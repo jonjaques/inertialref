@@ -3,7 +3,7 @@
 > **The question:** what is worth storing, when the entire universe can be
 > regenerated from a seed?
 > **The answer:** the seed, the tick, and the handful of things that have no
-> address to regenerate from. About **600 bytes** for a flown session.
+> address to regenerate from. About **700 bytes** for a flown session.
 >
 > Decision record: [ADR-0007](../adr/0007-persistence.md) ·
 > Code: `packages/persistence/`, `packages/protocol/src/save.ts`
@@ -151,7 +151,7 @@ flowchart LR
 ```
 
 IndexedDB rather than localStorage: localStorage is a synchronous 5 MB box that
-blocks the main thread — fine for 600 bytes, wrong the moment terrain mutations
+blocks the main thread — fine for 700 bytes, wrong the moment terrain mutations
 arrive. Starting there avoids a migration later.
 
 Verified in Chrome: save → step 500 ticks → load → hash returns to the saved
@@ -184,6 +184,13 @@ change of *model*:
 ```
 { address, kind: 'discovered' | 'destroyed' | 'placed' | 'terrain', data, tick }
 ```
+
+Those four are `SAVE_MUTATION_KINDS`, an exported `as const` array that
+`SaveMutationKind` derives from and the decoder validates against with
+`decodeEnum(...SAVE_MUTATION_KINDS)`. That matters because the decoder used to
+declare `kind: decodeString` and then *cast* the result to the four-literal
+union — accepting any string at the trust boundary while telling the compiler it
+had checked. The list above and the schema can no longer drift apart.
 
 See the [roadmap](../roadmap.md#persistent-mutations).
 

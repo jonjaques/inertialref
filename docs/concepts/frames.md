@@ -39,7 +39,7 @@ flowchart TB
     SYS2["<b>s:HIP71683</b><br/><i>4.365 ly away</i>"]
     BODY["<b>b:…/b:0</b><br/><i>body-centred inertial</i><br/>translates along the orbit,<br/>does not spin"]
     BF["<b>bf:…/b:0</b><br/><i>body-fixed</i><br/>spins with the planet"]
-    SF["<b>sf:…@0.35,-1.10</b><br/><i>surface</i><br/>east / up / south at one lat-lon"]
+    SF["<b>sf:…@0.350000,-1.100000</b><br/><i>surface</i><br/>east / up / south at one lat-lon"]
     MOON["<b>b:…/b:0.0</b><br/><i>moon, orbiting the planet</i>"]
 
     ROOT --> SYS
@@ -126,7 +126,7 @@ different questions.
 
 ## Frame transitions
 
-`reframe(state, target, t)` re-expresses a state in another frame at the same
+`reframe(graph, state, target, t)` re-expresses a state in another frame at the same
 instant, via universe coordinates:
 
 ```mermaid
@@ -226,6 +226,14 @@ Two bugs came from violating it:
 Both are fixed by the same principle: quantise the angles, derive the elevation
 from the quantised direction, and let the entity's local position absorb the
 residual.
+
+The formatter and the parser now sit in the same module —
+`surfaceFrameId` and `parseSurfaceFrameId`, both in `universe/frames.ts` — which
+is what makes the round trip expressible as a property test rather than a
+convention. The parser used to be open-coded in `World.ensureFrame`, a package
+below, with a `lastIndexOf('@')` and a `split(',')` and no counterpart to the
+`-0` collapse the formatter carries a comment about. It was on the load path for
+every save with a landed ship, which is precisely the path both bugs above broke.
 
 ---
 

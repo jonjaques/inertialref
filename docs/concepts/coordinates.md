@@ -73,7 +73,7 @@ positions are always represented identically and `equals` is a field comparison.
 |---|---|---|
 | `SECTOR_EXPONENT` | 40 | |
 | `SECTOR_SIZE` | 2^40 m ≈ 1.0995e12 m | ≈ 7.35 AU |
-| Sector index range | int32 | ±2,147,483,648 sectors |
+| Sector index range | int32 | ±2,147,483,647 sectors (2^31 exclusive) |
 | `UNIVERSE_HALF_EXTENT` | 2^71 m ≈ 2.36e21 m | **≈ 249,000 ly** |
 | `POSITION_RESOLUTION` | 2^40 × 2^-52 m | **≈ 0.24 mm, everywhere** |
 

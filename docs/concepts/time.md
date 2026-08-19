@@ -100,10 +100,21 @@ flowchart LR
 ```
 
 Because the tick duration never changes, a session played at 100× and the same
-session played at 1× reach identical state. The test runs one world at 100× for
-32 frames and another with `runTicks(n)` and compares the hash.
+session played at 1× reach identical state. The test runs one world at 100×
+until tick 3,200 — which takes 400 frames, not 32, because each 1/60 s frame
+*wants* 106 ticks and the step budget caps it at 8 — and another with
+`runTicks(3_200)`, then compares the hash and the simulated time.
 
 Warp steps in the client are `1 → 5 → 25 → 100 → 1,000 → 10,000 → 100,000`.
+
+That capping is also why `droppedTicks` is worth trusting now. The view used to
+clamp the frame delta to 0.25 s before handing it over, which changed nothing
+about the spiral of death — the clock already caps a step — but destroyed the
+diagnostic: a three-minute background stall was reported in the HUD as 8 dropped
+ticks instead of 11,520. The clamp is gone and the clock owns the budget alone.
+The single `advance` call is reached from an `EngineTick` component at an
+explicit R3F priority, so the simulation steps before any consumer reads it
+rather than depending on JSX sibling order.
 
 ---
 

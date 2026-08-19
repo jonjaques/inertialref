@@ -55,8 +55,9 @@ ground it represents ended up 30 km apart and no terrain was visible at all.
 ## Consequences
 
 - Render coordinates stay within ±4096 m of the origin for anything near the
-  player, where float32 resolves 0.24 mm — measured: two points 1 m apart at
-  8.18 kpc render 1.000 m apart after rounding to float32.
+  player, where float32 resolves 0.24 mm within ±2048 m and 0.49 mm at the
+  threshold itself — measured: two points 1 m apart at 8.18 kpc render 1.000 m
+  apart after rounding to float32.
 - Depth is not metric for far objects. Nothing may measure distance in render
   space; `placement.distance` carries the true value for anything that needs it.
 - The mapping is non-decreasing everywhere but only *strictly* increasing while

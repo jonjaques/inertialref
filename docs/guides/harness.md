@@ -4,8 +4,9 @@ A single object that can drive and interrogate the whole simulation without
 touching the UI. It is exposed as `window.ir` in the browser and used directly
 by the Node runner and the tests.
 
-> `ir.help()` in the console is the **authoritative** list — it is generated from
-> the implementation. This page explains what the pieces are for.
+> `ir.help()` in the console is the quickest list, but it is hand-maintained and
+> already omits `snapshot`, `flightAssist` and `scenarios`. This page is the
+> check on it.
 >
 > Code: `packages/devtools/src/harness.ts`
 
@@ -48,7 +49,7 @@ pixels.
 
 ```js
 ir.summary()
-// tick 2590 (40.47 s, 1x) | hash 0ccda85a | Debug One in sf:g:milky-way/s:SOL/b:0@0.35,-1.10 | 51849.8 m/s alt 0.000 mm | systems 1, frames 19
+// tick 2590 (40.47 s, 1x) | hash fdf43017 | Debug One in sf:g:milky-way/s:SOL/b:0@0.350000,-1.100000 | 51849.8 m/s alt 0.000 mm | systems 1, frames 19
 ```
 
 ---
@@ -60,7 +61,7 @@ ir.summary()
 | `ir.step(ticks)` | advance exactly N ticks, ignoring wall clock |
 | `ir.runSeconds(s)` | advance exactly `s × 64` ticks |
 | `ir.pause()` / `ir.resume()` | |
-| `ir.timeWarp(x)` | ticks per second of wall clock |
+| `ir.timeWarp(x)` | multiplier on how many ticks a second of wall clock buys (1 = real time) |
 
 `step` is the deterministic one — it does not consult the clock at all, which is
 what makes scripted scenarios reproducible.
@@ -73,7 +74,7 @@ what makes scripted scenarios reproducible.
 flowchart TB
     subgraph POS["put the ship somewhere"]
         O["ir.orbit(address, altitudeKm)<br/><i>a valid two-body solution —<br/>it stays there</i>"]
-        L["ir.land(address, lat, lon)"]
+        L["ir.land(address, lat, lon)<br/><i>places on the pad —<br/>landed after one tick</i>"]
         G["ir.goToSystem(id, au)"]
     end
     subgraph AIM["aim and burn"]
@@ -94,6 +95,18 @@ Two notes worth internalising:
   and useless.
 - **`face` and `burnToward` are separate** because looking and accelerating are
   different acts. `face` costs nothing and does not perturb the trajectory.
+- **`land` does not land you.** It puts the ship on the pad — local `y = 0` in a
+  surface frame *is* the ground — and the contact test makes it landed on the
+  next tick, so `ir.land(...).player.landed` is `false` and one `ir.step()`
+  fixes it. `ir.scenario('surface')` hides this because it steps 64 ticks. The
+  previous version asserted landedness directly while sitting three metres up;
+  because `stepFlight` short-circuits for an entity that is already landed, the
+  contact test never ran and the ship hovered there for the whole session while
+  the overlay reported an altitude of zero. Landedness is now only ever a
+  consequence of touching the ground.
+- **`ir.flightAssist(enabled)`** exists and is absent from `ir.help()`. It is
+  control input and it is in the state hash, so a test comparing hashes has to
+  know it is there. `ir.scenarios()` lists the four scenario names.
 
 ---
 
@@ -129,15 +142,17 @@ PASS  9. Origin rebasing — 500 rebases, 2560 km of origin travel, zero drift
 …
 ```
 
-Most checks run against **scratch worlds**, so the self-test does not perturb
-the session it is checking.
+Five checks build **scratch worlds**. The rest read the live session — and
+capability 3 is not read-only: it loads Alpha Centauri in order to measure the
+distance to it, so after a self-test the session has two systems loaded rather
+than one. Worth knowing before using the self-test as a mid-session probe.
 
 ---
 
 ## Persistence
 
 ```js
-const text = ir.save()       // serialised save, ~600 bytes
+const text = ir.save()       // serialised save, ~700 bytes
 ir.load(text)                // → Result<stateHash, error>
 ```
 
@@ -175,8 +190,8 @@ part of the vocabulary rather than a one-off. Keep the return JSON-serialisable
 and add the line to `help()`, which is what people actually read.
 
 If a set-up sequence is shared with the app or the runner, it belongs in
-`Session` instead, which owns standing a world up — see
-[extending](extending.md).
+`openSession` instead, which owns standing a world up — see
+[extending](extending.md#standing-a-world-up-opensession).
 
 ---
 

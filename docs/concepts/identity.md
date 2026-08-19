@@ -105,7 +105,7 @@ within that cell:
 ```mermaid
 flowchart LR
     ID["<code>P2s_1e_3_7</code>"] --> DEC["decode<br/><i>zigzag base-36</i>"]
-    DEC --> CELL["cell (44, 23, -2)"]
+    DEC --> CELL["cell (50, 25, -2)"]
     CELL --> REGEN["generateCell(seed, cell)"]
     REGEN --> STAR["star at index 7"]
 
@@ -141,8 +141,16 @@ flowchart LR
 ```
 
 Level *n* has 2^n cells per side per face. `regionForDirection(direction, level)`
-maps a direction to its region, and `regionDirection(region, s, t)` maps back —
-a property test asserts the round trip to within 1e-12.
+maps a direction to its region, and `regionDirection(region, s, t)` maps back.
+
+The 1e-12 property test is on the layer below — `directionToFace` ⇄
+`faceToDirection`. `regionForDirection` is checked against
+`regionCentreDirection` to within one region's angular half-width, which is the
+strongest thing that can be true of a map that quantises.
+
+Both `regionDirection` and `faceToDirection` return a branded
+`BodyFixedDirection`, which is what makes it impossible to hand `surfaceRadius`
+an inertial direction.
 
 ---
 

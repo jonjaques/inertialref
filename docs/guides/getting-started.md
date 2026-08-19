@@ -23,8 +23,11 @@ flowchart LR
     style F fill:#065f46,stroke:#064e3b,color:#fff
 ```
 
-No server is required after the first load — a service worker caches the app and
-content comes from the seed. See [persistence](../concepts/persistence.md#offline-first).
+In a **production** build (`pnpm build && pnpm preview`) no server is required
+after the first load — a service worker caches the app and content comes from the
+seed. It is deliberately not registered under `pnpm dev`, where it would sit in
+front of Vite and turn every edit into a caching investigation. See
+[persistence](../concepts/persistence.md#offline-first).
 
 ---
 
@@ -104,7 +107,7 @@ const target = ir.bodies().find(b => b.kind === 'rocky')
 ir.orbit(target.address, 100000)   // inside the sphere of influence
 ir.control({ translation: [0, 0, 1] })   // burn prograde
 for (let i = 0; i < 30; i++) ir.step(20000)
-ir.status().world.events            // → 'left sphere of influence'
+ir.status().world.events.at(-1)     // → { tick, kind: 'frame-change', detail: 'left sphere of influence' }
 ```
 
 The ship is re-framed from the planet to the system, mid-flight, without moving.
@@ -138,9 +141,10 @@ pnpm typecheck    # three tsconfig projects
 pnpm lint         # oxlint
 pnpm graph        # dependency layering + cycle check
 pnpm build
-pnpm check        # all of the above, in order — the gate
+pnpm check        # graph → lint → typecheck → test → build — the gate
 
 pnpm sim --self-test          # headless run + capability checks
+pnpm sim --scenario surface --ticks 2526    # also: --seed, --system, --quiet
 pnpm vitest run <substring>   # one test file
 ```
 

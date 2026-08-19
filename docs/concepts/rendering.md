@@ -56,7 +56,8 @@ accumulate zero drift rather than ten thousand roundings — asserted directly:
 > still *exactly* on the grid and the canonical position decoded back from render
 > space is unchanged.
 
-Within ±4096 m of the origin, float32 resolves about 0.24 mm — which is why a
+Within ±2048 m of the origin float32 resolves 0.24 mm, and better than half a
+millimetre all the way out to the ±4096 m rebase threshold — which is why a
 metre-scale object beside the ship is exact no matter where in the galaxy the
 ship is. Capability check 8 measures it: two points 1 m apart at 8.18 kpc render
 1.000 m apart *after* rounding to float32.
@@ -102,7 +103,8 @@ relative across ten orders of magnitude of distance.
 |---|---|
 | Angular size preserved | exact, property-tested |
 | Continuous at the boundary | factor is exactly 1 there |
-| **C¹** at the boundary (no change in apparent rate of approach) | requires `shellSpan = nearLimit` — it was *not* C¹ until a test said so |
+| **C¹** at the boundary (no change in apparent rate of approach) | requires `SHELL_SPAN === NEAR_LIMIT` — which is how they are now defined, as
+module constants rather than a config object nothing ever varied — it was *not* C¹ until a test said so |
 | Strictly increasing (depth ordering) | non-decreasing **everywhere**; strictly increasing only while the separation survives double precision |
 
 That last row is a real limitation stated honestly rather than papered over.
@@ -162,11 +164,30 @@ Stars beyond the local system are drawn as a point cloud projected onto a fixed
 shell around the camera. Direction is what matters; their distance is neither
 representable nor observable.
 
+The projection is `placeOnStarShell(origin, position)` with
+`STAR_SHELL_RADIUS = 8e7`, and it lives here rather than in the R3F layer for a
+concrete reason. It used to be open-coded in the component over the raw sector
+fields, with `2 ** 40` written out by hand — the sector size `spatial` owns — and
+that copy skipped the origin's **orientation**, which `toRenderSpace` applies and
+every body therefore got. Whenever the origin was anchored to an oriented frame,
+the stars were rotated out of alignment with the planets in front of them.
+
 ---
 
 ## Terrain meshing
 
-Patches are built from a heightfield into vertex buffers in render space.
+Patches are built from a heightfield into vertex buffers in render space. The
+resolution is `HEIGHTFIELD_RESOLUTION` (65), exported once and shared by the
+streamer, the worker task and capability check 10 — which compares worker output
+to main-thread output sample by sample, and would otherwise be capable of
+comparing two differently sized grids and calling them equal.
+
+The heightfield is `groundElevation`, not the bare `elevationAt`: the same
+sea-level clamp the physics uses. Before that had one owner, `seaLevel` was
+carried from the generator through the worker to the mesh and then ignored, so on
+an ocean world the landing pad sat on the water datum while the mesh drew the
+seabed underneath it. A test now asserts the mesh is drawn at the radius the
+contact test stops at.
 
 ```mermaid
 sequenceDiagram

@@ -38,8 +38,13 @@ The inline worker is not a mock. It runs the same host loop against the same
 registry, serialising through the same envelopes — so a bug that only appears
 when something is not structured-cloneable still shows up in a Node test.
 
-It is also the **fallback**: a browser without module workers gets a jerkier
-game rather than no game.
+It is **not** the browser's fallback, though it used to say so. A browser
+without module workers gets *no pool at all*: the starfield survey runs on the
+main thread and terrain streaming stops until a pool exists, because
+`TerrainStreamer` returns early without one. The inline worker's four callers are
+all Node — the headless runner and three test files. It does go through
+`structuredClone` and honour its transfer list, so a payload that a real `Worker`
+could not clone fails here too.
 
 ---
 
@@ -89,10 +94,20 @@ sequenceDiagram
     P->>W: {kind:'cancel', job}
 ```
 
+The worker also posts `{kind:'ready', tasks}` when it starts, so the pool can log
+which tasks a worker actually serves.
+
 The version check matters more than it looks. An offline-first app is *designed*
 to be left open across a deploy. Without the check, a page could generate half a
 planet with algorithm v1 and half with v2 and never notice. With it, the job
 fails loudly.
+
+The envelope is now **validated** rather than discriminated: the host runs
+`decode(decodeWorkerRequest, message)` and drops anything malformed with a log
+line. It previously checked only `kind === 'request'`, so `job`, `task` and
+`taskVersion` were read off an unvalidated object and `payload` reached
+`task.run` as `never` — a trust boundary that trusted everything. `protocol`
+exists for exactly this, and now the boundary uses it.
 
 ---
 
@@ -135,7 +150,7 @@ A job can be cancelled whether or not it has started:
 | Not used | Why |
 |---|---|
 | `SharedArrayBuffer` | Requires cross-origin isolation headers, which constrains hosting. Nothing yet needs shared mutable memory; transferables cover the current traffic. |
-| The simulation itself in a worker | It *can* run there — that is what `apps/headless` proves — but nothing yet requires it. [Roadmap](../roadmap.md#simulation-in-a-worker). |
+| The simulation itself in a worker | Plausible rather than proven: `apps/headless` shows the core runs unchanged with no DOM, no React and no WebGL — but nothing yet requires it. [Roadmap](../roadmap.md#simulation-in-a-worker). |
 | A second pool for a different priority class | One pool, FIFO. Priorities become interesting when terrain competes with something else. |
 
 ---

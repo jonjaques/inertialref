@@ -95,7 +95,7 @@ into a bug report, does not.
 ## The state hash
 
 ```
-state hash  f63b48a4
+state hash  804b2d58
 ```
 
 Eight characters that answer "are these two universes the same?". It is the
@@ -123,6 +123,19 @@ The reason it lives in a package rather than the app: **a scenario that
 reproduces a bug in Chrome replays in a test.** That has already happened
 several times during development — the frame-transition and save-round-trip bugs
 were both found by driving the browser and then pinned by a Node test.
+
+What makes that possible is that every host is assembled the same way, by
+`openSession`: seed → system → target → ship → pool → store → harness, once,
+instead of five times. And the host port is split so a host answers only what it
+has a concept of — `SimulationHost` (`world`, `player`, `pool`, `replaceWorld`)
+for everyone, `PresentationHost` (`scene`, `frameStats`) only for a host that
+draws. The headless runner used to satisfy a single wide port by returning
+`null` twice and throwing once.
+
+One detail on that port is an observability property rather than a style choice:
+`world` is a **getter**. A host that captured the reference kept the debug
+overlay reporting on the world a load had just discarded, while the frame loop
+ran the new one — which looked exactly like "load silently does nothing".
 
 ---
 

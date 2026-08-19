@@ -16,8 +16,8 @@ Eight decisions that are expensive to reverse. Each records the **context**, the
 | [0004](0004-entity-addressing.md) | Entity addressing | accepted | Identity is a path through containment, and that path is also the seed path. |
 | [0005](0005-procedural-seeds.md) | Procedural seeds | accepted | Hierarchical derivation, never a shared stream. xoshiro128** over exact integer ops. |
 | [0006](0006-simulation-clock.md) | Simulation clock | accepted | 64 Hz fixed timestep, because 1/64 is exact in binary. Wall clock decides only how many. |
-| [0007](0007-persistence.md) | Persistence | accepted | A save is the seed, the tick, and what could not be regenerated — about 600 bytes. |
-| [0008](0008-multiplayer-partitions.md) | Multiplayer partitions | **proposed** | Authority partitions by star system, behind a port. Design only; multiplayer is a later phase. |
+| [0007](0007-persistence.md) | Persistence | accepted | A save is the seed, the tick, and what could not be regenerated — under 700 bytes. |
+| [0008](0008-multiplayer-partitions.md) | Multiplayer partitions | **proposed** | Authority partitions by star system. Design only; multiplayer is a later phase, though the partition key is already a live debug field. |
 
 ---
 
@@ -54,7 +54,7 @@ Two dependencies are worth noticing because they are not obvious:
   have to be a precision mechanism, which is the opposite of how most engines at
   this scale are built. That freed frames to be about the semantics of motion.
 - **0005 + 0004 → 0007.** Determinism plus stable identity is what makes a save
-  600 bytes instead of gigabytes. Persistence did not need a clever format; it
+  a few hundred bytes instead of gigabytes. Persistence did not need a clever format; it
   needed the other two decisions to have been made correctly.
 
 ---

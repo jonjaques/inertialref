@@ -67,7 +67,7 @@ flowchart TB
     PER --> PRO & SIM
     REN --> SIM & UNI
     SIM --> UNI & PHY
-    PRO --> UNI & SPA
+    PRO --> SPA
     UNI --> PHY & PCD
     PHY --> SPA
     SPA --> SHR
@@ -119,7 +119,7 @@ everything below is presentation.
 ```mermaid
 sequenceDiagram
     autonumber
-    participant RAF as requestAnimationFrame
+    participant TICK as EngineTick
     participant ENG as GameEngine
     participant CLK as SimulationClock
     participant W as World
@@ -127,7 +127,8 @@ sequenceDiagram
     participant SCN as buildScene()
     participant R3F as React Three Fiber
 
-    RAF->>ENG: frame(delta)
+    TICK->>ENG: frame(delta)
+    Note over TICK: a useFrame at priority −1<br/>so the tick precedes every reader
     Note over ENG,CLK: the only place wall clock enters
     ENG->>CLK: advance(delta) → n
     loop n fixed ticks (n may be 0)
@@ -147,9 +148,14 @@ sequenceDiagram
 Three properties of this loop are load-bearing:
 
 1. **`delta` reaches the clock and stops.** The number of ticks is the only
-   thing wall time decides. [Simulation time](concepts/time.md)
+   thing wall time decides. It is handed over raw, from a component whose only
+   job is to step the simulation — the tick runs at an explicit R3F priority so
+   that the components reading the result are not depending on JSX sibling
+   order. [Simulation time](concepts/time.md)
 2. **`n` may be zero, or eight.** The loop is not "one tick per frame", and a
-   step budget prevents a backgrounded tab from returning and freezing the page.
+   step budget inside the clock prevents a backgrounded tab from returning and
+   freezing the page. That budget lives in exactly one place: a second clamp in
+   the view changed nothing and corrupted the dropped-tick count the HUD shows.
 3. **The snapshot is a copy.** The renderer holding it cannot mutate the world,
    and the same structure crosses a worker boundary unchanged if the simulation
    ever moves off the main thread.
@@ -229,8 +235,8 @@ many workers. [Determinism](concepts/determinism.md) ·
 [identity](concepts/identity.md)
 
 The consequence for storage is stark: a save is the seed, the tick and the
-handful of things with no address to regenerate from — **about 600 bytes for a
-flown session**. [Persistence](concepts/persistence.md)
+handful of things with no address to regenerate from — **just under 700 bytes
+for a flown session**. [Persistence](concepts/persistence.md)
 
 ---
 
@@ -284,7 +290,7 @@ flowchart TB
 | App | What it is for |
 |---|---|
 | `apps/game` | The client. React for UI, R3F for the view, and an engine that owns everything else. |
-| `apps/headless` | The same core in Node — no DOM, no React, no WebGL. Proves the boundary and runs the capability checks in CI. |
+| `apps/headless` | The same core in Node — no DOM, no React, no WebGL. Proves the boundary and runs the capability checks via `pnpm sim --self-test`. |
 
 Both open a session through the same `Session` in `devtools`, which owns the
 seven steps of standing a world up. Before it existed there were five copies of
@@ -304,17 +310,30 @@ The short list. Violating one of these is a rewrite later, not a refactor —
 | 1 | Only `UniverseVector` is an absolute position | convention + review |
 | 2 | No `Math.random`, `Date.now` or `performance.now` in canonical paths | golden vectors, determinism tests |
 | 3 | Generation never depends on order | shuffled-order tests |
-| 4 | Canonical state is never in a React component | `packages/*` has no DOM lib |
+| 4 | Canonical state is never in a React component | components read snapshots; `packages/*` has no DOM lib |
 | 5 | One module constructs a `Worker` | port interface in `workers` |
 | 6 | Nothing regenerable is persisted | save-size test |
-| 7 | No vendor SDK below the adapter layer | `pnpm graph` |
+| 7 | No vendor SDK below the adapter layer | `pnpm graph` — `packages/*` may have no third-party dependency |
 | 8 | Terrain is sampled in body-fixed axes | a branded `BodyFixedDirection` type |
+| 9 | Landedness is a consequence, never asserted | `teleport` has no `landed` flag |
+| 10 | Entity state is written through `World`, not `entities.update` | `teleport`, `setControl`, `setFlightAssist`, `killRotation` |
 
 Invariant 8 is worth calling out as a pattern. It began as a bug — terrain was
 sampled with an inertial direction, so the mountains stood still while the
 planet rotated underneath them, and a ship landed 83 m above the ground it had
-just touched. The fix was correct code; the *durable* fix was giving the
-body-fixed direction its own type so the wrong vector no longer compiles.
+just touched. The fix was correct code, and it was applied to one of the two
+terrain samples in `stepFlight`; the other went on feeding the atmosphere an
+inertially-sampled altitude, where nothing rendered wrong and no test failed.
+The *durable* fix was giving the body-fixed direction its own type, so the wrong
+vector no longer compiles. Adding the brand immediately surfaced a third call
+site nobody had found by reading.
+
+Invariants 9 and 10 have the same shape. `teleport` used to take a `landed`
+boolean, and the harness used it to declare a ship landed three metres above the
+pad — `stepFlight` short-circuits for an already-landed entity, so the contact
+test never ran and the ship hovered there for the rest of the session while the
+overlay reported an altitude of zero. Removing the parameter makes the state
+unreachable rather than merely discouraged.
 
 ---
 
@@ -329,7 +348,7 @@ pnpm check   # graph → lint → typecheck (3 projects) → tests → build
 | `graph` | layering intact, no cycles |
 | `lint` | oxlint across the workspace |
 | `typecheck` | three tsconfig projects — packages (no DOM), client, Node runner |
-| `test` | ~184 tests, all in plain Node |
+| `test` | 200 tests, all in plain Node — `packages/*` and `apps/*` alike |
 | `build` | the client actually bundles, workers included |
 
 On top of that, twelve **capability checks** execute the milestone's claims

@@ -6,6 +6,12 @@ means something.
 > Tests live beside the code and run in **plain Node**. That is not a
 > convenience — it is the check that the core stays free of DOM, React and
 > WebGL. Nothing registers a browser environment.
+>
+> That now includes the client. `vitest.config.ts` covers `apps/*` as well as
+> `packages/*`, and `apps/game/src/engine/gameEngine.test.ts` drives the real
+> frame loop, origin rebasing, save/load and derived-state invalidation under
+> Node — because `GameEngine` takes its worker factory and save store as
+> arguments instead of constructing a browser `Worker` and IndexedDB itself.
 
 ---
 
@@ -162,7 +168,7 @@ otherwise assert in prose.
 
 | Gap | Roadmap |
 |---|---|
-| A stored fixture of an old save, for real compatibility testing | [roadmap](../roadmap.md#persistent-mutations) |
+| A fixture captured from a released build, for real compatibility testing (the v0 shape is covered, but from an inline literal) | [roadmap](../roadmap.md#persistent-mutations) |
 | Recorded input replay | [roadmap](../roadmap.md#replay-and-reconciliation) |
 | Performance regression benchmarks | [roadmap](../roadmap.md#performance-work) |
 | Any rendering test that touches a GPU | out of scope by design — `rendering` is pure data |

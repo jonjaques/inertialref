@@ -89,7 +89,7 @@ flowchart TB
     RECON -->|"cached heightfield"| MESH["rebuild mesh if the<br/>origin generation changed"]
     RECON -->|"not cached"| JOB["submit a worker job<br/><i>deduplicated by key</i>"]
     JOB --> CACHE["cache the heightfield"]
-    RECON --> EVICT["drop patches nobody wants"]
+    RECON --> EVICT["drop meshes nobody wants (heightfields survive until the cache passes 64)"]
 
     style JOB fill:#065f46,stroke:#064e3b,color:#fff
 ```
@@ -119,6 +119,23 @@ Streaming is only tractable because of two properties established elsewhere:
 
 Take away any one of them and streaming becomes a cache-coherency problem
 instead of a memory-management one.
+
+---
+
+## Two things worth knowing
+
+**No pool means no terrain.** `TerrainStreamer` returns early without one, so a
+browser that cannot construct module workers gets main-thread starfield surveys
+and no streamed ground at all. That is the real degradation path; there is no
+inline-worker fallback in the browser.
+
+**Rebasing is handled in one place.** A patch records the origin generation it
+was built against and `#ensure` rebuilds it when that goes stale — for the ~9
+patches that should be visible, and nothing else. An explicit `rebuild()` used to
+run alongside it from the frame loop, walking the whole 64-entry heightfield
+cache and re-adding patches `update()` had just pruned: a frame of off-screen
+geometry uploads on every rebase, which is every 4096 m of camera travel. It is
+gone.
 
 ---
 

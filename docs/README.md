@@ -36,7 +36,7 @@ flowchart LR
 
 ## Concepts
 
-The eight mechanisms that carry the architecture. Each page explains the
+The ten mechanisms that carry the architecture. Each page explains the
 problem, the mechanism, the numbers, and what breaks if you get it wrong.
 
 | Page | The question it answers |

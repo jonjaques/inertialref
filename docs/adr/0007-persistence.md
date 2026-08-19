@@ -20,12 +20,22 @@ A save contains exactly:
 - the simulation tick,
 - the algorithm versions it was generated with,
 - dynamic entities (ships), which have no address to regenerate from,
+- which entity the player is, and the counter that mints dynamic ids,
 - which systems were loaded,
-- `mutations` — deliberate departures from what generation would produce.
+- `mutations` — deliberate departures from what generation would produce,
+- `meta` — free-form strings, so a build can record something without a
+  schema bump.
 
-Not one planet, moon, orbit, star or heightfield. Measured: a flown session
-saves in **580 bytes**, and the test asserts the file does not grow with the
-size of the universe visited.
+Not one planet, moon, orbit, star or heightfield. Measured at **580 bytes** when
+this was written and **685–696 bytes** today; the entity record has gained fields
+since, control input among them. The number to care about is its order of
+magnitude, not its value.
+
+The size claim is pinned by a fixed ceiling (under 2,000 bytes) plus an assertion
+that the text contains no `elevations` — not by a comparison between two worlds
+of different sizes. What it therefore proves is that no generated content is in
+the file. The file *does* grow with the number of systems visited, because
+`loadedSystems` is in it; it does not grow with the size of the universe.
 
 The test that matters is not that the file contains the right fields; it is that
 `stateHash()` after a save/load round trip is **identical** to the hash before
@@ -44,7 +54,7 @@ contain state this build cannot represent, and silently dropping it loses a
 player's progress.
 
 Storage is behind a `SaveStore` port. The browser uses IndexedDB (localStorage
-is a synchronous 5 MB box that blocks the main thread — fine for 600 bytes,
+is a synchronous 5 MB box that blocks the main thread — fine for 700 bytes,
 wrong the moment terrain mutations arrive); Node tests and the headless runner
 use an in-memory store.
 

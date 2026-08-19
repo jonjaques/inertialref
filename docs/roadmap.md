@@ -61,7 +61,7 @@ a production build. What follows is depth, not foundations.
 | Automation and DX | 🟡 | Commands and docs done; [no CI](#automation-gaps) |
 | Testing | 🟡 | Strong; [replay and fixtures](#automation-gaps) missing |
 | Performance | 🟡 | Designed for, [barely measured](#performance-work) |
-| Multiplayer | ⛔ | Deferred. Seams only — [ADR-0008](adr/0008-multiplayer-partitions.md) |
+| Multiplayer | ⛔ | Deferred. Seams only — [ADR-0008](adr/0008-multiplayer-partitions.md); the partition key is a live debug field |
 
 ---
 
@@ -225,7 +225,7 @@ almost none are applied, and almost nothing is measured.
 | WebGPU | ⬜ | A renderer decision, not an architecture one |
 | `SharedArrayBuffer` | ⬜ | Requires cross-origin isolation; nothing needs it yet |
 
-**What is measured today:** simulation throughput (~110k ticks/s headless,
+**What is measured today:** simulation throughput (~100–105k ticks/s headless,
 ~1.25M ticks/s browser for one entity), worker queue latency and execution time,
 frame time. **What is not:** allocation rate, GC pressure, draw calls, or any
 regression baseline. A benchmark harness is a prerequisite for taking any of the

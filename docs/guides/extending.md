@@ -96,9 +96,9 @@ instead of failing loudly.
 
 ## Adding a frame kind
 
-Frames are `fixed` (an absolute position) or `dynamic` (a pure function of
-time). Adding a kind usually means adding a dynamic evaluator in
-`packages/universe/src/frames.ts`.
+Frames are `root` (exactly one, the universe itself), `fixed` (an absolute
+position) or `dynamic` (a pure function of time). Adding a kind usually means
+adding a dynamic evaluator in `packages/universe/src/frames.ts`.
 
 **Checklist**
 
@@ -107,7 +107,12 @@ time). Adding a kind usually means adding a dynamic evaluator in
   Dropping angular velocity silently breaks the transport theorem for children.
 - If the frame can be persisted, its **id must determine it completely** — see
   [the identity trap](../concepts/frames.md#surface-frames-and-the-identity-trap).
-- Add it to `World.ensureFrame` so a save can rebuild it.
+- Give it a **parser beside its formatter**, the way `surfaceFrameId` and
+  `parseSurfaceFrameId` pair up in `packages/universe/src/frames.ts`, then
+  dispatch to it from `World.ensureFrame`. Keeping the two together is what lets
+  the round trip be a property test — and what stops a repeat of the `-0` trap,
+  where the parser lived a package below the formatter and had no counterpart to
+  its sign-collapsing rule.
 
 ---
 
@@ -161,13 +166,68 @@ caught, and why the round-trip test steps both worlds afterwards.
 
 ---
 
+## Standing a world up: `openSession`
+
+Anything that needs a running world — the browser client, the headless runner,
+the capability checks, a test — goes through one function:
+
+```ts
+import { openSession } from '@inertialref/devtools'
+
+const session = openSession({
+  seed: 'inertialref',
+  workers: () => createInlineWorker(registry),   // or null for no pool
+  store: new MemorySaveStore(),
+})
+session.harness.orbit('g:milky-way/s:SOL/b:0', 400)
+```
+
+It performs seven steps in the one order that works — derive the world from a
+seed, load a system, choose a landable body, put a ship above it, stand up a
+worker pool, pick a save store, wire the harness — and returns `{ world, player,
+harness, pool, store, system, target, dispose }`.
+
+| Option | For |
+|---|---|
+| `seed`, `system`, `shipName` | what to generate |
+| `workers` | a `WorkerFactory`, or `null` for no pool at all |
+| `poolSize`, `now` | pool sizing and an injected clock |
+| `store` | a `SaveStore`; defaults to in-memory |
+| `presentation` | `scene()` / `frameStats()`, for a host that draws |
+| `onWorldReplaced` | drop derived state when a load swaps the world |
+
+Three things about it are load-bearing:
+
+- **`world` is a getter, never a captured reference.** Loading a save replaces
+  the world wholesale, and a host that copied the reference kept reporting on the
+  discarded one while the frame loop ran the new one.
+- **The host port is split.** `SimulationHost` is what every host can answer;
+  `PresentationHost` (`scene`, `frameStats`) is optional, so the headless runner
+  no longer stubs questions it has no concept of.
+- **Spawn policy lives here.** `landingTarget(system)` and `isLandable(body)` are
+  the one place a target is chosen. When five call sites each did this
+  themselves, two of them drifted to different spawn distances and nothing could
+  have noticed.
+
+If a set-up sequence is shared between the app and the runner, it belongs here
+rather than in the harness.
+
+---
+
 ## Adding a package
 
-1. `packages/<name>/package.json` with `inertialref.layer` set to a number
-   strictly above every dependency.
-2. `tsconfig.json` extending the base.
+1. `packages/<name>/package.json` with `"type": "module"`, `"private": true`,
+   `"exports": { ".": "./src/index.ts" }` and `inertialref.layer` set to a number
+   strictly above every dependency. Copy `packages/rendering/package.json`.
+2. Nothing to do for TypeScript. Packages have no `tsconfig.json` of their own —
+   the root project already includes `packages/*/src`, and only the two apps have
+   their own config.
 3. Add it to the dependents' `dependencies` with `workspace:*`.
 4. `pnpm install` then `pnpm graph`.
+
+Note `pnpm graph` also rejects any **third-party** runtime dependency in
+`packages/*`. The core has to run unchanged in a browser, a worker and Node, and
+depending on nothing but itself is the cheapest way to guarantee that.
 
 **The trap.** Needing a host capability (DOM, IndexedDB, `Worker`). Do not raise
 the layer to reach it — declare a **port** and let the host implement it, the

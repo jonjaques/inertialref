@@ -32,6 +32,21 @@ partition.
 What exists today is exactly that: a mapping to opaque keys, in `universe`, with
 no networking, no transport and no vendor import anywhere in the graph.
 
+Two amendments, from a later review:
+
+- It is no longer purely design. `partitionForPosition` is a live consumer —
+  `devtools/inspect.ts` puts the partition key on every entity inspection and
+  the debug overlay shows it as "authority". Being able to see which partition
+  an entity would belong to, a phase before any partition exists, is the cheapest
+  possible test of whether the rule makes sense.
+- The frame-chain rule is implemented, but *not* through this ADR's own API:
+  `inspect.ts` scans the chain for an `s:` prefix itself rather than calling
+  `partitionForAddress`. The two agree only because the frame-id grammar and the
+  partition-key grammar are both `s:<system>`. That is a coincidence one rename
+  away from being a bug, and it is the first thing to fix when this phase starts.
+  `partitionForAddress`, `partitionsAdjacent`, `formatPartition` and
+  `partitionForFlight` have no callers at all.
+
 ## Sketch, to be validated rather than assumed
 
 ```
@@ -70,5 +85,8 @@ preserving.
 - `PARTITION_ENTRY_RADIUS` and the entry rule are guesses. They should be
   validated against real latency and real player density before anything is
   built on them.
-- Nothing in `packages/*` imports a vendor SDK today, and `pnpm graph` will
-  notice if a future package adds one below the adapter layer.
+- Nothing in `packages/*` imports a vendor SDK today, and `pnpm graph` will now
+  notice if a future package adds one: it rejects any third-party runtime
+  dependency in `packages/*` outright. When this ADR was written that sentence
+  was aspirational — the check discarded every non-workspace edge before looking
+  — so the rule was documented as enforced while nothing enforced it.

@@ -31,6 +31,19 @@ The same string is the **seed path** (ADR-0005), the save-file reference, the
 log field, the debug-overlay display and the harness argument. One
 representation, parsed and formatted round-trip-exactly.
 
+That identity is now pinned by a test rather than by intent: `universe.test.ts`
+compares `addressLabels` against the seed a *generated* body actually carries,
+for planets and moons, and against `systemSeedOf` for systems. The earlier test
+derived both sides of the comparison from `addressLabels` and so could not fail
+— a generator changing `b:${index}` to `b${index}` would have gone unnoticed.
+
+Two honest limits. `addressLabels` still has no production caller: the
+generators build their labels independently and the test is what holds them
+together. And only the galaxy, system and body levels are derived along the
+path — nothing derives a seed along an `r:` or `o:` label yet, because terrain
+derives from the body's surface seed and a direction rather than from a region
+address.
+
 Runtime entities carry an `EntityId` in one of two flavours, distinguishable at
 a glance:
 

@@ -9,7 +9,8 @@ elsewhere in games or astronomy, the entry says what it means *here*.
 
 **UniverseVector** — the only representation allowed to claim it is an absolute
 position: an int32 sector index per axis plus a float64 offset in metres inside
-that sector. Sub-millimetre anywhere in a 249,000 ly cube.
+that sector. Sub-millimetre anywhere within 249,000 ly of the origin — that is
+the *half*-extent, so the addressable cube is twice that on a side.
 → [coordinates](concepts/coordinates.md)
 
 **Sector** — a 2^40 m (≈7.35 AU) cube. A power of two so that carrying an offset
@@ -36,6 +37,13 @@ these axes; sampling in inertial axes leaves the mountains behind.
 
 **Surface frame** (`sf:`) — a local tangent plane at one latitude/longitude,
 axes east / up / south, +Y up. Where metre-scale gameplay happens.
+
+**Body-fixed direction** (`BodyFixedDirection`) — a unit direction from a body's
+centre, in that body's *rotating* axes, as a branded type. `surfaceRadius` and
+the region functions accept nothing else, so terrain cannot be sampled with an
+inertial direction — the bug the body-fixed frame entry above warns about, which
+shipped twice before the brand existed. Produced only by `bodyFixedDirection`,
+`geodeticDirection`, `regionDirection` and `faceToDirection`.
 
 **Reframe** — re-expressing a state in a different frame at the same instant.
 Provably preserves canonical position and velocity.
@@ -90,7 +98,8 @@ worlds.
 the value is right; testing that it never changes.
 
 **Stub** — the minimal description of a system (id, name, position, spectral
-type, mass) before its bodies are generated.
+type, mass in solar masses, and whether it came from the catalogue) before its
+bodies are generated.
 
 **Cube-sphere** — the surface addressing scheme: six cube faces, each a
 quadtree, projected onto a sphere. Avoids the polar singularities of a lat/lon
@@ -105,8 +114,10 @@ grid.
 **Tick** — one fixed simulation step. 64 Hz, because 1/64 is exact in binary.
 Canonical state depends only on the integer tick count. → [time](concepts/time.md)
 
-**State hash** — a hash over the tick and every entity's canonical state. The
-comparison every determinism test makes, and the natural desync check.
+**State hash** — a hash over the tick, the seed, and every entity's frame,
+position, velocity, orientation, angular velocity, control input, flight-assist
+setting and landedness. The comparison every determinism test makes, and the
+natural desync check. Add a field to canonical state and it belongs here too.
 
 **Step budget** — the cap on ticks per frame (8). Prevents a backgrounded tab
 from freezing the page on return. Dropped ticks are counted and displayed.

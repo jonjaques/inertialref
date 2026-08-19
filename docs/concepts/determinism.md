@@ -135,7 +135,7 @@ flowchart LR
     N3 --> SUM(("+"))
     MIX --> SUM
     N1 --> SUM
-    SUM --> OUT["elevation, metres"]
+    SUM --> OUT["groundElevation, metres"]
 
     MIX -.- NOTE["continents modulate the mountains,<br/>so ranges sit on landmasses instead of<br/>marching across the ocean floor"]
     classDef note fill:none,stroke:none,color:#64748b,font-style:italic
@@ -186,11 +186,21 @@ Generation determinism is only half. The simulation half is enforced by a single
 comparison value:
 
 ```ts
-world.stateHash()   // '655fd189'
+world.stateHash()   // '804b2d58'
 ```
 
-A hash over the tick and every entity's frame, position, velocity, orientation
-and landed state. Every determinism test in the suite is an assertion about it:
+A hash over the tick, the seed, and every entity's frame, position, velocity,
+orientation, angular velocity, control input, flight assist and landed state.
+
+The last three were not always in it, and the docstring said "everything
+canonical" anyway — so two worlds that differed only in the fields `killRotation`
+and flight assist write hashed identically at the instant they diverged, and only
+drifted apart hundreds of ticks later once the difference had leaked into
+position. That is where a shipped bug had already lived: a save taken mid-burn
+resumed coasting, and the persistence test caught it only by stepping 300 further
+ticks. If you add a field to canonical state, add it here too.
+
+Every determinism test in the suite is an assertion about it:
 
 | Test | Asserts |
 |---|---|
@@ -198,6 +208,9 @@ and landed state. Every determinism test in the suite is an assertion about it:
 | jittery frames (4–60 ms) vs steady | same hash at the same tick |
 | 1× for 100 s vs 100× for 1 s | same hash, same simulated time |
 | save → step → load | hash returns to the saved value |
+| worlds differing only in control input | different hashes |
+| worlds differing only in flight assist | different hashes |
+| worlds differing only in angular velocity | different hashes |
 | replay with identical inputs | same hash |
 
 See [simulation time](time.md) for why the clock makes this possible.

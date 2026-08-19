@@ -71,4 +71,5 @@ on rather than a mystery.
   adjacent planets come out suspiciously similar. Measured: 5,000 sibling
   derivations differ by 64 of 128 bits on average, with no collisions.
 - Changing a generator is a versioned, deliberate act. The golden vectors make
-  an accidental change fail loudly in CI.
+  an accidental change fail loudly in `pnpm test`. (There is no CI in this
+  repository; `pnpm check` is the gate, run by hand.)
