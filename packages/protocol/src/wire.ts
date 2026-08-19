@@ -1,4 +1,4 @@
-import { ok, type Result } from '@inertialref/shared'
+import { ok } from '@inertialref/shared'
 import {
   type FrameId,
   frameId,
@@ -10,7 +10,7 @@ import {
   type Vec3,
   vec3,
 } from '@inertialref/spatial'
-import { decodeNumberTuple, decodeObject, decodeString, type Decoder } from './codec.ts'
+import { decodeNumberTuple, decodeObject, decodeString, type Decoder, refine } from './codec.ts'
 
 /*
  * Wire forms for spatial types.
@@ -91,12 +91,8 @@ export const decodeFrameState: Decoder<FrameState> = decodeObject({
   orientation: decodeQuat,
   velocity: decodeVec3,
   angularVelocity: decodeVec3,
-}) as Decoder<FrameState>
+})
 
-/** Round-trip check used by the protocol tests and by the harness self-test. */
-export function roundTripsFrameState(state: FrameState): Result<FrameState, string> {
-  return decodeFrameState(JSON.parse(JSON.stringify(encodeFrameState(state))), 'state')
-}
 
 /*
  * Validators that leave the wire form alone.
@@ -106,15 +102,17 @@ export function roundTripsFrameState(state: FrameState): Result<FrameState, stri
  * turned `[1,2,3]` into `{x,y,z}` while the type still said `WireVec3` is
  * exactly the sort of mismatch a cast hides — it did, until a test caught it.
  */
-export const decodeWireVec3: Decoder<WireVec3> = (value, path) => {
-  const parts = decodeNumberTuple(3)(value, path)
-  return parts.ok ? ok(parts.value as unknown as WireVec3) : parts
-}
+export const decodeWireVec3: Decoder<WireVec3> = refine(
+  decodeNumberTuple(3),
+  (parts): parts is WireVec3 => parts.length === 3,
+  'three numbers',
+)
 
-export const decodeWireQuat: Decoder<WireQuat> = (value, path) => {
-  const parts = decodeNumberTuple(4)(value, path)
-  return parts.ok ? ok(parts.value as unknown as WireQuat) : parts
-}
+export const decodeWireQuat: Decoder<WireQuat> = refine(
+  decodeNumberTuple(4),
+  (parts): parts is WireQuat => parts.length === 4,
+  'four numbers',
+)
 
 export const decodeWireFrameState: Decoder<WireFrameState> = decodeObject({
   frame: decodeString,

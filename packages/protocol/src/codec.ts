@@ -47,6 +47,28 @@ export function decodeEnum<const T extends string>(...options: readonly T[]): De
       : fail(path, `one of ${options.join(' | ')}`, value)
 }
 
+/**
+ * Narrow a decoded value with a runtime predicate.
+ *
+ * This is what a branded or literal type needs, and its absence is why four
+ * decoders in this package ended in `as Decoder<T>`: `decodeString` proves the
+ * value is a string, the predicate proves it is *that* string, and the two
+ * together produce the narrow type honestly. A cast in that position asserts
+ * precisely the half a validator exists not to assert — `decodeSaveMutation`
+ * accepted any string as its `kind` and told the compiler it was one of four.
+ */
+export function refine<T, U extends T>(
+  inner: Decoder<T>,
+  predicate: (value: T) => value is U,
+  expected: string,
+): Decoder<U> {
+  return (value, path) => {
+    const decoded = inner(value, path)
+    if (!decoded.ok) return decoded
+    return predicate(decoded.value) ? ok(decoded.value) : fail(path, expected, value)
+  }
+}
+
 export function decodeArray<T>(item: Decoder<T>): Decoder<readonly T[]> {
   return (value, path) => {
     if (!Array.isArray(value)) return fail(path, 'an array', value)
@@ -70,9 +92,6 @@ export function decodeNumberTuple<N extends number>(length: N): Decoder<readonly
   }
 }
 
-export function decodeNullable<T>(inner: Decoder<T>): Decoder<T | null> {
-  return (value, path) => (value === null ? ok(null) : inner(value, path))
-}
 
 export function decodeOptional<T>(inner: Decoder<T>, fallback: T): Decoder<T> {
   return (value, path) => (value === undefined ? ok(fallback) : inner(value, path))

@@ -1,5 +1,5 @@
 import { LIGHT_YEAR } from '@inertialref/shared'
-import { rootSeed } from '@inertialref/procedural'
+import { formatSeed, rootSeed } from '@inertialref/procedural'
 import { circularSpeed } from '@inertialref/physics'
 import {
   createRenderOrigin,
@@ -9,7 +9,7 @@ import {
   Vec,
   vec3,
 } from '@inertialref/spatial'
-import { generateHeightfield, walkBodies } from '@inertialref/universe'
+import { generateHeightfield, HEIGHTFIELD_RESOLUTION, isLandable, walkBodies } from '@inertialref/universe'
 import {
   bodyFrameId,
   catalogStub,
@@ -29,13 +29,15 @@ import { generateHeightfieldTask, runInline, type WorkerPool } from '@inertialre
 /*
  * The twelve capability checks.
  *
- * `INITIALPROMPT.md` lists twelve things the first milestone has to
- * demonstrate. These are those twelve, executable, in the browser, against the
- * real code — not a description of them in a document that goes stale.
+ * The first milestone had twelve things to demonstrate (docs/vision.md). These
+ * are those twelve, executable, in the browser, against the real code — not a
+ * description of them in a document that goes stale.
  *
- * Most run against scratch worlds rather than the player's session, so the
- * self-test never perturbs the game it is checking. The ones that do use the
- * live world (save round trip) only read from it.
+ * Five build scratch worlds. The rest read the live session — and check 3 is not
+ * read-only: it loads Alpha Centauri to measure the distance to it, so a session
+ * that has run a self-test has two systems loaded rather than one. That is
+ * visible in `ir.summary()` and it is not a bug, but it is worth knowing before
+ * you use the self-test as a probe mid-session.
  */
 
 export interface CapabilityResult {
@@ -63,7 +65,7 @@ function firstSolidBody(world: World) {
   const system = world.system(SOL)
   if (system === undefined) throw new Error('SOL not loaded')
   for (const body of walkBodies(system)) {
-    if (body.kind === 'rocky' && body.radius > 1e6) return body
+    if (isLandable(body)) return body
   }
   throw new Error('no solid body in SOL')
 }
@@ -266,14 +268,17 @@ function checkOriginRebasing(world: World): CapabilityResult {
 async function checkWorkerTask(world: World, pool: WorkerPool | null): Promise<CapabilityResult> {
   const planet = firstSolidBody(world)
   const payload = {
-    surfaceSeed: formatSurfaceSeed(planet.surface.seed),
+    surfaceSeed: formatSeed(planet.surface.seed),
     maxElevation: planet.surface.maxElevation,
     roughness: planet.surface.roughness,
     seaLevel: planet.surface.seaLevel,
     region: { face: 1, level: 6, i: 20, j: 33 },
-    resolution: 65,
+    resolution: HEIGHTFIELD_RESOLUTION,
   }
-  const local = generateHeightfield(planet.surface, { region: payload.region, resolution: 65 })
+  const local = generateHeightfield(planet.surface, {
+    region: payload.region,
+    resolution: HEIGHTFIELD_RESOLUTION,
+  })
   const remote = pool === null ? await runInline(generateHeightfieldTask, payload) : await pool.run(generateHeightfieldTask, payload)
 
   for (let i = 0; i < local.elevations.length; i += 1) {
@@ -327,12 +332,6 @@ function checkFrameRateIndependence(): CapabilityResult {
     return failure(12, 'Frame-rate independence', 'jittery frames produced a different universe')
   }
   return pass(12, 'Frame-rate independence', `identical state hash ${steady.stateHash()} at tick ${steady.clock.tick}`)
-}
-
-/** Local helper so this file does not need the procedural seed formatter's name twice. */
-function formatSurfaceSeed(seed: { a: number; b: number; c: number; d: number }): string {
-  const hex = (n: number): string => n.toString(16).padStart(8, '0')
-  return `${hex(seed.a)}${hex(seed.b)}${hex(seed.c)}${hex(seed.d)}`
 }
 
 /**

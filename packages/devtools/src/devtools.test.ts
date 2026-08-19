@@ -1,45 +1,29 @@
 import { describe, expect, it } from 'vitest'
-import { createInlineWorker, createTaskRegistry, WorkerPool } from '@inertialref/workers'
-import { vec3 } from '@inertialref/spatial'
-import { World } from '@inertialref/simulation'
-import { bodyFrameId, systemId, walkBodies } from '@inertialref/universe'
+import { createInlineWorker, createTaskRegistry } from '@inertialref/workers'
+import { formatAddress } from '@inertialref/universe'
 import { runCapabilityChecks, summarizeCapabilities } from './capabilities.ts'
-import { GameHarness, type HarnessHost } from './harness.ts'
+import type { GameHarness } from './harness.ts'
 import { inspectWorld } from './inspect.ts'
+import { openSession, type Session } from './session.ts'
 
-function harness(): { harness: GameHarness; world: World; host: HarnessHost } {
-  let world = new World({ seed: 'inertialref' })
-  const system = world.loadSystem(systemId('SOL'))
-  const planet = [...walkBodies(system)].find((b) => b.kind === 'rocky' && b.radius > 1e6)
-  if (planet === undefined) throw new Error('no planet')
-  let player = world.spawnShip('Debug One', bodyFrameId(planet.address), vec3(planet.radius * 3, 0, 0)).id
+function harness(): { harness: GameHarness; session: Session } {
+  // The same call the browser client and the headless runner make. When these
+  // three assembled a session independently they drifted — the client spawned
+  // at 2.5 body radii and everything else at 3 — and no test could have seen it.
   const registry = createTaskRegistry()
-  const pool = new WorkerPool({ factory: () => createInlineWorker(registry), size: 2 })
-  const host: HarnessHost = {
-    get world() {
-      return world
-    },
-    player: () => player,
-    setPlayer: (id) => {
-      player = id
-    },
-    scene: () => null,
-    pool: () => pool,
-    frameStats: () => null,
-    replaceWorld: (next, nextPlayer) => {
-      world = next
-      if (nextPlayer !== null) player = nextPlayer
-    },
-  }
-  return { harness: new GameHarness(host), world, host }
+  const session = openSession({
+    seed: 'inertialref',
+    workers: () => createInlineWorker(registry),
+  })
+  return { harness: session.harness, session }
 }
 
 describe('capability checks', () => {
   it('proves all twelve milestone capabilities', async () => {
     // This is the milestone's definition of done, executable. It runs in Node
     // here and in the browser through the harness, against the same code.
-    const { harness: ir, world } = harness()
-    const results = await runCapabilityChecks({ world, pool: null })
+    const { harness: ir, session } = harness()
+    const results = await runCapabilityChecks({ world: session.world, pool: null })
     const failed = results.filter((r) => !r.passed)
     expect(summarizeCapabilities(results).split('\n')[0]).toBe('12/12 capabilities proven')
     expect(failed).toEqual([])
@@ -122,8 +106,8 @@ describe('harness', () => {
   })
 
   it('reports every field the spec asks to be inspectable', () => {
-    const { world } = harness()
-    const inspection = inspectWorld(world)
+    const { session } = harness()
+    const inspection = inspectWorld(session.world)
     expect(inspection.seed).toBe('inertialref')
     expect(inspection.seedHex).toHaveLength(32)
     expect(inspection.stateHash).toHaveLength(8)
@@ -141,4 +125,40 @@ describe('harness', () => {
     const result = await ir.scenario('surface')
     expect(result.status.player?.landed).toBe(true)
   }, 20_000)
+})
+
+describe('landing through the harness', () => {
+  /*
+   * `ir.land()` used to assert landedness rather than achieve it: it teleported
+   * the ship 3 m above the pad and passed `landed = true`. `stepFlight`
+   * short-circuits to `stepLanded` for an entity that is already landed, so the
+   * contact test never ran, nothing brought the ship down, and it hovered there
+   * for the rest of the session while the overlay reported an altitude of 0.
+   *
+   * Landedness is a consequence of geometry now — `teleport` has no flag to set
+   * — so the only way to be landed is to have actually touched the ground.
+   */
+  it('puts the ship on the pad, not hovering above it', () => {
+    const { session } = harness()
+    const player = session.player()
+    if (player === null) throw new Error('no player')
+
+    session.harness.land(formatAddress(session.target.address), 0.35, -1.1)
+    // Not landed yet: the contact test decides, on the next tick.
+    expect(session.world.isLanded(player)).toBe(false)
+
+    session.world.runTicks(64)
+    expect(session.world.isLanded(player)).toBe(true)
+
+    // Local y in a surface frame is height above the pad, and the pad is what
+    // the frame's origin is. Reporting 0 while sitting at 3 was the bug.
+    const height = () => session.world.entities.require(player).state.position.y
+    expect(height()).toBeCloseTo(0, 6)
+    expect(session.world.altitudeOf(player)).toBe(0)
+
+    // And it stays there rather than drifting or re-landing forever.
+    session.world.runTicks(64 * 60)
+    expect(height()).toBeCloseTo(0, 6)
+    expect(session.world.isLanded(player)).toBe(true)
+  })
 })

@@ -10,6 +10,14 @@
  *
  * Each package declares `inertialref.layer` in its package.json. A package may
  * only depend on strictly lower layers.
+ *
+ * It also enforces the rule that `packages/*` carries no third-party runtime
+ * dependency at all. That is the mechanical form of "no hosting vendor's SDK
+ * below the adapter layer": the core has to run unchanged in a browser, a worker
+ * and Node, and the cheapest way to guarantee it is to let it depend on nothing
+ * but itself. The layering check alone could not catch this — it discarded every
+ * non-workspace edge before looking — so the invariant was documented as
+ * enforced while nothing enforced it.
  */
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
@@ -26,16 +34,24 @@ for (const name of readdirSync(packagesDir)) {
   } catch {
     continue
   }
+  const allDeps = Object.keys(manifest.dependencies ?? {})
   packages.set(manifest.name, {
     name: manifest.name,
     layer: manifest.inertialref?.layer,
-    deps: Object.keys(manifest.dependencies ?? {}).filter((dep) => dep.startsWith('@inertialref/')),
+    deps: allDeps.filter((dep) => dep.startsWith('@inertialref/')),
+    foreign: allDeps.filter((dep) => !dep.startsWith('@inertialref/')),
   })
 }
 
 const problems = []
 
 for (const pkg of packages.values()) {
+  if (pkg.foreign.length > 0) {
+    problems.push(
+      `${pkg.name} depends on ${pkg.foreign.join(', ')}; packages/* must have no ` +
+        `third-party runtime dependency (see the header of this script)`,
+    )
+  }
   if (typeof pkg.layer !== 'number') {
     problems.push(`${pkg.name} has no inertialref.layer in its package.json`)
     continue
@@ -88,4 +104,4 @@ for (const pkg of packages.values()) {
 for (const layer of [...byLayer.keys()].sort((a, b) => a - b)) {
   console.log(`layer ${layer}: ${byLayer.get(layer).sort().join(', ')}`)
 }
-console.log(`${packages.size} packages, no cycles, layering intact`)
+console.log(`${packages.size} packages, no cycles, layering intact, no third-party dependencies`)

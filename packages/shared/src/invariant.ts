@@ -15,15 +15,4 @@ export function invariant(condition: unknown, message: string): asserts conditio
   if (!condition) throw new InvariantError(message)
 }
 
-/**
- * Exhaustiveness check for discriminated unions. `erasableSyntaxOnly` forbids
- * enums, so unions plus this helper are how we get switch exhaustiveness.
- */
-export function assertNever(value: never, message = 'Unexpected variant'): never {
-  throw new InvariantError(`${message}: ${JSON.stringify(value)}`)
-}
 
-/** Guard for values that must be finite numbers (catches NaN propagation early). */
-export function assertFinite(value: number, what: string): asserts value is number {
-  if (!Number.isFinite(value)) throw new InvariantError(`${what} must be finite, got ${value}`)
-}

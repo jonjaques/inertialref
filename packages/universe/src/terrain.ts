@@ -1,7 +1,14 @@
-import type { Meters } from '@inertialref/shared'
+import type { Brand, Meters } from '@inertialref/shared'
 import { invariant } from '@inertialref/shared'
 import { deriveSeed, fbm3, ridged3 } from '@inertialref/procedural'
-import { type Vec3, vec3, Vec } from '@inertialref/spatial'
+import {
+  type FramePose,
+  type UniverseVector,
+  type Vec3,
+  universeToLocal,
+  vec3,
+  Vec,
+} from '@inertialref/spatial'
 import { type RegionAddress, regionAddress } from './address.ts'
 import type { Body, SurfaceParameters } from './system.ts'
 
@@ -23,21 +30,47 @@ import type { Body, SurfaceParameters } from './system.ts'
 
 export const FACE_COUNT = 6
 
+/**
+ * A unit direction from a body's centre, expressed in that body's *rotating*
+ * axes.
+ *
+ * Branded because a bare `Vec3` carries no axes and this is the one place where
+ * passing the wrong ones is both easy and silent: terrain is a function of
+ * position on the turning body, so an inertial direction leaves the mountains
+ * standing still in inertial space while the planet rotates underneath them.
+ * That shipped once as "a ship landing 83 m above the ground it had just
+ * touched", and it shipped a second time in the drag path, where nothing
+ * rendered wrong and nothing failed — the density was simply computed against
+ * the wrong mountain.
+ *
+ * There are exactly two producers below. Neither can be reached without a spin
+ * frame or a region address, which is what makes the brand worth its cost.
+ */
+export type BodyFixedDirection = Brand<Vec3, 'body-fixed'>
+
+/** Direction of `position` from the body whose rotating frame is `spinPose`. */
+export function bodyFixedDirection(
+  spinPose: FramePose,
+  position: UniverseVector,
+): BodyFixedDirection {
+  return Vec.normalize(universeToLocal(spinPose, position)) as BodyFixedDirection
+}
+
 /** Face-local (u, v) in [-1, 1] to a direction on the unit sphere. */
-export function faceToDirection(face: number, u: number, v: number): Vec3 {
+export function faceToDirection(face: number, u: number, v: number): BodyFixedDirection {
   switch (face) {
     case 0:
-      return Vec.normalize(vec3(1, v, -u))
+      return Vec.normalize(vec3(1, v, -u)) as BodyFixedDirection
     case 1:
-      return Vec.normalize(vec3(-1, v, u))
+      return Vec.normalize(vec3(-1, v, u)) as BodyFixedDirection
     case 2:
-      return Vec.normalize(vec3(u, 1, -v))
+      return Vec.normalize(vec3(u, 1, -v)) as BodyFixedDirection
     case 3:
-      return Vec.normalize(vec3(u, -1, v))
+      return Vec.normalize(vec3(u, -1, v)) as BodyFixedDirection
     case 4:
-      return Vec.normalize(vec3(u, v, 1))
+      return Vec.normalize(vec3(u, v, 1)) as BodyFixedDirection
     case 5:
-      return Vec.normalize(vec3(-u, v, -1))
+      return Vec.normalize(vec3(-u, v, -1)) as BodyFixedDirection
     default:
       invariant(false, `Bad cube face ${face}`)
   }
@@ -81,7 +114,11 @@ export function regionCentreDirection(region: RegionAddress): Vec3 {
 }
 
 /** Direction of a normalised (s, t) ∈ [0,1]² position inside a region. */
-export function regionDirection(region: RegionAddress, s: number, t: number): Vec3 {
+export function regionDirection(
+  region: RegionAddress,
+  s: number,
+  t: number,
+): BodyFixedDirection {
   const span = 2 ** region.level
   const u = ((region.i + s) / span) * 2 - 1
   const v = ((region.j + t) / span) * 2 - 1
@@ -121,18 +158,42 @@ export function elevationAt(surface: SurfaceParameters, direction: Vec3): Meters
   return height * surface.maxElevation
 }
 
-/** Radius of the surface below a direction, including elevation and any ocean. */
-export function surfaceRadius(body: Body, direction: Vec3): Meters {
-  const elevation = elevationAt(body.surface, direction)
-  const sea = body.surface.seaLevel
-  if (sea === null) return body.radius + elevation
-  const seaElevation = (sea * 2 - 1) * body.surface.maxElevation * 0.55
-  return body.radius + Math.max(elevation, seaElevation)
+/**
+ * Elevation of the *ground* below a direction: landform, clamped up to the
+ * ocean surface where there is one.
+ *
+ * This is the single owner of the sea clamp. It used to live inside
+ * `surfaceRadius` alone, so physics and frames put a landing pad on the ocean
+ * datum while `generateHeightfield` — which calls `elevationAt` directly — drew
+ * the seabed underneath it. `seaLevel` was carried the whole way to the mesh
+ * and then ignored, on roughly 40% of atmosphered rocky planets.
+ */
+export function groundElevation(surface: SurfaceParameters, direction: Vec3): Meters {
+  const elevation = elevationAt(surface, direction)
+  const sea = surface.seaLevel
+  if (sea === null) return elevation
+  return Math.max(elevation, (sea * 2 - 1) * surface.maxElevation * 0.55)
 }
+
+/** Radius of the surface below a direction, including elevation and any ocean. */
+export function surfaceRadius(body: Body, direction: BodyFixedDirection): Meters {
+  return body.radius + groundElevation(body.surface, direction)
+}
+
+/**
+ * Vertices per side of a terrain patch. 65 gives a 64-quad patch with a shared
+ * edge row, which is what lets neighbouring patches stitch without a seam.
+ *
+ * Single-sourced here because the streamer, the worker task and capability
+ * check 10 all have to agree: that check compares worker output to main-thread
+ * output sample-by-sample, so two of them drifting apart would not fail, it
+ * would compare two differently-sized grids.
+ */
+export const HEIGHTFIELD_RESOLUTION = 65
 
 export interface HeightfieldRequest {
   readonly region: RegionAddress
-  /** Vertices per side. 65 gives a 64-quad patch with a shared edge row. */
+  /** Vertices per side; see HEIGHTFIELD_RESOLUTION. */
   readonly resolution: number
 }
 
@@ -165,7 +226,7 @@ export function generateHeightfield(
     const t = row / (resolution - 1)
     for (let col = 0; col < resolution; col += 1) {
       const s = col / (resolution - 1)
-      const elevation = elevationAt(surface, regionDirection(region, s, t))
+      const elevation = groundElevation(surface, regionDirection(region, s, t))
       elevations[row * resolution + col] = elevation
       if (elevation < min) min = elevation
       if (elevation > max) max = elevation

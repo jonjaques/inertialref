@@ -6,7 +6,7 @@ import {
   Vec,
   type Vec3,
 } from '@inertialref/spatial'
-import { type LodTier, selectLod, type LodThresholds, DEFAULT_LOD } from './lod.ts'
+import { type LodTier, selectLod } from './lod.ts'
 
 /*
  * Turning a canonical position into something the GPU can draw (ADR-0003).
@@ -25,29 +25,24 @@ import { type LodTier, selectLod, type LodThresholds, DEFAULT_LOD } from './lod.
  * distance, so occlusion ordering survives, which a single far shell would not.
  */
 
-export interface PlacementConfig {
-  /** Distance below which nothing is touched: true metres, true scale. */
-  readonly nearLimit: Meters
-  /** Where the compressed range starts. Must equal nearLimit for continuity. */
-  readonly shellStart: Meters
-  /**
-   * How far one e-fold of real distance moves the compressed position. Setting
-   * this equal to `nearLimit` makes the derivative exactly 1 at the boundary,
-   * so the mapping is C¹ and a body crossing into the near field neither jumps
-   * nor visibly changes its rate of approach.
-   */
-  readonly shellSpan: Meters
-  readonly thresholds: LodThresholds
-}
+/*
+ * The compression shell. Constants, for the same reason as LOD_THRESHOLDS: the
+ * `PlacementConfig` these replace had exactly one instance in the repository.
+ */
 
-export const DEFAULT_PLACEMENT: PlacementConfig = {
-  nearLimit: 2e6,
-  shellStart: 2e6,
-  // Equal to nearLimit: see the field comment. Four light-years compresses to
-  // about 5e7 m, which needs a logarithmic depth buffer but nothing more.
-  shellSpan: 2e6,
-  thresholds: DEFAULT_LOD,
-}
+/** Distance below which nothing is touched: true metres, true scale. */
+export const NEAR_LIMIT: Meters = 2e6
+/** Where the compressed range starts. Equal to NEAR_LIMIT, for continuity. */
+export const SHELL_START: Meters = 2e6
+/**
+ * How far one e-fold of real distance moves the compressed position.
+ *
+ * Equal to `NEAR_LIMIT`, which makes the derivative exactly 1 at the boundary,
+ * so the mapping is C¹ and a body crossing into the near field neither jumps nor
+ * visibly changes its rate of approach. Four light-years compresses to about
+ * 5e7 m, which needs a logarithmic depth buffer but nothing more.
+ */
+export const SHELL_SPAN: Meters = 2e6
 
 export interface RenderPlacement {
   /** Position in render space, metres, possibly compressed. */
@@ -78,20 +73,19 @@ export interface RenderPlacement {
  * this costs nothing — but it is a property of the mapping, not an accident,
  * and the tests state it that way.
  */
-export function compressDistance(distance: Meters, config: PlacementConfig): Meters {
-  if (distance <= config.nearLimit) return distance
-  return config.shellStart + config.shellSpan * Math.log(1 + (distance - config.nearLimit) / config.nearLimit)
+export function compressDistance(distance: Meters): Meters {
+  if (distance <= NEAR_LIMIT) return distance
+  return SHELL_START + SHELL_SPAN * Math.log(1 + (distance - NEAR_LIMIT) / NEAR_LIMIT)
 }
 
 export function placeAt(
   origin: RenderOrigin,
   position: UniverseVector,
   radius: Meters,
-  config: PlacementConfig = DEFAULT_PLACEMENT,
 ): RenderPlacement {
   const offset = toRenderSpace(origin, position)
   const distance = Vec.length(offset)
-  const tier = selectLod(radius, distance, config.thresholds)
+  const tier = selectLod(radius, distance)
   const angle = radius <= 0 || distance <= 0 ? 0 : Math.asin(Math.min(1, radius / Math.max(radius, distance)))
 
   // Compression keys off the distance to the *surface*, not to the centre.
@@ -105,11 +99,11 @@ export function placeAt(
   // Using the surface distance also makes the transition continuous: at the
   // boundary the factor is exactly 1, so a planet does not pop as you arrive.
   const surfaceDistance = Math.max(0, distance - radius)
-  if (surfaceDistance <= config.nearLimit || distance === 0) {
+  if (surfaceDistance <= NEAR_LIMIT || distance === 0) {
     return { position: offset, scale: radius, distance, tier, compressed: false, angularRadius: angle }
   }
 
-  const factor = (radius + compressDistance(surfaceDistance, config)) / distance
+  const factor = (radius + compressDistance(surfaceDistance)) / distance
   return {
     // Same direction, and position and radius scale together — so the object
     // subtends exactly the angle it should. Only depth becomes a lie.
@@ -123,8 +117,30 @@ export function placeAt(
 }
 
 /** Place a point with no extent (a distant star). */
-export const placePoint = (
-  origin: RenderOrigin,
-  position: UniverseVector,
-  config: PlacementConfig = DEFAULT_PLACEMENT,
-): RenderPlacement => placeAt(origin, position, 0, config)
+export const placePoint = (origin: RenderOrigin, position: UniverseVector): RenderPlacement =>
+  placeAt(origin, position, 0)
+
+/** Radius of the shell distant stars are drawn on. */
+export const STAR_SHELL_RADIUS: Meters = 8e7
+
+/**
+ * Project a star onto a fixed shell around the render origin.
+ *
+ * Stars sit far outside any usable depth range, so only their direction is
+ * observable; the shell radius is a rendering convenience, not a distance.
+ *
+ * This lives here rather than in the R3F layer, where it was open-coded over
+ * the raw sector fields with `2 ** 40` written out by hand — the sector size
+ * that `spatial` owns and ADR-0001 makes load-bearing. That copy also skipped
+ * the origin's *orientation*, which `toRenderSpace` applies and every body
+ * therefore got: whenever the origin was anchored to an oriented frame the
+ * stars were rotated out of alignment with the planets in front of them.
+ *
+ * Returns null for a star exactly at the origin, which has no direction.
+ */
+export function placeOnStarShell(origin: RenderOrigin, position: UniverseVector): Vec3 | null {
+  const offset = toRenderSpace(origin, position)
+  const length = Vec.length(offset)
+  if (length === 0) return null
+  return Vec.scale(offset, STAR_SHELL_RADIUS / length)
+}

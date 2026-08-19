@@ -1,5 +1,4 @@
 import { ok } from '@inertialref/shared'
-import type { FrameState } from '@inertialref/spatial'
 import {
   decodeArray,
   decodeBoolean,
@@ -7,13 +6,13 @@ import {
   decodeNumber,
   decodeObject,
   decodeOptional,
+  decodeEnum,
   decodeString,
   type Decoder,
 } from './codec.ts'
 import {
   decodeWireFrameState,
   decodeWireVec3,
-  encodeFrameState,
   type WireFrameState,
   type WireVec3,
 } from './wire.ts'
@@ -58,7 +57,8 @@ export interface SaveEntity {
   readonly flightAssist: boolean
 }
 
-export type SaveMutationKind = 'discovered' | 'destroyed' | 'placed' | 'terrain'
+export const SAVE_MUTATION_KINDS = ['discovered', 'destroyed', 'placed', 'terrain'] as const
+export type SaveMutationKind = (typeof SAVE_MUTATION_KINDS)[number]
 
 export interface SaveMutation {
   /** Universe address the mutation applies to. */
@@ -128,10 +128,10 @@ const decodeNumberRecord: Decoder<Readonly<Record<string, number>>> = (value, pa
 
 export const decodeSaveMutation: Decoder<SaveMutation> = decodeObject({
   address: decodeString,
-  kind: decodeString,
+  kind: decodeEnum(...SAVE_MUTATION_KINDS),
   data: decodeString,
   tick: decodeInteger,
-}) as Decoder<SaveMutation>
+})
 
 /**
  * Decode a save of the *current* schema version.
@@ -153,6 +153,4 @@ export const decodeSaveGame: Decoder<SaveGame> = decodeObject({
   loadedSystems: decodeArray(decodeString),
   mutations: decodeOptional(decodeArray(decodeSaveMutation), []),
   meta: decodeOptional(decodeStringRecord, {}),
-}) as Decoder<SaveGame>
-
-export const encodeEntityState = (state: FrameState): WireFrameState => encodeFrameState(state)
+})

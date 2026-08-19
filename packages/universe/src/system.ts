@@ -383,6 +383,19 @@ export function findBody(system: StarSystem, path: readonly number[]): Body | un
   return body
 }
 
+/**
+ * Somewhere a ship can actually put down: solid ground, and big enough that the
+ * surface is a place rather than a curiosity.
+ *
+ * The 1,000 km floor is what separates a world from a rubble pile — below it the
+ * horizon is close enough that "landing" and "docking" stop being different
+ * manoeuvres. This predicate decided where every session in the game starts and
+ * was written out five times as `body.kind === 'rocky' && body.radius > 1e6`,
+ * which is how the client and the headless runner came to disagree about the
+ * spawn distance without anything noticing.
+ */
+export const isLandable = (body: Body): boolean => body.kind === 'rocky' && body.radius > 1e6
+
 /** Habitable-zone check, used by the harness and the star map to pick targets. */
 export function insolation(star: Star, semiMajorAxis: Meters): number {
   return star.luminosity / (4 * Math.PI * semiMajorAxis * semiMajorAxis)

@@ -9,8 +9,6 @@ import {
   generateHeightfield,
   generateSystem,
   type Heightfield,
-  levelForSize,
-  MILKY_WAY,
   type RegionAddress,
   regionAddress,
   resolveSystem,
@@ -229,10 +227,3 @@ export function createTaskRegistry(): TaskRegistry {
   return registry
 }
 
-export const DEFAULT_HEIGHTFIELD_RESOLUTION = 65
-
-/** Level whose regions are roughly `target` meters across, clamped for sanity. */
-export const heightfieldLevelFor = (radius: number, target: number): number =>
-  Math.min(18, levelForSize(radius, target))
-
-export { MILKY_WAY }

@@ -1,9 +1,24 @@
 import { describe, expect, it } from 'vitest'
-import { SECONDS_PER_DAY } from '@inertialref/shared'
+import { LIGHT_YEAR, type Meters, type Seconds, SECONDS_PER_DAY } from '@inertialref/shared'
 import { Rng, rootSeed } from '@inertialref/procedural'
 import { circularSpeed } from '@inertialref/physics'
-import { canonicalPosition, UV, Vec, vec3 } from '@inertialref/spatial'
-import { bodyFrameId, systemFrameId, systemId, walkBodies } from '@inertialref/universe'
+import {
+  canonicalPosition,
+  localToUniverse,
+  POSITION_RESOLUTION,
+  UV,
+  Vec,
+  vec3,
+} from '@inertialref/spatial'
+import {
+  bodyFixedDirection,
+  bodyFixedFrameId,
+  bodyFrameId,
+  surfaceRadius,
+  systemFrameId,
+  systemId,
+  walkBodies,
+} from '@inertialref/universe'
 import { TICK_DURATION, TICK_RATE } from './clock.ts'
 import { snapshot } from './snapshot.ts'
 import { World } from './world.ts'
@@ -276,14 +291,14 @@ describe('streaming', () => {
     const sol = world.loadSystem(SOL)
     const ship = world.spawnShip('scout', systemFrameId(SOL), vec3(1e9, 0, 0))
 
-    const near = world.updateInterest(sol.position, 5 * 9.4607304725808e15)
+    const near = world.updateInterest(sol.position, 5 * LIGHT_YEAR)
     expect(near.loaded.length).toBeGreaterThan(0)
     expect(world.loadedSystems().length).toBeGreaterThan(1)
 
     // Move the interest centre far away: everything unloads except the system
     // the ship is actually in.
-    const far = UV.translate(sol.position, vec3(200 * 9.4607304725808e15, 0, 0))
-    world.updateInterest(far, 5 * 9.4607304725808e15)
+    const far = UV.translate(sol.position, vec3(200 * LIGHT_YEAR, 0, 0))
+    world.updateInterest(far, 5 * LIGHT_YEAR)
     const remaining = world.loadedSystems().map((s) => s.id)
     expect(remaining).toContain(SOL)
     expect(world.entities.require(ship.id).state.frame).toBe(systemFrameId(SOL))
@@ -342,5 +357,91 @@ describe('snapshots', () => {
     const midpoint = UV.distance(planetA.position, planetB.position)
     const full = UV.distance(planetA.position, planetC.position)
     expect(midpoint / full).toBeCloseTo(0.5, 6)
+  })
+})
+
+describe('terrain is sampled in body-fixed axes', () => {
+  /*
+   * The regression these two guard is the one CONTEXT.md records and the one
+   * that came back: terrain is a function of position on the *turning* body, so
+   * an inertial direction leaves the mountains behind as the planet rotates.
+   *
+   * It reappeared in the pre-integration sample inside `stepFlight` — the one
+   * the atmosphere is evaluated against — where nothing rendered wrong and no
+   * test failed, because that altitude only ever feeds a drag coefficient.
+   */
+  it('holds the ground still under a point fixed to the rotating body', () => {
+    const world = solarWorld()
+    const planet = landingTarget(world)
+    const spinFrame = bodyFixedFrameId(planet.address)
+    world.ensureFrame(spinFrame)
+
+    // One point, fixed in the body's own axes, sampled as the planet turns.
+    const local = vec3(planet.radius * 1.001, 0, 0)
+    const groundAt = (time: Seconds): Meters => {
+      const pose = world.frames.pose(spinFrame, time)
+      return surfaceRadius(planet, bodyFixedDirection(pose, localToUniverse(pose, local)))
+    }
+
+    const samples = [0, 0.1, 0.25, 0.5, 0.75, 1].map((f) =>
+      groundAt((SECONDS_PER_DAY * f) as Seconds),
+    )
+    const spread = Math.max(...samples) - Math.min(...samples)
+
+    // Not zero: the sample round-trips through a rotation and a UniverseVector,
+    // so it carries that round trip's error and nothing better. POSITION_RESOLUTION
+    // is where that error is allowed to live — it is the coordinate system's own
+    // floor, not a tolerance chosen to make this pass.
+    expect(spread).toBeLessThan(POSITION_RESOLUTION)
+    // And the point of the invariant: the drift is negligible against the relief
+    // it would otherwise smear. Sampled inertially, a full rotation walks the
+    // sample across the whole planet.
+    expect(spread).toBeLessThan(planet.surface.maxElevation * 1e-6)
+  })
+})
+
+describe('the state hash covers what it claims', () => {
+  /*
+   * AGENTS.md makes `stateHash` *the* determinism comparison, and its docstring
+   * says "everything canonical". It used to hash position, velocity, orientation
+   * and landedness — omitting angular velocity, control input and flight assist,
+   * which is precisely where a shipped bug already lived ("a save taken mid-burn
+   * resumed coasting"). Two worlds diverging in those fields compared equal at
+   * the moment they diverged, and only drifted apart hundreds of ticks later.
+   */
+  const twoWorlds = () => {
+    const make = () => {
+      const world = solarWorld()
+      const planet = landingTarget(world)
+      const ship = world.spawnShip('probe', bodyFrameId(planet.address), vec3(planet.radius * 3, 0, 0))
+      return { world, ship: ship.id }
+    }
+    return [make(), make()] as const
+  }
+
+  it('separates worlds that differ only in control input', () => {
+    const [a, b] = twoWorlds()
+    expect(a.world.stateHash()).toBe(b.world.stateHash())
+    b.world.setControl(b.ship, vec3(0, 0, 1), Vec.ZERO)
+    expect(a.world.stateHash()).not.toBe(b.world.stateHash())
+  })
+
+  it('separates worlds that differ only in flight assist', () => {
+    const [a, b] = twoWorlds()
+    b.world.setFlightAssist(b.ship, !b.world.entities.require(b.ship).flightAssist)
+    expect(a.world.stateHash()).not.toBe(b.world.stateHash())
+  })
+
+  it('separates worlds that differ only in angular velocity', () => {
+    const [a, b] = twoWorlds()
+    // Spin one up, then stop it with the command that writes angular velocity.
+    b.world.setControl(b.ship, Vec.ZERO, vec3(0, 1, 0))
+    b.world.runTicks(8)
+    a.world.setControl(a.ship, Vec.ZERO, vec3(0, 1, 0))
+    a.world.runTicks(8)
+    expect(a.world.stateHash()).toBe(b.world.stateHash())
+
+    b.world.killRotation(b.ship)
+    expect(a.world.stateHash()).not.toBe(b.world.stateHash())
   })
 })

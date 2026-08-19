@@ -6,15 +6,13 @@ import {
   type Quat,
   type RenderOrigin,
   toRenderSpace,
-  UV,
   type UniverseVector,
-  Vec,
   type Vec3,
 } from '@inertialref/spatial'
 import type { EntitySnapshot, WorldSnapshot } from '@inertialref/simulation'
 import type { EntityId } from '@inertialref/universe'
 import { type LodTier, starColor } from './lod.ts'
-import { DEFAULT_PLACEMENT, placeAt, type PlacementConfig, type RenderPlacement } from './placement.ts'
+import { placeAt, type RenderPlacement } from './placement.ts'
 
 /*
  * The scene description.
@@ -68,16 +66,8 @@ export interface RenderScene {
   readonly terrainCandidates: readonly RenderBody[]
 }
 
-export interface SceneConfig {
-  readonly placement: PlacementConfig
-  /** Bodies dimmer/smaller than this angular radius are dropped entirely. */
-  readonly cullAngle: number
-}
-
-export const DEFAULT_SCENE: SceneConfig = {
-  placement: DEFAULT_PLACEMENT,
-  cullAngle: 1e-5,
-}
+/** Bodies smaller than this angular radius are dropped entirely. */
+const CULL_ANGLE = 1e-5
 
 /** Keep the render origin near the camera. Pure: returns the origin to use. */
 export function originForCamera(
@@ -91,7 +81,6 @@ export function buildScene(
   snapshot: WorldSnapshot,
   origin: RenderOrigin,
   cameraEntity: EntityId,
-  config: SceneConfig = DEFAULT_SCENE,
 ): RenderScene {
   const camera = snapshot.entities.find((entity) => entity.id === cameraEntity)
   invariant(camera !== undefined, `Camera entity ${cameraEntity} is not in the snapshot`)
@@ -103,8 +92,8 @@ export function buildScene(
     // the datum radius hides every valley on the planet — which, with only a
     // few patches streamed, means hiding most of the terrain.
     const sphereRadius = Math.max(body.radius * 0.9, body.radius - body.relief)
-    const placement = placeAt(origin, body.position, sphereRadius, config.placement)
-    if (placement.angularRadius < config.cullAngle) continue
+    const placement = placeAt(origin, body.position, sphereRadius, )
+    if (placement.angularRadius < CULL_ANGLE) continue
     bodies.push({
       address: body.address,
       name: body.name,
@@ -119,7 +108,7 @@ export function buildScene(
 
   let brightest = 0
   const rawStars = snapshot.stars.map((star) => {
-    const placement = placeAt(origin, star.position, star.radius, config.placement)
+    const placement = placeAt(origin, star.position, star.radius, )
     // Inverse-square apparent brightness; normalised below so the scene always
     // has something at full intensity whatever the player is looking at.
     const apparent = star.luminosity / Math.max(1, placement.distance * placement.distance)
@@ -173,9 +162,6 @@ export function nearestBody(scene: RenderScene): RenderBody | null {
   return best
 }
 
-/** Distance between two render-space points, for debug readouts. */
-export const renderDistance = (a: Vec3, b: Vec3): number => Vec.distance(a, b)
 
-export const universeDistance = (a: UniverseVector, b: UniverseVector): number => UV.distance(a, b)
 
 export type { LodTier }

@@ -1,19 +1,20 @@
 import { getLogger } from '@inertialref/shared'
 import { formatSeed } from '@inertialref/procedural'
 import {
+  type FramePose,
   Quaternion as Q,
   type RenderOrigin,
   UV,
   type UniverseVector,
-  universeToLocal,
-  Vec,
 } from '@inertialref/spatial'
 import type { World } from '@inertialref/simulation'
 import {
+  bodyFixedDirection,
   bodyFixedFrameId,
   bodyFrameId,
   type Body,
   findBody,
+  HEIGHTFIELD_RESOLUTION,
   parseAddress,
   type RegionAddress,
   regionAddress,
@@ -35,7 +36,6 @@ import { generateHeightfieldTask, type WorkerPool } from '@inertialref/workers'
 
 const log = getLogger('game.terrain')
 
-const RESOLUTION = 65
 /** How many rings of neighbours around the player's own region. */
 const RADIUS = 1
 
@@ -82,27 +82,23 @@ export class TerrainStreamer {
    */
   update(world: World, camera: UniverseVector, origin: RenderOrigin, bodyAddress: string | null): void {
     if (bodyAddress === null) {
-      this.#clear()
+      this.clear()
       return
     }
     if (bodyAddress !== this.#bodyAddress) {
-      this.#clear()
+      this.clear()
       this.#bodyAddress = bodyAddress
     }
 
-    const address = parseAddress(bodyAddress)
-    if (address.kind !== 'body') return
-    const system = world.system(address.system)
-    if (system === undefined) return
-    const body = findBody(system, address.body)
-    if (body === undefined) return
+    const resolved = this.#resolve(world, bodyAddress)
+    if (resolved === null) return
+    const { body, bodyPose, spinPose } = resolved
 
-    const time = world.clock.time
-    const spinPose = world.frames.pose(bodyFixedFrameId(body.address), time)
-    const bodyPose = world.frames.pose(bodyFrameId(body.address), time)
     const distance = UV.distance(camera, bodyPose.position)
-    // Which patch of ground is under the camera, in body-fixed axes.
-    const direction = Vec.normalize(universeToLocal(spinPose, camera))
+    // Which patch of ground is under the camera. `bodyFixedDirection` is the
+    // only producer of the branded direction the terrain functions accept, so
+    // this cannot drift back to an inertial sample the way it once did.
+    const direction = bodyFixedDirection(spinPose, camera)
     this.#level = terrainLevelFor(body.radius, distance)
 
     const centre = regionForDirection(direction, this.#level)
@@ -132,34 +128,28 @@ export class TerrainStreamer {
     }
   }
 
-  /** Rebuild every patch against a new origin. Cheap: the noise is cached. */
-  rebuild(world: World, origin: RenderOrigin): void {
-    if (this.#bodyAddress === null) return
-    const address = parseAddress(this.#bodyAddress)
-    if (address.kind !== 'body') return
+  /**
+   * Resolve the streamed body and the two poses terrain needs.
+   *
+   * The `bf:` spin pose and the `b:` orbital pose are different frames and the
+   * difference is the whole "terrain is sampled in body-fixed axes" rule, so
+   * they are looked up in one place rather than at each caller.
+   */
+  #resolve(
+    world: World,
+    bodyAddress: string,
+  ): { body: Body; bodyPose: FramePose; spinPose: FramePose } | null {
+    const address = parseAddress(bodyAddress)
+    if (address.kind !== 'body') return null
     const system = world.system(address.system)
-    if (system === undefined) return
+    if (system === undefined) return null
     const body = findBody(system, address.body)
-    if (body === undefined) return
+    if (body === undefined) return null
     const time = world.clock.time
-    const bodyPose = world.frames.pose(bodyFrameId(body.address), time)
-    const spinPose = world.frames.pose(bodyFixedFrameId(body.address), time)
-
-    for (const [key, field] of this.#fields) {
-      this.#patches.set(
-        key,
-        buildPatch(
-          {
-            region: field.region,
-            resolution: RESOLUTION,
-            elevations: field.elevations,
-            bodyRadius: body.radius,
-            bodyCentre: bodyPose.position,
-            bodyOrientation: spinPose.orientation,
-          },
-          origin,
-        ),
-      )
+    return {
+      body,
+      bodyPose: world.frames.pose(bodyFrameId(body.address), time),
+      spinPose: world.frames.pose(bodyFixedFrameId(body.address), time),
     }
   }
 
@@ -180,7 +170,7 @@ export class TerrainStreamer {
           buildPatch(
             {
               region,
-              resolution: RESOLUTION,
+              resolution: HEIGHTFIELD_RESOLUTION,
               elevations: cached.elevations,
               bodyRadius: body.radius,
               bodyCentre,
@@ -202,7 +192,7 @@ export class TerrainStreamer {
         roughness: body.surface.roughness,
         seaLevel: body.surface.seaLevel,
         region,
-        resolution: RESOLUTION,
+        resolution: HEIGHTFIELD_RESOLUTION,
       })
       .then((result) => {
         this.#fields.set(key, { elevations: result.elevations, region })
@@ -215,7 +205,8 @@ export class TerrainStreamer {
       })
   }
 
-  #clear(): void {
+  /** Drop everything. The world was replaced; none of this describes it. */
+  clear(): void {
     this.#fields.clear()
     this.#patches.clear()
     this.#bodyAddress = null
@@ -225,6 +216,3 @@ export class TerrainStreamer {
     return `${bodyAddress}|${region.face}.${region.level}.${region.i}.${region.j}`
   }
 }
-
-export const TERRAIN_RESOLUTION = RESOLUTION
-export { Vec }

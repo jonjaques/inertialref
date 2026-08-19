@@ -24,19 +24,21 @@ export type LodTier =
   /** Fills a good part of the view: sphere plus streamed terrain patches. */
   | 'surface'
 
-export interface LodThresholds {
-  /** Angular radius, radians, above which a body is drawn as a billboard. */
-  readonly billboard: number
-  readonly sphere: number
-  readonly surface: number
-}
-
-export const DEFAULT_LOD: LodThresholds = {
+/*
+ * Angular radius, in radians, at which a body changes representation.
+ *
+ * Constants rather than an injectable `LodThresholds`. There was one, threaded
+ * through six signatures and nested three deep inside a `SceneConfig`, and in
+ * the whole repository — app, headless runner, devtools and tests — nothing
+ * ever constructed one other than the default. One adapter is a hypothetical
+ * seam, and this one was charging every caller a parameter for it.
+ */
+export const LOD_THRESHOLDS = {
   // ~0.2 mrad is roughly a pixel at a 60 degree FOV on a 1080p display.
   billboard: 2e-4,
   sphere: 2e-3,
   surface: 0.12,
-}
+} as const
 
 /** Angular radius of a sphere of `radius` seen from `distance`, in radians. */
 export function angularRadius(radius: Meters, distance: Meters): number {
@@ -44,15 +46,11 @@ export function angularRadius(radius: Meters, distance: Meters): number {
   return Math.asin(Math.min(1, radius / distance))
 }
 
-export function selectLod(
-  radius: Meters,
-  distance: Meters,
-  thresholds: LodThresholds = DEFAULT_LOD,
-): LodTier {
+export function selectLod(radius: Meters, distance: Meters): LodTier {
   const angle = angularRadius(radius, distance)
-  if (angle >= thresholds.surface) return 'surface'
-  if (angle >= thresholds.sphere) return 'sphere'
-  if (angle >= thresholds.billboard) return 'billboard'
+  if (angle >= LOD_THRESHOLDS.surface) return 'surface'
+  if (angle >= LOD_THRESHOLDS.sphere) return 'sphere'
+  if (angle >= LOD_THRESHOLDS.billboard) return 'billboard'
   return 'point'
 }
 

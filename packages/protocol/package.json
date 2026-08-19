@@ -13,7 +13,6 @@
   },
   "dependencies": {
     "@inertialref/shared": "workspace:*",
-    "@inertialref/spatial": "workspace:*",
-    "@inertialref/universe": "workspace:*"
+    "@inertialref/spatial": "workspace:*"
   }
 }

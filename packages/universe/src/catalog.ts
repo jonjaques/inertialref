@@ -1,4 +1,4 @@
-import { type Kilograms, type Meters, PARSEC, type Radians } from '@inertialref/shared'
+import { type Kilograms, LIGHT_YEAR, type Meters, PARSEC, type Radians } from '@inertialref/shared'
 import { astroToSim } from '@inertialref/physics'
 import { fromMeters, type UniverseVector, vec3 } from '@inertialref/spatial'
 import { type SystemId, systemId } from './address.ts'
@@ -103,7 +103,7 @@ export function equatorialToGalactic(
  */
 export function catalogStarPosition(star: CatalogStar): UniverseVector {
   const { l, b } = equatorialToGalactic(star.rightAscension, star.declination)
-  const distance = star.distanceLightYears * 9.4607304725808e15
+  const distance = star.distanceLightYears * LIGHT_YEAR
 
   // Heliocentric galactic Cartesian, +x toward the galactic centre.
   const hx = distance * Math.cos(b) * Math.cos(l)

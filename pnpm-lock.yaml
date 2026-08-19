@@ -213,9 +213,6 @@ importers:
       '@inertialref/spatial':
         specifier: workspace:*
         version: link:../spatial
-      '@inertialref/universe':
-        specifier: workspace:*
-        version: link:../universe
 
   packages/rendering:
     dependencies:

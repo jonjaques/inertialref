@@ -1,18 +1,18 @@
-import { createConsoleSink, getLogger, logHub, type Seconds } from '@inertialref/shared'
+import { getLogger, LIGHT_YEAR, type Seconds } from '@inertialref/shared'
 import { formatSeed } from '@inertialref/procedural'
-import { type RenderOrigin, UV, type UniverseVector, Vec, vec3 } from '@inertialref/spatial'
-import { snapshot, World, type WorldSnapshot } from '@inertialref/simulation'
+import { type RenderOrigin, UV, type UniverseVector, vec3 } from '@inertialref/spatial'
+import { snapshot, type World, type WorldSnapshot } from '@inertialref/simulation'
+import { cellOf, type EntityId, type SystemId } from '@inertialref/universe'
+import { buildScene, originForCamera, type RenderScene } from '@inertialref/rendering'
+import { surveyRegionTask, type WorkerFactory, WorkerPool } from '@inertialref/workers'
 import {
-  bodyFrameId,
-  type EntityId,
-  systemId,
-  type SystemId,
-  walkBodies,
-} from '@inertialref/universe'
-import { buildScene, nearestBody, originForCamera, type RenderScene } from '@inertialref/rendering'
-import { createTaskRegistry, surveyRegionTask, WorkerPool } from '@inertialref/workers'
-import { GameHarness, type HarnessHost } from '@inertialref/devtools'
-import { captureSave, DEFAULT_SLOT, serializeSave, type SaveStore } from '@inertialref/persistence'
+  type FrameStats,
+  type GameHarness,
+  openSession,
+  type PresentationHost,
+  type Session,
+} from '@inertialref/devtools'
+import { DEFAULT_SLOT, type SaveStore } from '@inertialref/persistence'
 import { createBrowserWorkerPort, poolSize } from './browserWorker.ts'
 import { IndexedDbSaveStore } from './indexedDbStore.ts'
 import { TerrainStreamer, type TerrainState } from './terrainStreamer.ts'
@@ -32,36 +32,50 @@ import { TerrainStreamer, type TerrainState } from './terrainStreamer.ts'
 
 const log = getLogger('game.engine')
 
-export interface FrameStats {
-  readonly fps: number
-  readonly frameMs: number
-  readonly ticksLastFrame: number
-}
+/** How far the player must move before the starfield is surveyed again. */
+const STARFIELD_HYSTERESIS = 8 * LIGHT_YEAR
 
 export interface StarField {
   readonly positions: readonly UniverseVector[]
   readonly names: readonly string[]
 }
 
+export interface GameEngineOptions {
+  readonly seed?: string
+  /**
+   * Where worker tasks run. Omit for the browser default; pass `null` to
+   * generate on the main thread; pass an in-process factory to run the whole
+   * engine under Node.
+   */
+  readonly workers?: WorkerFactory | null
+  readonly store?: SaveStore
+  readonly now?: () => number
+}
+
 /**
- * The engine *is* the harness host.
+ * The engine is the *presentation* half of a session.
  *
- * Implementing the interface directly rather than building an object literal
- * around the engine keeps `world` a live property read: a literal would have to
- * capture `this`, and a captured world reference is precisely the bug that made
- * loading a save appear to do nothing.
+ * It used to be the whole thing: the constructor built a `World`, an
+ * `IndexedDbSaveStore`, a browser `WorkerPool` and a console log sink, then
+ * spawned a ship and put it in orbit. Every one of those had a port underneath
+ * it built precisely so it could be swapped — and none of them could be,
+ * because the engine reached past its own seams to the concrete adapter. That
+ * is why nothing under `apps/` had a test.
+ *
+ * `openSession` now owns assembly and the mutable (world, player) pair. What is
+ * left here is what genuinely belongs to a rendering host: the frame loop, the
+ * render origin, the scene, the terrain streamer and the starfield.
  */
-export class GameEngine implements HarnessHost {
-  world: World
-  origin: RenderOrigin | null = null
-  snapshot: WorldSnapshot | null = null
+export class GameEngine implements PresentationHost {
+  readonly session: Session
   readonly harness: GameHarness
   readonly saves: SaveStore
   readonly terrain: TerrainStreamer
 
-  #playerId: EntityId | null = null
+  origin: RenderOrigin | null = null
+  snapshot: WorldSnapshot | null = null
+
   #scene: RenderScene | null = null
-  #pool: WorkerPool | null = null
   #frameMs = 16
   #fps = 60
   #ticksLastFrame = 0
@@ -69,82 +83,78 @@ export class GameEngine implements HarnessHost {
   #starFieldCentre: UniverseVector | null = null
   #starFieldPending = false
 
-  constructor(seed: string, options: { workers?: boolean } = {}) {
-    logHub.addSink(createConsoleSink(console, 'info'))
-    this.world = new World({ seed })
-    this.saves = new IndexedDbSaveStore()
-
-    if (options.workers !== false) {
-      try {
-        this.#pool = new WorkerPool({
-          factory: () => createBrowserWorkerPort(),
-          size: poolSize(),
-          now: () => performance.now(),
-        })
-      } catch (cause) {
-        // A browser without module workers still gets a game, just a jerkier
-        // one: generation falls back to the main thread rather than failing.
-        log.warn('worker pool unavailable, generating on the main thread', { cause: String(cause) })
-        this.#pool = null
-      }
-    }
-    this.terrain = new TerrainStreamer(this.#pool)
-
-    this.harness = new GameHarness(this)
+  constructor(options: GameEngineOptions = {}) {
+    this.session = openSession({
+      ...(options.seed === undefined ? {} : { seed: options.seed }),
+      // `undefined` means "the browser default"; `null` means "no pool at all".
+      workers: options.workers === undefined ? () => createBrowserWorkerPort() : options.workers,
+      poolSize: poolSize(),
+      now: options.now ?? (() => performance.now()),
+      store: options.store ?? new IndexedDbSaveStore(),
+      presentation: {
+        scene: () => this.#scene,
+        frameStats: () => this.frameStats(),
+      },
+      onWorldReplaced: () => this.#invalidateDerived(),
+    })
+    this.harness = this.session.harness
+    this.saves = this.session.store
+    this.terrain = new TerrainStreamer(this.session.pool())
     this.#start()
   }
 
-  /* ----------------------------------------------------------------------- */
-  /* HarnessHost                                                              */
-  /* ----------------------------------------------------------------------- */
-
-  player(): EntityId | null {
-    return this.#playerId
+  /** Live read, never a captured reference — loading a save replaces it. */
+  get world(): World {
+    return this.session.world
   }
 
-  setPlayer(id: EntityId): void {
-    this.#playerId = id
-  }
+  /* ----------------------------------------------------------------------- */
+  /* PresentationHost                                                         */
+  /* ----------------------------------------------------------------------- */
 
   scene(): RenderScene | null {
     return this.#scene
-  }
-
-  pool(): WorkerPool | null {
-    return this.#pool
-  }
-
-  replaceWorld(world: World, player: EntityId | null): void {
-    this.world = world
-    this.#playerId = player
-    this.origin = null
-    this.#scene = null
-    log.info('world replaced', { tick: world.clock.tick })
-  }
-
-  get starField(): StarField {
-    return this.#starField
   }
 
   frameStats(): FrameStats {
     return { fps: this.#fps, frameMs: this.#frameMs, ticksLastFrame: this.#ticksLastFrame }
   }
 
+  player(): EntityId | null {
+    return this.session.player()
+  }
+
+  pool(): WorkerPool | null {
+    return this.session.pool()
+  }
+
+  get starField(): StarField {
+    return this.#starField
+  }
+
   terrainState(): TerrainState {
     return this.terrain.state()
   }
 
-  /** Set up the opening position: a ship in orbit around the first solid world. */
-  #start(): void {
-    const system = this.world.loadSystem(systemId('SOL'))
-    const target =
-      [...walkBodies(system)].find((body) => body.kind === 'rocky' && body.radius > 1e6) ??
-      system.planets[0]
-    if (target === undefined) throw new Error('Sol generated no planets')
+  /**
+   * Everything derived from the world, dropped in one place.
+   *
+   * Called whenever the world is replaced. Splitting this across `replaceWorld`
+   * and `load` is how the starfield came to survive a jump of four light years.
+   */
+  #invalidateDerived(): void {
+    this.origin = null
+    this.snapshot = null
+    this.#scene = null
+    this.#starField = { positions: [], names: [] }
+    this.#starFieldCentre = null
+    this.terrain.clear()
+    log.info('world replaced, derived state dropped', { tick: this.world.clock.tick })
+  }
 
-    const ship = this.world.spawnShip('Debug One', bodyFrameId(target.address), vec3(target.radius * 2.5, 0, 0))
-    this.#playerId = ship.id
-    const address = target.id.slice(1)
+  /** Frame the opening shot. The ship itself is placed by `openSession`. */
+  #start(): void {
+    const address = this.session.target.id.slice(1)
     this.harness.orbit(address, 400)
     // Opening shot looks at the world you are orbiting rather than along the
     // orbit; the trajectory is unchanged either way.
@@ -152,8 +162,8 @@ export class GameEngine implements HarnessHost {
     log.info('universe ready', {
       seed: this.world.seedText,
       seedHex: formatSeed(this.world.rootSeed),
-      system: system.name,
-      target: target.name,
+      system: this.session.system.name,
+      target: this.session.target.name,
     })
   }
 
@@ -168,7 +178,7 @@ export class GameEngine implements HarnessHost {
     const started = performance.now()
     this.#ticksLastFrame = this.world.advance(delta)
 
-    const player = this.#playerId
+    const player = this.session.player()
     if (player === null) return
 
     const shot = snapshot(this.world)
@@ -176,15 +186,17 @@ export class GameEngine implements HarnessHost {
     const camera = shot.entities.find((entity) => entity.id === player)
     if (camera === undefined) return
 
-    const previousGeneration = this.origin?.generation ?? -1
     this.origin = originForCamera(this.origin, camera.position)
     this.#scene = buildScene(shot, this.origin, player)
 
     const surfaceBody = this.#scene.terrainCandidates[0] ?? null
+    // No rebase branch here. `TerrainStreamer.#ensure` already rebuilds any
+    // patch whose `originGeneration` is stale, and it does it only for the
+    // patches that should be visible. The explicit `rebuild()` this replaces
+    // walked the whole 64-entry heightfield cache instead, re-adding patches
+    // `update()` had just pruned — one frame of off-screen geometry uploads on
+    // every rebase, which is every 4096 m of camera travel.
     this.terrain.update(this.world, camera.position, this.origin, surfaceBody?.address ?? null)
-    if (this.origin.generation !== previousGeneration && previousGeneration >= 0) {
-      this.terrain.rebuild(this.world, this.origin)
-    }
 
     this.#maybeSurveyStars(camera.position)
 
@@ -203,17 +215,19 @@ export class GameEngine implements HarnessHost {
   #maybeSurveyStars(centre: UniverseVector): void {
     if (this.#starFieldPending) return
     const moved =
-      this.#starFieldCentre === null || UV.distance(this.#starFieldCentre, centre) > 8 * 9.4607304725808e15
+      this.#starFieldCentre === null ||
+      UV.distance(this.#starFieldCentre, centre) > STARFIELD_HYSTERESIS
     if (!moved) return
 
     this.#starFieldCentre = centre
     this.#starFieldPending = true
     const radiusCells = 2
-    const cell = {
-      x: Math.floor(UV.approxMeters(centre).x / (20 * 9.4607304725808e15)),
-      y: Math.floor(UV.approxMeters(centre).y / (20 * 9.4607304725808e15)),
-      z: Math.floor(UV.approxMeters(centre).z / (20 * 9.4607304725808e15)),
-    }
+    // `cellOf`, not a hand-inlined copy of it. The copy restated CELL_SIZE as
+    // `20 * 9.4607304725808e15` and recomputed `approxMeters` three times, so
+    // changing the galaxy's cell size would have left the client surveying
+    // cells that no longer correspond to where the player is — a compile-clean
+    // change that presents as "the stars are in the wrong place".
+    const cell = cellOf(centre)
     const payload = {
       seed: formatSeed(this.world.galaxySeed),
       min: { x: cell.x - radiusCells, y: cell.y - radiusCells, z: cell.z - radiusCells },
@@ -221,9 +235,9 @@ export class GameEngine implements HarnessHost {
     }
 
     const run =
-      this.#pool === null
+      this.pool() === null
         ? Promise.resolve(surveyRegionTask.run(payload, { cancelled: () => false }))
-        : this.#pool.run(surveyRegionTask, payload)
+        : (this.pool() as WorkerPool).run(surveyRegionTask, payload)
 
     void Promise.resolve(run)
       .then((cells) => {
@@ -250,26 +264,21 @@ export class GameEngine implements HarnessHost {
   /* --------------------------------------------------------------------- */
 
   setControl(translation: [number, number, number], rotation: [number, number, number]): void {
-    if (this.#playerId === null) return
-    this.world.entities.update(this.#playerId, {
-      control: { translation: vec3(...translation), rotation: vec3(...rotation) },
-    })
+    const player = this.session.player()
+    if (player === null) return
+    this.world.setControl(player, vec3(...translation), vec3(...rotation))
   }
 
   toggleFlightAssist(): boolean {
-    if (this.#playerId === null) return false
-    const entity = this.world.entities.require(this.#playerId)
-    const next = !entity.flightAssist
-    this.world.entities.update(this.#playerId, { flightAssist: next })
-    return next
+    const player = this.session.player()
+    if (player === null) return false
+    return this.world.setFlightAssist(player, !this.world.entities.require(player).flightAssist)
   }
 
   killRotation(): void {
-    if (this.#playerId === null) return
-    const entity = this.world.entities.require(this.#playerId)
-    this.world.entities.update(this.#playerId, {
-      state: { ...entity.state, angularVelocity: Vec.ZERO },
-    })
+    const player = this.session.player()
+    if (player === null) return
+    this.world.killRotation(player)
   }
 
   loadedSystemIds(): readonly SystemId[] {
@@ -277,7 +286,7 @@ export class GameEngine implements HarnessHost {
   }
 
   async save(slot: string = DEFAULT_SLOT): Promise<string> {
-    const text = serializeSave(captureSave(this.world, this.#playerId))
+    const text = this.harness.save()
     await this.saves.write(slot, text)
     log.info('saved', { slot, bytes: text.length })
     return text
@@ -294,27 +303,13 @@ export class GameEngine implements HarnessHost {
       log.warn('load failed', { slot, error: result.error })
       return false
     }
-    this.origin = null
+    // No `this.origin = null` here: `onWorldReplaced` already dropped every
+    // piece of derived state, which is the point of having one hook.
     return true
   }
 
   dispose(): void {
-    this.#pool?.terminate()
+    this.session.dispose()
   }
 }
 
-/** The registry the worker entry serves, shared so both sides agree. */
-export const taskRegistry = createTaskRegistry()
-
-/** Bodies of the loaded system, for the HUD's target list. */
-export function loadedBodies(engine: GameEngine): readonly { address: string; name: string; kind: string }[] {
-  const system = engine.world.loadedSystems()[0]
-  if (system === undefined) return []
-  return [...walkBodies(system)].map((body) => ({
-    address: `${body.id.slice(1)}`,
-    name: body.name,
-    kind: body.kind,
-  }))
-}
-
-export { nearestBody }

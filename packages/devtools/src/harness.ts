@@ -1,4 +1,4 @@
-import { getLogger, type LogRecord, type Result, RingBufferSink, logHub } from '@inertialref/shared'
+import { AU, getLogger, LIGHT_YEAR, logHub, type LogRecord, type Result, RingBufferSink } from '@inertialref/shared'
 import { circularSpeed } from '@inertialref/physics'
 import { Quaternion as Q, UV, Vec, vec3 } from '@inertialref/spatial'
 import { snapshot, type World, type WorldSnapshot } from '@inertialref/simulation'
@@ -8,10 +8,11 @@ import {
   findBody,
   formatAddress,
   installSurfaceFrame,
+  isLandable,
   parseAddress,
   systemFrameId,
-  type SystemId,
   systemId,
+  type SystemId,
   systemsWithin,
   walkBodies,
 } from '@inertialref/universe'
@@ -35,34 +36,54 @@ import { inspectEntity, inspectRender, inspectWorld, type EntityInspection, type
  * in the browser can be replayed in a test.
  */
 
-export interface HarnessHost {
-  /**
-   * Must be a *getter*, not a captured reference.
-   *
-   * Loading a save replaces the world wholesale. A host that copied the
-   * reference in at construction leaves the harness — and therefore the debug
-   * overlay — reporting on the world that was thrown away, while the frame loop
-   * runs the new one. That split brain looked exactly like "load silently does
-   * nothing" from the outside.
-   */
+/** Frame timing from a render loop. One definition; it used to have three. */
+export interface FrameStats {
+  readonly fps: number
+  readonly frameMs: number
+  readonly ticksLastFrame: number
+}
+
+/**
+ * What every host can answer, whether or not it draws anything.
+ *
+ * `world` must be a *getter*, not a captured reference. Loading a save replaces
+ * the world wholesale, and a host that copied the reference in at construction
+ * leaves the harness — and therefore the debug overlay — reporting on the world
+ * that was thrown away while the frame loop runs the new one. That split brain
+ * looked exactly like "load silently does nothing" from the outside.
+ * `openSession` is the one implementation that matters; it gets this right once.
+ */
+export interface SimulationHost {
   readonly world: World
   /** The entity the camera follows. */
   player(): EntityId | null
   setPlayer(id: EntityId): void
-  scene(): RenderScene | null
   pool(): WorkerPool | null
-  /** Frame timing from the render loop, if there is one. */
-  frameStats(): { fps: number; frameMs: number; ticksLastFrame: number } | null
   /** Replace the running world (used by load). */
   replaceWorld(world: World, player: EntityId | null): void
 }
+
+/**
+ * The half only a host that renders can answer.
+ *
+ * Split out because it was not optional before, so the headless runner and the
+ * tests each had to write `scene: () => null, frameStats: () => null` and, in
+ * the runner's case, a `replaceWorld` that threw — three of eight members
+ * stubbed to satisfy a port for questions they have no concept of.
+ */
+export interface PresentationHost {
+  scene(): RenderScene | null
+  frameStats(): FrameStats | null
+}
+
+export type HarnessHost = SimulationHost & Partial<PresentationHost>
 
 export interface HarnessStatus {
   readonly world: WorldInspection
   readonly player: EntityInspection | null
   readonly render: RenderInspection | null
   readonly workers: PoolStats | null
-  readonly frame: { fps: number; frameMs: number; ticksLastFrame: number } | null
+  readonly frame: FrameStats | null
 }
 
 export interface ScenarioResult {
@@ -94,13 +115,13 @@ export class GameHarness {
   /** Everything the debug overlay shows, as data. */
   status(): HarnessStatus {
     const player = this.#host.player()
-    const scene = this.#host.scene()
+    const scene = this.#host.scene?.() ?? null
     return {
       world: inspectWorld(this.world),
       player: player === null ? null : inspectEntity(this.world, player),
       render: scene === null ? null : inspectRender(scene),
       workers: this.#host.pool()?.stats() ?? null,
-      frame: this.#host.frameStats(),
+      frame: this.#host.frameStats?.() ?? null,
     }
   }
 
@@ -137,11 +158,11 @@ export class GameHarness {
     const player = this.#host.player()
     const centre =
       player === null ? (this.world.loadedSystems()[0]?.position ?? UV.UNIVERSE_ORIGIN) : this.world.canonicalPositionOf(player)
-    return systemsWithin(this.world.galaxySeed, centre, lightYears * 9.4607304725808e15)
+    return systemsWithin(this.world.galaxySeed, centre, lightYears * LIGHT_YEAR)
       .map((stub) => ({
         id: stub.id as string,
         name: stub.name,
-        lightYears: UV.distance(stub.position, centre) / 9.4607304725808e15,
+        lightYears: UV.distance(stub.position, centre) / LIGHT_YEAR,
       }))
       .sort((a, b) => a.lightYears - b.lightYears)
   }
@@ -155,7 +176,7 @@ export class GameHarness {
       name: body.name,
       kind: body.kind,
       radiusKm: body.radius / 1000,
-      auFromStar: body.elements.semiMajorAxis / 1.495978707e11,
+      auFromStar: body.elements.semiMajorAxis / AU,
       moons: body.moons.length,
     }))
   }
@@ -191,12 +212,11 @@ export class GameHarness {
   control(input: { translation?: [number, number, number]; rotation?: [number, number, number] }): void {
     const player = this.#requirePlayer()
     const entity = this.world.entities.require(player)
-    this.world.entities.update(player, {
-      control: {
-        translation: input.translation === undefined ? entity.control.translation : vec3(...input.translation),
-        rotation: input.rotation === undefined ? entity.control.rotation : vec3(...input.rotation),
-      },
-    })
+    this.world.setControl(
+      player,
+      input.translation === undefined ? entity.control.translation : vec3(...input.translation),
+      input.rotation === undefined ? entity.control.rotation : vec3(...input.rotation),
+    )
   }
 
   hold(): void {
@@ -204,7 +224,7 @@ export class GameHarness {
   }
 
   flightAssist(enabled: boolean): void {
-    this.world.entities.update(this.#requirePlayer(), { flightAssist: enabled })
+    this.world.setFlightAssist(this.#requirePlayer(), enabled)
   }
 
   /**
@@ -250,7 +270,7 @@ export class GameHarness {
       velocity: Vec.scale(alongOrbit, speed),
       angularVelocity: Vec.ZERO,
     })
-    this.world.entities.update(player, { control: { translation: Vec.ZERO, rotation: Vec.ZERO } })
+    this.world.setControl(player, Vec.ZERO, Vec.ZERO)
     log.info('placed in orbit', { address, altitudeKm, speed })
     return this.status()
   }
@@ -265,20 +285,25 @@ export class GameHarness {
 
     const frame = installSurfaceFrame(this.world.frames, body, latitude, longitude)
     const player = this.#requirePlayer()
-    this.world.teleport(
-      player,
-      {
-        frame,
-        // A few metres up, so the contact test settles it onto the ground on
-        // the next tick rather than starting it inside the terrain.
-        position: vec3(0, 3, 0),
-        orientation: Q.IDENTITY,
-        velocity: Vec.ZERO,
-        angularVelocity: Vec.ZERO,
-      },
-      true,
-    )
-    this.world.entities.update(player, { control: { translation: Vec.ZERO, rotation: Vec.ZERO } })
+    this.world.teleport(player, {
+      frame,
+      // On the pad, which is what the origin of a surface frame *is*:
+      // `installSurfaceFrame` derives the frame's elevation from the terrain at
+      // this exact quantised latitude/longitude, so local y = 0 is the ground.
+      //
+      // This used to be `vec3(0, 3, 0)` with `landed = true`, and the two
+      // contradicted each other. `stepFlight` short-circuits to `stepLanded`
+      // when an entity is already landed, so the contact test never ran and the
+      // ship hovered at y = 3 forever while the overlay reported an altitude of
+      // 0. Dropping the flag alone was not enough: 3 m is inside
+      // LANDING_CLEARANCE, so the contact test then registered a landing at 3 m
+      // and `#land`'s `max(0, y)` kept it there.
+      position: Vec.ZERO,
+      orientation: Q.IDENTITY,
+      velocity: Vec.ZERO,
+      angularVelocity: Vec.ZERO,
+    })
+    this.world.setControl(player, Vec.ZERO, Vec.ZERO)
     return this.status()
   }
 
@@ -288,12 +313,12 @@ export class GameHarness {
     const player = this.#requirePlayer()
     this.world.teleport(player, {
       frame: systemFrameId(target.id),
-      position: vec3(distanceAu * 1.495978707e11, 0, 0),
+      position: vec3(distanceAu * AU, 0, 0),
       orientation: Q.IDENTITY,
       velocity: Vec.ZERO,
       angularVelocity: Vec.ZERO,
     })
-    this.world.entities.update(player, { control: { translation: Vec.ZERO, rotation: Vec.ZERO } })
+    this.world.setControl(player, Vec.ZERO, Vec.ZERO)
     return this.status()
   }
 
@@ -337,10 +362,10 @@ export class GameHarness {
     // Forward is −Z, so the orientation that points the nose at the target is
     // the rotation taking −Z onto the target direction.
     const orientation = Q.fromUnitVectors(vec3(0, 0, -1), Vec.normalize(toTarget))
-    this.world.entities.update(player, {
-      state: { ...state, orientation, angularVelocity: Vec.ZERO },
-      control: { translation: vec3(0, 0, throttle), rotation: Vec.ZERO },
-    })
+    // Through `teleport`, not `entities.update`: this is a discontinuous change
+    // of attitude and the interpolation history has to be reset with it.
+    this.world.teleport(player, { ...state, orientation, angularVelocity: Vec.ZERO })
+    this.world.setControl(player, vec3(0, 0, throttle), Vec.ZERO)
     return this.status()
   }
 
@@ -438,7 +463,7 @@ export class GameHarness {
   #firstSolidBodyAddress(): string {
     const system = this.world.loadedSystems()[0] ?? this.world.loadSystem(systemId('SOL'))
     for (const body of walkBodies(system)) {
-      if (body.kind === 'rocky' && body.radius > 1e6) return formatAddress(body.address)
+      if (isLandable(body)) return formatAddress(body.address)
     }
     throw new Error('no solid body available')
   }

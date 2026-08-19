@@ -22,6 +22,3 @@ export function expect<T, E>(result: Result<T, E>, message: string): T {
   throw new Error(`${message}: ${String(result.error)}`)
 }
 
-export function mapResult<T, U, E>(result: Result<T, E>, f: (value: T) => U): Result<U, E> {
-  return result.ok ? ok(f(result.value)) : result
-}

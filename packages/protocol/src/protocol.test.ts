@@ -3,7 +3,14 @@ import { describe, expect, it } from 'vitest'
 import { expect as unwrap } from '@inertialref/shared'
 import { frameId, Quaternion as Q, universeVector, vec3 } from '@inertialref/spatial'
 import { decode, decodeJson, decodeObject, decodeNumber, decodeString } from './codec.ts'
-import { decodeSaveGame, SAVE_SCHEMA_VERSION, type SaveGame } from './save.ts'
+import {
+  decodeSaveGame,
+  decodeSaveMutation,
+  SAVE_MUTATION_KINDS,
+  SAVE_SCHEMA_VERSION,
+  type SaveGame,
+} from './save.ts'
+import { decodeWorkerRequest } from './worker.ts'
 import {
   decodeFrameState,
   decodeUniverseVector,
@@ -128,5 +135,46 @@ describe('save schema', () => {
     const decoded = decode(decodeSaveGame, broken)
     expect(decoded.ok).toBe(false)
     if (!decoded.ok) expect(decoded.error).toMatch(/entities\[0\]\.state\.position/)
+  })
+})
+
+describe('the boundaries actually validate', () => {
+  /*
+   * Both of these once passed by assertion rather than by checking. The decoders
+   * existed and had zero callers; the shapes were cast into place instead.
+   */
+  it('rejects a save mutation whose kind is not one of the four', () => {
+    const bad = decode(decodeSaveMutation, {
+      address: 'g:milky-way/s:SOL/b:0',
+      kind: 'not-a-kind',
+      data: '{}',
+      tick: 12,
+    })
+    expect(bad.ok).toBe(false)
+    if (!bad.ok) expect(bad.error).toContain('discovered | destroyed | placed | terrain')
+
+    for (const kind of SAVE_MUTATION_KINDS) {
+      expect(decode(decodeSaveMutation, { address: 'a', kind, data: '{}', tick: 0 }).ok).toBe(true)
+    }
+  })
+
+  it('rejects worker envelopes the host loop would otherwise dereference', () => {
+    const good = { kind: 'request', job: 1, task: 'terrain', taskVersion: 2, payload: { any: 'thing' } }
+    expect(decode(decodeWorkerRequest, good).ok).toBe(true)
+
+    // Each of these reached `registry.get(...)`, a version comparison, or
+    // `task.run` unchecked before the decoder was wired in.
+    for (const [label, message] of [
+      ['wrong discriminant', { ...good, kind: 'success' }],
+      ['job is not an integer', { ...good, job: 1.5 }],
+      ['task is not a string', { ...good, task: 42 }],
+      ['version is missing', { ...good, taskVersion: undefined }],
+    ] as const) {
+      const result = decode(decodeWorkerRequest, message)
+      expect(result.ok, label).toBe(false)
+    }
+
+    // `payload` stays unknown on purpose — its shape is the task's business.
+    expect(decode(decodeWorkerRequest, { ...good, payload: undefined }).ok).toBe(true)
   })
 })

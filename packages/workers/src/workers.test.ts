@@ -189,3 +189,48 @@ describe('terrain task', () => {
     expect(survey.bodies[0]?.address).toMatch(/^g:milky-way\/s:SOL\/b:/)
   })
 })
+
+describe('the inline transport matches the browser one', () => {
+  /*
+   * Two adapters at one seam have to agree about aliasing, or the seam is
+   * decorative: a bug that only appears once something is not
+   * structured-cloneable has to appear here too, and a transferred buffer has to
+   * detach here too. Neither was true — the inline port passed the message
+   * object by reference and dropped its transfer list — so a payload holding a
+   * Map or a class instance passed every Node test and threw DataCloneError in
+   * Chrome.
+   */
+  it('copies messages rather than passing them by reference', async () => {
+    const registry = new TaskRegistry()
+    registry.register(
+      defineTask<{ box: { n: number } }, { n: number }>({
+        name: 'peek',
+        version: 1,
+        run: (payload) => ({ n: payload.box.n }),
+      }),
+    )
+    const pool = new WorkerPool({ factory: () => createInlineWorker(registry), size: 1 })
+    const box = { n: 1 }
+    const result = await pool.run(registry.get('peek') as never, { box })
+    box.n = 99
+    // The task saw the value at post time, not the mutation afterwards.
+    expect(result).toEqual({ n: 1 })
+    pool.terminate()
+  })
+
+  it('rejects a payload a real Worker could not clone', async () => {
+    const registry = new TaskRegistry()
+    registry.register(
+      defineTask<{ fn: unknown }, number>({ name: 'nope', version: 1, run: () => 1 }),
+    )
+    const pool = new WorkerPool({ factory: () => createInlineWorker(registry), size: 1 })
+    // A function is not structured-cloneable. This used to pass silently here
+    // and fail only in the browser. The pool turns the synchronous `post` throw
+    // into a rejected job rather than leaving it active forever.
+    await expect(pool.run(registry.get('nope') as never, { fn: () => 0 })).rejects.toThrow(
+      /could not be cloned|DataClone/i,
+    )
+    expect(pool.stats().active).toBe(0)
+    pool.terminate()
+  })
+})

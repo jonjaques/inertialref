@@ -5,6 +5,8 @@ import {
   createRenderOrigin,
   Quaternion as Q,
   rebase,
+  toRenderSpace,
+  universeVector,
   UV,
   Vec,
   vec3,
@@ -13,7 +15,13 @@ import { snapshot, World } from '@inertialref/simulation'
 import { bodyFrameId, regionAddress, systemId, walkBodies } from '@inertialref/universe'
 import { generateHeightfield } from '@inertialref/universe'
 import { angularRadius, selectLod, starColor, terrainLevelFor } from './lod.ts'
-import { compressDistance, DEFAULT_PLACEMENT, placeAt } from './placement.ts'
+import {
+  compressDistance,
+  NEAR_LIMIT,
+  placeAt,
+  placeOnStarShell,
+  STAR_SHELL_RADIUS,
+} from './placement.ts'
 import { buildScene, nearestBody, originForCamera } from './scene.ts'
 import { buildPatch } from './terrainMesh.ts'
 
@@ -23,8 +31,8 @@ describe('LOD selection', () => {
   it('chooses representation by angular size, not distance', () => {
     // A gas giant far away and a boulder up close subtend the same angle and
     // deserve the same treatment.
-    const giant = selectLod(7e7, 3.5e10, DEFAULT_PLACEMENT.thresholds)
-    const boulder = selectLod(2, 1_000, DEFAULT_PLACEMENT.thresholds)
+    const giant = selectLod(7e7, 3.5e10)
+    const boulder = selectLod(2, 1_000)
     expect(angularRadius(7e7, 3.5e10)).toBeCloseTo(angularRadius(2, 1_000), 6)
     expect(giant).toBe(boulder)
   })
@@ -100,8 +108,8 @@ describe('render placement', () => {
         fc.double({ min: 1, max: 1e18, noNaN: true }),
         fc.double({ min: 1, max: 1e18, noNaN: true }),
         (a, b) => {
-          const ca = compressDistance(a, DEFAULT_PLACEMENT)
-          const cb = compressDistance(b, DEFAULT_PLACEMENT)
+          const ca = compressDistance(a)
+          const cb = compressDistance(b)
           if (a < b) expect(ca).toBeLessThanOrEqual(cb)
           if (a > b) expect(ca).toBeGreaterThanOrEqual(cb)
         },
@@ -123,8 +131,8 @@ describe('render placement', () => {
         fc.double({ min: 1, max: 1e18, noNaN: true }),
         (a, b) => {
           fc.pre(Math.abs(a - b) / Math.max(a, b) > 1e-9)
-          const ca = compressDistance(a, DEFAULT_PLACEMENT)
-          const cb = compressDistance(b, DEFAULT_PLACEMENT)
+          const ca = compressDistance(a)
+          const cb = compressDistance(b)
           expect(a < b).toBe(ca < cb)
         },
       ),
@@ -132,13 +140,13 @@ describe('render placement', () => {
   })
 
   it('is continuous at the compression boundary', () => {
-    const { nearLimit } = DEFAULT_PLACEMENT
+    const nearLimit = NEAR_LIMIT
     // Continuous in value...
-    expect(compressDistance(nearLimit, DEFAULT_PLACEMENT)).toBeCloseTo(nearLimit, 6)
+    expect(compressDistance(nearLimit)).toBeCloseTo(nearLimit, 6)
     // ...and in slope, which is what stops a body changing its apparent rate of
     // approach as it crosses the boundary.
     const step = nearLimit * 1e-6
-    const slope = (compressDistance(nearLimit + step, DEFAULT_PLACEMENT) - nearLimit) / step
+    const slope = (compressDistance(nearLimit + step) - nearLimit) / step
     expect(slope).toBeCloseTo(1, 5)
   })
 
@@ -245,8 +253,39 @@ describe('terrain mesh', () => {
       const r = Math.hypot(patch.positions[i] as number, patch.positions[i + 1] as number, patch.positions[i + 2] as number)
       expect(Math.abs(r - planet.radius)).toBeLessThanOrEqual(planet.surface.maxElevation * 1.5)
     }
-    // Normals are unit length.
-    expect(Math.hypot(patch.normals[0] as number, patch.normals[1] as number, patch.normals[2] as number)).toBeCloseTo(1, 5)
+    /*
+     * Normals follow the relief, not the datum sphere.
+     *
+     * "Unit length" was the whole assertion here, and a radial normal is also
+     * unit length — so this test passed both before and after the fix for
+     * "terrain patches carried radial normals, shading a mountain range exactly
+     * like a smooth sphere". The check has to be that the normals *differ* from
+     * radial where there is relief.
+     */
+    let maxTilt = 0
+    let unitLengthFailures = 0
+    for (let i = 0; i < patch.normals.length; i += 3) {
+      const n = vec3(
+        patch.normals[i] as number,
+        patch.normals[i + 1] as number,
+        patch.normals[i + 2] as number,
+      )
+      if (Math.abs(Vec.length(n) - 1) > 1e-5) unitLengthFailures += 1
+      // The radial direction at this vertex — what a smooth sphere would give.
+      const radial = Vec.normalize(
+        vec3(
+          patch.positions[i] as number,
+          patch.positions[i + 1] as number,
+          patch.positions[i + 2] as number,
+        ),
+      )
+      maxTilt = Math.max(maxTilt, Math.acos(Math.min(1, Math.abs(Vec.dot(n, radial)))))
+    }
+    expect(unitLengthFailures).toBe(0)
+    // A patch spanning real mountains has to tilt somewhere. The bound is
+    // deliberately small — this is one patch on one seed, and the point is that
+    // it is not *zero*, which is what a radial normal would give.
+    expect(maxTilt).toBeGreaterThan(1e-3)
   })
 
   it('places meter-scale detail on an astronomically distant surface', () => {
@@ -271,5 +310,32 @@ describe('terrain mesh', () => {
     const distant = createRenderOrigin(centre)
     expect(placeAt(distant, a, 1).compressed).toBe(true)
     expect(AU).toBeGreaterThan(0)
+  })
+})
+
+describe('the star shell', () => {
+  /*
+   * This projection used to live in the R3F component, written out over the raw
+   * sector fields with `2 ** 40` inline, in the one directory vitest did not
+   * cover. `placePoint` — written for exactly this — had no callers.
+   */
+  it('puts every star on the shell, in the origin\'s axes', () => {
+    const centre = universeVector(3, -1, 7, 100, 200, 300)
+    const origin = createRenderOrigin(centre)
+    const star = UV.translate(centre, vec3(4 * LIGHT_YEAR, 0, 0))
+
+    const point = placeOnStarShell(origin, star)
+    if (point === null) throw new Error('a star four light years away has a direction')
+    expect(Vec.length(point)).toBeCloseTo(STAR_SHELL_RADIUS, 3)
+
+    // Direction is preserved; only the radius is invented.
+    const direct = toRenderSpace(origin, star)
+    const cosine = Vec.dot(Vec.normalize(point), Vec.normalize(direct))
+    expect(cosine).toBeCloseTo(1, 12)
+  })
+
+  it('has no direction for a star at the origin', () => {
+    const centre = universeVector(0, 0, 0, 0, 0, 0)
+    expect(placeOnStarShell(createRenderOrigin(centre), centre)).toBeNull()
   })
 })

@@ -28,23 +28,23 @@ import {
   type Body,
   bodyFixedFrameId,
   bodyFrameId,
-  catalogStub,
   CATALOG,
+  catalogStub,
   directionToGeodetic,
+  dynamicEntityId,
   type EntityId,
   findBody,
-  dynamicEntityId,
   type GalaxyId,
   galaxySeedOf,
   generateSystem,
   installSurfaceFrame,
   installSystemFrames,
   MILKY_WAY,
-  parseAddress,
+  parseSurfaceFrameId,
   resolveSystem,
   type StarSystem,
-  type SystemId,
   systemFrameId,
+  type SystemId,
   systemsWithin,
   uninstallSystemFrames,
   walkBodies,
@@ -167,34 +167,26 @@ export class World implements FlightWorld {
     const systemFrame = systemFrameId(system.id)
     this.#addBinding({
       frame: systemFrame,
-      kind: 'system',
-      system: system.id,
       mu: system.star.mu,
       radius: system.star.radius,
       sphereOfInfluence: SYSTEM_INFLUENCE_RADIUS,
       atmosphere: null,
       spinFrame: null,
       parent: ROOT_FRAME,
-      children: [],
       body: null,
-      star: system.star,
     })
 
     const bindBody = (body: Body, parent: FrameId): void => {
       const frame = bodyFrameId(body.address)
       this.#addBinding({
         frame,
-        kind: 'body',
-        system: system.id,
         mu: body.mu,
         radius: body.radius,
         sphereOfInfluence: body.sphereOfInfluence,
         atmosphere: body.atmosphere,
         spinFrame: bodyFixedFrameId(body.address),
         parent,
-        children: [],
         body,
-        star: null,
       })
       for (const moon of body.moons) bindBody(moon, frame)
     }
@@ -298,21 +290,16 @@ export class World implements FlightWorld {
    */
   ensureFrame(id: FrameId): boolean {
     if (this.frames.has(id)) return true
-    if (!id.startsWith('sf:')) return false
-    const at = id.lastIndexOf('@')
-    if (at < 0) return false
-    const address = parseAddress(id.slice(3, at))
-    if (address.kind !== 'body') return false
-    const [latitude, longitude] = id
-      .slice(at + 1)
-      .split(',')
-      .map((part) => Number.parseFloat(part))
-    if (latitude === undefined || longitude === undefined) return false
+    // The grammar belongs to `universe`, beside the formatter that mints it.
+    // Re-deriving it here meant the `-0` idempotency guard had no counterpart
+    // on the load path, which is where a landed save is restored.
+    const parsed = parseSurfaceFrameId(id)
+    if (parsed === null) return false
 
-    const system = this.#systems.get(address.system) ?? this.loadSystem(address.system)
-    const body = findBody(system, address.body)
+    const system = this.#systems.get(parsed.address.system) ?? this.loadSystem(parsed.address.system)
+    const body = findBody(system, parsed.address.body)
     if (body === undefined) return false
-    installSurfaceFrame(this.frames, body, latitude, longitude)
+    installSurfaceFrame(this.frames, body, parsed.latitude, parsed.longitude)
     return this.frames.has(id)
   }
 
@@ -333,13 +320,49 @@ export class World implements FlightWorld {
    * Only debug tooling should be calling it — nothing in normal play moves an
    * entity without moving it.
    */
-  teleport(id: EntityId, state: FrameState, landed = false): Entity {
+  teleport(id: EntityId, state: FrameState): Entity {
     const entity = this.entities.update(id, { state })
     this.#previous.set(id, state)
     this.#altitudes.delete(id)
-    if (landed) this.#landed.add(id)
-    else this.#landed.delete(id)
+    // Landedness is *not* a parameter. It is a consequence of geometry that
+    // `#land` computes from the contact test, and letting a caller assert it
+    // produced states `#land` would never produce: the harness teleported a
+    // ship to 3 m up and declared it landed, `stepFlight` short-circuited to
+    // `stepLanded` before the contact test could run, and the ship hovered
+    // there permanently while `altitudeOf` reported 0.
+    this.#landed.delete(id)
     return entity
+  }
+
+  /* ----------------------------------------------------------------------- */
+  /* Player input                                                             */
+  /* ----------------------------------------------------------------------- */
+
+  /*
+   * Control lives here rather than in the caller for the same reason `teleport`
+   * does: `entities.update` is public and unrestricted, so the door that skips
+   * the interpolation and landed-set bookkeeping was exactly as wide as the one
+   * that does it. These three are the whole of what a player can change.
+   */
+
+  setControl(id: EntityId, translation: Vec3, rotation: Vec3): Entity {
+    return this.entities.update(id, { control: { translation, rotation } })
+  }
+
+  setFlightAssist(id: EntityId, enabled: boolean): boolean {
+    this.entities.update(id, { flightAssist: enabled })
+    return enabled
+  }
+
+  /** Zero the spin without disturbing the trajectory. */
+  killRotation(id: EntityId): Entity {
+    const entity = this.entities.require(id)
+    const state = { ...entity.state, angularVelocity: Vec.ZERO }
+    const updated = this.entities.update(id, { state })
+    // Interpolation history has to follow, or the overlay lerps the old spin
+    // into the new one for a frame.
+    this.#previous.set(id, state)
+    return updated
   }
 
   canonicalPositionOf(id: EntityId): UniverseVector {
@@ -514,15 +537,29 @@ export class World implements FlightWorld {
    *
    * Two runs that agree on this agree on the universe. Used by the determinism
    * tests, by the harness, and (later) as a desync check against a server.
+   *
+   * `angularVelocity`, `control` and `flightAssist` are in here now. They were
+   * not, and the docstring said "everything canonical" anyway, so two worlds
+   * differing only in the fields that `killRotation` and flight assist write
+   * hashed identically at the instant they diverged. That matters because it is
+   * where a real bug already lived — a save taken mid-burn resumed coasting —
+   * and the persistence test caught it only by stepping 300 further ticks and
+   * letting the difference show up in position. This makes it detectable at the
+   * tick it happens.
    */
   stateHash(): string {
     const parts: string[] = [`t=${this.clock.tick}`, `seed=${this.seedText}`]
     for (const entity of this.entities.ordered()) {
       const s = entity.state
+      const c = entity.control
       parts.push(
         `${entity.id}|${s.frame}|${s.position.x},${s.position.y},${s.position.z}` +
           `|${s.velocity.x},${s.velocity.y},${s.velocity.z}` +
           `|${s.orientation.x},${s.orientation.y},${s.orientation.z},${s.orientation.w}` +
+          `|${s.angularVelocity.x},${s.angularVelocity.y},${s.angularVelocity.z}` +
+          `|${c.translation.x},${c.translation.y},${c.translation.z}` +
+          `|${c.rotation.x},${c.rotation.y},${c.rotation.z}` +
+          `|${entity.flightAssist ? 'assist' : 'manual'}` +
           `|${this.#landed.has(entity.id) ? 'landed' : 'free'}`,
       )
     }

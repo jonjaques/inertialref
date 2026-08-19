@@ -16,12 +16,11 @@ import {
   Quaternion as Q,
   reframe,
   UV,
-  universeToLocal,
   Vec,
   type Vec3,
   vec3,
 } from '@inertialref/spatial'
-import { surfaceRadius } from '@inertialref/universe'
+import { type BodyFixedDirection, bodyFixedDirection, surfaceRadius } from '@inertialref/universe'
 import type { FrameBinding } from './binding.ts'
 import type { Entity } from './entity.ts'
 
@@ -149,11 +148,15 @@ export function stepFlight(
   let altitude: Meters | null = null
 
   if (binding.body !== null && binding.radius > 0) {
+    // Sampled through the same helper as the contact test below. This used to
+    // be `Vec.normalize(radius)` — an *inertial* direction — and it is the
+    // altitude the atmosphere is evaluated against. The terrain gate here is
+    // `radius * 0.25` (~1,600 km on an Earth-sized world) while an atmosphere
+    // ceiling is 60–180 km, so every atmospheric pass in the game took the
+    // wrong sample, and the error moved with the planet's rotation phase.
     const sampleBelow = options.terrainSampleAltitude ?? binding.radius * 0.25
     if (distance - binding.radius < sampleBelow) {
-      const direction = Vec.normalize(radius)
-      const ground = surfaceRadius(binding.body, direction)
-      altitude = distance - ground
+      altitude = distance - surfaceRadius(binding.body, groundDirection(world, entity, binding, time))
     } else {
       altitude = distance - binding.radius
     }
@@ -224,22 +227,28 @@ function groundAltitude(
   // Sampling terrain is fourteen octaves of 3D noise; only worth it near the
   // ground, and a sphere is an exact answer everywhere else.
   if (distance - binding.radius > binding.radius * 0.25) return distance - binding.radius
-  return distance - surfaceRadius(binding.body, bodyFixedDirection(world, entity, binding, time))
+  return distance - surfaceRadius(binding.body, groundDirection(world, entity, binding, time))
 }
 
-/** Unit vector from the body's centre to the entity, in body-fixed axes. */
-export function bodyFixedDirection(
+/**
+ * Unit vector from the body's centre to the entity, in body-fixed axes.
+ *
+ * The only way to obtain a `BodyFixedDirection` for an entity, which is what
+ * makes `surfaceRadius` impossible to call with the wrong axes. A body with no
+ * spin frame is not rotating, so its inertial and body-fixed axes coincide and
+ * the brand is honest.
+ */
+export function groundDirection(
   world: FlightWorld,
   entity: Entity,
   binding: FrameBinding,
   time: Seconds,
-): Vec3 {
+): BodyFixedDirection {
   if (binding.spinFrame === null) {
-    return Vec.normalize(radiusVector(world, entity.state, binding, time))
+    return Vec.normalize(radiusVector(world, entity.state, binding, time)) as BodyFixedDirection
   }
   const spin = world.frames.pose(binding.spinFrame, time)
-  const universe = canonicalPosition(world.frames, entity.state, time)
-  return Vec.normalize(universeToLocal(spin, universe))
+  return bodyFixedDirection(spin, canonicalPosition(world.frames, entity.state, time))
 }
 
 /** A landed entity is carried by the ground; only a thrust command frees it. */

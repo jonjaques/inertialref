@@ -3,7 +3,6 @@ import {
   Quaternion as Q,
   type RenderOrigin,
   toRenderSpace,
-  UV,
   type UniverseVector,
   Vec,
   type Vec3,
@@ -164,14 +163,3 @@ function computeNormals(positions: Float32Array, normals: Float32Array, resoluti
   }
 }
 
-/** Universe position of a point on a patch, for placing objects on the ground. */
-export function patchPointToUniverse(
-  input: PatchInput,
-  s: number,
-  t: number,
-  elevation: Meters,
-): UniverseVector {
-  const direction = regionDirection(input.region, s, t)
-  const local = Vec.scale(direction, input.bodyRadius + elevation)
-  return UV.translate(input.bodyCentre, Q.rotate(input.bodyOrientation, local))
-}

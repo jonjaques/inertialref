@@ -20,7 +20,7 @@ import { SceneView } from './scene/SceneView.tsx'
 let singleton: GameEngine | null = null
 
 function engineInstance(): GameEngine {
-  singleton ??= new GameEngine(new URLSearchParams(window.location.search).get('seed') ?? 'inertialref')
+  singleton ??= new GameEngine({ seed: new URLSearchParams(window.location.search).get('seed') ?? 'inertialref' })
   return singleton
 }
 

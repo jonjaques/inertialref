@@ -176,16 +176,26 @@ export class WorkerPool {
       this.#longestQueueMs = Math.max(this.#longestQueueMs, waited)
       worker.job = job
       this.#active.set(job.id, job)
-      worker.port.post(
-        {
-          kind: 'request',
-          job: job.id,
-          task: job.task,
-          taskVersion: job.taskVersion,
-          payload: job.payload,
-        },
-        job.transfer,
-      )
+      try {
+        worker.port.post(
+          {
+            kind: 'request',
+            job: job.id,
+            task: job.task,
+            taskVersion: job.taskVersion,
+            payload: job.payload,
+          },
+          job.transfer,
+        )
+      } catch (cause) {
+        // `postMessage` throws synchronously on a payload that is not
+        // structured-cloneable. Without this the job stayed in `#active` with
+        // nobody ever settling its promise, so the caller hung and the failure
+        // only surfaced later as an unhandled rejection from `terminate`.
+        this.#active.delete(job.id)
+        worker.job = null
+        job.reject(cause instanceof Error ? cause : new Error(String(cause)))
+      }
     }
   }
 

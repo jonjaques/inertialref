@@ -30,6 +30,20 @@ These are the ones where a violation is a rewrite later rather than a refactor.
 - **Never construct a `Worker` outside `apps/game/src/engine/browserWorker.ts`.**
   Tasks are typed and versioned; the pool owns dispatch, cancellation and
   instrumentation.
+- **Never assemble a session by hand.** `openSession` in `packages/devtools`
+  builds the world, the ship, the pool, the store and the harness, in the one
+  order that works. Five places used to do it independently and two of them had
+  already drifted apart. A host passes adapters in; it does not construct them.
+- **Never pass a bare `Vec3` to anything that samples terrain.** The argument is
+  a `BodyFixedDirection`, and the only producers are `bodyFixedDirection`,
+  `geodeticDirection` and `regionDirection`. Sampling in inertial axes has
+  shipped twice.
+- **Never write entity state through `world.entities.update`.** Use `teleport`
+  for a discontinuous move and `setControl` / `setFlightAssist` /
+  `killRotation` for input; those reset the interpolation history and the
+  landed set, and `update` does not.
+- **Never assert that something is landed.** Landedness is a consequence of the
+  contact test, owned by `World.#land`. `teleport` deliberately has no flag.
 - **Never persist anything regenerable.** A save stores references and
   mutations. If you are tempted to store generated content, you want a cache,
   and it is not a save.
@@ -59,7 +73,11 @@ These are the ones where a violation is a rewrite later rather than a refactor.
 `packages/*` are source-only workspace packages resolved through pnpm links, so
 there is no build step between an edit and a test. Each declares
 `inertialref.layer` in its `package.json` and may depend only on strictly lower
-layers. `pnpm graph` enforces layering and acyclicity, and prints the graph.
+layers. `pnpm graph` enforces layering and acyclicity, prints the graph, and rejects any
+**third-party runtime dependency** in `packages/*`. The core has to run unchanged
+in a browser, a worker and Node; depending on nothing but itself is the cheapest
+way to guarantee that, and it is the mechanical form of "no hosting vendor's SDK
+below the adapter layer".
 
 There are no TypeScript project references: a referenced project may not disable
 emit, and declaration-emitting eleven source-only packages to satisfy `tsc -b`
@@ -91,7 +109,10 @@ What to reach for:
 - **Golden vectors** for the PRNG. Changing them is a deliberate act with an
   algorithm-version bump in the same commit.
 - **State-hash equality** for anything about determinism. `world.stateHash()`
-  is the canonical comparison.
+  is the canonical comparison, and it covers position, velocity, orientation,
+  angular velocity, control input, flight assist and landedness. If you add a
+  field to canonical state, add it there too — the fields it omitted were
+  exactly the ones a shipped bug lived in.
 - **Assert the physics, not the direction of change.** Capability check 5 once
   passed while reporting "fell from 57287 km to 57287 km"; it now compares
   against the analytic free-fall prediction.
@@ -99,6 +120,15 @@ What to reach for:
 When a bound is loose because of a real limit, say so in the test and name the
 limit. `POSITION_RESOLUTION * 2` is a better assertion than `toBeCloseTo(x, 3)`
 because it says where the number came from.
+
+**Check that a regression test can actually fail.** Reintroduce the bug and watch
+it go red before you keep it. The terrain-normals test asserted that normals were
+unit length, which a radial normal also is — so it passed both before and after
+the fix for the bug it was written to guard.
+
+Tests run for `packages/*` and `apps/*` alike. `apps/game` is drivable under Node
+because `GameEngine` takes its worker factory and save store as arguments; see
+`apps/game/src/engine/gameEngine.test.ts`.
 
 ## Driving the game
 

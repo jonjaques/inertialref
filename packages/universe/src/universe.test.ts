@@ -1,10 +1,10 @@
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { AU, LIGHT_YEAR, SECONDS_PER_DAY } from '@inertialref/shared'
-import { Rng, rootSeed } from '@inertialref/procedural'
+import { AU, LIGHT_YEAR, type Radians, SECONDS_PER_DAY } from '@inertialref/shared'
+import { derivePath, deriveSeed, Rng, rootSeed } from '@inertialref/procedural'
 import { apoapsis, orbitalPeriod, periapsis } from '@inertialref/physics'
-import { FrameGraph, UV, Vec, vec3 } from '@inertialref/spatial'
-import { bodyAddress, formatAddress } from './address.ts'
+import { type FrameId, FrameGraph, UV, Vec, vec3 } from '@inertialref/spatial'
+import { addressLabels, bodyAddress, formatAddress, regionAddress, systemAddress } from './address.ts'
 import { CATALOG, catalogStarPosition } from './catalog.ts'
 import {
   bodyFixedFrameId,
@@ -13,18 +13,21 @@ import {
   geodeticDirection,
   installSurfaceFrame,
   installSystemFrames,
+  parseSurfaceFrameId,
+  surfaceFrameId,
   systemFrameId,
   uninstallSystemFrames,
 } from './frames.ts'
 import {
   catalogStub,
   cellOf,
-  generateCell,
   galaxySeedOf,
+  generateCell,
   MILKY_WAY,
   parseProceduralSystemId,
   proceduralSystemId,
   resolveSystem,
+  systemSeedOf,
   systemsWithin,
 } from './galaxy.ts'
 import { findBody, generateSystem, walkBodies } from './system.ts'
@@ -33,10 +36,14 @@ import {
   elevationAt,
   faceToDirection,
   generateHeightfield,
+  groundElevation,
+  HEIGHTFIELD_RESOLUTION,
   levelForSize,
   regionCentreDirection,
+  regionDirection,
   regionForDirection,
   regionSize,
+  surfaceRadius,
 } from './terrain.ts'
 
 const ROOT = rootSeed('inertialref')
@@ -333,5 +340,164 @@ describe('catalogue', () => {
   it('puts a day-long rotation in the right ballpark', () => {
     expect(SECONDS_PER_DAY).toBe(86_400)
     expect(AU / 1e11).toBeCloseTo(1.496, 3)
+  })
+})
+
+describe('the ground has one owner', () => {
+  /*
+   * `seaLevel` used to be honoured by `surfaceRadius` — which decides where a
+   * ship touches down and where `installSurfaceFrame` puts the pad — and
+   * ignored by `generateHeightfield`, which decides what gets drawn. It was
+   * carried the whole way from the generator to the mesh and then dropped, so
+   * on any world with an ocean the pad sat on the water datum and the mesh drew
+   * the seabed under it. Roughly 40% of atmosphered rocky planets have one.
+   */
+  // Sol has no ocean world at this seed, so the catalogue is scanned rather
+  // than a system named: which star gets one is a property of the seed, and
+  // pinning it here would make this test fail for the wrong reason.
+  const oceanWorld = () => {
+    for (const stub of CATALOG.map(catalogStub)) {
+      const system = generateSystem(ROOT, MILKY_WAY, stub)
+      const wet = [...walkBodies(system)].find((body) => body.surface.seaLevel !== null)
+      if (wet !== undefined) return wet
+    }
+    throw new Error('no ocean world anywhere in the catalogue')
+  }
+
+  it('draws the mesh at the radius the physics lands on', () => {
+    const body = oceanWorld()
+    const region = regionAddress(0, 4, 5, 6)
+    const field = generateHeightfield(body.surface, {
+      region,
+      resolution: HEIGHTFIELD_RESOLUTION,
+    })
+
+    // Walk the patch corners and centre: the elevation the mesh will extrude by
+    // has to be the elevation the contact test will stop at, exactly.
+    for (const [s, t] of [
+      [0, 0],
+      [1, 0],
+      [0.5, 0.5],
+      [0, 1],
+      [1, 1],
+    ] as const) {
+      const row = Math.round(t * (HEIGHTFIELD_RESOLUTION - 1))
+      const col = Math.round(s * (HEIGHTFIELD_RESOLUTION - 1))
+      const meshed = field.elevations[row * HEIGHTFIELD_RESOLUTION + col] as number
+      const physical = surfaceRadius(body, regionDirection(region, s, t)) - body.radius
+      // Float32Array storage is the only thing between them, so the bound is
+      // that conversion and nothing else.
+      expect(meshed).toBeCloseTo(physical, 1)
+    }
+  })
+
+  it('clamps the ocean up to its datum rather than down to the seabed', () => {
+    const body = oceanWorld()
+    const sea = body.surface.seaLevel as number
+    const floor = (sea * 2 - 1) * body.surface.maxElevation * 0.55
+    // Somewhere on this world the bare landform is below the water line; the
+    // ground there is the water, not the rock.
+    const grid = []
+    for (let face = 0; face < 6; face += 1) {
+      for (let u = -0.9; u <= 0.9; u += 0.3) {
+        for (let v = -0.9; v <= 0.9; v += 0.3) grid.push(faceToDirection(face, u, v))
+      }
+    }
+    const submerged = grid.find((d) => elevationAt(body.surface, d) < floor)
+    if (submerged === undefined) throw new Error('no submerged sample found')
+
+    expect(groundElevation(body.surface, submerged)).toBe(floor)
+    expect(groundElevation(body.surface, submerged)).toBeGreaterThan(
+      elevationAt(body.surface, submerged),
+    )
+  })
+})
+
+describe('surface frame ids round-trip', () => {
+  /*
+   * The formatter and the parser now sit in the same module, which is what makes
+   * this expressible. The parser used to be open-coded in `World.ensureFrame`,
+   * one package down, on the load path for every save with a landed ship — and
+   * with no counterpart to the `-0` collapse the formatter carries a comment
+   * about. Both halves of that bug are here.
+   */
+  const ADDRESS = bodyAddress(MILKY_WAY, SOL.id, [2])
+
+  it('parses back to the angles the id records', () => {
+    fc.assert(
+      fc.property(
+        fc.double({ min: -1.5, max: 1.5, noNaN: true }),
+        fc.double({ min: -3.1, max: 3.1, noNaN: true }),
+        (latitude, longitude) => {
+          const id = surfaceFrameId(ADDRESS, latitude as Radians, longitude as Radians)
+          const parsed = parseSurfaceFrameId(id)
+          expect(parsed).not.toBeNull()
+          if (parsed === null) return
+          expect(formatAddress(parsed.address)).toBe(formatAddress(ADDRESS))
+          // Re-formatting what we parsed must give the identical id. That is the
+          // property the whole quantisation dance exists to provide.
+          expect(surfaceFrameId(parsed.address, parsed.latitude, parsed.longitude)).toBe(id)
+        },
+      ),
+    )
+  })
+
+  it('survives a latitude a hair south of the equator', () => {
+    // `(-1e-9).toFixed(6)` is "-0.000000", which parses to -0, which formats as
+    // "0.000000". This exact value broke restoring a save.
+    const id = surfaceFrameId(ADDRESS, -1e-9 as Radians, 0 as Radians)
+    const parsed = parseSurfaceFrameId(id)
+    if (parsed === null) throw new Error('should parse')
+    expect(surfaceFrameId(parsed.address, parsed.latitude, parsed.longitude)).toBe(id)
+    expect(Object.is(parsed.latitude, -0)).toBe(false)
+  })
+
+  it('returns null for anything that is not a surface frame id', () => {
+    for (const id of ['s:SOL', 'b:g:milky-way/s:SOL/b:2', 'bf:g:milky-way/s:SOL/b:2', 'sf:no-at-sign']) {
+      expect(parseSurfaceFrameId(id as FrameId)).toBeNull()
+    }
+  })
+})
+
+describe('the address is the seed path', () => {
+  /*
+   * ADR-0004 and ADR-0005 both rest on this: an object's address, its position
+   * in the containment hierarchy, and the path its seed derives along are the
+   * same tree. `addressLabels` is the function that states it.
+   *
+   * It had no production callers, and the one test that mentioned it derived
+   * *both* sides of its assertion from `addressLabels` — so if a generator had
+   * changed `b:${index}` to `b${index}`, the labels would still have agreed with
+   * themselves and the test would still have passed. This compares the labels
+   * against the seed a real generated body actually carries, which is the only
+   * version of the claim that can fail.
+   */
+  it('matches the seed the generators actually derive', () => {
+    const root = ROOT
+    const system = generateSystem(root, MILKY_WAY, SOL)
+
+    // A body does not store its own seed — only the surface parameters derived
+    // from it — so the identity is checked one derivation further down. That is
+    // still the real chain: `makePlanet` does `deriveSeed(systemSeed, 'b:i')`
+    // and then `deriveSeed(seed, 'surface')`, and nothing here is computed by
+    // the code under test.
+    const surfaceSeedOf = (labels: readonly string[]) =>
+      deriveSeed(derivePath(root, labels), 'surface')
+
+    system.planets.forEach((planet, index) => {
+      const address = bodyAddress(MILKY_WAY, SOL.id, [index])
+      expect(planet.surface.seed).toEqual(surfaceSeedOf(addressLabels(address)))
+
+      planet.moons.forEach((moon, moonIndex) => {
+        const moonAddress = bodyAddress(MILKY_WAY, SOL.id, [index, moonIndex])
+        expect(moon.surface.seed).toEqual(surfaceSeedOf(addressLabels(moonAddress)))
+      })
+    })
+  })
+
+  it('addresses a system the same way its seed is derived', () => {
+    expect(systemSeedOf(ROOT, MILKY_WAY, SOL.id)).toEqual(
+      derivePath(ROOT, addressLabels(systemAddress(MILKY_WAY, SOL.id))),
+    )
   })
 })

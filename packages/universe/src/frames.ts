@@ -10,9 +10,9 @@ import {
   Vec,
   vec3,
 } from '@inertialref/spatial'
-import { formatAddress, type SystemId, type UniverseAddress } from './address.ts'
+import { formatAddress, parseAddress, type SystemId, type UniverseAddress } from './address.ts'
 import type { Body, StarSystem } from './system.ts'
-import { surfaceRadius } from './terrain.ts'
+import { type BodyFixedDirection, surfaceRadius } from './terrain.ts'
 
 /*
  * Where the universe meets the spatial package.
@@ -72,6 +72,45 @@ export const surfaceFrameId = (
   longitude: Radians,
 ): FrameId =>
   frameId(`sf:${formatAddress(address)}@${formatAngle(latitude)},${formatAngle(longitude)}`)
+
+/**
+ * Read a surface frame id back into the three things that determine it.
+ *
+ * Lives beside `surfaceFrameId` because the grammar has exactly one owner and
+ * the round trip is a property worth testing in one place. It was previously
+ * open-coded in `World.ensureFrame` with `lastIndexOf('@')` and a `split(',')`,
+ * one package down — on the load path for every save with a landed ship, and
+ * with no counterpart to the `-0` collapse that `formatAngle` exists to provide.
+ *
+ * Returns null for anything that is not a surface frame id.
+ */
+export function parseSurfaceFrameId(id: FrameId): {
+  address: Extract<UniverseAddress, { kind: 'body' }>
+  latitude: Radians
+  longitude: Radians
+} | null {
+  if (!id.startsWith('sf:')) return null
+  const at = id.lastIndexOf('@')
+  if (at < 0) return null
+
+  const address = parseAddress(id.slice(3, at))
+  if (address.kind !== 'body') return null
+
+  const parts = id.slice(at + 1).split(',')
+  if (parts.length !== 2) return null
+  const latitude = Number.parseFloat(parts[0] as string)
+  const longitude = Number.parseFloat(parts[1] as string)
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null
+
+  // Quantised on the way out as well as in. `formatAngle` collapses a
+  // sub-precision negative to +0, so parsing has to land on the same value the
+  // formatter would produce or the round trip is not a round trip.
+  return {
+    address,
+    latitude: quantizeAngle(latitude as Radians),
+    longitude: quantizeAngle(longitude as Radians),
+  }
+}
 
 /** Orbit evaluator for a body about a primary with gravitational parameter `mu`. */
 function orbitEvaluator(body: Body, primaryMu: number): (t: Seconds) => LocalPose {
@@ -155,9 +194,15 @@ export function uninstallSystemFrames(graph: FrameGraph, system: StarSystem): vo
 }
 
 /** Unit vector at a latitude/longitude in body-fixed axes (+Y is the pole). */
-export function geodeticDirection(latitude: Radians, longitude: Radians) {
+export function geodeticDirection(latitude: Radians, longitude: Radians): BodyFixedDirection {
   const cosLat = Math.cos(latitude)
-  return vec3(cosLat * Math.cos(longitude), Math.sin(latitude), -cosLat * Math.sin(longitude))
+  // Body-fixed by construction: a surface frame's parent is the `bf:` frame, so
+  // lat/long here already mean "on the turning body".
+  return vec3(
+    cosLat * Math.cos(longitude),
+    Math.sin(latitude),
+    -cosLat * Math.sin(longitude),
+  ) as BodyFixedDirection
 }
 
 /** Latitude/longitude of a direction in body-fixed axes. */

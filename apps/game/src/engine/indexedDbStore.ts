@@ -5,7 +5,7 @@ import type { SaveStore } from '@inertialref/persistence'
  * IndexedDB save store.
  *
  * Offline-first means saves have to survive with no server, and localStorage is
- * a synchronous 5 MB box that blocks the main thread — fine for the 600-byte
+ * a synchronous 5 MB box that blocks the main thread — fine for the ~700-byte
  * saves this milestone produces, wrong the moment persistent mutations arrive.
  * Starting on IndexedDB avoids a migration later.
  *

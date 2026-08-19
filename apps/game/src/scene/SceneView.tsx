@@ -2,6 +2,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import type { RenderBody } from '@inertialref/rendering'
+import { placeOnStarShell } from '@inertialref/rendering'
 import type { GameEngine } from '../engine/GameEngine.ts'
 
 /*
@@ -29,6 +30,7 @@ export function SceneView({ engine }: { engine: GameEngine }) {
           ambient plus a dim camera-mounted fill keeps the near field readable
           without flattening the terminator on a planet. */}
       <ambientLight intensity={0.16} />
+      <EngineTick engine={engine} />
       <CameraRig engine={engine} />
       <Starfield engine={engine} />
       <Bodies engine={engine} />
@@ -37,6 +39,30 @@ export function SceneView({ engine }: { engine: GameEngine }) {
       <NearFieldProps engine={engine} />
     </>
   )
+}
+
+/**
+ * Steps the simulation, once per animation frame, before anything reads it.
+ *
+ * Its own component with an explicit negative priority rather than a line at the
+ * top of `CameraRig`. R3F runs equal-priority `useFrame` callbacks in mount
+ * order, so while the tick lived inside `CameraRig` the correctness of every
+ * other consumer — `Starfield`, `Bodies`, `TerrainPatches`, `ShipModel`,
+ * `NearFieldProps` — rested on `<CameraRig />` appearing first in the fragment
+ * above. Moving one JSX line would have made every planet render a frame stale,
+ * silently. Priority says it instead.
+ */
+function EngineTick({ engine }: { engine: GameEngine }) {
+  useFrame((_, delta) => {
+    // The one place the wall clock enters the game, and it is handed over raw.
+    // It used to be clamped to 0.25 s here, which changed nothing about the
+    // spiral of death — `SimulationClock.advance` already caps a step at
+    // DEFAULT_MAX_STEPS — and did corrupt the diagnostic: the clock books the
+    // excess as `droppedTicks`, so a three-minute background stall was reported
+    // in the HUD as 8 dropped ticks instead of 11,520.
+    engine.frame(delta)
+  }, -1)
+  return null
 }
 
 /**
@@ -54,10 +80,7 @@ function CameraRig({ engine }: { engine: GameEngine }) {
   const light = useRef<THREE.PointLight>(null)
   const offset = useMemo(() => new THREE.Vector3(), [])
 
-  useFrame((_, delta) => {
-    // The one place the wall clock enters the game. Clamped because a
-    // backgrounded tab returns with a delta measured in minutes.
-    engine.frame(Math.min(delta, 0.25))
+  useFrame(() => {
     const scene = engine.scene()
     if (scene === null) return
 
@@ -119,19 +142,17 @@ function Starfield({ engine }: { engine: GameEngine }) {
 
     // Stars sit far outside the depth range, so they are drawn on a fixed
     // sphere around the camera: direction is what matters, distance is not
-    // representable and not observable.
+    // representable and not observable. The projection itself belongs to
+    // `rendering`, which owns render space — doing it here meant a hand-written
+    // copy of the sector arithmetic that also forgot the origin's orientation.
     let written = 0
     for (const position of field.positions) {
       if (written >= MAX_STARS) break
-      const dx = (position.sx - scene.origin.position.sx) * 2 ** 40 + (position.ox - scene.origin.position.ox)
-      const dy = (position.sy - scene.origin.position.sy) * 2 ** 40 + (position.oy - scene.origin.position.oy)
-      const dz = (position.sz - scene.origin.position.sz) * 2 ** 40 + (position.oz - scene.origin.position.oz)
-      const length = Math.hypot(dx, dy, dz)
-      if (length === 0) continue
-      const scale = 8e7 / length
-      array[written * 3] = dx * scale
-      array[written * 3 + 1] = dy * scale
-      array[written * 3 + 2] = dz * scale
+      const point = placeOnStarShell(scene.origin, position)
+      if (point === null) continue
+      array[written * 3] = point.x
+      array[written * 3 + 1] = point.y
+      array[written * 3 + 2] = point.z
       written += 1
     }
     attribute.needsUpdate = true

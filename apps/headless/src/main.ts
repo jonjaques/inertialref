@@ -4,7 +4,9 @@
  * Exists to prove a claim that is easy to make and easy to quietly break: the
  * simulation core runs with no DOM, no React and no WebGL. If an import of
  * `window` ever creeps into `packages/simulation` or anything below it, this
- * stops working immediately, and it runs in CI as part of `pnpm check`.
+ * stops working immediately. Note it is *not* part of `pnpm check` — that runs
+ * the vitest suite, which covers the same boundary from the other direction.
+ * This is the one that has to be run by hand, or by whatever eventually runs CI.
  *
  * It is also the shape a server-authoritative process would take, which is why
  * it drives the same harness the browser does rather than a parallel API.
@@ -14,12 +16,9 @@
  */
 import { parseArgs } from 'node:util'
 import { createConsoleSink, logHub } from '@inertialref/shared'
-import { vec3 } from '@inertialref/spatial'
-import { World } from '@inertialref/simulation'
-import { bodyFrameId, type EntityId, systemId, walkBodies } from '@inertialref/universe'
-import { GameHarness, type HarnessHost } from '@inertialref/devtools'
-import { createInlineWorker, createTaskRegistry, WorkerPool } from '@inertialref/workers'
-import { MemorySaveStore, captureSave, serializeSave } from '@inertialref/persistence'
+import { openSession } from '@inertialref/devtools'
+import { createInlineWorker, createTaskRegistry } from '@inertialref/workers'
+import { captureSave, serializeSave } from '@inertialref/persistence'
 
 const { values } = parseArgs({
   options: {
@@ -36,46 +35,21 @@ if (!values.quiet) {
   logHub.addSink(createConsoleSink(console, 'info'))
 }
 
-const world = new World({ seed: values.seed ?? 'inertialref' })
-const system = world.loadSystem(systemId(values.system ?? 'SOL'))
-const target = [...walkBodies(system)].find((body) => body.kind === 'rocky' && body.radius > 1e6)
-if (target === undefined) throw new Error(`No solid body in ${system.name}`)
-
-let player: EntityId | null = world.spawnShip(
-  'Debug One',
-  bodyFrameId(target.address),
-  vec3(target.radius * 3, 0, 0),
-).id
-
 const registry = createTaskRegistry()
-const pool = new WorkerPool({
+const session = openSession({
+  ...(values.seed === undefined ? {} : { seed: values.seed }),
+  ...(values.system === undefined ? {} : { system: values.system }),
   // Node has worker_threads, but the point of this runner is the *simulation*,
   // and an in-process pool exercises the identical host loop without the
   // module-resolution ceremony of spawning a worker for a source-only package.
-  factory: () => createInlineWorker(registry, () => performance.now()),
-  size: 2,
+  workers: () => createInlineWorker(registry, () => performance.now()),
   now: () => performance.now(),
 })
+// Note `session.world` rather than a destructured `world`: loading a save
+// replaces it, and a captured reference is the exact bug the getter exists for.
+const { harness, system, target } = session
 
-const host: HarnessHost = {
-  get world() {
-    return world
-  },
-  player: () => player,
-  setPlayer: (id) => {
-    player = id
-  },
-  scene: () => null,
-  pool: () => pool,
-  frameStats: () => null,
-  replaceWorld: () => {
-    throw new Error('the headless runner does not reload worlds')
-  },
-}
-
-const harness = new GameHarness(host)
-
-console.log(`InertialRef headless — seed "${world.seedText}", ${system.name}, target ${target.name}`)
+console.log(`InertialRef headless — seed "${session.world.seedText}", ${system.name}, target ${target.name}`)
 await harness.scenario(values.scenario ?? 'orbit')
 
 const ticks = Number.parseInt(values.ticks ?? '3840', 10)
@@ -89,9 +63,8 @@ console.log(
     `${(ticks / 64).toFixed(1)} s of simulation`,
 )
 
-const store = new MemorySaveStore()
-const save = serializeSave(captureSave(world, player))
-await store.write('headless', save)
+const save = serializeSave(captureSave(session.world, session.player()))
+await session.store.write('headless', save)
 console.log(`save: ${save.length} bytes`)
 
 if (values['self-test'] === true) {
@@ -100,4 +73,4 @@ if (values['self-test'] === true) {
   if (report.passed !== report.total) process.exitCode = 1
 }
 
-pool.terminate()
+session.dispose()

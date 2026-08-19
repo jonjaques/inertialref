@@ -30,7 +30,7 @@ await ir.scenario('surface') // land on the first solid world
 - A debug spacecraft with 6-DoF flight, patched-conic gravity, atmospheric drag,
   sphere-of-influence frame transitions, and landing.
 - Streamed cube-sphere terrain generated in a worker pool.
-- Save and load to IndexedDB in ~600 bytes.
+- Save and load to IndexedDB in under 700 bytes.
 - Genuinely offline: a service worker caches the app, and with the server
   stopped the game still loads, streams terrain from its workers, and passes all
   twelve capability checks.
@@ -55,8 +55,8 @@ PASS  7. Precision near the surface — 1 inch resolved to 9.4 µm, 8.18 kpc fro
 PASS  8. Meter-scale rendering — 1 m separation survives float32 at 8.18 kpc
 PASS  9. Origin rebasing — 500 rebases, 2560 km of origin travel, zero drift
 PASS 10. Worker task — 4225 terrain samples generated in a worker, identical to local generation
-PASS 11. Save round trip — 580 bytes restored to an identical state hash
-PASS 12. Frame-rate independence — identical state hash 655fd189 at tick 513
+PASS 11. Save round trip — 696 bytes restored to an identical state hash
+PASS 12. Frame-rate independence — identical state hash 804b2d58 at tick 513
 ```
 
 ## Architecture in one page
@@ -75,7 +75,7 @@ Five decisions carry most of the weight:
 
 1. **Positions are sectorised**, not doubles — an int32 sector index per axis
    plus a double offset inside a 2^40 m sector. Sub-millimetre everywhere in a
-   249,000 ly cube, and crossing a sector boundary is *exact*.
+   249,000 ly of the origin, and crossing a sector boundary is *exact*.
 2. **Frames are not a precision mechanism**; the coordinates already are. They
    carry the semantics of motion, and re-framing provably does not move
    anything.

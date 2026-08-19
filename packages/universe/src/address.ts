@@ -7,11 +7,11 @@ import { type Brand, invariant } from '@inertialref/shared'
  * slash-separated typed segments:
  *
  *   g:milky-way
- *   g:milky-way/s:HIP71681
- *   g:milky-way/s:HIP71681/b:2         third planet
- *   g:milky-way/s:HIP71681/b:2.0       its first moon
- *   g:milky-way/s:HIP71681/b:2/r:3.6.12.44    a surface region
- *   g:milky-way/s:HIP71681/b:2/r:3.6.12.44/o:7  a generated object in it
+ *   g:milky-way/s:HIP71683
+ *   g:milky-way/s:HIP71683/b:2         third planet
+ *   g:milky-way/s:HIP71683/b:2.0       its first moon
+ *   g:milky-way/s:HIP71683/b:2/r:3.6.12.44    a surface region
+ *   g:milky-way/s:HIP71683/b:2/r:3.6.12.44/o:7  a generated object in it
  *
  * The properties that matter, in order of how expensive they are to retrofit:
  *
@@ -19,7 +19,7 @@ import { type Brand, invariant } from '@inertialref/shared'
  *     order, memory, Three.js object ids, worker scheduling or connection
  *     order. Regenerating the universe from the seed reproduces every address.
  *   - It exists whether or not the thing is loaded. "Where is the third planet
- *     of HIP71681" is answerable without having generated it.
+ *     of HIP71683" is answerable without having generated it.
  *   - It is the seed path. Generation, persistence, save files, logs, the debug
  *     overlay and the harness all key off the same string, so a bug report can
  *     be replayed by pasting one address.

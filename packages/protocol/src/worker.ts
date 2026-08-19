@@ -1,4 +1,5 @@
-import { decodeInteger, decodeObject, decodeString, type Decoder } from './codec.ts'
+import { ok } from '@inertialref/shared'
+import { decodeInteger, decodeLiteral, decodeObject, decodeString, type Decoder } from './codec.ts'
 
 /*
  * Worker protocol.
@@ -52,16 +53,23 @@ export interface WorkerReady {
 export type WorkerInbound = WorkerRequest | WorkerCancel
 export type WorkerOutbound = WorkerSuccess | WorkerFailure | WorkerReady
 
+/**
+ * Validate an inbound request envelope.
+ *
+ * `payload` stays `unknown` on purpose — its shape is the task's business, and
+ * the task registry is what knows which task expects what. Everything the host
+ * loop itself dereferences (`job`, `task`, `taskVersion`) is checked here,
+ * which it previously was not: the loop read them off an unvalidated object and
+ * handed `payload` to `task.run` as `never`.
+ */
 export const decodeWorkerRequest: Decoder<WorkerRequest> = decodeObject({
-  kind: decodeString,
+  kind: decodeLiteral('request'),
   job: decodeInteger,
   task: decodeString,
   taskVersion: decodeInteger,
-  payload: (value) => ({ ok: true as const, value }),
-}) as unknown as Decoder<WorkerRequest>
+  payload: (value) => ok(value),
+})
 
-export const isWorkerRequest = (message: unknown): message is WorkerRequest =>
-  typeof message === 'object' && message !== null && (message as { kind?: unknown }).kind === 'request'
 
 export const isWorkerCancel = (message: unknown): message is WorkerCancel =>
   typeof message === 'object' && message !== null && (message as { kind?: unknown }).kind === 'cancel'

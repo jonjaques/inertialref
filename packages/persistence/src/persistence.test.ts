@@ -5,7 +5,7 @@ import { UV, Vec, vec3 } from '@inertialref/spatial'
 import { World } from '@inertialref/simulation'
 import { bodyFrameId, systemFrameId, systemId, walkBodies } from '@inertialref/universe'
 import { migrateSave } from './migrate.ts'
-import { captureSave, parseSave, readSave, restoreSave, serializeSave, writeSave } from './save.ts'
+import { captureSave, parseSave, restoreSave, serializeSave } from './save.ts'
 import { MemorySaveStore } from './store.ts'
 
 const SOL = systemId('SOL')
@@ -83,13 +83,25 @@ describe('save round trip', () => {
   })
 
   it('goes through a store', async () => {
+    // Serialize, store, read, parse, restore — the path the game actually takes.
+    // `writeSave`/`readSave` used to wrap this pair, and their only callers were
+    // this test: they took a `SaveGame` while every production path (browser,
+    // headless runner, harness) works in serialized text, so two APIs existed
+    // for one job and the shipped one was the untested one.
     const store = new MemorySaveStore()
     const { world, ship } = flownWorld(90)
-    unwrap(await writeSave(store, captureSave(world, ship.id), 'slot-1'), 'write')
+
+    unwrap(await store.write('slot-1', serializeSave(captureSave(world, ship.id))), 'write')
     expect(await store.list()).toEqual(['slot-1'])
-    const loaded = unwrap(await readSave(store, 'slot-1'), 'read')
+
+    const contents = unwrap(await store.read('slot-1'), 'read')
+    const loaded = unwrap(parseSave(contents), 'parse')
     expect(unwrap(restoreSave(loaded), 'restore').world.stateHash()).toBe(world.stateHash())
-    expect((await readSave(store, 'missing')).ok).toBe(false)
+
+    expect((await store.read('missing')).ok).toBe(false)
+
+    await store.remove('slot-1')
+    expect(await store.list()).toEqual([])
   })
 })
 

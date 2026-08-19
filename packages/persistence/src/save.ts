@@ -13,7 +13,6 @@ import { type FrameId, vec3 } from '@inertialref/spatial'
 import { DEBUG_SHIP_THRUSTERS, type EntityKind, World } from '@inertialref/simulation'
 import { GENERATION_VERSIONS, galaxyId, type EntityId, type SystemId } from '@inertialref/universe'
 import { migrateSave } from './migrate.ts'
-import { DEFAULT_SLOT, type SaveStore } from './store.ts'
 
 /*
  * Turning a world into a save and back.
@@ -139,21 +138,4 @@ export function parseSave(text: string): Result<SaveGame, string> {
   const migrated = migrateSave(raw)
   if (!migrated.ok) return migrated
   return decode(decodeSaveGame, migrated.value)
-}
-
-export async function writeSave(
-  store: SaveStore,
-  save: SaveGame,
-  slot: string = DEFAULT_SLOT,
-): Promise<Result<void, string>> {
-  return await store.write(slot, serializeSave(save))
-}
-
-export async function readSave(
-  store: SaveStore,
-  slot: string = DEFAULT_SLOT,
-): Promise<Result<SaveGame, string>> {
-  const contents = await store.read(slot)
-  if (!contents.ok) return contents
-  return parseSave(contents.value)
 }

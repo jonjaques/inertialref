@@ -19,7 +19,7 @@ surface, a sphere-of-influence frame transition mid-flight, and a save
 round-tripping through IndexedDB to an identical state hash. With the preview
 server **stopped**, the page still loads from the service worker and passes
 12/12 — offline-first demonstrated rather than asserted. The browser runs
-~1.25M simulation ticks/s for one entity; the headless runner does 110k ticks/s
+~1.25M simulation ticks/s for one entity; the headless runner does ~100–105k ticks/s
 including frame resolution.
 
 | Package | Layer | State |
@@ -36,7 +36,7 @@ including frame resolution.
 | `rendering` | 5 | done — LOD, depth compression, terrain meshing |
 | `devtools` | 6 | done — inspection, twelve capability checks, harness, `openSession` |
 | `apps/game` | — | done — React + R3F client, worker pool, IndexedDB saves |
-| `apps/headless` | — | done — Node runner, 110k ticks/s, self-test in CI |
+| `apps/headless` | — | done — Node runner, ~100–105k ticks/s, `pnpm sim --self-test` |
 
 ## Decisions that are expensive to reverse
 
@@ -44,7 +44,7 @@ Full reasoning is in `docs/adr/`. The short version:
 
 1. **Positions are sector + offset, not doubles.** int32 sector index per axis
    plus a double offset inside a 2^40 m sector. Sub-millimetre everywhere in a
-   249,000 ly cube. The power-of-two sector size makes carrying exact, so
+   249,000 ly of the origin. The power-of-two sector size makes carrying exact, so
    crossing a sector boundary adds zero error.
 2. **Frames are not a precision mechanism.** The coordinates already are.
    Frames carry the semantics of motion and give rendering a local origin. A
@@ -64,7 +64,7 @@ Full reasoning is in `docs/adr/`. The short version:
    kinematically to a surface frame instead.
 8. **Render compression keys off distance to the *surface*.** Keying off the
    centre put a planet's datum sphere 30 km from the terrain it represents.
-9. **A save is a reference, not a copy** — 580 bytes for a flown session.
+9. **A save is a reference, not a copy** — under 700 bytes for a flown session.
 
 ## Conventions worth knowing before editing
 
@@ -126,6 +126,17 @@ The load-bearing changes:
 - Three speculative config seams in `rendering` (`SceneConfig`,
   `PlacementConfig`, `LodThresholds`) collapsed to constants — six signatures
   lost a parameter no caller ever supplied.
+- **The two `WorkerPort` adapters agree.** The inline transport now
+  `structuredClone`s messages and honours its transfer list; it did neither, so
+  a payload holding a `Map`, a class instance or a function passed every Node
+  test and threw `DataCloneError` in Chrome. Making it throw exposed a second
+  gap: `WorkerPool` left the job in `#active` with nobody settling its promise,
+  so the caller hung and the failure surfaced later as an unhandled rejection
+  from `terminate`. Both are fixed and tested.
+- **`pnpm graph` enforces the no-vendor-SDK rule.** It discarded every
+  non-workspace edge before looking, so the rule was documented as enforced
+  while nothing enforced it. It now rejects any third-party runtime dependency
+  in `packages/*` — of which there are, and should be, none.
 
 ## Bugs the tests found (worth not reintroducing)
 
