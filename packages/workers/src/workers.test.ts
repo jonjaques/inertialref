@@ -1,0 +1,191 @@
+import { describe, expect, it } from 'vitest'
+import { formatSeed, rootSeed } from '@inertialref/procedural'
+import { decodeUniverseVector } from '@inertialref/protocol'
+import { expect as unwrap } from '@inertialref/shared'
+import { UV } from '@inertialref/spatial'
+import { generateCell, galaxySeedOf, MILKY_WAY } from '@inertialref/universe'
+import { createInlineWorker } from './inline.ts'
+import { WorkerPool } from './pool.ts'
+import { defineTask, runInline, TaskRegistry } from './task.ts'
+import {
+  createTaskRegistry,
+  generateCellTask,
+  generateHeightfieldTask,
+  surveySystemTask,
+  surveyRegionTask,
+} from './tasks.ts'
+
+const SEED = rootSeed('inertialref')
+const GALAXY_SEED = galaxySeedOf(SEED, MILKY_WAY)
+
+/** A deterministic fake clock, so timing assertions are exact. */
+function fakeClock() {
+  let now = 0
+  return { now: () => now, advance: (ms: number) => (now += ms) }
+}
+
+function pool(size = 2, now: () => number = () => 0): WorkerPool {
+  const registry = createTaskRegistry()
+  return new WorkerPool({ factory: () => createInlineWorker(registry, now), size, now })
+}
+
+describe('task contracts', () => {
+  it('runs the same code inline as it does in a worker', async () => {
+    // The property that makes worker code testable: a task is a function, and
+    // the worker is only a place to call it.
+    const payload = { seed: formatSeed(GALAXY_SEED), cell: { x: 3, y: 0, z: -7 } }
+    const direct = await runInline(generateCellTask, payload)
+    const viaPool = await pool().run(generateCellTask, payload)
+    expect(viaPool).toEqual(direct)
+    // ...and it agrees with calling the generator itself.
+    expect(direct.stars.length).toBe(generateCell(GALAXY_SEED, payload.cell).length)
+  })
+
+  it('produces positions that survive the wire', async () => {
+    const result = await pool().run(generateCellTask, {
+      seed: formatSeed(GALAXY_SEED),
+      cell: { x: 0, y: 0, z: 0 },
+    })
+    const local = generateCell(GALAXY_SEED, { x: 0, y: 0, z: 0 })
+    for (const [index, star] of result.stars.entries()) {
+      const decoded = unwrap(decodeUniverseVector(star.position, 'p'), 'decode')
+      expect(UV.equals(decoded, local[index]?.position as never)).toBe(true)
+    }
+  })
+
+  it('rejects an unknown task and a stale task version', async () => {
+    const registry = new TaskRegistry()
+    const real = defineTask<number, number>({ name: 'double', version: 2, run: (n) => n * 2 })
+    registry.register(real)
+    const p = new WorkerPool({ factory: () => createInlineWorker(registry), size: 1 })
+
+    await expect(p.run({ ...real, name: 'missing' }, 1)).rejects.toThrow(/Unknown task missing/)
+    // A page left open across a deploy must fail loudly rather than mixing
+    // algorithm versions inside one universe.
+    await expect(p.run({ ...real, version: 1 }, 1)).rejects.toThrow(/version mismatch/)
+    expect(await p.run(real, 21)).toBe(42)
+  })
+
+  it('surfaces a thrown task as a rejected job without killing the worker', async () => {
+    const registry = new TaskRegistry()
+    const boom = defineTask<null, null>({
+      name: 'boom',
+      version: 1,
+      run: () => {
+        throw new Error('deliberate')
+      },
+    })
+    const fine = defineTask<number, number>({ name: 'fine', version: 1, run: (n) => n + 1 })
+    registry.register(boom)
+    registry.register(fine)
+    const p = new WorkerPool({ factory: () => createInlineWorker(registry), size: 1 })
+    await expect(p.run(boom, null)).rejects.toThrow(/deliberate/)
+    expect(await p.run(fine, 1)).toBe(2)
+    expect(p.stats().failed).toBe(1)
+  })
+})
+
+describe('worker pool', () => {
+  it('spreads work across workers and drains the queue', async () => {
+    const p = pool(3)
+    const jobs = Array.from({ length: 12 }, (_, i) =>
+      p.run(generateCellTask, { seed: formatSeed(GALAXY_SEED), cell: { x: i, y: 1, z: 1 } }),
+    )
+    const results = await Promise.all(jobs)
+    expect(results).toHaveLength(12)
+    const stats = p.stats()
+    expect(stats.completed).toBe(12)
+    expect(stats.queued).toBe(0)
+    expect(stats.active).toBe(0)
+    expect(stats.idle).toBe(3)
+  })
+
+  it('measures queue latency separately from execution time', async () => {
+    // The two fail differently — slow tasks want optimising, a deep queue wants
+    // more workers — so the pool has to be able to tell them apart.
+    const clock = fakeClock()
+    const registry = new TaskRegistry()
+    registry.register(
+      defineTask<number, number>({
+        name: 'slow',
+        version: 1,
+        run: (n) => {
+          clock.advance(50)
+          return n
+        },
+      }),
+    )
+    const slow = registry.get('slow')
+    const p = new WorkerPool({
+      factory: () => createInlineWorker(registry, clock.now),
+      size: 1,
+      now: clock.now,
+    })
+    const first = p.run(slow as never, 1)
+    clock.advance(30)
+    const second = p.run(slow as never, 2)
+    await Promise.all([first, second])
+    const stats = p.stats()
+    expect(stats.averageRunMs).toBeGreaterThan(0)
+    expect(stats.longestQueueMs).toBeGreaterThanOrEqual(30)
+  })
+
+  it('cancels a queued job before it runs', async () => {
+    const p = pool(1)
+    const busy = p.submit(surveyRegionTask, {
+      seed: formatSeed(GALAXY_SEED),
+      min: { x: 0, y: 0, z: 0 },
+      max: { x: 2, y: 2, z: 2 },
+    })
+    const doomed = p.submit(generateCellTask, {
+      seed: formatSeed(GALAXY_SEED),
+      cell: { x: 9, y: 9, z: 9 },
+    })
+    doomed.cancel()
+    await expect(doomed.result).rejects.toThrow(/cancelled/)
+    await busy.result
+    expect(p.stats().cancelled).toBe(1)
+  })
+
+  it('rejects everything outstanding when terminated', async () => {
+    const p = pool(1)
+    const job = p.submit(generateCellTask, { seed: formatSeed(GALAXY_SEED), cell: { x: 1, y: 2, z: 3 } })
+    p.terminate()
+    await expect(job.result).rejects.toThrow(/terminated/)
+  })
+})
+
+describe('terrain task', () => {
+  it('returns a transferable heightfield that matches local generation', async () => {
+    const p = pool(2)
+    const payload = {
+      surfaceSeed: formatSeed(SEED),
+      maxElevation: 8_000,
+      roughness: 3,
+      seaLevel: null,
+      region: { face: 2, level: 5, i: 11, j: 4 },
+      resolution: 33,
+    }
+    const result = await p.run(generateHeightfieldTask, payload)
+    expect(result.elevations).toBeInstanceOf(Float32Array)
+    expect(result.elevations.length).toBe(33 * 33)
+    expect(result.maxElevation).toBeLessThanOrEqual(8_000 * 1.2)
+    // Declared as transferable, which is what keeps a planet's worth of patches
+    // from being copied twice per frame.
+    expect(generateHeightfieldTask.transfers?.(result)).toHaveLength(1)
+
+    const again = await p.run(generateHeightfieldTask, payload)
+    expect(Array.from(again.elevations)).toEqual(Array.from(result.elevations))
+  })
+
+  it('surveys a system through the same generator the world uses', async () => {
+    const survey = await pool().run(surveySystemTask, {
+      seed: formatSeed(SEED),
+      galaxy: MILKY_WAY,
+      system: 'SOL',
+    })
+    expect(survey.name).toBe('Sol')
+    expect(survey.bodies.length).toBeGreaterThan(0)
+    expect(survey.bodies[0]?.address).toMatch(/^g:milky-way\/s:SOL\/b:/)
+  })
+})

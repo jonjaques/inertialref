@@ -32,6 +32,7 @@ import {
   CATALOG,
   directionToGeodetic,
   type EntityId,
+  findBody,
   dynamicEntityId,
   type GalaxyId,
   galaxySeedOf,
@@ -39,9 +40,9 @@ import {
   installSurfaceFrame,
   installSystemFrames,
   MILKY_WAY,
+  parseAddress,
   resolveSystem,
   type StarSystem,
-  surfaceRadius,
   type SystemId,
   systemFrameId,
   systemsWithin,
@@ -286,6 +287,35 @@ export class World implements FlightWorld {
     return this.#altitudes.get(id) ?? null
   }
 
+  /**
+   * Re-create a frame from its id.
+   *
+   * Surface frames are minted on landing rather than up front, so a save that
+   * has a ship parked on a planet refers to a frame that does not exist yet
+   * after a reload. Because terrain is a pure function of the seed, the frame
+   * can be regenerated exactly — which is the persistence model working as
+   * intended: store the reference, regenerate the content.
+   */
+  ensureFrame(id: FrameId): boolean {
+    if (this.frames.has(id)) return true
+    if (!id.startsWith('sf:')) return false
+    const at = id.lastIndexOf('@')
+    if (at < 0) return false
+    const address = parseAddress(id.slice(3, at))
+    if (address.kind !== 'body') return false
+    const [latitude, longitude] = id
+      .slice(at + 1)
+      .split(',')
+      .map((part) => Number.parseFloat(part))
+    if (latitude === undefined || longitude === undefined) return false
+
+    const system = this.#systems.get(address.system) ?? this.loadSystem(address.system)
+    const body = findBody(system, address.body)
+    if (body === undefined) return false
+    installSurfaceFrame(this.frames, body, latitude, longitude)
+    return this.frames.has(id)
+  }
+
   /** Move an entity into another frame without moving it in the universe. */
   reframeEntity(id: EntityId, frame: FrameId): Entity {
     const entity = this.entities.require(id)
@@ -370,9 +400,7 @@ export class World implements FlightWorld {
     const universe = canonicalPosition(this.frames, entity.state, time)
     const bodyFixed = universeToLocal(spinPose, universe)
     const { latitude, longitude } = directionToGeodetic(bodyFixed)
-    const ground = surfaceRadius(body, Vec.normalize(bodyFixed))
-
-    const frame = installSurfaceFrame(this.frames, body, latitude, longitude, ground - body.radius)
+    const frame = installSurfaceFrame(this.frames, body, latitude, longitude)
     const landedState = reframe(this.frames, entity.state, frame, time)
     this.entities.update(id, {
       state: {

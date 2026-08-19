@@ -269,7 +269,10 @@ describe('system frames', () => {
     const t = 1_000
     const pose = graph.pose(surface, t)
     const planetPose = graph.pose(bodyFrameId(planet.address), t)
-    expect(UV.distance(pose.position, planetPose.position)).toBeCloseTo(planet.radius, 0)
+    // On the ground, which is the terrain height — not the datum sphere.
+    const height = UV.distance(pose.position, planetPose.position) - planet.radius
+    expect(Math.abs(height)).toBeLessThanOrEqual(planet.surface.maxElevation * 1.2)
+    expect(Math.abs(height)).toBeGreaterThan(0)
 
     // Standing still on the surface still means moving, in the frame above.
     const spinSpeed = (2 * Math.PI * planet.radius * Math.cos(0.4)) / Math.abs(planet.rotationPeriod)

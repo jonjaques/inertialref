@@ -1,4 +1,4 @@
-import type { Meters, Radians, Seconds } from '@inertialref/shared'
+import type { Radians, Seconds } from '@inertialref/shared'
 import { stateVectorAt } from '@inertialref/physics'
 import {
   type FrameGraph,
@@ -12,6 +12,7 @@ import {
 } from '@inertialref/spatial'
 import { formatAddress, type SystemId, type UniverseAddress } from './address.ts'
 import type { Body, StarSystem } from './system.ts'
+import { surfaceRadius } from './terrain.ts'
 
 /*
  * Where the universe meets the spatial package.
@@ -35,12 +36,42 @@ export const bodyFrameId = (address: UniverseAddress): FrameId =>
   frameId(`b:${formatAddress(address)}`)
 export const bodyFixedFrameId = (address: UniverseAddress): FrameId =>
   frameId(`bf:${formatAddress(address)}`)
+/**
+ * Angles in a frame id are formatted through this, not through `toFixed`
+ * directly.
+ *
+ * `(-1e-9).toFixed(6)` is "-0.000000" but `Number.parseFloat` of that is `-0`,
+ * whose `toFixed(6)` is "0.000000" — so an id built at a latitude a hair south
+ * of the equator did not survive being parsed and rebuilt, and a save with a
+ * ship landed there failed to restore. Collapsing the sub-precision band to
+ * zero makes the text form idempotent.
+ */
+const ANGLE_PRECISION = 1e-6
+
+/**
+ * Snap an angle to the precision the id records.
+ *
+ * The frame's *geometry* is built from the quantised value too, not just its
+ * name. Otherwise the id does not fully determine the frame: a landing site
+ * rebuilt from a save landed half a metre from where it was written, because
+ * the original frame had used the unrounded latitude the id had thrown away.
+ */
+export const quantizeAngle = (radians: Radians): Radians =>
+  Math.round(radians / ANGLE_PRECISION) * ANGLE_PRECISION
+
+const formatAngle = (radians: Radians): string => {
+  const snapped = quantizeAngle(radians)
+  // `(-0).toFixed(6)` is "0.000000" while `(-1e-9).toFixed(6)` is "-0.000000",
+  // so without collapsing the sign the text form is not idempotent.
+  return (Object.is(snapped, -0) ? 0 : snapped).toFixed(6)
+}
+
 export const surfaceFrameId = (
   address: UniverseAddress,
   latitude: Radians,
   longitude: Radians,
 ): FrameId =>
-  frameId(`sf:${formatAddress(address)}@${latitude.toFixed(6)},${longitude.toFixed(6)}`)
+  frameId(`sf:${formatAddress(address)}@${formatAngle(latitude)},${formatAngle(longitude)}`)
 
 /** Orbit evaluator for a body about a primary with gravitational parameter `mu`. */
 function orbitEvaluator(body: Body, primaryMu: number): (t: Seconds) => LocalPose {
@@ -153,14 +184,20 @@ export function directionToGeodetic(direction: {
 export function installSurfaceFrame(
   graph: FrameGraph,
   body: Body,
-  latitude: Radians,
-  longitude: Radians,
-  elevation: Meters = 0,
+  requestedLatitude: Radians,
+  requestedLongitude: Radians,
 ): FrameId {
+  const latitude = quantizeAngle(requestedLatitude)
+  const longitude = quantizeAngle(requestedLongitude)
   const id = surfaceFrameId(body.address, latitude, longitude)
   if (graph.has(id)) return id
 
   const up = geodeticDirection(latitude, longitude)
+  // Elevation is derived here rather than passed in, for the same reason the
+  // angles are quantised here: the id has to determine the frame completely.
+  // A caller-supplied elevation sampled at the unrounded position put a
+  // restored landing site 21 mm from the original.
+  const elevation = surfaceRadius(body, up) - body.radius
   const east = Vec.normalize(vec3(-up.z, 0, up.x))
   // Degenerate at the poles, where "east" is undefined; fall back to +X.
   const eastSafe = Vec.lengthSquared(east) === 0 ? vec3(1, 0, 0) : east
