@@ -67,6 +67,8 @@ export interface BodySnapshot {
   readonly frame: FrameId
   readonly hasAtmosphere: boolean
   readonly atmosphereCeiling: Meters
+  /** Peak-to-datum terrain relief, so the renderer can sink the datum sphere. */
+  readonly relief: Meters
 }
 
 export interface StarSnapshot {
@@ -165,6 +167,7 @@ export function snapshot(world: World, alpha = world.clock.alpha): WorldSnapshot
         frame,
         hasAtmosphere: body.atmosphere !== null,
         atmosphereCeiling: body.atmosphere?.ceiling ?? 0,
+        relief: body.surface.maxElevation,
       })
       for (const moon of body.moons) collect(moon)
     }

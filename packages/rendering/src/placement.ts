@@ -69,8 +69,14 @@ export interface RenderPlacement {
  * `shellStart + shellSpan · ln(1 + (d − nearLimit)/nearLimit)`. With
  * `shellSpan = shellStart = nearLimit` this is continuous *and* has derivative
  * 1 at the boundary, so an object crossing into the near field neither pops nor
- * changes its apparent rate of approach. It is strictly increasing everywhere,
- * so sorting by rendered depth still sorts by real distance.
+ * changes its apparent rate of approach.
+ *
+ * It is non-decreasing everywhere, so rendered depth never inverts real depth.
+ * It is *strictly* increasing only while the separation survives double
+ * precision: past ~1e17 m the slope is around 1e-11, so two objects a hundred
+ * metres apart compress to the same value. They are also the same pixel, so
+ * this costs nothing — but it is a property of the mapping, not an accident,
+ * and the tests state it that way.
  */
 export function compressDistance(distance: Meters, config: PlacementConfig): Meters {
   if (distance <= config.nearLimit) return distance
@@ -88,15 +94,25 @@ export function placeAt(
   const tier = selectLod(radius, distance, config.thresholds)
   const angle = radius <= 0 || distance <= 0 ? 0 : Math.asin(Math.min(1, radius / Math.max(radius, distance)))
 
-  if (distance <= config.nearLimit || distance === 0) {
+  // Compression keys off the distance to the *surface*, not to the centre.
+  //
+  // Keying off the centre broke the thing this whole system exists for: in a
+  // 400 km orbit the planet's centre is 3,264 km away and was therefore
+  // compressed, while the streamed terrain patches 400 km away were in the
+  // uncompressed near field. The datum sphere and the ground it represents
+  // ended up 30 km apart, so no terrain was visible at all.
+  //
+  // Using the surface distance also makes the transition continuous: at the
+  // boundary the factor is exactly 1, so a planet does not pop as you arrive.
+  const surfaceDistance = Math.max(0, distance - radius)
+  if (surfaceDistance <= config.nearLimit || distance === 0) {
     return { position: offset, scale: radius, distance, tier, compressed: false, angularRadius: angle }
   }
 
-  const compressed = compressDistance(distance, config)
-  const factor = compressed / distance
+  const factor = (radius + compressDistance(surfaceDistance, config)) / distance
   return {
-    // Same direction, shorter radius, and the radius shrinks by the same
-    // factor — so the object subtends exactly the angle it should.
+    // Same direction, and position and radius scale together — so the object
+    // subtends exactly the angle it should. Only depth becomes a lie.
     position: Vec.scale(offset, factor),
     scale: radius * factor,
     distance,

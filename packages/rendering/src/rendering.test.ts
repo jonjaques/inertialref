@@ -54,6 +54,18 @@ describe('LOD selection', () => {
 })
 
 describe('render placement', () => {
+  it('does not compress the world you are in orbit around', () => {
+    // The regression that made terrain invisible: in a 400 km orbit the centre
+    // of a 2,864 km planet is far beyond the near limit, but its surface — and
+    // the streamed patches on it — are right in front of the camera.
+    const radius = 2.864e6
+    const centre = UV.translate(ORIGIN.position, vec3(radius + 400e3, 0, 0))
+    const planet = placeAt(ORIGIN, centre, radius)
+    expect(planet.compressed).toBe(false)
+    // The rendered near surface sits exactly at the true altitude.
+    expect(Vec.length(planet.position) - planet.scale).toBeCloseTo(400e3, 3)
+  })
+
   it('leaves the near field completely alone', () => {
     const near = UV.translate(ORIGIN.position, vec3(1_000, 0, 0))
     const placement = placeAt(ORIGIN, near, 5)
@@ -81,16 +93,38 @@ describe('render placement', () => {
     )
   })
 
-  it('keeps depth ordering intact (property)', () => {
+  it('never inverts depth ordering (property)', () => {
+    // The property occlusion actually depends on: nearer never renders further.
     fc.assert(
       fc.property(
         fc.double({ min: 1, max: 1e18, noNaN: true }),
         fc.double({ min: 1, max: 1e18, noNaN: true }),
         (a, b) => {
-          fc.pre(Math.abs(a - b) > 1)
           const ca = compressDistance(a, DEFAULT_PLACEMENT)
           const cb = compressDistance(b, DEFAULT_PLACEMENT)
-          // Strictly increasing, so sorting rendered depth still sorts reality.
+          if (a < b) expect(ca).toBeLessThanOrEqual(cb)
+          if (a > b) expect(ca).toBeGreaterThanOrEqual(cb)
+        },
+      ),
+    )
+  })
+
+  it('separates depths that are resolvable at all (property)', () => {
+    // Strictly increasing wherever the separation survives double precision.
+    // It is not strictly increasing everywhere, and pretending otherwise made
+    // this test flaky: at 1e18 m the compression slope is ~2e-12, so a 100 m
+    // difference maps to less than one ULP of the compressed value. Two objects
+    // 100 m apart a hundred light-years away are the same pixel; the honest
+    // claim is non-inversion above, plus strict ordering once the difference is
+    // large enough to mean anything.
+    fc.assert(
+      fc.property(
+        fc.double({ min: 1, max: 1e18, noNaN: true }),
+        fc.double({ min: 1, max: 1e18, noNaN: true }),
+        (a, b) => {
+          fc.pre(Math.abs(a - b) / Math.max(a, b) > 1e-9)
+          const ca = compressDistance(a, DEFAULT_PLACEMENT)
+          const cb = compressDistance(b, DEFAULT_PLACEMENT)
           expect(a < b).toBe(ca < cb)
         },
       ),
@@ -112,9 +146,10 @@ describe('render placement', () => {
     const star = UV.translate(ORIGIN.position, vec3(4 * LIGHT_YEAR, 0, 0))
     const placement = placeAt(ORIGIN, star, 6.957e8)
     expect(placement.distance / LIGHT_YEAR).toBeCloseTo(4, 3)
-    // Rendered a few tens of millions of metres out instead of 4e16 — inside
-    // what a logarithmic depth buffer handles comfortably.
-    expect(Vec.length(placement.position)).toBeLessThan(1e8)
+    // Rendered under a billion metres out instead of 4e16 — inside what a
+    // logarithmic depth buffer handles comfortably. The star's own radius
+    // dominates that figure, because a body's radius is never compressed away.
+    expect(Vec.length(placement.position)).toBeLessThan(1e10)
     expect(Vec.length(placement.position)).toBeGreaterThan(1e7)
     expect(Math.fround(placement.position.x)).not.toBe(0)
   })

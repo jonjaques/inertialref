@@ -8,7 +8,7 @@ import { GameHarness, type HarnessHost } from './harness.ts'
 import { inspectWorld } from './inspect.ts'
 
 function harness(): { harness: GameHarness; world: World; host: HarnessHost } {
-  const world = new World({ seed: 'inertialref' })
+  let world = new World({ seed: 'inertialref' })
   const system = world.loadSystem(systemId('SOL'))
   const planet = [...walkBodies(system)].find((b) => b.kind === 'rocky' && b.radius > 1e6)
   if (planet === undefined) throw new Error('no planet')
@@ -16,7 +16,9 @@ function harness(): { harness: GameHarness; world: World; host: HarnessHost } {
   const registry = createTaskRegistry()
   const pool = new WorkerPool({ factory: () => createInlineWorker(registry), size: 2 })
   const host: HarnessHost = {
-    world,
+    get world() {
+      return world
+    },
     player: () => player,
     setPlayer: (id) => {
       player = id
@@ -24,7 +26,10 @@ function harness(): { harness: GameHarness; world: World; host: HarnessHost } {
     scene: () => null,
     pool: () => pool,
     frameStats: () => null,
-    replaceWorld: () => {},
+    replaceWorld: (next, nextPlayer) => {
+      world = next
+      if (nextPlayer !== null) player = nextPlayer
+    },
   }
   return { harness: new GameHarness(host), world, host }
 }
@@ -99,6 +104,21 @@ describe('harness', () => {
     const parsed = JSON.parse(text)
     expect(parsed.seed).toBe('inertialref')
     expect(parsed.entities).toHaveLength(1)
+  })
+
+  it('reports on the loaded world, not the discarded one', () => {
+    // The host's `world` must be a getter. With a captured reference the
+    // harness kept inspecting the world that load had thrown away, which read
+    // from outside as "load does nothing".
+    const { harness: ir } = harness()
+    const saved = ir.save()
+    const savedHash = ir.status().world.stateHash
+    ir.step(500)
+    expect(ir.status().world.stateHash).not.toBe(savedHash)
+
+    const result = ir.load(saved)
+    expect(result.ok).toBe(true)
+    expect(ir.status().world.stateHash).toBe(savedHash)
   })
 
   it('reports every field the spec asks to be inspectable', () => {

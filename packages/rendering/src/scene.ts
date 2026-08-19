@@ -98,7 +98,12 @@ export function buildScene(
 
   const bodies: RenderBody[] = []
   for (const body of snapshot.bodies) {
-    const placement = placeAt(origin, body.position, body.radius, config.placement)
+    // The datum sphere is drawn a full relief below the datum. Terrain dips
+    // below the datum as often as it rises above it, and a sphere at exactly
+    // the datum radius hides every valley on the planet — which, with only a
+    // few patches streamed, means hiding most of the terrain.
+    const sphereRadius = Math.max(body.radius * 0.9, body.radius - body.relief)
+    const placement = placeAt(origin, body.position, sphereRadius, config.placement)
     if (placement.angularRadius < config.cullAngle) continue
     bodies.push({
       address: body.address,
@@ -107,7 +112,7 @@ export function buildScene(
       placement,
       orientation: orientationToRenderSpace(origin, body.orientation),
       hasAtmosphere: body.hasAtmosphere,
-      atmosphereScale: body.hasAtmosphere ? (body.radius + body.atmosphereCeiling) / body.radius : 1,
+      atmosphereScale: body.hasAtmosphere ? (body.radius + body.atmosphereCeiling) / sphereRadius : 1,
       trueRadius: body.radius,
     })
   }

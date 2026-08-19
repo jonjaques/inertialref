@@ -36,6 +36,15 @@ import { inspectEntity, inspectRender, inspectWorld, type EntityInspection, type
  */
 
 export interface HarnessHost {
+  /**
+   * Must be a *getter*, not a captured reference.
+   *
+   * Loading a save replaces the world wholesale. A host that copied the
+   * reference in at construction leaves the harness — and therefore the debug
+   * overlay — reporting on the world that was thrown away, while the frame loop
+   * runs the new one. That split brain looked exactly like "load silently does
+   * nothing" from the outside.
+   */
   readonly world: World
   /** The entity the camera follows. */
   player(): EntityId | null
@@ -214,11 +223,31 @@ export class GameHarness {
     const radius = body.radius + altitudeKm * 1000
     const speed = circularSpeed(body.mu, radius)
     const player = this.#requirePlayer()
+    const frame = bodyFrameId(body.address)
+
+    // Placed on the sunward side, and pointing along the orbit. A debug tool
+    // that drops you on the night side of an unlit world, facing away from
+    // everything, is technically correct and useless.
+    const time = this.world.clock.time
+    const bodyPose = this.world.frames.pose(frame, time)
+    const parent = this.world.frames.get(frame).parent
+    const toStar =
+      parent === null
+        ? vec3(1, 0, 0)
+        : Vec.normalize(
+            Q.rotateInverse(
+              bodyPose.orientation,
+              UV.difference(this.world.frames.pose(parent, time).position, bodyPose.position),
+            ),
+          )
+    const alongOrbit = Vec.normalize(Vec.cross(vec3(0, 1, 0), toStar))
+
     this.world.teleport(player, {
-      frame: bodyFrameId(body.address),
-      position: vec3(radius, 0, 0),
-      orientation: Q.IDENTITY,
-      velocity: vec3(0, 0, -speed),
+      frame,
+      position: Vec.scale(toStar, radius),
+      // Nose along the direction of travel: forward is −Z.
+      orientation: Q.fromUnitVectors(vec3(0, 0, -1), alongOrbit),
+      velocity: Vec.scale(alongOrbit, speed),
       angularVelocity: Vec.ZERO,
     })
     this.world.entities.update(player, { control: { translation: Vec.ZERO, rotation: Vec.ZERO } })
@@ -265,6 +294,33 @@ export class GameHarness {
       angularVelocity: Vec.ZERO,
     })
     this.world.entities.update(player, { control: { translation: Vec.ZERO, rotation: Vec.ZERO } })
+    return this.status()
+  }
+
+  /**
+   * Point the nose at a body without touching its trajectory.
+   *
+   * Separate from `burnToward` because looking and burning are different acts:
+   * this one is free, and it is what you want when setting up a screenshot or
+   * checking that a body is where the HUD says it is.
+   */
+  face(address: string): HarnessStatus {
+    const player = this.#requirePlayer()
+    const parsed = parseAddress(address)
+    if (parsed.kind !== 'body') throw new Error(`${address} is not a body address`)
+    const time = this.world.clock.time
+    const bodyPose = this.world.frames.pose(bodyFrameId(parsed), time)
+    const state = this.world.entities.require(player).state
+    const framePose = this.world.frames.pose(state.frame, time)
+    const toTarget = Q.rotateInverse(
+      framePose.orientation,
+      UV.difference(bodyPose.position, this.world.canonicalPositionOf(player)),
+    )
+    this.world.teleport(player, {
+      ...state,
+      orientation: Q.fromUnitVectors(vec3(0, 0, -1), Vec.normalize(toTarget)),
+      angularVelocity: Vec.ZERO,
+    })
     return this.status()
   }
 
@@ -366,6 +422,7 @@ export class GameHarness {
       '  ir.control({translation,rotation}) / ir.hold()',
       '  ir.bodies() / ir.systemsNearby(ly)',
       '  ir.orbit(address, altitudeKm) / ir.land(address, lat, lon)',
+      '  ir.face(address)              point the nose at something',
       '  ir.goToSystem(id, au) / ir.burnToward(address, throttle)',
       '  ir.save() / ir.load(text)',
       '  await ir.selfTest()           the twelve milestone capabilities',

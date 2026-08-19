@@ -1,0 +1,22 @@
+@import 'tailwindcss';
+
+/* The game fills the viewport and never scrolls; the HUD is absolutely
+   positioned over the canvas. */
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  background: #000;
+  overscroll-behavior: none;
+}
+
+body {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  color-scheme: dark;
+}
+
+canvas {
+  display: block;
+  touch-action: none;
+}
