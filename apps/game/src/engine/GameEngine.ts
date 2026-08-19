@@ -43,16 +43,24 @@ export interface StarField {
   readonly names: readonly string[]
 }
 
-export class GameEngine {
+/**
+ * The engine *is* the harness host.
+ *
+ * Implementing the interface directly rather than building an object literal
+ * around the engine keeps `world` a live property read: a literal would have to
+ * capture `this`, and a captured world reference is precisely the bug that made
+ * loading a save appear to do nothing.
+ */
+export class GameEngine implements HarnessHost {
   world: World
-  player: EntityId | null = null
   origin: RenderOrigin | null = null
-  scene: RenderScene | null = null
   snapshot: WorldSnapshot | null = null
   readonly harness: GameHarness
   readonly saves: SaveStore
   readonly terrain: TerrainStreamer
 
+  #playerId: EntityId | null = null
+  #scene: RenderScene | null = null
   #pool: WorkerPool | null = null
   #frameMs = 16
   #fps = 60
@@ -82,33 +90,36 @@ export class GameEngine {
     }
     this.terrain = new TerrainStreamer(this.#pool)
 
-    // `world` is a getter: `load` replaces the world, and a captured reference
-    // would leave the harness inspecting the discarded one.
-    const engine = this
-    const host: HarnessHost = {
-      get world() {
-        return engine.world
-      },
-      player: () => this.player,
-      setPlayer: (id) => {
-        this.player = id
-      },
-      scene: () => this.scene,
-      pool: () => this.#pool,
-      frameStats: () => this.frameStats(),
-      replaceWorld: (world, player) => {
-        this.world = world
-        this.player = player
-        this.origin = null
-        log.info('world replaced', { tick: world.clock.tick })
-      },
-    }
-    this.harness = new GameHarness(host)
+    this.harness = new GameHarness(this)
     this.#start()
   }
 
-  get pool(): WorkerPool | null {
+  /* ----------------------------------------------------------------------- */
+  /* HarnessHost                                                              */
+  /* ----------------------------------------------------------------------- */
+
+  player(): EntityId | null {
+    return this.#playerId
+  }
+
+  setPlayer(id: EntityId): void {
+    this.#playerId = id
+  }
+
+  scene(): RenderScene | null {
+    return this.#scene
+  }
+
+  pool(): WorkerPool | null {
     return this.#pool
+  }
+
+  replaceWorld(world: World, player: EntityId | null): void {
+    this.world = world
+    this.#playerId = player
+    this.origin = null
+    this.#scene = null
+    log.info('world replaced', { tick: world.clock.tick })
   }
 
   get starField(): StarField {
@@ -132,7 +143,7 @@ export class GameEngine {
     if (target === undefined) throw new Error('Sol generated no planets')
 
     const ship = this.world.spawnShip('Debug One', bodyFrameId(target.address), vec3(target.radius * 2.5, 0, 0))
-    this.player = ship.id
+    this.#playerId = ship.id
     const address = target.id.slice(1)
     this.harness.orbit(address, 400)
     // Opening shot looks at the world you are orbiting rather than along the
@@ -157,7 +168,7 @@ export class GameEngine {
     const started = performance.now()
     this.#ticksLastFrame = this.world.advance(delta)
 
-    const player = this.player
+    const player = this.#playerId
     if (player === null) return
 
     const shot = snapshot(this.world)
@@ -167,9 +178,9 @@ export class GameEngine {
 
     const previousGeneration = this.origin?.generation ?? -1
     this.origin = originForCamera(this.origin, camera.position)
-    this.scene = buildScene(shot, this.origin, player)
+    this.#scene = buildScene(shot, this.origin, player)
 
-    const surfaceBody = this.scene.terrainCandidates[0] ?? null
+    const surfaceBody = this.#scene.terrainCandidates[0] ?? null
     this.terrain.update(this.world, camera.position, this.origin, surfaceBody?.address ?? null)
     if (this.origin.generation !== previousGeneration && previousGeneration >= 0) {
       this.terrain.rebuild(this.world, this.origin)
@@ -239,24 +250,24 @@ export class GameEngine {
   /* --------------------------------------------------------------------- */
 
   setControl(translation: [number, number, number], rotation: [number, number, number]): void {
-    if (this.player === null) return
-    this.world.entities.update(this.player, {
+    if (this.#playerId === null) return
+    this.world.entities.update(this.#playerId, {
       control: { translation: vec3(...translation), rotation: vec3(...rotation) },
     })
   }
 
   toggleFlightAssist(): boolean {
-    if (this.player === null) return false
-    const entity = this.world.entities.require(this.player)
+    if (this.#playerId === null) return false
+    const entity = this.world.entities.require(this.#playerId)
     const next = !entity.flightAssist
-    this.world.entities.update(this.player, { flightAssist: next })
+    this.world.entities.update(this.#playerId, { flightAssist: next })
     return next
   }
 
   killRotation(): void {
-    if (this.player === null) return
-    const entity = this.world.entities.require(this.player)
-    this.world.entities.update(this.player, {
+    if (this.#playerId === null) return
+    const entity = this.world.entities.require(this.#playerId)
+    this.world.entities.update(this.#playerId, {
       state: { ...entity.state, angularVelocity: Vec.ZERO },
     })
   }
@@ -266,7 +277,7 @@ export class GameEngine {
   }
 
   async save(slot: string = DEFAULT_SLOT): Promise<string> {
-    const text = serializeSave(captureSave(this.world, this.player))
+    const text = serializeSave(captureSave(this.world, this.#playerId))
     await this.saves.write(slot, text)
     log.info('saved', { slot, bytes: text.length })
     return text

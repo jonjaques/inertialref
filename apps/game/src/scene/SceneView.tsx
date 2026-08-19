@@ -58,7 +58,7 @@ function CameraRig({ engine }: { engine: GameEngine }) {
     // The one place the wall clock enters the game. Clamped because a
     // backgrounded tab returns with a delta measured in minutes.
     engine.frame(Math.min(delta, 0.25))
-    const scene = engine.scene
+    const scene = engine.scene()
     if (scene === null) return
 
     camera.quaternion.set(
@@ -107,7 +107,7 @@ function Starfield({ engine }: { engine: GameEngine }) {
   const count = useRef(0)
 
   useFrame(() => {
-    const scene = engine.scene
+    const scene = engine.scene()
     const field = engine.starField
     if (scene === null || points.current === null) return
     if (generation.current === scene.origin.generation && count.current === field.positions.length) return
@@ -157,7 +157,7 @@ function Bodies({ engine }: { engine: GameEngine }) {
   const geometry = useMemo(() => new THREE.SphereGeometry(1, 48, 32), [])
 
   useFrame(() => {
-    const scene = engine.scene
+    const scene = engine.scene()
     const container = group.current
     if (scene === null || container === null) return
 
@@ -298,7 +298,7 @@ function ShipModel({ engine }: { engine: GameEngine }) {
   const group = useRef<THREE.Group>(null)
 
   useFrame(() => {
-    const scene = engine.scene
+    const scene = engine.scene()
     if (scene === null || group.current === null) return
     const ship = scene.entities.find((entity) => entity.isCamera)
     if (ship === undefined) return
@@ -337,7 +337,7 @@ function NearFieldProps({ engine }: { engine: GameEngine }) {
   const group = useRef<THREE.Group>(null)
 
   useFrame(() => {
-    const scene = engine.scene
+    const scene = engine.scene()
     if (scene === null || group.current === null) return
     const ship = scene.entities.find((entity) => entity.isCamera)
     if (ship === undefined) return

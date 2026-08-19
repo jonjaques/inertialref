@@ -1,0 +1,58 @@
+# ADR-0006: A 64 Hz fixed timestep, and wall clock decides only how many
+
+Status: accepted · 2026-08-19
+
+## Context
+
+Canonical state must not depend on frame rate. Rendering at 144 Hz and at 60 Hz
+must produce the same universe, a session must be replayable, time warp must not
+change physics, and a backgrounded tab must not return and freeze the page.
+
+## Decision
+
+**The tick rate is 64 Hz, not 60.** That is not a performance choice: 1/64 is
+exactly representable in binary, so `tick / TICK_RATE` is an exact conversion at
+every tick and simulation time never accumulates a rounding residue. At 60 Hz,
+1/60 is a repeating binary fraction, and two clients that reached tick 10^7 by
+different routes disagree in the low bits — the kind of divergence that shows up
+as a desync hours into a session.
+
+Wall clock enters at exactly one place: `clock.advance(realDelta)` returns an
+integer number of fixed steps to run. Nothing downstream ever sees `realDelta`.
+Canonical state depends only on the integer tick count.
+
+**Time warp multiplies how many ticks a second of wall clock buys**, never the
+tick duration. Warped time is therefore bit-identical to real time run for
+longer, which is what makes a warped session replayable.
+
+**A step budget of 8 ticks per frame.** Without it, a tab backgrounded for a
+minute returns and tries to run 3,840 ticks in one frame, freezes, and tries
+again next frame — the spiral of death. Excess ticks are dropped and counted,
+and the count is on the debug overlay so the drop is visible rather than felt.
+
+**Interpolation renders one tick in the past.** Entity states are lerped between
+the previous tick and the current one. Bodies are *not* lerped: their frames are
+analytic, so they are evaluated exactly at the fractional render time and have
+no interpolation error at any time warp.
+
+## Alternatives considered
+
+- **60 Hz.** Conventional, and matches the most common display. Rejected for the
+  binary-exactness reason above; 64 Hz is also 6.7% more simulation for free.
+- **Variable timestep with substepping.** Standard in many engines and
+  fundamentally not replayable.
+- **128 Hz.** Also exact, twice the cost, no benefit at current fidelity.
+
+## Consequences
+
+- Tests assert the property directly: 60 Hz, 144 Hz, jittery frame times from
+  4 ms to 60 ms, and 100× time warp all produce the same state hash at the same
+  tick.
+- Orbits being analytic (`stateVectorAt`) rather than integrated means the state
+  of the universe at tick 10^9 does not depend on having stepped through the
+  preceding 10^9 ticks. Save/load and time warp are consequently free of drift,
+  and an unloaded system can still answer where its planets are.
+- `stateHash()` over tick plus all entity states is the desync/replay check, and
+  every determinism test in the suite is an assertion about it.
+- The accumulator is deliberately not persisted: a save resumes on a tick
+  boundary.
