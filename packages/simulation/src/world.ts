@@ -324,6 +324,24 @@ export class World implements FlightWorld {
     return this.entities.update(id, { state })
   }
 
+  /**
+   * Set an entity's state discontinuously.
+   *
+   * Resets the interpolation history as well, which a plain update does not:
+   * the presentation layer lerps between the previous tick and this one, so a
+   * teleport without this smears the ship across the system for one frame.
+   * Only debug tooling should be calling it — nothing in normal play moves an
+   * entity without moving it.
+   */
+  teleport(id: EntityId, state: FrameState, landed = false): Entity {
+    const entity = this.entities.update(id, { state })
+    this.#previous.set(id, state)
+    this.#altitudes.delete(id)
+    if (landed) this.#landed.add(id)
+    else this.#landed.delete(id)
+    return entity
+  }
+
   canonicalPositionOf(id: EntityId): UniverseVector {
     return canonicalPosition(this.frames, this.entities.require(id).state, this.clock.time)
   }
