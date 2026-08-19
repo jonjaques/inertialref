@@ -179,7 +179,7 @@ function makeSurface(rng: Rng, seed: Seed, radius: Meters, kind: BodyKind, hasAt
 
 function makeMoon(
   parentSeed: Seed,
-  parentAddress: UniverseAddress,
+  parentName: string,
   parentMass: Kilograms,
   parentRadius: Meters,
   parentSoi: Meters,
@@ -217,7 +217,7 @@ function makeMoon(
   return {
     address,
     id: entityIdForAddress(address),
-    name: `${moonNameFor(parentAddress)} ${romanNumeral(index + 1)}`,
+    name: `${parentName} ${MOON_SUFFIX[index] ?? String(index)}`,
     kind: 'moon',
     mass,
     radius,
@@ -247,8 +247,8 @@ function moonOrbitBand(parentRadius: Meters, parentSoi: Meters): readonly [Meter
 
 const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII']
 const romanNumeral = (n: number): string => ROMAN[n - 1] ?? String(n)
-const moonNameFor = (parent: UniverseAddress): string =>
-  parent.kind === 'body' ? `b${parent.body.join('.')}` : 'moon'
+/** Moons take their planet's name and a letter, as real satellites do. */
+const MOON_SUFFIX = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
 
 function makePlanet(
   systemSeed: Seed,
@@ -295,6 +295,7 @@ function makePlanet(
     epoch: 0,
   }
 
+  const name = `${systemName} ${romanNumeral(index + 1)}`
   const soi = sphereOfInfluence(semiMajorAxis, mass, star.mass)
   // A planet close to its star has a sphere of influence barely larger than
   // itself and simply cannot hold a moon; asking for one produced unbound
@@ -308,13 +309,13 @@ function makePlanet(
       : rng.int(0, radius > EARTH_RADIUS ? 3 : 1)
   const moons: Body[] = []
   for (let m = 0; m < moonCount; m += 1) {
-    moons.push(makeMoon(seed, address, mass, radius, soi, m, galaxy, system, [index]))
+    moons.push(makeMoon(seed, name, mass, radius, soi, m, galaxy, system, [index]))
   }
 
   return {
     address,
     id: entityIdForAddress(address),
-    name: `${systemName} ${romanNumeral(index + 1)}`,
+    name,
     kind,
     mass,
     radius,

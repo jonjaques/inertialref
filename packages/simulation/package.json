@@ -12,9 +12,10 @@
     "layer": 4
   },
   "dependencies": {
+    "@inertialref/physics": "workspace:*",
+    "@inertialref/procedural": "workspace:*",
     "@inertialref/shared": "workspace:*",
     "@inertialref/spatial": "workspace:*",
-    "@inertialref/physics": "workspace:*",
     "@inertialref/universe": "workspace:*"
   }
 }

@@ -1,0 +1,346 @@
+import { describe, expect, it } from 'vitest'
+import { SECONDS_PER_DAY } from '@inertialref/shared'
+import { Rng, rootSeed } from '@inertialref/procedural'
+import { circularSpeed } from '@inertialref/physics'
+import { canonicalPosition, UV, Vec, vec3 } from '@inertialref/spatial'
+import { bodyFrameId, systemFrameId, systemId, walkBodies } from '@inertialref/universe'
+import { TICK_DURATION, TICK_RATE } from './clock.ts'
+import { snapshot } from './snapshot.ts'
+import { World } from './world.ts'
+
+const SOL = systemId('SOL')
+
+// Available in every runtime this package targets, but not in the ES2023 lib,
+// and packages/* deliberately does not pull in Node's type definitions.
+declare const structuredClone: <T>(value: T) => T
+
+function solarWorld(seed = 'inertialref'): World {
+  const world = new World({ seed })
+  world.loadSystem(SOL)
+  return world
+}
+
+/** First planet with solid ground and an atmosphere — somewhere to land. */
+function landingTarget(world: World) {
+  const system = world.system(SOL)
+  if (system === undefined) throw new Error('SOL not loaded')
+  for (const body of walkBodies(system)) {
+    if (body.kind === 'rocky' && body.atmosphere !== null && body.radius > 1e6) return body
+  }
+  const first = system.planets[0]
+  if (first === undefined) throw new Error('no planets')
+  return first
+}
+
+describe('simulation clock', () => {
+  it('produces the same universe at 60 Hz and at 144 Hz', () => {
+    // The headline determinism requirement: frame rate decides how many fixed
+    // steps to run and nothing else.
+    const runTo = (hz: number, targetTick: number): World => {
+      const world = solarWorld()
+      const planet = landingTarget(world)
+      world.spawnShip('probe', bodyFrameId(planet.address), vec3(planet.radius * 3, 0, 0))
+      // Run until the tick target rather than for a wall-clock duration: which
+      // tick a given number of frames lands on is a property of floating-point
+      // frame times, and is not what this test is about.
+      while (world.clock.tick < targetTick) world.advance(1 / hz)
+      return world
+    }
+    const slow = runTo(60, 256)
+    const fast = runTo(144, 256)
+    // A 60 Hz frame is longer than a 64 Hz tick, so it sometimes buys two; the
+    // claim is not that both land on the same tick, it is that the state at a
+    // given tick does not depend on the frame times that got there.
+    const target = Math.max(slow.clock.tick, fast.clock.tick)
+    slow.runTicks(target - slow.clock.tick)
+    fast.runTicks(target - fast.clock.tick)
+    expect(fast.stateHash()).toBe(slow.stateHash())
+  })
+
+  it('is unaffected by irregular frame times', () => {
+    const rng = new Rng(rootSeed('frame-jitter'))
+    const jittery = solarWorld()
+    const steady = solarWorld()
+    for (const world of [jittery, steady]) {
+      const planet = landingTarget(world)
+      world.spawnShip('probe', bodyFrameId(planet.address), vec3(planet.radius * 4, 0, 0))
+    }
+
+    // A stuttering client: frames from 4 ms to 60 ms.
+    while (jittery.clock.tick < 600) jittery.advance(rng.range(0.004, 0.06))
+    steady.runTicks(jittery.clock.tick)
+    expect(jittery.stateHash()).toBe(steady.stateHash())
+  })
+
+  it('treats time warp as more ticks, not longer ticks', () => {
+    const warped = solarWorld()
+    const real = solarWorld()
+    for (const world of [warped, real]) {
+      const planet = landingTarget(world)
+      world.spawnShip('probe', bodyFrameId(planet.address), vec3(planet.radius * 5, 0, 0))
+    }
+    warped.clock.setTimeScale(100)
+    // 100x for one frame-second buys the same ticks as 1x for a hundred.
+    while (warped.clock.tick < 3_200) warped.advance(1 / 60)
+    real.runTicks(warped.clock.tick)
+    expect(warped.stateHash()).toBe(real.stateHash())
+    expect(warped.clock.time).toBeCloseTo(real.clock.time, 12)
+  })
+
+  it('converts ticks to seconds exactly', () => {
+    const world = solarWorld()
+    world.runTicks(TICK_RATE * 3)
+    // 1/64 is exact in binary; at 60 Hz this assertion fails in the low bits.
+    expect(world.clock.time).toBe(3)
+    expect(TICK_DURATION * TICK_RATE).toBe(1)
+  })
+
+  it('drops ticks rather than spiralling after a long stall', () => {
+    const world = solarWorld()
+    const ran = world.advance(60)
+    expect(ran).toBeLessThanOrEqual(8)
+    expect(world.clock.status().droppedTicks).toBeGreaterThan(3_000)
+  })
+
+  it('pauses without drifting', () => {
+    const world = solarWorld()
+    world.clock.setPaused(true)
+    expect(world.advance(5)).toBe(0)
+    expect(world.clock.tick).toBe(0)
+    world.clock.setPaused(false)
+    expect(world.advance(1 / 64)).toBe(1)
+  })
+})
+
+describe('flight', () => {
+  it('holds a circular orbit', () => {
+    const world = solarWorld()
+    const planet = landingTarget(world)
+    const radius = planet.radius * 2
+    const speed = circularSpeed(planet.mu, radius)
+    const ship = world.spawnShip('orbiter', bodyFrameId(planet.address), vec3(radius, 0, 0))
+    world.entities.update(ship.id, {
+      state: { ...world.entities.require(ship.id).state, velocity: vec3(0, 0, -speed) },
+    })
+
+    world.runTicks(20_000)
+    const state = world.entities.require(ship.id).state
+    expect(state.frame).toBe(bodyFrameId(planet.address))
+    // Symplectic integration: the orbit may precess, its radius may not drift.
+    expect(Vec.length(state.position) / radius).toBeCloseTo(1, 2)
+    expect(Vec.length(state.velocity) / speed).toBeCloseTo(1, 2)
+  })
+
+  it('replays identically from identical inputs', () => {
+    const run = (): string => {
+      const world = solarWorld()
+      const planet = landingTarget(world)
+      const ship = world.spawnShip('pilot', bodyFrameId(planet.address), vec3(planet.radius * 6, 0, 0))
+      const rng = new Rng(rootSeed('pilot-inputs'))
+      for (let i = 0; i < 2_000; i += 1) {
+        if (i % 40 === 0) {
+          world.entities.update(ship.id, {
+            control: {
+              translation: vec3(rng.range(-1, 1), rng.range(-1, 1), rng.range(-1, 1)),
+              rotation: vec3(rng.range(-1, 1), rng.range(-1, 1), rng.range(-1, 1)),
+            },
+          })
+        }
+        world.step()
+      }
+      return world.stateHash()
+    }
+    expect(run()).toBe(run())
+  })
+
+  it('descends into a planet frame on approach without moving', () => {
+    const world = solarWorld()
+    const planet = landingTarget(world)
+    const system = world.system(SOL)
+    if (system === undefined) throw new Error('no system')
+
+    // Start in the system frame, just outside the planet's sphere of influence,
+    // falling toward it.
+    const t = world.clock.time
+    const planetPose = world.frames.pose(bodyFrameId(planet.address), t)
+    const systemPose = world.frames.pose(systemFrameId(SOL), t)
+    const toPlanet = UV.difference(planetPose.position, systemPose.position)
+    const inbound = Vec.withLength(toPlanet, Vec.length(toPlanet) - planet.sphereOfInfluence * 1.02)
+    const ship = world.spawnShip('inbound', systemFrameId(SOL), inbound)
+    // Arrival speed of something that has just crossed interstellar space.
+    const fall = Vec.scale(Vec.normalize(Vec.sub(toPlanet, inbound)), 200_000)
+    world.entities.update(ship.id, {
+      state: { ...world.entities.require(ship.id).state, velocity: fall },
+    })
+
+    const before = world.canonicalPositionOf(ship.id)
+    let changedAt = -1
+    for (let i = 0; i < 60_000 && changedAt < 0; i += 1) {
+      const previousFrame = world.entities.require(ship.id).state.frame
+      const canonicalBefore = world.canonicalPositionOf(ship.id)
+      world.step()
+      const state = world.entities.require(ship.id).state
+      if (state.frame !== previousFrame) {
+        changedAt = i
+        // The transition itself must be invisible: same place, same instant.
+        const canonicalAfter = canonicalPosition(world.frames, state, world.clock.time - TICK_DURATION)
+        expect(UV.distance(canonicalAfter, canonicalBefore)).toBeLessThan(
+          Vec.length(fall) * TICK_DURATION * 2,
+        )
+      }
+    }
+    expect(changedAt).toBeGreaterThan(0)
+    expect(world.entities.require(ship.id).state.frame).toBe(bodyFrameId(planet.address))
+    // It travelled; it did not teleport.
+    expect(UV.distance(before, world.canonicalPositionOf(ship.id))).toBeGreaterThan(1e6)
+    expect(world.events().some((e) => e.kind === 'frame-change')).toBe(true)
+  })
+
+  it('lands, sticks to the ground, and rides the rotation', () => {
+    const world = solarWorld()
+    const planet = landingTarget(world)
+    // Hovering 30 m up, descending at 2 m/s: a controlled touchdown.
+    const ship = world.spawnShip('lander', bodyFrameId(planet.address), vec3(planet.radius + 30, 0, 0))
+    world.entities.update(ship.id, {
+      state: { ...world.entities.require(ship.id).state, velocity: vec3(-2, 0, 0) },
+    })
+
+    let landedAt = -1
+    for (let i = 0; i < 60_000 && landedAt < 0; i += 1) {
+      world.step()
+      if (world.isLanded(ship.id)) landedAt = i
+    }
+    expect(landedAt).toBeGreaterThan(0)
+
+    const state = world.entities.require(ship.id).state
+    expect(state.frame.startsWith('sf:')).toBe(true)
+    expect(Vec.length(state.velocity)).toBe(0)
+
+    // Standing still on the surface is not standing still in the universe: a
+    // day later the ship has gone round with the planet.
+    const before = world.canonicalPositionOf(ship.id)
+    world.runTicks(TICK_RATE * 600)
+    const after = world.canonicalPositionOf(ship.id)
+    expect(UV.distance(before, after)).toBeGreaterThan(1_000)
+    // ...but it has not moved relative to the ground.
+    expect(Vec.length(world.entities.require(ship.id).state.position)).toBeLessThan(5)
+    expect(world.clock.time).toBeLessThan(SECONDS_PER_DAY)
+  })
+
+  it('hands back the ground speed on lift-off', () => {
+    const world = solarWorld()
+    const planet = landingTarget(world)
+    const ship = world.spawnShip('lander', bodyFrameId(planet.address), vec3(planet.radius + 30, 0, 0))
+    world.entities.update(ship.id, {
+      state: { ...world.entities.require(ship.id).state, velocity: vec3(-2, 0, 0) },
+    })
+    for (let i = 0; i < 60_000 && !world.isLanded(ship.id); i += 1) world.step()
+    expect(world.isLanded(ship.id)).toBe(true)
+
+    world.entities.update(ship.id, {
+      control: { translation: vec3(0, 1, 0), rotation: Vec.ZERO },
+    })
+    world.step()
+    world.step()
+    expect(world.isLanded(ship.id)).toBe(false)
+    const state = world.entities.require(ship.id).state
+    expect(state.frame).toBe(bodyFrameId(planet.address))
+    // Inherited the planet's surface speed without anything computing it here.
+    const surfaceSpeed = (2 * Math.PI * planet.radius) / Math.abs(planet.rotationPeriod)
+    expect(Vec.length(state.velocity)).toBeGreaterThan(surfaceSpeed * 0.3)
+  })
+
+  it('stops a ship that hits the ground fast, and calls it what it is', () => {
+    // No collision handling at all was the original state of this code: a ship
+    // dropped from orbit flew straight through the planet and out the far side.
+    const world = solarWorld()
+    const planet = landingTarget(world)
+    const ship = world.spawnShip('doomed', bodyFrameId(planet.address), vec3(planet.radius + 5_000, 0, 0))
+    world.entities.update(ship.id, {
+      state: { ...world.entities.require(ship.id).state, velocity: vec3(-400, 0, 0) },
+    })
+    for (let i = 0; i < 20_000 && !world.isLanded(ship.id); i += 1) world.step()
+
+    expect(world.isLanded(ship.id)).toBe(true)
+    const touchdown = world.events().find((e) => e.kind === 'touchdown')
+    expect(touchdown?.detail).toMatch(/hard landing/)
+    // Never below the surface.
+    const altitude = world.altitudeOf(ship.id)
+    expect(altitude === null || altitude > -50).toBe(true)
+  })
+})
+
+describe('streaming', () => {
+  it('loads and unloads systems as ordinary control flow', () => {
+    const world = new World({ seed: 'inertialref' })
+    const sol = world.loadSystem(SOL)
+    const ship = world.spawnShip('scout', systemFrameId(SOL), vec3(1e9, 0, 0))
+
+    const near = world.updateInterest(sol.position, 5 * 9.4607304725808e15)
+    expect(near.loaded.length).toBeGreaterThan(0)
+    expect(world.loadedSystems().length).toBeGreaterThan(1)
+
+    // Move the interest centre far away: everything unloads except the system
+    // the ship is actually in.
+    const far = UV.translate(sol.position, vec3(200 * 9.4607304725808e15, 0, 0))
+    world.updateInterest(far, 5 * 9.4607304725808e15)
+    const remaining = world.loadedSystems().map((s) => s.id)
+    expect(remaining).toContain(SOL)
+    expect(world.entities.require(ship.id).state.frame).toBe(systemFrameId(SOL))
+  })
+
+  it('refuses to unload a system an entity is inside', () => {
+    const world = solarWorld()
+    world.spawnShip('scout', systemFrameId(SOL), vec3(1e9, 0, 0))
+    expect(() => world.unloadSystem(SOL)).toThrow(/still inside/)
+  })
+
+  it('regenerates an unloaded system identically', () => {
+    const world = solarWorld()
+    const before = JSON.stringify(world.system(SOL))
+    world.unloadSystem(SOL)
+    expect(world.system(SOL)).toBeUndefined()
+    world.loadSystem(SOL)
+    expect(JSON.stringify(world.system(SOL))).toBe(before)
+  })
+})
+
+describe('snapshots', () => {
+  it('describes the world without exposing it', () => {
+    const world = solarWorld()
+    const planet = landingTarget(world)
+    world.spawnShip('probe', bodyFrameId(planet.address), vec3(planet.radius * 3, 0, 0))
+    world.runTicks(64)
+
+    const shot = snapshot(world, 0.5)
+    expect(shot.tick).toBe(64)
+    expect(shot.entities).toHaveLength(1)
+    expect(shot.bodies.length).toBeGreaterThan(0)
+    expect(shot.stars).toHaveLength(1)
+    const entity = shot.entities[0]
+    if (entity === undefined) throw new Error('no entity')
+    expect(entity.frameChain[0]).toBe('universe')
+    expect(UV.isValid(entity.position)).toBe(true)
+    // Structured-cloneable: no class instances, no functions.
+    expect(() => structuredClone(shot)).not.toThrow()
+  })
+
+  it('interpolates bodies analytically rather than by lerping', () => {
+    const world = solarWorld()
+    world.runTicks(10)
+    const a = snapshot(world, 0)
+    const b = snapshot(world, 0.5)
+    const c = snapshot(world, 1)
+    const planetA = a.bodies[0]
+    const planetB = b.bodies[0]
+    const planetC = c.bodies[0]
+    if (planetA === undefined || planetB === undefined || planetC === undefined) {
+      throw new Error('no bodies')
+    }
+    // Evaluated at the fractional time, so the half-alpha sample sits exactly
+    // between the two whole ones — no interpolation error to accumulate.
+    const midpoint = UV.distance(planetA.position, planetB.position)
+    const full = UV.distance(planetA.position, planetC.position)
+    expect(midpoint / full).toBeCloseTo(0.5, 6)
+  })
+})

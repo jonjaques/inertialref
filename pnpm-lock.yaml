@@ -239,6 +239,9 @@ importers:
       '@inertialref/physics':
         specifier: workspace:*
         version: link:../physics
+      '@inertialref/procedural':
+        specifier: workspace:*
+        version: link:../procedural
       '@inertialref/shared':
         specifier: workspace:*
         version: link:../shared
