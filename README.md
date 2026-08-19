@@ -38,8 +38,9 @@ await ir.scenario('surface') // land on the first solid world
 
 ## The twelve capabilities, proven
 
-`INITIALPROMPT.md` lists twelve things this milestone has to demonstrate. They
-are executable rather than described — `await ir.selfTest()` in the browser, or
+The first milestone had twelve things to demonstrate ([the full list, with what
+each measures](docs/vision.md#what-is-proven-today)). They are executable rather
+than described — `await ir.selfTest()` in the browser, or
 `pnpm sim --self-test` in Node. Sample output:
 
 ```
@@ -133,6 +134,19 @@ pnpm vitest run <substring>  # one test file
 - Gravity is patched-conic — no n-body perturbation.
 - Collision is ground contact only: no hull, no entity-to-entity.
 - Terrain patches do not stitch across cube faces or between LOD levels yet.
+
+## Documentation
+
+[`docs/`](docs/) is the explanatory documentation — interlinked concept pages,
+diagrams and decision records.
+
+| | |
+|---|---|
+| [Vision and scope](docs/vision.md) | what this is for, and the principles behind it |
+| [Architecture](docs/architecture.md) | the system in one sitting |
+| [Concepts](docs/README.md#concepts) | how each mechanism works, and why |
+| [ADRs](docs/adr/README.md) | eight decisions that are expensive to reverse |
+| [Roadmap](docs/roadmap.md) | what is deliberately not built yet |
 
 ## Contributing
 

@@ -9,8 +9,9 @@ from. A star has to be identifiable before it is generated, after it is
 unloaded, in a save file written last year, and in a network message from a
 client that has never loaded it.
 
-The spec is explicit that identity must not derive from array ordering, memory,
-Three.js object ids, render lifecycle, worker scheduling or connection order.
+Identity must not derive from array ordering, memory addresses, Three.js object
+ids, render lifecycle, worker scheduling or connection order — every one of
+those varies between two runs that have to agree on the same universe.
 
 ## Decision
 

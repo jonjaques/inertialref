@@ -1,0 +1,186 @@
+# The harness
+
+A single object that can drive and interrogate the whole simulation without
+touching the UI. It is exposed as `window.ir` in the browser and used directly
+by the Node runner and the tests.
+
+> `ir.help()` in the console is the **authoritative** list — it is generated from
+> the implementation. This page explains what the pieces are for.
+>
+> Code: `packages/devtools/src/harness.ts`
+
+---
+
+## Why it exists in a package, not the app
+
+```mermaid
+flowchart LR
+    H["<b>GameHarness</b>"]
+    H --> B["browser<br/><code>window.ir</code>"]
+    H --> N["headless runner<br/><code>pnpm sim</code>"]
+    H --> T["tests<br/><code>devtools.test.ts</code>"]
+
+    B --> R["a bug reproduced in Chrome…"]
+    R --> T2["…replays as a Node test"]
+    T2 -.- NOTE["this has happened repeatedly —<br/>the frame-transition and save<br/>bugs were both found this way"]
+    classDef note fill:none,stroke:none,color:#64748b,font-style:italic
+    class NOTE note
+    style H fill:#0369a1,stroke:#0c4a6e,color:#fff
+```
+
+Everything it returns is JSON-serialisable, for exactly that reason: an agent
+driving a browser over the debug protocol gets structured state back, not
+pixels.
+
+---
+
+## Reading state
+
+| Call | Returns |
+|---|---|
+| `ir.summary()` | one line: tick, hash, frame, speed, systems |
+| `ir.status()` | everything the debug overlay shows, structured |
+| `ir.inspect(id?)` | one entity in full — frames, canonical + local coords, velocities |
+| `ir.snapshot(alpha?)` | the raw presentation snapshot |
+| `ir.bodies(system?)` | flat listing of a system's bodies with addresses |
+| `ir.systemsNearby(ly)` | nearest star systems, catalogue and procedural |
+| `ir.logs(n)` | recent structured log records |
+
+```js
+ir.summary()
+// tick 2590 (40.47 s, 1x) | hash 0ccda85a | Debug One in sf:g:milky-way/s:SOL/b:0@0.35,-1.10 | 51849.8 m/s alt 0.000 mm | systems 1, frames 19
+```
+
+---
+
+## Driving the clock
+
+| Call | Effect |
+|---|---|
+| `ir.step(ticks)` | advance exactly N ticks, ignoring wall clock |
+| `ir.runSeconds(s)` | advance exactly `s × 64` ticks |
+| `ir.pause()` / `ir.resume()` | |
+| `ir.timeWarp(x)` | ticks per second of wall clock |
+
+`step` is the deterministic one — it does not consult the clock at all, which is
+what makes scripted scenarios reproducible.
+
+---
+
+## Flying
+
+```mermaid
+flowchart TB
+    subgraph POS["put the ship somewhere"]
+        O["ir.orbit(address, altitudeKm)<br/><i>a valid two-body solution —<br/>it stays there</i>"]
+        L["ir.land(address, lat, lon)"]
+        G["ir.goToSystem(id, au)"]
+    end
+    subgraph AIM["aim and burn"]
+        F["ir.face(address)<br/><i>free — changes nothing else</i>"]
+        BT["ir.burnToward(address, throttle)"]
+        C["ir.control({translation, rotation})"]
+        HOLD["ir.hold()"]
+    end
+    POS --> AIM
+```
+
+Two notes worth internalising:
+
+- **`orbit` is not a teleport to coordinates** — it sets a state that solves the
+  two-body problem, so the ship stays in that orbit. It also places the ship on
+  the **sunward** side, pointing along the orbit, because a debug tool that drops
+  you on the night side of an unlit world facing nothing is technically correct
+  and useless.
+- **`face` and `burnToward` are separate** because looking and accelerating are
+  different acts. `face` costs nothing and does not perturb the trajectory.
+
+---
+
+## Scenarios
+
+```js
+await ir.scenario('orbit')        // circular orbit, 300 km
+await ir.scenario('approach')     // burning toward a world
+await ir.scenario('surface')      // parked on the ground
+await ir.scenario('interstellar') // holding off Alpha Centauri
+```
+
+Named, repeatable set-ups. Each returns the resulting status, so a test can
+assert on it directly.
+
+---
+
+## Proving
+
+```js
+const report = await ir.selfTest()
+console.log(report.report)
+```
+
+Runs the twelve capability checks and returns `{ passed, total, results, report }`.
+The `results` array is structured, so a driver can assert on individual checks
+rather than parsing text.
+
+```
+12/12 capabilities proven
+PASS  5. Approach a planet — fell 18.74 m in 60 s at 0.0104 m/s², within 0.03% of free fall
+PASS  9. Origin rebasing — 500 rebases, 2560 km of origin travel, zero drift
+…
+```
+
+Most checks run against **scratch worlds**, so the self-test does not perturb
+the session it is checking.
+
+---
+
+## Persistence
+
+```js
+const text = ir.save()       // serialised save, ~600 bytes
+ir.load(text)                // → Result<stateHash, error>
+```
+
+`load` returns a `Result` rather than throwing — a save is untrusted input.
+
+---
+
+## Driving from an automated browser session
+
+The pattern that works well:
+
+```mermaid
+sequenceDiagram
+    participant A as driver
+    participant P as page
+
+    A->>P: navigate
+    A->>P: wait (RAF is throttled while backgrounded)
+    A->>P: ir.scenario('surface')
+    A->>P: ir.step(20000)
+    A->>P: JSON.stringify(ir.status())
+    P-->>A: structured state
+    A->>A: assert, screenshot, iterate
+```
+
+Read state back as JSON and assert on it. A screenshot tells you something
+rendered; `ir.status()` tells you *what*.
+
+---
+
+## Extending the harness
+
+Add a method when a sequence is one you keep retyping — that is the signal it is
+part of the vocabulary rather than a one-off. Keep the return JSON-serialisable
+and add the line to `help()`, which is what people actually read.
+
+If a set-up sequence is shared with the app or the runner, it belongs in
+`Session` instead, which owns standing a world up — see
+[extending](extending.md).
+
+---
+
+## Related
+
+- [Observability](../concepts/observability.md) — what the harness reads from
+- [Testing](testing.md) — turning a session into a regression test

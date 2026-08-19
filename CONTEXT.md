@@ -1,13 +1,16 @@
 # CONTEXT.md — InertialRef build log
 
-Working memory for agents. `INITIALPROMPT.md` is the spec; this file records what
-actually exists, what was decided and why, and what is deliberately not done yet.
-Update it when a package lands or a decision changes.
+Working memory for agents: what actually exists, what was decided and why, and
+which mistakes have already been made and must not return. Update it when a
+package lands or a decision changes.
+
+Scope and principles are in [`docs/vision.md`](docs/vision.md); the remaining
+work is in [`docs/roadmap.md`](docs/roadmap.md); the reasoning behind each
+foundational decision is in [`docs/adr/`](docs/adr/).
 
 ## Current state
 
-Milestone 1 — the vertical architectural proof from `INITIALPROMPT.md` — is
-**complete**: 12/12 capability checks pass in Node and in Chrome. Multiplayer is
+Milestone 1 — the vertical architectural proof — is **complete**: 12/12 capability checks pass in Node and in Chrome. Multiplayer is
 deferred to a later phase; only the seams exist (ADR-0008).
 
 Verified in Chrome, in **both dev and the production build**: the harness on
@@ -31,7 +34,7 @@ including frame resolution.
 | `workers` | 5 | done — typed tasks, ports, pool, four tasks |
 | `persistence` | 5 | done — save/restore, migration chain, store port |
 | `rendering` | 5 | done — LOD, depth compression, terrain meshing |
-| `devtools` | 6 | done — inspection, twelve capability checks, harness |
+| `devtools` | 6 | done — inspection, twelve capability checks, harness, `openSession` |
 | `apps/game` | — | done — React + R3F client, worker pool, IndexedDB saves |
 | `apps/headless` | — | done — Node runner, 110k ticks/s, self-test in CI |
 
@@ -89,6 +92,41 @@ pnpm check       # all of the above
 pnpm vitest run <substring>   # single test file
 ```
 
+## The architecture pass (19 Aug 2026)
+
+An architecture review found eight areas of friction; all eight were addressed.
+The load-bearing changes:
+
+- **`openSession` owns assembly** (`devtools/session.ts`). The seven steps of
+  standing up a world, a ship, a pool, a store and a harness had five copies —
+  the client, the headless runner, the capability checks, the harness's own
+  target search and the devtools tests — and they had already drifted: the
+  client spawned at 2.5 body radii, everything else at 3. `GameEngine` now takes
+  its adapters as arguments instead of constructing `IndexedDbSaveStore`,
+  a browser `WorkerPool` and a console sink directly, which is what makes
+  `apps/game` testable in Node at all. It has tests now; it had none.
+- **`HarnessHost` split** into `SimulationHost` and an optional
+  `PresentationHost`. The headless runner used to stub three of eight members,
+  one of them by throwing.
+- **`BodyFixedDirection` is a branded type.** `surfaceRadius` cannot be called
+  with inertial axes any more. See the bug list below.
+- **`groundElevation` is the single owner of the sea clamp**, so physics and the
+  terrain mesh cannot disagree about where the ground is.
+- **The worker boundary decodes.** `host.ts` validates the envelope instead of
+  checking a discriminant and passing `payload as never`; the save schema's
+  `kind` is decoded as its four literals rather than cast.
+- **Landedness is a consequence, not a parameter.** `teleport` lost its `landed`
+  argument.
+- **Player input goes through `World`** (`setControl`, `setFlightAssist`,
+  `killRotation`) rather than `entities.update`, so the door that skips the
+  interpolation and landed-set resets is no longer as wide as the one that
+  does not.
+- **`stateHash` hashes what it claims**: angular velocity, control and flight
+  assist are in it now.
+- Three speculative config seams in `rendering` (`SceneConfig`,
+  `PlacementConfig`, `LodThresholds`) collapsed to constants — six signatures
+  lost a parameter no caller ever supplied.
+
 ## Bugs the tests found (worth not reintroducing)
 
 Each of these was invisible in a running browser and caught by a test or by
@@ -115,11 +153,51 @@ again in a neighbouring system.
 - A property test was **flaky, correctly**: depth compression is non-decreasing
   everywhere but only strictly increasing while the separation survives double
   precision.
+- **Terrain sampled in inertial axes, again.** The fix recorded above was
+  applied to one of the two samples in `stepFlight`. The other — the
+  pre-integration one, seventy lines above the comment explaining why you must
+  not — is the altitude the *atmosphere* is evaluated against, and its terrain
+  gate (`radius * 0.25`, ~1,600 km) is far wider than any atmosphere ceiling
+  (60–180 km), so every atmospheric pass in the game used it. Nothing rendered
+  wrong and no test failed, because that number only ever reaches a drag
+  coefficient. `BodyFixedDirection` now makes it unrepresentable.
+- **`seaLevel` was honoured by physics and ignored by the mesh.** It was carried
+  from the generator through the worker to `terrainMesh` and dropped, so on a
+  world with an ocean the landing pad sat on the water datum and the mesh drew
+  the seabed underneath it.
+- **`ir.land()` never landed.** It teleported the ship 3 m up and declared it
+  landed; `stepFlight` short-circuits to `stepLanded` for an already-landed
+  entity, so the contact test never ran and the ship hovered there permanently
+  while `altitudeOf` reported 0. Dropping the flag was not sufficient — 3 m is
+  inside `LANDING_CLEARANCE`, so it then "landed" at 3 m. A surface frame's
+  origin *is* the pad, so the answer was `Vec.ZERO`.
+- **The starfield ignored the render origin's orientation.** It open-coded the
+  projection over raw sector fields with `2 ** 40` inline, in the one directory
+  vitest did not cover, while `placePoint` — written for the job — had no
+  callers. Bodies were rotated into render axes and stars were not.
+- **The terrain streamer resurrected pruned patches.** `update()` pruned to the
+  ~9 visible patches and the caller then invoked `rebuild()`, which walked the
+  whole 64-entry heightfield cache — one frame of off-screen geometry uploads on
+  every origin rebase. `#ensure`'s generation check already covered it.
+- **The normals test could not fail.** It asserted only that a normal was unit
+  length, and a radial normal is also unit length — so it passed both before and
+  after the fix for the bug it exists to guard.
+- **Two clamps for one spiral.** The view clamped the frame delta to 0.25 s,
+  which changed nothing (`SimulationClock.advance` already caps a step) and
+  corrupted `droppedTicks`: a three-minute background stall was reported in the
+  HUD as 8 dropped ticks instead of 11,520.
 
 ## Known gaps
+
+Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).
 
 - Binary and multiple-star systems are modelled as single stars (`components`
   in the catalogue records the truth).
 - No n-body perturbation; patched conics only.
 - Terrain has no persistence of modifications yet (the schema anticipates it).
 - Collision is ground contact only — no hull, no other entities.
+- `World.updateInterest` is the core's own system-streaming policy and has no
+  production caller: both apps load one system and never stream another, and the
+  client runs a separate starfield survey with its own radius and hysteresis.
+  It is tested and left in place deliberately — wiring it into the frame loop
+  changes what unloads mid-flight, which is a gameplay decision, not a cleanup.
