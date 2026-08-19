@@ -51,8 +51,8 @@ export type Degrees = Brand<number, 'deg'>
 export const AU: Meters = 1.495978707e11
 /** Julian light-year (exact: c × 365.25 days). */
 export const LIGHT_YEAR: Meters = 9.4607304725808e15
-/** Parsec (exact: 648000/π AU). */
-export const PARSEC: Meters = 3.0856775814913673e16
+/** Parsec: 648000/π AU. Written to the digits a double actually holds. */
+export const PARSEC: Meters = 3.085677581491367e16
 export const KILOMETER: Meters = 1e3
 /** International foot / inch (exact). */
 export const FOOT: Meters = 0.3048
@@ -102,9 +102,11 @@ export const degreesToRadians = (d: Degrees): Radians => (d * Math.PI) / 180
 export function formatDistance(m: Meters, digits = 3): string {
   const a = Math.abs(m)
   if (!Number.isFinite(m)) return `${m}`
+  // Light-years rather than parsecs below a kiloparsec: astronomers prefer pc,
+  // but the HUD is read by pilots, and every catalogue name the player sees
+  // ("4.24 ly to Proxima") is quoted in light-years.
   if (a >= 1e3 * PARSEC) return `${(m / (1e3 * PARSEC)).toFixed(digits)} kpc`
-  if (a >= 0.1 * PARSEC) return `${metersToParsecs(m).toFixed(digits)} pc`
-  if (a >= 0.01 * LIGHT_YEAR) return `${metersToLightYears(m).toFixed(digits)} ly`
+  if (a >= 0.05 * LIGHT_YEAR) return `${metersToLightYears(m).toFixed(digits)} ly`
   if (a >= 0.001 * AU) return `${metersToAu(m).toFixed(digits)} AU`
   if (a >= 1e5) return `${metersToKilometers(m).toFixed(digits)} km`
   if (a >= 1) return `${m.toFixed(digits)} m`
