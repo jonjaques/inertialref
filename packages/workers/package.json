@@ -1,0 +1,21 @@
+{
+  "name": "@inertialref/workers",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Typed task contracts, worker transport ports and a job pool.",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "inertialref": {
+    "layer": 5
+  },
+  "dependencies": {
+    "@inertialref/shared": "workspace:*",
+    "@inertialref/spatial": "workspace:*",
+    "@inertialref/procedural": "workspace:*",
+    "@inertialref/universe": "workspace:*",
+    "@inertialref/protocol": "workspace:*"
+  }
+}

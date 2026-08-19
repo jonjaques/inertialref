@@ -1,0 +1,17 @@
+{
+  /* The `packages/*` project. Everything here must run unchanged in the browser
+     main thread, a Web Worker, and Node — so there is deliberately no DOM lib.
+     A package that needs a host capability declares a port interface instead
+     (see packages/workers/src/transport.ts for the pattern).
+
+     Apps have their own tsconfig.json; editors pick the nearest one. Project
+     references are not used: a referenced project may not disable emit, and
+     declaration-emitting every package to satisfy `tsc -b` buys nothing here.
+     `pnpm graph` enforces the dependency layering instead. */
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    "types": []
+  },
+  "include": ["packages/*/src"]
+}

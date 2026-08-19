@@ -1,0 +1,17 @@
+{
+  "name": "@inertialref/spatial",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Universe coordinates, reference frames and render rebasing.",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "inertialref": {
+    "layer": 1
+  },
+  "dependencies": {
+    "@inertialref/shared": "workspace:*"
+  }
+}

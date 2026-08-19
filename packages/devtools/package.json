@@ -1,0 +1,26 @@
+{
+  "name": "@inertialref/devtools",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Inspection snapshots and the scriptable game harness.",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "inertialref": {
+    "layer": 6
+  },
+  "dependencies": {
+    "@inertialref/shared": "workspace:*",
+    "@inertialref/spatial": "workspace:*",
+    "@inertialref/procedural": "workspace:*",
+    "@inertialref/physics": "workspace:*",
+    "@inertialref/universe": "workspace:*",
+    "@inertialref/simulation": "workspace:*",
+    "@inertialref/protocol": "workspace:*",
+    "@inertialref/workers": "workspace:*",
+    "@inertialref/persistence": "workspace:*",
+    "@inertialref/rendering": "workspace:*"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "name": "inertialref",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "packageManager": "pnpm@11.22.0",
+  "scripts": {
+    "dev": "pnpm --filter @inertialref/game dev",
+    "build": "pnpm typecheck && pnpm --filter @inertialref/game build",
+    "preview": "pnpm --filter @inertialref/game preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.json && tsc -p apps/game/tsconfig.json && tsc -p apps/headless/tsconfig.json",
+    "lint": "oxlint",
+    "graph": "node scripts/check-graph.mjs",
+    "sim": "node apps/headless/src/main.ts",
+    "check": "pnpm graph && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "fast-check": "^4.1.1",
+    "oxlint": "^1.75.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.2.0",
+    "vitest": "^4.0.5"
+  }
+}

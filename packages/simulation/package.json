@@ -1,0 +1,20 @@
+{
+  "name": "@inertialref/simulation",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Fixed-timestep simulation core: clock, entities and systems.",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "inertialref": {
+    "layer": 4
+  },
+  "dependencies": {
+    "@inertialref/shared": "workspace:*",
+    "@inertialref/spatial": "workspace:*",
+    "@inertialref/physics": "workspace:*",
+    "@inertialref/universe": "workspace:*"
+  }
+}

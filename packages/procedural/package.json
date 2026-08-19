@@ -1,0 +1,17 @@
+{
+  "name": "@inertialref/procedural",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Hash-based PRNG and hierarchical deterministic seed derivation.",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "inertialref": {
+    "layer": 1
+  },
+  "dependencies": {
+    "@inertialref/shared": "workspace:*"
+  }
+}

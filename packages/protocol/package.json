@@ -1,0 +1,19 @@
+{
+  "name": "@inertialref/protocol",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Versioned, validated wire and save schemas.",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "inertialref": {
+    "layer": 4
+  },
+  "dependencies": {
+    "@inertialref/shared": "workspace:*",
+    "@inertialref/spatial": "workspace:*",
+    "@inertialref/universe": "workspace:*"
+  }
+}

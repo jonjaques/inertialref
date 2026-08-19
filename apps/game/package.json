@@ -1,0 +1,42 @@
+{
+  "name": "@inertialref/game",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "InertialRef browser client: React UI over a React Three Fiber view of the simulation.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --port 4173"
+  },
+  "dependencies": {
+    "@inertialref/devtools": "workspace:*",
+    "@inertialref/persistence": "workspace:*",
+    "@inertialref/physics": "workspace:*",
+    "@inertialref/procedural": "workspace:*",
+    "@inertialref/protocol": "workspace:*",
+    "@inertialref/rendering": "workspace:*",
+    "@inertialref/shared": "workspace:*",
+    "@inertialref/simulation": "workspace:*",
+    "@inertialref/spatial": "workspace:*",
+    "@inertialref/universe": "workspace:*",
+    "@inertialref/workers": "workspace:*",
+    "@react-three/fiber": "^9.3.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "three": "^0.182.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.29.7",
+    "@rolldown/plugin-babel": "^0.2.3",
+    "@tailwindcss/vite": "^4.1.16",
+    "@types/babel__core": "^7.20.5",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@types/three": "^0.182.0",
+    "@vitejs/plugin-react": "^6.0.4",
+    "babel-plugin-react-compiler": "^1.0.0",
+    "tailwindcss": "^4.1.16",
+    "vite": "^8.2.0"
+  }
+}

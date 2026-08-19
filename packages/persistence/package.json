@@ -1,0 +1,21 @@
+{
+  "name": "@inertialref/persistence",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Save/load: deterministic base universe plus versioned mutations.",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "inertialref": {
+    "layer": 5
+  },
+  "dependencies": {
+    "@inertialref/shared": "workspace:*",
+    "@inertialref/spatial": "workspace:*",
+    "@inertialref/universe": "workspace:*",
+    "@inertialref/simulation": "workspace:*",
+    "@inertialref/protocol": "workspace:*"
+  }
+}

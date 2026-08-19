@@ -1,0 +1,14 @@
+{
+  "name": "@inertialref/shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Units, branded identifiers, invariants and structured logging.",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "inertialref": {
+    "layer": 0
+  }
+}

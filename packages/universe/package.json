@@ -1,0 +1,20 @@
+{
+  "name": "@inertialref/universe",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Universe addressing, star catalog and deterministic generation.",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "inertialref": {
+    "layer": 3
+  },
+  "dependencies": {
+    "@inertialref/shared": "workspace:*",
+    "@inertialref/spatial": "workspace:*",
+    "@inertialref/procedural": "workspace:*",
+    "@inertialref/physics": "workspace:*"
+  }
+}

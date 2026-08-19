@@ -1,0 +1,10 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+
+# pnpm >=10 refuses to run install scripts unless the package is listed here.
+# These three ship native binaries and genuinely need their postinstall.
+onlyBuiltDependencies:
+  - '@tailwindcss/oxide'
+  - esbuild
+  - oxlint

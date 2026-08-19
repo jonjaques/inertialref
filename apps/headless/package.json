@@ -1,0 +1,21 @@
+{
+  "name": "@inertialref/headless",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Node runner that steps the simulation core with no DOM, React or WebGL present.",
+  "scripts": {
+    "start": "node src/main.ts"
+  },
+  "dependencies": {
+    "@inertialref/devtools": "workspace:*",
+    "@inertialref/persistence": "workspace:*",
+    "@inertialref/procedural": "workspace:*",
+    "@inertialref/protocol": "workspace:*",
+    "@inertialref/shared": "workspace:*",
+    "@inertialref/simulation": "workspace:*",
+    "@inertialref/spatial": "workspace:*",
+    "@inertialref/universe": "workspace:*",
+    "@inertialref/workers": "workspace:*"
+  }
+}
