@@ -129,6 +129,32 @@ export function fromUnitVectors(from: Vec3, to: Vec3): Quat {
   })
 }
 
+/**
+ * Quaternion from an orthonormal basis, given as the images of +X, +Y and +Z.
+ *
+ * Shepperd's method: pick the largest diagonal term first. The naive
+ * single-branch formula divides by a quantity that goes to zero for rotations
+ * near 180 degrees, which is exactly the case a surface frame on the far side
+ * of a planet hits.
+ */
+export function fromBasis(x: Vec3, y: Vec3, z: Vec3): Quat {
+  const trace = x.x + y.y + z.z
+  if (trace > 0) {
+    const s = Math.sqrt(trace + 1) * 2
+    return normalize({ x: (y.z - z.y) / s, y: (z.x - x.z) / s, z: (x.y - y.x) / s, w: s / 4 })
+  }
+  if (x.x > y.y && x.x > z.z) {
+    const s = Math.sqrt(1 + x.x - y.y - z.z) * 2
+    return normalize({ x: s / 4, y: (y.x + x.y) / s, z: (z.x + x.z) / s, w: (y.z - z.y) / s })
+  }
+  if (y.y > z.z) {
+    const s = Math.sqrt(1 + y.y - x.x - z.z) * 2
+    return normalize({ x: (y.x + x.y) / s, y: s / 4, z: (z.y + y.z) / s, w: (z.x - x.z) / s })
+  }
+  const s = Math.sqrt(1 + z.z - x.x - y.y) * 2
+  return normalize({ x: (z.x + x.z) / s, y: (z.y + y.z) / s, z: s / 4, w: (x.y - y.x) / s })
+}
+
 /** Column-major 3x3 basis of the quaternion, for building render matrices. */
 export function basis(q: Quat): { right: Vec3; up: Vec3; forward: Vec3 } {
   return {
