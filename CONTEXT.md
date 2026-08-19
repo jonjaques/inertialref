@@ -13,7 +13,9 @@ deferred to a later phase; only the seams exist (ADR-0008).
 Verified in Chrome, in **both dev and the production build**: the harness on
 `window.ir`, terrain streamed from a worker pool, landing on a generated
 surface, a sphere-of-influence frame transition mid-flight, and a save
-round-tripping through IndexedDB to an identical state hash. The browser runs
+round-tripping through IndexedDB to an identical state hash. With the preview
+server **stopped**, the page still loads from the service worker and passes
+12/12 — offline-first demonstrated rather than asserted. The browser runs
 ~1.25M simulation ticks/s for one entity; the headless runner does 110k ticks/s
 including frame resolution.
 

@@ -31,6 +31,9 @@ await ir.scenario('surface') // land on the first solid world
   sphere-of-influence frame transitions, and landing.
 - Streamed cube-sphere terrain generated in a worker pool.
 - Save and load to IndexedDB in ~600 bytes.
+- Genuinely offline: a service worker caches the app, and with the server
+  stopped the game still loads, streams terrain from its workers, and passes all
+  twelve capability checks.
 - A debug overlay and a scriptable harness that expose every part of it.
 
 ## The twelve capabilities, proven
