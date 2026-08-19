@@ -6,8 +6,16 @@ Update it when a package lands or a decision changes.
 
 ## Current state
 
-Milestone 1 (the vertical architectural proof from `INITIALPROMPT.md`) — in progress.
-Multiplayer is explicitly deferred to a later phase; only the seams exist.
+Milestone 1 — the vertical architectural proof from `INITIALPROMPT.md` — is
+**complete**: 12/12 capability checks pass in Node and in Chrome. Multiplayer is
+deferred to a later phase; only the seams exist (ADR-0008).
+
+Verified in Chrome, in **both dev and the production build**: the harness on
+`window.ir`, terrain streamed from a worker pool, landing on a generated
+surface, a sphere-of-influence frame transition mid-flight, and a save
+round-tripping through IndexedDB to an identical state hash. The browser runs
+~1.25M simulation ticks/s for one entity; the headless runner does 110k ticks/s
+including frame resolution.
 
 | Package | Layer | State |
 |---|---|---|
@@ -17,13 +25,13 @@ Multiplayer is explicitly deferred to a later phase; only the seams exist.
 | `physics` | 2 | done — Kepler, rigid body, atmosphere, thrusters |
 | `universe` | 3 | done — addressing, star catalogue, generation, terrain, frames |
 | `simulation` | 4 | done — clock, entities, flight, streaming, snapshots |
-| `protocol` | 4 | pending |
-| `workers` | 5 | pending |
-| `persistence` | 5 | pending |
-| `rendering` | 5 | pending |
-| `devtools` | 6 | pending — the scriptable harness lives here |
-| `apps/game` | — | pending |
-| `apps/headless` | — | pending |
+| `protocol` | 4 | done — validation combinators, wire and save schemas |
+| `workers` | 5 | done — typed tasks, ports, pool, four tasks |
+| `persistence` | 5 | done — save/restore, migration chain, store port |
+| `rendering` | 5 | done — LOD, depth compression, terrain meshing |
+| `devtools` | 6 | done — inspection, twelve capability checks, harness |
+| `apps/game` | — | done — React + R3F client, worker pool, IndexedDB saves |
+| `apps/headless` | — | done — Node runner, 110k ticks/s, self-test in CI |
 
 ## Decisions that are expensive to reverse
 
@@ -49,6 +57,9 @@ Full reasoning is in `docs/adr/`. The short version:
    are.
 7. **Ships integrate only in non-rotating frames.** Landed ships are attached
    kinematically to a surface frame instead.
+8. **Render compression keys off distance to the *surface*.** Keying off the
+   centre put a planet's datum sphere 30 km from the terrain it represents.
+9. **A save is a reference, not a copy** — 580 bytes for a flown session.
 
 ## Conventions worth knowing before editing
 
@@ -75,6 +86,33 @@ pnpm build
 pnpm check       # all of the above
 pnpm vitest run <substring>   # single test file
 ```
+
+## Bugs the tests found (worth not reintroducing)
+
+Each of these was invisible in a running browser and caught by a test or by
+driving the harness. They are listed because the same mistake is easy to make
+again in a neighbouring system.
+
+- Terrain sampled in **inertial** rather than body-fixed axes: mountains stood
+  still while the planet rotated under them.
+- **No ground contact at all**: a ship dropped from orbit flew through the
+  planet. Contact must be tested after integrating, against the new position —
+  at 20 km/s a tick covers 300 m.
+- Moons generated **outside their planet's sphere of influence**, i.e. not
+  actually bound to the planet they claimed to orbit.
+- Surface frame ids were **not idempotent**: `(-1e-9).toFixed(6)` is
+  `"-0.000000"`, which re-parses to `-0`, which formats as `"0.000000"`.
+- The frame's geometry used unrounded angles while its id was rounded, so a
+  restored landing site sat half a metre from the original.
+- **Control input was not persisted**, so a save taken mid-burn resumed
+  coasting.
+- Terrain patches carried **radial normals**, shading a mountain range exactly
+  like a smooth sphere — real relief rendered and was invisible.
+- The harness host **captured `world` by reference**, so loading a save left the
+  debug overlay reporting on the discarded world.
+- A property test was **flaky, correctly**: depth compression is non-decreasing
+  everywhere but only strictly increasing while the separation survives double
+  precision.
 
 ## Known gaps
 
