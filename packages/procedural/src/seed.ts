@@ -40,7 +40,8 @@ export function seedFromNumber(value: number): Seed {
 
 /** xoshiro rejects the all-zero state; the odds are 2^-128 but the branch is free. */
 function normalizeSeed(seed: Seed): Seed {
-  if ((seed.a | seed.b | seed.c | seed.d) === 0) return { a: 1, b: 2, c: 3, d: 4 }
+  if ((seed.a | seed.b | seed.c | seed.d) === 0)
+    return { a: 1, b: 2, c: 3, d: 4 }
   return seed
 }
 

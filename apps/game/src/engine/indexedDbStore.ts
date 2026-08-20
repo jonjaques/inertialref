@@ -25,14 +25,16 @@ function open(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE)
     }
     request.onsuccess = () => resolve(request.result)
-    request.onerror = () => reject(request.error ?? new Error('IndexedDB open failed'))
+    request.onerror = () =>
+      reject(request.error ?? new Error('IndexedDB open failed'))
   })
 }
 
 function promisify<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
     request.onsuccess = () => resolve(request.result)
-    request.onerror = () => reject(request.error ?? new Error('IndexedDB request failed'))
+    request.onerror = () =>
+      reject(request.error ?? new Error('IndexedDB request failed'))
   })
 }
 
@@ -41,7 +43,10 @@ export class IndexedDbSaveStore implements SaveStore {
     try {
       const db = await open()
       const value = await promisify<string | undefined>(
-        db.transaction(STORE, 'readonly').objectStore(STORE).get(slot) as IDBRequest<string | undefined>,
+        db
+          .transaction(STORE, 'readonly')
+          .objectStore(STORE)
+          .get(slot) as IDBRequest<string | undefined>,
       )
       db.close()
       return value === undefined ? err(`No save in slot "${slot}"`) : ok(value)
@@ -57,7 +62,8 @@ export class IndexedDbSaveStore implements SaveStore {
       transaction.objectStore(STORE).put(contents, slot)
       await new Promise<void>((resolve, reject) => {
         transaction.oncomplete = () => resolve()
-        transaction.onerror = () => reject(transaction.error ?? new Error('write failed'))
+        transaction.onerror = () =>
+          reject(transaction.error ?? new Error('write failed'))
       })
       db.close()
       return ok(undefined)
@@ -69,7 +75,9 @@ export class IndexedDbSaveStore implements SaveStore {
   async list(): Promise<readonly string[]> {
     try {
       const db = await open()
-      const keys = await promisify(db.transaction(STORE, 'readonly').objectStore(STORE).getAllKeys())
+      const keys = await promisify(
+        db.transaction(STORE, 'readonly').objectStore(STORE).getAllKeys(),
+      )
       db.close()
       return keys.map((key) => String(key)).sort()
     } catch {

@@ -22,7 +22,7 @@ flowchart TB
     style PRES fill:#334155,stroke:#1e293b,color:#fff
 ```
 
-The renderer is a *reader*. It can be replaced, moved to another thread, or
+The renderer is a _reader_. It can be replaced, moved to another thread, or
 deleted, and the universe is unchanged. A Three.js coordinate is never the truth
 about where anything is — [ADR-0001](adr/0001-universe-coordinates.md).
 
@@ -90,19 +90,19 @@ it declares a **port** and the host implements it — see
 
 ### What each package is for
 
-| Package | Owns | Never knows about |
-|---|---|---|
-| `shared` | units, brands, invariants, structured logging | anything domain-specific |
-| `spatial` | absolute position, frame graph, floating origin | orbits, bodies, rendering |
-| `procedural` | PRNG, seed derivation, noise, algorithm versions | what is being generated |
-| `physics` | Kepler solutions, 6-DoF integration, drag, thrusters | which body, which ship |
-| `universe` | addressing, catalogue, generation, terrain, frames-for-bodies | entities, ticks |
-| `simulation` | clock, entities, flight, frame transitions, streaming | React, Three.js, the DOM |
-| `protocol` | validated wire/save shapes | where bytes come from |
-| `workers` | typed tasks, job pool, transport ports | `Worker` (the class) |
-| `persistence` | save capture/restore, migrations | IndexedDB (a port) |
-| `rendering` | canonical→render bridge, LOD, terrain meshing | Three.js |
-| `devtools` | inspection, capability checks, harness, session wiring | — (it may depend on everything) |
+| Package       | Owns                                                          | Never knows about               |
+| ------------- | ------------------------------------------------------------- | ------------------------------- |
+| `shared`      | units, brands, invariants, structured logging                 | anything domain-specific        |
+| `spatial`     | absolute position, frame graph, floating origin               | orbits, bodies, rendering       |
+| `procedural`  | PRNG, seed derivation, noise, algorithm versions              | what is being generated         |
+| `physics`     | Kepler solutions, 6-DoF integration, drag, thrusters          | which body, which ship          |
+| `universe`    | addressing, catalogue, generation, terrain, frames-for-bodies | entities, ticks                 |
+| `simulation`  | clock, entities, flight, frame transitions, streaming         | React, Three.js, the DOM        |
+| `protocol`    | validated wire/save shapes                                    | where bytes come from           |
+| `workers`     | typed tasks, job pool, transport ports                        | `Worker` (the class)            |
+| `persistence` | save capture/restore, migrations                              | IndexedDB (a port)              |
+| `rendering`   | canonical→render bridge, LOD, terrain meshing                 | Three.js                        |
+| `devtools`    | inspection, capability checks, harness, session wiring        | — (it may depend on everything) |
 
 `rendering` deliberately does **not** import Three.js. It emits positions,
 scales, orientations and vertex buffers as plain data; `apps/game` applies them.
@@ -165,7 +165,7 @@ Three properties of this loop are load-bearing:
 ## Where a position lives
 
 A single position passes through four representations. Each conversion is
-lossless *in the direction it is used*, and each has a reason to exist.
+lossless _in the direction it is used_, and each has a reason to exist.
 
 ```mermaid
 flowchart TB
@@ -287,9 +287,9 @@ flowchart TB
 
 ## Applications
 
-| App | What it is for |
-|---|---|
-| `apps/game` | The client. React for UI, R3F for the view, and an engine that owns everything else. |
+| App             | What it is for                                                                                                                     |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/game`     | The client. React for UI, R3F for the view, and an engine that owns everything else.                                               |
 | `apps/headless` | The same core in Node — no DOM, no React, no WebGL. Proves the boundary and runs the capability checks via `pnpm sim --self-test`. |
 
 Both open a session through the same `Session` in `devtools`, which owns the
@@ -305,18 +305,18 @@ reproduce in one runtime and not the other.
 The short list. Violating one of these is a rewrite later, not a refactor —
 [AGENTS.md](../AGENTS.md) has the full set with rationale.
 
-| # | Invariant | Enforced by |
-|---|---|---|
-| 1 | Only `UniverseVector` is an absolute position | convention + review |
-| 2 | No `Math.random`, `Date.now` or `performance.now` in canonical paths | golden vectors, determinism tests |
-| 3 | Generation never depends on order | shuffled-order tests |
-| 4 | Canonical state is never in a React component | components read snapshots; `packages/*` has no DOM lib |
-| 5 | One module constructs a `Worker` | port interface in `workers` |
-| 6 | Nothing regenerable is persisted | save-size test |
-| 7 | No vendor SDK below the adapter layer | `pnpm graph` — `packages/*` may have no third-party dependency |
-| 8 | Terrain is sampled in body-fixed axes | a branded `BodyFixedDirection` type |
-| 9 | Landedness is a consequence, never asserted | `teleport` has no `landed` flag |
-| 10 | Entity state is written through `World`, not `entities.update` | `teleport`, `setControl`, `setFlightAssist`, `killRotation` |
+| #   | Invariant                                                            | Enforced by                                                    |
+| --- | -------------------------------------------------------------------- | -------------------------------------------------------------- |
+| 1   | Only `UniverseVector` is an absolute position                        | convention + review                                            |
+| 2   | No `Math.random`, `Date.now` or `performance.now` in canonical paths | golden vectors, determinism tests                              |
+| 3   | Generation never depends on order                                    | shuffled-order tests                                           |
+| 4   | Canonical state is never in a React component                        | components read snapshots; `packages/*` has no DOM lib         |
+| 5   | One module constructs a `Worker`                                     | port interface in `workers`                                    |
+| 6   | Nothing regenerable is persisted                                     | save-size test                                                 |
+| 7   | No vendor SDK below the adapter layer                                | `pnpm graph` — `packages/*` may have no third-party dependency |
+| 8   | Terrain is sampled in body-fixed axes                                | a branded `BodyFixedDirection` type                            |
+| 9   | Landedness is a consequence, never asserted                          | `teleport` has no `landed` flag                                |
+| 10  | Entity state is written through `World`, not `entities.update`       | `teleport`, `setControl`, `setFlightAssist`, `killRotation`    |
 
 Invariant 8 is worth calling out as a pattern. It began as a bug — terrain was
 sampled with an inertial direction, so the mountains stood still while the
@@ -324,7 +324,7 @@ planet rotated underneath them, and a ship landed 83 m above the ground it had
 just touched. The fix was correct code, and it was applied to one of the two
 terrain samples in `stepFlight`; the other went on feeding the atmosphere an
 inertially-sampled altitude, where nothing rendered wrong and no test failed.
-The *durable* fix was giving the body-fixed direction its own type, so the wrong
+The _durable_ fix was giving the body-fixed direction its own type, so the wrong
 vector no longer compiles. Adding the brand immediately surfaced a third call
 site nobody had found by reading.
 
@@ -343,13 +343,13 @@ unreachable rather than merely discouraged.
 pnpm check   # graph → lint → typecheck (3 projects) → tests → build
 ```
 
-| Stage | What it proves |
-|---|---|
-| `graph` | layering intact, no cycles |
-| `lint` | oxlint across the workspace |
+| Stage       | What it proves                                                   |
+| ----------- | ---------------------------------------------------------------- |
+| `graph`     | layering intact, no cycles                                       |
+| `lint`      | oxlint across the workspace                                      |
 | `typecheck` | three tsconfig projects — packages (no DOM), client, Node runner |
-| `test` | 200 tests, all in plain Node — `packages/*` and `apps/*` alike |
-| `build` | the client actually bundles, workers included |
+| `test`      | 200 tests, all in plain Node — `packages/*` and `apps/*` alike   |
+| `build`     | the client actually bundles, workers included                    |
 
 On top of that, twelve **capability checks** execute the milestone's claims
 against the live build — in Node via `pnpm sim --self-test`, and in the browser

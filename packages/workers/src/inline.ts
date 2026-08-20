@@ -32,13 +32,19 @@ import type { HostPort, WorkerPort } from './transport.ts'
 // Available in every runtime this package targets — browser, worker and Node —
 // but not in the ES2023 lib, and `packages/*` deliberately pulls in neither DOM
 // nor Node type definitions. `world.test.ts` declares it the same way.
-declare const structuredClone: <T>(value: T, options?: { transfer?: unknown[] }) => T
+declare const structuredClone: <T>(
+  value: T,
+  options?: { transfer?: unknown[] },
+) => T
 
 const defer = (run: () => void): void => {
   void Promise.resolve().then(run)
 }
 
-export function createInlineWorker(registry: TaskRegistry, now: () => number = () => 0): WorkerPort {
+export function createInlineWorker(
+  registry: TaskRegistry,
+  now: () => number = () => 0,
+): WorkerPort {
   const toWorker = new Set<(message: WorkerInbound) => void>()
   const toHost = new Set<(message: WorkerOutbound) => void>()
   let terminated = false

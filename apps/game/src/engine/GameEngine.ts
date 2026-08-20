@@ -1,10 +1,27 @@
 import { getLogger, LIGHT_YEAR, type Seconds } from '@inertialref/shared'
 import { formatSeed } from '@inertialref/procedural'
-import { type RenderOrigin, UV, type UniverseVector, vec3 } from '@inertialref/spatial'
-import { snapshot, type World, type WorldSnapshot } from '@inertialref/simulation'
+import {
+  type RenderOrigin,
+  UV,
+  type UniverseVector,
+  vec3,
+} from '@inertialref/spatial'
+import {
+  snapshot,
+  type World,
+  type WorldSnapshot,
+} from '@inertialref/simulation'
 import { cellOf, type EntityId, type SystemId } from '@inertialref/universe'
-import { buildScene, originForCamera, type RenderScene } from '@inertialref/rendering'
-import { surveyRegionTask, type WorkerFactory, WorkerPool } from '@inertialref/workers'
+import {
+  buildScene,
+  originForCamera,
+  type RenderScene,
+} from '@inertialref/rendering'
+import {
+  surveyRegionTask,
+  type WorkerFactory,
+  WorkerPool,
+} from '@inertialref/workers'
 import {
   type FrameStats,
   type GameHarness,
@@ -124,7 +141,10 @@ export class GameEngine implements PresentationHost {
     this.session = openSession({
       ...(options.seed === undefined ? {} : { seed: options.seed }),
       // `undefined` means "the browser default"; `null` means "no pool at all".
-      workers: options.workers === undefined ? () => createBrowserWorkerPort() : options.workers,
+      workers:
+        options.workers === undefined
+          ? () => createBrowserWorkerPort()
+          : options.workers,
       poolSize: poolSize(),
       now: options.now ?? (() => performance.now()),
       store: options.store ?? new IndexedDbSaveStore(),
@@ -154,7 +174,11 @@ export class GameEngine implements PresentationHost {
   }
 
   frameStats(): FrameStats {
-    return { fps: this.#fps, frameMs: this.#frameMs, ticksLastFrame: this.#ticksLastFrame }
+    return {
+      fps: this.#fps,
+      frameMs: this.#frameMs,
+      ticksLastFrame: this.#ticksLastFrame,
+    }
   }
 
   player(): EntityId | null {
@@ -187,7 +211,9 @@ export class GameEngine implements PresentationHost {
     this.#starFieldCentre = null
     this.#starFieldWorld += 1
     this.terrain.clear()
-    log.info('world replaced, derived state dropped', { tick: this.world.clock.tick })
+    log.info('world replaced, derived state dropped', {
+      tick: this.world.clock.tick,
+    })
   }
 
   /** Frame the opening shot. The ship itself is placed by `openSession`. */
@@ -271,7 +297,13 @@ export class GameEngine implements PresentationHost {
     // `shot.renderTime`, not the clock: the snapshot presents the world one tick
     // in the past, and terrain that disagrees with the ship about what time it
     // is drifts from under it by 800 m at orbital speed.
-    this.terrain.update(this.world, shot.renderTime, camera.position, this.origin, surfaceBody?.address ?? null)
+    this.terrain.update(
+      this.world,
+      shot.renderTime,
+      camera.position,
+      this.origin,
+      surfaceBody?.address ?? null,
+    )
 
     this.#maybeSurveyStars(camera.position)
   }
@@ -302,13 +334,23 @@ export class GameEngine implements PresentationHost {
     const cell = cellOf(centre)
     const payload = {
       seed: formatSeed(this.world.galaxySeed),
-      min: { x: cell.x - radiusCells, y: cell.y - radiusCells, z: cell.z - radiusCells },
-      max: { x: cell.x + radiusCells, y: cell.y + radiusCells, z: cell.z + radiusCells },
+      min: {
+        x: cell.x - radiusCells,
+        y: cell.y - radiusCells,
+        z: cell.z - radiusCells,
+      },
+      max: {
+        x: cell.x + radiusCells,
+        y: cell.y + radiusCells,
+        z: cell.z + radiusCells,
+      },
     }
 
     const run =
       this.pool() === null
-        ? Promise.resolve(surveyRegionTask.run(payload, { cancelled: () => false }))
+        ? Promise.resolve(
+            surveyRegionTask.run(payload, { cancelled: () => false }),
+          )
         : (this.pool() as WorkerPool).run(surveyRegionTask, payload)
 
     void Promise.resolve(run)
@@ -328,7 +370,9 @@ export class GameEngine implements PresentationHost {
         this.#starField = { positions, names }
         log.info('starfield surveyed', { stars: positions.length })
       })
-      .catch((cause: unknown) => log.warn('starfield survey failed', { cause: String(cause) }))
+      .catch((cause: unknown) =>
+        log.warn('starfield survey failed', { cause: String(cause) }),
+      )
       .finally(() => {
         this.#starFieldPending = false
       })
@@ -338,7 +382,10 @@ export class GameEngine implements PresentationHost {
   /* Player commands                                                        */
   /* --------------------------------------------------------------------- */
 
-  setControl(translation: [number, number, number], rotation: [number, number, number]): void {
+  setControl(
+    translation: [number, number, number],
+    rotation: [number, number, number],
+  ): void {
     const player = this.session.player()
     if (player === null) return
     this.world.setControl(player, vec3(...translation), vec3(...rotation))
@@ -347,7 +394,10 @@ export class GameEngine implements PresentationHost {
   toggleFlightAssist(): boolean {
     const player = this.session.player()
     if (player === null) return false
-    return this.world.setFlightAssist(player, !this.world.entities.require(player).flightAssist)
+    return this.world.setFlightAssist(
+      player,
+      !this.world.entities.require(player).flightAssist,
+    )
   }
 
   killRotation(): void {
@@ -387,4 +437,3 @@ export class GameEngine implements PresentationHost {
     this.session.dispose()
   }
 }
-

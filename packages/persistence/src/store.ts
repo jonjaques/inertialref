@@ -22,7 +22,9 @@ export class MemorySaveStore implements SaveStore {
 
   async read(slot: string): Promise<Result<string, string>> {
     const contents = this.#slots.get(slot)
-    return contents === undefined ? err(`No save in slot "${slot}"`) : ok(contents)
+    return contents === undefined
+      ? err(`No save in slot "${slot}"`)
+      : ok(contents)
   }
 
   async write(slot: string, contents: string): Promise<Result<void, string>> {

@@ -48,7 +48,13 @@ const ENGINE_BUDGET_MS = 2.0
 /** The draw-call budget from the same table. */
 const DRAW_CALL_BUDGET = 1_200
 
-export function PerfPanel({ engine, status }: { engine: GameEngine; status: HarnessStatus | null }) {
+export function PerfPanel({
+  engine,
+  status,
+}: {
+  engine: GameEngine
+  status: HarnessStatus | null
+}) {
   /*
    * React Compiler is on, and it is exactly wrong about this component.
    *
@@ -89,17 +95,36 @@ export function PerfPanel({ engine, status }: { engine: GameEngine; status: Harn
 
   return (
     <div>
-      <Section id="perf.frame" title="frame" trailing={`${fps(period.mean)} fps`}>
-        <Plot series={metrics.period} unit="ms" budget={FRAME_BUDGET_MS} warnAbove={DROPPED_FRAME_MS} />
+      <Section
+        id="perf.frame"
+        title="frame"
+        trailing={`${fps(period.mean)} fps`}
+      >
+        <Plot
+          series={metrics.period}
+          unit="ms"
+          budget={FRAME_BUDGET_MS}
+          warnAbove={DROPPED_FRAME_MS}
+        />
         <Stats stats={period} unit="ms" />
         {/* p95 rather than max, and stated as a frame rate too, because "17.4 ms
             p95" and "57 fps at the 95th percentile" land differently and only
             one of them is the number the budget is written in. */}
-        <Row label="p95" value={`${period.p95.toFixed(2)} ms · ${fps(period.p95)} fps`} />
-        <Row label="worst" value={`${period.max.toFixed(2)} ms · ${fps(period.max)} fps`} />
+        <Row
+          label="p95"
+          value={`${period.p95.toFixed(2)} ms · ${fps(period.p95)} fps`}
+        />
+        <Row
+          label="worst"
+          value={`${period.max.toFixed(2)} ms · ${fps(period.max)} fps`}
+        />
       </Section>
 
-      <Section id="perf.engine" title="engine" trailing={`${metrics.engineMs.summarise().mean.toFixed(2)} ms`}>
+      <Section
+        id="perf.engine"
+        title="engine"
+        trailing={`${metrics.engineMs.summarise().mean.toFixed(2)} ms`}
+      >
         {/* Simulation, snapshot, scene build and terrain reconciliation — but
             not the draw, which happens after this returns. Conflating the two is
             how a renderer problem gets diagnosed as a simulation one. */}
@@ -107,7 +132,11 @@ export function PerfPanel({ engine, status }: { engine: GameEngine; status: Harn
         <Stats stats={metrics.engineMs.summarise()} unit="ms" />
         <Row label="gpu" value={gpuLabel(engine, metrics.gpuMs, gpuBusy)} />
         <div className="mt-1">
-          <MeasureButton engine={engine} busy={gpuBusy} onMeasure={measureGpu} />
+          <MeasureButton
+            engine={engine}
+            busy={gpuBusy}
+            onMeasure={measureGpu}
+          />
         </div>
       </Section>
 
@@ -118,11 +147,11 @@ export function PerfPanel({ engine, status }: { engine: GameEngine; status: Harn
       >
         <Plot series={metrics.ticks} unit="" />
         {/*
-          * Requested against delivered, side by side, which is the whole reason
-          * this row exists: the dock offers seven time-warp detents and the
-          * clock has a ceiling, and for a long time nothing said so. Anything
-          * short of the request is being dropped.
-          */}
+         * Requested against delivered, side by side, which is the whole reason
+         * this row exists: the dock offers seven time-warp detents and the
+         * clock has a ceiling, and for a long time nothing said so. Anything
+         * short of the request is being dropped.
+         */}
         <Row
           label="time warp"
           value={
@@ -136,34 +165,72 @@ export function PerfPanel({ engine, status }: { engine: GameEngine; status: Harn
             capped — the clock cannot run {world.timeScale}× at this frame rate
           </div>
         )}
-        <Row label="ticks/frame" value={format(metrics.ticks.summarise().mean)} />
-        <Row label="dropped" value={world === null ? '—' : String(world.droppedTicks)} />
+        <Row
+          label="ticks/frame"
+          value={format(metrics.ticks.summarise().mean)}
+        />
+        <Row
+          label="dropped"
+          value={world === null ? '—' : String(world.droppedTicks)}
+        />
       </Section>
 
-      <Section id="perf.render" title="render" trailing={`${format(metrics.drawCalls.summarise().last)} calls`}>
+      <Section
+        id="perf.render"
+        title="render"
+        trailing={`${format(metrics.drawCalls.summarise().last)} calls`}
+      >
         <Plot series={metrics.drawCalls} unit="" budget={DRAW_CALL_BUDGET} />
         <Stats stats={metrics.drawCalls.summarise()} unit="" />
-        <Row label="triangles" value={format(metrics.triangles.summarise().last)} />
-        <Row label="pipeline" value={engine.gl === null ? 'starting…' : describeGl(engine)} />
+        <Row
+          label="triangles"
+          value={format(metrics.triangles.summarise().last)}
+        />
+        <Row
+          label="pipeline"
+          value={engine.gl === null ? 'starting…' : describeGl(engine)}
+        />
       </Section>
 
-      <Section id="perf.workers" title="workers" trailing={workers === null ? '—' : `${workers.workers} threads`}>
+      <Section
+        id="perf.workers"
+        title="workers"
+        trailing={workers === null ? '—' : `${workers.workers} threads`}
+      >
         <Plot series={metrics.queuedJobs} unit="" />
         {workers !== null && (
           <>
-            <Row label="queued / active" value={`${workers.queued} / ${workers.active}`} />
-            <Row label="queue wait" value={`${workers.averageQueueMs.toFixed(1)} ms avg · ${workers.longestQueueMs.toFixed(1)} ms worst`} />
-            <Row label="run" value={`${workers.averageRunMs.toFixed(1)} ms avg`} />
-            <Row label="completed / failed" value={`${workers.completed} / ${workers.failed}`} />
+            <Row
+              label="queued / active"
+              value={`${workers.queued} / ${workers.active}`}
+            />
+            <Row
+              label="queue wait"
+              value={`${workers.averageQueueMs.toFixed(1)} ms avg · ${workers.longestQueueMs.toFixed(1)} ms worst`}
+            />
+            <Row
+              label="run"
+              value={`${workers.averageRunMs.toFixed(1)} ms avg`}
+            />
+            <Row
+              label="completed / failed"
+              value={`${workers.completed} / ${workers.failed}`}
+            />
           </>
         )}
       </Section>
 
-      <Section id="perf.memory" title="memory" trailing={heap.count === 0 ? 'n/a' : `${heap.last.toFixed(0)} MB`}>
+      <Section
+        id="perf.memory"
+        title="memory"
+        trailing={heap.count === 0 ? 'n/a' : `${heap.last.toFixed(0)} MB`}
+      >
         {heap.count === 0 ? (
           // Not a failure worth hiding: `performance.memory` is Chromium-only and
           // non-standard, and a blank plot with no explanation reads as a bug.
-          <div className="text-slate-500">performance.memory is Chromium-only</div>
+          <div className="text-slate-500">
+            performance.memory is Chromium-only
+          </div>
         ) : (
           <>
             {/* The budget is 900 MB peak; the plot would be a flat line at the
@@ -190,7 +257,8 @@ function MeasureButton({
   'use no memo'
 
   const gl = engine.gl
-  const ready = gl !== null && engine.view !== null && canMeasureGpu(gl.renderer)
+  const ready =
+    gl !== null && engine.view !== null && canMeasureGpu(gl.renderer)
   return (
     <button
       type="button"
@@ -250,7 +318,11 @@ function Plot({
 
   // Headroom above the peak so the tallest sample is not flush with the border,
   // and never a zero-height range — a flat series would divide by zero.
-  const ceiling = Math.max(stats.max * 1.15, budget === undefined ? 0 : budget * 1.1, 1e-9)
+  const ceiling = Math.max(
+    stats.max * 1.15,
+    budget === undefined ? 0 : budget * 1.1,
+    1e-9,
+  )
   const step = written > 1 ? width / (written - 1) : width
   let path = `M 0 ${height}`
   for (let i = 0; i < written; i += 1) {
@@ -272,7 +344,14 @@ function Plot({
         role="img"
         aria-label={`${stats.last.toFixed(2)} ${unit}, ${written} samples`}
       >
-        <path d={path} fill={stroke} fillOpacity={0.22} stroke={stroke} strokeWidth={0.6} vectorEffect="non-scaling-stroke" />
+        <path
+          d={path}
+          fill={stroke}
+          fillOpacity={0.22}
+          stroke={stroke}
+          strokeWidth={0.6}
+          vectorEffect="non-scaling-stroke"
+        />
         {budget !== undefined && budget < ceiling && (
           <line
             x1={0}
@@ -314,9 +393,14 @@ function describeGl(engine: GameEngine): string {
     : `${description.backend} · sRGB`
 }
 
-function gpuLabel(engine: GameEngine, gpuMs: number | null, busy: boolean): string {
+function gpuLabel(
+  engine: GameEngine,
+  gpuMs: number | null,
+  busy: boolean,
+): string {
   if (busy) return 'measuring…'
-  if (engine.gl !== null && !canMeasureGpu(engine.gl.renderer)) return 'webgpu only'
+  if (engine.gl !== null && !canMeasureGpu(engine.gl.renderer))
+    return 'webgpu only'
   if (gpuMs === null) return 'not measured'
   return Number.isFinite(gpuMs) ? `${gpuMs.toFixed(2)} ms/frame` : 'unavailable'
 }

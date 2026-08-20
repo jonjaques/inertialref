@@ -54,6 +54,9 @@ export function chaseCameraPosition(
   // because "behind" has rotated downwards.
   const rise = Vec.dot(rotated, scene.camera.up)
   const shortfall = clearance - (altitude + rise)
-  const lifted = shortfall > 0 ? Vec.add(rotated, Vec.scale(scene.camera.up, shortfall)) : rotated
+  const lifted =
+    shortfall > 0
+      ? Vec.add(rotated, Vec.scale(scene.camera.up, shortfall))
+      : rotated
   return Vec.add(scene.camera.position, lifted)
 }

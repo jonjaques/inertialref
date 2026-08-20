@@ -59,7 +59,9 @@ for (const pkg of packages.values()) {
   for (const dep of pkg.deps) {
     const target = packages.get(dep)
     if (target === undefined) {
-      problems.push(`${pkg.name} depends on ${dep}, which is not a workspace package`)
+      problems.push(
+        `${pkg.name} depends on ${dep}, which is not a workspace package`,
+      )
       continue
     }
     if (typeof target.layer !== 'number') continue
@@ -80,7 +82,9 @@ function visit(name) {
   const status = state.get(name)
   if (status === 'done') return
   if (status === 'visiting') {
-    problems.push(`dependency cycle: ${[...stack.slice(stack.indexOf(name)), name].join(' → ')}`)
+    problems.push(
+      `dependency cycle: ${[...stack.slice(stack.indexOf(name)), name].join(' → ')}`,
+    )
     return
   }
   state.set(name, 'visiting')
@@ -99,9 +103,14 @@ if (problems.length > 0) {
 
 const byLayer = new Map()
 for (const pkg of packages.values()) {
-  byLayer.set(pkg.layer, [...(byLayer.get(pkg.layer) ?? []), pkg.name.replace('@inertialref/', '')])
+  byLayer.set(pkg.layer, [
+    ...(byLayer.get(pkg.layer) ?? []),
+    pkg.name.replace('@inertialref/', ''),
+  ])
 }
 for (const layer of [...byLayer.keys()].sort((a, b) => a - b)) {
   console.log(`layer ${layer}: ${byLayer.get(layer).sort().join(', ')}`)
 }
-console.log(`${packages.size} packages, no cycles, layering intact, no third-party dependencies`)
+console.log(
+  `${packages.size} packages, no cycles, layering intact, no third-party dependencies`,
+)

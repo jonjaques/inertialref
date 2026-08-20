@@ -2,7 +2,14 @@ import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
 import { fbm3, noise3 } from './noise.ts'
 import { Rng } from './rng.ts'
-import { deriveSeed, derivePath, formatSeed, parseSeed, rootSeed, seedEquals } from './seed.ts'
+import {
+  deriveSeed,
+  derivePath,
+  formatSeed,
+  parseSeed,
+  rootSeed,
+  seedEquals,
+} from './seed.ts'
 
 const ROOT = rootSeed('inertialref')
 
@@ -17,28 +24,44 @@ describe('seed derivation', () => {
    */
   it('matches golden vectors', () => {
     expect(formatSeed(ROOT)).toBe('0df87e57180611d601f6e442eb5fc374')
-    expect(formatSeed(deriveSeed(ROOT, 'system:SOL'))).toBe('aafc440b771aaf62551f650e4b099be0')
+    expect(formatSeed(deriveSeed(ROOT, 'system:SOL'))).toBe(
+      'aafc440b771aaf62551f650e4b099be0',
+    )
     expect(formatSeed(derivePath(ROOT, ['system:SOL', 'body:2']))).toBe(
       'b1e23aa109393ae28bd09fba800e2331',
     )
     const rng = new Rng(ROOT)
-    expect([rng.nextUint32(), rng.nextUint32(), rng.nextUint32(), rng.nextUint32()]).toEqual([
-      2_291_224_860, 3_225_986_370, 2_608_961_050, 2_565_227_618,
-    ])
+    expect([
+      rng.nextUint32(),
+      rng.nextUint32(),
+      rng.nextUint32(),
+      rng.nextUint32(),
+    ]).toEqual([2_291_224_860, 3_225_986_370, 2_608_961_050, 2_565_227_618])
     expect(noise3(ROOT, 1.5, -2.25, 3.125).toFixed(12)).toBe('-0.279786154628')
     expect(fbm3(ROOT, 0.3, 0.7, -0.1).toFixed(12)).toBe('0.017432449097')
   })
 
   it('is a pure function of the path', () => {
-    expect(seedEquals(derivePath(ROOT, ['a', 'b', 'c']), derivePath(ROOT, ['a', 'b', 'c']))).toBe(true)
-    expect(seedEquals(derivePath(ROOT, ['a', 'b']), derivePath(ROOT, ['b', 'a']))).toBe(false)
-    expect(seedEquals(deriveSeed(ROOT, 'ab'), derivePath(ROOT, ['a', 'b']))).toBe(false)
+    expect(
+      seedEquals(
+        derivePath(ROOT, ['a', 'b', 'c']),
+        derivePath(ROOT, ['a', 'b', 'c']),
+      ),
+    ).toBe(true)
+    expect(
+      seedEquals(derivePath(ROOT, ['a', 'b']), derivePath(ROOT, ['b', 'a'])),
+    ).toBe(false)
+    expect(
+      seedEquals(deriveSeed(ROOT, 'ab'), derivePath(ROOT, ['a', 'b'])),
+    ).toBe(false)
   })
 
   it('does not depend on derivation order', () => {
     // The whole point of path derivation: whoever asks first gets the same answer.
     const labels = Array.from({ length: 500 }, (_, i) => `body:${i}`)
-    const forward = new Map(labels.map((l) => [l, formatSeed(deriveSeed(ROOT, l))]))
+    const forward = new Map(
+      labels.map((l) => [l, formatSeed(deriveSeed(ROOT, l))]),
+    )
     const shuffled = new Rng(rootSeed('shuffle')).shuffle(labels.slice())
     for (const label of shuffled) {
       expect(formatSeed(deriveSeed(ROOT, label))).toBe(forward.get(label))
@@ -109,7 +132,8 @@ describe('Rng', () => {
       buckets[Math.floor(v * 10)] = (buckets[Math.floor(v * 10)] ?? 0) + 1
     }
     expect(sum / samples).toBeCloseTo(0.5, 2)
-    for (const count of buckets) expect(Math.abs(count - samples / 10)).toBeLessThan(samples / 50)
+    for (const count of buckets)
+      expect(Math.abs(count - samples / 10)).toBeLessThan(samples / 50)
   })
 
   it('draws a usable normal distribution', () => {
@@ -157,9 +181,14 @@ describe('Rng', () => {
 
 describe('noise', () => {
   it('is stateless, so sampling order cannot change a planet', () => {
-    const points = Array.from({ length: 200 }, (_, i) => [i * 0.37, i * -0.11, i * 0.53] as const)
+    const points = Array.from(
+      { length: 200 },
+      (_, i) => [i * 0.37, i * -0.11, i * 0.53] as const,
+    )
     const inOrder = points.map(([x, y, z]) => noise3(ROOT, x, y, z))
-    const shuffled = new Rng(rootSeed('order')).shuffle(points.map((p, i) => [p, i] as const))
+    const shuffled = new Rng(rootSeed('order')).shuffle(
+      points.map((p, i) => [p, i] as const),
+    )
     for (const [[x, y, z], i] of shuffled) {
       expect(noise3(ROOT, x, y, z)).toBe(inOrder[i])
     }
@@ -175,7 +204,10 @@ describe('noise', () => {
       const v = noise3(ROOT, x, y, z)
       expect(v).toBeGreaterThanOrEqual(-1.01)
       expect(v).toBeLessThanOrEqual(1.01)
-      worstJump = Math.max(worstJump, Math.abs(v - noise3(ROOT, x + 1e-4, y, z)))
+      worstJump = Math.max(
+        worstJump,
+        Math.abs(v - noise3(ROOT, x + 1e-4, y, z)),
+      )
     }
     // A 1e-4 lattice step must not produce a cliff, or terrain will crack.
     expect(worstJump).toBeLessThan(0.01)

@@ -73,7 +73,9 @@ export class Rng {
     // Guard against log(0); nextFloat53 can legitimately return exactly 0.
     const u1 = this.nextFloat53() || Number.MIN_VALUE
     const u2 = this.nextFloat53()
-    return mean + stdDev * Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2)
+    return (
+      mean + stdDev * Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2)
+    )
   }
 
   /**
@@ -133,7 +135,9 @@ export class Rng {
    * subsequent values stable.
    */
   fork(label: string): Rng {
-    return new Rng(deriveSeed({ a: this.#s0, b: this.#s1, c: this.#s2, d: this.#s3 }, label))
+    return new Rng(
+      deriveSeed({ a: this.#s0, b: this.#s1, c: this.#s2, d: this.#s3 }, label),
+    )
   }
 }
 

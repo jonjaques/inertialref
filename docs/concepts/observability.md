@@ -24,7 +24,7 @@ flowchart TB
     style INSPECT fill:#0369a1,stroke:#0c4a6e,color:#fff
 ```
 
-Because the overlay and the tests read the *same* structure, what a human sees
+Because the overlay and the tests read the _same_ structure, what a human sees
 and what a check asserts cannot drift apart. Adding a field to the inspection
 makes it visible in all four places at once.
 
@@ -35,21 +35,21 @@ makes it visible in all four places at once.
 Twelve things have to be visible for this architecture to be debuggable at
 all. All twelve are:
 
-| | Field | Example |
-|---|---|---|
-| 1 | canonical entity id | `#0` |
-| 2 | universe address | `(dynamic)` or `g:milky-way/s:SOL/b:2` |
-| 3 | reference frame | `sf:g:milky-way/s:SOL/b:0@0.350000,-1.100000` |
-| | frame **chain** | `universe › s:SOL › b:… › bf:… › sf:…` |
-| 4 | local coordinates | `0.00, 3.00, 0.00 m` |
-| 5 | canonical coordinates | `[-229507999,583732,-1]+(932659…, …)` |
-| 6 | velocity | `0.0 m/s local · 51853.5 m/s universe` |
-| 7 | simulation tick | `257334 · 1.12 h` |
-| 8 | seed | `inertialref · 0df87e571806…` |
-| 9 | active LOD | `Sol I  surface · 2865.046 km` |
-| 10 | loaded region | `g:milky-way/s:SOL/b:0` |
-| 11 | network authority | `s:SOL` (partition key — no networking yet) |
-| 12 | worker queue state | `4w · 0 active · 0 queued · 25 done · q 9.2ms · run 11.3ms` |
+|     | Field                 | Example                                                     |
+| --- | --------------------- | ----------------------------------------------------------- |
+| 1   | canonical entity id   | `#0`                                                        |
+| 2   | universe address      | `(dynamic)` or `g:milky-way/s:SOL/b:2`                      |
+| 3   | reference frame       | `sf:g:milky-way/s:SOL/b:0@0.350000,-1.100000`               |
+|     | frame **chain**       | `universe › s:SOL › b:… › bf:… › sf:…`                      |
+| 4   | local coordinates     | `0.00, 3.00, 0.00 m`                                        |
+| 5   | canonical coordinates | `[-229507999,583732,-1]+(932659…, …)`                       |
+| 6   | velocity              | `0.0 m/s local · 51853.5 m/s universe`                      |
+| 7   | simulation tick       | `257334 · 1.12 h`                                           |
+| 8   | seed                  | `inertialref · 0df87e571806…`                               |
+| 9   | active LOD            | `Sol I  surface · 2865.046 km`                              |
+| 10  | loaded region         | `g:milky-way/s:SOL/b:0`                                     |
+| 11  | network authority     | `s:SOL` (partition key — no networking yet)                 |
+| 12  | worker queue state    | `4w · 0 active · 0 queued · 25 done · q 9.2ms · run 11.3ms` |
 
 Plus the state hash, dropped ticks, origin rebase count, frame timing and a
 rolling event log.
@@ -110,11 +110,11 @@ two tabs, and it is the natural desync check if a server ever appears.
 scenario, step deterministically, read structured state back.
 
 ```js
-ir.summary()                     // one line
-ir.status()                      // everything, structured
+ir.summary() // one line
+ir.status() // everything, structured
 ir.orbit('g:milky-way/s:SOL/b:2', 400)
 ir.step(20000)
-await ir.selfTest()              // the twelve capability checks
+await ir.selfTest() // the twelve capability checks
 ```
 
 Full reference: [guides/harness.md](../guides/harness.md).
@@ -151,7 +151,7 @@ PASS 10. Worker task — 4225 terrain samples generated in a worker, identical t
 ```
 
 They report **measurements, not "OK"**. That distinction is not cosmetic: check
-5 originally passed while reporting *"fell from 57287 km to 57287 km"* — a
+5 originally passed while reporting _"fell from 57287 km to 57287 km"_ — a
 vacuously green tick. It now compares the fall against the analytic free-fall
 prediction and agrees to 0.03%.
 

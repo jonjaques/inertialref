@@ -22,21 +22,21 @@ server **stopped**, the page still loads from the service worker and passes
 ~1.25M simulation ticks/s for one entity; the headless runner does ~100–105k ticks/s
 including frame resolution.
 
-| Package | Layer | State |
-|---|---|---|
-| `shared` | 0 | done — units, brands, invariants, structured logging |
-| `spatial` | 1 | done — UniverseVector, frame graph, floating origin |
-| `procedural` | 1 | done — PRNG, hierarchical seeds, noise, algorithm versions |
-| `physics` | 2 | done — Kepler, rigid body, atmosphere, thrusters |
-| `universe` | 3 | done — addressing, star catalogue, generation, terrain, frames |
-| `simulation` | 4 | done — clock, entities, flight, streaming, snapshots |
-| `protocol` | 4 | done — validation combinators, wire and save schemas |
-| `workers` | 5 | done — typed tasks, ports, pool, four tasks |
-| `persistence` | 5 | done — save/restore, migration chain, store port |
-| `rendering` | 5 | done — LOD, depth compression, terrain meshing |
-| `devtools` | 6 | done — inspection, twelve capability checks, harness, `openSession` |
-| `apps/game` | — | done — React + R3F client on `WebGPURenderer`/TSL, worker pool, IndexedDB saves |
-| `apps/headless` | — | done — Node runner, ~100–105k ticks/s, `pnpm sim --self-test` |
+| Package         | Layer | State                                                                           |
+| --------------- | ----- | ------------------------------------------------------------------------------- |
+| `shared`        | 0     | done — units, brands, invariants, structured logging                            |
+| `spatial`       | 1     | done — UniverseVector, frame graph, floating origin                             |
+| `procedural`    | 1     | done — PRNG, hierarchical seeds, noise, algorithm versions                      |
+| `physics`       | 2     | done — Kepler, rigid body, atmosphere, thrusters                                |
+| `universe`      | 3     | done — addressing, star catalogue, generation, terrain, frames                  |
+| `simulation`    | 4     | done — clock, entities, flight, streaming, snapshots                            |
+| `protocol`      | 4     | done — validation combinators, wire and save schemas                            |
+| `workers`       | 5     | done — typed tasks, ports, pool, four tasks                                     |
+| `persistence`   | 5     | done — save/restore, migration chain, store port                                |
+| `rendering`     | 5     | done — LOD, depth compression, terrain meshing                                  |
+| `devtools`      | 6     | done — inspection, twelve capability checks, harness, `openSession`             |
+| `apps/game`     | —     | done — React + R3F client on `WebGPURenderer`/TSL, worker pool, IndexedDB saves |
+| `apps/headless` | —     | done — Node runner, ~100–105k ticks/s, `pnpm sim --self-test`                   |
 
 ## Decisions that are expensive to reverse
 
@@ -66,7 +66,7 @@ Full reasoning is in `docs/adr/`. The short version:
    are.
 7. **Ships integrate only in non-rotating frames.** Landed ships are attached
    kinematically to a surface frame instead.
-8. **Render compression keys off distance to the *surface*.** Keying off the
+8. **Render compression keys off distance to the _surface_.** Keying off the
    centre put a planet's datum sphere 30 km from the terrain it represents.
 9. **A save is a reference, not a copy** — under 700 bytes for a flown session.
 
@@ -168,12 +168,12 @@ Every driving verb took an address and nothing produced one.
   frame still holds after a minute; it was confirmed to fail by raising the
   altitude to 40 body radii. Both numbers were settled by looking at the screen
   rather than by argument: a quarter radius fills the frame edge to edge with no
-  limb visible, and half the SOI is *inside the surface* of a planet orbiting at
+  limb visible, and half the SOI is _inside the surface_ of a planet orbiting at
   0.005 AU, which collapsed the clamp onto its floor and parked the ship 10 km
   up.
 - **Arriving somewhere points the nose at it.** `orbit` aims along the track,
   which is right for flying and wrong for arriving: you teleport into orbit and
-  see empty space, which reads as a planet that failed to load. Naming a *system*
+  see empty space, which reads as a planet that failed to load. Naming a _system_
   arrives at its first planet for the same reason — 40 AU out in the dark, a red
   dwarf is a sub-pixel point and travelling looks like a no-op. `distanceAu`
   asks for the hold-off explicitly.
@@ -219,7 +219,7 @@ again in a neighbouring system.
 - **Terrain sampled in inertial axes, again.** The fix recorded above was
   applied to one of the two samples in `stepFlight`. The other — the
   pre-integration one, seventy lines above the comment explaining why you must
-  not — is the altitude the *atmosphere* is evaluated against, and its terrain
+  not — is the altitude the _atmosphere_ is evaluated against, and its terrain
   gate (`radius * 0.25`, ~1,600 km) is far wider than any atmosphere ceiling
   (60–180 km), so every atmospheric pass in the game used it. Nothing rendered
   wrong and no test failed, because that number only ever reaches a drag
@@ -233,7 +233,7 @@ again in a neighbouring system.
   entity, so the contact test never ran and the ship hovered there permanently
   while `altitudeOf` reported 0. Dropping the flag was not sufficient — 3 m is
   inside `LANDING_CLEARANCE`, so it then "landed" at 3 m. A surface frame's
-  origin *is* the pad, so the answer was `Vec.ZERO`.
+  origin _is_ the pad, so the answer was `Vec.ZERO`.
 - **The starfield ignored the render origin's orientation.** It open-coded the
   projection over raw sector fields with `2 ** 40` inline, in the one directory
   vitest did not cover, while `placePoint` — written for the job — had no
@@ -266,7 +266,7 @@ again in a neighbouring system.
   both fixed in body-fixed axes, so their separation in render space is a
   constant — and it fails at 2,101 m and 90 m respectively.
 - **The chase camera had no floor.** The offset is 14 m behind the ship in
-  *ship* axes, so pitching the nose up swings it down: 10° puts it at ground
+  _ship_ axes, so pitching the nose up swings it down: 10° puts it at ground
   level and 40° puts it 7 m under. Underground, the near terrain vanishes to
   backface culling, stars show through the crust and the far terrain reads as a
   second band of land above the hole — it looks like broken geometry and it is a
@@ -319,7 +319,7 @@ expensively.
   hoists every intermediate to a function-scope `var`; Metal removes the
   difference.
 - **HDR output is one constructor parameter.** `WebGPURenderer({ outputType:
-  HalfFloatType })` sets both the `rgba16float` canvas format and
+HalfFloatType })` sets both the `rgba16float` canvas format and
   `toneMapping: { mode: 'extended' }`. Setting `outputColorSpace` alone does
   nothing — `ColorManagement.getToneMappingMode()` has no caller in three r182.
 - **`(dynamic-range: high)` is not a display test.** Chrome and Safari report true
@@ -337,7 +337,7 @@ expensively.
   git-lfs pointers, so a `raw/` fetch silently returns 133 bytes of pointer text
   instead of data. Use the `media/` path and assert on the row count.
 - **The Gamepad API caps at 16 axes / 32 buttons**, and on macOS Chromium indexes
-  buttons by HID usage and *silently drops* any usage above 32. WebHID has no such
+  buttons by HID usage and _silently drops_ any usage above 32. WebHID has no such
   cap but exists only in Chromium.
 
 ## The horizon gap (resolved 20 Aug 2026 — it was the triangle winding)
@@ -368,21 +368,21 @@ there until the quadtree can do better. The measurements below are kept because
 they are correct and the next milestone needs them — all from `s:SOL/b:0`,
 landed at 0.35, −1.1:
 
-| Quantity | Value |
-|---|---|
-| Body radius | 2,864,333 m |
-| `surface.maxElevation` (= `relief`) | 11,133 m |
-| Datum sphere drawn radius (`radius − relief`) | 2,853,200 m |
-| Camera height above that sphere, standing on the ground | 11,436 m |
-| Sphere's limb, below the horizontal | **5.121°** (≈ 64 px at 65° FOV / 812 px) |
-| Streamed terrain, edge to edge | 5.2 km (3×3 patches at level 12) |
-| Farthest terrain vertex from the camera | 4.3 km |
+| Quantity                                                | Value                                    |
+| ------------------------------------------------------- | ---------------------------------------- |
+| Body radius                                             | 2,864,333 m                              |
+| `surface.maxElevation` (= `relief`)                     | 11,133 m                                 |
+| Datum sphere drawn radius (`radius − relief`)           | 2,853,200 m                              |
+| Camera height above that sphere, standing on the ground | 11,436 m                                 |
+| Sphere's limb, below the horizontal                     | **5.121°** (≈ 64 px at 65° FOV / 812 px) |
+| Streamed terrain, edge to edge                          | 5.2 km (3×3 patches at level 12)         |
+| Farthest terrain vertex from the camera                 | 4.3 km                                   |
 
 So the ground you stand on is a 5 km mesa floating 11 km above a featureless
 sphere. From the ground the mesa now hides the sphere entirely; from altitude
 the wedge of sky between the mesa's edge and the sphere's limb reappears. The
 sink is deliberate — `scene.ts` explains that a sphere at the datum hides every
-valley on the planet — and it is the *right* call from orbit and the wrong one
+valley on the planet — and it is the _right_ call from orbit and the wrong one
 near the ground.
 
 Approaches considered and not taken for that remaining seam, with the
@@ -412,7 +412,7 @@ output resolved on a display reporting `dynamic-range: high`, 60–70 fps in orb
 on the surface and on approach, zero GPU validation errors.
 
 What is genuinely new rather than ported: a capability probe and the three-state
-HDR override `docs/design/art.md` calls mandatory; a tone curve that *is* stock
+HDR override `docs/design/art.md` calls mandatory; a tone curve that _is_ stock
 ACES at headroom 1 and lifts only above the shoulder beyond it; an analytic
 atmosphere with a real path integral; and a star field of instanced sprites.
 
@@ -422,7 +422,7 @@ atmosphere with a real path integral; and a star field of instanced sprites.
   `Points` object under the WebGPU backend — every point renders at one pixel —
   and honoured on the WebGL fallback. The star field is a `Sprite` with an
   instanced position attribute and `Sprite.count` for exactly this reason. A bug
-  visible only on the *primary* backend is the worst shape a rendering bug has.
+  visible only on the _primary_ backend is the worst shape a rendering bug has.
 - **A `vec3` clamped against `float` bounds renders black, silently.**
   `clamp(graded, 0, headroomUniform)` generated a WGSL `clamp` whose arguments did
   not agree on a type: no warning, no exception, no console output, an entirely
@@ -447,7 +447,7 @@ atmosphere with a real path integral; and a star field of instanced sprites.
 ### And one instrument that lies
 
 R3F sets `outputColorSpace` and `toneMapping` itself, in `configure()`, which runs
-*after* the async `gl` factory resolves — so it lands on top of the custom tone
+_after_ the async `gl` factory resolves — so it lands on top of the custom tone
 curve and reverts the renderer to stock ACES with its clamp to [0, 1]. Invisible
 on the sRGB path; on the extended path it discards the entire range the migration
 exists for. `commitToneCurve` in `onCreated` puts it back.
@@ -461,8 +461,8 @@ exactly the same speed and every tick above it was counted into `droppedTicks`
 and never shown. The cap had been there since the clock was written.
 
 The mistake was one budget doing two jobs. Eight ticks is the right guard against
-a *stalled* frame — a backgrounded tab returning after a minute must not try to
-run 3,840 ticks — and the wrong one for a *deliberate* frame, and the clock could
+a _stalled_ frame — a backgrounded tab returning after a minute must not try to
+run 3,840 ticks — and the wrong one for a _deliberate_ frame, and the clock could
 not tell the difference. The budget now scales with the requested time scale,
 bounded by `MAX_WARP_STEPS = 2048`, so 1× behaves exactly as it always did and
 warp gets what it asks for up to a ceiling. Measured after: 1×, 5×, 25×, 100× and
@@ -504,7 +504,7 @@ calls; 66–74 MB heap.
   session, reporting `starting…` for a renderer that had been live for minutes.
   `'use no memo'` is the documented opt-out and those three components carry it.
   This will happen again to anything that renders live mutable state.
-- **A frame *period* is not a frame *budget*.** The budget is 16.6 ms of work;
+- **A frame _period_ is not a frame _budget_.** The budget is 16.6 ms of work;
   the plot samples the interval between animation frames, and on a vsynced
   display that interval is pinned near 16.67 ms no matter how little work
   happened. Colouring the plot on the budget alone marked a comfortable 60 fps as

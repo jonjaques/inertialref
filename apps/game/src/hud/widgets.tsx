@@ -34,18 +34,36 @@ export function Section({
       >
         <span className="w-2 text-slate-500">{open ? '▾' : '▸'}</span>
         <span>{title}</span>
-        {trailing !== undefined && <span className="ml-auto normal-case tracking-normal text-slate-500">{trailing}</span>}
+        {trailing !== undefined && (
+          <span className="ml-auto normal-case tracking-normal text-slate-500">
+            {trailing}
+          </span>
+        )}
       </button>
       {open && <div className="mt-1">{children}</div>}
     </div>
   )
 }
 
-export function Row({ label, value, wrap = false }: { label: string; value: string; wrap?: boolean }) {
+export function Row({
+  label,
+  value,
+  wrap = false,
+}: {
+  label: string
+  value: string
+  wrap?: boolean
+}) {
   return (
     <div className="flex justify-between gap-3">
       <span className="shrink-0 text-slate-500">{label}</span>
-      <span className={wrap ? 'break-all text-right text-slate-300' : 'truncate text-right text-slate-300'}>
+      <span
+        className={
+          wrap
+            ? 'break-all text-right text-slate-300'
+            : 'truncate text-right text-slate-300'
+        }
+      >
         {value}
       </span>
     </div>

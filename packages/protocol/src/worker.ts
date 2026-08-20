@@ -1,5 +1,11 @@
 import { ok } from '@inertialref/shared'
-import { decodeInteger, decodeLiteral, decodeObject, decodeString, type Decoder } from './codec.ts'
+import {
+  decodeInteger,
+  decodeLiteral,
+  decodeObject,
+  decodeString,
+  type Decoder,
+} from './codec.ts'
 
 /*
  * Worker protocol.
@@ -70,6 +76,7 @@ export const decodeWorkerRequest: Decoder<WorkerRequest> = decodeObject({
   payload: (value) => ok(value),
 })
 
-
 export const isWorkerCancel = (message: unknown): message is WorkerCancel =>
-  typeof message === 'object' && message !== null && (message as { kind?: unknown }).kind === 'cancel'
+  typeof message === 'object' &&
+  message !== null &&
+  (message as { kind?: unknown }).kind === 'cancel'

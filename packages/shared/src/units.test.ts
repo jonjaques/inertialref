@@ -15,7 +15,10 @@ import {
 describe('units', () => {
   it('round-trips presentation conversions', () => {
     expect(auToMeters(metersToAu(1.234e12))).toBeCloseTo(1.234e12, 3)
-    expect(parsecsToMeters(metersToParsecs(4.2 * LIGHT_YEAR))).toBeCloseTo(4.2 * LIGHT_YEAR, 3)
+    expect(parsecsToMeters(metersToParsecs(4.2 * LIGHT_YEAR))).toBeCloseTo(
+      4.2 * LIGHT_YEAR,
+      3,
+    )
   })
 
   it('matches published constant relationships', () => {

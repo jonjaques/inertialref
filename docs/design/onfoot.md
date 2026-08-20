@@ -15,13 +15,13 @@ inventory, and the inside of a ship.
 
 ## The reference set
 
-| Game | What we take |
-|---|---|
-| **Hardspace: Shipbreaker** | First-person work as the verb. Tools, not weapons. Physical objects with mass that hurt you. |
-| **Alien: Isolation** | Tension from an environment that is indifferent rather than hostile. Very few threats, each one total. |
-| **Deliver Us The Moon** | Vacuum, oxygen, and the pacing of moving through a dead structure. |
-| **Outer Wilds** | Curiosity as the only objective. Nothing is gated; understanding is the reward. |
-| **Elite: Odyssey** | What to avoid — an on-foot layer built as a shooter first, in a game whose players wanted a survey layer. |
+| Game                       | What we take                                                                                              |
+| -------------------------- | --------------------------------------------------------------------------------------------------------- |
+| **Hardspace: Shipbreaker** | First-person work as the verb. Tools, not weapons. Physical objects with mass that hurt you.              |
+| **Alien: Isolation**       | Tension from an environment that is indifferent rather than hostile. Very few threats, each one total.    |
+| **Deliver Us The Moon**    | Vacuum, oxygen, and the pacing of moving through a dead structure.                                        |
+| **Outer Wilds**            | Curiosity as the only objective. Nothing is gated; understanding is the reward.                           |
+| **Elite: Odyssey**         | What to avoid — an on-foot layer built as a shooter first, in a game whose players wanted a survey layer. |
 
 ---
 
@@ -40,16 +40,16 @@ no skills and no levels; there is a suit with modules and five gauges.
 └────────────────────────────────────────────────────────────────┘
 ```
 
-| Gauge | Depletes from | Refills from | Failure |
-|---|---|---|---|
-| **Oxygen** | Time, exertion, breach | Ship, station, breathable atmosphere | Unconsciousness → death, ~90 s |
-| **Power** | Life support, lights, tools, thrusters | Ship, station, solar in-system | Everything else stops working |
-| **Thermal** | Ambient extremes, stellar exposure, no shade | Time in tolerance, ship | Integrity loss, then death |
+| Gauge         | Depletes from                                       | Refills from                               | Failure                                            |
+| ------------- | --------------------------------------------------- | ------------------------------------------ | -------------------------------------------------- |
+| **Oxygen**    | Time, exertion, breach                              | Ship, station, breathable atmosphere       | Unconsciousness → death, ~90 s                     |
+| **Power**     | Life support, lights, tools, thrusters              | Ship, station, solar in-system             | Everything else stops working                      |
+| **Thermal**   | Ambient extremes, stellar exposure, no shade        | Time in tolerance, ship                    | Integrity loss, then death                         |
 | **Radiation** | Stellar flares, unshielded remnants, some anomalies | Does not refill — cumulative per excursion | Forced return; damage persists to end of excursion |
-| **Integrity** | Falls, impacts, thrown objects, weapons, heat | Repair at ship or station only | Breach: oxygen dumps fast |
+| **Integrity** | Falls, impacts, thrown objects, weapons, heat       | Repair at ship or station only             | Breach: oxygen dumps fast                          |
 
 **Radiation is the only one that does not refill**, which makes it the excursion
-clock — the thing that says *you have been out here long enough*. It is what
+clock — the thing that says _you have been out here long enough_. It is what
 makes a walk on an unshielded world near an active star feel different from a
 walk on a quiet one, using real stellar data to set the rate.
 
@@ -59,14 +59,14 @@ Same [size-and-grade system as ship modules](ships.md#size-and-grade), same
 data-unlocked acquisition, same D-is-best-for-explorers tension — a light suit
 lets you carry more sample mass.
 
-| Slot | Options |
-|---|---|
-| **Life support** | Tank capacity vs mass; rebreather efficiency |
-| **Thermal** | Insulation vs heat rejection; you cannot have both |
-| **Shielding** | Radiation attenuation; heavy |
-| **Mobility** | EVA thruster ΔV; jump assist; magnetic boots |
-| **Tools** (2) | Sampler, cutter, scanner, tether, lamp |
-| **Utility** | Cargo rack, repair kit, beacon |
+| Slot             | Options                                            |
+| ---------------- | -------------------------------------------------- |
+| **Life support** | Tank capacity vs mass; rebreather efficiency       |
+| **Thermal**      | Insulation vs heat rejection; you cannot have both |
+| **Shielding**    | Radiation attenuation; heavy                       |
+| **Mobility**     | EVA thruster ΔV; jump assist; magnetic boots       |
+| **Tools** (2)    | Sampler, cutter, scanner, tether, lamp             |
+| **Utility**      | Cargo rack, repair kit, beacon                     |
 
 ---
 
@@ -76,13 +76,13 @@ lets you carry more sample mass.
 super-Earth at 2.3 g, and a station at 0 g are three genuinely different
 locomotion problems, and the design leans into that rather than normalising it.
 
-| Environment | Surface gravity | How it plays |
-|---|---|---|
-| **Micro-g** (< 0.05 g) | Asteroids, small moons | Ballistic. Every push is a commitment. Magnetic boots or tether or you leave. |
-| **Low** (0.05 – 0.4 g) | Most moons, Mars-likes | Long float-y strides. Falls are slow and survivable. Jumping is a mode of travel. |
-| **Standard** (0.4 – 1.3 g) | Earth-likes | Conventional. The baseline the controls are tuned for. |
-| **High** (1.3 – 2.5 g) | Super-Earths | Slow, heavy, expensive. Sprint is short. A fall is serious. |
-| **Extreme** (> 2.5 g) | Rare | Not walkable. Suit warns and refuses egress. |
+| Environment                | Surface gravity        | How it plays                                                                      |
+| -------------------------- | ---------------------- | --------------------------------------------------------------------------------- |
+| **Micro-g** (< 0.05 g)     | Asteroids, small moons | Ballistic. Every push is a commitment. Magnetic boots or tether or you leave.     |
+| **Low** (0.05 – 0.4 g)     | Most moons, Mars-likes | Long float-y strides. Falls are slow and survivable. Jumping is a mode of travel. |
+| **Standard** (0.4 – 1.3 g) | Earth-likes            | Conventional. The baseline the controls are tuned for.                            |
+| **High** (1.3 – 2.5 g)     | Super-Earths           | Slow, heavy, expensive. Sprint is short. A fall is serious.                       |
+| **Extreme** (> 2.5 g)      | Rare                   | Not walkable. Suit warns and refuses egress.                                      |
 
 **Technical note.** The player, like a landed ship, attaches kinematically to a
 **rotating surface frame** rather than being integrated in it — the same approach
@@ -90,20 +90,20 @@ locomotion problems, and the design leans into that rather than normalising it.
 frame without Coriolis and centrifugal terms is simply wrong, and adding them is
 a lot of subtle code for one case. The
 [roadmap](../roadmap.md#content-the-rest-of-the-vision) names this exactly:
-*"needs a character controller on a surface frame."*
+_"needs a character controller on a surface frame."_
 
-| Parameter | Standard g | Notes |
-|---|---|---|
-| Walk | 1.4 m/s | Deliberately slow; this is a suit, not a soldier |
-| Run | 3.8 m/s | Costs oxygen at 2.2× |
-| Jump | 0.45 m | Scales with `1/g` |
-| EVA thruster ΔV | 42 m/s total | Rechargeable at the ship only. **This is the scariest number in the game.** |
-| Fall damage onset | 4.5 m/s impact | Scales with suit mass |
+| Parameter         | Standard g     | Notes                                                                       |
+| ----------------- | -------------- | --------------------------------------------------------------------------- |
+| Walk              | 1.4 m/s        | Deliberately slow; this is a suit, not a soldier                            |
+| Run               | 3.8 m/s        | Costs oxygen at 2.2×                                                        |
+| Jump              | 0.45 m         | Scales with `1/g`                                                           |
+| EVA thruster ΔV   | 42 m/s total   | Rechargeable at the ship only. **This is the scariest number in the game.** |
+| Fall damage onset | 4.5 m/s impact | Scales with suit mass                                                       |
 
 > 🎮 Designer's Note: EVA thruster ΔV as a hard, non-regenerating budget is the
 > single mechanic that will produce the game's best stories. Forty-two metres per
 > second, spent, is a person drifting away from their ship. It should never be
-> made forgiving. It should be made *legible* — a large, always-visible number,
+> made forgiving. It should be made _legible_ — a large, always-visible number,
 > and a predicted-trajectory line while thrusting.
 
 ---
@@ -114,31 +114,31 @@ Physical, diegetic, and always through hands.
 [Pillar 4](charter.md#pillar-4--you-are-one-person) means there is no inventory
 screen that pauses the world and no context menu.
 
-| Verb | Input | Notes |
-|---|---|---|
-| **Look at** | Crosshair proximity | Object name and a one-line readout appear on the HUD |
-| **Pick up** | Hold `E` | Object is held in front of you, physically, with mass |
-| **Throw** | Release with movement | Real momentum; in low g this is locomotion |
-| **Stow** | `Q` while held | Into the suit rack, if mass allows |
-| **Use** | `F` | Contextual: switch, hatch, terminal, sampler |
-| **Tether** | Tool | Attach to a surface; the anti-drift answer to EVA |
-| **Sample** | Tool, hold | The ground-truth verb; 6 s and a physical core |
+| Verb        | Input                 | Notes                                                 |
+| ----------- | --------------------- | ----------------------------------------------------- |
+| **Look at** | Crosshair proximity   | Object name and a one-line readout appear on the HUD  |
+| **Pick up** | Hold `E`              | Object is held in front of you, physically, with mass |
+| **Throw**   | Release with movement | Real momentum; in low g this is locomotion            |
+| **Stow**    | `Q` while held        | Into the suit rack, if mass allows                    |
+| **Use**     | `F`                   | Contextual: switch, hatch, terminal, sampler          |
+| **Tether**  | Tool                  | Attach to a surface; the anti-drift answer to EVA     |
+| **Sample**  | Tool, hold            | The ground-truth verb; 6 s and a physical core        |
 
 **Mass is real.** A sample core weighs something, and what you can carry depends
 on suit grade and local gravity. On a 0.16 g moon you can carry six cores; on a
 2 g world, one. That is not an inventory rule, it is the physics already in the
-engine, and it means *where you are* determines *how much you can take*.
+engine, and it means _where you are_ determines _how much you can take_.
 
 ### Inventory
 
 A **rack**, not a grid. Six slots, mass-limited, visible on the suit.
 
-| Rule | Why |
-|---|---|
-| Mass-limited, not slot-limited | Slots are an abstraction; mass is already simulated |
-| No pause | Pillar 4. Swapping tools happens in real time, and in a hazard that costs you |
-| Ship is the depot | The ship holds cargo. The suit holds what you are working with. |
-| Dropped items persist | They are `placed` mutations — the [roadmap](../roadmap.md#persistent-mutations) names this as already-working for the ship |
+| Rule                           | Why                                                                                                                        |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| Mass-limited, not slot-limited | Slots are an abstraction; mass is already simulated                                                                        |
+| No pause                       | Pillar 4. Swapping tools happens in real time, and in a hazard that costs you                                              |
+| Ship is the depot              | The ship holds cargo. The suit holds what you are working with.                                                            |
+| Dropped items persist          | They are `placed` mutations — the [roadmap](../roadmap.md#persistent-mutations) names this as already-working for the ship |
 
 ---
 
@@ -161,15 +161,15 @@ modules, and greebling, laid out deterministically from the hull id. One person
 cannot author twenty ship interiors; one person can author twelve room modules
 and a layout grammar.
 
-| Room module | Function |
-|---|---|
-| Cockpit | The seat. The only place the ship flies from. |
-| Spine corridor | Connective; length varies by hull |
-| Cargo bay | Where cargo physically is, visibly |
-| Fabrication bay | Module refit, repair, sample processing |
-| Quarters | The save point that is not a save point — you save anywhere |
-| Airlock | The pressure boundary; 6 s cycle |
-| Hangar | *Herschel* only; a smaller craft inside a larger one |
+| Room module     | Function                                                    |
+| --------------- | ----------------------------------------------------------- |
+| Cockpit         | The seat. The only place the ship flies from.               |
+| Spine corridor  | Connective; length varies by hull                           |
+| Cargo bay       | Where cargo physically is, visibly                          |
+| Fabrication bay | Module refit, repair, sample processing                     |
+| Quarters        | The save point that is not a save point — you save anywhere |
+| Airlock         | The pressure boundary; 6 s cycle                            |
+| Hangar          | _Herschel_ only; a smaller craft inside a larger one        |
 
 ### During a burn
 
@@ -177,13 +177,13 @@ and a layout grammar.
 where [the travel model](flight.md#the-burn) and the on-foot layer meet, and it
 is one of the better consequences of the v0.2 redesign.
 
-| Felt acceleration | What it is like inside |
-|---|---|
-| 0 g — coast, or **the flip** | Freefall. Handholds, and everything unsecured is floating. |
-| 0.1–1.4 g — transit | Normal. There is a floor and it is aft. You can work. |
-| 1.5–3 g — hard transit, or manoeuvre | Heavy. Movement is slow and expensive; the suit warns. |
-| 3–5 g — combat manoeuvring | **Secure yourself or be injured.** Unsecured objects become hazards. |
-| > 5 g | Crew stations only. Egress from the seat is refused. |
+| Felt acceleration                    | What it is like inside                                               |
+| ------------------------------------ | -------------------------------------------------------------------- |
+| 0 g — coast, or **the flip**         | Freefall. Handholds, and everything unsecured is floating.           |
+| 0.1–1.4 g — transit                  | Normal. There is a floor and it is aft. You can work.                |
+| 1.5–3 g — hard transit, or manoeuvre | Heavy. Movement is slow and expensive; the suit warns.               |
+| 3–5 g — combat manoeuvring           | **Secure yourself or be injured.** Unsecured objects become hazards. |
+| > 5 g                                | Crew stations only. Egress from the seat is refused.                 |
 
 Two consequences worth having. **"Down" is the direction the drive is not** — so
 during a burn the ship's floor is aft, and after the flip it is forward, which
@@ -204,11 +204,11 @@ Buildings on planets. Enter and exit with no transition, same as ships.
 
 Three kinds, in the order they should be built:
 
-| Kind | Purpose | Generation |
-|---|---|---|
-| **Outposts** | Refuel, refit, bank data. The social hub in online modes. | Assembled from parts; placed at generated sites |
-| **Installations** | Automated, uninhabited, resource or research | Fully generated |
-| **Wrecks** ⬜ | The setting's only narrative surface — see [world](world.md) | Generated with authored fragments |
+| Kind              | Purpose                                                      | Generation                                      |
+| ----------------- | ------------------------------------------------------------ | ----------------------------------------------- |
+| **Outposts**      | Refuel, refit, bank data. The social hub in online modes.    | Assembled from parts; placed at generated sites |
+| **Installations** | Automated, uninhabited, resource or research                 | Fully generated                                 |
+| **Wrecks** ⬜     | The setting's only narrative surface — see [world](world.md) | Generated with authored fragments               |
 
 All three are the first real consumer of
 [persistent mutations](../roadmap.md#persistent-mutations), because a structure

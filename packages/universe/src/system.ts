@@ -16,7 +16,13 @@ import {
   SOLAR_MASS,
   SOLAR_RADIUS,
 } from '@inertialref/shared'
-import { algorithm, deriveSeed, manifest, Rng, type Seed } from '@inertialref/procedural'
+import {
+  algorithm,
+  deriveSeed,
+  manifest,
+  Rng,
+  type Seed,
+} from '@inertialref/procedural'
 import type { Atmosphere, OrbitalElements } from '@inertialref/physics'
 import { orbitalPeriod, sphereOfInfluence } from '@inertialref/physics'
 import type { UniverseVector } from '@inertialref/spatial'
@@ -114,7 +120,10 @@ const mu = (mass: Kilograms): Mu => GRAVITATIONAL_CONSTANT * mass
 
 function classify(spectralType: string): SpectralClass {
   const first = spectralType.charAt(0).toUpperCase()
-  return (['O', 'B', 'A', 'F', 'G', 'K', 'M'] as const).find((c) => c === first) ?? 'M'
+  return (
+    (['O', 'B', 'A', 'F', 'G', 'K', 'M'] as const).find((c) => c === first) ??
+    'M'
+  )
 }
 
 function makeStar(stub: SystemStub): Star {
@@ -137,7 +146,8 @@ function makeStar(stub: SystemStub): Star {
 }
 
 /** Water frost line: where volatiles survive, so where giants can form. */
-const frostLine = (luminosity: number): Meters => 2.7 * AU * Math.sqrt(luminosity / SOLAR_LUMINOSITY)
+const frostLine = (luminosity: number): Meters =>
+  2.7 * AU * Math.sqrt(luminosity / SOLAR_LUMINOSITY)
 
 const DENSITY: Readonly<Record<BodyKind, number>> = {
   rocky: 5_200,
@@ -150,9 +160,18 @@ const DENSITY: Readonly<Record<BodyKind, number>> = {
 const radiusFromMass = (mass: Kilograms, kind: BodyKind): Meters =>
   ((3 * mass) / (4 * Math.PI * (DENSITY[kind] ?? 3_000))) ** (1 / 3)
 
-function makeAtmosphere(rng: Rng, kind: BodyKind, radius: Meters, surfaceGravity: number): Atmosphere | null {
+function makeAtmosphere(
+  rng: Rng,
+  kind: BodyKind,
+  radius: Meters,
+  surfaceGravity: number,
+): Atmosphere | null {
   if (kind === 'gas-giant' || kind === 'ice-giant') {
-    return { surfaceDensity: rng.range(0.2, 1.6), scaleHeight: rng.range(20_000, 60_000), ceiling: radius * 0.06 }
+    return {
+      surfaceDensity: rng.range(0.2, 1.6),
+      scaleHeight: rng.range(20_000, 60_000),
+      ceiling: radius * 0.06,
+    }
   }
   // Small bodies cannot hold onto one; below ~2 m/s² of surface gravity the
   // exosphere escapes, which is why our Moon is bare and Titan is not.
@@ -165,15 +184,26 @@ function makeAtmosphere(rng: Rng, kind: BodyKind, radius: Meters, surfaceGravity
   }
 }
 
-function makeSurface(rng: Rng, seed: Seed, radius: Meters, kind: BodyKind, hasAtmosphere: boolean): SurfaceParameters {
-  const relief = kind === 'gas-giant' || kind === 'ice-giant' ? 0 : rng.range(0.0005, 0.004)
+function makeSurface(
+  rng: Rng,
+  seed: Seed,
+  radius: Meters,
+  kind: BodyKind,
+  hasAtmosphere: boolean,
+): SurfaceParameters {
+  const relief =
+    kind === 'gas-giant' || kind === 'ice-giant' ? 0 : rng.range(0.0005, 0.004)
   return {
     seed,
     maxElevation: radius * relief,
     roughness: rng.range(1.5, 6),
-    seaLevel: hasAtmosphere && kind !== 'gas-giant' && kind !== 'ice-giant' && rng.bool(0.4)
-      ? rng.range(0.15, 0.55)
-      : null,
+    seaLevel:
+      hasAtmosphere &&
+      kind !== 'gas-giant' &&
+      kind !== 'ice-giant' &&
+      rng.bool(0.4)
+        ? rng.range(0.15, 0.55)
+        : null,
   }
 }
 
@@ -192,7 +222,11 @@ function makeMoon(
   const rng = new Rng(seed)
   const address = bodyAddress(galaxy, system, [...parentPath, index])
 
-  const mass = rng.powerLaw(-1.6, 1e18, Math.max(2e18, Math.min(1.5e23, parentMass * 0.012)))
+  const mass = rng.powerLaw(
+    -1.6,
+    1e18,
+    Math.max(2e18, Math.min(1.5e23, parentMass * 0.012)),
+  )
   const radius = radiusFromMass(mass, 'moon')
   // Between a few parent radii and 40% of the sphere of influence. Inside that
   // lower bound is roughly the Roche limit; outside the upper bound the moon is
@@ -202,7 +236,8 @@ function makeMoon(
   const semiMajorAxis = rng.range(inner, outer)
   const bodyMu = mu(mass)
   const surfaceGravity = bodyMu / (radius * radius)
-  const atmosphere = radius > 1.2e6 ? makeAtmosphere(rng, 'moon', radius, surfaceGravity) : null
+  const atmosphere =
+    radius > 1.2e6 ? makeAtmosphere(rng, 'moon', radius, surfaceGravity) : null
 
   const elements: OrbitalElements = {
     semiMajorAxis,
@@ -230,7 +265,13 @@ function makeMoon(
       : rng.range(0.4, 30) * SECONDS_PER_DAY,
     axialTilt: Math.abs(rng.gaussian(0, 0.15)),
     atmosphere,
-    surface: makeSurface(rng, deriveSeed(seed, 'surface'), radius, 'moon', atmosphere !== null),
+    surface: makeSurface(
+      rng,
+      deriveSeed(seed, 'surface'),
+      radius,
+      'moon',
+      atmosphere !== null,
+    ),
     sphereOfInfluence: sphereOfInfluence(semiMajorAxis, mass, parentMass),
     moons: [],
   }
@@ -241,11 +282,27 @@ function makeMoon(
  * part of the sphere of influence where an orbit stays stable over the long
  * term (~40% of the SOI is the usual rule of thumb for prograde satellites).
  */
-function moonOrbitBand(parentRadius: Meters, parentSoi: Meters): readonly [Meters, Meters] {
+function moonOrbitBand(
+  parentRadius: Meters,
+  parentSoi: Meters,
+): readonly [Meters, Meters] {
   return [parentRadius * 2.5, parentSoi * 0.4]
 }
 
-const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII']
+const ROMAN = [
+  'I',
+  'II',
+  'III',
+  'IV',
+  'V',
+  'VI',
+  'VII',
+  'VIII',
+  'IX',
+  'X',
+  'XI',
+  'XII',
+]
 const romanNumeral = (n: number): string => ROMAN[n - 1] ?? String(n)
 /** Moons take their planet's name and a letter, as real satellites do. */
 const MOON_SUFFIX = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
@@ -309,7 +366,9 @@ function makePlanet(
       : rng.int(0, radius > EARTH_RADIUS ? 3 : 1)
   const moons: Body[] = []
   for (let m = 0; m < moonCount; m += 1) {
-    moons.push(makeMoon(seed, name, mass, radius, soi, m, galaxy, system, [index]))
+    moons.push(
+      makeMoon(seed, name, mass, radius, soi, m, galaxy, system, [index]),
+    )
   }
 
   return {
@@ -322,10 +381,17 @@ function makePlanet(
     mu: bodyMu,
     elements,
     orbitalPeriod: orbitalPeriod(star.mu, semiMajorAxis),
-    rotationPeriod: rng.range(0.25, 3) * SECONDS_PER_DAY * (rng.bool(0.06) ? -1 : 1),
+    rotationPeriod:
+      rng.range(0.25, 3) * SECONDS_PER_DAY * (rng.bool(0.06) ? -1 : 1),
     axialTilt: Math.abs(rng.gaussian(0, 0.35)),
     atmosphere,
-    surface: makeSurface(rng, deriveSeed(seed, 'surface'), radius, kind, atmosphere !== null),
+    surface: makeSurface(
+      rng,
+      deriveSeed(seed, 'surface'),
+      radius,
+      kind,
+      atmosphere !== null,
+    ),
     sphereOfInfluence: soi,
     moons,
   }
@@ -339,12 +405,18 @@ function makePlanet(
  * each planet's *properties* come from its own derived seed, so the spacing and
  * the contents are independent.
  */
-export function generateSystem(rootSeed: Seed, galaxy: GalaxyId, stub: SystemStub): StarSystem {
+export function generateSystem(
+  rootSeed: Seed,
+  galaxy: GalaxyId,
+  stub: SystemStub,
+): StarSystem {
   const seed = systemSeedOf(rootSeed, galaxy, stub.id)
   const star = makeStar(stub)
   const layoutRng = new Rng(deriveSeed(seed, 'layout'))
 
-  const planetCount = layoutRng.weightedIndex([6, 9, 12, 14, 14, 12, 9, 7, 5, 3])
+  const planetCount = layoutRng.weightedIndex([
+    6, 9, 12, 14, 14, 12, 9, 7, 5, 3,
+  ])
   const luminosityScale = Math.sqrt(star.luminosity / SOLAR_LUMINOSITY)
   let axis = layoutRng.range(0.06, 0.5) * AU * luminosityScale
   const planets: Body[] = []
@@ -373,7 +445,10 @@ export function* walkBodies(system: StarSystem): Generator<Body> {
   }
 }
 
-export function findBody(system: StarSystem, path: readonly number[]): Body | undefined {
+export function findBody(
+  system: StarSystem,
+  path: readonly number[],
+): Body | undefined {
   const first = path[0]
   if (first === undefined) return undefined
   let body = system.planets[first]
@@ -394,7 +469,8 @@ export function findBody(system: StarSystem, path: readonly number[]): Body | un
  * which is how the client and the headless runner came to disagree about the
  * spawn distance without anything noticing.
  */
-export const isLandable = (body: Body): boolean => body.kind === 'rocky' && body.radius > 1e6
+export const isLandable = (body: Body): boolean =>
+  body.kind === 'rocky' && body.radius > 1e6
 
 /** Habitable-zone check, used by the harness and the star map to pick targets. */
 export function insolation(star: Star, semiMajorAxis: Meters): number {

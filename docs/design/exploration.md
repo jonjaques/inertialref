@@ -47,14 +47,14 @@ genre: it costs nothing, takes no skill, and produces a complete change in what
 the player knows. It converts arrival from "look around" into "read the map and
 choose", which is where the interesting decision is. Taken directly, with the
 addition that provenance is visible immediately — so a player arriving at a
-system with three *confirmed* planets knows instantly that they are somewhere
+system with three _confirmed_ planets knows instantly that they are somewhere
 astronomically real.
 
-| Parameter | Value |
-|---|---|
-| Range | Entire system |
-| Duration | ~4 s reveal, non-blocking |
-| Cost | None |
+| Parameter  | Value                                 |
+| ---------- | ------------------------------------- |
+| Range      | Entire system                         |
+| Duration   | ~4 s reveal, non-blocking             |
+| Cost       | None                                  |
 | Data yield | Small, flat: 1 unit per body revealed |
 
 ### Tier 2 — Detail scan
@@ -64,24 +64,24 @@ astronomically real.
 **System.** Requires proximity — within **0.35 × body radius above the surface**,
 scaled by scanner grade — and alignment within 20°. Yields mass, radius, density,
 rotation, axial tilt, atmospheric composition and pressure, surface temperature
-range, and landability. This is the scan that converts a *projection* into a
-*surveyed* body and is the atomic unit of discovery credit.
+range, and landability. This is the scan that converts a _projection_ into a
+_surveyed_ body and is the atomic unit of discovery credit.
 
 **Feedback.** A progress ring on the target reticle, a rising harmonic as it
 fills, and a hard, satisfying resolve when it completes: the body's dashed outline
 snaps solid, the panel fills in, and the Almanac entry writes itself with a
 visible timestamp.
 
-| Parameter | Class 1E | Class 3A | Notes |
-|---|---|---|---|
-| Required altitude | 0.6 R | 0.20 R | Better scanners work further out |
-| Dwell time | 45 s | 22 s | |
-| Alignment tolerance | 12° | 25° | |
-| Power draw | PAY bank | | Cannot scan with PAY starved |
+| Parameter           | Class 1E | Class 3A | Notes                            |
+| ------------------- | -------- | -------- | -------------------------------- |
+| Required altitude   | 0.6 R    | 0.20 R   | Better scanners work further out |
+| Dwell time          | 45 s     | 22 s     |                                  |
+| Alignment tolerance | 12°      | 25°      |                                  |
+| Power draw          | PAY bank |          | Cannot scan with PAY starved     |
 
 > 🎮 Designer's Note: The dwell time is doing emotional work, not gating work.
 > Twenty-two seconds of holding a planet in the reticle while the ring fills is
-> long enough to *look at the planet*, which is the thing we want. Shortening it
+> long enough to _look at the planet_, which is the thing we want. Shortening it
 > to five seconds would make the game faster and worse.
 
 ### Tier 3 — Surface survey
@@ -99,12 +99,12 @@ go.
 momentum, visibly impacting. Coverage fills in on the body as a growing patchwork,
 and the player can watch it from orbit.
 
-| Parameter | Value | Notes |
-|---|---|---|
-| Orbit required | ≤ 3 R, eccentricity < 0.3 | Enforced; the survey aborts if you leave |
-| Probes for full coverage | 8–20, by body radius | The mini-game is placing them well |
-| Duration | 2–4 min | Runs while you do other things |
-| Anomalies per body | 0–6 | From terrain seed; rarer on dull worlds |
+| Parameter                | Value                     | Notes                                    |
+| ------------------------ | ------------------------- | ---------------------------------------- |
+| Orbit required           | ≤ 3 R, eccentricity < 0.3 | Enforced; the survey aborts if you leave |
+| Probes for full coverage | 8–20, by body radius      | The mini-game is placing them well       |
+| Duration                 | 2–4 min                   | Runs while you do other things           |
+| Anomalies per body       | 0–6                       | From terrain seed; rarer on dull worlds  |
 
 **Resolved:** probes are aimable, and a one-key auto-distribute is always
 available at ~40% more probes. Skill is optional and rewarded rather than
@@ -214,14 +214,14 @@ It is **manufactured from banked survey data at a station**, which is what keeps
 [the one-resource rule](flight.md#fuel) intact: data is the resource, and a
 beacon is data spent in advance against a risk. Carrying one is a deliberate
 decision made before departure, not a routine, and using it is a decision made in
-the field. The default state of an expedition is still *no way out but home*.
+the field. The default state of an expedition is still _no way out but home_.
 
-| Parameter | Value |
-|---|---|
-| Cost | 1,200 units of banked data |
-| Carried | 1 by default; more occupy cargo space and therefore [jump range](flight.md#range) |
-| Value banked | 100% — it is a real transmitter, not a lossy compromise |
-| Consumed | Yes, entirely |
+| Parameter    | Value                                                                             |
+| ------------ | --------------------------------------------------------------------------------- |
+| Cost         | 1,200 units of banked data                                                        |
+| Carried      | 1 by default; more occupy cargo space and therefore [jump range](flight.md#range) |
+| Value banked | 100% — it is a real transmitter, not a lossy compromise                           |
+| Consumed     | Yes, entirely                                                                     |
 
 ---
 
@@ -229,7 +229,7 @@ the field. The default state of an expedition is still *no way out but home*.
 
 ### The one currency
 
-**Survey data**, measured in *units*. It is earned by scanning and spent on module
+**Survey data**, measured in _units_. It is earned by scanning and spent on module
 access. There is no second currency, no credits, no premium anything.
 
 ```
@@ -244,12 +244,12 @@ Where:
 
 Every term is doing deliberate work:
 
-| Term | Pushes the player toward |
-|---|---|
-| `base` | Interesting bodies over abundant ones |
-| `novelty` × 4.0 | The frontier, hard |
-| `completeness` | Going down rather than moving on — a fully ground-truthed world is worth 5× a detail scan |
-| `remoteness` | Outward, and it is capped so that distance alone is never the whole answer |
+| Term            | Pushes the player toward                                                                  |
+| --------------- | ----------------------------------------------------------------------------------------- |
+| `base`          | Interesting bodies over abundant ones                                                     |
+| `novelty` × 4.0 | The frontier, hard                                                                        |
+| `completeness`  | Going down rather than moving on — a fully ground-truthed world is worth 5× a detail scan |
+| `remoteness`    | Outward, and it is capped so that distance alone is never the whole answer                |
 
 **Worked example.** A previously undiscovered terrestrial world with an
 atmosphere, fully surveyed and walked on, 600 ly out:
@@ -259,15 +259,15 @@ the difference**, and every factor of it is a choice the player made.
 
 ### Faucets and sinks
 
-| | Source / drain | Rate |
-|---|---|---|
-| **Faucet** | Detail scans | ~20–800 units per body |
-| **Faucet** | Surface surveys | ×3 multiplier on the bodies surveyed |
-| **Faucet** | Ground truth samples | ×1.67 further multiplier |
-| **Faucet** | Commissions (optional) | 1.5× on requested categories |
-| **Sink** | Module access unlocks | 400 – 45,000 units, one-time |
-| **Sink** | Hull access unlocks | 8,000 – 220,000 units, one-time |
-| **Sink** | Module repair and refit | Small, recurring |
+|            | Source / drain          | Rate                                 |
+| ---------- | ----------------------- | ------------------------------------ |
+| **Faucet** | Detail scans            | ~20–800 units per body               |
+| **Faucet** | Surface surveys         | ×3 multiplier on the bodies surveyed |
+| **Faucet** | Ground truth samples    | ×1.67 further multiplier             |
+| **Faucet** | Commissions (optional)  | 1.5× on requested categories         |
+| **Sink**   | Module access unlocks   | 400 – 45,000 units, one-time         |
+| **Sink**   | Hull access unlocks     | 8,000 – 220,000 units, one-time      |
+| **Sink**   | Module repair and refit | Small, recurring                     |
 
 **There is no inflation problem, by construction.** Data is not held as a
 spendable balance that grows unbounded; **lifetime banked total** is what gates
@@ -284,9 +284,9 @@ and what Elite's long-term explorers actually do.
 
 ### Directed goals — Commissions
 
-Optional, standing requests from research institutions. *"Detail-scan five
-confirmed exoplanets under 2 M⊕"*, *"return ground samples from three worlds with
-liquid-water surface temperatures"*.
+Optional, standing requests from research institutions. _"Detail-scan five
+confirmed exoplanets under 2 M⊕"_, _"return ground samples from three worlds with
+liquid-water surface temperatures"_.
 
 They exist to give players who want a target a target, without ever gating
 anything behind them. They are generated from the **real** catalogue, so a
@@ -309,12 +309,12 @@ The thing that gives a landing a destination. Flagged by a
 [surface survey](#tier-3--surface-survey), seeded from the terrain seed, and
 resolvable only on foot.
 
-| Kind | What it is | Resolves to |
-|---|---|---|
-| **Geological** | Vents, geysers, crystalline formations, impact melt | Sample; high data value |
-| **Compositional** | An unexpected material signature | Sample; may unlock a module line |
-| **Structural** ⬜ | Something built | See [world](world.md) — the setting's only narrative hook |
-| **Biological** ⬜ | Something living | Deliberately rare and deliberately not answered yet |
+| Kind              | What it is                                          | Resolves to                                               |
+| ----------------- | --------------------------------------------------- | --------------------------------------------------------- |
+| **Geological**    | Vents, geysers, crystalline formations, impact melt | Sample; high data value                                   |
+| **Compositional** | An unexpected material signature                    | Sample; may unlock a module line                          |
+| **Structural** ⬜ | Something built                                     | See [world](world.md) — the setting's only narrative hook |
+| **Biological** ⬜ | Something living                                    | Deliberately rare and deliberately not answered yet       |
 
 Anomalies are the seam where this design meets the
 [roadmap's scatter and structure work](../roadmap.md#content-the-rest-of-the-vision),

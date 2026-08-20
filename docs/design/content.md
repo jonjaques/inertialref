@@ -1,8 +1,8 @@
 # Content
 
 What exists in the galaxy, in what quantity, and generated how — because with
-[one person and coding agents](charter.md#the-honest-constraints), *generated
-how* is the only question that determines whether it exists at all.
+[one person and coding agents](charter.md#the-honest-constraints), _generated
+how_ is the only question that determines whether it exists at all.
 
 ---
 
@@ -13,11 +13,11 @@ how* is the only question that determines whether it exists at all.
 
 Everything in this game is one of three things:
 
-| | What it is | How many can exist | Example |
-|---|---|---|---|
-| **Generated** | A pure function of seed and address | Unbounded | Planets, terrain, asteroids, ship variants |
-| **Observed** | Ingested from a real catalogue | As many as astronomy has found | Stars, confirmed exoplanets |
-| **Parts** | Hand-authored, assembled by generation | Tens, not thousands | Room modules, hull sections, weapon models, biome materials |
+|               | What it is                             | How many can exist             | Example                                                     |
+| ------------- | -------------------------------------- | ------------------------------ | ----------------------------------------------------------- |
+| **Generated** | A pure function of seed and address    | Unbounded                      | Planets, terrain, asteroids, ship variants                  |
+| **Observed**  | Ingested from a real catalogue         | As many as astronomy has found | Stars, confirmed exoplanets                                 |
+| **Parts**     | Hand-authored, assembled by generation | Tens, not thousands            | Room modules, hull sections, weapon models, biome materials |
 
 The third row is the entire art budget. Twelve room modules and a layout grammar
 produce every ship interior in the game; forty hull sections produce every ship.
@@ -32,21 +32,21 @@ problem.
 Mirrors [`docs/roadmap.md`](../roadmap.md#content-the-rest-of-the-vision), which
 is the engineering-facing view of this same table.
 
-| Thing | Status | Launch target | Notes |
-|---|---|---|---|
-| Galaxy, systems, stars | ✅ | Catalogue + procedural fill | 18 hand-entered stars today; wants the [ingest pipeline](galaxy.md#ingest-pipeline) |
-| Planets, moons | ✅ | Full | Deterministic from address |
-| Planetary terrain | 🟡 | Quadtree LOD, biomes, materials | The visible ceiling on everything — see [production](production.md) |
-| Ships | 🟡 | 6 hulls, ~60 modules | One debug ship today |
-| Rings | ⬜ | All giants that warrant them | A body property plus an instanced renderer |
-| Asteroids / belts | ⬜ | 2–4 belts per system where warranted | Wants a **population generator**: many small bodies from one cell seed, addressed as `o:` objects |
-| Star clusters, nebulae | ⬜ | Post-MVP | Density modulation in the galaxy generator + volumetric rendering |
-| Exotic remnants | ⬜ | Post-MVP | White dwarfs, neutron stars, black holes — a body kind; the hard part is rendering |
-| Vegetation, flora | ⬜ | Post-MVP | Region-seeded scatter; the `o:` address segment exists for it |
-| Rocks, surface scatter | ⬜ | **MVP** | Same mechanism, much easier, and it is what makes a surface a place |
-| Structures, outposts | ⬜ | 3 kinds, parts-assembled | First real consumer of [persistent mutations](../roadmap.md#persistent-mutations) |
-| Humanoids | ⬜ | Post-MVP | Needs a character controller on a surface frame |
-| Small physical objects | 🟡 | Samples, tools, debris | Debug cubes render at correct scale today; no interaction |
+| Thing                  | Status | Launch target                        | Notes                                                                                             |
+| ---------------------- | ------ | ------------------------------------ | ------------------------------------------------------------------------------------------------- |
+| Galaxy, systems, stars | ✅     | Catalogue + procedural fill          | 18 hand-entered stars today; wants the [ingest pipeline](galaxy.md#ingest-pipeline)               |
+| Planets, moons         | ✅     | Full                                 | Deterministic from address                                                                        |
+| Planetary terrain      | 🟡     | Quadtree LOD, biomes, materials      | The visible ceiling on everything — see [production](production.md)                               |
+| Ships                  | 🟡     | 6 hulls, ~60 modules                 | One debug ship today                                                                              |
+| Rings                  | ⬜     | All giants that warrant them         | A body property plus an instanced renderer                                                        |
+| Asteroids / belts      | ⬜     | 2–4 belts per system where warranted | Wants a **population generator**: many small bodies from one cell seed, addressed as `o:` objects |
+| Star clusters, nebulae | ⬜     | Post-MVP                             | Density modulation in the galaxy generator + volumetric rendering                                 |
+| Exotic remnants        | ⬜     | Post-MVP                             | White dwarfs, neutron stars, black holes — a body kind; the hard part is rendering                |
+| Vegetation, flora      | ⬜     | Post-MVP                             | Region-seeded scatter; the `o:` address segment exists for it                                     |
+| Rocks, surface scatter | ⬜     | **MVP**                              | Same mechanism, much easier, and it is what makes a surface a place                               |
+| Structures, outposts   | ⬜     | 3 kinds, parts-assembled             | First real consumer of [persistent mutations](../roadmap.md#persistent-mutations)                 |
+| Humanoids              | ⬜     | Post-MVP                             | Needs a character controller on a surface frame                                                   |
+| Small physical objects | 🟡     | Samples, tools, debris               | Debug cubes render at correct scale today; no interaction                                         |
 
 ---
 
@@ -55,17 +55,17 @@ is the engineering-facing view of this same table.
 ### Distribution
 
 Where the catalogue is silent, generation fills in — and it should fill in
-*plausibly*, which means the generator's statistics should look like the real
+_plausibly_, which means the generator's statistics should look like the real
 ones rather than like a designer's preferences.
 
-| Property | Target distribution | Real basis |
-|---|---|---|
-| Spectral class | M ≫ K > G > F > A > B > O | The stellar initial mass function [Source: Chabrier, *Galactic Stellar and Substellar IMF*, 2003] |
-| Planets per system | 0–12, median ~3 | Kepler occurrence rates `[Assumption: approximate; validate against current occurrence-rate literature at ingest]` |
-| Rocky : giant ratio | ~2 : 1 within 10 AU | |
-| Moons per giant | 4–60, log-distributed | Sol's giants as the reference |
-| Landable fraction | ~55% of solid bodies | Airless and thin-atmosphere worlds; thick-atmosphere worlds are not landable in the MVP |
-| Systems with belts | ~40% | |
+| Property            | Target distribution       | Real basis                                                                                                         |
+| ------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Spectral class      | M ≫ K > G > F > A > B > O | The stellar initial mass function [Source: Chabrier, _Galactic Stellar and Substellar IMF_, 2003]                  |
+| Planets per system  | 0–12, median ~3           | Kepler occurrence rates `[Assumption: approximate; validate against current occurrence-rate literature at ingest]` |
+| Rocky : giant ratio | ~2 : 1 within 10 AU       |                                                                                                                    |
+| Moons per giant     | 4–60, log-distributed     | Sol's giants as the reference                                                                                      |
+| Landable fraction   | ~55% of solid bodies      | Airless and thin-atmosphere worlds; thick-atmosphere worlds are not landable in the MVP                            |
+| Systems with belts  | ~40%                      |                                                                                                                    |
 
 **The generator already does the astrophysics honestly** — main-sequence
 mass–luminosity, a frost line that scales with luminosity, densities that separate
@@ -74,15 +74,15 @@ something better later is a change to one file. That is the right posture.
 
 ### Body kinds
 
-| Kind | Landable | Notes |
-|---|---|---|
-| Rocky | ✅ | The default. Terrain, no or thin atmosphere. |
-| Ice | ✅ | Terrain with an ice material set; often outer-system |
-| Gas giant | ❌ | Approachable, ring systems, moons. A destination without a surface. |
-| Ice giant | ❌ | |
-| Moon | ✅ | Anything orbiting a body rather than a star |
-| Asteroid ⬜ | ✅ | Micro-gravity; the most interesting on-foot environment in the game |
-| Exotic remnant ⬜ | ❌ | White dwarf, neutron star, black hole. Hazard and spectacle. |
+| Kind              | Landable | Notes                                                               |
+| ----------------- | -------- | ------------------------------------------------------------------- |
+| Rocky             | ✅       | The default. Terrain, no or thin atmosphere.                        |
+| Ice               | ✅       | Terrain with an ice material set; often outer-system                |
+| Gas giant         | ❌       | Approachable, ring systems, moons. A destination without a surface. |
+| Ice giant         | ❌       |                                                                     |
+| Moon              | ✅       | Anything orbiting a body rather than a star                         |
+| Asteroid ⬜       | ✅       | Micro-gravity; the most interesting on-foot environment in the game |
+| Exotic remnant ⬜ | ❌       | White dwarf, neutron star, black hole. Hazard and spectacle.        |
 
 ---
 
@@ -107,16 +107,16 @@ Derived, never authored. A biome is a **lookup from three values the generator
 already computes per vertex** — latitude, altitude, slope — plus body-level
 properties (temperature, atmosphere, water presence).
 
-| Biome | Conditions | Material set |
-|---|---|---|
-| Regolith | Airless, any latitude | Fine grey-brown dust, high-frequency crater noise |
-| Basalt plain | Airless or thin, low slope, low altitude | Dark, low roughness variance |
-| Highland | High altitude, high slope | Exposed rock, scree at the base of slopes |
-| Polar ice | High latitude, temperature below freezing | Bright, low roughness, wind-scour patterning |
-| Sand sea | Thin+ atmosphere, low slope, warm | Dune-scale noise, wind-aligned |
-| Salt flat | Thin+ atmosphere, low altitude, evaporite conditions | Bright, cracked, very low slope |
-| Tundra ⬜ | Atmosphere, cold, water | First biome with flora |
-| Temperate ⬜ | Atmosphere, moderate, water | Post-MVP |
+| Biome        | Conditions                                           | Material set                                      |
+| ------------ | ---------------------------------------------------- | ------------------------------------------------- |
+| Regolith     | Airless, any latitude                                | Fine grey-brown dust, high-frequency crater noise |
+| Basalt plain | Airless or thin, low slope, low altitude             | Dark, low roughness variance                      |
+| Highland     | High altitude, high slope                            | Exposed rock, scree at the base of slopes         |
+| Polar ice    | High latitude, temperature below freezing            | Bright, low roughness, wind-scour patterning      |
+| Sand sea     | Thin+ atmosphere, low slope, warm                    | Dune-scale noise, wind-aligned                    |
+| Salt flat    | Thin+ atmosphere, low altitude, evaporite conditions | Bright, cracked, very low slope                   |
+| Tundra ⬜    | Atmosphere, cold, water                              | First biome with flora                            |
+| Temperate ⬜ | Atmosphere, moderate, water                          | Post-MVP                                          |
 
 Eight biomes, six of them airless or near-airless, is the right MVP set: it
 covers the great majority of landable real bodies, and it avoids the flora
@@ -132,7 +132,7 @@ Rocks before plants. A region-seeded scatter of boulders, outcrops and debris,
 instanced, generated from the `r:` region seed and addressed as `o:` objects — an
 address segment that already exists for exactly this.
 
-Scatter is what converts a heightfield into a *place*, and it is cheap: a dozen
+Scatter is what converts a heightfield into a _place_, and it is cheap: a dozen
 rock meshes, instanced, with per-instance rotation and scale, will do more for
 the feeling of standing on a world than any amount of additional terrain
 frequency.
@@ -141,12 +141,12 @@ frequency.
 
 ## Systems and stations
 
-| Kind | Count at launch | Placed how |
-|---|---|---|
-| **Survey outposts** | ~1 per 8 inhabited systems | Generated placement in real nearby systems; parts-assembled |
-| **Independent stations** | ~1 per 20 | |
-| **Automated installations** | 0–3 per system, sparse beyond 200 ly | Fully generated |
-| **Wrecks** ⬜ | Rare, log-distributed with distance | The setting's only narrative surface — see [world](world.md) |
+| Kind                        | Count at launch                      | Placed how                                                   |
+| --------------------------- | ------------------------------------ | ------------------------------------------------------------ |
+| **Survey outposts**         | ~1 per 8 inhabited systems           | Generated placement in real nearby systems; parts-assembled  |
+| **Independent stations**    | ~1 per 20                            |                                                              |
+| **Automated installations** | 0–3 per system, sparse beyond 200 ly | Fully generated                                              |
+| **Wrecks** ⬜               | Rare, log-distributed with distance  | The setting's only narrative surface — see [world](world.md) |
 
 Inhabited space is deliberately **small** — a bubble of a few hundred light-years
 around Sol, thinning outward, with nothing beyond it. That is both the honest
@@ -160,20 +160,20 @@ the reason the frontier means something.
 For the [MVP](production.md#the-mvp-the-explorer), the numbers that have to be
 true:
 
-| | Target | How it is met |
-|---|---|---|
-| Star systems reachable | Effectively unbounded | Generated; ~119k catalogued via HYG |
-| Systems with real catalogue data | ~119,000 | HYG ingest |
-| Confirmed exoplanets | ~6,000 `[Assumption: read at ingest]` | NASA Exoplanet Archive |
-| Landable bodies | Millions | Generated |
-| Biomes | 8 | Authored material sets |
-| Ship hulls | 6 | Parts-assembled |
-| Ship modules | ~60 across 12 lines × 5 grades | Parametric |
-| Suit modules | ~18 | Parametric |
-| Room modules | 12 | Authored parts |
-| Rock / scatter meshes | ~20 | Authored parts |
-| Weapons | 12 across 4 classes | Post-MVP |
-| Structures | 3 kinds, parts-assembled | Post-MVP |
+|                                  | Target                                | How it is met                       |
+| -------------------------------- | ------------------------------------- | ----------------------------------- |
+| Star systems reachable           | Effectively unbounded                 | Generated; ~119k catalogued via HYG |
+| Systems with real catalogue data | ~119,000                              | HYG ingest                          |
+| Confirmed exoplanets             | ~6,000 `[Assumption: read at ingest]` | NASA Exoplanet Archive              |
+| Landable bodies                  | Millions                              | Generated                           |
+| Biomes                           | 8                                     | Authored material sets              |
+| Ship hulls                       | 6                                     | Parts-assembled                     |
+| Ship modules                     | ~60 across 12 lines × 5 grades        | Parametric                          |
+| Suit modules                     | ~18                                   | Parametric                          |
+| Room modules                     | 12                                    | Authored parts                      |
+| Rock / scatter meshes            | ~20                                   | Authored parts                      |
+| Weapons                          | 12 across 4 classes                   | Post-MVP                            |
+| Structures                       | 3 kinds, parts-assembled              | Post-MVP                            |
 
 **The authored column totals roughly 40 meshes and 8 material sets.** That is the
 number that has to be affordable, and it is. Everything else in the table is a

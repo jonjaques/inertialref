@@ -1,6 +1,18 @@
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { basis, fromAxisAngle, fromBasis, IDENTITY, integrate, multiply, normalize, rotate, rotateInverse, slerp, approxEquals } from './quat.ts'
+import {
+  basis,
+  fromAxisAngle,
+  fromBasis,
+  IDENTITY,
+  integrate,
+  multiply,
+  normalize,
+  rotate,
+  rotateInverse,
+  slerp,
+  approxEquals,
+} from './quat.ts'
 import * as V from './vec3.ts'
 import { vec3 } from './vec3.ts'
 
@@ -19,7 +31,9 @@ describe('Quat', () => {
     fc.assert(
       fc.property(anyRotation, (q) => {
         const v = vec3(3, -4, 5)
-        expect(V.distance(rotateInverse(q, rotate(q, v)), v)).toBeLessThan(1e-12)
+        expect(V.distance(rotateInverse(q, rotate(q, v)), v)).toBeLessThan(
+          1e-12,
+        )
         // Rotation preserves length.
         expect(V.length(rotate(q, v))).toBeCloseTo(V.length(v), 12)
       }),
@@ -31,7 +45,13 @@ describe('Quat', () => {
     const pitch = fromAxisAngle(vec3(1, 0, 0), Math.PI / 2)
     // multiply(a, b) applies b first, then a.
     const combined = multiply(yaw, pitch)
-    expect(V.approxEquals(rotate(combined, vec3(0, 0, -1)), rotate(yaw, rotate(pitch, vec3(0, 0, -1))), 1e-12)).toBe(true)
+    expect(
+      V.approxEquals(
+        rotate(combined, vec3(0, 0, -1)),
+        rotate(yaw, rotate(pitch, vec3(0, 0, -1))),
+        1e-12,
+      ),
+    ).toBe(true)
   })
 
   it('round-trips through a basis (property)', () => {
@@ -47,7 +67,9 @@ describe('Quat', () => {
 
   it('builds a stable basis for 180-degree rotations', () => {
     const flipped = fromBasis(vec3(-1, 0, 0), vec3(0, 1, 0), vec3(0, 0, -1))
-    expect(V.approxEquals(rotate(flipped, vec3(1, 0, 0)), vec3(-1, 0, 0), 1e-12)).toBe(true)
+    expect(
+      V.approxEquals(rotate(flipped, vec3(1, 0, 0)), vec3(-1, 0, 0), 1e-12),
+    ).toBe(true)
     expect(Number.isFinite(flipped.w)).toBe(true)
   })
 

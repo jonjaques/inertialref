@@ -12,9 +12,22 @@ import {
   vec3,
 } from '@inertialref/spatial'
 import { snapshot, World } from '@inertialref/simulation'
-import { bodyFrameId, installSurfaceFrame, regionAddress, systemFrameId, systemId, walkBodies } from '@inertialref/universe'
+import {
+  bodyFrameId,
+  installSurfaceFrame,
+  regionAddress,
+  systemFrameId,
+  systemId,
+  walkBodies,
+} from '@inertialref/universe'
 import { generateHeightfield } from '@inertialref/universe'
-import { angularRadius, selectLod, starColor, terrainLevelFor, terrainOpacity } from './lod.ts'
+import {
+  angularRadius,
+  selectLod,
+  starColor,
+  terrainLevelFor,
+  terrainOpacity,
+} from './lod.ts'
 import {
   compressDistance,
   NEAR_LIMIT,
@@ -22,8 +35,17 @@ import {
   placeOnStarShell,
   STAR_SHELL_RADIUS,
 } from './placement.ts'
-import { buildScene, nearestBody, originForCamera, type RenderScene } from './scene.ts'
-import { CAMERA_GROUND_CLEARANCE, CHASE_OFFSET, chaseCameraPosition } from './camera.ts'
+import {
+  buildScene,
+  nearestBody,
+  originForCamera,
+  type RenderScene,
+} from './scene.ts'
+import {
+  CAMERA_GROUND_CLEARANCE,
+  CHASE_OFFSET,
+  chaseCameraPosition,
+} from './camera.ts'
 import { buildPatch, patchPlacement } from './terrainMesh.ts'
 
 const ORIGIN = createRenderOrigin(UV.fromMeters(4.2 * LIGHT_YEAR, 0, 0))
@@ -85,9 +107,12 @@ describe('LOD selection', () => {
           const altitude = r * 2 ** -exponent
           const opacity = terrainOpacity(r, r + altitude)
           if (opacity === 1) expect(terrainLevelFor(r, r + altitude)).toBe(12)
-          if (terrainLevelFor(r, r + altitude) < 12) expect(opacity).toBeLessThan(1)
+          if (terrainLevelFor(r, r + altitude) < 12)
+            expect(opacity).toBeLessThan(1)
           // And it never increases with altitude.
-          expect(terrainOpacity(r, r + altitude * 2)).toBeLessThanOrEqual(opacity)
+          expect(terrainOpacity(r, r + altitude * 2)).toBeLessThanOrEqual(
+            opacity,
+          )
         },
       ),
     )
@@ -207,15 +232,28 @@ describe('scene', () => {
   function sceneFixture() {
     const world = new World({ seed: 'inertialref' })
     const system = world.loadSystem(systemId('SOL'))
-    const planet = [...walkBodies(system)].find((b) => b.kind === 'rocky' && b.radius > 1e6)
+    const planet = [...walkBodies(system)].find(
+      (b) => b.kind === 'rocky' && b.radius > 1e6,
+    )
     if (planet === undefined) throw new Error('no planet')
-    const ship = world.spawnShip('cam', bodyFrameId(planet.address), vec3(planet.radius * 2.2, 0, 0))
+    const ship = world.spawnShip(
+      'cam',
+      bodyFrameId(planet.address),
+      vec3(planet.radius * 2.2, 0, 0),
+    )
     world.runTicks(4)
     const shot = snapshot(world)
     const camera = shot.entities.find((e) => e.id === ship.id)
     if (camera === undefined) throw new Error('no camera')
     const origin = originForCamera(null, camera.position)
-    return { world, planet, ship, shot, origin, scene: buildScene(shot, origin, ship.id) }
+    return {
+      world,
+      planet,
+      ship,
+      shot,
+      origin,
+      scene: buildScene(shot, origin, ship.id),
+    }
   }
 
   it('describes bodies, stars and entities without touching Three.js', () => {
@@ -235,7 +273,10 @@ describe('scene', () => {
 
   it('does not move anything canonical when the origin is rebased', () => {
     const { shot, scene, ship } = sceneFixture()
-    const moved = rebase(scene.origin, UV.translate(scene.origin.position, vec3(50_000, 0, 0)))
+    const moved = rebase(
+      scene.origin,
+      UV.translate(scene.origin.position, vec3(50_000, 0, 0)),
+    )
     const rebased = buildScene(shot, moved, ship.id)
     // Render coordinates shift by exactly the origin delta — which is snapped
     // to the 1024 m grid, hence 50176 rather than 50000.
@@ -243,9 +284,14 @@ describe('scene', () => {
     expect(shift.x).toBe(50_176)
     const before = scene.entities.find((e) => e.isCamera)
     const after = rebased.entities.find((e) => e.isCamera)
-    expect((before?.position.x ?? 0) - (after?.position.x ?? 0)).toBeCloseTo(shift.x, 3)
+    expect((before?.position.x ?? 0) - (after?.position.x ?? 0)).toBeCloseTo(
+      shift.x,
+      3,
+    )
     // ...and the canonical positions in the snapshot are untouched.
-    expect(UV.equals(rebased.camera.universePosition, scene.camera.universePosition)).toBe(true)
+    expect(
+      UV.equals(rebased.camera.universePosition, scene.camera.universePosition),
+    ).toBe(true)
   })
 
   it('finds the body the player is closest to the surface of', () => {
@@ -273,7 +319,11 @@ describe('scene', () => {
     const shot = snapshot(world)
     const camera = shot.entities.find((e) => e.id === ship.id)
     if (camera === undefined) throw new Error('no camera')
-    const scene = buildScene(shot, originForCamera(null, camera.position), ship.id)
+    const scene = buildScene(
+      shot,
+      originForCamera(null, camera.position),
+      ship.id,
+    )
 
     expect(scene.stars).toHaveLength(2)
     expect(scene.stars[0]?.name).toBe('Proxima Centauri')
@@ -303,7 +353,9 @@ describe('chase camera', () => {
   function landedScene(pitchDegrees: number): RenderScene {
     const world = new World({ seed: 'inertialref' })
     const system = world.loadSystem(systemId('SOL'))
-    const planet = [...walkBodies(system)].find((b) => b.kind === 'rocky' && b.radius > 1e6)
+    const planet = [...walkBodies(system)].find(
+      (b) => b.kind === 'rocky' && b.radius > 1e6,
+    )
     if (planet === undefined) throw new Error('no planet')
 
     const frame = installSurfaceFrame(world.frames, planet, 0.35, -1.1)
@@ -311,7 +363,10 @@ describe('chase camera', () => {
     world.runTicks(64)
     world.teleport(ship.id, {
       ...world.entities.require(ship.id).state,
-      orientation: Q.fromAxisAngle(vec3(1, 0, 0), (pitchDegrees * Math.PI) / 180),
+      orientation: Q.fromAxisAngle(
+        vec3(1, 0, 0),
+        (pitchDegrees * Math.PI) / 180,
+      ),
     })
     world.runTicks(1)
 
@@ -338,8 +393,13 @@ describe('chase camera', () => {
       const eye = chaseCameraPosition(scene)
       // Height of the eye over the ship, along local up, plus the ship's own
       // altitude — which is zero, because it is parked.
-      const height = Vec.dot(Vec.sub(eye, scene.camera.position), scene.camera.up)
-      expect(`pitch ${pitch}: ${height >= CAMERA_GROUND_CLEARANCE - 1e-9}`).toBe(`pitch ${pitch}: true`)
+      const height = Vec.dot(
+        Vec.sub(eye, scene.camera.position),
+        scene.camera.up,
+      )
+      expect(
+        `pitch ${pitch}: ${height >= CAMERA_GROUND_CLEARANCE - 1e-9}`,
+      ).toBe(`pitch ${pitch}: true`)
     }
   })
 
@@ -347,9 +407,15 @@ describe('chase camera', () => {
     // Nothing to clip through in deep space, and nothing to lift the camera
     // off: an unclamped chase view is the normal case and must stay exact.
     const scene = landedScene(0)
-    const free: RenderScene = { ...scene, camera: { ...scene.camera, altitude: null } }
+    const free: RenderScene = {
+      ...scene,
+      camera: { ...scene.camera, altitude: null },
+    }
     const eye = chaseCameraPosition(free)
-    const expected = Vec.add(free.camera.position, Q.rotate(free.camera.orientation, CHASE_OFFSET))
+    const expected = Vec.add(
+      free.camera.position,
+      Q.rotate(free.camera.orientation, CHASE_OFFSET),
+    )
     expect(Vec.length(Vec.sub(eye, expected))).toBeLessThan(1e-9)
   })
 })
@@ -358,12 +424,17 @@ describe('terrain mesh', () => {
   it('builds a patch that sits on the body, in render space', () => {
     const world = new World({ seed: 'inertialref' })
     const system = world.loadSystem(systemId('SOL'))
-    const planet = [...walkBodies(system)].find((b) => b.surface.maxElevation > 0)
+    const planet = [...walkBodies(system)].find(
+      (b) => b.surface.maxElevation > 0,
+    )
     if (planet === undefined) throw new Error('no solid body')
 
     const bodyPose = world.frames.pose(bodyFrameId(planet.address), 0)
     const region = regionAddress(0, 4, 8, 8)
-    const field = generateHeightfield(planet.surface, { region, resolution: 17 })
+    const field = generateHeightfield(planet.surface, {
+      region,
+      resolution: 17,
+    })
     const origin = createRenderOrigin(bodyPose.position)
     const patch = buildPatch({
       region,
@@ -385,7 +456,12 @@ describe('terrain mesh', () => {
 
     // Put the pose back on: every vertex is then at the planet's radius plus
     // its own elevation, measured from the body's centre in render space.
-    const placement = patchPlacement(patch, origin, bodyPose.position, Q.IDENTITY)
+    const placement = patchPlacement(
+      patch,
+      origin,
+      bodyPose.position,
+      Q.IDENTITY,
+    )
     const bodyInRender = toRenderSpace(origin, bodyPose.position)
     for (let i = 0; i < patch.positions.length; i += 3) {
       const local = vec3(
@@ -393,9 +469,14 @@ describe('terrain mesh', () => {
         patch.positions[i + 1] as number,
         patch.positions[i + 2] as number,
       )
-      const world = Vec.add(placement.position, Q.rotate(placement.orientation, local))
+      const world = Vec.add(
+        placement.position,
+        Q.rotate(placement.orientation, local),
+      )
       const r = Vec.length(Vec.sub(world, bodyInRender))
-      expect(Math.abs(r - planet.radius)).toBeLessThanOrEqual(planet.surface.maxElevation * 1.5)
+      expect(Math.abs(r - planet.radius)).toBeLessThanOrEqual(
+        planet.surface.maxElevation * 1.5,
+      )
     }
     /*
      * Normals follow the relief, not the datum sphere.
@@ -423,7 +504,10 @@ describe('terrain mesh', () => {
           patch.positions[i + 2] as number,
         ),
       )
-      maxTilt = Math.max(maxTilt, Math.acos(Math.min(1, Math.abs(Vec.dot(n, radial)))))
+      maxTilt = Math.max(
+        maxTilt,
+        Math.acos(Math.min(1, Math.abs(Vec.dot(n, radial)))),
+      )
     }
     expect(unitLengthFailures).toBe(0)
     // A patch spanning real mountains has to tilt somewhere. The bound is
@@ -449,7 +533,9 @@ describe('terrain mesh', () => {
      */
     const world = new World({ seed: 'inertialref' })
     const system = world.loadSystem(systemId('SOL'))
-    const planet = [...walkBodies(system)].find((b) => b.surface.maxElevation > 0)
+    const planet = [...walkBodies(system)].find(
+      (b) => b.surface.maxElevation > 0,
+    )
     if (planet === undefined) throw new Error('no solid body')
 
     const resolution = 9
@@ -459,8 +545,16 @@ describe('terrain mesh', () => {
         [12, 3090, 2886],
       ] as const) {
         const span = 2 ** level
-        const region = regionAddress(face, level, Math.min(i, span - 1), Math.min(j, span - 1))
-        const field = generateHeightfield(planet.surface, { region, resolution })
+        const region = regionAddress(
+          face,
+          level,
+          Math.min(i, span - 1),
+          Math.min(j, span - 1),
+        )
+        const field = generateHeightfield(planet.surface, {
+          region,
+          resolution,
+        })
         const patch = buildPatch({
           region,
           resolution,
@@ -507,7 +601,9 @@ describe('terrain mesh', () => {
     const pa = placeAt(origin, a, 1)
     const pb = placeAt(origin, b, 1)
     expect(pa.compressed).toBe(false)
-    expect(Vec.distance(Vec.toFloat32(pa.position), Vec.toFloat32(pb.position))).toBeCloseTo(1, 4)
+    expect(
+      Vec.distance(Vec.toFloat32(pa.position), Vec.toFloat32(pb.position)),
+    ).toBeCloseTo(1, 4)
 
     // Sanity: from an origin at the planet's centre those same two points *are*
     // compressed, and the metre between them shrinks. Compression is a property
@@ -524,13 +620,14 @@ describe('the star shell', () => {
    * sector fields with `2 ** 40` inline, in the one directory vitest did not
    * cover. `placePoint` — written for exactly this — had no callers.
    */
-  it('puts every star on the shell, in the origin\'s axes', () => {
+  it("puts every star on the shell, in the origin's axes", () => {
     const centre = universeVector(3, -1, 7, 100, 200, 300)
     const origin = createRenderOrigin(centre)
     const star = UV.translate(centre, vec3(4 * LIGHT_YEAR, 0, 0))
 
     const point = placeOnStarShell(origin, star)
-    if (point === null) throw new Error('a star four light years away has a direction')
+    if (point === null)
+      throw new Error('a star four light years away has a direction')
     expect(Vec.length(point)).toBeCloseTo(STAR_SHELL_RADIUS, 3)
 
     // Direction is preserved; only the radius is invented.

@@ -33,7 +33,13 @@ const SURVEY_LIGHT_YEARS = 8
  */
 const DEBUG_LANDING_SITE = { latitude: 0.35, longitude: -1.1 }
 
-export function NavPanel({ engine, onNotice }: { engine: GameEngine; onNotice: (message: string) => void }) {
+export function NavPanel({
+  engine,
+  onNotice,
+}: {
+  engine: GameEngine
+  onNotice: (message: string) => void
+}) {
   const [targets, setTargets] = useState<readonly TravelTarget[]>([])
   const [selected, setSelected] = useState<string | null>(null)
   const [query, setQuery] = useState('')
@@ -55,7 +61,8 @@ export function NavPanel({ engine, onNotice }: { engine: GameEngine; onNotice: (
     return () => window.clearInterval(timer)
   }, [engine, generation])
 
-  const target = targets.find((candidate) => candidate.address === selected) ?? null
+  const target =
+    targets.find((candidate) => candidate.address === selected) ?? null
 
   const run = (label: string, action: () => void): void => {
     try {
@@ -96,12 +103,24 @@ export function NavPanel({ engine, onNotice }: { engine: GameEngine; onNotice: (
             spellCheck={false}
             className="min-w-0 flex-1 rounded border border-slate-700 bg-slate-900/80 px-1.5 py-0.5 text-[11px] text-slate-200 placeholder:text-slate-600 focus:border-sky-500/60 focus:outline-none"
           />
-          <Action label="go" tone="primary" onClick={() => run(`go to ${query}`, () => engine.harness.goTo(query))} />
+          <Action
+            label="go"
+            tone="primary"
+            onClick={() =>
+              run(`go to ${query}`, () => engine.harness.goTo(query))
+            }
+          />
         </form>
-        {error !== null && <div className="mt-1 break-words text-rose-300">{error}</div>}
+        {error !== null && (
+          <div className="mt-1 break-words text-rose-300">{error}</div>
+        )}
       </Section>
 
-      <Section id="nav.targets" title="destinations" trailing={`${targets.length}`}>
+      <Section
+        id="nav.targets"
+        title="destinations"
+        trailing={`${targets.length}`}
+      >
         <div className="max-h-64 overflow-auto rounded border border-slate-800/80">
           {targets.map((candidate) => (
             <TargetRow
@@ -111,7 +130,9 @@ export function NavPanel({ engine, onNotice }: { engine: GameEngine; onNotice: (
               onSelect={() => setSelected(candidate.address)}
             />
           ))}
-          {targets.length === 0 && <div className="px-2 py-1 text-slate-500">surveying…</div>}
+          {targets.length === 0 && (
+            <div className="px-2 py-1 text-slate-500">surveying…</div>
+          )}
         </div>
 
         <div className="mt-1 min-h-[2.75rem] rounded border border-slate-800/80 bg-slate-900/40 px-2 py-1">
@@ -120,7 +141,8 @@ export function NavPanel({ engine, onNotice }: { engine: GameEngine; onNotice: (
           ) : (
             <>
               <div className="truncate text-slate-300">
-                {target.name} <span className="text-slate-600">{target.address}</span>
+                {target.name}{' '}
+                <span className="text-slate-600">{target.address}</span>
               </div>
               <div className="mt-1 flex flex-wrap gap-1">
                 {target.kind === 'system' ? (
@@ -129,7 +151,11 @@ export function NavPanel({ engine, onNotice }: { engine: GameEngine; onNotice: (
                       label="travel"
                       tone="primary"
                       title="Arrive in this system, looking at its star"
-                      onClick={() => run(`travelling to ${target.name}`, () => engine.harness.goTo(target.address))}
+                      onClick={() =>
+                        run(`travelling to ${target.name}`, () =>
+                          engine.harness.goTo(target.address),
+                        )
+                      }
                     />
                     <Action
                       label="generate"
@@ -148,12 +174,20 @@ export function NavPanel({ engine, onNotice }: { engine: GameEngine; onNotice: (
                       label="orbit"
                       tone="primary"
                       title="Circular orbit at an altitude that frames the body"
-                      onClick={() => run(`orbiting ${target.name}`, () => engine.harness.goTo(target.address))}
+                      onClick={() =>
+                        run(`orbiting ${target.name}`, () =>
+                          engine.harness.goTo(target.address),
+                        )
+                      }
                     />
                     <Action
                       label="land"
                       disabled={!target.landable}
-                      title={target.landable ? 'Park on the surface' : 'Not solid ground'}
+                      title={
+                        target.landable
+                          ? 'Park on the surface'
+                          : 'Not solid ground'
+                      }
                       onClick={() =>
                         run(`landing on ${target.name}`, () =>
                           engine.harness.land(
@@ -167,12 +201,20 @@ export function NavPanel({ engine, onNotice }: { engine: GameEngine; onNotice: (
                     <Action
                       label="face"
                       title="Point the nose at it without touching the trajectory"
-                      onClick={() => run(`facing ${target.name}`, () => engine.harness.face(target.address))}
+                      onClick={() =>
+                        run(`facing ${target.name}`, () =>
+                          engine.harness.face(target.address),
+                        )
+                      }
                     />
                     <Action
                       label="burn"
                       title="Aim at it and light the main drive"
-                      onClick={() => run(`burning toward ${target.name}`, () => engine.harness.burnToward(target.address))}
+                      onClick={() =>
+                        run(`burning toward ${target.name}`, () =>
+                          engine.harness.burnToward(target.address),
+                        )
+                      }
                     />
                   </>
                 )}
@@ -243,18 +285,27 @@ export function TargetRow({
         selected ? 'bg-sky-500/20 text-sky-100' : 'hover:bg-slate-800/60'
       }`}
     >
-      <span className={target.kind === 'system' ? 'shrink-0 text-amber-300/80' : 'shrink-0 text-slate-600'}>
+      <span
+        className={
+          target.kind === 'system'
+            ? 'shrink-0 text-amber-300/80'
+            : 'shrink-0 text-slate-600'
+        }
+      >
         {target.kind === 'system' ? '★' : target.landable ? '◍' : '·'}
       </span>
       <span className="min-w-0 flex-1 truncate">
         {target.name}
         <span className="ml-1.5 text-slate-600">{target.detail}</span>
       </span>
-      <span className={`shrink-0 tabular-nums ${target.loaded ? 'text-slate-400' : 'text-slate-600'}`}>
+      <span
+        className={`shrink-0 tabular-nums ${target.loaded ? 'text-slate-400' : 'text-slate-600'}`}
+      >
         {target.distanceText}
       </span>
     </button>
   )
 }
 
-const message = (cause: unknown): string => (cause instanceof Error ? cause.message : String(cause))
+const message = (cause: unknown): string =>
+  cause instanceof Error ? cause.message : String(cause)

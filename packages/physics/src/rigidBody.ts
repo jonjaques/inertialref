@@ -1,5 +1,11 @@
 import type { Kilograms, Meters, Mu, Seconds } from '@inertialref/shared'
-import { Quaternion as Q, type Quat, Vec, type Vec3, vec3 } from '@inertialref/spatial'
+import {
+  Quaternion as Q,
+  type Quat,
+  Vec,
+  type Vec3,
+  vec3,
+} from '@inertialref/spatial'
 
 /**
  * Kinematic state of a 6-DoF body, expressed in some reference frame.
@@ -35,7 +41,10 @@ export function integrateBody(
 ): BodyState {
   const velocity = Vec.add(state.velocity, Vec.scale(linearAcceleration, dt))
   const position = Vec.add(state.position, Vec.scale(velocity, dt))
-  const angularVelocity = Vec.add(state.angularVelocity, Vec.scale(angularAcceleration, dt))
+  const angularVelocity = Vec.add(
+    state.angularVelocity,
+    Vec.scale(angularAcceleration, dt),
+  )
   return {
     position,
     velocity,
@@ -51,10 +60,12 @@ export function pointMassAcceleration(mu: Mu, relativePosition: Vec3): Vec3 {
   return Vec.scale(relativePosition, -mu / (r * r * r))
 }
 
-export const standardGravitationalParameter = (mass: Kilograms): Mu => 6.674_3e-11 * mass
+export const standardGravitationalParameter = (mass: Kilograms): Mu =>
+  6.674_3e-11 * mass
 
 /** Surface gravity of a uniform sphere, m/s². */
-export const surfaceGravity = (mu: Mu, radius: Meters): number => mu / (radius * radius)
+export const surfaceGravity = (mu: Mu, radius: Meters): number =>
+  mu / (radius * radius)
 
 /* ------------------------------------------------------------------------- */
 /* Atmosphere                                                                 */
@@ -70,10 +81,15 @@ export interface Atmosphere {
 }
 
 /** Isothermal exponential atmosphere — enough for entry heating and drag feel. */
-export function atmosphericDensity(atmosphere: Atmosphere, altitude: Meters): number {
+export function atmosphericDensity(
+  atmosphere: Atmosphere,
+  altitude: Meters,
+): number {
   if (altitude >= atmosphere.ceiling) return 0
   if (altitude <= 0) return atmosphere.surfaceDensity
-  return atmosphere.surfaceDensity * Math.exp(-altitude / atmosphere.scaleHeight)
+  return (
+    atmosphere.surfaceDensity * Math.exp(-altitude / atmosphere.scaleHeight)
+  )
 }
 
 /**

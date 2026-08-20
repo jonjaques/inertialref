@@ -25,8 +25,8 @@ project occupies.
 **Every axis of this design exists in a shipped product. The intersection does
 not.** Space Engine has real astronomy and continuous scale and is a planetarium.
 Elite has continuous scale and a game and a synthetic galaxy. Star Citizen has
-fidelity and no galaxy. The empty quadrant is *real astronomy, continuous scale,
-and a game* — and none of the occupants can move into it without rebuilding their
+fidelity and no galaxy. The empty quadrant is _real astronomy, continuous scale,
+and a game_ — and none of the occupants can move into it without rebuilding their
 foundation, because a synthetic galaxy is not something you retrofit real data
 into.
 
@@ -41,7 +41,7 @@ raised and thirteen-plus years in development, still without a 1.0 release
 figure moves continuously; validate before external use].
 
 **What it does better than anything.** Seamless ship interiors, physicalised
-first-person interaction, and a sense of *presence* in a machine that nothing
+first-person interaction, and a sense of _presence_ in a machine that nothing
 else matches. When it works, standing in a ship's hold while it manoeuvres is the
 best thing in the genre.
 
@@ -76,14 +76,14 @@ take the solutions and spend the saved effort elsewhere.
 
 **What we do differently.**
 
-| | Elite | InertialRef |
-|---|---|---|
-| Galaxy | Synthetic beyond the local bubble; ~150,000 real stars in a synthetic frame | Catalogue-first, procedurally filled, **and it updates as astronomy does** |
-| Atmospheric worlds | Expansion content, still limited | The base case |
-| On foot | *Odyssey* — built as a shooter, to a mixed reception | Built as a survey and hazard layer |
-| Economy | Credits, grind, engineering RNG | Data only; no grind, no RNG |
-| Install | ~50 GB | A link |
-| Progression | ~8× jump-range curve, with a long cage at the bottom | ~7.7×, same spread — but a steep early curve, so the cage phase is short |
+|                    | Elite                                                                       | InertialRef                                                                |
+| ------------------ | --------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Galaxy             | Synthetic beyond the local bubble; ~150,000 real stars in a synthetic frame | Catalogue-first, procedurally filled, **and it updates as astronomy does** |
+| Atmospheric worlds | Expansion content, still limited                                            | The base case                                                              |
+| On foot            | _Odyssey_ — built as a shooter, to a mixed reception                        | Built as a survey and hazard layer                                         |
+| Economy            | Credits, grind, engineering RNG                                             | Data only; no grind, no RNG                                                |
+| Install            | ~50 GB                                                                      | A link                                                                     |
+| Progression        | ~8× jump-range curve, with a long cage at the bottom                        | ~7.7×, same spread — but a steep early curve, so the cage phase is short   |
 
 **The lesson.** Elite's most-loved system — exploration — has the least
 mechanical machinery in it. Its least-loved systems are the ones with the most:
@@ -103,7 +103,7 @@ years.
 strangeness. A generator whose outputs surprise its own creators.
 
 **What we take.** Discovery-as-reward. Naming as the emotional payoff. The
-principle that generation *is* content rather than a substitute for it.
+principle that generation _is_ content rather than a substitute for it.
 
 **What we do differently.** Real astronomy underneath. Real orbital mechanics and
 real momentum — NMS's flight is arcade by design. A genuinely continuous
@@ -112,7 +112,7 @@ no crafting, no base building, no farming.
 
 **The lesson.** Two, and they point in opposite directions. Launching on a
 promise you cannot verify is nearly fatal — which is why the twelve capability
-checks are *executable* rather than described. And a small team sustained a
+checks are _executable_ rather than described. And a small team sustained a
 galaxy-scale game for years through incremental generation work, which is direct
 evidence that this project's shape is viable at this project's size.
 
@@ -134,7 +134,7 @@ loop, no reward, no ship you operate as a machine, no reason to be anywhere in
 particular. It also runs as a native application and has no multiplayer.
 
 **The lesson, and it is the sharpest one here.** The technical achievement this
-project is most proud of is *already fifteen years old in another product*. The
+project is most proud of is _already fifteen years old in another product_. The
 differentiator is therefore **not** "real astronomy at continuous scale" — it is
 **a game built on it**. Any pitch that leads with the tech is a pitch that Space
 Engine already answers. Lead with the loop.
@@ -150,7 +150,7 @@ surface, surface to interior.
 **What we take.** Nothing mechanically. It is included because it is the most
 recent large-budget attempt and its reception is instructive.
 
-**The lesson.** The most consistent criticism of Starfield was the *absence* of
+**The lesson.** The most consistent criticism of Starfield was the _absence_ of
 continuity — that space travel was a menu and planets were disconnected boxes.
 An enormous, well-funded team shipped a space game without seamlessness and the
 audience noticed immediately and loudly. That is strong evidence that
@@ -160,23 +160,23 @@ audience noticed immediately and loudly. That is strong evidence that
 
 ## Feature matrix
 
-| | **InertialRef** | Star Citizen | Elite Dangerous | No Man's Sky | Space Engine | Starfield |
-|---|---|---|---|---|---|---|
-| Real star catalogue | ✅ **and versioned** | ❌ | Partial | ❌ | ✅ | ❌ |
-| Updates with new astronomy | ✅ | ❌ | ❌ | ❌ | Manual | ❌ |
-| Seamless orbit → surface | ✅ | ✅ | ✅ | Partial | ✅ | ❌ |
-| Seamless ship → on foot | ✅ | ✅ | Partial | ✅ | ❌ | Partial |
-| Galaxy scale | ✅ | ❌ | ✅ | ✅ | ✅ | ❌ |
-| Newtonian flight | ✅ | Partial | ✅ | ❌ | N/A | ❌ |
-| First-person only | ✅ | ✅ | ✅ | ❌ | N/A | ❌ |
-| Runs in a browser | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| Playable fully offline | ✅ | ❌ | Partial | ✅ | ✅ | ✅ |
-| Deterministic universe | ✅ | ❌ | ✅ | ✅ | ✅ | ❌ |
-| Open source | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| Photorealistic fidelity | ❌ | ✅ | Partial | ❌ | ✅ | ✅ |
-| Persistent multiplayer | ⬜ later | ✅ | ✅ | Partial | ❌ | ❌ |
-| Deep content breadth | ❌ | Partial | ✅ | ✅ | ❌ | ✅ |
-| Shipped | ⬜ | ❌ | ✅ | ✅ | ✅ | ✅ |
+|                            | **InertialRef**      | Star Citizen | Elite Dangerous | No Man's Sky | Space Engine | Starfield |
+| -------------------------- | -------------------- | ------------ | --------------- | ------------ | ------------ | --------- |
+| Real star catalogue        | ✅ **and versioned** | ❌           | Partial         | ❌           | ✅           | ❌        |
+| Updates with new astronomy | ✅                   | ❌           | ❌              | ❌           | Manual       | ❌        |
+| Seamless orbit → surface   | ✅                   | ✅           | ✅              | Partial      | ✅           | ❌        |
+| Seamless ship → on foot    | ✅                   | ✅           | Partial         | ✅           | ❌           | Partial   |
+| Galaxy scale               | ✅                   | ❌           | ✅              | ✅           | ✅           | ❌        |
+| Newtonian flight           | ✅                   | Partial      | ✅              | ❌           | N/A          | ❌        |
+| First-person only          | ✅                   | ✅           | ✅              | ❌           | N/A          | ❌        |
+| Runs in a browser          | ✅                   | ❌           | ❌              | ❌           | ❌           | ❌        |
+| Playable fully offline     | ✅                   | ❌           | Partial         | ✅           | ✅           | ✅        |
+| Deterministic universe     | ✅                   | ❌           | ✅              | ✅           | ✅           | ❌        |
+| Open source                | ✅                   | ❌           | ❌              | ❌           | ❌           | ❌        |
+| Photorealistic fidelity    | ❌                   | ✅           | Partial         | ❌           | ✅           | ✅        |
+| Persistent multiplayer     | ⬜ later             | ✅           | ✅              | Partial      | ❌           | ❌        |
+| Deep content breadth       | ❌                   | Partial      | ✅              | ✅           | ❌           | ✅        |
+| Shipped                    | ⬜                   | ❌           | ✅              | ✅           | ✅           | ✅        |
 
 The bottom four rows are the honest ones. **This project loses on fidelity,
 breadth, and having shipped.** It wins on continuity, reality, reach, and
@@ -187,8 +187,8 @@ honestly.
 
 ## Positioning
 
-> *Elite Dangerous's exploration loop, run on real astronomy, seamless all the way
-> down to your hands, in a browser tab.*
+> _Elite Dangerous's exploration loop, run on real astronomy, seamless all the way
+> down to your hands, in a browser tab._
 
 **Market gap:** there is no space simulator in a browser at any level of
 seriousness, and there is no game — as opposed to a planetarium — built on real

@@ -49,11 +49,16 @@ export interface OutputCapability {
  * - `auto` requires all three, which is the expression `docs/design/art.md`
  *   spells out verbatim.
  */
-export function resolveOutputMode(preference: OutputPreference, capability: OutputCapability): OutputMode {
+export function resolveOutputMode(
+  preference: OutputPreference,
+  capability: OutputCapability,
+): OutputMode {
   if (preference === 'standard') return 'standard'
   if (!capability.extendedCanvas) return 'standard'
   if (preference === 'extended') return 'extended'
-  return capability.webgpu && capability.dynamicRangeHigh ? 'extended' : 'standard'
+  return capability.webgpu && capability.dynamicRangeHigh
+    ? 'extended'
+    : 'standard'
 }
 
 /**
@@ -84,6 +89,9 @@ export interface RendererDescription {
 
 /** One line, for the dock header and the console. */
 export function describeOutput(description: RendererDescription): string {
-  const range = description.mode === 'extended' ? `extended ${description.headroom}×` : 'sRGB'
+  const range =
+    description.mode === 'extended'
+      ? `extended ${description.headroom}×`
+      : 'sRGB'
   return `${description.backend} · ${range} · ${description.preference}`
 }

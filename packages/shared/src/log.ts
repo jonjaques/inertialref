@@ -76,12 +76,16 @@ export interface ConsoleLike {
   error(...args: unknown[]): void
 }
 
-export function createConsoleSink(target: ConsoleLike, minLevel: LogLevel = 'info'): LogSink {
+export function createConsoleSink(
+  target: ConsoleLike,
+  minLevel: LogLevel = 'info',
+): LogSink {
   return {
     write(record) {
       if (LEVEL_ORDER[record.level] < LEVEL_ORDER[minLevel]) return
       const head = `[${record.scope}] ${record.message}`
-      const args: unknown[] = Object.keys(record.fields).length > 0 ? [head, record.fields] : [head]
+      const args: unknown[] =
+        Object.keys(record.fields).length > 0 ? [head, record.fields] : [head]
       switch (record.level) {
         case 'trace':
         case 'debug':
@@ -120,14 +124,29 @@ export class LogHub {
     return this.#minLevel
   }
 
-  emit(level: LogLevel, scope: string, message: string, fields: LogFields): void {
+  emit(
+    level: LogLevel,
+    scope: string,
+    message: string,
+    fields: LogFields,
+  ): void {
     if (LEVEL_ORDER[level] < LEVEL_ORDER[this.#minLevel]) return
-    const record: LogRecord = { seq: this.#seq++, level, scope, message, fields }
+    const record: LogRecord = {
+      seq: this.#seq++,
+      level,
+      scope,
+      message,
+      fields,
+    }
     for (const sink of this.#sinks) sink.write(record)
   }
 
   logger(scope: string, bound: LogFields = {}): Logger {
-    const emit = (level: LogLevel, message: string, fields?: LogFields): void => {
+    const emit = (
+      level: LogLevel,
+      message: string,
+      fields?: LogFields,
+    ): void => {
       this.emit(level, scope, message, fields ? { ...bound, ...fields } : bound)
     }
     return {

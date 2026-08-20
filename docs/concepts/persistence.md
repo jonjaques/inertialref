@@ -30,14 +30,14 @@ Storing generated content would be storing a **cache** — one that goes stale t
 moment a generator changes, and that is measured in terabytes if the player
 travels. So a save contains:
 
-| Stored | Not stored |
-|---|---|
-| global seed, galaxy id | every planet, moon, orbit |
-| simulation tick | every star |
-| algorithm versions | any heightfield |
-| dynamic entities (ships) | any terrain mesh |
-| which systems were loaded | anything with an address |
-| mutations | |
+| Stored                    | Not stored                |
+| ------------------------- | ------------------------- |
+| global seed, galaxy id    | every planet, moon, orbit |
+| simulation tick           | every star                |
+| algorithm versions        | any heightfield           |
+| dynamic entities (ships)  | any terrain mesh          |
+| which systems were loaded | anything with an address  |
+| mutations                 |                           |
 
 A test asserts the shape of that claim rather than trusting it: the serialised
 save must be **under 2 KB** and must not contain the string `elevations`.
@@ -65,8 +65,8 @@ sequenceDiagram
 ```
 
 Round-tripping to an identical [state hash](determinism.md#determinism-in-the-simulation-not-just-generation),
-and then *staying in step* when both are stepped further. The second half is
-what catches state that was restored but not restored *completely*.
+and then _staying in step_ when both are stepped further. The second half is
+what catches state that was restored but not restored _completely_.
 
 It caught exactly that: **control input** was missing from the save, so a save
 taken mid-burn resumed coasting. The hashes matched at rest and diverged 300
@@ -133,8 +133,8 @@ flowchart TB
     style DONE fill:#065f46,stroke:#064e3b,color:#fff
 ```
 
-This is the persistence model working as intended — *store the reference,
-regenerate the content* — and it is why the frame id has to determine the frame
+This is the persistence model working as intended — _store the reference,
+regenerate the content_ — and it is why the frame id has to determine the frame
 completely. See [frames](frames.md#surface-frames-and-the-identity-trap) for the
 two bugs that taught us so.
 
@@ -178,8 +178,8 @@ There is nothing else to fetch, because content comes from the seed.
 ## What mutations will look like
 
 The `mutations` array is empty today and its shape is provisional — but the
-field exists so that adding the first one is a migration of *data* rather than a
-change of *model*:
+field exists so that adding the first one is a migration of _data_ rather than a
+change of _model_:
 
 ```
 { address, kind: 'discovered' | 'destroyed' | 'placed' | 'terrain', data, tick }
@@ -188,7 +188,7 @@ change of *model*:
 Those four are `SAVE_MUTATION_KINDS`, an exported `as const` array that
 `SaveMutationKind` derives from and the decoder validates against with
 `decodeEnum(...SAVE_MUTATION_KINDS)`. That matters because the decoder used to
-declare `kind: decodeString` and then *cast* the result to the four-literal
+declare `kind: decodeString` and then _cast_ the result to the four-literal
 union — accepting any string at the trust boundary while telling the compiler it
 had checked. The list above and the schema can no longer drift apart.
 

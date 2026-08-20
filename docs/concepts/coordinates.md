@@ -14,14 +14,14 @@
 InertialRef has to place a bolt on a hull and a star at the far rim of the
 galaxy in the same universe.
 
-| Thing | Scale |
-|---|---|
-| Milky Way diameter | ~1e21 m |
-| Distance to Alpha Centauri | 4.13e16 m |
-| 1 AU | 1.496e11 m |
-| Earth radius | 6.37e6 m |
-| A person | 1.8 m |
-| An inch | 2.54e-2 m |
+| Thing                      | Scale      |
+| -------------------------- | ---------- |
+| Milky Way diameter         | ~1e21 m    |
+| Distance to Alpha Centauri | 4.13e16 m  |
+| 1 AU                       | 1.496e11 m |
+| Earth radius               | 6.37e6 m   |
+| A person                   | 1.8 m      |
+| An inch                    | 2.54e-2 m  |
 
 That is **23 orders of magnitude**. Every naive representation dies somewhere in
 that span:
@@ -42,7 +42,7 @@ The float64 line is the one that surprises people, so it is worth making
 concrete. In JavaScript, at 8 kiloparsecs from the galactic centre:
 
 ```js
-8000 * PARSEC + 0.0254 === 8000 * PARSEC   // → true
+8000 * PARSEC + 0.0254 === 8000 * PARSEC // → true
 ```
 
 An inch simply vanishes. There is no arrangement of doubles-as-metres that both
@@ -63,19 +63,19 @@ flowchart LR
     style UV fill:#0369a1,stroke:#0c4a6e,color:#fff
 ```
 
-A position is the sector index *plus* the offset. The invariant — every offset
+A position is the sector index _plus_ the offset. The invariant — every offset
 in `[0, SECTOR_SIZE)` — is maintained by every constructor, so two equal
 positions are always represented identically and `equals` is a field comparison.
 
 ### The numbers that fall out
 
-| Quantity | Value | |
-|---|---|---|
-| `SECTOR_EXPONENT` | 40 | |
-| `SECTOR_SIZE` | 2^40 m ≈ 1.0995e12 m | ≈ 7.35 AU |
-| Sector index range | int32 | ±2,147,483,647 sectors (2^31 exclusive) |
-| `UNIVERSE_HALF_EXTENT` | 2^71 m ≈ 2.36e21 m | **≈ 249,000 ly** |
-| `POSITION_RESOLUTION` | 2^40 × 2^-52 m | **≈ 0.24 mm, everywhere** |
+| Quantity               | Value                |                                         |
+| ---------------------- | -------------------- | --------------------------------------- |
+| `SECTOR_EXPONENT`      | 40                   |                                         |
+| `SECTOR_SIZE`          | 2^40 m ≈ 1.0995e12 m | ≈ 7.35 AU                               |
+| Sector index range     | int32                | ±2,147,483,647 sectors (2^31 exclusive) |
+| `UNIVERSE_HALF_EXTENT` | 2^71 m ≈ 2.36e21 m   | **≈ 249,000 ly**                        |
+| `POSITION_RESOLUTION`  | 2^40 × 2^-52 m       | **≈ 0.24 mm, everywhere**               |
 
 The Milky Way is ~100,000 ly across, so the addressable volume holds the galaxy
 plus a wide halo, and a quarter of a millimetre is below anything a player can
@@ -85,7 +85,7 @@ interact with.
 
 ## Why a power of two, specifically
 
-This is the part that makes the scheme safe to use as *canonical state* rather
+This is the part that makes the scheme safe to use as _canonical state_ rather
 than as a rendering trick.
 
 When an offset runs past the sector edge it has to be carried into the sector
@@ -112,13 +112,13 @@ travelled, which is exactly the property a canonical coordinate must not have.
 
 ### The residual error, and where it comes from
 
-Precision is bounded by the *offset*, not by the absolute magnitude:
+Precision is bounded by the _offset_, not by the absolute magnitude:
 
-| Where | Offset magnitude | ULP |
-|---|---|---|
-| Just inside a sector | ~1 m | 2e-16 m |
-| Middle of a sector | ~5e11 m | 6e-5 m |
-| Just below the edge | ~1.1e12 m | **1.22e-4 m** |
+| Where                | Offset magnitude | ULP           |
+| -------------------- | ---------------- | ------------- |
+| Just inside a sector | ~1 m             | 2e-16 m       |
+| Middle of a sector   | ~5e11 m          | 6e-5 m        |
+| Just below the edge  | ~1.1e12 m        | **1.22e-4 m** |
 
 Worst case ≈ 0.12 mm, and `POSITION_RESOLUTION` (0.24 mm) is the conservative
 bound the tests assert against. Measured in capability check 7: an inch-scale
@@ -174,7 +174,7 @@ sector index would be a relative quantity pretending to be absolute.
 
 Catalogue stars are converted ICRS → galactic → simulation axes on the way in.
 The conversion validates itself: Proxima and Alpha Centauri are placed from
-*independent* right ascension / declination / parallax entries and land **0.2025
+_independent_ right ascension / declination / parallax entries and land **0.2025
 ly** apart, matching the published separation.
 
 ---

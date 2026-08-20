@@ -3,7 +3,12 @@ import * as Q from './quat.ts'
 import type { Quat } from './quat.ts'
 import * as V from './vec3.ts'
 import type { Vec3 } from './vec3.ts'
-import { difference, translate, UNIVERSE_ORIGIN, type UniverseVector } from './universeVector.ts'
+import {
+  difference,
+  translate,
+  UNIVERSE_ORIGIN,
+  type UniverseVector,
+} from './universeVector.ts'
 
 /*
  * Reference frames.
@@ -30,7 +35,8 @@ export type FrameId = Brand<string, 'frame'>
 export const frameId = (id: string): FrameId => id as FrameId
 
 /** Descriptive only — devtools group by it and streaming policies key off it. */
-export type FrameKind = 'root' | 'system' | 'body' | 'orbit' | 'surface' | 'entity'
+export type FrameKind =
+  'root' | 'system' | 'body' | 'orbit' | 'surface' | 'entity'
 
 /** Pose of a frame relative to its parent. */
 export interface LocalPose {
@@ -74,7 +80,11 @@ export type FrameAnchor =
    * position relative to the galactic root is ~1e20 m, which a parent-relative
    * Vec3 could only express to ~16 km.
    */
-  | { readonly kind: 'fixed'; readonly position: UniverseVector; readonly orientation: Quat }
+  | {
+      readonly kind: 'fixed'
+      readonly position: UniverseVector
+      readonly orientation: Quat
+    }
   /**
    * Pose is a pure function of simulation time. Orbits and rotating bodies use
    * this; the function is supplied by the universe/simulation layer so this
@@ -92,7 +102,12 @@ export interface FrameDefinition {
 export const ROOT_FRAME = frameId('universe')
 
 export function rootFrame(): FrameDefinition {
-  return { id: ROOT_FRAME, parent: null, kind: 'root', anchor: { kind: 'root' } }
+  return {
+    id: ROOT_FRAME,
+    parent: null,
+    kind: 'root',
+    anchor: { kind: 'root' },
+  }
 }
 
 /**
@@ -114,9 +129,15 @@ export class FrameGraph {
 
   define(definition: FrameDefinition): void {
     if (definition.anchor.kind === 'root') {
-      invariant(definition.id === ROOT_FRAME, `Only ${ROOT_FRAME} may be the root frame`)
+      invariant(
+        definition.id === ROOT_FRAME,
+        `Only ${ROOT_FRAME} may be the root frame`,
+      )
     } else {
-      invariant(definition.parent !== null, `Frame ${definition.id} needs a parent`)
+      invariant(
+        definition.parent !== null,
+        `Frame ${definition.id} needs a parent`,
+      )
       invariant(
         this.#frames.has(definition.parent),
         `Frame ${definition.id} references unknown parent ${definition.parent}`,
@@ -190,8 +211,14 @@ export class FrameGraph {
         }
         break
       case 'dynamic': {
-        invariant(definition.parent !== null, `Dynamic frame ${id} has no parent`)
-        pose = composePose(this.pose(definition.parent, t), definition.anchor.evaluate(t))
+        invariant(
+          definition.parent !== null,
+          `Dynamic frame ${id} has no parent`,
+        )
+        pose = composePose(
+          this.pose(definition.parent, t),
+          definition.anchor.evaluate(t),
+        )
         break
       }
     }
@@ -233,11 +260,18 @@ export function composePose(parent: FramePose, local: LocalPose): FramePose {
 export const localToUniverse = (pose: FramePose, local: Vec3): UniverseVector =>
   translate(pose.position, Q.rotate(pose.orientation, local))
 
-export const universeToLocal = (pose: FramePose, position: UniverseVector): Vec3 =>
+export const universeToLocal = (
+  pose: FramePose,
+  position: UniverseVector,
+): Vec3 =>
   Q.rotateInverse(pose.orientation, difference(position, pose.position))
 
 /** Velocity of a point that is moving at `localVelocity` within `pose`. */
-export function localVelocityToUniverse(pose: FramePose, local: Vec3, localVelocity: Vec3): Vec3 {
+export function localVelocityToUniverse(
+  pose: FramePose,
+  local: Vec3,
+  localVelocity: Vec3,
+): Vec3 {
   const offset = Q.rotate(pose.orientation, local)
   return V.add(
     V.add(pose.velocity, Q.rotate(pose.orientation, localVelocity)),
@@ -252,7 +286,10 @@ export function universeVelocityToLocal(
   velocity: Vec3,
 ): Vec3 {
   const offset = difference(position, pose.position)
-  const relative = V.sub(V.sub(velocity, pose.velocity), V.cross(pose.angularVelocity, offset))
+  const relative = V.sub(
+    V.sub(velocity, pose.velocity),
+    V.cross(pose.angularVelocity, offset),
+  )
   return Q.rotateInverse(pose.orientation, relative)
 }
 
@@ -282,16 +319,34 @@ export const restState = (frame: FrameId): FrameState => ({
   angularVelocity: V.ZERO,
 })
 
-export function canonicalPosition(graph: FrameGraph, state: FrameState, t: Seconds): UniverseVector {
+export function canonicalPosition(
+  graph: FrameGraph,
+  state: FrameState,
+  t: Seconds,
+): UniverseVector {
   return localToUniverse(graph.pose(state.frame, t), state.position)
 }
 
-export function canonicalVelocity(graph: FrameGraph, state: FrameState, t: Seconds): Vec3 {
-  return localVelocityToUniverse(graph.pose(state.frame, t), state.position, state.velocity)
+export function canonicalVelocity(
+  graph: FrameGraph,
+  state: FrameState,
+  t: Seconds,
+): Vec3 {
+  return localVelocityToUniverse(
+    graph.pose(state.frame, t),
+    state.position,
+    state.velocity,
+  )
 }
 
-export function canonicalOrientation(graph: FrameGraph, state: FrameState, t: Seconds): Quat {
-  return Q.normalize(Q.multiply(graph.pose(state.frame, t).orientation, state.orientation))
+export function canonicalOrientation(
+  graph: FrameGraph,
+  state: FrameState,
+  t: Seconds,
+): Quat {
+  return Q.normalize(
+    Q.multiply(graph.pose(state.frame, t).orientation, state.orientation),
+  )
 }
 
 /**
@@ -314,7 +369,11 @@ export function reframe(
   const to = graph.pose(target, t)
 
   const universePosition = localToUniverse(from, state.position)
-  const universeVelocity = localVelocityToUniverse(from, state.position, state.velocity)
+  const universeVelocity = localVelocityToUniverse(
+    from,
+    state.position,
+    state.velocity,
+  )
   const universeOrientation = Q.multiply(from.orientation, state.orientation)
   const universeAngular = V.add(
     from.angularVelocity,
@@ -324,8 +383,13 @@ export function reframe(
   return {
     frame: target,
     position: universeToLocal(to, universePosition),
-    orientation: Q.normalize(Q.multiply(Q.conjugate(to.orientation), universeOrientation)),
+    orientation: Q.normalize(
+      Q.multiply(Q.conjugate(to.orientation), universeOrientation),
+    ),
     velocity: universeVelocityToLocal(to, universePosition, universeVelocity),
-    angularVelocity: Q.rotateInverse(to.orientation, V.sub(universeAngular, to.angularVelocity)),
+    angularVelocity: Q.rotateInverse(
+      to.orientation,
+      V.sub(universeAngular, to.angularVelocity),
+    ),
   }
 }

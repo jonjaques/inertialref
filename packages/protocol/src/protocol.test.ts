@@ -1,8 +1,19 @@
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
 import { expect as unwrap } from '@inertialref/shared'
-import { frameId, Quaternion as Q, universeVector, vec3 } from '@inertialref/spatial'
-import { decode, decodeJson, decodeObject, decodeNumber, decodeString } from './codec.ts'
+import {
+  frameId,
+  Quaternion as Q,
+  universeVector,
+  vec3,
+} from '@inertialref/spatial'
+import {
+  decode,
+  decodeJson,
+  decodeObject,
+  decodeNumber,
+  decodeString,
+} from './codec.ts'
 import {
   decodeSaveGame,
   decodeSaveMutation,
@@ -53,10 +64,15 @@ const sampleSave: SaveGame = {
 
 describe('codec', () => {
   it('reports the path to a bad field', () => {
-    const decoder = decodeObject({ outer: decodeObject({ inner: decodeNumber }) })
+    const decoder = decodeObject({
+      outer: decodeObject({ inner: decodeNumber }),
+    })
     const result = decode(decoder, { outer: { inner: 'nope' } })
     expect(result.ok).toBe(false)
-    if (!result.ok) expect(result.error).toBe('outer.inner: expected a finite number, got string')
+    if (!result.ok)
+      expect(result.error).toBe(
+        'outer.inner: expected a finite number, got string',
+      )
   })
 
   it('rejects NaN, which JSON.stringify turns into null anyway', () => {
@@ -108,14 +124,20 @@ describe('wire formats', () => {
       velocity: vec3(0, 0, -30_000),
       angularVelocity: vec3(0.01, 0, 0),
     }
-    const back = unwrap(decodeFrameState(JSON.parse(JSON.stringify(encodeFrameState(state))), ''), 'decode')
+    const back = unwrap(
+      decodeFrameState(JSON.parse(JSON.stringify(encodeFrameState(state))), ''),
+      'decode',
+    )
     expect(back).toEqual(state)
   })
 })
 
 describe('save schema', () => {
   it('accepts a well-formed save', () => {
-    const decoded = decode(decodeSaveGame, JSON.parse(JSON.stringify(sampleSave)))
+    const decoded = decode(
+      decodeSaveGame,
+      JSON.parse(JSON.stringify(sampleSave)),
+    )
     expect(decoded.ok).toBe(true)
     if (decoded.ok) expect(decoded.value.entities[0]?.name).toBe('Debug One')
   })
@@ -124,17 +146,26 @@ describe('save schema', () => {
     const withoutMutations = { ...sampleSave } as Record<string, unknown>
     delete withoutMutations['mutations']
     delete withoutMutations['meta']
-    const decoded = decode(decodeSaveGame, JSON.parse(JSON.stringify(withoutMutations)))
+    const decoded = decode(
+      decodeSaveGame,
+      JSON.parse(JSON.stringify(withoutMutations)),
+    )
     expect(decoded.ok).toBe(true)
     if (decoded.ok) expect(decoded.value.mutations).toEqual([])
   })
 
   it('rejects a save whose ship has a corrupt position', () => {
-    const broken = JSON.parse(JSON.stringify(sampleSave)) as Record<string, unknown>
-    ;(broken['entities'] as { state: { position: unknown } }[])[0]!.state.position = [1, 2]
+    const broken = JSON.parse(JSON.stringify(sampleSave)) as Record<
+      string,
+      unknown
+    >
+    ;(
+      broken['entities'] as { state: { position: unknown } }[]
+    )[0]!.state.position = [1, 2]
     const decoded = decode(decodeSaveGame, broken)
     expect(decoded.ok).toBe(false)
-    if (!decoded.ok) expect(decoded.error).toMatch(/entities\[0\]\.state\.position/)
+    if (!decoded.ok)
+      expect(decoded.error).toMatch(/entities\[0\]\.state\.position/)
   })
 })
 
@@ -151,15 +182,25 @@ describe('the boundaries actually validate', () => {
       tick: 12,
     })
     expect(bad.ok).toBe(false)
-    if (!bad.ok) expect(bad.error).toContain('discovered | destroyed | placed | terrain')
+    if (!bad.ok)
+      expect(bad.error).toContain('discovered | destroyed | placed | terrain')
 
     for (const kind of SAVE_MUTATION_KINDS) {
-      expect(decode(decodeSaveMutation, { address: 'a', kind, data: '{}', tick: 0 }).ok).toBe(true)
+      expect(
+        decode(decodeSaveMutation, { address: 'a', kind, data: '{}', tick: 0 })
+          .ok,
+      ).toBe(true)
     }
   })
 
   it('rejects worker envelopes the host loop would otherwise dereference', () => {
-    const good = { kind: 'request', job: 1, task: 'terrain', taskVersion: 2, payload: { any: 'thing' } }
+    const good = {
+      kind: 'request',
+      job: 1,
+      task: 'terrain',
+      taskVersion: 2,
+      payload: { any: 'thing' },
+    }
     expect(decode(decodeWorkerRequest, good).ok).toBe(true)
 
     // Each of these reached `registry.get(...)`, a version comparison, or
@@ -175,6 +216,8 @@ describe('the boundaries actually validate', () => {
     }
 
     // `payload` stays unknown on purpose — its shape is the task's business.
-    expect(decode(decodeWorkerRequest, { ...good, payload: undefined }).ok).toBe(true)
+    expect(
+      decode(decodeWorkerRequest, { ...good, payload: undefined }).ok,
+    ).toBe(true)
   })
 })

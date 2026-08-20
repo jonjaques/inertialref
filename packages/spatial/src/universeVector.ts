@@ -76,7 +76,10 @@ export const UNIVERSE_ORIGIN: UniverseVector = Object.freeze({
 })
 
 /** Carry an arbitrary offset into (sectorIndex, offset). Exact — see the header. */
-function carry(sector: number, offset: number): { sector: number; offset: number } {
+function carry(
+  sector: number,
+  offset: number,
+): { sector: number; offset: number } {
   const k = Math.floor(offset / SECTOR_SIZE)
   return { sector: sector + k, offset: offset - k * SECTOR_SIZE }
 }
@@ -106,7 +109,14 @@ export function universeVector(
   checkSector(cx.sector, 'x')
   checkSector(cy.sector, 'y')
   checkSector(cz.sector, 'z')
-  return { sx: cx.sector, sy: cy.sector, sz: cz.sector, ox: cx.offset, oy: cy.offset, oz: cz.offset }
+  return {
+    sx: cx.sector,
+    sy: cy.sector,
+    sz: cz.sector,
+    ox: cx.offset,
+    oy: cy.offset,
+    oz: cz.offset,
+  }
 }
 
 /**
@@ -126,7 +136,14 @@ export const fromVec3 = (v: Vec3): UniverseVector => fromMeters(v.x, v.y, v.z)
 
 /** Move by a displacement expressed in universe axes. */
 export function translate(uv: UniverseVector, delta: Vec3): UniverseVector {
-  return universeVector(uv.sx, uv.sy, uv.sz, uv.ox + delta.x, uv.oy + delta.y, uv.oz + delta.z)
+  return universeVector(
+    uv.sx,
+    uv.sy,
+    uv.sz,
+    uv.ox + delta.x,
+    uv.oy + delta.y,
+    uv.oz + delta.z,
+  )
 }
 
 /**
@@ -168,10 +185,18 @@ export function approxMeters(uv: UniverseVector): Vec3 {
 }
 
 export const equals = (a: UniverseVector, b: UniverseVector): boolean =>
-  a.sx === b.sx && a.sy === b.sy && a.sz === b.sz && a.ox === b.ox && a.oy === b.oy && a.oz === b.oz
+  a.sx === b.sx &&
+  a.sy === b.sy &&
+  a.sz === b.sz &&
+  a.ox === b.ox &&
+  a.oy === b.oy &&
+  a.oz === b.oz
 
-export const approxEquals = (a: UniverseVector, b: UniverseVector, epsilon: Meters = 1e-6): boolean =>
-  distance(a, b) <= epsilon
+export const approxEquals = (
+  a: UniverseVector,
+  b: UniverseVector,
+  epsilon: Meters = 1e-6,
+): boolean => distance(a, b) <= epsilon
 
 export const isValid = (uv: UniverseVector): boolean =>
   Number.isInteger(uv.sx) &&
@@ -188,7 +213,8 @@ export const isValid = (uv: UniverseVector): boolean =>
   uv.oz < SECTOR_SIZE
 
 /** Stable key for the containing sector — used by spatial indexes and streaming. */
-export const sectorKey = (uv: UniverseVector): string => `${uv.sx},${uv.sy},${uv.sz}`
+export const sectorKey = (uv: UniverseVector): string =>
+  `${uv.sx},${uv.sy},${uv.sz}`
 
 export const format = (uv: UniverseVector): string =>
   `[${uv.sx},${uv.sy},${uv.sz}]+(${uv.ox.toFixed(3)}, ${uv.oy.toFixed(3)}, ${uv.oz.toFixed(3)})`

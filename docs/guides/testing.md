@@ -42,11 +42,15 @@ under test is mathematical.
 
 ```ts
 it('round-trips translate/difference (property)', () => {
-  fc.assert(fc.property(anyPosition, anyDisplacement, (uv, d) => {
-    const back = UV.difference(UV.translate(uv, d), uv)
-    // bounded by the representation's ULP, not by the absolute magnitude
-    expect(Math.abs(back.x - d.x)).toBeLessThanOrEqual(UV.POSITION_RESOLUTION * 4)
-  }))
+  fc.assert(
+    fc.property(anyPosition, anyDisplacement, (uv, d) => {
+      const back = UV.difference(UV.translate(uv, d), uv)
+      // bounded by the representation's ULP, not by the absolute magnitude
+      expect(Math.abs(back.x - d.x)).toBeLessThanOrEqual(
+        UV.POSITION_RESOLUTION * 4,
+      )
+    }),
+  )
 })
 ```
 
@@ -56,7 +60,7 @@ cube-sphere direction mapping.
 
 > **A flaky property test is usually the code telling you something.** The depth-
 > compression monotonicity test failed intermittently because the mapping really
-> is only *non-decreasing* past 1e17 m. The fix was to state the true property in
+> is only _non-decreasing_ past 1e17 m. The fix was to state the true property in
 > two tests, not to loosen the tolerance.
 
 ### 2. Golden vectors
@@ -65,7 +69,7 @@ cube-sphere direction mapping.
 expect(formatSeed(ROOT)).toBe('0df87e57180611d601f6e442eb5fc374')
 ```
 
-Not testing that the value is *right* — any stream would do. Testing that it
+Not testing that the value is _right_ — any stream would do. Testing that it
 **never changes**, because a silent change regenerates every player's universe.
 Changing one is deliberate and comes with an algorithm version bump in the same
 commit.
@@ -75,7 +79,8 @@ commit.
 The canonical comparison for anything about determinism:
 
 ```ts
-const jittery = build(), steady = build()
+const jittery = build(),
+  steady = build()
 while (jittery.clock.tick < 512) jittery.advance(randomFrameTime())
 steady.runTicks(jittery.clock.tick)
 expect(jittery.stateHash()).toBe(steady.stateHash())
@@ -90,7 +95,7 @@ expect(Math.abs(fallen - predicted) / predicted).toBeLessThan(0.02)
 ```
 
 Not "the number went down". Capability check 5 once passed while reporting
-*"fell from 57287 km to 57287 km"* — the ship had fallen 19 m out of 57,000 km
+_"fell from 57287 km to 57287 km"_ — the ship had fallen 19 m out of 57,000 km
 and the assertion was `now <= start`, which equality satisfies.
 
 > A test that cannot fail informatively converts an unknown into a false
@@ -100,7 +105,7 @@ and the assertion was `now <= start`, which equality satisfies.
 
 Malformed JSON, a save from a newer schema, a frame that cannot be rebuilt, an
 unknown worker task, a version mismatch. These are the paths where behaviour is
-a *decision* (refuse? default? migrate?) and the test documents the decision.
+a _decision_ (refuse? default? migrate?) and the test documents the decision.
 
 ---
 
@@ -166,12 +171,12 @@ otherwise assert in prose.
 
 ## What is not covered yet
 
-| Gap | Roadmap |
-|---|---|
-| A fixture captured from a released build, for real compatibility testing (the v0 shape is covered, but from an inline literal) | [roadmap](../roadmap.md#persistent-mutations) |
-| Recorded input replay | [roadmap](../roadmap.md#replay-and-reconciliation) |
-| Performance regression benchmarks | [roadmap](../roadmap.md#performance-work) |
-| Any rendering test that touches a GPU | out of scope by design — `rendering` is pure data |
+| Gap                                                                                                                            | Roadmap                                            |
+| ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------- |
+| A fixture captured from a released build, for real compatibility testing (the v0 shape is covered, but from an inline literal) | [roadmap](../roadmap.md#persistent-mutations)      |
+| Recorded input replay                                                                                                          | [roadmap](../roadmap.md#replay-and-reconciliation) |
+| Performance regression benchmarks                                                                                              | [roadmap](../roadmap.md#performance-work)          |
+| Any rendering test that touches a GPU                                                                                          | out of scope by design — `rendering` is pure data  |
 
 ---
 

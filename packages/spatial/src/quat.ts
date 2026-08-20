@@ -39,7 +39,12 @@ export function multiply(a: Quat, b: Quat): Quat {
 }
 
 /** Inverse of a unit quaternion. */
-export const conjugate = (q: Quat): Quat => ({ x: -q.x, y: -q.y, z: -q.z, w: q.w })
+export const conjugate = (q: Quat): Quat => ({
+  x: -q.x,
+  y: -q.y,
+  z: -q.z,
+  w: q.w,
+})
 
 export function normalize(q: Quat): Quat {
   const len = Math.hypot(q.x, q.y, q.z, q.w)
@@ -73,7 +78,11 @@ export const rotateInverse = (q: Quat, v: Vec3): Vec3 => rotate(conjugate(q), v)
  * seconds of wall clock.
  */
 export function integrate(q: Quat, angularVelocity: Vec3, dt: number): Quat {
-  const omega = Math.hypot(angularVelocity.x, angularVelocity.y, angularVelocity.z)
+  const omega = Math.hypot(
+    angularVelocity.x,
+    angularVelocity.y,
+    angularVelocity.z,
+  )
   if (omega === 0) return q
   const delta = fromAxisAngle(angularVelocity, omega * dt)
   return normalize(multiply(q, delta))
@@ -141,18 +150,38 @@ export function fromBasis(x: Vec3, y: Vec3, z: Vec3): Quat {
   const trace = x.x + y.y + z.z
   if (trace > 0) {
     const s = Math.sqrt(trace + 1) * 2
-    return normalize({ x: (y.z - z.y) / s, y: (z.x - x.z) / s, z: (x.y - y.x) / s, w: s / 4 })
+    return normalize({
+      x: (y.z - z.y) / s,
+      y: (z.x - x.z) / s,
+      z: (x.y - y.x) / s,
+      w: s / 4,
+    })
   }
   if (x.x > y.y && x.x > z.z) {
     const s = Math.sqrt(1 + x.x - y.y - z.z) * 2
-    return normalize({ x: s / 4, y: (y.x + x.y) / s, z: (z.x + x.z) / s, w: (y.z - z.y) / s })
+    return normalize({
+      x: s / 4,
+      y: (y.x + x.y) / s,
+      z: (z.x + x.z) / s,
+      w: (y.z - z.y) / s,
+    })
   }
   if (y.y > z.z) {
     const s = Math.sqrt(1 + y.y - x.x - z.z) * 2
-    return normalize({ x: (y.x + x.y) / s, y: s / 4, z: (z.y + y.z) / s, w: (z.x - x.z) / s })
+    return normalize({
+      x: (y.x + x.y) / s,
+      y: s / 4,
+      z: (z.y + y.z) / s,
+      w: (z.x - x.z) / s,
+    })
   }
   const s = Math.sqrt(1 + z.z - x.x - y.y) * 2
-  return normalize({ x: (z.x + x.z) / s, y: (z.y + y.z) / s, z: s / 4, w: (x.y - y.x) / s })
+  return normalize({
+    x: (z.x + x.z) / s,
+    y: (z.y + y.z) / s,
+    z: s / 4,
+    w: (x.y - y.x) / s,
+  })
 }
 
 /** Column-major 3x3 basis of the quaternion, for building render matrices. */

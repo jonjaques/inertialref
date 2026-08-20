@@ -29,17 +29,25 @@ describe('rigid body integration', () => {
     let state = AT_REST
     const dt = 1 / 64
     const accel = vec3(0, 0, -30)
-    for (let i = 0; i < 640; i += 1) state = integrateBody(state, accel, Vec.ZERO, dt)
+    for (let i = 0; i < 640; i += 1)
+      state = integrateBody(state, accel, Vec.ZERO, dt)
     // Ten seconds at 30 m/s².
     expect(state.velocity.z).toBeCloseTo(-300, 9)
     // Semi-implicit Euler leads the analytic ½at² by exactly one half-step of
     // velocity, which is a known, bounded offset rather than drift.
-    expect(state.position.z).toBeCloseTo(-(0.5 * 30 * 100) - 0.5 * 30 * dt * 10, 6)
+    expect(state.position.z).toBeCloseTo(
+      -(0.5 * 30 * 100) - 0.5 * 30 * dt * 10,
+      6,
+    )
   })
 
   it('keeps orientation normalised under sustained rotation', () => {
-    let state: BodyState = { ...AT_REST, angularVelocity: vec3(0.7, -0.3, 1.1) }
-    for (let i = 0; i < 100_000; i += 1) state = integrateBody(state, Vec.ZERO, Vec.ZERO, 1 / 64)
+    let state: BodyState = {
+      ...AT_REST,
+      angularVelocity: vec3(0.7, -0.3, 1.1),
+    }
+    for (let i = 0; i < 100_000; i += 1)
+      state = integrateBody(state, Vec.ZERO, Vec.ZERO, 1 / 64)
     const norm = Math.hypot(
       state.orientation.x,
       state.orientation.y,
@@ -52,7 +60,8 @@ describe('rigid body integration', () => {
   it('completes exactly one turn per rotation period', () => {
     const rate = (2 * Math.PI) / 8 // one revolution in 8 s
     let state: BodyState = { ...AT_REST, angularVelocity: vec3(0, rate, 0) }
-    for (let i = 0; i < 8 * 64; i += 1) state = integrateBody(state, Vec.ZERO, Vec.ZERO, 1 / 64)
+    for (let i = 0; i < 8 * 64; i += 1)
+      state = integrateBody(state, Vec.ZERO, Vec.ZERO, 1 / 64)
     expect(Q.approxEquals(state.orientation, Q.IDENTITY, 1e-9)).toBe(true)
   })
 
@@ -71,7 +80,12 @@ describe('rigid body integration', () => {
     const period = orbitalPeriod(SUN_MU, r)
     const dt = period / 20_000
     for (let i = 0; i < 20_000; i += 1) {
-      state = integrateBody(state, pointMassAcceleration(SUN_MU, state.position), Vec.ZERO, dt)
+      state = integrateBody(
+        state,
+        pointMassAcceleration(SUN_MU, state.position),
+        Vec.ZERO,
+        dt,
+      )
     }
     expect(Vec.length(state.position) / r).toBeCloseTo(1, 3)
     expect(Vec.length(state.velocity) / speed).toBeCloseTo(1, 3)
@@ -86,7 +100,10 @@ describe('rigid body integration', () => {
     expect(linear.z).toBeCloseTo(-30, 9)
     expect(angular).toEqual(vec3(0, 0, 0))
 
-    const clamped = resolveThrust(SHIP, { translation: vec3(5, 0, 0), rotation: vec3(-9, 0, 0) })
+    const clamped = resolveThrust(SHIP, {
+      translation: vec3(5, 0, 0),
+      rotation: vec3(-9, 0, 0),
+    })
     expect(clamped.linear.x).toBeCloseTo(8, 9)
     expect(clamped.angular.x).toBeCloseTo(-1.2, 9)
   })
@@ -95,7 +112,12 @@ describe('rigid body integration', () => {
     const dt = 1 / 64
     let state: BodyState = { ...AT_REST, angularVelocity: vec3(0, 0.05, 0) }
     for (let i = 0; i < 64; i += 1) {
-      state = integrateBody(state, Vec.ZERO, dampingTorque(state.angularVelocity, SHIP, dt), dt)
+      state = integrateBody(
+        state,
+        Vec.ZERO,
+        dampingTorque(state.angularVelocity, SHIP, dt),
+        dt,
+      )
       expect(Vec.length(state.angularVelocity)).toBeLessThanOrEqual(0.0501)
     }
     expect(Vec.length(state.angularVelocity)).toBeCloseTo(0, 12)
@@ -103,7 +125,11 @@ describe('rigid body integration', () => {
 })
 
 describe('atmosphere', () => {
-  const AIR: Atmosphere = { surfaceDensity: 1.225, scaleHeight: 8_500, ceiling: 140_000 }
+  const AIR: Atmosphere = {
+    surfaceDensity: 1.225,
+    scaleHeight: 8_500,
+    ceiling: 140_000,
+  }
 
   it('falls off exponentially and stops at the ceiling', () => {
     expect(atmosphericDensity(AIR, 0)).toBeCloseTo(1.225, 6)

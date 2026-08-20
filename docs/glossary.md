@@ -1,7 +1,7 @@
 # Glossary
 
 Terms with a specific meaning in this codebase. Where a word is used loosely
-elsewhere in games or astronomy, the entry says what it means *here*.
+elsewhere in games or astronomy, the entry says what it means _here_.
 
 ---
 
@@ -10,7 +10,7 @@ elsewhere in games or astronomy, the entry says what it means *here*.
 **UniverseVector** — the only representation allowed to claim it is an absolute
 position: an int32 sector index per axis plus a float64 offset in metres inside
 that sector. Sub-millimetre anywhere within 249,000 ly of the origin — that is
-the *half*-extent, so the addressable cube is twice that on a side.
+the _half_-extent, so the addressable cube is twice that on a side.
 → [coordinates](concepts/coordinates.md)
 
 **Sector** — a 2^40 m (≈7.35 AU) cube. A power of two so that carrying an offset
@@ -39,7 +39,7 @@ these axes; sampling in inertial axes leaves the mountains behind.
 axes east / up / south, +Y up. Where metre-scale gameplay happens.
 
 **Body-fixed direction** (`BodyFixedDirection`) — a unit direction from a body's
-centre, in that body's *rotating* axes, as a branded type. `surfaceRadius` and
+centre, in that body's _rotating_ axes, as a branded type. `surfaceRadius` and
 the region functions accept nothing else, so terrain cannot be sampled with an
 inertial direction — the bug the body-fixed frame entry above warns about, which
 shipped twice before the brand existed. Produced only by `bodyFixedDirection`,
@@ -78,7 +78,7 @@ moving at 465 m/s.
 **Seed** — 128 bits in four uint32 lanes. Derived down a path of labels, never
 drawn from a shared stream. → [determinism](concepts/determinism.md)
 
-**Seed path** — the sequence of labels that derives a seed. It *is* the address.
+**Seed path** — the sequence of labels that derives a seed. It _is_ the address.
 
 **Address** — a path through the containment hierarchy that identifies anything
 in the universe: `g:milky-way/s:SOL/b:2.0`. Also the seed path, the save
@@ -142,7 +142,7 @@ are ordinary operations. → [streaming](concepts/streaming.md)
 
 ## Presentation
 
-**LOD tier** — the *representation* of a body: `point`, `billboard`, `sphere` or
+**LOD tier** — the _representation_ of a body: `point`, `billboard`, `sphere` or
 `surface`. Chosen by angular size, not distance. Separate from identity — the
 same planet at every tier. → [rendering](concepts/rendering.md)
 
@@ -150,7 +150,7 @@ same planet at every tier. → [rendering](concepts/rendering.md)
 scaling position and radius together so angular size is preserved exactly and
 only depth is fictional.
 
-**Near limit** — the distance to a body's *surface* below which nothing is
+**Near limit** — the distance to a body's _surface_ below which nothing is
 compressed. Keying this off the centre instead of the surface is what once made
 terrain invisible.
 

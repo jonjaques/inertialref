@@ -11,13 +11,13 @@ range, and every position in the game has to live somewhere in it.
 
 The obvious representations all fail somewhere in that range:
 
-| Representation | Fails how |
-|---|---|
-| `float64` absolute metres | 52-bit mantissa: at the galactic rim an ULP is ~100 km. |
-| `float32` absolute metres | Useless past a few kilometres. |
-| `int64` millimetres | 2^63 mm is 0.97 ly. The galaxy needs ~100,000. |
-| `int64` metres | 975 ly. Still two orders short. |
-| `BigInt` / int128 | Works, but BigInt arithmetic is roughly an order of magnitude slower than double math in the inner loop of a 64 Hz simulation, and serialises badly. |
+| Representation            | Fails how                                                                                                                                            |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `float64` absolute metres | 52-bit mantissa: at the galactic rim an ULP is ~100 km.                                                                                              |
+| `float32` absolute metres | Useless past a few kilometres.                                                                                                                       |
+| `int64` millimetres       | 2^63 mm is 0.97 ly. The galaxy needs ~100,000.                                                                                                       |
+| `int64` metres            | 975 ly. Still two orders short.                                                                                                                      |
+| `BigInt` / int128         | Works, but BigInt arithmetic is roughly an order of magnitude slower than double math in the inner loop of a 64 Hz simulation, and serialises badly. |
 
 ## Decision
 
@@ -26,8 +26,12 @@ within that sector**, where the sector edge is **2^40 m** (≈ 7.35 AU).
 
 ```ts
 interface UniverseVector {
-  sx, sy, sz: number   // int32 sector index
-  ox, oy, oz: number   // metres, normalised into [0, 2^40)
+  sx
+  sy
+  sz: number // int32 sector index
+  ox
+  oy
+  oz: number // metres, normalised into [0, 2^40)
 }
 ```
 
@@ -44,11 +48,11 @@ what makes this safe to use as canonical state rather than as a rendering trick.
 
 ## Resulting numbers
 
-| Quantity | Value |
-|---|---|
-| Sector edge | 2^40 m ≈ 1.0995e12 m ≈ 7.35 AU |
-| Addressable half-extent | 2^71 m ≈ 2.36e21 m ≈ 249,000 ly |
-| Worst-case resolution, anywhere | 2^40 × 2^-52 m ≈ 0.24 mm |
+| Quantity                        | Value                           |
+| ------------------------------- | ------------------------------- |
+| Sector edge                     | 2^40 m ≈ 1.0995e12 m ≈ 7.35 AU  |
+| Addressable half-extent         | 2^71 m ≈ 2.36e21 m ≈ 249,000 ly |
+| Worst-case resolution, anywhere | 2^40 × 2^-52 m ≈ 0.24 mm        |
 
 Measured: an inch-scale displacement 8.18 kpc from the galactic centre resolves
 to within 9.4 µm (capability check 7). The naive double representation cannot

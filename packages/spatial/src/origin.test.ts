@@ -64,7 +64,9 @@ describe('floating origin', () => {
     expect(travelled.x % REBASE_SNAP).toBe(0)
     expect(travelled.y).toBe(0)
     expect(travelled.z).toBe(0)
-    expect(Math.abs(UV.difference(camera, origin.position).x)).toBeLessThanOrEqual(REBASE_SNAP)
+    expect(
+      Math.abs(UV.difference(camera, origin.position).x),
+    ).toBeLessThanOrEqual(REBASE_SNAP)
   })
 
   it('keeps render coordinates inside float32 comfort while flying', () => {
@@ -88,7 +90,12 @@ describe('floating origin', () => {
     const near = UV.translate(START, vec3(10, 10, 10))
     expect(needsRebase(origin, near)).toBe(false)
     expect(maintainOrigin(origin, near)).toBe(origin)
-    expect(needsRebase(origin, UV.translate(START, vec3(REBASE_THRESHOLD + 1, 0, 0)))).toBe(true)
+    expect(
+      needsRebase(
+        origin,
+        UV.translate(START, vec3(REBASE_THRESHOLD + 1, 0, 0)),
+      ),
+    ).toBe(true)
   })
 
   it('renders an interplanetary separation without losing the near field', () => {
@@ -110,6 +117,8 @@ describe('floating origin', () => {
     const render = toRenderSpace(origin, point)
     // Rotated 60 degrees about +Y: x' = x cos - z sin.
     expect(render.x).toBeCloseTo(100 * Math.cos(-Math.PI / 3), 6)
-    expect(UV.distance(fromRenderSpace(origin, render), point)).toBeLessThan(1e-6)
+    expect(UV.distance(fromRenderSpace(origin, render), point)).toBeLessThan(
+      1e-6,
+    )
   })
 })

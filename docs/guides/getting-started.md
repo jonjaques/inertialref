@@ -33,19 +33,19 @@ front of Vite and turn every edit into a caching investigation. See
 
 ## Controls
 
-| Key | Action |
-|---|---|
-| `W` / `S` | main drive fore / aft |
-| `A` / `D` | translate left / right |
-| `R` / `F` | translate up / down |
-| `↑ ↓ ← →` | pitch / yaw |
-| `Q` / `E` | roll |
-| `Z` | flight assist (rotational damping) |
-| `X` | kill rotation |
-| `Space` | pause |
-| `[` / `]` | time warp down / up |
-| `F5` / `F9` | save / load |
-| `Tab` | hide the debug panel |
+| Key         | Action                             |
+| ----------- | ---------------------------------- |
+| `W` / `S`   | main drive fore / aft              |
+| `A` / `D`   | translate left / right             |
+| `R` / `F`   | translate up / down                |
+| `↑ ↓ ← →`   | pitch / yaw                        |
+| `Q` / `E`   | roll                               |
+| `Z`         | flight assist (rotational damping) |
+| `X`         | kill rotation                      |
+| `Space`     | pause                              |
+| `[` / `]`   | time warp down / up                |
+| `F5` / `F9` | save / load                        |
+| `Tab`       | hide the debug panel               |
 
 Flight is full 6-DoF with no artificial "space mode" — the same controls fly
 between stars, into orbit, and down to a landing.
@@ -103,11 +103,11 @@ of kilometres per second.
 ### 3. Watch a frame transition
 
 ```js
-const target = ir.bodies().find(b => b.kind === 'rocky')
-ir.orbit(target.address, 100000)   // inside the sphere of influence
-ir.control({ translation: [0, 0, 1] })   // burn prograde
+const target = ir.bodies().find((b) => b.kind === 'rocky')
+ir.orbit(target.address, 100000) // inside the sphere of influence
+ir.control({ translation: [0, 0, 1] }) // burn prograde
 for (let i = 0; i < 30; i++) ir.step(20000)
-ir.status().world.events.at(-1)     // → { tick, kind: 'frame-change', detail: 'left sphere of influence' }
+ir.status().world.events.at(-1) // → { tick, kind: 'frame-change', detail: 'left sphere of influence' }
 ```
 
 The ship is re-framed from the planet to the system, mid-flight, without moving.
@@ -119,7 +119,7 @@ const a = ir.status().world.stateHash
 const save = ir.save()
 ir.step(500)
 ir.load(save)
-ir.status().world.stateHash === a   // → true
+ir.status().world.stateHash === a // → true
 ```
 
 ### 5. Run it with no browser at all
@@ -161,9 +161,9 @@ time if you do not know it.
 
 ## Where to go next
 
-| | |
-|---|---|
-| Understand the system | [Architecture](../architecture.md) |
-| Drive it properly | [The harness](harness.md) |
-| Change it safely | [AGENTS.md](../../AGENTS.md) then [Extending](extending.md) |
-| Know what is missing | [Roadmap](../roadmap.md) |
+|                       |                                                             |
+| --------------------- | ----------------------------------------------------------- |
+| Understand the system | [Architecture](../architecture.md)                          |
+| Drive it properly     | [The harness](harness.md)                                   |
+| Change it safely      | [AGENTS.md](../../AGENTS.md) then [Extending](extending.md) |
+| Know what is missing  | [Roadmap](../roadmap.md)                                    |

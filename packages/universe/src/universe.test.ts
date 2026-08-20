@@ -1,10 +1,21 @@
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { AU, LIGHT_YEAR, type Radians, SECONDS_PER_DAY } from '@inertialref/shared'
+import {
+  AU,
+  LIGHT_YEAR,
+  type Radians,
+  SECONDS_PER_DAY,
+} from '@inertialref/shared'
 import { derivePath, deriveSeed, Rng, rootSeed } from '@inertialref/procedural'
 import { apoapsis, orbitalPeriod, periapsis } from '@inertialref/physics'
 import { type FrameId, FrameGraph, UV, Vec, vec3 } from '@inertialref/spatial'
-import { addressLabels, bodyAddress, formatAddress, regionAddress, systemAddress } from './address.ts'
+import {
+  addressLabels,
+  bodyAddress,
+  formatAddress,
+  regionAddress,
+  systemAddress,
+} from './address.ts'
 import { CATALOG, catalogStarPosition } from './catalog.ts'
 import {
   bodyFixedFrameId,
@@ -54,7 +65,9 @@ const stringify = (value: unknown): string => JSON.stringify(value)
 describe('galaxy', () => {
   it('generates a cell identically no matter who asks or when', () => {
     const cell = { x: 12, y: -3, z: 7 }
-    expect(stringify(generateCell(GALAXY_SEED, cell))).toBe(stringify(generateCell(GALAXY_SEED, cell)))
+    expect(stringify(generateCell(GALAXY_SEED, cell))).toBe(
+      stringify(generateCell(GALAXY_SEED, cell)),
+    )
   })
 
   it('does not let neighbouring cells influence each other', () => {
@@ -64,7 +77,11 @@ describe('galaxy', () => {
     const isolated = stringify(generateCell(GALAXY_SEED, cell))
     for (let dx = -1; dx <= 1; dx += 1) {
       for (let dy = -1; dy <= 1; dy += 1) {
-        generateCell(GALAXY_SEED, { x: cell.x + dx, y: cell.y + dy, z: cell.z - 1 })
+        generateCell(GALAXY_SEED, {
+          x: cell.x + dx,
+          y: cell.y + dy,
+          z: cell.z - 1,
+        })
       }
     }
     expect(stringify(generateCell(GALAXY_SEED, cell))).toBe(isolated)
@@ -79,7 +96,10 @@ describe('galaxy', () => {
         fc.integer({ min: 0, max: 200 }),
         (x, y, z, index) => {
           const id = proceduralSystemId({ x, y, z }, index)
-          expect(parseProceduralSystemId(id)).toEqual({ cell: { x, y, z }, index })
+          expect(parseProceduralSystemId(id)).toEqual({
+            cell: { x, y, z },
+            index,
+          })
         },
       ),
     )
@@ -91,7 +111,9 @@ describe('galaxy', () => {
     expect(stars.length).toBeGreaterThan(0)
     const target = stars[0]
     if (target === undefined) throw new Error('expected a star')
-    expect(stringify(resolveSystem(GALAXY_SEED, target.id))).toBe(stringify(target))
+    expect(stringify(resolveSystem(GALAXY_SEED, target.id))).toBe(
+      stringify(target),
+    )
     expect(resolveSystem(GALAXY_SEED, SOL.id)?.name).toBe('Sol')
   })
 
@@ -102,11 +124,17 @@ describe('galaxy', () => {
     expect(names).toContain('Alpha Centauri')
     expect(names).not.toContain('Sirius')
     // Stable ordering, so two clients asking the same question agree.
-    expect(stringify(systemsWithin(GALAXY_SEED, SOL.position, 5 * LIGHT_YEAR))).toBe(stringify(near))
+    expect(
+      stringify(systemsWithin(GALAXY_SEED, SOL.position, 5 * LIGHT_YEAR)),
+    ).toBe(stringify(near))
   })
 
   it('thins out above the galactic plane', () => {
-    const inPlane = systemsWithin(GALAXY_SEED, SOL.position, 30 * LIGHT_YEAR).length
+    const inPlane = systemsWithin(
+      GALAXY_SEED,
+      SOL.position,
+      30 * LIGHT_YEAR,
+    ).length
     const aboveDisk = systemsWithin(
       GALAXY_SEED,
       UV.translate(SOL.position, vec3(0, 3_000 * LIGHT_YEAR, 0)),
@@ -122,15 +150,23 @@ describe('system generation', () => {
     const b = generateSystem(ROOT, MILKY_WAY, SOL)
     expect(stringify(a)).toBe(stringify(b))
     // A different global seed gives a different universe.
-    expect(stringify(generateSystem(rootSeed('other'), MILKY_WAY, SOL))).not.toBe(stringify(a))
+    expect(
+      stringify(generateSystem(rootSeed('other'), MILKY_WAY, SOL)),
+    ).not.toBe(stringify(a))
   })
 
   it('does not depend on generation order', () => {
     const stubs = CATALOG.map(catalogStub)
-    const sequential = stubs.map((s) => stringify(generateSystem(ROOT, MILKY_WAY, s)))
-    const shuffled = new Rng(rootSeed('order')).shuffle(stubs.map((s, i) => [s, i] as const))
+    const sequential = stubs.map((s) =>
+      stringify(generateSystem(ROOT, MILKY_WAY, s)),
+    )
+    const shuffled = new Rng(rootSeed('order')).shuffle(
+      stubs.map((s, i) => [s, i] as const),
+    )
     for (const [stub, index] of shuffled) {
-      expect(stringify(generateSystem(ROOT, MILKY_WAY, stub))).toBe(sequential[index])
+      expect(stringify(generateSystem(ROOT, MILKY_WAY, stub))).toBe(
+        sequential[index],
+      )
     }
   })
 
@@ -191,7 +227,9 @@ describe('cube-sphere terrain', () => {
           fc.pre(Math.hypot(x, y, z) > 1e-6)
           const direction = Vec.normalize(vec3(x, y, z))
           const face = directionToFace(direction)
-          expect(Vec.distance(faceToDirection(face.face, face.u, face.v), direction)).toBeLessThan(1e-12)
+          expect(
+            Vec.distance(faceToDirection(face.face, face.u, face.v), direction),
+          ).toBeLessThan(1e-12)
         },
       ),
     )
@@ -218,23 +256,43 @@ describe('cube-sphere terrain', () => {
 
   it('generates identical heightfields regardless of call order', () => {
     const system = generateSystem(ROOT, MILKY_WAY, SOL)
-    const planet = [...walkBodies(system)].find((b) => b.surface.maxElevation > 0)
+    const planet = [...walkBodies(system)].find(
+      (b) => b.surface.maxElevation > 0,
+    )
     if (planet === undefined) throw new Error('expected a solid body')
     const region = regionForDirection(Vec.normalize(vec3(1, 0.2, 0.1)), 5)
-    const first = generateHeightfield(planet.surface, { region, resolution: 33 })
-    generateHeightfield(planet.surface, { region: regionForDirection(vec3(0, 1, 0), 5), resolution: 33 })
-    const second = generateHeightfield(planet.surface, { region, resolution: 33 })
+    const first = generateHeightfield(planet.surface, {
+      region,
+      resolution: 33,
+    })
+    generateHeightfield(planet.surface, {
+      region: regionForDirection(vec3(0, 1, 0), 5),
+      resolution: 33,
+    })
+    const second = generateHeightfield(planet.surface, {
+      region,
+      resolution: 33,
+    })
     expect(Array.from(second.elevations)).toEqual(Array.from(first.elevations))
-    expect(first.maxElevation).toBeLessThanOrEqual(planet.surface.maxElevation * 1.2)
-    expect(first.minElevation).toBeGreaterThanOrEqual(-planet.surface.maxElevation * 1.2)
+    expect(first.maxElevation).toBeLessThanOrEqual(
+      planet.surface.maxElevation * 1.2,
+    )
+    expect(first.minElevation).toBeGreaterThanOrEqual(
+      -planet.surface.maxElevation * 1.2,
+    )
   })
 
   it('agrees with the sampled elevation at region corners', () => {
     const system = generateSystem(ROOT, MILKY_WAY, SOL)
-    const planet = [...walkBodies(system)].find((b) => b.surface.maxElevation > 0)
+    const planet = [...walkBodies(system)].find(
+      (b) => b.surface.maxElevation > 0,
+    )
     if (planet === undefined) throw new Error('expected a solid body')
     const region = regionForDirection(Vec.normalize(vec3(-0.4, 0.1, 0.9)), 4)
-    const field = generateHeightfield(planet.surface, { region, resolution: 5 })
+    const field = generateHeightfield(planet.surface, {
+      region,
+      resolution: 5,
+    })
     const corner = elevationAt(planet.surface, regionCentreDirection(region))
     expect(Number.isFinite(corner)).toBe(true)
     expect(field.elevations.length).toBe(25)
@@ -277,12 +335,17 @@ describe('system frames', () => {
     const pose = graph.pose(surface, t)
     const planetPose = graph.pose(bodyFrameId(planet.address), t)
     // On the ground, which is the terrain height — not the datum sphere.
-    const height = UV.distance(pose.position, planetPose.position) - planet.radius
-    expect(Math.abs(height)).toBeLessThanOrEqual(planet.surface.maxElevation * 1.2)
+    const height =
+      UV.distance(pose.position, planetPose.position) - planet.radius
+    expect(Math.abs(height)).toBeLessThanOrEqual(
+      planet.surface.maxElevation * 1.2,
+    )
     expect(Math.abs(height)).toBeGreaterThan(0)
 
     // Standing still on the surface still means moving, in the frame above.
-    const spinSpeed = (2 * Math.PI * planet.radius * Math.cos(0.4)) / Math.abs(planet.rotationPeriod)
+    const spinSpeed =
+      (2 * Math.PI * planet.radius * Math.cos(0.4)) /
+      Math.abs(planet.rotationPeriod)
     expect(Vec.length(pose.velocity)).toBeGreaterThan(spinSpeed * 0.5)
   })
 
@@ -292,7 +355,9 @@ describe('system frames', () => {
         fc.double({ min: -1.5, max: 1.5, noNaN: true }),
         fc.double({ min: -Math.PI + 0.01, max: Math.PI - 0.01, noNaN: true }),
         (latitude, longitude) => {
-          const back = directionToGeodetic(geodeticDirection(latitude, longitude))
+          const back = directionToGeodetic(
+            geodeticDirection(latitude, longitude),
+          )
           expect(back.latitude).toBeCloseTo(latitude, 9)
           expect(back.longitude).toBeCloseTo(longitude, 9)
         },
@@ -334,7 +399,9 @@ describe('catalogue', () => {
 
   it('places the Sun 8.178 kpc from the galactic centre', () => {
     const sol = catalogStarPosition(CATALOG[0] as (typeof CATALOG)[number])
-    expect(UV.distance(sol, UV.UNIVERSE_ORIGIN) / (3.085677581491367e16 * 1000)).toBeCloseTo(8.178, 3)
+    expect(
+      UV.distance(sol, UV.UNIVERSE_ORIGIN) / (3.085677581491367e16 * 1000),
+    ).toBeCloseTo(8.178, 3)
   })
 
   it('puts a day-long rotation in the right ballpark', () => {
@@ -358,7 +425,9 @@ describe('the ground has one owner', () => {
   const oceanWorld = () => {
     for (const stub of CATALOG.map(catalogStub)) {
       const system = generateSystem(ROOT, MILKY_WAY, stub)
-      const wet = [...walkBodies(system)].find((body) => body.surface.seaLevel !== null)
+      const wet = [...walkBodies(system)].find(
+        (body) => body.surface.seaLevel !== null,
+      )
       if (wet !== undefined) return wet
     }
     throw new Error('no ocean world anywhere in the catalogue')
@@ -383,8 +452,11 @@ describe('the ground has one owner', () => {
     ] as const) {
       const row = Math.round(t * (HEIGHTFIELD_RESOLUTION - 1))
       const col = Math.round(s * (HEIGHTFIELD_RESOLUTION - 1))
-      const meshed = field.elevations[row * HEIGHTFIELD_RESOLUTION + col] as number
-      const physical = surfaceRadius(body, regionDirection(region, s, t)) - body.radius
+      const meshed = field.elevations[
+        row * HEIGHTFIELD_RESOLUTION + col
+      ] as number
+      const physical =
+        surfaceRadius(body, regionDirection(region, s, t)) - body.radius
       // Float32Array storage is the only thing between them, so the bound is
       // that conversion and nothing else.
       expect(meshed).toBeCloseTo(physical, 1)
@@ -400,7 +472,8 @@ describe('the ground has one owner', () => {
     const grid = []
     for (let face = 0; face < 6; face += 1) {
       for (let u = -0.9; u <= 0.9; u += 0.3) {
-        for (let v = -0.9; v <= 0.9; v += 0.3) grid.push(faceToDirection(face, u, v))
+        for (let v = -0.9; v <= 0.9; v += 0.3)
+          grid.push(faceToDirection(face, u, v))
       }
     }
     const submerged = grid.find((d) => elevationAt(body.surface, d) < floor)
@@ -429,14 +502,20 @@ describe('surface frame ids round-trip', () => {
         fc.double({ min: -1.5, max: 1.5, noNaN: true }),
         fc.double({ min: -3.1, max: 3.1, noNaN: true }),
         (latitude, longitude) => {
-          const id = surfaceFrameId(ADDRESS, latitude as Radians, longitude as Radians)
+          const id = surfaceFrameId(
+            ADDRESS,
+            latitude as Radians,
+            longitude as Radians,
+          )
           const parsed = parseSurfaceFrameId(id)
           expect(parsed).not.toBeNull()
           if (parsed === null) return
           expect(formatAddress(parsed.address)).toBe(formatAddress(ADDRESS))
           // Re-formatting what we parsed must give the identical id. That is the
           // property the whole quantisation dance exists to provide.
-          expect(surfaceFrameId(parsed.address, parsed.latitude, parsed.longitude)).toBe(id)
+          expect(
+            surfaceFrameId(parsed.address, parsed.latitude, parsed.longitude),
+          ).toBe(id)
         },
       ),
     )
@@ -448,12 +527,19 @@ describe('surface frame ids round-trip', () => {
     const id = surfaceFrameId(ADDRESS, -1e-9 as Radians, 0 as Radians)
     const parsed = parseSurfaceFrameId(id)
     if (parsed === null) throw new Error('should parse')
-    expect(surfaceFrameId(parsed.address, parsed.latitude, parsed.longitude)).toBe(id)
+    expect(
+      surfaceFrameId(parsed.address, parsed.latitude, parsed.longitude),
+    ).toBe(id)
     expect(Object.is(parsed.latitude, -0)).toBe(false)
   })
 
   it('returns null for anything that is not a surface frame id', () => {
-    for (const id of ['s:SOL', 'b:g:milky-way/s:SOL/b:2', 'bf:g:milky-way/s:SOL/b:2', 'sf:no-at-sign']) {
+    for (const id of [
+      's:SOL',
+      'b:g:milky-way/s:SOL/b:2',
+      'bf:g:milky-way/s:SOL/b:2',
+      'sf:no-at-sign',
+    ]) {
       expect(parseSurfaceFrameId(id as FrameId)).toBeNull()
     }
   })
@@ -490,7 +576,9 @@ describe('the address is the seed path', () => {
 
       planet.moons.forEach((moon, moonIndex) => {
         const moonAddress = bodyAddress(MILKY_WAY, SOL.id, [index, moonIndex])
-        expect(moon.surface.seed).toEqual(surfaceSeedOf(addressLabels(moonAddress)))
+        expect(moon.surface.seed).toEqual(
+          surfaceSeedOf(addressLabels(moonAddress)),
+        )
       })
     })
   })

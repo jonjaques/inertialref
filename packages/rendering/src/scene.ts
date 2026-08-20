@@ -13,7 +13,11 @@ import {
   type Vec3,
   vec3,
 } from '@inertialref/spatial'
-import type { BodySnapshot, EntitySnapshot, WorldSnapshot } from '@inertialref/simulation'
+import type {
+  BodySnapshot,
+  EntitySnapshot,
+  WorldSnapshot,
+} from '@inertialref/simulation'
 import type { EntityId } from '@inertialref/universe'
 import { type LodTier, starColor } from './lod.ts'
 import { placeAt, type RenderPlacement } from './placement.ts'
@@ -42,7 +46,11 @@ export interface RenderStar {
   readonly system: string
   readonly name: string
   readonly placement: RenderPlacement
-  readonly color: { readonly r: number; readonly g: number; readonly b: number }
+  readonly color: {
+    readonly r: number
+    readonly g: number
+    readonly b: number
+  }
   /** Apparent brightness relative to the brightest star in the scene, 0..1. */
   readonly brightness: number
 }
@@ -89,7 +97,9 @@ export function originForCamera(
   origin: RenderOrigin | null,
   camera: UniverseVector,
 ): RenderOrigin {
-  return origin === null ? createRenderOrigin(camera) : maintainOrigin(origin, camera)
+  return origin === null
+    ? createRenderOrigin(camera)
+    : maintainOrigin(origin, camera)
 }
 
 export function buildScene(
@@ -98,7 +108,10 @@ export function buildScene(
   cameraEntity: EntityId,
 ): RenderScene {
   const camera = snapshot.entities.find((entity) => entity.id === cameraEntity)
-  invariant(camera !== undefined, `Camera entity ${cameraEntity} is not in the snapshot`)
+  invariant(
+    camera !== undefined,
+    `Camera entity ${cameraEntity} is not in the snapshot`,
+  )
 
   const bodies: RenderBody[] = []
   for (const body of snapshot.bodies) {
@@ -107,7 +120,7 @@ export function buildScene(
     // the datum radius hides every valley on the planet — which, with only a
     // few patches streamed, means hiding most of the terrain.
     const sphereRadius = Math.max(body.radius * 0.9, body.radius - body.relief)
-    const placement = placeAt(origin, body.position, sphereRadius, )
+    const placement = placeAt(origin, body.position, sphereRadius)
     if (placement.angularRadius < CULL_ANGLE) continue
     bodies.push({
       address: body.address,
@@ -116,17 +129,20 @@ export function buildScene(
       placement,
       orientation: orientationToRenderSpace(origin, body.orientation),
       hasAtmosphere: body.hasAtmosphere,
-      atmosphereScale: body.hasAtmosphere ? (body.radius + body.atmosphereCeiling) / sphereRadius : 1,
+      atmosphereScale: body.hasAtmosphere
+        ? (body.radius + body.atmosphereCeiling) / sphereRadius
+        : 1,
       trueRadius: body.radius,
     })
   }
 
   let brightest = 0
   const rawStars = snapshot.stars.map((star) => {
-    const placement = placeAt(origin, star.position, star.radius, )
+    const placement = placeAt(origin, star.position, star.radius)
     // Inverse-square apparent brightness; normalised below so the scene always
     // has something at full intensity whatever the player is looking at.
-    const apparent = star.luminosity / Math.max(1, placement.distance * placement.distance)
+    const apparent =
+      star.luminosity / Math.max(1, placement.distance * placement.distance)
     brightest = Math.max(brightest, apparent)
     return { star, placement, apparent }
   })
@@ -146,17 +162,20 @@ export function buildScene(
       name: star.name,
       placement,
       color: starColor(star.temperature),
-      brightness: brightest === 0 ? 0 : Math.min(1, (apparent / brightest) ** 0.25),
+      brightness:
+        brightest === 0 ? 0 : Math.min(1, (apparent / brightest) ** 0.25),
     }))
 
-  const entities: RenderEntity[] = snapshot.entities.map((entity: EntitySnapshot) => ({
-    id: entity.id,
-    name: entity.name,
-    kind: entity.kind,
-    position: toRenderSpace(origin, entity.position),
-    orientation: orientationToRenderSpace(origin, entity.orientation),
-    isCamera: entity.id === cameraEntity,
-  }))
+  const entities: RenderEntity[] = snapshot.entities.map(
+    (entity: EntitySnapshot) => ({
+      id: entity.id,
+      name: entity.name,
+      kind: entity.kind,
+      position: toRenderSpace(origin, entity.position),
+      orientation: orientationToRenderSpace(origin, entity.orientation),
+      isCamera: entity.id === cameraEntity,
+    }),
+  )
 
   const terrainCandidates = bodies
     .filter((body) => body.placement.tier === 'surface')
@@ -182,7 +201,11 @@ export function buildScene(
 }
 
 /** Which way is away from the ground, in render axes. */
-function upFrom(snapshot: WorldSnapshot, origin: RenderOrigin, camera: UniverseVector): Vec3 {
+function upFrom(
+  snapshot: WorldSnapshot,
+  origin: RenderOrigin,
+  camera: UniverseVector,
+): Vec3 {
   let nearest: BodySnapshot | null = null
   let best = Infinity
   for (const body of snapshot.bodies) {
@@ -205,13 +228,15 @@ function upFrom(snapshot: WorldSnapshot, origin: RenderOrigin, camera: UniverseV
 export function nearestBody(scene: RenderScene): RenderBody | null {
   let best: RenderBody | null = null
   for (const body of scene.bodies) {
-    if (best === null || body.placement.distance - body.trueRadius < best.placement.distance - best.trueRadius) {
+    if (
+      best === null ||
+      body.placement.distance - body.trueRadius <
+        best.placement.distance - best.trueRadius
+    ) {
       best = body
     }
   }
   return best
 }
-
-
 
 export type { LodTier }

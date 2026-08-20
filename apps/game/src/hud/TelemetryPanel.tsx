@@ -29,13 +29,21 @@ export function TelemetryPanel({
   status: HarnessStatus | null
   output: RendererDescription | null
 }) {
-  if (status === null) return <div className="text-slate-500">waiting for the first frame…</div>
+  if (status === null)
+    return <div className="text-slate-500">waiting for the first frame…</div>
   const { world, player, render, workers, frame } = status
 
   return (
     <div>
-      <Section id="tel.simulation" title="simulation" trailing={`tick ${world.tick}`}>
-        <Row label="seed" value={`${world.seed} · ${world.seedHex.slice(0, 12)}…`} />
+      <Section
+        id="tel.simulation"
+        title="simulation"
+        trailing={`tick ${world.tick}`}
+      >
+        <Row
+          label="seed"
+          value={`${world.seed} · ${world.seedHex.slice(0, 12)}…`}
+        />
         <Row label="tick" value={`${world.tick} · ${world.timeText}`} />
         <Row
           label="clock"
@@ -44,12 +52,20 @@ export function TelemetryPanel({
         <Row label="state hash" value={world.stateHash} />
         <Row
           label="frame"
-          value={frame === null ? '—' : `${frame.fps.toFixed(0)} fps · ${frame.frameMs.toFixed(2)} ms · ${frame.ticksLastFrame} ticks`}
+          value={
+            frame === null
+              ? '—'
+              : `${frame.fps.toFixed(0)} fps · ${frame.frameMs.toFixed(2)} ms · ${frame.ticksLastFrame} ticks`
+          }
         />
       </Section>
 
       {player !== null && (
-        <Section id="tel.player" title="player" trailing={player.landed ? 'landed' : 'flying'}>
+        <Section
+          id="tel.player"
+          title="player"
+          trailing={player.landed ? 'landed' : 'flying'}
+        >
           <Row label="entity" value={`${player.id} · ${player.name}`} />
           <Row label="address" value={player.address ?? '(dynamic)'} />
           <Row label="frame" value={player.frame} />
@@ -60,30 +76,43 @@ export function TelemetryPanel({
             label="local"
             value={`${player.local.x.toFixed(2)}, ${player.local.y.toFixed(2)}, ${player.local.z.toFixed(2)} m`}
           />
-          <Row label="speed" value={`${player.localSpeedText} local · ${player.speedText} universe`} />
+          <Row
+            label="speed"
+            value={`${player.localSpeedText} local · ${player.speedText} universe`}
+          />
           <Row label="altitude" value={player.altitudeText ?? '—'} />
           <Row label="state" value={player.landed ? 'landed' : 'flying'} />
         </Section>
       )}
 
       {/*
-        * The three HDR signals, separately, because they routinely disagree and
-        * the interesting cases are the disagreements. Spike 1 measured one
-        * physical display reporting `dynamic-range: high` as true, true and
-        * false across three browsers — so a single "HDR: on" line would be a
-        * claim this page is not in a position to make.
-        */}
+       * The three HDR signals, separately, because they routinely disagree and
+       * the interesting cases are the disagreements. Spike 1 measured one
+       * physical display reporting `dynamic-range: high` as true, true and
+       * false across three browsers — so a single "HDR: on" line would be a
+       * claim this page is not in a position to make.
+       */}
       {output !== null && (
         <Section id="tel.output" title="output" trailing={output.mode}>
           <Row label="pipeline" value={describeOutput(output)} />
           <Row label="backend" value={output.backend} />
           <Row
             label="range"
-            value={output.mode === 'extended' ? `extended · ${output.headroom}× headroom` : 'sRGB · clamped at white'}
+            value={
+              output.mode === 'extended'
+                ? `extended · ${output.headroom}× headroom`
+                : 'sRGB · clamped at white'
+            }
           />
           <Row label="preference" value={output.preference} />
-          <Row label="navigator.gpu" value={output.capability.webgpu ? 'present' : 'absent'} />
-          <Row label="dynamic-range: high" value={String(output.capability.dynamicRangeHigh)} />
+          <Row
+            label="navigator.gpu"
+            value={output.capability.webgpu ? 'present' : 'absent'}
+          />
+          <Row
+            label="dynamic-range: high"
+            value={String(output.capability.dynamicRangeHigh)}
+          />
           <Row
             label="rgba16float canvas"
             value={output.capability.extendedCanvas ? 'configured' : 'refused'}
@@ -92,13 +121,26 @@ export function TelemetryPanel({
       )}
 
       {render !== null && (
-        <Section id="tel.render" title="render" trailing={`${render.starCount} stars`}>
+        <Section
+          id="tel.render"
+          title="render"
+          trailing={`${render.starCount} stars`}
+        >
           <Row label="origin sector" value={render.originSector.join(', ')} />
           <Row label="rebases" value={String(render.originGeneration)} />
           <Row label="anchor" value={render.anchorFrame} />
-          <Row label="camera" value={render.cameraRenderPosition.map((n) => n.toFixed(1)).join(', ')} />
+          <Row
+            label="camera"
+            value={render.cameraRenderPosition
+              .map((n) => n.toFixed(1))
+              .join(', ')}
+          />
           <Row label="stars" value={String(render.starCount)} />
-          <Row label="streaming" value={render.terrainCandidates.join(', ') || '—'} wrap />
+          <Row
+            label="streaming"
+            value={render.terrainCandidates.join(', ') || '—'}
+            wrap
+          />
           <div className="mt-1 border-t border-slate-800 pt-1">
             {render.bodies.slice(0, 6).map((body) => (
               <div key={body.name} className="flex justify-between gap-2">
@@ -113,8 +155,18 @@ export function TelemetryPanel({
         </Section>
       )}
 
-      <Section id="tel.universe" title="universe" trailing={`${world.loadedSystems.length} systems`}>
-        <Row label="systems" value={world.loadedSystems.map((s) => `${s.name} (${s.bodies})`).join(', ')} wrap />
+      <Section
+        id="tel.universe"
+        title="universe"
+        trailing={`${world.loadedSystems.length} systems`}
+      >
+        <Row
+          label="systems"
+          value={world.loadedSystems
+            .map((s) => `${s.name} (${s.bodies})`)
+            .join(', ')}
+          wrap
+        />
         <Row label="frames" value={String(world.frames)} />
         <Row label="entities" value={String(world.entityCount)} />
         <Row
@@ -129,10 +181,18 @@ export function TelemetryPanel({
       </Section>
 
       {world.events.length > 0 && (
-        <Section id="tel.events" title="events" trailing={String(world.events.length)}>
+        <Section
+          id="tel.events"
+          title="events"
+          trailing={String(world.events.length)}
+        >
           {world.events.slice(-5).map((event, index) => (
-            <div key={`${event.tick}-${index}`} className="truncate text-slate-400">
-              <span className="text-slate-600">{event.tick}</span> {event.kind} · {event.detail}
+            <div
+              key={`${event.tick}-${index}`}
+              className="truncate text-slate-400"
+            >
+              <span className="text-slate-600">{event.tick}</span> {event.kind}{' '}
+              · {event.detail}
             </div>
           ))}
         </Section>
@@ -149,7 +209,8 @@ export function TelemetryPanel({
         </div>
         <div className="mt-2 text-slate-500">
           console: <span className="text-sky-300">ir.help()</span> ·{' '}
-          <span className="text-sky-300">ir.targets()</span> · <span className="text-sky-300">ir.goTo(&apos;b:2&apos;)</span>
+          <span className="text-sky-300">ir.targets()</span> ·{' '}
+          <span className="text-sky-300">ir.goTo(&apos;b:2&apos;)</span>
         </div>
       </Section>
     </div>

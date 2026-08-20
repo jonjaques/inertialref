@@ -14,8 +14,8 @@
 ## `rendering` does not import Three.js
 
 Worth stating first, because it explains the shape of everything below. The
-package computes *what should be drawn, where, at what size, at which level of
-detail* and emits it as plain data. `apps/game` turns that into Three.js objects.
+package computes _what should be drawn, where, at what size, at which level of
+detail_ and emits it as plain data. `apps/game` turns that into Three.js objects.
 
 ```mermaid
 flowchart LR
@@ -50,18 +50,18 @@ flowchart TB
 ```
 
 **Snapping is what makes it exact.** The shift is an integer multiple of 1024,
-so it is exactly representable in float64 *and* float32. Ten thousand rebases
+so it is exactly representable in float64 _and_ float32. Ten thousand rebases
 accumulate zero drift rather than ten thousand roundings — asserted directly:
 
 > `origin.test.ts` → after 10,000 rebases along a flight path, the origin is
-> still *exactly* on the grid and the canonical position decoded back from render
+> still _exactly_ on the grid and the canonical position decoded back from render
 > space is unchanged.
 
 Within ±2048 m of the origin float32 resolves 0.24 mm, and better than half a
 millimetre all the way out to the ±4096 m rebase threshold — which is why a
 metre-scale object beside the ship is exact no matter where in the galaxy the
 ship is. Capability check 8 measures it: two points 1 m apart at 8.18 kpc render
-1.000 m apart *after* rounding to float32.
+1.000 m apart _after_ rounding to float32.
 
 And because the origin is a **view** onto canonical state — nothing is written
 back — a rebase cannot move an entity. That is capability check 9.
@@ -70,7 +70,7 @@ back — a rebase cannot move an entity. That is capability check 9.
 
 ## Distance compression
 
-The origin solves precision. It does not solve *range*: a star is still 4e16 m
+The origin solves precision. It does not solve _range_: a star is still 4e16 m
 from the camera, and no depth buffer spans 1e16:1.
 
 Anything whose **surface** is beyond the near limit (2e6 m) is moved onto a
@@ -100,19 +100,19 @@ relative across ten orders of magnitude of distance.
 
 ### Three properties, and one honest limitation
 
-| Property | Status |
-|---|---|
-| Angular size preserved | exact, property-tested |
-| Continuous at the boundary | factor is exactly 1 there |
-| **C¹** at the boundary (no change in apparent rate of approach) | requires `SHELL_SPAN === NEAR_LIMIT` — which is how they are now defined, as
-module constants rather than a config object nothing ever varied — it was *not* C¹ until a test said so |
-| Strictly increasing (depth ordering) | non-decreasing **everywhere**; strictly increasing only while the separation survives double precision |
+| Property                                                                                                | Status                                                                                                 |
+| ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Angular size preserved                                                                                  | exact, property-tested                                                                                 |
+| Continuous at the boundary                                                                              | factor is exactly 1 there                                                                              |
+| **C¹** at the boundary (no change in apparent rate of approach)                                         | requires `SHELL_SPAN === NEAR_LIMIT` — which is how they are now defined, as                           |
+| module constants rather than a config object nothing ever varied — it was _not_ C¹ until a test said so |
+| Strictly increasing (depth ordering)                                                                    | non-decreasing **everywhere**; strictly increasing only while the separation survives double precision |
 
 That last row is a real limitation stated honestly rather than papered over.
 Past ~1e17 m the compression slope is ~1e-11, so two objects 100 m apart map to
 the same depth. They are also the same pixel. The tests say exactly this: one
-asserts *never inverts* with no preconditions, and a second asserts *strictly
-increasing* given a relative separation above 1e-9.
+asserts _never inverts_ with no preconditions, and a second asserts _strictly
+increasing_ given a relative separation above 1e-9.
 
 A first version of that test asserted strict monotonicity everywhere and was
 **intermittently red** — which was the mapping telling the truth about itself.
@@ -211,7 +211,7 @@ sequenceDiagram
 
 `buildPatch` originally emitted **radial** normals — each vertex's normal
 pointing straight out from the planet's centre. That shades a mountain range
-*exactly* like a smooth sphere.
+_exactly_ like a smooth sphere.
 
 Real relief was being generated, transferred, and drawn, and it was completely
 invisible. The fix is a second pass computing central differences over
@@ -221,7 +221,7 @@ has no observable effect.
 Patch edges use one-sided differences, which leaves a hairline seam between
 neighbouring patches — [roadmap item](../roadmap.md#terrain).
 
-### The datum sphere sits *below* the terrain
+### The datum sphere sits _below_ the terrain
 
 Terrain dips below the datum as often as it rises above it. A sphere drawn at
 exactly the datum radius hides every valley on the planet — and with only a few
@@ -290,11 +290,11 @@ media query and may not overrule the probe.
 ### One curve, two ranges
 
 The tone curve is three's `acesFilmicToneMapping` exactly, up to its final clamp,
-and the *only* difference between the two paths is how far that clamp goes. At
+and the _only_ difference between the two paths is how far that clamp goes. At
 headroom 1 it is bit-identical to the stock tonemapper; above 1, values the sRGB
 path would have clipped are re-expanded and nothing below the shoulder moves.
 That is the mechanism behind [art](../design/art.md#hdr)'s requirement that the
-SDR render be *a tonemapped version of the same image*, never a differently
+SDR render be _a tonemapped version of the same image_, never a differently
 authored one — and it is why the stock tonemapper could not simply be selected:
 it ends in `color.clamp()`, which throws away exactly the range extended output
 exists to carry.
@@ -311,7 +311,7 @@ than shading a surface: the shell is drawn back-side, so the fragment is always 
 its far wall and the opaque planet has already depth-killed the middle. What is
 left is a ray–sphere intersection with the near end clamped to the camera, which
 is what lets one expression serve both an orbital limb and a sky seen from the
-ground. It is *not* scattering — uniform density, a path length, authored
+ground. It is _not_ scattering — uniform density, a path length, authored
 constants — and the replacement is named:
 [Bruneton's precomputed LUTs](../spikes.md#2--tsl-and-the-atmosphere-integral),
 which spike 2 promoted from optimisation to requirement when a 256-sample raymarch

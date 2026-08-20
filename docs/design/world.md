@@ -25,18 +25,18 @@ That is the whole setting. Everything else is a consequence.
 
 ## Why this premise
 
-It is chosen to make the game's mechanics *true* rather than to be interesting on
+It is chosen to make the game's mechanics _true_ rather than to be interesting on
 its own:
 
-| Mechanic | The premise explains it |
-|---|---|
-| Real astronomy is the catalogue | The Survey's record is humanity's record, which is the real one |
-| Procedural bodies are **projections** | The ship's computer models what should be there; it says so | 
-| [Catalogue revisions](galaxy.md#catalogue-revisions) | The Survey publishes. That is what it does. |
-| [Discovery credit](exploration.md#discovery-credit) | The record names who filed it, because records do |
-| [Data is the only currency](exploration.md#the-data-economy) | The institution pays in access, because that is what it has |
-| Inhabited space is tiny | Sixty years is not long |
-| You are alone out there | There are not many people and the galaxy is enormous |
+| Mechanic                                                     | The premise explains it                                         |
+| ------------------------------------------------------------ | --------------------------------------------------------------- |
+| Real astronomy is the catalogue                              | The Survey's record is humanity's record, which is the real one |
+| Procedural bodies are **projections**                        | The ship's computer models what should be there; it says so     |
+| [Catalogue revisions](galaxy.md#catalogue-revisions)         | The Survey publishes. That is what it does.                     |
+| [Discovery credit](exploration.md#discovery-credit)          | The record names who filed it, because records do               |
+| [Data is the only currency](exploration.md#the-data-economy) | The institution pays in access, because that is what it has     |
+| Inhabited space is tiny                                      | Sixty years is not long                                         |
+| You are alone out there                                      | There are not many people and the galaxy is enormous            |
 
 > 🎮 Designer's Note: The test for any addition to this setting is whether it
 > makes a mechanic more true. Space pirates pass — someone wants your data.
@@ -50,13 +50,13 @@ its own:
 war. Nobody is chosen. Nothing is at stake beyond the specific, physical stakes
 of a person a long way from help.
 
-| It sounds like | It does not sound like |
-|---|---|
-| *2001: A Space Odyssey* — procedure, silence, scale | *Star Wars* — destiny, factions, opera |
-| *Solaris* — the indifference of the thing you came to study | *Mass Effect* — a galaxy that is about you |
-| *Outer Wilds* — curiosity as the only motive | *Destiny* — power as the motive |
-| *The Expanse* — physics as a source of tension | *Star Trek* — physics as a plot device |
-| Carl Sagan's *Cosmos* — awe without sentiment | Any narrator explaining how you should feel |
+| It sounds like                                              | It does not sound like                      |
+| ----------------------------------------------------------- | ------------------------------------------- |
+| _2001: A Space Odyssey_ — procedure, silence, scale         | _Star Wars_ — destiny, factions, opera      |
+| _Solaris_ — the indifference of the thing you came to study | _Mass Effect_ — a galaxy that is about you  |
+| _Outer Wilds_ — curiosity as the only motive                | _Destiny_ — power as the motive             |
+| _The Expanse_ — physics as a source of tension              | _Star Trek_ — physics as a plot device      |
+| Carl Sagan's _Cosmos_ — awe without sentiment               | Any narrator explaining how you should feel |
 
 **Three tonal rules:**
 
@@ -77,11 +77,11 @@ of a person a long way from help.
 
 All text in the game is one of three registers, and they never mix:
 
-| Register | Used for | Example |
-|---|---|---|
-| **Instrument** | HUD, gauges, readouts | `THERMAL 84% · VENT ADVISED` |
-| **Record** | Almanac, catalogue panels, revisions | `b:3 · rocky · 1.09 M⊕ · thin CO₂ · surveyed 2026-09-14 · hyg-4.1` |
-| **Correspondence** | Survey messages, commissions | *"Third request. The Anselm group still needs sub-2-Earth-mass confirmations and they are still not being fussy about which ones."* |
+| Register           | Used for                             | Example                                                                                                                             |
+| ------------------ | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| **Instrument**     | HUD, gauges, readouts                | `THERMAL 84% · VENT ADVISED`                                                                                                        |
+| **Record**         | Almanac, catalogue panels, revisions | `b:3 · rocky · 1.09 M⊕ · thin CO₂ · surveyed 2026-09-14 · hyg-4.1`                                                                  |
+| **Correspondence** | Survey messages, commissions         | _"Third request. The Anselm group still needs sub-2-Earth-mass confirmations and they are still not being fussy about which ones."_ |
 
 Correspondence is the only place with a human voice, it arrives rarely, and it is
 always text. **No voice acting anywhere**, which is a scope decision as much as a
@@ -134,14 +134,14 @@ paying out, which is honest about what it is.
 
 ## What is deliberately absent
 
-| | Why |
-|---|---|
-| Plot, arc, ending | The game is a place, not a story |
-| NPCs to talk to | No dialogue system, no animation budget, and nothing to say |
-| Factions at war | Adds nothing to a survey game and makes the emptiness a lie |
-| Aliens | The single most expensive promise in science fiction. Not made, not hinted, not foreclosed. |
-| Lore dumps, codex entries | The [Almanac](exploration.md#the-almanac) is the codex, and the player wrote it |
-| A narrator | Rule 2 |
+|                           | Why                                                                                         |
+| ------------------------- | ------------------------------------------------------------------------------------------- |
+| Plot, arc, ending         | The game is a place, not a story                                                            |
+| NPCs to talk to           | No dialogue system, no animation budget, and nothing to say                                 |
+| Factions at war           | Adds nothing to a survey game and makes the emptiness a lie                                 |
+| Aliens                    | The single most expensive promise in science fiction. Not made, not hinted, not foreclosed. |
+| Lore dumps, codex entries | The [Almanac](exploration.md#the-almanac) is the codex, and the player wrote it             |
+| A narrator                | Rule 2                                                                                      |
 
 ---
 

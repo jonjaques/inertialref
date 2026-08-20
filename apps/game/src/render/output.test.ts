@@ -23,9 +23,17 @@ const capabilities = fc.record({
   extendedCanvas: fc.boolean(),
 })
 
-const preferences = fc.constantFrom<OutputPreference>('auto', 'extended', 'standard')
+const preferences = fc.constantFrom<OutputPreference>(
+  'auto',
+  'extended',
+  'standard',
+)
 
-const everything: OutputCapability = { webgpu: true, dynamicRangeHigh: true, extendedCanvas: true }
+const everything: OutputCapability = {
+  webgpu: true,
+  dynamicRangeHigh: true,
+  extendedCanvas: true,
+}
 
 describe('resolveOutputMode', () => {
   it('never produces extended output without the canvas probe', () => {
@@ -34,7 +42,10 @@ describe('resolveOutputMode', () => {
     // hand Firefox a configuration that throws on the first frame.
     fc.assert(
       fc.property(preferences, capabilities, (preference, capability) => {
-        const mode = resolveOutputMode(preference, { ...capability, extendedCanvas: false })
+        const mode = resolveOutputMode(preference, {
+          ...capability,
+          extendedCanvas: false,
+        })
         expect(mode).toBe('standard')
       }),
     )
@@ -52,15 +63,25 @@ describe('resolveOutputMode', () => {
     // Spike 1 measured `(dynamic-range: high)` returning true on a panel with
     // 2× headroom and false on the same panel in another browser. It is the
     // signal a player is entitled to disagree with; the probe is not.
-    expect(resolveOutputMode('extended', { ...everything, dynamicRangeHigh: false })).toBe('extended')
-    expect(resolveOutputMode('extended', { ...everything, extendedCanvas: false })).toBe('standard')
+    expect(
+      resolveOutputMode('extended', { ...everything, dynamicRangeHigh: false }),
+    ).toBe('extended')
+    expect(
+      resolveOutputMode('extended', { ...everything, extendedCanvas: false }),
+    ).toBe('standard')
   })
 
   it('requires all three signals under "auto"', () => {
     expect(resolveOutputMode('auto', everything)).toBe('extended')
-    expect(resolveOutputMode('auto', { ...everything, webgpu: false })).toBe('standard')
-    expect(resolveOutputMode('auto', { ...everything, dynamicRangeHigh: false })).toBe('standard')
-    expect(resolveOutputMode('auto', { ...everything, extendedCanvas: false })).toBe('standard')
+    expect(resolveOutputMode('auto', { ...everything, webgpu: false })).toBe(
+      'standard',
+    )
+    expect(
+      resolveOutputMode('auto', { ...everything, dynamicRangeHigh: false }),
+    ).toBe('standard')
+    expect(
+      resolveOutputMode('auto', { ...everything, extendedCanvas: false }),
+    ).toBe('standard')
   })
 
   it('is at most as permissive under "auto" as under "extended"', () => {
@@ -117,7 +138,11 @@ describe('describeOutput', () => {
         mode: 'standard',
         preference: 'auto',
         headroom: 1,
-        capability: { webgpu: true, dynamicRangeHigh: false, extendedCanvas: false },
+        capability: {
+          webgpu: true,
+          dynamicRangeHigh: false,
+          extendedCanvas: false,
+        },
       }),
     ).toBe('webgpu · sRGB · auto')
   })

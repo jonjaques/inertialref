@@ -76,7 +76,10 @@ export function buildPatch(input: PatchInput): RenderPatch {
       const index = row * resolution + col
       const direction = regionDirection(region, s, t)
       const elevation = elevations[index] ?? 0
-      const local = Vec.sub(Vec.scale(direction, bodyRadius + elevation), anchor)
+      const local = Vec.sub(
+        Vec.scale(direction, bodyRadius + elevation),
+        anchor,
+      )
       positions[index * 3] = local.x
       positions[index * 3 + 1] = local.y
       positions[index * 3 + 2] = local.z
@@ -142,9 +145,15 @@ export function patchPlacement(
   bodyCentre: UniverseVector,
   bodyOrientation: Q.Quat,
 ): PatchPlacement {
-  const orientation = Q.multiply(Q.conjugate(origin.orientation), bodyOrientation)
+  const orientation = Q.multiply(
+    Q.conjugate(origin.orientation),
+    bodyOrientation,
+  )
   return {
-    position: Vec.add(toRenderSpace(origin, bodyCentre), Q.rotate(orientation, patch.anchor)),
+    position: Vec.add(
+      toRenderSpace(origin, bodyCentre),
+      Q.rotate(orientation, patch.anchor),
+    ),
     orientation,
   }
 }
@@ -162,7 +171,11 @@ export function patchPlacement(
  * neighbouring patches; stitching needs the neighbours' edge rows and is the
  * natural next step.
  */
-function computeNormals(positions: Float32Array, normals: Float32Array, resolution: number): void {
+function computeNormals(
+  positions: Float32Array,
+  normals: Float32Array,
+  resolution: number,
+): void {
   const at = (row: number, col: number, axis: number): number =>
     positions[(row * resolution + col) * 3 + axis] ?? 0
 
@@ -174,12 +187,26 @@ function computeNormals(positions: Float32Array, normals: Float32Array, resoluti
       const up = Math.max(0, row - 1)
       const down = Math.min(resolution - 1, row + 1)
 
-      const du = [at(row, right, 0) - at(row, left, 0), at(row, right, 1) - at(row, left, 1), at(row, right, 2) - at(row, left, 2)]
-      const dv = [at(down, col, 0) - at(up, col, 0), at(down, col, 1) - at(up, col, 1), at(down, col, 2) - at(up, col, 2)]
+      const du = [
+        at(row, right, 0) - at(row, left, 0),
+        at(row, right, 1) - at(row, left, 1),
+        at(row, right, 2) - at(row, left, 2),
+      ]
+      const dv = [
+        at(down, col, 0) - at(up, col, 0),
+        at(down, col, 1) - at(up, col, 1),
+        at(down, col, 2) - at(up, col, 2),
+      ]
 
-      let nx = (du[1] as number) * (dv[2] as number) - (du[2] as number) * (dv[1] as number)
-      let ny = (du[2] as number) * (dv[0] as number) - (du[0] as number) * (dv[2] as number)
-      let nz = (du[0] as number) * (dv[1] as number) - (du[1] as number) * (dv[0] as number)
+      let nx =
+        (du[1] as number) * (dv[2] as number) -
+        (du[2] as number) * (dv[1] as number)
+      let ny =
+        (du[2] as number) * (dv[0] as number) -
+        (du[0] as number) * (dv[2] as number)
+      let nz =
+        (du[0] as number) * (dv[1] as number) -
+        (du[1] as number) * (dv[0] as number)
       const length = Math.hypot(nx, ny, nz)
       if (length === 0) continue
 
@@ -198,4 +225,3 @@ function computeNormals(positions: Float32Array, normals: Float32Array, resoluti
     }
   }
 }
-

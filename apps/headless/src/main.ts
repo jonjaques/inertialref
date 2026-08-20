@@ -43,8 +43,11 @@ if (values.help === true) {
   // `parseArgs` answered it by throwing "Unknown option".
   console.log('pnpm sim — headless InertialRef runner\n')
   for (const [name, option] of Object.entries(OPTIONS)) {
-    const fallback = 'default' in option ? ` (default ${String(option.default)})` : ''
-    console.log(`  --${name}${option.type === 'string' ? ' <value>' : ''}${fallback}`)
+    const fallback =
+      'default' in option ? ` (default ${String(option.default)})` : ''
+    console.log(
+      `  --${name}${option.type === 'string' ? ' <value>' : ''}${fallback}`,
+    )
   }
   process.exit(0)
 }
@@ -67,7 +70,9 @@ const session = openSession({
 // replaces it, and a captured reference is the exact bug the getter exists for.
 const { harness, system, target } = session
 
-console.log(`InertialRef headless — seed "${session.world.seedText}", ${system.name}, target ${target.name}`)
+console.log(
+  `InertialRef headless — seed "${session.world.seedText}", ${system.name}, target ${target.name}`,
+)
 await harness.scenario(values.scenario ?? 'orbit')
 
 // After the scenario, not instead of it: a scenario sets up a situation and

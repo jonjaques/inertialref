@@ -24,7 +24,10 @@ function read<T>(key: string, fallback: T): T {
   }
 }
 
-export function usePersistentState<T>(key: string, initial: T): [T, (value: T) => void] {
+export function usePersistentState<T>(
+  key: string,
+  initial: T,
+): [T, (value: T) => void] {
   const [value, setValue] = useState<T>(() => read(key, initial))
   const update = (next: T): void => {
     setValue(next)

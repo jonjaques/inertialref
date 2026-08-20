@@ -38,7 +38,10 @@ createRoot(root).render(
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     void navigator.serviceWorker.register('/sw.js').catch((cause: unknown) => {
-      console.warn('service worker registration failed; the game still runs online', cause)
+      console.warn(
+        'service worker registration failed; the game still runs online',
+        cause,
+      )
     })
   })
 }

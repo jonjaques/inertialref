@@ -75,7 +75,10 @@ export interface RenderPlacement {
  */
 export function compressDistance(distance: Meters): Meters {
   if (distance <= NEAR_LIMIT) return distance
-  return SHELL_START + SHELL_SPAN * Math.log(1 + (distance - NEAR_LIMIT) / NEAR_LIMIT)
+  return (
+    SHELL_START +
+    SHELL_SPAN * Math.log(1 + (distance - NEAR_LIMIT) / NEAR_LIMIT)
+  )
 }
 
 export function placeAt(
@@ -86,7 +89,10 @@ export function placeAt(
   const offset = toRenderSpace(origin, position)
   const distance = Vec.length(offset)
   const tier = selectLod(radius, distance)
-  const angle = radius <= 0 || distance <= 0 ? 0 : Math.asin(Math.min(1, radius / Math.max(radius, distance)))
+  const angle =
+    radius <= 0 || distance <= 0
+      ? 0
+      : Math.asin(Math.min(1, radius / Math.max(radius, distance)))
 
   // Compression keys off the distance to the *surface*, not to the centre.
   //
@@ -100,7 +106,14 @@ export function placeAt(
   // boundary the factor is exactly 1, so a planet does not pop as you arrive.
   const surfaceDistance = Math.max(0, distance - radius)
   if (surfaceDistance <= NEAR_LIMIT || distance === 0) {
-    return { position: offset, scale: radius, distance, tier, compressed: false, angularRadius: angle }
+    return {
+      position: offset,
+      scale: radius,
+      distance,
+      tier,
+      compressed: false,
+      angularRadius: angle,
+    }
   }
 
   const factor = (radius + compressDistance(surfaceDistance)) / distance
@@ -117,8 +130,10 @@ export function placeAt(
 }
 
 /** Place a point with no extent (a distant star). */
-export const placePoint = (origin: RenderOrigin, position: UniverseVector): RenderPlacement =>
-  placeAt(origin, position, 0)
+export const placePoint = (
+  origin: RenderOrigin,
+  position: UniverseVector,
+): RenderPlacement => placeAt(origin, position, 0)
 
 /** Radius of the shell distant stars are drawn on. */
 export const STAR_SHELL_RADIUS: Meters = 8e7
@@ -138,7 +153,10 @@ export const STAR_SHELL_RADIUS: Meters = 8e7
  *
  * Returns null for a star exactly at the origin, which has no direction.
  */
-export function placeOnStarShell(origin: RenderOrigin, position: UniverseVector): Vec3 | null {
+export function placeOnStarShell(
+  origin: RenderOrigin,
+  position: UniverseVector,
+): Vec3 | null {
   const offset = toRenderSpace(origin, position)
   const length = Vec.length(offset)
   if (length === 0) return null

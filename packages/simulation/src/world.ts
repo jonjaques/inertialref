@@ -51,7 +51,13 @@ import {
 } from '@inertialref/universe'
 import type { FrameBinding } from './binding.ts'
 import { SimulationClock, TICK_DURATION, timeOfTick } from './clock.ts'
-import { createEntity, DEBUG_SHIP_THRUSTERS, type Entity, type EntityInit, EntityStore } from './entity.ts'
+import {
+  createEntity,
+  DEBUG_SHIP_THRUSTERS,
+  type Entity,
+  type EntityInit,
+  EntityStore,
+} from './entity.ts'
 import { type FlightWorld, stepFlight } from './flight.ts'
 
 /*
@@ -72,7 +78,12 @@ export const SYSTEM_INFLUENCE_RADIUS: Meters = 1 * LIGHT_YEAR
 
 export interface WorldEvent {
   readonly tick: Tick
-  readonly kind: 'frame-change' | 'touchdown' | 'lift-off' | 'system-loaded' | 'system-unloaded'
+  readonly kind:
+    | 'frame-change'
+    | 'touchdown'
+    | 'lift-off'
+    | 'system-loaded'
+    | 'system-unloaded'
   readonly entity: EntityId | null
   readonly detail: string
 }
@@ -108,7 +119,9 @@ export class World implements FlightWorld {
     this.galaxy = options.galaxy ?? MILKY_WAY
     this.galaxySeed = galaxySeedOf(this.rootSeed, this.galaxy)
     this.clock = new SimulationClock({
-      ...(options.startTick === undefined ? {} : { startTick: options.startTick }),
+      ...(options.startTick === undefined
+        ? {}
+        : { startTick: options.startTick }),
       ...(options.maxSteps === undefined ? {} : { maxSteps: options.maxSteps }),
     })
     this.#log = getLogger('simulation.world', { seed: options.seed })
@@ -128,8 +141,15 @@ export class World implements FlightWorld {
     installSystemFrames(this.frames, system)
     this.#systems.set(id, system)
     this.#bindSystem(system)
-    this.#record('system-loaded', null, `${system.name} (${system.planets.length} planets)`)
-    this.#log.info('system loaded', { system: id, planets: system.planets.length })
+    this.#record(
+      'system-loaded',
+      null,
+      `${system.name} (${system.planets.length} planets)`,
+    )
+    this.#log.info('system loaded', {
+      system: id,
+      planets: system.planets.length,
+    })
     return system
   }
 
@@ -137,7 +157,9 @@ export class World implements FlightWorld {
     const system = this.#systems.get(id)
     if (system === undefined) return
     for (const entity of this.entities.all()) {
-      const chain = this.frames.has(entity.state.frame) ? this.frames.chain(entity.state.frame) : []
+      const chain = this.frames.has(entity.state.frame)
+        ? this.frames.chain(entity.state.frame)
+        : []
       invariant(
         !chain.includes(systemFrameId(id)),
         `Cannot unload ${id}: entity ${entity.id} is still inside it`,
@@ -145,7 +167,10 @@ export class World implements FlightWorld {
     }
     // Surface frames are created on demand; drop them before their parents.
     for (const frame of this.frames.ids()) {
-      if (frame.startsWith('sf:') && this.frames.chain(frame).includes(systemFrameId(id))) {
+      if (
+        frame.startsWith('sf:') &&
+        this.frames.chain(frame).includes(systemFrameId(id))
+      ) {
         this.frames.remove(frame)
       }
     }
@@ -194,7 +219,8 @@ export class World implements FlightWorld {
   }
 
   #unbindSystem(system: StarSystem): void {
-    for (const body of walkBodies(system)) this.#removeBinding(bodyFrameId(body.address))
+    for (const body of walkBodies(system))
+      this.#removeBinding(bodyFrameId(body.address))
     this.#removeBinding(systemFrameId(system.id))
   }
 
@@ -215,7 +241,9 @@ export class World implements FlightWorld {
     this.#children.delete(frame)
     const parent = binding.parent
     if (parent !== null) {
-      const siblings = (this.#children.get(parent) ?? []).filter((b) => b.frame !== frame)
+      const siblings = (this.#children.get(parent) ?? []).filter(
+        (b) => b.frame !== frame,
+      )
       if (siblings.length === 0) this.#children.delete(parent)
       else this.#children.set(parent, siblings)
     }
@@ -296,7 +324,9 @@ export class World implements FlightWorld {
     const parsed = parseSurfaceFrameId(id)
     if (parsed === null) return false
 
-    const system = this.#systems.get(parsed.address.system) ?? this.loadSystem(parsed.address.system)
+    const system =
+      this.#systems.get(parsed.address.system) ??
+      this.loadSystem(parsed.address.system)
     const body = findBody(system, parsed.address.body)
     if (body === undefined) return false
     installSurfaceFrame(this.frames, body, parsed.latitude, parsed.longitude)
@@ -366,7 +396,11 @@ export class World implements FlightWorld {
   }
 
   canonicalPositionOf(id: EntityId): UniverseVector {
-    return canonicalPosition(this.frames, this.entities.require(id).state, this.clock.time)
+    return canonicalPosition(
+      this.frames,
+      this.entities.require(id).state,
+      this.clock.time,
+    )
   }
 
   /* ----------------------------------------------------------------------- */
@@ -383,7 +417,8 @@ export class World implements FlightWorld {
         time,
       })
 
-      if (result.altitude !== null) this.#altitudes.set(entity.id, result.altitude)
+      if (result.altitude !== null)
+        this.#altitudes.set(entity.id, result.altitude)
       else this.#altitudes.delete(entity.id)
 
       if (result.frameChange !== null) {
@@ -415,7 +450,10 @@ export class World implements FlightWorld {
 
   /** Run n ticks with no wall clock. Deterministic by construction. */
   runTicks(count: number): void {
-    invariant(Number.isInteger(count) && count >= 0, `runTicks needs a whole count, got ${count}`)
+    invariant(
+      Number.isInteger(count) && count >= 0,
+      `runTicks needs a whole count, got ${count}`,
+    )
     for (let i = 0; i < count; i += 1) this.step()
   }
 
@@ -434,7 +472,12 @@ export class World implements FlightWorld {
   #land(id: EntityId, time: Seconds, impactSpeed: number): void {
     const entity = this.entities.require(id)
     const binding = this.binding(entity.state.frame)
-    if (binding?.body === null || binding === undefined || binding.spinFrame === null) return
+    if (
+      binding?.body === null ||
+      binding === undefined ||
+      binding.spinFrame === null
+    )
+      return
     const body = binding.body
 
     const spinPose = this.frames.pose(binding.spinFrame, time)
@@ -448,7 +491,11 @@ export class World implements FlightWorld {
         ...landedState,
         // Sit on the surface, not a fraction of a metre inside it: the contact
         // test fires on the tick that crosses zero, which is usually just past.
-        position: vec3(landedState.position.x, Math.max(0, landedState.position.y), landedState.position.z),
+        position: vec3(
+          landedState.position.x,
+          Math.max(0, landedState.position.y),
+          landedState.position.z,
+        ),
         // Attached to the ground: no residual motion in the surface frame.
         velocity: Vec.ZERO,
         angularVelocity: Vec.ZERO,
@@ -485,7 +532,10 @@ export class World implements FlightWorld {
    * Ordinary control flow, called every so often rather than at a mode
    * boundary. Systems containing an entity are never unloaded.
    */
-  updateInterest(centre: UniverseVector, radius: Meters = 6 * LIGHT_YEAR): {
+  updateInterest(
+    centre: UniverseVector,
+    radius: Meters = 6 * LIGHT_YEAR,
+  ): {
     loaded: readonly SystemId[]
     unloaded: readonly SystemId[]
   } {
@@ -501,7 +551,8 @@ export class World implements FlightWorld {
     const occupied = new Set<string>()
     for (const entity of this.entities.all()) {
       if (!this.frames.has(entity.state.frame)) continue
-      for (const frame of this.frames.chain(entity.state.frame)) occupied.add(frame)
+      for (const frame of this.frames.chain(entity.state.frame))
+        occupied.add(frame)
     }
 
     const unloaded: SystemId[] = []
@@ -527,7 +578,11 @@ export class World implements FlightWorld {
     return this.#events.slice(-limit)
   }
 
-  #record(kind: WorldEvent['kind'], entity: EntityId | null, detail: string): void {
+  #record(
+    kind: WorldEvent['kind'],
+    entity: EntityId | null,
+    detail: string,
+  ): void {
     this.#events.push({ tick: this.clock.tick, kind, entity, detail })
     if (this.#events.length > 256) this.#events.shift()
   }

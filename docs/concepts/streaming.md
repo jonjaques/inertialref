@@ -110,12 +110,12 @@ meaning most frames submit nothing at all.
 
 Streaming is only tractable because of two properties established elsewhere:
 
-| Property | Why streaming needs it | Where |
-|---|---|---|
-| Content is a pure function of address | Unloading loses nothing; reloading is exact | [determinism](determinism.md) |
-| Generation is order-independent | Patches can arrive from workers in any order | [determinism](determinism.md) |
-| Identity exists without residency | A save can reference an unloaded system | [identity](identity.md) |
-| Frames install as closures | Installing a system costs no generation | [frames](frames.md) |
+| Property                              | Why streaming needs it                       | Where                         |
+| ------------------------------------- | -------------------------------------------- | ----------------------------- |
+| Content is a pure function of address | Unloading loses nothing; reloading is exact  | [determinism](determinism.md) |
+| Generation is order-independent       | Patches can arrive from workers in any order | [determinism](determinism.md) |
+| Identity exists without residency     | A save can reference an unloaded system      | [identity](identity.md)       |
+| Frames install as closures            | Installing a system costs no generation      | [frames](frames.md)           |
 
 Take away any one of them and streaming becomes a cache-coherency problem
 instead of a memory-management one.
@@ -141,12 +141,12 @@ gone.
 
 ## Current limits
 
-| Limit | Consequence | Roadmap |
-|---|---|---|
+| Limit                                           | Consequence                                             | Roadmap                                      |
+| ----------------------------------------------- | ------------------------------------------------------- | -------------------------------------------- |
 | Interest is a radius scan over generation cells | Fine at 6 ly; a spatial index is needed for large radii | [roadmap](../roadmap.md#streaming-and-scale) |
-| Terrain is a 3×3 block at a single level | No mixed-resolution quadtree, so the horizon is limited | [roadmap](../roadmap.md#terrain) |
-| Patches do not stitch across faces or levels | Hairline seams at boundaries | [roadmap](../roadmap.md#terrain) |
-| No prediction of where the player is going | Patches pop in rather than pre-loading | [roadmap](../roadmap.md#streaming-and-scale) |
+| Terrain is a 3×3 block at a single level        | No mixed-resolution quadtree, so the horizon is limited | [roadmap](../roadmap.md#terrain)             |
+| Patches do not stitch across faces or levels    | Hairline seams at boundaries                            | [roadmap](../roadmap.md#terrain)             |
+| No prediction of where the player is going      | Patches pop in rather than pre-loading                  | [roadmap](../roadmap.md#streaming-and-scale) |
 
 ---
 

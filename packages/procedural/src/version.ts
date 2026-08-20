@@ -12,13 +12,19 @@ export interface AlgorithmVersion {
   readonly version: number
 }
 
-export const algorithm = (name: string, version: number): AlgorithmVersion => ({ name, version })
+export const algorithm = (name: string, version: number): AlgorithmVersion => ({
+  name,
+  version,
+})
 
-export const versionLabel = (v: AlgorithmVersion): string => `${v.name}@${v.version}`
+export const versionLabel = (v: AlgorithmVersion): string =>
+  `${v.name}@${v.version}`
 
 export type VersionManifest = Readonly<Record<string, number>>
 
-export function manifest(versions: readonly AlgorithmVersion[]): VersionManifest {
+export function manifest(
+  versions: readonly AlgorithmVersion[],
+): VersionManifest {
   const out: Record<string, number> = {}
   for (const v of versions) out[v.name] = v.version
   return out

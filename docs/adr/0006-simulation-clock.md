@@ -31,7 +31,7 @@ again next frame — the spiral of death. Excess ticks are dropped and counted,
 and the count is on the debug overlay so the drop is visible rather than felt.
 
 **Interpolation renders one tick in the past.** Entity states are lerped between
-the previous tick and the current one. Bodies are *not* lerped: their frames are
+the previous tick and the current one. Bodies are _not_ lerped: their frames are
 analytic, so they are evaluated exactly at the fractional render time and have
 no interpolation error at any time warp.
 

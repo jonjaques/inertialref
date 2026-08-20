@@ -1,4 +1,9 @@
-import { invariant, type Seconds, type Tick, tick as asTick } from '@inertialref/shared'
+import {
+  invariant,
+  type Seconds,
+  type Tick,
+  tick as asTick,
+} from '@inertialref/shared'
 
 /*
  * Simulation time (ADR-0006).
@@ -149,7 +154,8 @@ export class SimulationClock {
     // Ratio rather than a rate, so a frame that wanted one tick and ran one
     // reports 1× and not 0.94× — the accumulator carries the remainder and a
     // sampled rate would oscillate around the truth instead of stating it.
-    this.#achievedTimeScale = wanted === 0 ? this.#timeScale : (this.#timeScale * steps) / wanted
+    this.#achievedTimeScale =
+      wanted === 0 ? this.#timeScale : (this.#timeScale * steps) / wanted
     if (wanted > steps) {
       // Drop the excess rather than letting the accumulator grow without bound.
       this.#droppedTicks += wanted - steps
@@ -179,7 +185,10 @@ export class SimulationClock {
 
   /** Run n ticks with no wall clock involved. Tests, replay and headless runs. */
   stepExact(count: number): number {
-    invariant(Number.isInteger(count) && count >= 0, `stepExact needs a whole count, got ${count}`)
+    invariant(
+      Number.isInteger(count) && count >= 0,
+      `stepExact needs a whole count, got ${count}`,
+    )
     return count
   }
 

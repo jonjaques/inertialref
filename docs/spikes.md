@@ -5,7 +5,7 @@ something specific, each was small, and each is recorded here with the numbers
 that came back.
 
 > [Roadmap](roadmap.md) is what is not built yet. This was what could not be
-> *planned* yet, because the answer was unknown and guessing it would have put a
+> _planned_ yet, because the answer was unknown and guessing it would have put a
 > number in a design document that nobody measured.
 
 **All five have been run.** Three came back clean, one came back with a result
@@ -16,13 +16,13 @@ answer it and is now waiting on hardware.
 
 ## Status
 
-| # | Spike | Blocks | Status | The number that mattered |
-|---|---|---|---|---|
-| 1 | [HDR display detection](#1--hdr-display-detection) | M2 | ✅ **Resolved — negative** | Three browsers, one display, `(dynamic-range: high)` = true, true, **false** |
-| 2 | [TSL and the atmosphere integral](#2--tsl-and-the-atmosphere-integral) | M2 | ✅ **Resolved — positive** | **1.000×** against hand-written WGSL, pixel-identical |
-| 3 | [Catalogue bundle size](#3--catalogue-bundle-size) | M4 | ✅ **Resolved — positive** | 150 ly, 7,529 stars + 861 planets = **159 KB brotli** |
-| 4 | [Gaia and HYG attribution terms](#4--gaia-and-hyg-attribution-terms) | M4 | ⚠️ **Resolved — reverses a decision** | **Gaia is CC BY-NC 3.0 IGO**, not "open with attribution" |
-| 5 | [WebHID and Gamepad for HOTAS](#5--webhid-and-gamepad-for-hotas) | M3 | 🟡 **Software answered, hardware outstanding** | WebHID: Chrome ✅, Safari ❌, Firefox ❌ · Gamepad caps at **16 axes / 32 buttons** |
+| #   | Spike                                                                  | Blocks | Status                                         | The number that mattered                                                            |
+| --- | ---------------------------------------------------------------------- | ------ | ---------------------------------------------- | ----------------------------------------------------------------------------------- |
+| 1   | [HDR display detection](#1--hdr-display-detection)                     | M2     | ✅ **Resolved — negative**                     | Three browsers, one display, `(dynamic-range: high)` = true, true, **false**        |
+| 2   | [TSL and the atmosphere integral](#2--tsl-and-the-atmosphere-integral) | M2     | ✅ **Resolved — positive**                     | **1.000×** against hand-written WGSL, pixel-identical                               |
+| 3   | [Catalogue bundle size](#3--catalogue-bundle-size)                     | M4     | ✅ **Resolved — positive**                     | 150 ly, 7,529 stars + 861 planets = **159 KB brotli**                               |
+| 4   | [Gaia and HYG attribution terms](#4--gaia-and-hyg-attribution-terms)   | M4     | ⚠️ **Resolved — reverses a decision**          | **Gaia is CC BY-NC 3.0 IGO**, not "open with attribution"                           |
+| 5   | [WebHID and Gamepad for HOTAS](#5--webhid-and-gamepad-for-hotas)       | M3     | 🟡 **Software answered, hardware outstanding** | WebHID: Chrome ✅, Safari ❌, Firefox ❌ · Gamepad caps at **16 axes / 32 buttons** |
 
 Measured on 2026-08-19 on an Apple M5 MacBook (10-core GPU, Metal 3, built-in
 2880×1864 Liquid Retina — **not** an XDR display), macOS 26.5, against Chrome
@@ -73,44 +73,44 @@ information bought is cheaper than code kept.
 
 ## 1 · HDR display detection
 
-| | |
-|---|---|
-| **Blocks** | [M2](design/production.md#m2--the-believable-world) |
+|              |                                                                                                                         |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| **Blocks**   | [M2](design/production.md#m2--the-believable-world)                                                                     |
 | **Question** | Can the page reliably tell whether it is on an extended-range display, and can the user override it in both directions? |
-| **Answer** | **No, it cannot tell.** Yes, it can override. |
-| **Lives in** | [`design/art.md` § HDR](design/art.md#hdr) |
+| **Answer**   | **No, it cannot tell.** Yes, it can override.                                                                           |
+| **Lives in** | [`design/art.md` § HDR](design/art.md#hdr)                                                                              |
 
 ### What came back
 
 The same physical display, the same second, three browsers:
 
-| Signal | Chrome 151 | Safari 26.5 | Firefox 153 |
-|---|---|---|---|
-| `(dynamic-range: high)` | **true** | **true** | **false** |
-| `(dynamic-range: standard)` | true | true | true |
-| `(video-dynamic-range: high)` | false | false | true |
-| `(video-dynamic-range: standard)` | false | false | true |
-| `(color-gamut: p3)` | true | true | false |
-| `screen.isExtended` | false | *absent* | *absent* |
-| `screen.colorDepth` | 30 | 24 | 30 |
-| `screen.highDynamicRangeHeadroom` | *absent* | *absent* | *absent* |
-| `dynamic-range-limit: standard` \| `no-limit` | ✅ | ✅ | ❌ |
-| `dynamic-range-limit: constrained` | ✅ | ❌ | ❌ |
-| computed initial `dynamic-range-limit` | `no-limit` | `no-limit` | — |
-| WebGPU `rgba16float` canvas, `toneMapping: extended` | accepted | accepted | **throws** |
-| `getConfiguration().toneMapping` echoes back | `{"mode":"extended"}` | `{"mode":"extended"}` | — |
-| `vec4f(8,4,2,1)` survives the swap chain | `8, 4, 2, 1` | `8, 4, 2, 1` | — |
-| WebGL2 `drawingBufferStorage` | function | *absent* | *absent* |
+| Signal                                               | Chrome 151            | Safari 26.5           | Firefox 153 |
+| ---------------------------------------------------- | --------------------- | --------------------- | ----------- |
+| `(dynamic-range: high)`                              | **true**              | **true**              | **false**   |
+| `(dynamic-range: standard)`                          | true                  | true                  | true        |
+| `(video-dynamic-range: high)`                        | false                 | false                 | true        |
+| `(video-dynamic-range: standard)`                    | false                 | false                 | true        |
+| `(color-gamut: p3)`                                  | true                  | true                  | false       |
+| `screen.isExtended`                                  | false                 | _absent_              | _absent_    |
+| `screen.colorDepth`                                  | 30                    | 24                    | 30          |
+| `screen.highDynamicRangeHeadroom`                    | _absent_              | _absent_              | _absent_    |
+| `dynamic-range-limit: standard` \| `no-limit`        | ✅                    | ✅                    | ❌          |
+| `dynamic-range-limit: constrained`                   | ✅                    | ❌                    | ❌          |
+| computed initial `dynamic-range-limit`               | `no-limit`            | `no-limit`            | —           |
+| WebGPU `rgba16float` canvas, `toneMapping: extended` | accepted              | accepted              | **throws**  |
+| `getConfiguration().toneMapping` echoes back         | `{"mode":"extended"}` | `{"mode":"extended"}` | —           |
+| `vec4f(8,4,2,1)` survives the swap chain             | `8, 4, 2, 1`          | `8, 4, 2, 1`          | —           |
+| WebGL2 `drawingBufferStorage`                        | function              | _absent_              | _absent_    |
 
-Firefox's failure is explicit and tracked: *"GPUCanvasContext.configure: Canvas
+Firefox's failure is explicit and tracked: _"GPUCanvasContext.configure: Canvas
 texture format `rgba16float` is not yet supported. Subscribe to
-https://bugzilla.mozilla.org/show_bug.cgi?id=1834395"*.
+https://bugzilla.mozilla.org/show_bug.cgi?id=1834395"_.
 
 ### Why `(dynamic-range: high)` is not the signal it looks like
 
 The display under test is an ordinary laptop panel — macOS reports it as
 `Color LCD`, 8 bits per sample, with **no reference HDR mode**
-(`maximumReferenceExtendedDynamicRangeColorComponentValue = 0.0`). What it *does*
+(`maximumReferenceExtendedDynamicRangeColorComponentValue = 0.0`). What it _does_
 have is EDR headroom:
 
 ```
@@ -147,13 +147,13 @@ The rest of the signals are worse:
 const canOutputExtendedRange =
   'gpu' in navigator &&
   window.matchMedia('(dynamic-range: high)').matches &&
-  await probeExtendedCanvas()          // configure rgba16float + toneMapping:'extended'
+  (await probeExtendedCanvas()) // configure rgba16float + toneMapping:'extended'
 ```
 
 - `probeExtendedCanvas()` is the load-bearing half. It is what excludes Firefox,
   and it is a feature test rather than a guess about hardware.
 - `dynamic-range-limit`'s initial value is already `no-limit`, so nothing is
-  needed to opt *in*; `standard` is the opt-*out* lever and it inherits, which
+  needed to opt _in_; `standard` is the opt-_out_ lever and it inherits, which
   makes "clamp everything under this subtree" a one-line CSS change.
 - The media query is live — attach a `change` listener rather than reading once,
   because a window can move between displays.
@@ -191,12 +191,12 @@ manual override exists because it will sometimes be wrong.
 
 ## 2 · TSL and the atmosphere integral
 
-| | |
-|---|---|
-| **Blocks** | [M2](design/production.md#m2--the-believable-world) |
+|              |                                                                                                                                  |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| **Blocks**   | [M2](design/production.md#m2--the-believable-world)                                                                              |
 | **Question** | Does Three.js's shading language cost anything material on a dense atmosphere integral, or is a hand-written WebGPU pass needed? |
-| **Answer** | **It costs nothing measurable.** Take TSL and stop thinking about it. |
-| **Lives in** | [`design/technical.md` § The WebGPU migration](design/technical.md#the-webgpu-migration) |
+| **Answer**   | **It costs nothing measurable.** Take TSL and stop thinking about it.                                                            |
+| **Lives in** | [`design/technical.md` § The WebGPU migration](design/technical.md#the-webgpu-migration)                                         |
 
 ### Method
 
@@ -206,7 +206,7 @@ harness**: same `rgba16float` 1920×1080 target, same fullscreen triangle, same
 uniforms, GPU time from `timestamp-query`, A and B interleaved so clock ramping
 hits both equally, 60 passes each after 20 warm-up passes.
 
-The TSL side is not the TSL *renderer* — it is the WGSL that three's node system
+The TSL side is not the TSL _renderer_ — it is the WGSL that three's node system
 generates, harvested with `renderer.debug.getShaderAsync()` and then run through
 the identical harness. That isolates the code generator, which is what the
 question is about.
@@ -217,16 +217,16 @@ question is about.
 
 32 view × 8 light samples, 1920×1080, Apple M5:
 
-| Case | Hand-written WGSL | TSL-generated WGSL | Ratio |
-|---|---|---|---|
+| Case          | Hand-written WGSL            | TSL-generated WGSL           | Ratio      |
+| ------------- | ---------------------------- | ---------------------------- | ---------- |
 | Orbit, 400 km | p50 **0.393 ms** · p95 0.459 | p50 **0.393 ms** · p95 0.459 | **1.000×** |
-| High, 60 km | p50 **7.274 ms** · p95 7.340 | p50 **7.274 ms** · p95 7.340 | **1.000×** |
-| Ground, 2 m | p50 **7.274 ms** · p95 7.340 | p50 **7.274 ms** · p95 7.274 | **1.000×** |
+| High, 60 km   | p50 **7.274 ms** · p95 7.340 | p50 **7.274 ms** · p95 7.340 | **1.000×** |
+| Ground, 2 m   | p50 **7.274 ms** · p95 7.340 | p50 **7.274 ms** · p95 7.274 | **1.000×** |
 
-| | Hand-written | TSL-generated |
-|---|---|---|
-| Source size | 3,859 B · 121 lines | 5,196 B · 188 lines (**+35%**) |
-| Pipeline build, median of 6, cache defeated | **1.00 ms** | **0.90 ms** |
+|                                             | Hand-written        | TSL-generated                  |
+| ------------------------------------------- | ------------------- | ------------------------------ |
+| Source size                                 | 3,859 B · 121 lines | 5,196 B · 188 lines (**+35%**) |
+| Pipeline build, median of 6, cache defeated | **1.00 ms**         | **0.90 ms**                    |
 
 The 15% threshold the spike set for "take TSL and stop thinking about it" was met
 by a factor of ten. Chrome's timestamp results are quantised to ~65.5 µs on this
@@ -261,17 +261,17 @@ Rendering the identical material to an offscreen target reported 7.274 ms; the
 same frame to the canvas reported 14.615 ms. Independent wall-clock, measured by
 submitting 40 frames and awaiting `queue.onSubmittedWorkDone()`:
 
-| Same workload, same material | To canvas | To offscreen target |
-|---|---|---|
-| Wall clock, queue-drained | **7.375 ms/frame** | **7.265 ms/frame** |
-| `renderer.info.render.timestamp` | 14.615 ms | 7.274 ms |
+| Same workload, same material     | To canvas          | To offscreen target |
+| -------------------------------- | ------------------ | ------------------- |
+| Wall clock, queue-drained        | **7.375 ms/frame** | **7.265 ms/frame**  |
+| `renderer.info.render.timestamp` | 14.615 ms          | 7.274 ms            |
 
 The canvas output pass really costs **0.11 ms (1.5%)**. The instrument was
 double-counting. Two lessons, both cheap to carry forward:
 
 1. **`renderer.info.render.timestamp` is not trustworthy on the canvas path.** Use
    wall clock across a drained queue, or a raw timestamp query.
-2. A 2× result that is *exactly* 2× deserves suspicion before it deserves a
+2. A 2× result that is _exactly_ 2× deserves suspicion before it deserves a
    design change.
 
 ### The consequence nobody asked for
@@ -298,12 +298,12 @@ is what transfers between machines; the absolute milliseconds do not.**
 
 ## 3 · Catalogue bundle size
 
-| | |
-|---|---|
-| **Blocks** | [M4](design/production.md#m4--the-explorer--mvp) |
+|              |                                                                                          |
+| ------------ | ---------------------------------------------------------------------------------------- |
+| **Blocks**   | [M4](design/production.md#m4--the-explorer--mvp)                                         |
 | **Question** | What does a packed catalogue sphere actually cost over the wire, at 25 ly and at 150 ly? |
-| **Answer** | **159 KB brotli for everything out to 150 ly.** Bundle it all. |
-| **Lives in** | [`design/galaxy.md` § Ingest pipeline](design/galaxy.md#ingest-pipeline) |
+| **Answer**   | **159 KB brotli for everything out to 150 ly.** Bundle it all.                           |
+| **Lives in** | [`design/galaxy.md` § Ingest pipeline](design/galaxy.md#ingest-pipeline)                 |
 
 ### Source
 
@@ -322,14 +322,14 @@ sentinel and must be dropped, not clamped).
 
 16 bytes per star, which is the whole answer to "what does it cost":
 
-| Bytes | Field | Note |
-|---|---|---|
-| 0–8 | position, 3 × int24 | galactic cartesian, quantised against the chunk extent |
-| 9 | spectral class | class × subclass × giant flag, one byte |
+| Bytes | Field                          | Note                                                              |
+| ----- | ------------------------------ | ----------------------------------------------------------------- |
+| 0–8   | position, 3 × int24            | galactic cartesian, quantised against the chunk extent            |
+| 9     | spectral class                 | class × subclass × giant flag, one byte                           |
 | 10–11 | absolute magnitude, int16 ×100 | luminosity is `10^((4.85 − M)/2.5)` — **do not store it as well** |
-| 12–13 | colour index B−V, int16 ×1000 | `-32768` is "unknown"; drives the render colour |
-| 14 | flags | component count, has-name, provenance |
-| 15 | reserved | |
+| 12–13 | colour index B−V, int16 ×1000  | `-32768` is "unknown"; drives the render colour                   |
+| 14    | flags                          | component count, has-name, provenance                             |
+| 15    | reserved                       |                                                                   |
 
 Plus an 8-byte identity row per star (HYG id + HIP) and a designation table for
 the stars that have one. Position resolution at 150 ly is **1.13 AU per step**,
@@ -338,12 +338,12 @@ parallax uncertainty at that distance, so the quantiser is free.
 
 ### What came back
 
-| Radius | Stars | HYG rows as JSON | …brotli | Packed | …brotli | + ids + names, brotli |
-|---|---|---|---|---|---|---|
-| **25 ly** | 166 | 92.4 KB | 18.7 KB | 2.6 KB | 2.4 KB | **4.1 KB** |
-| **50 ly** | 978 | 541.8 KB | 103.6 KB | 15.3 KB | 12.9 KB | **21.1 KB** |
-| **100 ly** | 4,049 | 2.18 MB | 417.2 KB | 63.3 KB | 52.3 KB | **81.9 KB** |
-| **150 ly** | 7,529 | 4.04 MB | 769.0 KB | 117.6 KB | 97.0 KB | **143.6 KB** |
+| Radius     | Stars | HYG rows as JSON | …brotli  | Packed   | …brotli | + ids + names, brotli |
+| ---------- | ----- | ---------------- | -------- | -------- | ------- | --------------------- |
+| **25 ly**  | 166   | 92.4 KB          | 18.7 KB  | 2.6 KB   | 2.4 KB  | **4.1 KB**            |
+| **50 ly**  | 978   | 541.8 KB         | 103.6 KB | 15.3 KB  | 12.9 KB | **21.1 KB**           |
+| **100 ly** | 4,049 | 2.18 MB          | 417.2 KB | 63.3 KB  | 52.3 KB | **81.9 KB**           |
+| **150 ly** | 7,529 | 4.04 MB          | 769.0 KB | 117.6 KB | 97.0 KB | **143.6 KB**          |
 
 Columnar beats interleaved by **7–8%** after brotli — the same fields laid out
 structure-of-arrays compress better because like values sit together. Free, so
@@ -353,11 +353,11 @@ take it.
 2026-08-19:**
 
 | Radius | Host systems | Planets |
-|---|---|---|
-| 25 ly | 39 | 84 |
-| 50 ly | 120 | 216 |
-| 100 ly | 314 | 520 |
-| 150 ly | **550** | **861** |
+| ------ | ------------ | ------- |
+| 25 ly  | 39           | 84      |
+| 50 ly  | 120          | 216     |
+| 100 ly | 314          | 520     |
+| 150 ly | **550**      | **861** |
 
 At 20 bytes per planet plus names, the whole planet layer to 150 ly is **15.2 KB
 brotli**.
@@ -366,13 +366,13 @@ brotli**.
 
 Measured from `pnpm build` on the same day:
 
-| | Raw | gzip | brotli |
-|---|---|---|---|
-| `index.js` | 1,155,149 B | 324.6 KB | 249.3 KB |
-| `index.css` | 15,554 B | 3.9 KB | 3.4 KB |
-| `universe.worker.js` | 20,127 B | 8.1 KB | 7.3 KB |
-| **Total client** | 1.19 MB | ~337 KB | **~260 KB** |
-| **150 ly catalogue** | 274 KB | — | **~159 KB** |
+|                      | Raw         | gzip     | brotli      |
+| -------------------- | ----------- | -------- | ----------- |
+| `index.js`           | 1,155,149 B | 324.6 KB | 249.3 KB    |
+| `index.css`          | 15,554 B    | 3.9 KB   | 3.4 KB      |
+| `universe.worker.js` | 20,127 B    | 8.1 KB   | 7.3 KB      |
+| **Total client**     | 1.19 MB     | ~337 KB  | **~260 KB** |
+| **150 ly catalogue** | 274 KB      | —        | **~159 KB** |
 
 The full local tier is **61% of the current client** and lands the whole download
 around 420 KB. That is not a conversation, it is a rounding error against the
@@ -381,15 +381,15 @@ around 420 KB. That is not a conversation, it is a rounding error against the
 ### Chunking, for when it does become streamed
 
 Cell-local coordinates (rebasing to the cell origin before quantisation — the
-first attempt did not, clamped every value, and produced a *negative* chunking
+first attempt did not, clamped every value, and produced a _negative_ chunking
 penalty, which is what a bug looks like):
 
-| Cell | Non-empty cells | Summed brotli | Largest cell | Median cell | vs one blob |
-|---|---|---|---|---|---|
-| 10 ly | 5,132 | 137.7 KB | 0.17 KB | 0.02 KB | +47% |
-| 25 ly | 1,030 | 118.5 KB | 0.61 KB | 0.08 KB | +26% |
-| **50 ly** | **173** | **105.1 KB** | 3.33 KB | 0.46 KB | **+12%** |
-| 75 ly | 62 | 99.9 KB | 6.82 KB | 1.39 KB | +7% |
+| Cell      | Non-empty cells | Summed brotli | Largest cell | Median cell | vs one blob |
+| --------- | --------------- | ------------- | ------------ | ----------- | ----------- |
+| 10 ly     | 5,132           | 137.7 KB      | 0.17 KB      | 0.02 KB     | +47%        |
+| 25 ly     | 1,030           | 118.5 KB      | 0.61 KB      | 0.08 KB     | +26%        |
+| **50 ly** | **173**         | **105.1 KB**  | 3.33 KB      | 0.46 KB     | **+12%**    |
+| 75 ly     | 62              | 99.9 KB       | 6.82 KB      | 1.39 KB     | +7%         |
 
 Compression wants big chunks and request count wants few of them, and they agree:
 **50 ly cells**. 25 ly cells cost 26% more bytes across 1,030 requests to save
@@ -399,10 +399,10 @@ nothing.
 
 **Size was never the constraint. Completeness is.**
 
-| Volume | HYG entries | Best available census | HYG coverage |
-|---|---|---|---|
-| 10 pc (32.6 ly) | 324 | 462 objects in 317 systems — RECONS, 2018.3 | ~70% |
-| 25 pc (81.5 ly) | 3,072 | 5,931 objects — CNS5, Golovin et al. 2023 | **~52%** |
+| Volume          | HYG entries | Best available census                       | HYG coverage |
+| --------------- | ----------- | ------------------------------------------- | ------------ |
+| 10 pc (32.6 ly) | 324         | 462 objects in 317 systems — RECONS, 2018.3 | ~70%         |
+| 25 pc (81.5 ly) | 3,072       | 5,931 objects — CNS5, Golovin et al. 2023   | **~52%**     |
 
 CNS5's 5,931 is 5,230 stars plus 701 brown dwarfs, so HYG holds roughly **59% of
 the known stars within 25 pc and none of the brown dwarfs**. And its character
@@ -430,16 +430,16 @@ other 13%. Strip the prefix, handle `D…` as its own class.
 
 ## 4 · Gaia and HYG attribution terms
 
-| | |
-|---|---|
-| **Blocks** | [M4](design/production.md#m4--the-explorer--mvp) |
-| **Question** | What exactly do the licences require, and where must the attribution appear? |
-| **Answer** | **Gaia is CC BY-NC 3.0 IGO.** That is not what the bible assumed and it changes the ingest plan. |
+|              |                                                                                                                     |
+| ------------ | ------------------------------------------------------------------------------------------------------------------- |
+| **Blocks**   | [M4](design/production.md#m4--the-explorer--mvp)                                                                    |
+| **Question** | What exactly do the licences require, and where must the attribution appear?                                        |
+| **Answer**   | **Gaia is CC BY-NC 3.0 IGO.** That is not what the bible assumed and it changes the ingest plan.                    |
 | **Lives in** | [`design/sustainability.md` § Data licensing](design/sustainability.md#data-licensing-is-the-constraint-that-bites) |
 
 ### The finding
 
-The bible recorded Gaia as *"Open with attribution"*. ESA's own licence page says
+The bible recorded Gaia as _"Open with attribution"_. ESA's own licence page says
 otherwise, verbatim:
 
 > Gaia data are distributed under the CC BY-NC 3.0 IGO license.
@@ -462,20 +462,20 @@ that the project deliberately avoided one. Bundling Gaia would attach exactly th
 restriction to the shipped artefact — not to the Apache-2.0 code, but to the data
 the game cannot run without.
 
-There is a conflicting statement in Gaia's own DR3 documentation — *"The Gaia data
-are open and free to use, provided credit is given to 'ESA/Gaia/DPAC'"* — which
+There is a conflicting statement in Gaia's own DR3 documentation — _"The Gaia data
+are open and free to use, provided credit is given to 'ESA/Gaia/DPAC'"_ — which
 reads much more permissively than the licence page. **A documentation page and a
 licence page that disagree are a reason to take the stricter one**, and to ask ESA
 in writing before relying on the looser one.
 
 ### The strings, verbatim
 
-| Where | What must appear |
-|---|---|
-| **Gaia — credit line** | `Credit: ESA, Gaia DPAC` |
+| Where                           | What must appear                                                                                                                                                                                                                                                                                                                                                                                   |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Gaia — credit line**          | `Credit: ESA, Gaia DPAC`                                                                                                                                                                                                                                                                                                                                                                           |
 | **Gaia — full acknowledgement** | "This work has made use of data from the European Space Agency (ESA) mission Gaia (https://www.cosmos.esa.int/gaia), processed by the Gaia Data Processing and Analysis Consortium (DPAC, https://www.cosmos.esa.int/web/gaia/dpac/consortium). Funding for the DPAC has been provided by national institutions, in particular the institutions participating in the Gaia Multilateral Agreement." |
-| **HYG** | CC BY-SA 4.0 (v4.x; v3.x was CC BY-SA 2.5). Credit *The HYG Database, astronexus*, link the licence, link the source, and state that it was modified. |
-| **NASA Exoplanet Archive** | "This research has made use of the NASA Exoplanet Archive, which is operated by the California Institute of Technology, under contract with the National Aeronautics and Space Administration under the Exoplanet Exploration Program." Cite Christiansen et al. (2025). |
+| **HYG**                         | CC BY-SA 4.0 (v4.x; v3.x was CC BY-SA 2.5). Credit _The HYG Database, astronexus_, link the licence, link the source, and state that it was modified.                                                                                                                                                                                                                                              |
+| **NASA Exoplanet Archive**      | "This research has made use of the NASA Exoplanet Archive, which is operated by the California Institute of Technology, under contract with the National Aeronautics and Space Administration under the Exoplanet Exploration Program." Cite Christiansen et al. (2025).                                                                                                                           |
 
 ### Does share-alike reach the packed binary? Yes. Does it reach the code? No.
 
@@ -493,7 +493,7 @@ on `packages/*` and CC BY-SA 4.0 on the catalogue coexist without conflict,
 because they cover different works.
 
 **That has a concrete engineering consequence.** The packed catalogue must ship as
-its own asset with its own licence notice beside it — *not* inlined into the JS
+its own asset with its own licence notice beside it — _not_ inlined into the JS
 bundle as a literal, which would blur exactly the boundary the licences depend on.
 A separate `.bin` fetched at runtime is an aggregation; a base64 blob compiled into
 `index.js` invites the argument that it is not.
@@ -529,8 +529,8 @@ describing the data as public domain in project documentation.
 
 ### The stated fallback was backwards
 
-The spike's fallback read: *"if HYG's share-alike proves awkward, rebuild the
-ingest from Gaia and the NASA archive directly."* **That is strictly worse.** It
+The spike's fallback read: _"if HYG's share-alike proves awkward, rebuild the
+ingest from Gaia and the NASA archive directly."_ **That is strictly worse.** It
 trades a share-alike obligation for a non-commercial restriction and throws away
 HYG's pre-merged cross-catalogue identity resolution. HYG is the licence-clean
 source; Gaia is the encumbered one.
@@ -539,21 +539,21 @@ source; Gaia is the encumbered one.
 
 ## 5 · WebHID and Gamepad for HOTAS
 
-| | |
-|---|---|
-| **Blocks** | [M3](design/production.md#m3--the-pilot), and a public promise |
-| **Question** | Is many-axis HOTAS support achievable in a browser at all? |
-| **Answer** | **Yes — on Chromium, via WebHID.** Nowhere else, and the Gamepad API alone is not enough. |
-| **Lives in** | [`design/ux.md` § Controls](design/ux.md#controls) |
+|              |                                                                                           |
+| ------------ | ----------------------------------------------------------------------------------------- |
+| **Blocks**   | [M3](design/production.md#m3--the-pilot), and a public promise                            |
+| **Question** | Is many-axis HOTAS support achievable in a browser at all?                                |
+| **Answer**   | **Yes — on Chromium, via WebHID.** Nowhere else, and the Gamepad API alone is not enough. |
+| **Lives in** | [`design/ux.md` § Controls](design/ux.md#controls)                                        |
 
 ### Measured — API surface, three browsers, same machine
 
-| | Chrome 151 | Safari 26.5 | Firefox 153 |
-|---|---|---|---|
-| `navigator.hid` | **present** | **absent** | **absent** |
-| `navigator.usb` | present | absent | absent |
-| `navigator.getGamepads` | present | present | present |
-| `Gamepad.vibrationActuator` | ✅ | ✅ | legacy `hapticActuators` |
+|                             | Chrome 151  | Safari 26.5 | Firefox 153              |
+| --------------------------- | ----------- | ----------- | ------------------------ |
+| `navigator.hid`             | **present** | **absent**  | **absent**               |
+| `navigator.usb`             | present     | absent      | absent                   |
+| `navigator.getGamepads`     | present     | present     | present                  |
+| `Gamepad.vibrationActuator` | ✅          | ✅          | legacy `hapticActuators` |
 
 Mozilla's position on WebHID is **negative**, and it is a settled one rather than
 a backlog item. Verbatim:
@@ -568,12 +568,12 @@ not shipped it. **Plan for WebHID being Chromium-only indefinitely.**
 
 ### Measured — what the Gamepad API costs you, from Chromium's source
 
-| Fact | Source |
-|---|---|
-| `kAxesLengthCap = 16` | `device/gamepad/public/cpp/gamepad.h` |
-| `kButtonsLengthCap = 32` | same |
-| Polling at **250 Hz** on a dedicated thread | `kPollingIntervalMilliseconds = 4` in `device/gamepad/gamepad_provider.cc` |
-| Axes normalised from the element's own logical min/max at 8/16/32-bit report size | `gamepad_device_mac.mm` |
+| Fact                                                                              | Source                                                                     |
+| --------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `kAxesLengthCap = 16`                                                             | `device/gamepad/public/cpp/gamepad.h`                                      |
+| `kButtonsLengthCap = 32`                                                          | same                                                                       |
+| Polling at **250 Hz** on a dedicated thread                                       | `kPollingIntervalMilliseconds = 4` in `device/gamepad/gamepad_provider.cc` |
+| Axes normalised from the element's own logical min/max at 8/16/32-bit report size | `gamepad_device_mac.mm`                                                    |
 
 The button cap is worse than a cap. On macOS, buttons are indexed by **HID usage
 number**, and the code reads:
@@ -590,7 +590,7 @@ remapped into free indices in a second pass, up to 16. A HOTAS throttle with
 buttons declared above usage 32 will therefore appear to work and quietly lose
 inputs, which is the worst failure mode available.
 
-Axis resolution is *not* a problem: normalisation uses the device's own logical
+Axis resolution is _not_ a problem: normalisation uses the device's own logical
 range at its native report size, so a 16-bit axis keeps all 65,536 steps. The
 250 Hz poll downsamples a 1000 Hz device but is well inside what flight needs.
 
@@ -610,11 +610,11 @@ user gesture and shows a device chooser, and `device.forget()` revokes.
 
 ### What this means for the design
 
-| Scheme | Where it works | Ceiling |
-|---|---|---|
-| Mouse + keyboard | Everywhere | None |
-| Gamepad | Everywhere | 16 axes, 32 buttons, silent loss above usage 32 |
-| **HOTAS / HOSAS, full fidelity** | **Chromium only** | The device's own limits |
+| Scheme                           | Where it works    | Ceiling                                         |
+| -------------------------------- | ----------------- | ----------------------------------------------- |
+| Mouse + keyboard                 | Everywhere        | None                                            |
+| Gamepad                          | Everywhere        | 16 axes, 32 buttons, silent loss above usage 32 |
+| **HOTAS / HOSAS, full fidelity** | **Chromium only** | The device's own limits                         |
 
 HOTAS can be promised **with the browser named**. "Full 6-DoF axis binding with no
 emulation layer, in Chrome and Edge" is honest; "HOTAS support" unqualified is

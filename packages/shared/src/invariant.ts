@@ -11,8 +11,9 @@ export class InvariantError extends Error {
  * poison a whole universe and are far more expensive to diagnose later than an
  * immediate throw.
  */
-export function invariant(condition: unknown, message: string): asserts condition {
+export function invariant(
+  condition: unknown,
+  message: string,
+): asserts condition {
   if (!condition) throw new InvariantError(message)
 }
-
-

@@ -5,7 +5,7 @@ Status: accepted · 2026-08-19
 ## Context
 
 [ADR-0004](0004-entity-addressing.md) makes identity a path through containment,
-and body segments are written `b:2` for the third planet. Today that index *is*
+and body segments are written `b:2` for the third planet. Today that index _is_
 the orbital index: bodies are generated in order of semi-major axis and numbered
 as they come out.
 
@@ -24,11 +24,11 @@ ADR-0004 already names the failure mode it was avoiding — identity must not
 derive from array ordering — and then, in its own consequences section, admits
 the one place it does:
 
-> Bodies are addressed by *orbital index*, so changing how a system lays out its
+> Bodies are addressed by _orbital index_, so changing how a system lays out its
 > orbits renames its planets.
 
 It treated that as acceptable because a rename would be deliberate and detectable
-through algorithm versioning. That reasoning holds for *our* changes to the
+through algorithm versioning. That reasoning holds for _our_ changes to the
 generator. It does not hold for the catalogue, because the catalogue changes on
 someone else's schedule, continuously, forever, and a version bump that renames
 half the galaxy every few weeks is not a version bump anybody can act on.
@@ -60,7 +60,7 @@ A system therefore carries an ordered, **append-only** body manifest:
 Four rules govern it:
 
 1. **The catalogue version is an explicit generation input.** `bodies(system,
-   seed, catalogueVersion)` — same three inputs, same universe, forever, on any
+seed, catalogueVersion)` — same three inputs, same universe, forever, on any
    machine, offline. Determinism is unchanged; it now has three inputs instead of
    two, and the catalogue version joins `algorithm()` in the generation manifest
    ([ADR-0005](0005-procedural-seeds.md)).

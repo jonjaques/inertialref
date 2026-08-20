@@ -40,12 +40,12 @@ whole universe in under 700 bytes, and get the same answer twice.
 
 ### Prerequisites
 
-| Requirement | Version | Why |
-|---|---|---|
-| **Node.js** | **26 or newer** | The headless runner executes the TypeScript sources directly through type stripping — that is how `pnpm sim` works with no build step |
-| **pnpm** | **11** (11.22.0 pinned) | The lockfile is pnpm's, and `packages/*` are source-only workspace links |
+| Requirement               | Version                    | Why                                                                                                                                                                                                             |
+| ------------------------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Node.js**               | **26 or newer**            | The headless runner executes the TypeScript sources directly through type stripping — that is how `pnpm sim` works with no build step                                                                           |
+| **pnpm**                  | **11** (11.22.0 pinned)    | The lockfile is pnpm's, and `packages/*` are source-only workspace links                                                                                                                                        |
 | **A browser with WebGPU** | Chrome, Edge or Safari 26+ | The client renders through `WebGPURenderer` with TSL. WebGL 2 is a retained fallback, so Firefox runs — without extended-range HDR output, which it [cannot do at all](docs/spikes.md#1--hdr-display-detection) |
-| **git** | any | |
+| **git**                   | any                        |                                                                                                                                                                                                                 |
 
 Nothing else. There is no native toolchain, no Python, no database, and
 `packages/*` have **zero third-party runtime dependencies** — a rule the build
@@ -100,12 +100,12 @@ backend.
 Open the browser console. The whole simulation is scriptable from there:
 
 ```js
-ir.help()                      // everything the harness can do
-ir.targets()                   // everywhere you can go, nearest first — start here
-ir.goTo('b:2')                 // system or body; accepts the forms a human types
-await ir.selfTest()            // the twelve milestone capabilities, executed
-await ir.scenario('surface')   // land on the first solid world
-ir.status()                    // full structured state
+ir.help() // everything the harness can do
+ir.targets() // everywhere you can go, nearest first — start here
+ir.goTo('b:2') // system or body; accepts the forms a human types
+await ir.selfTest() // the twelve milestone capabilities, executed
+await ir.scenario('surface') // land on the first solid world
+ir.status() // full structured state
 ```
 
 **Start with `ir.targets()`** — every other verb takes an address and none of them
@@ -189,7 +189,7 @@ Five decisions carry most of the weight:
 
 1. **Positions are sectorised**, not doubles — an int32 sector index per axis plus
    a double offset inside a 2⁴⁰ m sector. Sub-millimetre everywhere within
-   249,000 ly of the origin, and crossing a sector boundary is *exact*.
+   249,000 ly of the origin, and crossing a sector boundary is _exact_.
 2. **Frames are not a precision mechanism**; the coordinates already are. They
    carry the semantics of motion, and re-framing provably does not move anything.
 3. **Seeds derive down a path of labels**, never along a shared stream, so
@@ -236,18 +236,18 @@ in `packages/*`.
 
 ### Commands
 
-| Command | What it does |
-|---|---|
-| `pnpm dev` | Vite dev server for `apps/game` on :5173 |
-| `pnpm test` | Vitest, Node environment only — no DOM is ever registered |
-| `pnpm typecheck` | Three independent tsconfig projects; see below |
-| `pnpm lint` | **oxlint**, not eslint (`oxlint --fix` applies autofixes) |
-| `pnpm graph` | Dependency layering + cycle check, and prints the graph |
-| `pnpm build` | `typecheck`, then `vite build` |
-| **`pnpm check`** | **graph → lint → typecheck → test → build. This is the gate.** |
-| `pnpm sim --self-test` | Headless run plus the twelve capability checks |
-| `pnpm vitest run <substring>` | A single test file |
-| `pnpm preview` | Serve a production build on :4173 |
+| Command                       | What it does                                                   |
+| ----------------------------- | -------------------------------------------------------------- |
+| `pnpm dev`                    | Vite dev server for `apps/game` on :5173                       |
+| `pnpm test`                   | Vitest, Node environment only — no DOM is ever registered      |
+| `pnpm typecheck`              | Three independent tsconfig projects; see below                 |
+| `pnpm lint`                   | **oxlint**, not eslint (`oxlint --fix` applies autofixes)      |
+| `pnpm graph`                  | Dependency layering + cycle check, and prints the graph        |
+| `pnpm build`                  | `typecheck`, then `vite build`                                 |
+| **`pnpm check`**              | **graph → lint → typecheck → test → build. This is the gate.** |
+| `pnpm sim --self-test`        | Headless run plus the twelve capability checks                 |
+| `pnpm vitest run <substring>` | A single test file                                             |
+| `pnpm preview`                | Serve a production build on :4173                              |
 
 **Do not report a task complete without `pnpm check` passing.** CI runs exactly
 that command, so there is no separate list of CI stages to drift out of step.
@@ -298,20 +298,20 @@ alike.
 [`docs/`](docs/) is explanatory documentation — interlinked concept pages,
 diagrams and decision records, not generated API reference.
 
-| | |
-|---|---|
-| [Getting started](docs/guides/getting-started.md) | Run it, drive it, and five things to try |
-| [Vision and scope](docs/vision.md) | What this is for, and the principles behind it |
-| [Architecture](docs/architecture.md) | The system in one sitting |
-| [Concepts](docs/README.md#concepts) | How each mechanism works, and why |
-| [ADRs](docs/adr/README.md) | Nine decisions that are expensive to reverse |
-| [The harness](docs/guides/harness.md) | The scriptable API, in full |
-| [Testing](docs/guides/testing.md) | Property tests, golden vectors, state hashes |
-| [Extending](docs/guides/extending.md) | Adding a body type, a task, a save field |
-| [Roadmap](docs/roadmap.md) | What is deliberately not built yet, and the seam for each |
-| [Spikes](docs/spikes.md) | Five questions that needed a measurement, and the numbers that came back |
-| [Design bible](docs/design/README.md) | What the game is, and why each mechanic is shaped that way |
-| [CONTEXT.md](CONTEXT.md) | Build log: what exists, what was decided, which bugs must not return |
+|                                                   |                                                                          |
+| ------------------------------------------------- | ------------------------------------------------------------------------ |
+| [Getting started](docs/guides/getting-started.md) | Run it, drive it, and five things to try                                 |
+| [Vision and scope](docs/vision.md)                | What this is for, and the principles behind it                           |
+| [Architecture](docs/architecture.md)              | The system in one sitting                                                |
+| [Concepts](docs/README.md#concepts)               | How each mechanism works, and why                                        |
+| [ADRs](docs/adr/README.md)                        | Nine decisions that are expensive to reverse                             |
+| [The harness](docs/guides/harness.md)             | The scriptable API, in full                                              |
+| [Testing](docs/guides/testing.md)                 | Property tests, golden vectors, state hashes                             |
+| [Extending](docs/guides/extending.md)             | Adding a body type, a task, a save field                                 |
+| [Roadmap](docs/roadmap.md)                        | What is deliberately not built yet, and the seam for each                |
+| [Spikes](docs/spikes.md)                          | Five questions that needed a measurement, and the numbers that came back |
+| [Design bible](docs/design/README.md)             | What the game is, and why each mechanic is shaped that way               |
+| [CONTEXT.md](CONTEXT.md)                          | Build log: what exists, what was decided, which bugs must not return     |
 
 ---
 
@@ -385,11 +385,11 @@ hand-transcribed published measurements — facts, not a licensed dataset. **Tha
 changes at the first ingest**, and the terms have been verified rather than
 assumed ([spike 4](docs/spikes.md#4--gaia-and-hyg-attribution-terms)):
 
-| Source | Terms |
-|---|---|
-| **HYG database** v4.x | CC BY-SA 4.0. Share-alike reaches the packed catalogue, which must carry the licence and ship as its own asset |
-| **Gaia** (ESA) | **CC BY-NC 3.0 IGO — non-commercial.** Kept out of the shipped bundle for exactly that reason |
-| **NASA Exoplanet Archive** | No licence stated; operated by Caltech under NASA contract. Use its requested acknowledgement |
+| Source                     | Terms                                                                                                          |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| **HYG database** v4.x      | CC BY-SA 4.0. Share-alike reaches the packed catalogue, which must carry the licence and ship as its own asset |
+| **Gaia** (ESA)             | **CC BY-NC 3.0 IGO — non-commercial.** Kept out of the shipped bundle for exactly that reason                  |
+| **NASA Exoplanet Archive** | No licence stated; operated by Caltech under NASA contract. Use its requested acknowledgement                  |
 
 A `NOTICE` file becomes required in the same change that first reads any of them.
 

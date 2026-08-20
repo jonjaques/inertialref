@@ -10,7 +10,13 @@ import {
   type Vec3,
   vec3,
 } from '@inertialref/spatial'
-import { decodeNumberTuple, decodeObject, decodeString, type Decoder, refine } from './codec.ts'
+import {
+  decodeNumberTuple,
+  decodeObject,
+  decodeString,
+  type Decoder,
+  refine,
+} from './codec.ts'
 
 /*
  * Wire forms for spatial types.
@@ -25,42 +31,69 @@ import { decodeNumberTuple, decodeObject, decodeString, type Decoder, refine } f
 export type WireVec3 = readonly [number, number, number]
 export type WireQuat = readonly [number, number, number, number]
 /** [sectorX, sectorY, sectorZ, offsetX, offsetY, offsetZ] */
-export type WireUniverseVector = readonly [number, number, number, number, number, number]
+export type WireUniverseVector = readonly [
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+]
 
 export const encodeVec3 = (v: Vec3): WireVec3 => [v.x, v.y, v.z]
 export const encodeQuat = (q: Quat): WireQuat => [q.x, q.y, q.z, q.w]
-export const encodeUniverseVector = (uv: UniverseVector): WireUniverseVector => [
-  uv.sx,
-  uv.sy,
-  uv.sz,
-  uv.ox,
-  uv.oy,
-  uv.oz,
-]
+export const encodeUniverseVector = (
+  uv: UniverseVector,
+): WireUniverseVector => [uv.sx, uv.sy, uv.sz, uv.ox, uv.oy, uv.oz]
 
 export const decodeVec3: Decoder<Vec3> = (value, path) => {
   const parts = decodeNumberTuple(3)(value, path)
-  return parts.ok ? ok(vec3(parts.value[0] as number, parts.value[1] as number, parts.value[2] as number)) : parts
+  return parts.ok
+    ? ok(
+        vec3(
+          parts.value[0] as number,
+          parts.value[1] as number,
+          parts.value[2] as number,
+        ),
+      )
+    : parts
 }
 
 export const decodeQuat: Decoder<Quat> = (value, path) => {
   const parts = decodeNumberTuple(4)(value, path)
   return parts.ok
-    ? ok(quat(parts.value[0] as number, parts.value[1] as number, parts.value[2] as number, parts.value[3] as number))
+    ? ok(
+        quat(
+          parts.value[0] as number,
+          parts.value[1] as number,
+          parts.value[2] as number,
+          parts.value[3] as number,
+        ),
+      )
     : parts
 }
 
 export const decodeUniverseVector: Decoder<UniverseVector> = (value, path) => {
   const parts = decodeNumberTuple(6)(value, path)
   if (!parts.ok) return parts
-  const [sx, sy, sz, ox, oy, oz] = parts.value as [number, number, number, number, number, number]
+  const [sx, sy, sz, ox, oy, oz] = parts.value as [
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+  ]
   // universeVector re-validates and re-normalises: a save file that has been
   // hand-edited, or written by an older build with a different sector size, must
   // not be able to install an out-of-range position.
   try {
     return ok(universeVector(sx, sy, sz, ox, oy, oz))
   } catch (cause) {
-    return { ok: false, error: `${path}: ${cause instanceof Error ? cause.message : String(cause)}` }
+    return {
+      ok: false,
+      error: `${path}: ${cause instanceof Error ? cause.message : String(cause)}`,
+    }
   }
 }
 
@@ -92,7 +125,6 @@ export const decodeFrameState: Decoder<FrameState> = decodeObject({
   velocity: decodeVec3,
   angularVelocity: decodeVec3,
 })
-
 
 /*
  * Validators that leave the wire form alone.

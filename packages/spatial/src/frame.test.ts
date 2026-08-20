@@ -1,6 +1,12 @@
 import fc from 'fast-check'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { AU, EARTH_RADIUS, LIGHT_YEAR, SECONDS_PER_DAY, SECONDS_PER_YEAR } from '@inertialref/shared'
+import {
+  AU,
+  EARTH_RADIUS,
+  LIGHT_YEAR,
+  SECONDS_PER_DAY,
+  SECONDS_PER_YEAR,
+} from '@inertialref/shared'
 import {
   canonicalPosition,
   canonicalVelocity,
@@ -50,7 +56,11 @@ function equatorialSurface(radius: number, rotationPeriod: number) {
 }
 
 // A system 4.2 ly out, an Earth-ish planet at 1 AU, a landing site on its equator.
-const SYSTEM_POSITION = UV.fromMeters(4.2 * LIGHT_YEAR, 0.3 * LIGHT_YEAR, -1.1 * LIGHT_YEAR)
+const SYSTEM_POSITION = UV.fromMeters(
+  4.2 * LIGHT_YEAR,
+  0.3 * LIGHT_YEAR,
+  -1.1 * LIGHT_YEAR,
+)
 
 function buildGraph(): FrameGraph {
   const graph = new FrameGraph()
@@ -58,7 +68,11 @@ function buildGraph(): FrameGraph {
     id: SYSTEM,
     parent: ROOT_FRAME,
     kind: 'system',
-    anchor: { kind: 'fixed', position: SYSTEM_POSITION, orientation: Q.IDENTITY },
+    anchor: {
+      kind: 'fixed',
+      position: SYSTEM_POSITION,
+      orientation: Q.IDENTITY,
+    },
   })
   graph.define({
     id: PLANET,
@@ -70,7 +84,10 @@ function buildGraph(): FrameGraph {
     id: SURFACE,
     parent: PLANET,
     kind: 'surface',
-    anchor: { kind: 'dynamic', evaluate: equatorialSurface(EARTH_RADIUS, SECONDS_PER_DAY) },
+    anchor: {
+      kind: 'dynamic',
+      evaluate: equatorialSurface(EARTH_RADIUS, SECONDS_PER_DAY),
+    },
   })
   return graph
 }
@@ -88,7 +105,10 @@ describe('FrameGraph', () => {
         id: frameId('orphan'),
         parent: frameId('nope'),
         kind: 'body',
-        anchor: { kind: 'dynamic', evaluate: () => ({ ...circularOrbit(1, 1)(0) }) },
+        anchor: {
+          kind: 'dynamic',
+          evaluate: () => ({ ...circularOrbit(1, 1)(0) }),
+        },
       }),
     ).toThrow(/unknown parent/)
     expect(() => graph.remove(SYSTEM)).toThrow(/still has child/)
@@ -102,14 +122,26 @@ describe('FrameGraph', () => {
     const t = 12_345.678
     const surfacePose = graph.pose(SURFACE, t)
     const planetPose = graph.pose(PLANET, t)
-    expect(UV.distance(surfacePose.position, planetPose.position)).toBeCloseTo(EARTH_RADIUS, 3)
+    expect(UV.distance(surfacePose.position, planetPose.position)).toBeCloseTo(
+      EARTH_RADIUS,
+      3,
+    )
     // ...and at ~1 AU from the star, wherever it is in its orbit.
-    expect(UV.distance(planetPose.position, SYSTEM_POSITION) / AU).toBeCloseTo(1, 9)
+    expect(UV.distance(planetPose.position, SYSTEM_POSITION) / AU).toBeCloseTo(
+      1,
+      9,
+    )
   })
 
   it('gives a stationary surface point orbital plus rotational velocity', () => {
     const t = 0
-    const standing = { frame: SURFACE, position: V.ZERO, orientation: Q.IDENTITY, velocity: V.ZERO, angularVelocity: V.ZERO }
+    const standing = {
+      frame: SURFACE,
+      position: V.ZERO,
+      orientation: Q.IDENTITY,
+      velocity: V.ZERO,
+      angularVelocity: V.ZERO,
+    }
     const v = canonicalVelocity(graph, standing, t)
     const orbital = (2 * Math.PI * AU) / SECONDS_PER_YEAR
     const spin = (2 * Math.PI * EARTH_RADIUS) / SECONDS_PER_DAY
@@ -138,8 +170,12 @@ describe('FrameGraph', () => {
     // The numbers it carries change completely...
     expect(V.length(inSystem.position)).toBeGreaterThan(AU * 0.9)
     // ...but where it actually is does not.
-    expect(UV.distance(canonicalPosition(graph, inSystem, t), canonicalBefore)).toBeLessThan(1e-3)
-    expect(V.distance(canonicalVelocity(graph, inSystem, t), velocityBefore)).toBeLessThan(1e-6)
+    expect(
+      UV.distance(canonicalPosition(graph, inSystem, t), canonicalBefore),
+    ).toBeLessThan(1e-3)
+    expect(
+      V.distance(canonicalVelocity(graph, inSystem, t), velocityBefore),
+    ).toBeLessThan(1e-6)
   })
 
   it('round-trips any state through any frame in the same system (property)', () => {
@@ -164,8 +200,12 @@ describe('FrameGraph', () => {
           const back = reframe(graph, there, from, t)
           expect(V.distance(back.position, state.position)).toBeLessThan(1e-3)
           expect(V.distance(back.velocity, state.velocity)).toBeLessThan(1e-4)
-          expect(Q.approxEquals(back.orientation, state.orientation, 1e-9)).toBe(true)
-          expect(V.distance(back.angularVelocity, state.angularVelocity)).toBeLessThan(1e-9)
+          expect(
+            Q.approxEquals(back.orientation, state.orientation, 1e-9),
+          ).toBe(true)
+          expect(
+            V.distance(back.angularVelocity, state.angularVelocity),
+          ).toBeLessThan(1e-9)
         },
       ),
       { numRuns: 200 },
@@ -180,7 +220,9 @@ describe('FrameGraph', () => {
     const recovered = universeToLocal(pose, bolt)
     // Bounded by the representation's quarter-millimetre, not by the 8 m ULP a
     // double has at 4 light-years: the subtraction happens in universe space.
-    expect(Math.abs(recovered.x - 0.0254)).toBeLessThan(UV.POSITION_RESOLUTION * 2)
+    expect(Math.abs(recovered.x - 0.0254)).toBeLessThan(
+      UV.POSITION_RESOLUTION * 2,
+    )
     expect(Math.abs(UV.distance(bolt, pose.position) - 0.0254)).toBeLessThan(
       UV.POSITION_RESOLUTION * 2,
     )
@@ -211,7 +253,10 @@ describe('FrameGraph', () => {
 
     // Canonical position, by contrast, is preserved to the representation limit.
     expect(
-      UV.distance(canonicalPosition(graph, inFarFrame, t), canonicalPosition(graph, nearRoot, t)),
+      UV.distance(
+        canonicalPosition(graph, inFarFrame, t),
+        canonicalPosition(graph, nearRoot, t),
+      ),
     ).toBeLessThan(64)
   })
 

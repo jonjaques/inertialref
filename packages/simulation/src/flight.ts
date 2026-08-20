@@ -20,7 +20,11 @@ import {
   type Vec3,
   vec3,
 } from '@inertialref/spatial'
-import { type BodyFixedDirection, bodyFixedDirection, surfaceRadius } from '@inertialref/universe'
+import {
+  type BodyFixedDirection,
+  bodyFixedDirection,
+  surfaceRadius,
+} from '@inertialref/universe'
 import type { FrameBinding } from './binding.ts'
 import type { Entity } from './entity.ts'
 
@@ -85,16 +89,29 @@ export interface FlightResult {
  * positions: the entity may be in a surface frame several levels below the
  * body, and only the canonical position is comparable across frames.
  */
-function radiusVector(world: FlightWorld, state: FrameState, binding: FrameBinding, t: Seconds): Vec3 {
+function radiusVector(
+  world: FlightWorld,
+  state: FrameState,
+  binding: FrameBinding,
+  t: Seconds,
+): Vec3 {
   if (state.frame === binding.frame) return state.position
   const framePose = world.frames.pose(state.frame, t)
   const bodyPose = world.frames.pose(binding.frame, t)
   const universe = canonicalPosition(world.frames, state, t)
-  return Q.rotateInverse(framePose.orientation, UV.difference(universe, bodyPose.position))
+  return Q.rotateInverse(
+    framePose.orientation,
+    UV.difference(universe, bodyPose.position),
+  )
 }
 
 /** Air velocity at a point, from the body's rotation, in the entity's frame axes. */
-function airVelocity(world: FlightWorld, binding: FrameBinding, radius: Vec3, t: Seconds): Vec3 {
+function airVelocity(
+  world: FlightWorld,
+  binding: FrameBinding,
+  radius: Vec3,
+  t: Seconds,
+): Vec3 {
   if (binding.spinFrame === null) return Vec.ZERO
   const spin = world.frames.pose(binding.spinFrame, t)
   const bodyFrame = world.frames.pose(binding.frame, t)
@@ -156,16 +173,31 @@ export function stepFlight(
     // wrong sample, and the error moved with the planet's rotation phase.
     const sampleBelow = options.terrainSampleAltitude ?? binding.radius * 0.25
     if (distance - binding.radius < sampleBelow) {
-      altitude = distance - surfaceRadius(binding.body, groundDirection(world, entity, binding, time))
+      altitude =
+        distance -
+        surfaceRadius(
+          binding.body,
+          groundDirection(world, entity, binding, time),
+        )
     } else {
       altitude = distance - binding.radius
     }
   }
 
-  if (binding.atmosphere !== null && altitude !== null && altitude < binding.atmosphere.ceiling) {
+  if (
+    binding.atmosphere !== null &&
+    altitude !== null &&
+    altitude < binding.atmosphere.ceiling
+  ) {
     const density = atmosphericDensity(binding.atmosphere, altitude)
-    const relative = Vec.sub(entity.state.velocity, airVelocity(world, binding, radius, time))
-    acceleration = Vec.add(acceleration, dragAcceleration(density, relative, entity.ballisticCoefficient))
+    const relative = Vec.sub(
+      entity.state.velocity,
+      airVelocity(world, binding, radius, time),
+    )
+    acceleration = Vec.add(
+      acceleration,
+      dragAcceleration(density, relative, entity.ballisticCoefficient),
+    )
   }
 
   const state = integrateFree(entity, acceleration, dt)
@@ -174,10 +206,15 @@ export function stepFlight(
   // Testing the old one lets a fast descent step straight through the crust —
   // at 20 km/s a tick covers 300 m, so "was I close last tick" is not a
   // collision test, it is a coin flip.
-  if (binding.body !== null && binding.spinFrame !== null && altitude !== null) {
+  if (
+    binding.body !== null &&
+    binding.spinFrame !== null &&
+    altitude !== null
+  ) {
     const after = groundAltitude(world, { ...entity, state }, binding, time)
     const speed = Vec.length(state.velocity)
-    const contact = after <= 0 || (after <= LANDING_CLEARANCE && speed < LANDING_SPEED_LIMIT)
+    const contact =
+      after <= 0 || (after <= LANDING_CLEARANCE && speed < LANDING_SPEED_LIMIT)
     if (contact) {
       return {
         state,
@@ -193,7 +230,13 @@ export function stepFlight(
     altitude = after
   }
 
-  const transition = considerFrameChange(world, { ...entity, state }, binding, distance, time)
+  const transition = considerFrameChange(
+    world,
+    { ...entity, state },
+    binding,
+    distance,
+    time,
+  )
   return {
     state: transition?.state ?? state,
     landed: false,
@@ -226,8 +269,12 @@ function groundAltitude(
   if (binding.body === null) return distance - binding.radius
   // Sampling terrain is fourteen octaves of 3D noise; only worth it near the
   // ground, and a sphere is an exact answer everywhere else.
-  if (distance - binding.radius > binding.radius * 0.25) return distance - binding.radius
-  return distance - surfaceRadius(binding.body, groundDirection(world, entity, binding, time))
+  if (distance - binding.radius > binding.radius * 0.25)
+    return distance - binding.radius
+  return (
+    distance -
+    surfaceRadius(binding.body, groundDirection(world, entity, binding, time))
+  )
 }
 
 /**
@@ -245,10 +292,15 @@ export function groundDirection(
   time: Seconds,
 ): BodyFixedDirection {
   if (binding.spinFrame === null) {
-    return Vec.normalize(radiusVector(world, entity.state, binding, time)) as BodyFixedDirection
+    return Vec.normalize(
+      radiusVector(world, entity.state, binding, time),
+    ) as BodyFixedDirection
   }
   const spin = world.frames.pose(binding.spinFrame, time)
-  return bodyFixedDirection(spin, canonicalPosition(world.frames, entity.state, time))
+  return bodyFixedDirection(
+    spin,
+    canonicalPosition(world.frames, entity.state, time),
+  )
 }
 
 /** A landed entity is carried by the ground; only a thrust command frees it. */
@@ -261,7 +313,8 @@ function stepLanded(entity: Entity, options: StepFlightOptions): FlightResult {
 
   if (!wantsToLift) {
     // Attitude control still works on the pad; nothing else moves.
-    const state = entity.thrusters === null ? entity.state : rotateOnly(entity, options.dt)
+    const state =
+      entity.thrusters === null ? entity.state : rotateOnly(entity, options.dt)
     return {
       state,
       landed: true,
@@ -280,7 +333,10 @@ function stepLanded(entity: Entity, options: StepFlightOptions): FlightResult {
   return {
     state: {
       ...entity.state,
-      position: Vec.add(entity.state.position, vec3(0, LANDING_CLEARANCE * 2, 0)),
+      position: Vec.add(
+        entity.state.position,
+        vec3(0, LANDING_CLEARANCE * 2, 0),
+      ),
     },
     landed: false,
     touchdown: false,
@@ -316,7 +372,11 @@ function rotateOnly(entity: Entity, dt: Seconds): FrameState {
   }
 }
 
-function integrateFree(entity: Entity, externalAcceleration: Vec3, dt: Seconds): FrameState {
+function integrateFree(
+  entity: Entity,
+  externalAcceleration: Vec3,
+  dt: Seconds,
+): FrameState {
   const thrusters = entity.thrusters
   let linear = externalAcceleration
   let angular = Vec.ZERO
@@ -324,10 +384,19 @@ function integrateFree(entity: Entity, externalAcceleration: Vec3, dt: Seconds):
   if (thrusters !== null) {
     const resolved = resolveThrust(thrusters, entity.control)
     // Thrust is generated in body axes and applied in frame axes.
-    linear = Vec.add(linear, Q.rotate(entity.state.orientation, resolved.linear))
+    linear = Vec.add(
+      linear,
+      Q.rotate(entity.state.orientation, resolved.linear),
+    )
     angular = resolved.angular
-    if (entity.flightAssist && Vec.lengthSquared(entity.control.rotation) < 1e-6) {
-      angular = Vec.add(angular, dampingTorque(entity.state.angularVelocity, thrusters, dt))
+    if (
+      entity.flightAssist &&
+      Vec.lengthSquared(entity.control.rotation) < 1e-6
+    ) {
+      angular = Vec.add(
+        angular,
+        dampingTorque(entity.state.angularVelocity, thrusters, dt),
+      )
     }
   }
 
@@ -373,15 +442,26 @@ function considerFrameChange(
     if (childDistance < child.sphereOfInfluence * SOI_ENTER) {
       return {
         state: reframe(world.frames, entity.state, child.frame, time),
-        change: { from: entity.state.frame, to: child.frame, reason: 'entered sphere of influence' },
+        change: {
+          from: entity.state.frame,
+          to: child.frame,
+          reason: 'entered sphere of influence',
+        },
       }
     }
   }
 
-  if (binding.parent !== null && distance > binding.sphereOfInfluence * SOI_LEAVE) {
+  if (
+    binding.parent !== null &&
+    distance > binding.sphereOfInfluence * SOI_LEAVE
+  ) {
     return {
       state: reframe(world.frames, entity.state, binding.parent, time),
-      change: { from: entity.state.frame, to: binding.parent, reason: 'left sphere of influence' },
+      change: {
+        from: entity.state.frame,
+        to: binding.parent,
+        reason: 'left sphere of influence',
+      },
     }
   }
 

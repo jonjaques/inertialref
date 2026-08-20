@@ -10,8 +10,17 @@ import {
   type SaveGame,
 } from '@inertialref/protocol'
 import { type FrameId, vec3 } from '@inertialref/spatial'
-import { DEBUG_SHIP_THRUSTERS, type EntityKind, World } from '@inertialref/simulation'
-import { GENERATION_VERSIONS, galaxyId, type EntityId, type SystemId } from '@inertialref/universe'
+import {
+  DEBUG_SHIP_THRUSTERS,
+  type EntityKind,
+  World,
+} from '@inertialref/simulation'
+import {
+  GENERATION_VERSIONS,
+  galaxyId,
+  type EntityId,
+  type SystemId,
+} from '@inertialref/universe'
 import { migrateSave } from './migrate.ts'
 
 /*
@@ -31,7 +40,11 @@ export interface SaveOptions {
   readonly meta?: Readonly<Record<string, string>>
 }
 
-export function captureSave(world: World, playerEntity: EntityId | null, options: SaveOptions = {}): SaveGame {
+export function captureSave(
+  world: World,
+  playerEntity: EntityId | null,
+  options: SaveOptions = {},
+): SaveGame {
   const landed = new Set(world.landedEntities())
   const entities: SaveEntity[] = world.entities.ordered().map((entity) => ({
     id: entity.id,
@@ -81,13 +94,19 @@ export interface RestoredWorld {
  * demand from the frame id.
  */
 export function restoreSave(save: SaveGame): Result<RestoredWorld, string> {
-  const world = new World({ seed: save.seed, galaxy: galaxyId(save.galaxy), startTick: asTick(save.tick) })
+  const world = new World({
+    seed: save.seed,
+    galaxy: galaxyId(save.galaxy),
+    startTick: asTick(save.tick),
+  })
 
   for (const system of save.loadedSystems) {
     try {
       world.loadSystem(system as SystemId)
     } catch (cause) {
-      return err(`cannot load system ${system}: ${cause instanceof Error ? cause.message : String(cause)}`)
+      return err(
+        `cannot load system ${system}: ${cause instanceof Error ? cause.message : String(cause)}`,
+      )
     }
   }
 
@@ -96,7 +115,9 @@ export function restoreSave(save: SaveGame): Result<RestoredWorld, string> {
     const state = decode(decodeFrameState, entity.state)
     if (!state.ok) return err(`entity ${entity.id}: ${state.error}`)
     if (!world.ensureFrame(state.value.frame as FrameId)) {
-      return err(`entity ${entity.id} refers to frame ${state.value.frame}, which does not exist`)
+      return err(
+        `entity ${entity.id} refers to frame ${state.value.frame}, which does not exist`,
+      )
     }
     const spawned = world.spawn({
       id: entity.id as EntityId,
@@ -109,8 +130,16 @@ export function restoreSave(save: SaveGame): Result<RestoredWorld, string> {
     })
     world.entities.update(spawned.id, {
       control: {
-        translation: vec3(entity.control.translation[0], entity.control.translation[1], entity.control.translation[2]),
-        rotation: vec3(entity.control.rotation[0], entity.control.rotation[1], entity.control.rotation[2]),
+        translation: vec3(
+          entity.control.translation[0],
+          entity.control.translation[1],
+          entity.control.translation[2],
+        ),
+        rotation: vec3(
+          entity.control.rotation[0],
+          entity.control.rotation[1],
+          entity.control.rotation[2],
+        ),
       },
       flightAssist: entity.flightAssist,
     })
@@ -122,7 +151,8 @@ export function restoreSave(save: SaveGame): Result<RestoredWorld, string> {
 
   return ok({
     world,
-    playerEntity: save.playerEntity === null ? null : (save.playerEntity as EntityId),
+    playerEntity:
+      save.playerEntity === null ? null : (save.playerEntity as EntityId),
     generation: save.generation,
   })
 }
@@ -133,7 +163,9 @@ export function parseSave(text: string): Result<SaveGame, string> {
   try {
     raw = JSON.parse(text)
   } catch (cause) {
-    return err(`malformed save: ${cause instanceof Error ? cause.message : String(cause)}`)
+    return err(
+      `malformed save: ${cause instanceof Error ? cause.message : String(cause)}`,
+    )
   }
   const migrated = migrateSave(raw)
   if (!migrated.ok) return migrated

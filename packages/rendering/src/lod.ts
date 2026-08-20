@@ -62,7 +62,11 @@ export function selectLod(radius: Meters, distance: Meters): LodTier {
  * cube-sphere for exactly the regions it needs — the same addressing the
  * generator and the persistence layer use.
  */
-export function terrainLevelFor(radius: Meters, distance: Meters, maxLevel = 12): number {
+export function terrainLevelFor(
+  radius: Meters,
+  distance: Meters,
+  maxLevel = 12,
+): number {
   const altitude = Math.max(1, distance - radius)
   // Roughly: halve the patch size for every halving of altitude.
   const level = Math.round(Math.log2(radius / altitude)) + 4
@@ -86,14 +90,22 @@ export function terrainLevelFor(radius: Meters, distance: Meters, maxLevel = 12)
  * a sticker on it. The fade spans one octave of altitude above that, which is
  * the same cadence the level selection itself moves at.
  */
-export function terrainOpacity(radius: Meters, distance: Meters, maxLevel = 12): number {
+export function terrainOpacity(
+  radius: Meters,
+  distance: Meters,
+  maxLevel = 12,
+): number {
   const altitude = Math.max(1, distance - radius)
   const full = radius * 2 ** (4.5 - maxLevel)
   return Math.min(1, Math.max(0, 2 - altitude / full))
 }
 
 /** Blackbody colour of a star, approximate but monotonic in temperature. */
-export function starColor(temperature: number): { r: number; g: number; b: number } {
+export function starColor(temperature: number): {
+  r: number
+  g: number
+  b: number
+} {
   const t = Math.min(40_000, Math.max(1_000, temperature)) / 100
   const clamp = (v: number): number => Math.min(1, Math.max(0, v))
   const r = t <= 66 ? 1 : clamp((329.7 * (t - 60) ** -0.1332) / 255)
@@ -101,6 +113,11 @@ export function starColor(temperature: number): { r: number; g: number; b: numbe
     t <= 66
       ? clamp((99.47 * Math.log(t) - 161.12) / 255)
       : clamp((288.12 * (t - 60) ** -0.0755) / 255)
-  const b = t >= 66 ? 1 : t <= 19 ? 0 : clamp((138.52 * Math.log(t - 10) - 305.04) / 255)
+  const b =
+    t >= 66
+      ? 1
+      : t <= 19
+        ? 0
+        : clamp((138.52 * Math.log(t - 10) - 305.04) / 255)
   return { r, g, b }
 }

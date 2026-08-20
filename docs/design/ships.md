@@ -46,16 +46,16 @@ author a ship pipeline. The parts are hand-designed; the assemblies and their
 variants are generated, seeded from the hull id so a given ship always looks the
 same everywhere.
 
-| Class | Named for | Role | Mass (dry) | Core | Optional | Hardpoints | Utility | Interior |
-|---|---|---|---|---|---|---|---|---|
-| ***Bessel*** | Friedrich Bessel — the first stellar parallax, 61 Cygni, 1838 | Starter, minimal | 22 t | 6 | 3 | 2 × S1 | 2 | Cockpit only |
-| ***Cannon*** | Annie Jump Cannon — the OBAFGKM spectral classification | Long-range survey | 44 t | 6 | 6 | 2 × S1 | 4 | Cockpit + 1 bay |
-| ***Kapteyn*** | Jacobus Kapteyn — stellar statistics and star streams | Cargo and logistics | 96 t | 6 | 8 | 2 × S2 | 3 | Cockpit + 2 bays |
-| ***Cutter*** | *Independent lineage — a maritime armed working vessel* | Combat | 68 t | 6 | 4 | 4 × S3, 2 × S1 | 6 | Cockpit only |
-| ***Hertzsprung*** | Ejnar Hertzsprung — the H–R diagram | Multi-role medium | 120 t | 6 | 7 | 3 × S3 | 5 | Cockpit + 3 bays |
-| ***Herschel*** | Caroline and William Herschel — the first great sky surveys | Large, mobile base | 340 t | 6 | 11 | 4 × S4 | 8 | Full deck + hangar |
+| Class             | Named for                                                     | Role                | Mass (dry) | Core | Optional | Hardpoints     | Utility | Interior           |
+| ----------------- | ------------------------------------------------------------- | ------------------- | ---------- | ---- | -------- | -------------- | ------- | ------------------ |
+| _**Bessel**_      | Friedrich Bessel — the first stellar parallax, 61 Cygni, 1838 | Starter, minimal    | 22 t       | 6    | 3        | 2 × S1         | 2       | Cockpit only       |
+| _**Cannon**_      | Annie Jump Cannon — the OBAFGKM spectral classification       | Long-range survey   | 44 t       | 6    | 6        | 2 × S1         | 4       | Cockpit + 1 bay    |
+| _**Kapteyn**_     | Jacobus Kapteyn — stellar statistics and star streams         | Cargo and logistics | 96 t       | 6    | 8        | 2 × S2         | 3       | Cockpit + 2 bays   |
+| _**Cutter**_      | _Independent lineage — a maritime armed working vessel_       | Combat              | 68 t       | 6    | 4        | 4 × S3, 2 × S1 | 6       | Cockpit only       |
+| _**Hertzsprung**_ | Ejnar Hertzsprung — the H–R diagram                           | Multi-role medium   | 120 t      | 6    | 7        | 3 × S3         | 5       | Cockpit + 3 bays   |
+| _**Herschel**_    | Caroline and William Herschel — the first great sky surveys   | Large, mobile base  | 340 t      | 6    | 11       | 4 × S4         | 8       | Full deck + hangar |
 
-The ***Cannon*** is the design's centre of gravity — the ship the
+The _**Cannon**_ is the design's centre of gravity — the ship the
 [MVP](production.md#the-mvp-the-explorer) is balanced around, and every number in
 [flight](flight.md) is quoted for it. That the survey vessel is named for the
 astronomer whose spectral classification the
@@ -67,13 +67,13 @@ and should not be smoothed away.
 **A class is named for an astronomer; a ship is named by its captain.** The
 class/name split is Star Trek's, the class names are the people whose work the
 game's data actually rests on, and individual ship names follow maritime
-tradition — one word, plain, aspirational. You fly a *Cannon*-class survey vessel
-called the *Meridian*.
+tradition — one word, plain, aspirational. You fly a _Cannon_-class survey vessel
+called the _Meridian_.
 
-| Lineage | Class names | Why |
-|---|---|---|
-| **Survey** | Astronomers — Bessel, Cannon, Kapteyn, Hertzsprung, Herschel | An institution names its vessels after its own history, and the Survey's history is the catalogue |
-| **Independent** | Maritime working vessels — Cutter, Tender, Packet, Dory | Armed and commercial hulls are not Survey-built, and the naming says so before anything else does |
+| Lineage         | Class names                                                  | Why                                                                                               |
+| --------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
+| **Survey**      | Astronomers — Bessel, Cannon, Kapteyn, Hertzsprung, Herschel | An institution names its vessels after its own history, and the Survey's history is the catalogue |
+| **Independent** | Maritime working vessels — Cutter, Tender, Packet, Dory      | Armed and commercial hulls are not Survey-built, and the naming says so before anything else does |
 
 **The convention is therefore information.** A hull's class name tells you where
 it came from — which is worth more than any amount of invented backstory, and
@@ -86,8 +86,8 @@ you ever transmit.
 ### Interiors
 
 Walkable interior volume is a hull property, not a feature bolted on later — see
-[onfoot](onfoot.md#ship-interiors). A *Bessel* has a cockpit you can stand up in and
-nothing else. A *Herschel* has a deck, a hangar, and a reason to walk to the other
+[onfoot](onfoot.md#ship-interiors). A _Bessel_ has a cockpit you can stand up in and
+nothing else. A _Herschel_ has a deck, a hangar, and a reason to walk to the other
 end of it. Interiors are assembled from the same parts system: a bay is a
 generated room from a small set of module types, laid out along the spine.
 
@@ -110,12 +110,12 @@ the ship. Full numbers in [flight](flight.md#drive-ratings).
 
 ### Slots
 
-| Slot type | What goes in it | Notes |
-|---|---|---|
-| **Core** (6, mandatory) | Reactor, Reference Drive, Thrusters, Life Support, Sensors, Fuel Tank | Cannot be empty. A ship with a dead core module does not fly. |
-| **Optional** | Cargo, shield, fuel scoop, scanners, repair, extra tank, hangar, quarters | Sized; a size-4 module needs a size-4-or-larger slot |
-| **Hardpoint** | Weapons | Sized S1–S4; retractable |
-| **Utility** | Countermeasures, heat sinks, point defence, surface scanner | Small, external, always exposed |
+| Slot type               | What goes in it                                                           | Notes                                                         |
+| ----------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| **Core** (6, mandatory) | Reactor, Reference Drive, Thrusters, Life Support, Sensors, Fuel Tank     | Cannot be empty. A ship with a dead core module does not fly. |
+| **Optional**            | Cargo, shield, fuel scoop, scanners, repair, extra tank, hangar, quarters | Sized; a size-4 module needs a size-4-or-larger slot          |
+| **Hardpoint**           | Weapons                                                                   | Sized S1–S4; retractable                                      |
+| **Utility**             | Countermeasures, heat sinks, point defence, surface scanner               | Small, external, always exposed                               |
 
 ### Size and grade
 
@@ -128,16 +128,16 @@ be fitted to a smaller slot.
 **Grade A–E** is the engineering tradeoff, and deliberately **A is not simply
 best**:
 
-| Grade | Performance | Mass | Power draw | Integrity | Use it when |
-|---|---|---|---|---|---|
-| **A** | 1.00 | 1.00 | 1.00 | 1.00 | Reference |
-| **B** | 0.92 | 1.30 | 0.94 | 1.60 | You expect to be shot at |
-| **C** | 0.86 | 0.85 | 0.86 | 1.00 | Balanced default |
-| **D** | 0.78 | **0.55** | 0.75 | 0.70 | **Exploration — mass is range** |
-| **E** | 0.68 | 0.75 | **0.55** | 0.85 | Power-starved builds |
+| Grade | Performance | Mass     | Power draw | Integrity | Use it when                     |
+| ----- | ----------- | -------- | ---------- | --------- | ------------------------------- |
+| **A** | 1.00        | 1.00     | 1.00       | 1.00      | Reference                       |
+| **B** | 0.92        | 1.30     | 0.94       | 1.60      | You expect to be shot at        |
+| **C** | 0.86        | 0.85     | 0.86       | 1.00      | Balanced default                |
+| **D** | 0.78        | **0.55** | 0.75       | 0.70      | **Exploration — mass is range** |
+| **E** | 0.68        | 0.75     | **0.55**   | 0.85      | Power-starved builds            |
 
-*Rationale.* Elite Dangerous's A/B/C/D/E system is the best-designed fitting
-economy in the genre precisely because D-rated modules — the *worst* performing —
+_Rationale._ Elite Dangerous's A/B/C/D/E system is the best-designed fitting
+economy in the genre precisely because D-rated modules — the _worst_ performing —
 are the correct choice for the game's most popular activity, since
 [jump range depends on mass](flight.md#range). A player who understands that
 their exploration ship should be built almost entirely from low-grade parts has
@@ -170,28 +170,28 @@ Six pips, three subsystems, redistributable at any moment.
            2 pips             1 pip             0 pips     ← 3 unassigned
 ```
 
-| Bank | Feeds | Starved effect |
-|---|---|---|
-| **DRIVE** | Thrusters, Reference Drive | Manoeuvre thrust, transit acceleration and inertial compensation all scale with allocation; at 0 pips, 45% of rated. **Starving DRIVE mid-burn raises felt g**, which is a real and unpleasant surprise. |
-| **SYS** | Shields, sensors, life support, radiators | Shield recharge stops; sensor range halves |
-| **PAY** | Weapons, scanners, fuel scoop | Weapons will not fire; scoop rate scales linearly |
+| Bank      | Feeds                                     | Starved effect                                                                                                                                                                                           |
+| --------- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **DRIVE** | Thrusters, Reference Drive                | Manoeuvre thrust, transit acceleration and inertial compensation all scale with allocation; at 0 pips, 45% of rated. **Starving DRIVE mid-burn raises felt g**, which is a real and unpleasant surprise. |
+| **SYS**   | Shields, sensors, life support, radiators | Shield recharge stops; sensor range halves                                                                                                                                                               |
+| **PAY**   | Weapons, scanners, fuel scoop             | Weapons will not fire; scoop rate scales linearly                                                                                                                                                        |
 
 Total reactor output is a module property, and a fitted ship can easily demand
 more than it produces — which is the constraint that makes the pips matter. A
 ship that draws 108% of reactor output at full allocation is a legitimate and
 common build; it just cannot run everything at once.
 
-| Parameter | Value | Notes |
-|---|---|---|
-| Pips | 6 | Elite's number; enough granularity, few enough to manage under load |
-| Reallocation | Instant, 4 keys | Must be muscle memory, never a menu |
-| Effect curve | Linear in pips | Deliberately not a curve; players need to predict it |
-| Priority failover | Per-module, 1–5 | On reactor damage, low-priority modules shut down first |
+| Parameter         | Value           | Notes                                                               |
+| ----------------- | --------------- | ------------------------------------------------------------------- |
+| Pips              | 6               | Elite's number; enough granularity, few enough to manage under load |
+| Reallocation      | Instant, 4 keys | Must be muscle memory, never a menu                                 |
+| Effect curve      | Linear in pips  | Deliberately not a curve; players need to predict it                |
+| Priority failover | Per-module, 1–5 | On reactor damage, low-priority modules shut down first             |
 
 **Rationale.** Elite's pip system is the deepest cheap mechanic in the genre: four
 key presses, no UI, and it changes the outcome of every engagement and every fuel
 scoop. It costs almost nothing to build and it is the difference between a ship
-that is driven and a ship that is *operated*.
+that is driven and a ship that is _operated_.
 
 ---
 
@@ -226,12 +226,12 @@ so a radiator is nearly useless near a star, exactly when it is most needed.
 
 **Consequences.**
 
-| Heat | Effect |
-|---|---|
-| 0–80% | Nominal |
-| 80–100% | Warning tone; efficiency of the hottest module falls |
+| Heat     | Effect                                                           |
+| -------- | ---------------------------------------------------------------- |
+| 0–80%    | Nominal                                                          |
+| 80–100%  | Warning tone; efficiency of the hottest module falls             |
 | 100–120% | Module integrity loss, ~1.5%/s, on the highest-draw module first |
-| > 120% | Cascading module failure; hull damage |
+| > 120%   | Cascading module failure; hull damage                            |
 
 **And detectability.** A ship's sensor signature is dominated by heat:
 
@@ -260,14 +260,14 @@ impact and thermal wear, specified below. A module at 0% impact is **offline, no
 destroyed**, and can be repaired. Losing individual modules produces the
 situations worth having:
 
-| Module lost | Consequence |
-|---|---|
-| Reference Drive | Cannot jump, and transit power is gone. Manoeuvre thrust remains, so you are not stranded — you are *hours* from anywhere instead of minutes. |
-| Sensors | No targeting, no scanning, no contacts list. Fly on the window. |
-| Life Support | A countdown, measured in the oxygen in the cockpit. |
-| Fuel Tank | Leaking. The countdown is the tank. |
-| Thrusters | Partial attitude authority; one axis may be dead. |
-| Reactor | Priority failover sheds modules in order until draw fits output. |
+| Module lost     | Consequence                                                                                                                                   |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Reference Drive | Cannot jump, and transit power is gone. Manoeuvre thrust remains, so you are not stranded — you are _hours_ from anywhere instead of minutes. |
+| Sensors         | No targeting, no scanning, no contacts list. Fly on the window.                                                                               |
+| Life Support    | A countdown, measured in the oxygen in the cockpit.                                                                                           |
+| Fuel Tank       | Leaking. The countdown is the tank.                                                                                                           |
+| Thrusters       | Partial attitude authority; one axis may be dead.                                                                                             |
+| Reactor         | Priority failover sheds modules in order until draw fits output.                                                                              |
 
 **Shields** are an optional module: a rechargeable buffer that absorbs damage
 before the hull and recharges from SYS. They are not mandatory, and an explorer
@@ -275,9 +275,9 @@ who fits none in exchange for range is making a defensible choice.
 
 **Resolved: two scales.** Impact damage and thermal wear are tracked separately.
 
-| | Accrues from | Recovers | Reads as |
-|---|---|---|---|
-| **Impact** | Weapons, collision, hard landings | Repair, fully | Something happened |
+|                  | Accrues from                                                           | Recovers                       | Reads as                     |
+| ---------------- | ---------------------------------------------------------------------- | ------------------------------ | ---------------------------- |
+| **Impact**       | Weapons, collision, hard landings                                      | Repair, fully                  | Something happened           |
 | **Thermal wear** | Sustained heat over hours — hard burns, close scooping, silent running | Refit only, and only partially | Something has been happening |
 
 The reason to accept the extra readout: they are genuinely different problems. A
@@ -295,23 +295,23 @@ performance is the product of the two.
 
 ⬜ **Designed, not built.**
 
-The hardware. What it *does* for exploration is in
+The hardware. What it _does_ for exploration is in
 [exploration](exploration.md); what it does in a fight is in
 [combat](combat.md).
 
-| Function | Range (Class 3A) | Notes |
-|---|---|---|
-| **Contacts** | 12 km passive, 40 km active | Ships, structures, signal sources. Active sweep raises your own signature. |
-| **Body targeting** | Unlimited within system | Any body in the system map can be targeted; the nav computer solves a burn to it |
-| **Ship targeting** | 8 km for subsystem lock | Sub-targeting requires closer range than plain lock |
-| **Discovery scan** | System-wide, instant | See [exploration](exploration.md#tier-1--discovery-scan) |
-| **Detail scan** | 0.35 × body radius above surface | Requires alignment and dwell |
-| **Surface survey** | Orbital, ≤ 3 body radii | Probe-based mapping |
+| Function           | Range (Class 3A)                 | Notes                                                                            |
+| ------------------ | -------------------------------- | -------------------------------------------------------------------------------- |
+| **Contacts**       | 12 km passive, 40 km active      | Ships, structures, signal sources. Active sweep raises your own signature.       |
+| **Body targeting** | Unlimited within system          | Any body in the system map can be targeted; the nav computer solves a burn to it |
+| **Ship targeting** | 8 km for subsystem lock          | Sub-targeting requires closer range than plain lock                              |
+| **Discovery scan** | System-wide, instant             | See [exploration](exploration.md#tier-1--discovery-scan)                         |
+| **Detail scan**    | 0.35 × body radius above surface | Requires alignment and dwell                                                     |
+| **Surface survey** | Orbital, ≤ 3 body radii          | Probe-based mapping                                                              |
 
 **Subsystem targeting.** With a lock inside 8 km, individual modules on a target
 ship can be selected and damaged specifically — drives to strand, sensors to
 blind, fuel tank to force a decision. This is what makes ship combat a
-*disabling* problem rather than a health-bar problem, and it is why
+_disabling_ problem rather than a health-bar problem, and it is why
 [combat](combat.md) can be interesting with very few weapon types.
 
 ---
@@ -325,27 +325,27 @@ autopilot deletes the game.
 
 > **The rule: autopilot executes a plan you made. It never makes the plan.**
 
-| Function | What it does | What it refuses to do |
-|---|---|---|
-| **Attitude hold** | Holds current orientation or a selected vector | Choose a vector |
-| **Burn assist** | Executes a burn solution *you plotted* — holds alignment, calls and performs the flip, manages the decelerating half | Choose the target, choose the acceleration, or re-plot after an interruption |
-| **Orbital insertion** | Circularises at a commanded altitude | Choose the altitude |
-| **Docking** | Final approach on an accepted landing pad | Request the pad |
-| **Station-keeping** | Holds relative position to a selected object | — |
+| Function              | What it does                                                                                                         | What it refuses to do                                                        |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| **Attitude hold**     | Holds current orientation or a selected vector                                                                       | Choose a vector                                                              |
+| **Burn assist**       | Executes a burn solution _you plotted_ — holds alignment, calls and performs the flip, manages the decelerating half | Choose the target, choose the acceleration, or re-plot after an interruption |
+| **Orbital insertion** | Circularises at a commanded altitude                                                                                 | Choose the altitude                                                          |
+| **Docking**           | Final approach on an accepted landing pad                                                                            | Request the pad                                                              |
+| **Station-keeping**   | Holds relative position to a selected object                                                                         | —                                                                            |
 
 Each is a module, each occupies a slot, and each **disengages the moment
 something unexpected happens** — a contact, a heat warning, an interruption —
 handing control back with an audible cue rather than trying to cope.
 
-*Rationale.* Elite's supercruise assist is well-liked because it removes tedium
+_Rationale._ Elite's supercruise assist is well-liked because it removes tedium
 without removing the decision of where to go. Its docking computer is more
 contentious because it removes an entire skill. The distinction between them is
 exactly the rule above, so it is stated as a rule rather than discovered
 per-feature.
 
 Under [the burn model](flight.md#the-burn) this lands more cleanly than it did
-under cruise, because the interesting decision — *how hard, and therefore how much
-fuel* — happens before the burn starts and assist never touches it. Assist
+under cruise, because the interesting decision — _how hard, and therefore how much
+fuel_ — happens before the burn starts and assist never touches it. Assist
 automates the holding, not the choosing.
 
 **Resolved: assist never performs the flip.** It holds the burn vector for

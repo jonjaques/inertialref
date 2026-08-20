@@ -8,17 +8,17 @@ Nine decisions that are expensive to reverse. Each records the **context**, the
 > implementations produced. That makes them less a plan and more a record of
 > what each decision actually cost, which is the more useful artefact.
 
-| # | Decision | Status | One-line summary |
-|---|---|---|---|
-| [0001](0001-universe-coordinates.md) | Universe coordinates | accepted | Int32 sector index + float64 offset in a 2^40 m sector. Sub-millimetre anywhere in 249,000 ly. |
-| [0002](0002-reference-frames.md) | Reference frames | accepted | Frames carry the semantics of motion, not precision — the coordinates already handle that. |
-| [0003](0003-render-coordinates.md) | Render coordinates | accepted | Floating origin on a power-of-two grid, plus logarithmic depth compression that preserves angular size. |
-| [0004](0004-entity-addressing.md) | Entity addressing | accepted | Identity is a path through containment, and that path is also the seed path. |
-| [0005](0005-procedural-seeds.md) | Procedural seeds | accepted | Hierarchical derivation, never a shared stream. xoshiro128** over exact integer ops. |
-| [0006](0006-simulation-clock.md) | Simulation clock | accepted | 64 Hz fixed timestep, because 1/64 is exact in binary. Wall clock decides only how many. |
-| [0007](0007-persistence.md) | Persistence | accepted | A save is the seed, the tick, and what could not be regenerated — under 700 bytes. |
-| [0008](0008-multiplayer-partitions.md) | Multiplayer partitions | **proposed** | Authority partitions by star system. Design only; multiplayer is a later phase, though the partition key is already a live debug field. |
-| [0009](0009-issue-ordinal-addressing.md) | Issue-ordinal addressing | accepted | A body index is the ordinal it was issued at, not its orbital position — so real astronomy can add a planet without renaming every world outward of it. |
+| #                                        | Decision                 | Status       | One-line summary                                                                                                                                        |
+| ---------------------------------------- | ------------------------ | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [0001](0001-universe-coordinates.md)     | Universe coordinates     | accepted     | Int32 sector index + float64 offset in a 2^40 m sector. Sub-millimetre anywhere in 249,000 ly.                                                          |
+| [0002](0002-reference-frames.md)         | Reference frames         | accepted     | Frames carry the semantics of motion, not precision — the coordinates already handle that.                                                              |
+| [0003](0003-render-coordinates.md)       | Render coordinates       | accepted     | Floating origin on a power-of-two grid, plus logarithmic depth compression that preserves angular size.                                                 |
+| [0004](0004-entity-addressing.md)        | Entity addressing        | accepted     | Identity is a path through containment, and that path is also the seed path.                                                                            |
+| [0005](0005-procedural-seeds.md)         | Procedural seeds         | accepted     | Hierarchical derivation, never a shared stream. xoshiro128** over exact integer ops.                                                                    |
+| [0006](0006-simulation-clock.md)         | Simulation clock         | accepted     | 64 Hz fixed timestep, because 1/64 is exact in binary. Wall clock decides only how many.                                                                |
+| [0007](0007-persistence.md)              | Persistence              | accepted     | A save is the seed, the tick, and what could not be regenerated — under 700 bytes.                                                                      |
+| [0008](0008-multiplayer-partitions.md)   | Multiplayer partitions   | **proposed** | Authority partitions by star system. Design only; multiplayer is a later phase, though the partition key is already a live debug field.                 |
+| [0009](0009-issue-ordinal-addressing.md) | Issue-ordinal addressing | accepted     | A body index is the ordinal it was issued at, not its orbital position — so real astronomy can add a planet without renaming every world outward of it. |
 
 ---
 
@@ -55,7 +55,7 @@ flowchart TB
 
 Two dependencies are worth noticing because they are not obvious:
 
-- **0001 → 0002.** Because coordinates are precise everywhere, frames did *not*
+- **0001 → 0002.** Because coordinates are precise everywhere, frames did _not_
   have to be a precision mechanism, which is the opposite of how most engines at
   this scale are built. That freed frames to be about the semantics of motion.
 - **0005 + 0004 → 0007.** Determinism plus stable identity is what makes a save
@@ -72,7 +72,7 @@ Two dependencies are worth noticing because they are not obvious:
 ## Writing a new one
 
 Add an ADR when a decision would be expensive for a future engineer to reverse,
-or when they would otherwise have to reverse-engineer *why* from the code.
+or when they would otherwise have to reverse-engineer _why_ from the code.
 
 Keep the four headings: **Context**, **Decision**, **Alternatives considered**,
 **Consequences**. The alternatives section is the one that ages best — it is the

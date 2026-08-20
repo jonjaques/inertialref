@@ -24,9 +24,14 @@ describe('capability checks', () => {
     // This is the milestone's definition of done, executable. It runs in Node
     // here and in the browser through the harness, against the same code.
     const { harness: ir, session } = harness()
-    const results = await runCapabilityChecks({ world: session.world, pool: null })
+    const results = await runCapabilityChecks({
+      world: session.world,
+      pool: null,
+    })
     const failed = results.filter((r) => !r.passed)
-    expect(summarizeCapabilities(results).split('\n')[0]).toBe('12/12 capabilities proven')
+    expect(summarizeCapabilities(results).split('\n')[0]).toBe(
+      '12/12 capabilities proven',
+    )
     expect(failed).toEqual([])
     expect(results).toHaveLength(12)
     expect(ir.summary()).toContain('tick')
@@ -196,7 +201,9 @@ describe('travel targets', () => {
     expect(proxima?.address).toBe('g:milky-way/s:HIP70890')
 
     // Systems nearest first, so the top of the list is the useful end of it.
-    const systems = targets.filter((t) => t.kind === 'system').map((t) => t.distance)
+    const systems = targets
+      .filter((t) => t.kind === 'system')
+      .map((t) => t.distance)
     expect([...systems].sort((a, b) => a - b)).toEqual(systems)
   })
 
@@ -233,7 +240,9 @@ describe('going places', () => {
     const { harness: ir } = harness()
     expect(ir.status().world.loadedSystems).toHaveLength(1)
     ir.goTo('HIP71683')
-    expect(ir.status().world.loadedSystems.map((s) => s.id)).toContain('HIP71683')
+    expect(ir.status().world.loadedSystems.map((s) => s.id)).toContain(
+      'HIP71683',
+    )
     // Naming a system asks for its contents. Arriving 40 AU out in the dark is
     // where `goToSystem` leaves you and it looks exactly like nothing happened:
     // at that range a dwarf star is a sub-pixel point.
@@ -256,14 +265,20 @@ describe('going places', () => {
      * turns the first moon's frame into its planet's on the very first pass.
      */
     const { harness: ir } = harness()
-    for (const target of ir.targets({ lightYears: 1 }).filter((t) => t.kind === 'body')) {
+    for (const target of ir
+      .targets({ lightYears: 1 })
+      .filter((t) => t.kind === 'body')) {
       ir.goTo(target.address)
       const frame = ir.inspect()?.frame
       expect(frame).toBe(`b:${target.address}`)
       ir.step(64 * 60)
       const player = ir.inspect()
-      expect(`${target.name}: ${player?.frame}`).toBe(`${target.name}: ${frame}`)
-      expect(`${target.name}: landed ${player?.landed}`).toBe(`${target.name}: landed false`)
+      expect(`${target.name}: ${player?.frame}`).toBe(
+        `${target.name}: ${frame}`,
+      )
+      expect(`${target.name}: landed ${player?.landed}`).toBe(
+        `${target.name}: landed false`,
+      )
     }
   }, 20_000)
 

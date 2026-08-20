@@ -10,9 +10,24 @@ const anyPosition = fc
     sx: fc.integer({ min: -1_000_000, max: 1_000_000 }),
     sy: fc.integer({ min: -1_000_000, max: 1_000_000 }),
     sz: fc.integer({ min: -1_000_000, max: 1_000_000 }),
-    ox: fc.double({ min: 0, max: UV.SECTOR_SIZE, noNaN: true, maxExcluded: true }),
-    oy: fc.double({ min: 0, max: UV.SECTOR_SIZE, noNaN: true, maxExcluded: true }),
-    oz: fc.double({ min: 0, max: UV.SECTOR_SIZE, noNaN: true, maxExcluded: true }),
+    ox: fc.double({
+      min: 0,
+      max: UV.SECTOR_SIZE,
+      noNaN: true,
+      maxExcluded: true,
+    }),
+    oy: fc.double({
+      min: 0,
+      max: UV.SECTOR_SIZE,
+      noNaN: true,
+      maxExcluded: true,
+    }),
+    oz: fc.double({
+      min: 0,
+      max: UV.SECTOR_SIZE,
+      noNaN: true,
+      maxExcluded: true,
+    }),
   })
   .map((r) => UV.universeVector(r.sx, r.sy, r.sz, r.ox, r.oy, r.oz))
 
@@ -33,7 +48,14 @@ describe('UniverseVector', () => {
   })
 
   it('normalises offsets into the canonical range', () => {
-    const uv = UV.universeVector(0, 0, 0, UV.SECTOR_SIZE * 2.5, -UV.SECTOR_SIZE * 0.25, 0)
+    const uv = UV.universeVector(
+      0,
+      0,
+      0,
+      UV.SECTOR_SIZE * 2.5,
+      -UV.SECTOR_SIZE * 0.25,
+      0,
+    )
     expect(uv.sx).toBe(2)
     expect(uv.ox).toBe(UV.SECTOR_SIZE * 0.5)
     expect(uv.sy).toBe(-1)
@@ -42,7 +64,9 @@ describe('UniverseVector', () => {
   })
 
   it('rejects positions outside the addressable universe', () => {
-    expect(() => UV.fromMeters(UV.UNIVERSE_HALF_EXTENT * 2, 0, 0)).toThrow(/sector index out of range/)
+    expect(() => UV.fromMeters(UV.UNIVERSE_HALF_EXTENT * 2, 0, 0)).toThrow(
+      /sector index out of range/,
+    )
     expect(() => UV.fromMeters(Number.NaN, 0, 0)).toThrow(/must be finite/)
   })
 
@@ -52,7 +76,9 @@ describe('UniverseVector', () => {
     const moved = UV.translate(far, vec3(0.0254, 0, 0))
     // Resolvable, to within the quarter-millimetre the representation promises
     // — not to within a double's idea of 8 kpc, which is 30 km wide.
-    expect(Math.abs(UV.distance(far, moved) - 0.0254)).toBeLessThan(UV.POSITION_RESOLUTION * 2)
+    expect(Math.abs(UV.distance(far, moved) - 0.0254)).toBeLessThan(
+      UV.POSITION_RESOLUTION * 2,
+    )
     // The naive representation this design exists to avoid cannot do that at all:
     // 8 kpc in a double has an ULP of ~30 km.
     expect(8_000 * PARSEC + 0.0254).toBe(8_000 * PARSEC)
@@ -63,7 +89,9 @@ describe('UniverseVector', () => {
     const after = UV.translate(before, vec3(1, 0, 0))
     expect(after.sx).toBe(1)
     // The two points straddle the boundary; the separation must survive the carry.
-    expect(Math.abs(UV.distance(before, after) - 1)).toBeLessThan(UV.POSITION_RESOLUTION * 2)
+    expect(Math.abs(UV.distance(before, after) - 1)).toBeLessThan(
+      UV.POSITION_RESOLUTION * 2,
+    )
   })
 
   it('carries offsets exactly (property)', () => {
@@ -71,7 +99,14 @@ describe('UniverseVector', () => {
       fc.property(anyPosition, (uv) => {
         expect(UV.isValid(uv)).toBe(true)
         // Re-normalising an already-normalised vector must be the identity.
-        const again = UV.universeVector(uv.sx, uv.sy, uv.sz, uv.ox, uv.oy, uv.oz)
+        const again = UV.universeVector(
+          uv.sx,
+          uv.sy,
+          uv.sz,
+          uv.ox,
+          uv.oy,
+          uv.oz,
+        )
         expect(UV.equals(uv, again)).toBe(true)
       }),
     )
@@ -83,9 +118,15 @@ describe('UniverseVector', () => {
         const moved = UV.translate(uv, d)
         const back = UV.difference(moved, uv)
         // Error is bounded by the offset ULP, not by the absolute magnitude.
-        expect(Math.abs(back.x - d.x)).toBeLessThanOrEqual(UV.POSITION_RESOLUTION * 4)
-        expect(Math.abs(back.y - d.y)).toBeLessThanOrEqual(UV.POSITION_RESOLUTION * 4)
-        expect(Math.abs(back.z - d.z)).toBeLessThanOrEqual(UV.POSITION_RESOLUTION * 4)
+        expect(Math.abs(back.x - d.x)).toBeLessThanOrEqual(
+          UV.POSITION_RESOLUTION * 4,
+        )
+        expect(Math.abs(back.y - d.y)).toBeLessThanOrEqual(
+          UV.POSITION_RESOLUTION * 4,
+        )
+        expect(Math.abs(back.z - d.z)).toBeLessThanOrEqual(
+          UV.POSITION_RESOLUTION * 4,
+        )
       }),
     )
   })
@@ -95,7 +136,9 @@ describe('UniverseVector', () => {
       fc.property(anyPosition, anyDisplacement, anyDisplacement, (uv, a, b) => {
         const ab = UV.translate(UV.translate(uv, a), b)
         const ba = UV.translate(UV.translate(uv, b), a)
-        expect(UV.distance(ab, ba)).toBeLessThanOrEqual(UV.POSITION_RESOLUTION * 8)
+        expect(UV.distance(ab, ba)).toBeLessThanOrEqual(
+          UV.POSITION_RESOLUTION * 8,
+        )
 
         const forward = UV.difference(ab, uv)
         const backward = UV.difference(uv, ab)

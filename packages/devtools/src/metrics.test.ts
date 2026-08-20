@@ -27,29 +27,44 @@ function fill(values: readonly number[], capacity: number): Series {
 describe('Series', () => {
   it('holds the last `capacity` samples and nothing older', () => {
     fc.assert(
-      fc.property(fc.array(finite, { maxLength: 200 }), fc.integer({ min: 1, max: 64 }), (values, capacity) => {
-        const expected = window(values, capacity)
-        const stats = fill(values, capacity).summarise()
-        expect(stats.count).toBe(expected.length)
-        if (expected.length > 0) expect(stats.last).toBe(expected[expected.length - 1])
-      }),
+      fc.property(
+        fc.array(finite, { maxLength: 200 }),
+        fc.integer({ min: 1, max: 64 }),
+        (values, capacity) => {
+          const expected = window(values, capacity)
+          const stats = fill(values, capacity).summarise()
+          expect(stats.count).toBe(expected.length)
+          if (expected.length > 0)
+            expect(stats.last).toBe(expected[expected.length - 1])
+        },
+      ),
     )
   })
 
   it('agrees with a plain array on every statistic', () => {
     fc.assert(
-      fc.property(fc.array(finite, { minLength: 1, maxLength: 200 }), fc.integer({ min: 1, max: 64 }), (values, capacity) => {
-        const expected = window(values, capacity)
-        if (expected.length === 0) return
-        const stats = fill(values, capacity).summarise()
-        const sorted = [...expected].sort((a, b) => a - b)
-        const rank = Math.min(sorted.length - 1, Math.ceil(0.95 * sorted.length) - 1)
+      fc.property(
+        fc.array(finite, { minLength: 1, maxLength: 200 }),
+        fc.integer({ min: 1, max: 64 }),
+        (values, capacity) => {
+          const expected = window(values, capacity)
+          if (expected.length === 0) return
+          const stats = fill(values, capacity).summarise()
+          const sorted = [...expected].sort((a, b) => a - b)
+          const rank = Math.min(
+            sorted.length - 1,
+            Math.ceil(0.95 * sorted.length) - 1,
+          )
 
-        expect(stats.min).toBe(Math.min(...expected))
-        expect(stats.max).toBe(Math.max(...expected))
-        expect(stats.mean).toBeCloseTo(expected.reduce((a, b) => a + b, 0) / expected.length, 9)
-        expect(stats.p95).toBe(sorted[Math.max(0, rank)])
-      }),
+          expect(stats.min).toBe(Math.min(...expected))
+          expect(stats.max).toBe(Math.max(...expected))
+          expect(stats.mean).toBeCloseTo(
+            expected.reduce((a, b) => a + b, 0) / expected.length,
+            9,
+          )
+          expect(stats.p95).toBe(sorted[Math.max(0, rank)])
+        },
+      ),
     )
   })
 
@@ -58,12 +73,18 @@ describe('Series', () => {
     // straight copy of the backing array plots the window rotated by an amount
     // that changes every frame — a plot that shimmers rather than scrolls.
     fc.assert(
-      fc.property(fc.array(finite, { maxLength: 200 }), fc.integer({ min: 1, max: 64 }), (values, capacity) => {
-        const series = fill(values, capacity)
-        const out = new Float64Array(capacity)
-        const written = series.drain(out)
-        expect([...out.subarray(0, written)]).toEqual(window(values, capacity))
-      }),
+      fc.property(
+        fc.array(finite, { maxLength: 200 }),
+        fc.integer({ min: 1, max: 64 }),
+        (values, capacity) => {
+          const series = fill(values, capacity)
+          const out = new Float64Array(capacity)
+          const written = series.drain(out)
+          expect([...out.subarray(0, written)]).toEqual(
+            window(values, capacity),
+          )
+        },
+      ),
     )
   })
 
@@ -89,6 +110,13 @@ describe('Series', () => {
     // The panel renders before the first frame is sampled. `Math.min()` of
     // nothing is Infinity, and an overlay opening on "min Infinity ms" reads as
     // a bug in the thing being measured.
-    expect(new Series(16).summarise()).toEqual({ count: 0, last: 0, min: 0, max: 0, mean: 0, p95: 0 })
+    expect(new Series(16).summarise()).toEqual({
+      count: 0,
+      last: 0,
+      min: 0,
+      max: 0,
+      mean: 0,
+      p95: 0,
+    })
   })
 })

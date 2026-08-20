@@ -100,12 +100,30 @@ export function HudDock({
               title="Space"
               onClick={commands.togglePause}
             />
-            <Action label="−" title="Slower ( [ )" onClick={() => commands.warp(-1)} />
-            <span className="w-12 text-center tabular-nums text-slate-400">{world?.timeScale ?? 1}×</span>
-            <Action label="+" title="Faster ( ] )" onClick={() => commands.warp(1)} />
+            <Action
+              label="−"
+              title="Slower ( [ )"
+              onClick={() => commands.warp(-1)}
+            />
+            <span className="w-12 text-center tabular-nums text-slate-400">
+              {world?.timeScale ?? 1}×
+            </span>
+            <Action
+              label="+"
+              title="Faster ( ] )"
+              onClick={() => commands.warp(1)}
+            />
             <span className="mx-1 h-3 w-px bg-slate-800" />
-            <Action label="assist" title="Flight assist (Z)" onClick={commands.toggleAssist} />
-            <Action label="stop spin" title="Kill rotation (X)" onClick={commands.killRotation} />
+            <Action
+              label="assist"
+              title="Flight assist (Z)"
+              onClick={commands.toggleAssist}
+            />
+            <Action
+              label="stop spin"
+              title="Kill rotation (X)"
+              onClick={commands.killRotation}
+            />
             <span className="mx-1 h-3 w-px bg-slate-800" />
             <Action label="save" title="F5" onClick={commands.save} />
             <Action label="load" title="F9" onClick={commands.load} />
@@ -123,14 +141,30 @@ export function HudDock({
           </div>
 
           <div className="flex gap-1 border-b border-slate-800 px-2 pt-1">
-            <Tab label="navigate" active={tab === 'navigate'} onClick={() => onTabChange('navigate')} />
-            <Tab label="telemetry" active={tab === 'telemetry'} onClick={() => onTabChange('telemetry')} />
-            <Tab label="perf" active={tab === 'perf'} onClick={() => onTabChange('perf')} />
+            <Tab
+              label="navigate"
+              active={tab === 'navigate'}
+              onClick={() => onTabChange('navigate')}
+            />
+            <Tab
+              label="telemetry"
+              active={tab === 'telemetry'}
+              onClick={() => onTabChange('telemetry')}
+            />
+            <Tab
+              label="perf"
+              active={tab === 'perf'}
+              onClick={() => onTabChange('perf')}
+            />
           </div>
 
           <div className="min-h-0 flex-1 overflow-auto p-2">
-            {tab === 'navigate' && <NavPanel engine={engine} onNotice={onNotice} />}
-            {tab === 'telemetry' && <TelemetryPanel status={status} output={render.output} />}
+            {tab === 'navigate' && (
+              <NavPanel engine={engine} onNotice={onNotice} />
+            )}
+            {tab === 'telemetry' && (
+              <TelemetryPanel status={status} output={render.output} />
+            )}
             {tab === 'perf' && <PerfPanel engine={engine} status={status} />}
           </div>
         </>
@@ -139,7 +173,15 @@ export function HudDock({
   )
 }
 
-function Tab({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+function Tab({
+  label,
+  active,
+  onClick,
+}: {
+  label: string
+  active: boolean
+  onClick: () => void
+}) {
   return (
     <button
       type="button"

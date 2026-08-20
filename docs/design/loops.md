@@ -3,7 +3,7 @@
 What the player actually does, at three timescales, and what makes them start
 again.
 
-> [charter](charter.md) says what the game is. This says what it *feels like* on
+> [charter](charter.md) says what the game is. This says what it _feels like_ on
 > a Tuesday evening.
 
 ---
@@ -43,7 +43,7 @@ everything else is composed of Burns.
 ## Micro loop — the Burn (2–7 minutes)
 
 The single most-repeated action in the game, performed thousands of times. If
-this is not satisfying nothing else matters, and if it *is* satisfying the game
+this is not satisfying nothing else matters, and if it _is_ satisfying the game
 survives having very little else.
 
 Mechanically it is a [brachistochrone transfer](flight.md#the-burn): accelerate
@@ -76,7 +76,7 @@ time and fuel cost at your chosen acceleration; the throttle changes both, live.
 Commit. Hold alignment. At the flip cue, rotate — or let the autopilot do it
 slower. Hold alignment again. Arrive.
 
-**System.** `t = 2√(d/a)`, `Δv = 2√(a·d)`, `fuel = k·M·Δv`. Targets *move*, so
+**System.** `t = 2√(d/a)`, `Δv = 2√(a·d)`, `fuel = k·M·Δv`. Targets _move_, so
 the solution leads the destination and drifts if you dawdle. There is no drag and
 no assistance: what the first half of the burn gave you, the second half must
 take back.
@@ -84,30 +84,30 @@ take back.
 **Feedback.** Three instruments carry it, and all three must be readable in
 peripheral vision:
 
-| Instrument | Shows | Why it is the one |
-|---|---|---|
-| Burn plan | A timeline — burn, flip, burn — with time-to-flip counting down | The whole trip as one legible object |
-| Δv tape | Velocity change spent against velocity change required | The quantity actually being managed |
-| g-meter | Felt acceleration, and the compensation margin | The cost of being in a hurry, on your body |
+| Instrument | Shows                                                           | Why it is the one                          |
+| ---------- | --------------------------------------------------------------- | ------------------------------------------ |
+| Burn plan  | A timeline — burn, flip, burn — with time-to-flip counting down | The whole trip as one legible object       |
+| Δv tape    | Velocity change spent against velocity change required          | The quantity actually being managed        |
+| g-meter    | Felt acceleration, and the compensation margin                  | The cost of being in a hurry, on your body |
 
 The **burn plan** is the important one. It converts an abstract transfer into a
 shape the player reads once and then executes, and it is what makes the trip a
-*plan* rather than a continuous correction.
+_plan_ rather than a continuous correction.
 
 **Parameters.**
 
-| Parameter | Default | Notes |
-|---|---|---|
-| Nominal inner-system trip (Earth → Mars, full burn) | 2 min 24 s | The pacing target the whole mechanic is tuned around |
-| Nominal outer-system trip (Earth → Saturn, full burn) | 9 min 42 s | A deliberate commitment, not a routine hop |
-| Flip duration | 3.5–5 s by hull | Freefall throughout |
-| Flip window | ±8 s | Outside it, the solution needs re-plotting |
-| Arrival tolerance | ≤ 1.5 km/s relative | Above this the nav computer reports an overshoot |
-| Fuel, typical inner-system burn | 0.05–0.15 t | Roughly an order of magnitude below a jump |
+| Parameter                                             | Default             | Notes                                                |
+| ----------------------------------------------------- | ------------------- | ---------------------------------------------------- |
+| Nominal inner-system trip (Earth → Mars, full burn)   | 2 min 24 s          | The pacing target the whole mechanic is tuned around |
+| Nominal outer-system trip (Earth → Saturn, full burn) | 9 min 42 s          | A deliberate commitment, not a routine hop           |
+| Flip duration                                         | 3.5–5 s by hull     | Freefall throughout                                  |
+| Flip window                                           | ±8 s                | Outside it, the solution needs re-plotting           |
+| Arrival tolerance                                     | ≤ 1.5 km/s relative | Above this the nav computer reports an overshoot     |
+| Fuel, typical inner-system burn                       | 0.05–0.15 t         | Roughly an order of magnitude below a jump           |
 
 **Rationale.** The v0.1 design used an Elite-style cruise in which a gravity
 gradient throttled your top speed and the skill was a throttle correction against
-an overshoot. Two things were wrong with it. The fiction had to be *told* to
+an overshoot. Two things were wrong with it. The fiction had to be _told_ to
 produce the behaviour — a drive that mysteriously weakens in a well — where a
 burn produces it from Newton and needs no explanation at all. And
 throttle-correction is a weak verb: it is fiddly, it is continuous, and Elite
@@ -116,7 +116,7 @@ itself shipped a Supercruise Assist module because players found it tedious.
 A burn moves the interesting decision **to the front**, where the player makes it
 deliberately, and leaves the execution with three real skills — the flip, the
 moving target, and the thermal budget — instead of one micro-correction.
-*The Expanse* is the reference, and it is the reference because flip-and-burn is
+_The Expanse_ is the reference, and it is the reference because flip-and-burn is
 the most legible piece of orbital mechanics ever put on screen.
 
 ### The two quiet moments
@@ -139,7 +139,7 @@ machine that is working.
 > seconds with nothing to do and called it the product. Some of that instinct was
 > right — scale is communicated by duration, and a gas giant growing from a dot to
 > a wall is worth watching. But it is a much easier sell when the ship is
-> *audibly doing something* and the player made a decision that determined how
+> _audibly doing something_ and the player made a decision that determined how
 > long it takes. Duration that the player chose is not the same as duration
 > imposed on them, even when it is the same duration.
 
@@ -185,7 +185,7 @@ anywhere in the design and there never will be.
 
 **What varies it.** Real systems are not uniform. A survey of Sol is eight
 planets, a hundred-plus moons and a belt; a survey of Barnard's Star is one dim
-red dwarf and, currently, nothing else confirmed. That variance is *real* and it
+red dwarf and, currently, nothing else confirmed. That variance is _real_ and it
 is the content — see [galaxy](galaxy.md#what-real-data-buys).
 
 ---
@@ -218,15 +218,15 @@ emotionally invested playerbase in the genre.
 
 **Three things ratchet, and only three** — see [progression](progression.md):
 
-| Ratchet | What it is | Where it lives |
-|---|---|---|
-| **Capability** | Modules and hulls: jump range, scan resolution, fuel efficiency | Ship, lost if the ship is |
-| **Knowledge** | The Almanac — every body you have personally scanned | Player, permanent, works offline |
-| **Standing** | Discovery credit; your handle attached to bodies you found first | Universe, online only, permanent |
+| Ratchet        | What it is                                                       | Where it lives                   |
+| -------------- | ---------------------------------------------------------------- | -------------------------------- |
+| **Capability** | Modules and hulls: jump range, scan resolution, fuel efficiency  | Ship, lost if the ship is        |
+| **Knowledge**  | The Almanac — every body you have personally scanned             | Player, permanent, works offline |
+| **Standing**   | Discovery credit; your handle attached to bodies you found first | Universe, online only, permanent |
 
 There is no experience bar and no level. The reason is
 [pillar 4](charter.md#pillar-4--you-are-one-person): a level is a number about
-*you*, and there is no screen in a cockpit where a number about you belongs.
+_you_, and there is no screen in a cockpit where a number about you belongs.
 
 ---
 
@@ -262,7 +262,7 @@ player always has something left, let it be because they genuinely do.
 
 **5. Someone else's name.** In the online modes, arriving somewhere and finding it
 already carries a handle is a small, sharp feeling — and arriving somewhere that
-does *not* is a sharper one. Discovery credit does more social work than any chat
+does _not_ is a sharper one. Discovery credit does more social work than any chat
 system would.
 
 > 🎮 Designer's Note: What is deliberately absent — daily rewards, login streaks,
@@ -276,18 +276,18 @@ system would.
 
 Detailed screen-by-screen in [ux](ux.md#first-time-experience). The shape:
 
-| Time | What happens | What it teaches |
-|---|---|---|
+| Time      | What happens                                                      | What it teaches      |
+| --------- | ----------------------------------------------------------------- | -------------------- |
 | 0:00–0:02 | Cockpit, powered down, in orbit of Earth. Earth fills the canopy. | Scale. Nothing else. |
-| 0:02–0:08 | Power up, RCS, attitude, translate. No objective. | Momentum is law |
-| 0:08–0:20 | Plot a burn to the Moon. First flip, probably a first overshoot. | The micro loop |
-| 0:20–0:35 | Land. Get out. Walk. Look up at Earth. | One continuous space |
-| 0:35–0:50 | Detail scan, first Almanac entry. Return to orbit. | The reward model |
-| 0:50–1:00 | Jump to Proxima Centauri. Fuel is now finite. | The frontier |
+| 0:02–0:08 | Power up, RCS, attitude, translate. No objective.                 | Momentum is law      |
+| 0:08–0:20 | Plot a burn to the Moon. First flip, probably a first overshoot.  | The micro loop       |
+| 0:20–0:35 | Land. Get out. Walk. Look up at Earth.                            | One continuous space |
+| 0:35–0:50 | Detail scan, first Almanac entry. Return to orbit.                | The reward model     |
+| 0:50–1:00 | Jump to Proxima Centauri. Fuel is now finite.                     | The frontier         |
 
 Sol first is not sentiment. It is the one system where every player already knows
-what the answer should look like, which makes it the only place where *the sky is
-real* can be verified by the player rather than asserted by us.
+what the answer should look like, which makes it the only place where _the sky is
+real_ can be verified by the player rather than asserted by us.
 
 ---
 

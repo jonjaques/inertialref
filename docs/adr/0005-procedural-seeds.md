@@ -11,7 +11,9 @@ loaded — and produce the same universe every time.
 The failure mode to avoid is concrete:
 
 ```ts
-rng.next(); rng.next(); rng.next()
+rng.next()
+rng.next()
+rng.next()
 ```
 
 Inserting one planet shifts every value drawn afterwards, so adding a body to a
@@ -60,7 +62,7 @@ on rather than a mystery.
   global stream is the order-dependence trap by construction.
 - **PCG64 / splitmix64 via BigInt.** Better statistical properties, roughly an
   order of magnitude slower, and BigInt in the terrain inner loop is not viable.
-- **One RNG per system, drawn sequentially.** Order-independent *between*
+- **One RNG per system, drawn sequentially.** Order-independent _between_
   systems but not within one; adding a planet still rewrites its siblings.
 
 ## Consequences

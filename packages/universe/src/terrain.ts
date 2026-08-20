@@ -53,11 +53,17 @@ export function bodyFixedDirection(
   spinPose: FramePose,
   position: UniverseVector,
 ): BodyFixedDirection {
-  return Vec.normalize(universeToLocal(spinPose, position)) as BodyFixedDirection
+  return Vec.normalize(
+    universeToLocal(spinPose, position),
+  ) as BodyFixedDirection
 }
 
 /** Face-local (u, v) in [-1, 1] to a direction on the unit sphere. */
-export function faceToDirection(face: number, u: number, v: number): BodyFixedDirection {
+export function faceToDirection(
+  face: number,
+  u: number,
+  v: number,
+): BodyFixedDirection {
   switch (face) {
     case 0:
       return Vec.normalize(vec3(1, v, -u)) as BodyFixedDirection
@@ -89,19 +95,29 @@ export function directionToFace(direction: Vec3): FaceCoordinate {
   const ay = Math.abs(y)
   const az = Math.abs(z)
   if (ax >= ay && ax >= az) {
-    return x > 0 ? { face: 0, u: -z / ax, v: y / ax } : { face: 1, u: z / ax, v: y / ax }
+    return x > 0
+      ? { face: 0, u: -z / ax, v: y / ax }
+      : { face: 1, u: z / ax, v: y / ax }
   }
   if (ay >= az) {
-    return y > 0 ? { face: 2, u: x / ay, v: -z / ay } : { face: 3, u: x / ay, v: z / ay }
+    return y > 0
+      ? { face: 2, u: x / ay, v: -z / ay }
+      : { face: 3, u: x / ay, v: z / ay }
   }
-  return z > 0 ? { face: 4, u: x / az, v: y / az } : { face: 5, u: -x / az, v: y / az }
+  return z > 0
+    ? { face: 4, u: x / az, v: y / az }
+    : { face: 5, u: -x / az, v: y / az }
 }
 
 /** The region containing a direction, at a given subdivision level. */
-export function regionForDirection(direction: Vec3, level: number): RegionAddress {
+export function regionForDirection(
+  direction: Vec3,
+  level: number,
+): RegionAddress {
   const { face, u, v } = directionToFace(direction)
   const span = 2 ** level
-  const clamp = (t: number): number => Math.min(span - 1, Math.max(0, Math.floor(((t + 1) / 2) * span)))
+  const clamp = (t: number): number =>
+    Math.min(span - 1, Math.max(0, Math.floor(((t + 1) / 2) * span)))
   return regionAddress(face, level, clamp(u), clamp(v))
 }
 
@@ -131,7 +147,9 @@ export const regionSize = (radius: Meters, level: number): Meters =>
 
 /** Subdivision level whose regions are about `target` meters across. */
 export function levelForSize(radius: Meters, target: Meters): number {
-  const level = Math.round(Math.log2((Math.PI * radius) / 2 / Math.max(1, target)))
+  const level = Math.round(
+    Math.log2((Math.PI * radius) / 2 / Math.max(1, target)),
+  )
   return Math.min(24, Math.max(0, level))
 }
 
@@ -144,14 +162,31 @@ export function levelForSize(radius: Meters, target: Meters): number {
  * modulate the mountain amplitude so ranges sit on landmasses rather than
  * marching across the ocean floor.
  */
-export function elevationAt(surface: SurfaceParameters, direction: Vec3): Meters {
+export function elevationAt(
+  surface: SurfaceParameters,
+  direction: Vec3,
+): Meters {
   const d = Vec.normalize(direction)
   const f = surface.roughness
-  const continents = fbm3(surface.seed, d.x * f * 0.5, d.y * f * 0.5, d.z * f * 0.5, { octaves: 4 })
+  const continents = fbm3(
+    surface.seed,
+    d.x * f * 0.5,
+    d.y * f * 0.5,
+    d.z * f * 0.5,
+    { octaves: 4 },
+  )
   const mountainSeed = deriveSeed(surface.seed, 'mountains')
-  const mountains = ridged3(mountainSeed, d.x * f * 2.2, d.y * f * 2.2, d.z * f * 2.2, { octaves: 6 })
+  const mountains = ridged3(
+    mountainSeed,
+    d.x * f * 2.2,
+    d.y * f * 2.2,
+    d.z * f * 2.2,
+    { octaves: 6 },
+  )
   const detailSeed = deriveSeed(surface.seed, 'detail')
-  const detail = fbm3(detailSeed, d.x * f * 24, d.y * f * 24, d.z * f * 24, { octaves: 4 })
+  const detail = fbm3(detailSeed, d.x * f * 24, d.y * f * 24, d.z * f * 24, {
+    octaves: 4,
+  })
 
   const landMask = Math.max(0, continents)
   const height = continents * 0.55 + mountains * landMask * 0.5 + detail * 0.06
@@ -168,7 +203,10 @@ export function elevationAt(surface: SurfaceParameters, direction: Vec3): Meters
  * the seabed underneath it. `seaLevel` was carried the whole way to the mesh
  * and then ignored, on roughly 40% of atmosphered rocky planets.
  */
-export function groundElevation(surface: SurfaceParameters, direction: Vec3): Meters {
+export function groundElevation(
+  surface: SurfaceParameters,
+  direction: Vec3,
+): Meters {
   const elevation = elevationAt(surface, direction)
   const sea = surface.seaLevel
   if (sea === null) return elevation
@@ -176,7 +214,10 @@ export function groundElevation(surface: SurfaceParameters, direction: Vec3): Me
 }
 
 /** Radius of the surface below a direction, including elevation and any ocean. */
-export function surfaceRadius(body: Body, direction: BodyFixedDirection): Meters {
+export function surfaceRadius(
+  body: Body,
+  direction: BodyFixedDirection,
+): Meters {
   return body.radius + groundElevation(body.surface, direction)
 }
 
@@ -218,7 +259,10 @@ export function generateHeightfield(
   request: HeightfieldRequest,
 ): Heightfield {
   const { region, resolution } = request
-  invariant(resolution >= 2 && resolution <= 513, `Bad heightfield resolution ${resolution}`)
+  invariant(
+    resolution >= 2 && resolution <= 513,
+    `Bad heightfield resolution ${resolution}`,
+  )
   const elevations = new Float32Array(resolution * resolution)
   let min = Infinity
   let max = -Infinity
@@ -232,5 +276,11 @@ export function generateHeightfield(
       if (elevation > max) max = elevation
     }
   }
-  return { region, resolution, elevations, minElevation: min, maxElevation: max }
+  return {
+    region,
+    resolution,
+    elevations,
+    minElevation: min,
+    maxElevation: max,
+  }
 }

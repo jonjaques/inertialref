@@ -39,9 +39,9 @@ flowchart TB
 ```
 
 This is exactly [ADR-0008](../adr/0008-multiplayer-partitions.md)'s stated
-principle: *an authority only has to replicate what a client cannot derive —
+principle: _an authority only has to replicate what a client cannot derive —
 entity states and persistent mutations. That is the same set a save file
-contains, which is not a coincidence and is worth preserving.*
+contains, which is not a coincidence and is worth preserving._
 
 ---
 
@@ -51,13 +51,13 @@ contains, which is not a coincidence and is worth preserving.*
 
 The complete game, with no network of any kind.
 
-| | |
-|---|---|
-| **Universe** | Fully derived. Identical to every other player's. |
-| **Discovery credit** | Local. Everything you find is a first discovery, because there is nobody else. |
-| **Catalogue** | Whatever version was cached. Revisions arrive when you next connect. |
-| **Almanac, bookmarks, saves** | Local, IndexedDB, complete |
-| **Cost to run** | Zero, forever |
+|                               |                                                                                |
+| ----------------------------- | ------------------------------------------------------------------------------ |
+| **Universe**                  | Fully derived. Identical to every other player's.                              |
+| **Discovery credit**          | Local. Everything you find is a first discovery, because there is nobody else. |
+| **Catalogue**                 | Whatever version was cached. Revisions arrive when you next connect.           |
+| **Almanac, bookmarks, saves** | Local, IndexedDB, complete                                                     |
+| **Cost to run**               | Zero, forever                                                                  |
 
 **Already proven.** With the server stopped, the app loads from its service
 worker, streams terrain from its worker pool, and passes 12/12 capability checks
@@ -68,19 +68,19 @@ calls for it and it is a real piece of work — the player chooses to cache the
 client, the catalogue chunks for a chosen volume, and the material sets, and the
 UI shows what is cached and how large it is.
 
-| Cache tier | Contents | Size |
-|---|---|---|
-| Client | App, workers, shaders | ~2–4 MB `[Assumption: measured at 1.19 MB raw / 260 KB brotli on 2026-08-19, pre-WebGPU and pre-materials]` |
-| Catalogue, 25 ly | 166 stars, 84 planets | **~5 KB brotli** ✅ measured |
-| Catalogue, 150 ly | 7,529 stars, 861 planets | **~159 KB brotli** ✅ measured — [spike 3](../spikes.md#3--catalogue-bundle-size) |
-| Material sets, 8 biomes | Textures | 40–120 MB, the dominant cost |
+| Cache tier              | Contents                 | Size                                                                                                        |
+| ----------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| Client                  | App, workers, shaders    | ~2–4 MB `[Assumption: measured at 1.19 MB raw / 260 KB brotli on 2026-08-19, pre-WebGPU and pre-materials]` |
+| Catalogue, 25 ly        | 166 stars, 84 planets    | **~5 KB brotli** ✅ measured                                                                                |
+| Catalogue, 150 ly       | 7,529 stars, 861 planets | **~159 KB brotli** ✅ measured — [spike 3](../spikes.md#3--catalogue-bundle-size)                           |
+| Material sets, 8 biomes | Textures                 | 40–120 MB, the dominant cost                                                                                |
 
 **The catalogue tier collapsed.** It was estimated at ~2 MB and measured at 159 KB
 — small enough that there is nothing to choose about it. The preparation screen
 does not need a catalogue-volume slider; **it ships the whole 150 ly sphere as
 part of the client** and the screen is entirely about material sets.
 
-> 🎮 Designer's Note: The material sets are now the *only* thing in this game that
+> 🎮 Designer's Note: The material sets are now the _only_ thing in this game that
 > resembles a traditional asset download, and therefore the only thing that
 > threatens the "it's a link" pitch. That is a simplification worth having: one
 > download decision, not two. Budget them hard, stream them by biome rather than
@@ -94,12 +94,12 @@ part of the client** and the screen is entirely about material sets.
 
 The same game, connected. **No other players are present in your instance.**
 
-| Adds | |
-|---|---|
-| **Global discovery credit** | Your first discoveries are checked against everyone's and attributed publicly |
-| **Catalogue revisions** | Delivered as they are published |
-| **Bookmark and Almanac sync** | Across devices |
-| **Commissions** | Issued and completed against a shared pool |
+| Adds                          |                                                                               |
+| ----------------------------- | ----------------------------------------------------------------------------- |
+| **Global discovery credit**   | Your first discoveries are checked against everyone's and attributed publicly |
+| **Catalogue revisions**       | Delivered as they are published                                               |
+| **Bookmark and Almanac sync** | Across devices                                                                |
+| **Commissions**               | Issued and completed against a shared pool                                    |
 
 **This is the recommended default mode**, and it is the one the MVP ships. It
 delivers the entire social reward of discovery credit — the thing that actually
@@ -130,16 +130,16 @@ patched conics, two ships in different systems cannot influence each other at
 all, so nothing has to be reconciled across a partition boundary. Interstellar
 space partitions by generation cell for the same reason.
 
-| Piece | Status |
-|---|---|
-| `AuthorityPort` with a local implementation | ⬜ |
-| Entity replication | ⬜ |
-| Client prediction and reconciliation | ⬜ |
-| Interest management | ⬜ |
-| Handoff between partitions | ⬜ |
-| Mutation conflict resolution | ⬜ |
-| Net protocol versioning | ⬜ |
-| **Input log / replay recording** | ⬜ — a prerequisite, see below |
+| Piece                                       | Status                         |
+| ------------------------------------------- | ------------------------------ |
+| `AuthorityPort` with a local implementation | ⬜                             |
+| Entity replication                          | ⬜                             |
+| Client prediction and reconciliation        | ⬜                             |
+| Interest management                         | ⬜                             |
+| Handoff between partitions                  | ⬜                             |
+| Mutation conflict resolution                | ⬜                             |
+| Net protocol versioning                     | ⬜                             |
+| **Input log / replay recording**            | ⬜ — a prerequisite, see below |
 
 **Replay recording is the prerequisite worth naming.** The
 [roadmap](../roadmap.md#replay-and-reconciliation) observes that everything
@@ -151,10 +151,10 @@ work brought forward cheaply.
 
 ### Design decisions this mode forces
 
-| Question | Position |
-|---|---|
-| **PvP consent** | Opt-in, and off by default. A survey game whose players carry hours of unbanked data cannot have non-consensual PvP without becoming a different game. **Resolved: opt-in, off by default.** PvP-enabled players can see and engage each
-other; everyone else is present and non-hostile.
+| Question                                         | Position                                                                                                                                                                                                                                 |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **PvP consent**                                  | Opt-in, and off by default. A survey game whose players carry hours of unbanked data cannot have non-consensual PvP without becoming a different game. **Resolved: opt-in, off by default.** PvP-enabled players can see and engage each |
+| other; everyone else is present and non-hostile. |
 
 The fragmentation cost is accepted and it is smaller here than in Elite, because
 there is no economy for PvP to distort and no competitive ladder for it to feed.
@@ -163,7 +163,7 @@ non-consensual PvP without becoming a different game — the
 [banking tension](exploration.md#banking) only works if the risk is one the player
 chose. |
 | **Catalogue version** | All clients in a partition must run the same version. It becomes a protocol handshake. |
-| **Cheating** | The universe is derivable, so a client knows everything anyway — there are no secrets to protect. What must be authoritative is *mutation writes*: discovery records and placements. Validate those server-side and the rest does not matter. |
+| **Cheating** | The universe is derivable, so a client knows everything anyway — there are no secrets to protect. What must be authoritative is _mutation writes_: discovery records and placements. Validate those server-side and the rest does not matter. |
 | **Hosting cost** | The real constraint. See [sustainability](sustainability.md#the-hosting-question). |
 | **Population** | With few players, a shared galaxy is indistinguishable from solo online. That is fine, and it means the mode degrades gracefully rather than failing. |
 

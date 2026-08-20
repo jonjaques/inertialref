@@ -2,7 +2,7 @@
 
 > **The question:** how does a star have a stable name before it is generated,
 > after it is unloaded, and in a save file written a year ago?
-> **The answer:** identity *is* a path through the containment hierarchy — which
+> **The answer:** identity _is_ a path through the containment hierarchy — which
 > is also the seed path, the save reference, the log field and the console
 > argument.
 >
@@ -32,7 +32,7 @@ flowchart LR
     class WHY note
 ```
 
-The thing that *is* stable is where something sits in the universe.
+The thing that _is_ stable is where something sits in the universe.
 
 ---
 
@@ -49,13 +49,13 @@ g:milky-way/s:HIP71683/b:2/r:3.6.12.44            a surface region
 g:milky-way/s:HIP71683/b:2/r:3.6.12.44/o:7        an object in that region
 ```
 
-| Segment | Meaning |
-|---|---|
-| `g:` | galaxy id |
-| `s:` | system id — a catalogue designation or an encoded cell reference |
-| `b:` | orbital index path; `2.0` is "third planet, first moon" |
-| `r:` | cube-sphere region: `face.level.i.j` |
-| `o:` | object index within a region |
+| Segment | Meaning                                                          |
+| ------- | ---------------------------------------------------------------- |
+| `g:`    | galaxy id                                                        |
+| `s:`    | system id — a catalogue designation or an encoded cell reference |
+| `b:`    | orbital index path; `2.0` is "third planet, first moon"          |
+| `r:`    | cube-sphere region: `face.level.i.j`                             |
+| `o:`    | object index within a region                                     |
 
 Parsing and formatting round-trip exactly, which a property test asserts across
 randomly generated addresses of every kind.
@@ -86,10 +86,10 @@ body in the exact universe.
 
 Runtime entities carry an `EntityId`, distinguishable at a glance:
 
-| Form | Meaning |
-|---|---|
-| `@g:milky-way/s:SOL/b:2` | a **generated** thing — its identity *is* its address |
-| `#7` | a **dynamic** thing (a player ship) with no address to derive from |
+| Form                     | Meaning                                                            |
+| ------------------------ | ------------------------------------------------------------------ |
+| `@g:milky-way/s:SOL/b:2` | a **generated** thing — its identity _is_ its address              |
+| `#7`                     | a **dynamic** thing (a player ship) with no address to derive from |
 
 Dynamic ids come from a counter stored in the save, not a UUID. A random id
 would make two replays of the same session disagree; the counter is exactly as
@@ -140,7 +140,7 @@ flowchart LR
     class WHY note
 ```
 
-Level *n* has 2^n cells per side per face. `regionForDirection(direction, level)`
+Level _n_ has 2^n cells per side per face. `regionForDirection(direction, level)`
 maps a direction to its region, and `regionDirection(region, s, t)` maps back.
 
 The 1e-12 property test is on the layer below — `directionToFace` ⇄

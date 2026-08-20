@@ -102,7 +102,9 @@ describe('the game engine, headless', () => {
      * distance between them in render space is a constant.
      */
     const game = engine()
-    const target = game.harness.targets().find((candidate) => candidate.landable)
+    const target = game.harness
+      .targets()
+      .find((candidate) => candidate.landable)
     if (target === undefined) throw new Error('nowhere to land')
     game.harness.land(target.address, 0.35, -1.1)
 
@@ -117,7 +119,8 @@ describe('the game engine, headless', () => {
       const scene = game.scene()
       const ship = scene?.entities.find((entity) => entity.isCamera)
       const placed = game.terrainState().patches[0]
-      if (ship === undefined || placed === undefined) throw new Error('nothing to measure')
+      if (ship === undefined || placed === undefined)
+        throw new Error('nothing to measure')
       return Math.hypot(
         placed.placement.position.x - ship.position.x,
         placed.placement.position.y - ship.position.y,
@@ -164,7 +167,9 @@ describe('the game engine, headless', () => {
      * after — and 10 m is simply the vertex spacing at this level.
      */
     const game = engine()
-    const target = game.harness.targets().find((candidate) => candidate.landable)
+    const target = game.harness
+      .targets()
+      .find((candidate) => candidate.landable)
     if (target === undefined) throw new Error('nowhere to land')
     game.harness.land(target.address, 0.35, -1.1)
     for (let i = 0; i < 40; i += 1) {
@@ -195,7 +200,14 @@ describe('the game engine, headless', () => {
         const x = placement.position.x + v.x + q.w * tx + (q.y * tz - q.z * ty)
         const y = placement.position.y + v.y + q.w * ty + (q.z * tx - q.x * tz)
         const z = placement.position.z + v.z + q.w * tz + (q.x * ty - q.y * tx)
-        nearest = Math.min(nearest, Math.hypot(x - ship.position.x, y - ship.position.y, z - ship.position.z))
+        nearest = Math.min(
+          nearest,
+          Math.hypot(
+            x - ship.position.x,
+            y - ship.position.y,
+            z - ship.position.z,
+          ),
+        )
       }
     }
     // One vertex spacing at level 12 on this body is about 17 m; 40 m leaves
@@ -214,7 +226,9 @@ describe('the game engine, headless', () => {
      * as a transparency ramp rather than a pop.
      */
     const game = engine()
-    const target = game.harness.targets().find((candidate) => candidate.landable)
+    const target = game.harness
+      .targets()
+      .find((candidate) => candidate.landable)
     if (target === undefined) throw new Error('nowhere to land')
 
     game.harness.orbit(target.address, 300)

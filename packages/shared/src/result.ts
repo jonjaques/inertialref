@@ -21,4 +21,3 @@ export function expect<T, E>(result: Result<T, E>, message: string): T {
   if (result.ok) return result.value
   throw new Error(`${message}: ${String(result.error)}`)
 }
-

@@ -26,19 +26,28 @@ function fakeClock() {
 
 function pool(size = 2, now: () => number = () => 0): WorkerPool {
   const registry = createTaskRegistry()
-  return new WorkerPool({ factory: () => createInlineWorker(registry, now), size, now })
+  return new WorkerPool({
+    factory: () => createInlineWorker(registry, now),
+    size,
+    now,
+  })
 }
 
 describe('task contracts', () => {
   it('runs the same code inline as it does in a worker', async () => {
     // The property that makes worker code testable: a task is a function, and
     // the worker is only a place to call it.
-    const payload = { seed: formatSeed(GALAXY_SEED), cell: { x: 3, y: 0, z: -7 } }
+    const payload = {
+      seed: formatSeed(GALAXY_SEED),
+      cell: { x: 3, y: 0, z: -7 },
+    }
     const direct = await runInline(generateCellTask, payload)
     const viaPool = await pool().run(generateCellTask, payload)
     expect(viaPool).toEqual(direct)
     // ...and it agrees with calling the generator itself.
-    expect(direct.stars.length).toBe(generateCell(GALAXY_SEED, payload.cell).length)
+    expect(direct.stars.length).toBe(
+      generateCell(GALAXY_SEED, payload.cell).length,
+    )
   })
 
   it('produces positions that survive the wire', async () => {
@@ -55,14 +64,25 @@ describe('task contracts', () => {
 
   it('rejects an unknown task and a stale task version', async () => {
     const registry = new TaskRegistry()
-    const real = defineTask<number, number>({ name: 'double', version: 2, run: (n) => n * 2 })
+    const real = defineTask<number, number>({
+      name: 'double',
+      version: 2,
+      run: (n) => n * 2,
+    })
     registry.register(real)
-    const p = new WorkerPool({ factory: () => createInlineWorker(registry), size: 1 })
+    const p = new WorkerPool({
+      factory: () => createInlineWorker(registry),
+      size: 1,
+    })
 
-    await expect(p.run({ ...real, name: 'missing' }, 1)).rejects.toThrow(/Unknown task missing/)
+    await expect(p.run({ ...real, name: 'missing' }, 1)).rejects.toThrow(
+      /Unknown task missing/,
+    )
     // A page left open across a deploy must fail loudly rather than mixing
     // algorithm versions inside one universe.
-    await expect(p.run({ ...real, version: 1 }, 1)).rejects.toThrow(/version mismatch/)
+    await expect(p.run({ ...real, version: 1 }, 1)).rejects.toThrow(
+      /version mismatch/,
+    )
     expect(await p.run(real, 21)).toBe(42)
   })
 
@@ -75,10 +95,17 @@ describe('task contracts', () => {
         throw new Error('deliberate')
       },
     })
-    const fine = defineTask<number, number>({ name: 'fine', version: 1, run: (n) => n + 1 })
+    const fine = defineTask<number, number>({
+      name: 'fine',
+      version: 1,
+      run: (n) => n + 1,
+    })
     registry.register(boom)
     registry.register(fine)
-    const p = new WorkerPool({ factory: () => createInlineWorker(registry), size: 1 })
+    const p = new WorkerPool({
+      factory: () => createInlineWorker(registry),
+      size: 1,
+    })
     await expect(p.run(boom, null)).rejects.toThrow(/deliberate/)
     expect(await p.run(fine, 1)).toBe(2)
     expect(p.stats().failed).toBe(1)
@@ -89,7 +116,10 @@ describe('worker pool', () => {
   it('spreads work across workers and drains the queue', async () => {
     const p = pool(3)
     const jobs = Array.from({ length: 12 }, (_, i) =>
-      p.run(generateCellTask, { seed: formatSeed(GALAXY_SEED), cell: { x: i, y: 1, z: 1 } }),
+      p.run(generateCellTask, {
+        seed: formatSeed(GALAXY_SEED),
+        cell: { x: i, y: 1, z: 1 },
+      }),
     )
     const results = await Promise.all(jobs)
     expect(results).toHaveLength(12)
@@ -149,7 +179,10 @@ describe('worker pool', () => {
 
   it('rejects everything outstanding when terminated', async () => {
     const p = pool(1)
-    const job = p.submit(generateCellTask, { seed: formatSeed(GALAXY_SEED), cell: { x: 1, y: 2, z: 3 } })
+    const job = p.submit(generateCellTask, {
+      seed: formatSeed(GALAXY_SEED),
+      cell: { x: 1, y: 2, z: 3 },
+    })
     p.terminate()
     await expect(job.result).rejects.toThrow(/terminated/)
   })
@@ -209,7 +242,10 @@ describe('the inline transport matches the browser one', () => {
         run: (payload) => ({ n: payload.box.n }),
       }),
     )
-    const pool = new WorkerPool({ factory: () => createInlineWorker(registry), size: 1 })
+    const pool = new WorkerPool({
+      factory: () => createInlineWorker(registry),
+      size: 1,
+    })
     const box = { n: 1 }
     const result = await pool.run(registry.get('peek') as never, { box })
     box.n = 99
@@ -221,15 +257,22 @@ describe('the inline transport matches the browser one', () => {
   it('rejects a payload a real Worker could not clone', async () => {
     const registry = new TaskRegistry()
     registry.register(
-      defineTask<{ fn: unknown }, number>({ name: 'nope', version: 1, run: () => 1 }),
+      defineTask<{ fn: unknown }, number>({
+        name: 'nope',
+        version: 1,
+        run: () => 1,
+      }),
     )
-    const pool = new WorkerPool({ factory: () => createInlineWorker(registry), size: 1 })
+    const pool = new WorkerPool({
+      factory: () => createInlineWorker(registry),
+      size: 1,
+    })
     // A function is not structured-cloneable. This used to pass silently here
     // and fail only in the browser. The pool turns the synchronous `post` throw
     // into a rejected job rather than leaving it active forever.
-    await expect(pool.run(registry.get('nope') as never, { fn: () => 0 })).rejects.toThrow(
-      /could not be cloned|DataClone/i,
-    )
+    await expect(
+      pool.run(registry.get('nope') as never, { fn: () => 0 }),
+    ).rejects.toThrow(/could not be cloned|DataClone/i)
     expect(pool.stats().active).toBe(0)
     pool.terminate()
   })

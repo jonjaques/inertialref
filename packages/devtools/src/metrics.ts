@@ -37,7 +37,14 @@ export interface SeriesStats {
   readonly p95: number
 }
 
-const EMPTY: SeriesStats = { count: 0, last: 0, min: 0, max: 0, mean: 0, p95: 0 }
+const EMPTY: SeriesStats = {
+  count: 0,
+  last: 0,
+  min: 0,
+  max: 0,
+  mean: 0,
+  p95: 0,
+}
 
 export class Series {
   // Not a parameter property: `erasableSyntaxOnly` is on, so there is no such
@@ -78,7 +85,8 @@ export class Series {
     // The window starts `count` behind the cursor, wrapped.
     const start = (this.#next - this.#count + this.capacity * 2) % this.capacity
     for (let i = 0; i < written; i += 1) {
-      out[i] = this.#samples[(start + this.#count - written + i) % this.capacity] ?? 0
+      out[i] =
+        this.#samples[(start + this.#count - written + i) % this.capacity] ?? 0
     }
     return written
   }

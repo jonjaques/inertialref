@@ -1,5 +1,10 @@
 import { getLogger } from '@inertialref/shared'
-import { decode, decodeWorkerRequest, isWorkerCancel, type JobId } from '@inertialref/protocol'
+import {
+  decode,
+  decodeWorkerRequest,
+  isWorkerCancel,
+  type JobId,
+} from '@inertialref/protocol'
 import type { HostPort } from './transport.ts'
 import type { TaskRegistry } from './task.ts'
 
@@ -18,7 +23,11 @@ export interface ServeOptions {
   readonly now?: () => number
 }
 
-export function serveTasks(registry: TaskRegistry, port: HostPort, options: ServeOptions = {}): () => void {
+export function serveTasks(
+  registry: TaskRegistry,
+  port: HostPort,
+  options: ServeOptions = {},
+): () => void {
   const log = getLogger('workers.host')
   const now = options.now ?? (() => 0)
   const cancelled = new Set<JobId>()
@@ -41,7 +50,11 @@ export function serveTasks(registry: TaskRegistry, port: HostPort, options: Serv
 
     const task = registry.get(request.task)
     if (task === undefined) {
-      port.post({ kind: 'failure', job: request.job, error: `Unknown task ${request.task}` })
+      port.post({
+        kind: 'failure',
+        job: request.job,
+        error: `Unknown task ${request.task}`,
+      })
       return
     }
     if (task.version !== request.taskVersion) {
@@ -67,9 +80,21 @@ export function serveTasks(registry: TaskRegistry, port: HostPort, options: Serv
           return
         }
         const transfer = task.transfers?.(result) ?? []
-        port.post({ kind: 'success', job: request.job, payload: result, durationMs: now() - started }, transfer)
+        port.post(
+          {
+            kind: 'success',
+            job: request.job,
+            payload: result,
+            durationMs: now() - started,
+          },
+          transfer,
+        )
       } catch (cause) {
-        log.error('task failed', { task: request.task, job: request.job, cause: String(cause) })
+        log.error('task failed', {
+          task: request.task,
+          job: request.job,
+          cause: String(cause),
+        })
         port.post({
           kind: 'failure',
           job: request.job,

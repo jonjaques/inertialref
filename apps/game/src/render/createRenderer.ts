@@ -8,7 +8,11 @@ import {
   type RendererDescription,
   resolveOutputMode,
 } from './output.ts'
-import { installToneCurve, selectToneCurve, type ToneCurveControls } from './tonemap.ts'
+import {
+  installToneCurve,
+  selectToneCurve,
+  type ToneCurveControls,
+} from './tonemap.ts'
 
 /*
  * Building the renderer.
@@ -124,7 +128,13 @@ export function createRenderer(
     const headroom = headroomFor(mode)
 
     const tone = installToneCurve(renderer, headroom)
-    const description: RendererDescription = { backend, mode, preference, headroom, capability }
+    const description: RendererDescription = {
+      backend,
+      mode,
+      preference,
+      headroom,
+      capability,
+    }
 
     log.info('renderer ready', {
       backend,

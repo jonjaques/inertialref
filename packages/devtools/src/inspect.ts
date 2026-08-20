@@ -1,9 +1,17 @@
-import { formatDistance, formatDuration, type Meters } from '@inertialref/shared'
+import {
+  formatDistance,
+  formatDuration,
+  type Meters,
+} from '@inertialref/shared'
 import { formatSeed } from '@inertialref/procedural'
 import { UV, Vec } from '@inertialref/spatial'
 import type { World } from '@inertialref/simulation'
 import { snapshot } from '@inertialref/simulation'
-import { type EntityId, formatAddress, partitionForPosition } from '@inertialref/universe'
+import {
+  type EntityId,
+  formatAddress,
+  partitionForPosition,
+} from '@inertialref/universe'
 import type { RenderScene } from '@inertialref/rendering'
 
 /*
@@ -31,8 +39,16 @@ export interface EntityInspection {
     readonly offset: readonly [number, number, number]
     readonly text: string
   }
-  readonly local: { readonly x: number; readonly y: number; readonly z: number }
-  readonly velocity: { readonly x: number; readonly y: number; readonly z: number }
+  readonly local: {
+    readonly x: number
+    readonly y: number
+    readonly z: number
+  }
+  readonly velocity: {
+    readonly x: number
+    readonly y: number
+    readonly z: number
+  }
   /** Speed in universe axes — what an outside observer measures. */
   readonly speed: number
   readonly speedText: string
@@ -59,10 +75,18 @@ export interface WorldInspection {
   readonly droppedTicks: number
   readonly stateHash: string
   readonly entityCount: number
-  readonly loadedSystems: readonly { readonly id: string; readonly name: string; readonly bodies: number }[]
+  readonly loadedSystems: readonly {
+    readonly id: string
+    readonly name: string
+    readonly bodies: number
+  }[]
   readonly frames: number
   readonly entities: readonly EntityInspection[]
-  readonly events: readonly { readonly tick: number; readonly kind: string; readonly detail: string }[]
+  readonly events: readonly {
+    readonly tick: number
+    readonly kind: string
+    readonly detail: string
+  }[]
 }
 
 export interface RenderInspection {
@@ -70,7 +94,13 @@ export interface RenderInspection {
   readonly originGeneration: number
   readonly anchorFrame: string
   readonly cameraRenderPosition: readonly [number, number, number]
-  readonly bodies: readonly { readonly name: string; readonly tier: string; readonly distance: number; readonly distanceText: string; readonly compressed: boolean }[]
+  readonly bodies: readonly {
+    readonly name: string
+    readonly tier: string
+    readonly distance: number
+    readonly distanceText: string
+    readonly compressed: boolean
+  }[]
   readonly starCount: number
   readonly terrainCandidates: readonly string[]
 }
@@ -83,7 +113,10 @@ function partitionForFrameChain(chain: readonly string[]): string | null {
   return null
 }
 
-export function inspectEntity(world: World, id: EntityId): EntityInspection | null {
+export function inspectEntity(
+  world: World,
+  id: EntityId,
+): EntityInspection | null {
   const entity = world.entities.get(id)
   if (entity === undefined) return null
   const shot = snapshot(world, 0)
@@ -103,7 +136,11 @@ export function inspectEntity(world: World, id: EntityId): EntityInspection | nu
       offset: [view.position.ox, view.position.oy, view.position.oz],
       text: UV.format(view.position),
     },
-    local: { x: view.localPosition.x, y: view.localPosition.y, z: view.localPosition.z },
+    local: {
+      x: view.localPosition.x,
+      y: view.localPosition.y,
+      z: view.localPosition.z,
+    },
     velocity: { x: view.velocity.x, y: view.velocity.y, z: view.velocity.z },
     speed: Vec.length(view.velocity),
     speedText: `${Vec.length(view.velocity).toFixed(1)} m/s`,
@@ -115,7 +152,9 @@ export function inspectEntity(world: World, id: EntityId): EntityInspection | nu
     // Authority follows the frame, not the address: a ship has no address at
     // all, but a ship inside Sol belongs to Sol's partition. Falling back to
     // the galactic cell is only right out in interstellar space.
-    partition: partitionForFrameChain(view.frameChain) ?? partitionForPosition(view.position),
+    partition:
+      partitionForFrameChain(view.frameChain) ??
+      partitionForPosition(view.position),
   }
 }
 
@@ -137,7 +176,10 @@ export function inspectWorld(world: World): WorldInspection {
     loadedSystems: world.loadedSystems().map((system) => ({
       id: system.id,
       name: system.name,
-      bodies: system.planets.reduce((total, planet) => total + 1 + planet.moons.length, 0),
+      bodies: system.planets.reduce(
+        (total, planet) => total + 1 + planet.moons.length,
+        0,
+      ),
     })),
     frames: world.frames.ids().length,
     entities: world.entities
@@ -154,10 +196,18 @@ export function inspectWorld(world: World): WorldInspection {
 
 export function inspectRender(scene: RenderScene): RenderInspection {
   return {
-    originSector: [scene.origin.position.sx, scene.origin.position.sy, scene.origin.position.sz],
+    originSector: [
+      scene.origin.position.sx,
+      scene.origin.position.sy,
+      scene.origin.position.sz,
+    ],
     originGeneration: scene.origin.generation,
     anchorFrame: scene.origin.anchorFrame,
-    cameraRenderPosition: [scene.camera.position.x, scene.camera.position.y, scene.camera.position.z],
+    cameraRenderPosition: [
+      scene.camera.position.x,
+      scene.camera.position.y,
+      scene.camera.position.z,
+    ],
     bodies: scene.bodies
       .slice()
       .sort((a, b) => a.placement.distance - b.placement.distance)

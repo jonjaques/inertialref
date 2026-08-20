@@ -12,7 +12,11 @@ import {
 } from '@inertialref/universe'
 import { type WorkerFactory, WorkerPool } from '@inertialref/workers'
 import { MemorySaveStore, type SaveStore } from '@inertialref/persistence'
-import { GameHarness, type PresentationHost, type SimulationHost } from './harness.ts'
+import {
+  GameHarness,
+  type PresentationHost,
+  type SimulationHost,
+} from './harness.ts'
 
 /*
  * Opening a session.
@@ -116,7 +120,9 @@ export function openSession(options: SessionOptions = {}): Session {
     } catch (cause) {
       // A browser without module workers still gets a game, just a jerkier one:
       // generation falls back to the main thread rather than failing.
-      log.warn('worker pool unavailable, generating on the main thread', { cause: String(cause) })
+      log.warn('worker pool unavailable, generating on the main thread', {
+        cause: String(cause),
+      })
       pool = null
     }
   }

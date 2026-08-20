@@ -4,8 +4,8 @@ What the game **is**, what the player **does**, and why each mechanic is shaped
 the way it is.
 
 > This is the design counterpart to the engineering documentation.
-> [`docs/vision.md`](../vision.md) is the *charter* — what the platform is for.
-> This directory is the *game* — what is built on top of it.
+> [`docs/vision.md`](../vision.md) is the _charter_ — what the platform is for.
+> This directory is the _game_ — what is built on top of it.
 > Where the two disagree, vision.md wins and this directory is wrong.
 
 ---
@@ -46,44 +46,44 @@ flowchart LR
 
 ### The game
 
-| Page | What it settles |
-|---|---|
-| [charter](charter.md) | High concept, the four pillars, positioning, audience |
-| [loops](loops.md) | The micro, macro and meta loops, and what brings a player back |
-| [progression](progression.md) | The three ratchets, and why there is no XP bar |
+| Page                          | What it settles                                                |
+| ----------------------------- | -------------------------------------------------------------- |
+| [charter](charter.md)         | High concept, the four pillars, positioning, audience          |
+| [loops](loops.md)             | The micro, macro and meta loops, and what brings a player back |
+| [progression](progression.md) | The three ratchets, and why there is no XP bar                 |
 
 ### Systems
 
-| Page | What it settles |
-|---|---|
-| [flight](flight.md) | The Reference Drive, the three travel regimes, fuel |
-| [ships](ships.md) | Hulls, modules, power, heat, damage, targeting |
-| [galaxy](galaxy.md) | Real data, catalogue revisions, the galaxy and system maps |
-| [exploration](exploration.md) | Scanning, discovery credit, the reward model, the economy |
-| [onfoot](onfoot.md) | The first-person layer, the suit, interaction, inventory |
-| [combat](combat.md) | Ship combat and the deliberately scarce on-foot combat |
+| Page                          | What it settles                                            |
+| ----------------------------- | ---------------------------------------------------------- |
+| [flight](flight.md)           | The Reference Drive, the three travel regimes, fuel        |
+| [ships](ships.md)             | Hulls, modules, power, heat, damage, targeting             |
+| [galaxy](galaxy.md)           | Real data, catalogue revisions, the galaxy and system maps |
+| [exploration](exploration.md) | Scanning, discovery credit, the reward model, the economy  |
+| [onfoot](onfoot.md)           | The first-person layer, the suit, interaction, inventory   |
+| [combat](combat.md)           | Ship combat and the deliberately scarce on-foot combat     |
 
 ### Content and presentation
 
-| Page | What it settles |
-|---|---|
-| [content](content.md) | What exists in the galaxy, in what quantity, generated how |
-| [world](world.md) | Setting, tone, and the diegetic frame that holds it together |
-| [ux](ux.md) | Cockpit, HUD, the two maps, first-time experience, accessibility |
-| [art](art.md) | The photorealism doctrine and the LOD continuity specification |
-| [audio](audio.md) | Music, effects, and the problem of silence |
+| Page                  | What it settles                                                  |
+| --------------------- | ---------------------------------------------------------------- |
+| [content](content.md) | What exists in the galaxy, in what quantity, generated how       |
+| [world](world.md)     | Setting, tone, and the diegetic frame that holds it together     |
+| [ux](ux.md)           | Cockpit, HUD, the two maps, first-time experience, accessibility |
+| [art](art.md)         | The photorealism doctrine and the LOD continuity specification   |
+| [audio](audio.md)     | Music, effects, and the problem of silence                       |
 
 ### Production
 
-| Page | What it settles |
-|---|---|
-| [modes](modes.md) | Solo offline, solo online, persistent universe |
-| [technical](technical.md) | WebGPU migration, performance budgets, targets |
-| [sustainability](sustainability.md) | Open source governance, contribution, funding |
-| [competitive](competitive.md) | Star Citizen, Elite Dangerous, No Man's Sky, and the gap |
-| [production](production.md) | Milestones M2–M7 and the named MVP |
-| [risk](risk.md) | The risk register |
-| [appendix](appendix.md) | Glossary, open questions, revision history |
+| Page                                | What it settles                                          |
+| ----------------------------------- | -------------------------------------------------------- |
+| [modes](modes.md)                   | Solo offline, solo online, persistent universe           |
+| [technical](technical.md)           | WebGPU migration, performance budgets, targets           |
+| [sustainability](sustainability.md) | Open source governance, contribution, funding            |
+| [competitive](competitive.md)       | Star Citizen, Elite Dangerous, No Man's Sky, and the gap |
+| [production](production.md)         | Milestones M2–M7 and the named MVP                       |
+| [risk](risk.md)                     | The risk register                                        |
+| [appendix](appendix.md)             | Glossary, open questions, revision history               |
 
 ---
 

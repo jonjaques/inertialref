@@ -31,7 +31,7 @@ long-term player is actually playing for.
 
 ## Why there is no level
 
-A level is a number about *you*, and
+A level is a number about _you_, and
 [pillar 4](charter.md#pillar-4--you-are-one-person) says there is no screen in a
 cockpit where a number about you belongs. That is the pillar argument. There are
 two better ones.
@@ -48,7 +48,7 @@ two systems now decide how the ship moves, and one of them is lying. Elite
 Dangerous, Kerbal Space Program and DCS all progress through equipment and
 knowledge for the same reason.
 
-*What is given up:* the reliable dopamine of a filling bar, and the ability to
+_What is given up:_ the reliable dopamine of a filling bar, and the ability to
 gate content by level. Both are real losses and both are acceptable, because the
 [non-commercial posture](charter.md#business-posture) means no retention metric
 needs defending.
@@ -62,43 +62,43 @@ and fitted at any station.
 
 **The shape of the curve** — deliberately front-loaded, then long and flat:
 
-| Banked data (lifetime) | Roughly unlocks | Jump range | Character of play |
-|---|---|---|---|
-| 0 | *Bessel*, grade E core modules | **7.5 ly** | A dense web; every leg is forced |
-| 2,500 | *Cannon* hull, grade D drive | **18 ly** | Choices appear. The cage phase ends here, early and deliberately. |
-| 15,000 | Grade C/B across the board, better scanners | **28 ly** | Routes become plans rather than chains |
-| 60,000 | Class 4A drive, large fuel scoop | **42 ly** | Sustainable frontier operation |
-| 200,000 | *Hertzsprung* / *Herschel* hulls, hangar | **52 ly** | Multi-day expeditions with an interior |
-| 600,000+ | Class 5A long-range fit | **58 ly** | The sparse outer regions open up |
+| Banked data (lifetime) | Roughly unlocks                             | Jump range | Character of play                                                 |
+| ---------------------- | ------------------------------------------- | ---------- | ----------------------------------------------------------------- |
+| 0                      | _Bessel_, grade E core modules              | **7.5 ly** | A dense web; every leg is forced                                  |
+| 2,500                  | _Cannon_ hull, grade D drive                | **18 ly**  | Choices appear. The cage phase ends here, early and deliberately. |
+| 15,000                 | Grade C/B across the board, better scanners | **28 ly**  | Routes become plans rather than chains                            |
+| 60,000                 | Class 4A drive, large fuel scoop            | **42 ly**  | Sustainable frontier operation                                    |
+| 200,000                | _Hertzsprung_ / _Herschel_ hulls, hangar    | **52 ly**  | Multi-day expeditions with an interior                            |
+| 600,000+               | Class 5A long-range fit                     | **58 ly**  | The sparse outer regions open up                                  |
 
 **The curve is steep early and long at the top.** The jump from 7.5 ly to 18 ly
 arrives quickly, because Elite's real problem is not its top end — it is the hours
 spent at the bottom, where every route is forced and nothing is a decision. After
 that the curve keeps climbing, slowly, all the way to 58 ly.
 
-| Ratio | Value | Notes |
-|---|---|---|
-| Jump range, first ship → best ship | **~7.7×** | Comparable to Elite. Revised from v0.1's 2.2× — see below. |
-| Time to leave the cage (7.5 → 18 ly) | ~6–10 hours `[PLAYTEST]` | The number that actually matters |
-| Scan speed, first → best | ~2.0× | |
-| Effective survey throughput, first → best | ~4× | Combined effect |
-| Time to "can go anywhere" | ~40–60 hours `[PLAYTEST]` | Longer than v0.1, because there is more to climb |
+| Ratio                                     | Value                     | Notes                                                      |
+| ----------------------------------------- | ------------------------- | ---------------------------------------------------------- |
+| Jump range, first ship → best ship        | **~7.7×**                 | Comparable to Elite. Revised from v0.1's 2.2× — see below. |
+| Time to leave the cage (7.5 → 18 ly)      | ~6–10 hours `[PLAYTEST]`  | The number that actually matters                           |
+| Scan speed, first → best                  | ~2.0×                     |                                                            |
+| Effective survey throughput, first → best | ~4×                       | Combined effect                                            |
+| Time to "can go anywhere"                 | ~40–60 hours `[PLAYTEST]` | Longer than v0.1, because there is more to climb           |
 
 > 🎮 Designer's Note, revised in v0.2: v0.1 argued for a flat 2.2× curve on the
 > grounds that with no retention metric to defend, the first ship should be nearly
-> as good as the last. That reasoning was about *fairness*, and it missed what
+> as good as the last. That reasoning was about _fairness_, and it missed what
 > actually matters. A large range spread changes the **character** of the game,
 > not merely its speed: at 8 ly you thread a dense web and every leg is forced; at
 > 55 ly you leap between chosen anchors and the sparse outer regions become
 > reachable for the first time. Wanting a faster ship is a legitimate, well-earned
 > desire, not a retention hook — and designing it out made the game smaller. What
-> survives from the old argument is the *shape*: steep at the bottom, so the cage
+> survives from the old argument is the _shape_: steep at the bottom, so the cage
 > phase is short, which is the part Elite gets wrong.
 
 ### Loss
 
 Ships are lost. A destroyed ship costs the hull and everything fitted, and the
-player restarts in a *Bessel* at the last station — but **capability unlocks are
+player restarts in a _Bessel_ at the last station — but **capability unlocks are
 permanent**. Losing a ship costs the time to refit, not the progress.
 
 **Resolved: nothing beyond unbanked data.** You restart at the last station in a
@@ -119,9 +119,9 @@ only progression that survives everything: a destroyed ship, a wiped save
 restored from a 696-byte reference, a catalogue revision that retires a world you
 found.
 
-**Milestones exist but are not rewards.** *1,000 bodies. Every planet in Sol.
+**Milestones exist but are not rewards.** _1,000 bodies. Every planet in Sol.
 A body of every class. 10,000 light-years travelled. A confirmed exoplanet
-ground-truthed.* They are recorded, they are displayed, and they unlock nothing —
+ground-truthed._ They are recorded, they are displayed, and they unlock nothing —
 because the moment they unlock something they become a checklist, and a checklist
 is a different game.
 
@@ -152,7 +152,7 @@ The brief asks for secondary RPG elements. What that means here, precisely:
 **What exists:** equipment with real tradeoffs, a personal record that persists,
 directed optional goals ([commissions](exploration.md#directed-goals--commissions)),
 faction standing with the research institutions that issue them, and a
-progression of *access* rather than power.
+progression of _access_ rather than power.
 
 **What does not exist:** attributes, skill trees, classes, dialogue trees,
 quests, experience points, or levels of any kind.
@@ -178,13 +178,13 @@ is offered first, never what is reachable at all.
 Three timelines, for pacing the curve. All three assume the
 [MVP scope](production.md#the-mvp-the-explorer).
 
-| | **Casual** — 3 h/week | **Regular** — 8 h/week | **Dedicated** — 20 h/week |
-|---|---|---|---|
-| Week 1 | Sol, the Moon, first jump | Sol fully surveyed, 4 systems | 20 systems, first 100 ly |
-| Month 1 | ~12 systems, *Cannon* hull | ~50 systems, grade D fit | ~200 systems, grade B fit |
-| Month 3 | ~40 systems, still in the bubble | Grade A drive, 400 ly out | 1,000+ ly out, capability curve flat |
-| Month 6 | Beyond the catalogue horizon | Deep frontier; Almanac is the game | Somewhere nobody has been |
-| The wall | Never hits one | ~month 4, when capability flattens | ~month 2, same |
+|          | **Casual** — 3 h/week            | **Regular** — 8 h/week             | **Dedicated** — 20 h/week            |
+| -------- | -------------------------------- | ---------------------------------- | ------------------------------------ |
+| Week 1   | Sol, the Moon, first jump        | Sol fully surveyed, 4 systems      | 20 systems, first 100 ly             |
+| Month 1  | ~12 systems, _Cannon_ hull       | ~50 systems, grade D fit           | ~200 systems, grade B fit            |
+| Month 3  | ~40 systems, still in the bubble | Grade A drive, 400 ly out          | 1,000+ ly out, capability curve flat |
+| Month 6  | Beyond the catalogue horizon     | Deep frontier; Almanac is the game | Somewhere nobody has been            |
+| The wall | Never hits one                   | ~month 4, when capability flattens | ~month 2, same                       |
 
 **"The wall" is not a failure.** When capability flattens, the game becomes
 purely about the map and the record — which is precisely what Elite's long-term

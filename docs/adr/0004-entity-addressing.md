@@ -32,7 +32,7 @@ log field, the debug-overlay display and the harness argument. One
 representation, parsed and formatted round-trip-exactly.
 
 That identity is now pinned by a test rather than by intent: `universe.test.ts`
-compares `addressLabels` against the seed a *generated* body actually carries,
+compares `addressLabels` against the seed a _generated_ body actually carries,
 for planets and moons, and against `systemSeedOf` for systems. The earlier test
 derived both sides of the comparison from `addressLabels` and so could not fail
 — a generator changing `b:${index}` to `b${index}` would have gone unnoticed.
@@ -47,7 +47,7 @@ address.
 Runtime entities carry an `EntityId` in one of two flavours, distinguishable at
 a glance:
 
-- `@g:milky-way/s:SOL/b:2` — a generated thing; its identity *is* its address.
+- `@g:milky-way/s:SOL/b:2` — a generated thing; its identity _is_ its address.
 - `#7` — a dynamic thing (a player ship) with no address to derive from.
 
 Dynamic ids come from a counter stored in the save rather than a UUID: a random
@@ -72,7 +72,7 @@ than a lookup in a galaxy-wide index that would have to exist somewhere.
 
 - Addresses are long. `g:milky-way/s:HIP71683/b:2.0` is 28 characters where an
   integer would be 4. They compress well and appear once per entity in a save.
-- Bodies are addressed by *orbital index*, so changing how a system lays out its
+- Bodies are addressed by _orbital index_, so changing how a system lays out its
   orbits renames its planets. That is what algorithm versioning is for
   (ADR-0005): the rename is deliberate and detectable, not silent.
 - Region addresses are cube-sphere quadtree coordinates rather than lat/lon, so

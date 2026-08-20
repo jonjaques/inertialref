@@ -1,6 +1,12 @@
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { AU, EARTH_RADIUS, SECONDS_PER_DAY, SECONDS_PER_YEAR, SUN_MU } from '@inertialref/shared'
+import {
+  AU,
+  EARTH_RADIUS,
+  SECONDS_PER_DAY,
+  SECONDS_PER_YEAR,
+  SUN_MU,
+} from '@inertialref/shared'
 import { Vec } from '@inertialref/spatial'
 import {
   apoapsis,
@@ -28,19 +34,19 @@ const EARTH_LIKE: OrbitalElements = {
 }
 
 describe('Kepler', () => {
-  it('reproduces the Earth year from the Sun\'s gravitational parameter', () => {
+  it("reproduces the Earth year from the Sun's gravitational parameter", () => {
     const period = orbitalPeriod(SUN_MU, AU)
     expect(period / SECONDS_PER_YEAR).toBeCloseTo(1.0, 3)
   })
 
-  it('obeys Kepler\'s third law', () => {
+  it("obeys Kepler's third law", () => {
     // T² ∝ a³: quadrupling the period means a 2^(2/3) larger orbit.
     const inner = orbitalPeriod(SUN_MU, AU)
     const outer = orbitalPeriod(SUN_MU, 4 * AU)
     expect(outer / inner).toBeCloseTo(8, 6)
   })
 
-  it('solves Kepler\'s equation for eccentricities up to 0.95 (property)', () => {
+  it("solves Kepler's equation for eccentricities up to 0.95 (property)", () => {
     fc.assert(
       fc.property(
         fc.double({ min: 0, max: 2 * Math.PI, noNaN: true }),
@@ -48,14 +54,20 @@ describe('Kepler', () => {
         (M, e) => {
           const E = solveKepler(M, e)
           // The residual of the equation we claim to have solved.
-          expect(Math.abs(normalizeAngle(E - e * Math.sin(E)) - normalizeAngle(M))).toBeLessThan(1e-9)
+          expect(
+            Math.abs(normalizeAngle(E - e * Math.sin(E)) - normalizeAngle(M)),
+          ).toBeLessThan(1e-9)
         },
       ),
     )
   })
 
   it('keeps a circular orbit circular and at the right speed', () => {
-    const circular: OrbitalElements = { ...EARTH_LIKE, eccentricity: 0, argumentOfPeriapsis: 0 }
+    const circular: OrbitalElements = {
+      ...EARTH_LIKE,
+      eccentricity: 0,
+      argumentOfPeriapsis: 0,
+    }
     const expectedSpeed = circularSpeed(SUN_MU, AU)
     for (let i = 0; i <= 16; i += 1) {
       const t = (i / 16) * orbitalPeriod(SUN_MU, AU)
@@ -68,7 +80,11 @@ describe('Kepler', () => {
   })
 
   it('orbits prograde about +Y', () => {
-    const circular: OrbitalElements = { ...EARTH_LIKE, eccentricity: 0, argumentOfPeriapsis: 0 }
+    const circular: OrbitalElements = {
+      ...EARTH_LIKE,
+      eccentricity: 0,
+      argumentOfPeriapsis: 0,
+    }
     const { position, velocity } = stateVectorAt(circular, SUN_MU, 0)
     const h = Vec.cross(position, velocity)
     expect(h.y).toBeGreaterThan(0)
@@ -82,7 +98,11 @@ describe('Kepler', () => {
     let minH = Infinity
     let maxH = -Infinity
     for (let i = 0; i < 64; i += 1) {
-      const { position, velocity } = stateVectorAt(EARTH_LIKE, SUN_MU, (i / 64) * period)
+      const { position, velocity } = stateVectorAt(
+        EARTH_LIKE,
+        SUN_MU,
+        (i / 64) * period,
+      )
       const r = Vec.length(position)
       const v = Vec.length(velocity)
       const energy = (v * v) / 2 - SUN_MU / r
@@ -111,7 +131,9 @@ describe('Kepler', () => {
     const eccentric: OrbitalElements = { ...EARTH_LIKE, eccentricity: 0.7 }
     const period = orbitalPeriod(SUN_MU, eccentric.semiMajorAxis)
     for (let i = 0; i < 128; i += 1) {
-      const r = Vec.length(stateVectorAt(eccentric, SUN_MU, (i / 128) * period).position)
+      const r = Vec.length(
+        stateVectorAt(eccentric, SUN_MU, (i / 128) * period).position,
+      )
       expect(r).toBeGreaterThanOrEqual(periapsis(eccentric) - 1)
       expect(r).toBeLessThanOrEqual(apoapsis(eccentric) + 1)
     }
@@ -143,11 +165,18 @@ describe('Kepler', () => {
 
           // The elements themselves may differ by a 2π wrap or a degenerate
           // Ω/ω split; what must match is the physical state they describe.
-          expect(Vec.distance(state.position, again.position) / Vec.length(state.position))
-            .toBeLessThan(1e-9)
-          expect(Vec.distance(state.velocity, again.velocity) / Vec.length(state.velocity))
-            .toBeLessThan(1e-9)
-          expect(recovered.semiMajorAxis / elements.semiMajorAxis).toBeCloseTo(1, 9)
+          expect(
+            Vec.distance(state.position, again.position) /
+              Vec.length(state.position),
+          ).toBeLessThan(1e-9)
+          expect(
+            Vec.distance(state.velocity, again.velocity) /
+              Vec.length(state.velocity),
+          ).toBeLessThan(1e-9)
+          expect(recovered.semiMajorAxis / elements.semiMajorAxis).toBeCloseTo(
+            1,
+            9,
+          )
           expect(recovered.eccentricity).toBeCloseTo(elements.eccentricity, 9)
           expect(recovered.inclination).toBeCloseTo(elements.inclination, 9)
         },

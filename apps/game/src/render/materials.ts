@@ -84,7 +84,9 @@ export function createStarMaterial(): StarMaterial {
   // `abs` because a sphere seen from inside — which happens for exactly one
   // frame if the origin rebases while a star fills the view — otherwise flips
   // `mu` negative and turns the disc black.
-  const mu = abs(dot(normalize(normalWorld), normalize(cameraPosition.sub(positionWorld))))
+  const mu = abs(
+    dot(normalize(normalWorld), normalize(cameraPosition.sub(positionWorld))),
+  )
   const limb = oneMinus(float(LIMB_DARKENING).mul(oneMinus(mu)))
 
   const material = new MeshBasicNodeMaterial()
@@ -150,22 +152,35 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
   const closest = dot(toCentre, rayDirection)
   const impactSquared = max(length(cross(rayDirection, toCentre)).pow(2), 0)
 
-  const halfOuter = sqrt(max(outerRadius.mul(outerRadius).sub(impactSquared), 0))
-  const halfInner = sqrt(max(innerRadius.mul(innerRadius).sub(impactSquared), 0))
+  const halfOuter = sqrt(
+    max(outerRadius.mul(outerRadius).sub(impactSquared), 0),
+  )
+  const halfInner = sqrt(
+    max(innerRadius.mul(innerRadius).sub(impactSquared), 0),
+  )
 
   // Clamped at 0 so a camera already inside the air starts counting from itself.
   const near = max(closest.sub(halfOuter), 0)
   // `step` rather than a branch: 1 when the ray passes inside the planet, and
   // then the air stops at the ground instead of continuing to the far wall.
   const meetsGround = step(impactSquared, innerRadius.mul(innerRadius))
-  const far = mix(closest.add(halfOuter), max(closest.sub(halfInner), near), meetsGround)
+  const far = mix(
+    closest.add(halfOuter),
+    max(closest.sub(halfInner), near),
+    meetsGround,
+  )
   const airDepth = max(far.sub(near), 0)
 
   // Normalised against the deepest path the shell admits — grazing it at the
   // planet's edge — so a moon's wisp and a gas giant's envelope read the same,
   // and the render-space scale drops out. It has to: distance compression
   // rescales both radii together every time the LOD tier changes.
-  const deepest = max(sqrt(max(outerRadius.mul(outerRadius).sub(innerRadius.mul(innerRadius)), 0)).mul(2), 1e-6)
+  const deepest = max(
+    sqrt(
+      max(outerRadius.mul(outerRadius).sub(innerRadius.mul(innerRadius)), 0),
+    ).mul(2),
+    1e-6,
+  )
   const optical = airDepth.div(deepest).mul(2.4)
 
   // Beer–Lambert, so the limb saturates smoothly rather than clipping to a hard
@@ -178,14 +193,20 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
   // The midpoint degrades correctly at both ends: from orbit it is the graze
   // point, from the ground it is a few kilometres over the player's head.
   const sample = cameraPosition.add(rayDirection.mul(near.add(far).mul(0.5)))
-  const sunlit = saturate(dot(normalize(sample.sub(centre)), normalize(sunDirection)))
+  const sunlit = saturate(
+    dot(normalize(sample.sub(centre)), normalize(sunDirection)),
+  )
   // A wide terminator rather than a step: air scatters around the edge, which is
   // the entire reason twilight exists.
   const daylight = smoothstep(-0.35, 0.25, sunlit.mul(2).sub(1))
 
   // Rayleigh blue towards the zenith, a warmer forward-scattered limb near the
   // terminator. Both are authored constants standing in for the LUT.
-  const scattered = mix(vec3(0.86, 0.45, 0.26), vec3(0.28, 0.48, 0.95), daylight)
+  const scattered = mix(
+    vec3(0.86, 0.45, 0.26),
+    vec3(0.28, 0.48, 0.95),
+    daylight,
+  )
 
   const material = new MeshBasicNodeMaterial()
   material.colorNode = scattered.mul(mix(0.05, 1, daylight))
@@ -218,7 +239,10 @@ export interface StarfieldMaterial {
  *   the draw count moves; reallocating per survey would rebuild the pipeline.
  */
 export function createStarfieldMaterial(capacity: number): StarfieldMaterial {
-  const positions = new InstancedBufferAttribute(new Float32Array(capacity * 3), 3)
+  const positions = new InstancedBufferAttribute(
+    new Float32Array(capacity * 3),
+    3,
+  )
   const size = uniform(2.4)
 
   // Round, with a soft edge. A star is a point source seen through an aperture,
@@ -256,5 +280,9 @@ export function createBodyMaterial(color: Color): MeshStandardNodeMaterial {
  * material would otherwise ignore — next to the number it depends on.
  */
 export function createTerrainMaterial(): MeshStandardNodeMaterial {
-  return new MeshStandardNodeMaterial({ color: 0x9c8367, roughness: 1, flatShading: false })
+  return new MeshStandardNodeMaterial({
+    color: 0x9c8367,
+    roughness: 1,
+    flatShading: false,
+  })
 }

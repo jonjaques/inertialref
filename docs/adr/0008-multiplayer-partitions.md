@@ -39,7 +39,7 @@ Two amendments, from a later review:
   the debug overlay shows it as "authority". Being able to see which partition
   an entity would belong to, a phase before any partition exists, is the cheapest
   possible test of whether the rule makes sense.
-- The frame-chain rule is implemented, but *not* through this ADR's own API:
+- The frame-chain rule is implemented, but _not_ through this ADR's own API:
   `inspect.ts` scans the chain for an `s:` prefix itself rather than calling
   `partitionForAddress`. The two agree only because the frame-id grammar and the
   partition-key grammar are both `s:<system>`. That is a coincidence one rename

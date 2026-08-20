@@ -80,16 +80,20 @@ export const SPEED_OF_LIGHT: MetersPerSecond = 299_792_458
 /* Conversions — presentation layer only                                      */
 /* ------------------------------------------------------------------------- */
 
-export const metersToAu = (m: Meters): AstronomicalUnits => (m / AU) as AstronomicalUnits
+export const metersToAu = (m: Meters): AstronomicalUnits =>
+  (m / AU) as AstronomicalUnits
 export const auToMeters = (au: AstronomicalUnits): Meters => au * AU
-export const metersToLightYears = (m: Meters): LightYears => (m / LIGHT_YEAR) as LightYears
+export const metersToLightYears = (m: Meters): LightYears =>
+  (m / LIGHT_YEAR) as LightYears
 export const lightYearsToMeters = (ly: LightYears): Meters => ly * LIGHT_YEAR
 export const metersToParsecs = (m: Meters): Parsecs => (m / PARSEC) as Parsecs
 export const parsecsToMeters = (pc: Parsecs): Meters => pc * PARSEC
-export const metersToKilometers = (m: Meters): Kilometers => (m / KILOMETER) as Kilometers
+export const metersToKilometers = (m: Meters): Kilometers =>
+  (m / KILOMETER) as Kilometers
 export const metersToFeet = (m: Meters): Feet => (m / FOOT) as Feet
 export const metersToInches = (m: Meters): Inches => (m / INCH) as Inches
-export const radiansToDegrees = (r: Radians): Degrees => ((r * 180) / Math.PI) as Degrees
+export const radiansToDegrees = (r: Radians): Degrees =>
+  ((r * 180) / Math.PI) as Degrees
 export const degreesToRadians = (d: Degrees): Radians => (d * Math.PI) / 180
 
 /**
@@ -106,7 +110,8 @@ export function formatDistance(m: Meters, digits = 3): string {
   // but the HUD is read by pilots, and every catalogue name the player sees
   // ("4.24 ly to Proxima") is quoted in light-years.
   if (a >= 1e3 * PARSEC) return `${(m / (1e3 * PARSEC)).toFixed(digits)} kpc`
-  if (a >= 0.05 * LIGHT_YEAR) return `${metersToLightYears(m).toFixed(digits)} ly`
+  if (a >= 0.05 * LIGHT_YEAR)
+    return `${metersToLightYears(m).toFixed(digits)} ly`
   if (a >= 0.001 * AU) return `${metersToAu(m).toFixed(digits)} AU`
   if (a >= 1e5) return `${metersToKilometers(m).toFixed(digits)} km`
   if (a >= 1) return `${m.toFixed(digits)} m`

@@ -38,11 +38,11 @@ continuous universe rather than appearing to gameplay as separate worlds.
 
 1. Piloting spacecraft with full 6-DoF movement — **works**
 2. Travelling within star systems — **works**
-3. Travelling between star systems — *possible but slow; wants a warp mechanic*
+3. Travelling between star systems — _possible but slow; wants a warp mechanic_
 4. Approaching and orbiting planets — **works**
-5. Atmospheric entry — *drag and atmosphere modelled; no heating or stress*
+5. Atmospheric entry — _drag and atmosphere modelled; no heating or stress_
 6. Landing — **works**
-7. Surface exploration — *you can land and fly; there is nothing to find yet*
+7. Surface exploration — _you can land and fly; there is nothing to find yet_
 
 Everything beyond that — economy, combat, construction, life — is out of scope
 for now, but nothing in the architecture should make it harder later. That is
@@ -57,20 +57,20 @@ that the assumptions everything else depends on actually hold. Twelve claims,
 executable rather than asserted, runnable in Node (`pnpm sim --self-test`) and in
 the browser (`await ir.selfTest()`):
 
-| # | Claim | Measured |
-|---|---|---|
-| 1 | Deterministically generate the same systems from a global seed | identical across runs; differs by seed |
-| 2 | Address every generated object with a stable id | all bodies round-trip through text |
-| 3 | Place systems at astronomical distances | Sol → Alpha Centauri: 4.3650 ly |
-| 4 | Move within a system | 6.81 km under thrust in 10 s |
-| 5 | Approach a planet | fell 18.74 m in 60 s — within 0.03% of free fall |
-| 6 | Transition into increasingly local frames | entered a planet frame mid-flight |
-| 7 | Preserve precision near the surface | 1 inch resolved to 9.4 µm, 8.18 kpc out |
-| 8 | Render metre-scale objects near the player | 1 m survives float32 at 8.18 kpc |
-| 9 | Rebase render origins without moving entities | 500 rebases, 2,560 km, zero drift |
-| 10 | Run a meaningful procedural task in a worker | 4,225 terrain samples, identical to local |
-| 11 | Serialize and restore world/player state | 696 bytes → identical state hash |
-| 12 | Run the simulation independently of frame rate | same hash at 60 Hz, 144 Hz and 100× warp |
+| #   | Claim                                                          | Measured                                         |
+| --- | -------------------------------------------------------------- | ------------------------------------------------ |
+| 1   | Deterministically generate the same systems from a global seed | identical across runs; differs by seed           |
+| 2   | Address every generated object with a stable id                | all bodies round-trip through text               |
+| 3   | Place systems at astronomical distances                        | Sol → Alpha Centauri: 4.3650 ly                  |
+| 4   | Move within a system                                           | 6.81 km under thrust in 10 s                     |
+| 5   | Approach a planet                                              | fell 18.74 m in 60 s — within 0.03% of free fall |
+| 6   | Transition into increasingly local frames                      | entered a planet frame mid-flight                |
+| 7   | Preserve precision near the surface                            | 1 inch resolved to 9.4 µm, 8.18 kpc out          |
+| 8   | Render metre-scale objects near the player                     | 1 m survives float32 at 8.18 kpc                 |
+| 9   | Rebase render origins without moving entities                  | 500 rebases, 2,560 km, zero drift                |
+| 10  | Run a meaningful procedural task in a worker                   | 4,225 terrain samples, identical to local        |
+| 11  | Serialize and restore world/player state                       | 696 bytes → identical state hash                 |
+| 12  | Run the simulation independently of frame rate                 | same hash at 60 Hz, 144 Hz and 100× warp         |
 
 The point of listing measurements rather than ticks: a self-test that cannot
 fail informatively converts an unknown into a false assurance.
@@ -109,15 +109,15 @@ with the wrong ones, because the first grows and the second gets replaced.
 ### No opaque abstractions
 
 Do not introduce an abstraction without demonstrating its purpose. Every port,
-every indirection, every layer in this codebase has at least one *second*
+every indirection, every layer in this codebase has at least one _second_
 implementation or one test that could not exist without it:
 
-| Abstraction | What justifies it |
-|---|---|
-| `WorkerPort` | an in-process implementation that makes the pool testable in Node |
-| `SaveStore` | an in-memory store used by every persistence test |
-| `rendering` emitting data, not Three.js | render logic tested without a GPU |
-| Frame anchors as closures | `spatial` never learns what an orbit is |
+| Abstraction                             | What justifies it                                                 |
+| --------------------------------------- | ----------------------------------------------------------------- |
+| `WorkerPort`                            | an in-process implementation that makes the pool testable in Node |
+| `SaveStore`                             | an in-memory store used by every persistence test                 |
+| `rendering` emitting data, not Three.js | render logic tested without a GPU                                 |
+| Frame anchors as closures               | `spatial` never learns what an orbit is                           |
 
 If a new abstraction cannot name its justification, it is speculative structure
 and should wait until it can.
@@ -127,7 +127,7 @@ and should wait until it can.
 The repository is optimised so that someone — human or coding agent — who has
 never seen it can understand, modify, test and verify the system without tribal
 knowledge. That means: deterministic non-interactive commands with useful exit
-codes, documentation that explains *why*, decision records for what is expensive
+codes, documentation that explains _why_, decision records for what is expensive
 to reverse, and a build log of what has already been learned.
 
 ### Document assumptions, not just code
@@ -141,7 +141,7 @@ gets an [ADR](adr/README.md). If it is a fact learned the hard way, it goes in
 
 Performance matters, and blind pre-optimisation does not. Design so that object
 pooling, typed arrays, instancing, spatial indexes, worker pools, transferable
-buffers, WASM, WebGPU and shared memory all remain *possible* — then apply them
+buffers, WASM, WebGPU and shared memory all remain _possible_ — then apply them
 when a measurement says to.
 
 ---
@@ -166,13 +166,13 @@ each of which was invisible in a running browser.
 
 ## Non-goals, for now
 
-| Not doing | Why |
-|---|---|
-| Polished art | Debug primitives are *preferable* while proving architecture |
-| Multiplayer | Deferred to a later phase; seams and [ADR-0008](adr/0008-multiplayer-partitions.md) only |
-| n-body gravity | Patched conics are sufficient and analytic; n-body is a correction to add on top |
-| A content pipeline | Everything is generated; there are no assets to pipeline yet |
-| Mobile / touch | Not a constraint on any current decision |
+| Not doing          | Why                                                                                      |
+| ------------------ | ---------------------------------------------------------------------------------------- |
+| Polished art       | Debug primitives are _preferable_ while proving architecture                             |
+| Multiplayer        | Deferred to a later phase; seams and [ADR-0008](adr/0008-multiplayer-partitions.md) only |
+| n-body gravity     | Patched conics are sufficient and analytic; n-body is a correction to add on top         |
+| A content pipeline | Everything is generated; there are no assets to pipeline yet                             |
+| Mobile / touch     | Not a constraint on any current decision                                                 |
 
 ---
 

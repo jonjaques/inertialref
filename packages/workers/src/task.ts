@@ -31,7 +31,10 @@ export function defineTask<Request, Response>(
   definition: TaskDefinition<Request, Response>,
 ): TaskDefinition<Request, Response> {
   invariant(definition.name.length > 0, 'A task needs a name')
-  invariant(Number.isInteger(definition.version) && definition.version > 0, 'A task needs a version')
+  invariant(
+    Number.isInteger(definition.version) && definition.version > 0,
+    'A task needs a version',
+  )
   return definition
 }
 
@@ -39,8 +42,14 @@ export class TaskRegistry {
   readonly #tasks = new Map<string, TaskDefinition<never, unknown>>()
 
   register<Request, Response>(task: TaskDefinition<Request, Response>): void {
-    invariant(!this.#tasks.has(task.name), `Task ${task.name} is already registered`)
-    this.#tasks.set(task.name, task as unknown as TaskDefinition<never, unknown>)
+    invariant(
+      !this.#tasks.has(task.name),
+      `Task ${task.name} is already registered`,
+    )
+    this.#tasks.set(
+      task.name,
+      task as unknown as TaskDefinition<never, unknown>,
+    )
   }
 
   get(name: string): TaskDefinition<never, unknown> | undefined {

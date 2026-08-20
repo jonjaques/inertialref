@@ -26,12 +26,29 @@ export function vec3(x: number, y: number, z: number): Vec3 {
   return { x, y, z }
 }
 
-export const add = (a: Vec3, b: Vec3): Vec3 => ({ x: a.x + b.x, y: a.y + b.y, z: a.z + b.z })
-export const sub = (a: Vec3, b: Vec3): Vec3 => ({ x: a.x - b.x, y: a.y - b.y, z: a.z - b.z })
-export const mul = (a: Vec3, b: Vec3): Vec3 => ({ x: a.x * b.x, y: a.y * b.y, z: a.z * b.z })
-export const scale = (a: Vec3, s: number): Vec3 => ({ x: a.x * s, y: a.y * s, z: a.z * s })
+export const add = (a: Vec3, b: Vec3): Vec3 => ({
+  x: a.x + b.x,
+  y: a.y + b.y,
+  z: a.z + b.z,
+})
+export const sub = (a: Vec3, b: Vec3): Vec3 => ({
+  x: a.x - b.x,
+  y: a.y - b.y,
+  z: a.z - b.z,
+})
+export const mul = (a: Vec3, b: Vec3): Vec3 => ({
+  x: a.x * b.x,
+  y: a.y * b.y,
+  z: a.z * b.z,
+})
+export const scale = (a: Vec3, s: number): Vec3 => ({
+  x: a.x * s,
+  y: a.y * s,
+  z: a.z * s,
+})
 export const negate = (a: Vec3): Vec3 => ({ x: -a.x, y: -a.y, z: -a.z })
-export const dot = (a: Vec3, b: Vec3): number => a.x * b.x + a.y * b.y + a.z * b.z
+export const dot = (a: Vec3, b: Vec3): number =>
+  a.x * b.x + a.y * b.y + a.z * b.z
 
 export const cross = (a: Vec3, b: Vec3): Vec3 => ({
   x: a.y * b.z - a.z * b.y,
@@ -39,12 +56,14 @@ export const cross = (a: Vec3, b: Vec3): Vec3 => ({
   z: a.x * b.y - a.y * b.x,
 })
 
-export const lengthSquared = (a: Vec3): number => a.x * a.x + a.y * a.y + a.z * a.z
+export const lengthSquared = (a: Vec3): number =>
+  a.x * a.x + a.y * a.y + a.z * a.z
 
 /** Uses hypot to keep magnitudes near the double range (a 1e20 m vector squares to 1e40). */
 export const length = (a: Vec3): number => Math.hypot(a.x, a.y, a.z)
 
-export const distance = (a: Vec3, b: Vec3): number => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z)
+export const distance = (a: Vec3, b: Vec3): number =>
+  Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z)
 
 export function normalize(a: Vec3): Vec3 {
   const len = length(a)
@@ -63,10 +82,13 @@ export const lerp = (a: Vec3, b: Vec3, t: number): Vec3 => ({
   z: a.z + (b.z - a.z) * t,
 })
 
-export const equals = (a: Vec3, b: Vec3): boolean => a.x === b.x && a.y === b.y && a.z === b.z
+export const equals = (a: Vec3, b: Vec3): boolean =>
+  a.x === b.x && a.y === b.y && a.z === b.z
 
 export const approxEquals = (a: Vec3, b: Vec3, epsilon = 1e-9): boolean =>
-  Math.abs(a.x - b.x) <= epsilon && Math.abs(a.y - b.y) <= epsilon && Math.abs(a.z - b.z) <= epsilon
+  Math.abs(a.x - b.x) <= epsilon &&
+  Math.abs(a.y - b.y) <= epsilon &&
+  Math.abs(a.z - b.z) <= epsilon
 
 export const isFinite3 = (a: Vec3): boolean =>
   Number.isFinite(a.x) && Number.isFinite(a.y) && Number.isFinite(a.z)

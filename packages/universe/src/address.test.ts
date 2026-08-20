@@ -32,24 +32,43 @@ const anyAddress: fc.Arbitrary<UniverseAddress> = fc.oneof(
     .map((path) => bodyAddress(GALAXY, SYSTEM, path)),
   fc
     .record({
-      path: fc.array(fc.integer({ min: 0, max: 4095 }), { minLength: 1, maxLength: 2 }),
+      path: fc.array(fc.integer({ min: 0, max: 4095 }), {
+        minLength: 1,
+        maxLength: 2,
+      }),
       face: fc.integer({ min: 0, max: 5 }),
       level: fc.integer({ min: 0, max: 12 }),
     })
     .chain((r) =>
       fc
-        .tuple(fc.integer({ min: 0, max: 2 ** r.level - 1 }), fc.integer({ min: 0, max: 2 ** r.level - 1 }))
+        .tuple(
+          fc.integer({ min: 0, max: 2 ** r.level - 1 }),
+          fc.integer({ min: 0, max: 2 ** r.level - 1 }),
+        )
         .map(([i, j]) =>
-          regionOf(bodyAddress(GALAXY, SYSTEM, r.path), regionAddress(r.face, r.level, i, j)),
+          regionOf(
+            bodyAddress(GALAXY, SYSTEM, r.path),
+            regionAddress(r.face, r.level, i, j),
+          ),
         ),
     ),
 )
 
 describe('UniverseAddress', () => {
   it('formats the documented shape', () => {
-    expect(formatAddress(bodyAddress(GALAXY, SYSTEM, [2, 0]))).toBe('g:milky-way/s:HIP71683/b:2.0')
+    expect(formatAddress(bodyAddress(GALAXY, SYSTEM, [2, 0]))).toBe(
+      'g:milky-way/s:HIP71683/b:2.0',
+    )
     expect(
-      formatAddress(objectOf(regionOf(bodyAddress(GALAXY, SYSTEM, [2]), regionAddress(3, 6, 12, 44)), 7)),
+      formatAddress(
+        objectOf(
+          regionOf(
+            bodyAddress(GALAXY, SYSTEM, [2]),
+            regionAddress(3, 6, 12, 44),
+          ),
+          7,
+        ),
+      ),
     ).toBe('g:milky-way/s:HIP71683/b:2/r:3.6.12.44/o:7')
   })
 
@@ -66,8 +85,12 @@ describe('UniverseAddress', () => {
   it('rejects malformed text', () => {
     expect(() => parseAddress('nonsense')).toThrow()
     expect(() => parseAddress('g:milky way')).toThrow(/Malformed galaxy/)
-    expect(() => parseAddress('g:milky-way/x:1')).toThrow(/Unknown address segment/)
-    expect(() => parseAddress('g:milky-way/s:S/b:2/r:9.6.1.1')).toThrow(/cube face/)
+    expect(() => parseAddress('g:milky-way/x:1')).toThrow(
+      /Unknown address segment/,
+    )
+    expect(() => parseAddress('g:milky-way/s:S/b:2/r:9.6.1.1')).toThrow(
+      /cube face/,
+    )
   })
 
   it('walks up the containment chain', () => {
@@ -93,11 +116,19 @@ describe('UniverseAddress', () => {
 
   it('derives a seed path that mirrors containment', () => {
     const moon = bodyAddress(GALAXY, SYSTEM, [2, 0])
-    expect(addressLabels(moon)).toEqual(['g:milky-way', 's:HIP71683', 'b:2', 'b:0'])
+    expect(addressLabels(moon)).toEqual([
+      'g:milky-way',
+      's:HIP71683',
+      'b:2',
+      'b:0',
+    ])
     // A moon's seed descends from its planet's, so generating one moon does not
     // require generating its siblings.
     const seed = rootSeed('test')
-    const planetSeed = derivePath(seed, addressLabels(bodyAddress(GALAXY, SYSTEM, [2])))
+    const planetSeed = derivePath(
+      seed,
+      addressLabels(bodyAddress(GALAXY, SYSTEM, [2])),
+    )
     const moonSeed = derivePath(seed, addressLabels(moon))
     expect(moonSeed).not.toEqual(planetSeed)
     expect(derivePath(planetSeed, ['b:0'])).toEqual(moonSeed)

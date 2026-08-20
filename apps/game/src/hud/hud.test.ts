@@ -39,7 +39,11 @@ describe('the dev dock', () => {
         tab: 'telemetry' as const,
         onTabChange: () => {},
         onNotice: () => {},
-        render: { preference: 'auto' as const, output: null, onCyclePreference: () => {} },
+        render: {
+          preference: 'auto' as const,
+          output: null,
+          onCyclePreference: () => {},
+        },
         commands: {
           togglePause: () => {},
           warp: () => {},
@@ -65,7 +69,11 @@ describe('the dev dock', () => {
     const markup = targets
       .map((target) =>
         renderToStaticMarkup(
-          createElement(TargetRow, { target, selected: false, onSelect: () => {} }),
+          createElement(TargetRow, {
+            target,
+            selected: false,
+            onSelect: () => {},
+          }),
         ),
       )
       .join('')
@@ -96,7 +104,11 @@ describe('the dev dock', () => {
         tab: 'navigate' as const,
         onTabChange: () => {},
         onNotice: () => {},
-        render: { preference: 'auto' as const, output: null, onCyclePreference: () => {} },
+        render: {
+          preference: 'auto' as const,
+          output: null,
+          onCyclePreference: () => {},
+        },
         commands: {
           togglePause: () => {},
           warp: () => {},
@@ -110,7 +122,8 @@ describe('the dev dock', () => {
     expect(markup).toContain('surveying')
     expect(markup).toContain('starting')
     // Scenario buttons come from the harness, not from a list written twice.
-    for (const name of session.harness.scenarios()) expect(markup).toContain(name)
+    for (const name of session.harness.scenarios())
+      expect(markup).toContain(name)
     session.dispose()
   })
 })

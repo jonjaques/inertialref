@@ -3,8 +3,8 @@
 > **The question:** why does rendering at 144 Hz produce the same universe as
 > rendering at 60 Hz — and the same universe as running at 100× time warp?
 > **The answer:** canonical state depends only on an integer tick count, and
-> wall clock reaches exactly one function whose only output is *how many ticks
-> to run*.
+> wall clock reaches exactly one function whose only output is _how many ticks
+> to run_.
 >
 > Decision record: [ADR-0006](../adr/0006-simulation-clock.md) ·
 > Code: `packages/simulation/src/clock.ts`
@@ -20,7 +20,7 @@ fraction. So:
 
 ```js
 // 64 Hz — exact, forever
-timeOfTick(10_000_000) === 10_000_000 / 64   // exact, no residue
+timeOfTick(10_000_000) === 10_000_000 / 64 // exact, no residue
 
 // 60 Hz — two clients reaching the same tick by different
 // routes disagree in the low bits
@@ -102,7 +102,7 @@ flowchart LR
 Because the tick duration never changes, a session played at 100× and the same
 session played at 1× reach identical state. The test runs one world at 100×
 until tick 3,200 — which takes 400 frames, not 32, because each 1/60 s frame
-*wants* 106 ticks and the step budget caps it at 8 — and another with
+_wants_ 106 ticks and the step budget caps it at 8 — and another with
 `runTicks(3_200)`, then compares the hash and the simulated time.
 
 Warp steps in the client are `1 → 5 → 25 → 100 → 1,000 → 10,000 → 100,000`.
@@ -143,7 +143,7 @@ flowchart TB
 ```
 
 This is a direct dividend of [analytic orbits](#analytic-orbits): a planet's
-position at a fractional time is *computable*, so it is computed rather than
+position at a fractional time is _computable_, so it is computed rather than
 guessed. A test asserts the half-alpha sample sits exactly midway between the
 whole ones.
 
@@ -179,7 +179,7 @@ Three consequences, all structural rather than cosmetic:
    momentum are conserved to 1e-12 over a full orbit because they are never
    integrated in the first place.
 
-The ship, which *is* integrated, uses semi-implicit (symplectic) Euler —
+The ship, which _is_ integrated, uses semi-implicit (symplectic) Euler —
 velocity first, then position from the new velocity. Explicit Euler pumps energy
 into every orbit, so a coasting ship would slowly climb out of a gravity well: a
 failure invisible for minutes and obvious after an hour of time warp.
@@ -188,15 +188,15 @@ failure invisible for minutes and obvious after an hour of time warp.
 
 ## What is asserted
 
-| Property | How |
-|---|---|
+| Property                   | How                                                             |
+| -------------------------- | --------------------------------------------------------------- |
 | Frame rate does not matter | 60 Hz and 144 Hz worlds compared by state hash at the same tick |
-| Jitter does not matter | random 4–60 ms frames vs `runTicks` |
-| Warp does not matter | 100× vs 1× |
-| Ticks convert exactly | `clock.time === 3` after 192 ticks |
-| Stalls do not spiral | 60 s delta runs ≤ 8 ticks and records the drops |
-| Pause does not drift | 5 s while paused advances zero ticks |
-| Replay is exact | identical scripted inputs → identical hash |
+| Jitter does not matter     | random 4–60 ms frames vs `runTicks`                             |
+| Warp does not matter       | 100× vs 1×                                                      |
+| Ticks convert exactly      | `clock.time === 3` after 192 ticks                              |
+| Stalls do not spiral       | 60 s delta runs ≤ 8 ticks and records the drops                 |
+| Pause does not drift       | 5 s while paused advances zero ticks                            |
+| Replay is exact            | identical scripted inputs → identical hash                      |
 
 ---
 

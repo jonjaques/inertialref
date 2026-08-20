@@ -169,8 +169,10 @@ export class WorkerPool {
 
   terminate(): void {
     this.#terminated = true
-    for (const job of this.#queue.splice(0)) job.reject(new Error('pool terminated'))
-    for (const job of this.#active.values()) job.reject(new Error('pool terminated'))
+    for (const job of this.#queue.splice(0))
+      job.reject(new Error('pool terminated'))
+    for (const job of this.#active.values())
+      job.reject(new Error('pool terminated'))
     this.#active.clear()
     for (const worker of this.#workers) worker.port.terminate()
   }
@@ -211,7 +213,10 @@ export class WorkerPool {
 
   #receive(worker: PooledWorker, message: WorkerOutbound): void {
     if (message.kind === 'ready') {
-      this.#log.debug('worker ready', { index: worker.index, tasks: message.tasks.length })
+      this.#log.debug('worker ready', {
+        index: worker.index,
+        tasks: message.tasks.length,
+      })
       return
     }
 

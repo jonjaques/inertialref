@@ -34,7 +34,7 @@ magnitude, not its value.
 The size claim is pinned by a fixed ceiling (under 2,000 bytes) plus an assertion
 that the text contains no `elevations` — not by a comparison between two worlds
 of different sizes. What it therefore proves is that no generated content is in
-the file. The file *does* grow with the number of systems visited, because
+the file. The file _does_ grow with the number of systems visited, because
 `loadedSystems` is in it; it does not grow with the size of the universe.
 
 The test that matters is not that the file contains the right fields; it is that
@@ -42,7 +42,7 @@ The test that matters is not that the file contains the right fields; it is that
 it, and that both worlds stay in step when stepped a further 300 ticks.
 
 **Loading is a pipeline of three separable stages**: parse JSON → migrate
-through a chain of single-step migrations → validate against the *current*
+through a chain of single-step migrations → validate against the _current_
 schema. Migrations operate on raw, unvalidated data and are never typed against
 the current interfaces, because a migration written against today's `SaveGame`
 silently changes meaning the day that interface changes. Keeping them separate
@@ -63,7 +63,7 @@ use an in-memory store.
 - **Snapshot everything.** Simple, and it makes the save the source of truth —
   which throws away the entire benefit of determinism and grows without bound.
 - **Store generated content lazily as a cache with the seed as the key.** A
-  reasonable *optimisation* later; as a persistence model it confuses the cache
+  reasonable _optimisation_ later; as a persistence model it confuses the cache
   with the record.
 
 ## Consequences
@@ -78,5 +78,5 @@ use an in-memory store.
   save taken mid-burn that resumed coasting is a different universe, and the
   round-trip determinism test caught exactly that.
 - Changing a generation algorithm changes what an old save loads into. The
-  version manifest makes that detectable; deciding what to *do* about it
+  version manifest makes that detectable; deciding what to _do_ about it
   (regenerate, pin the old version, migrate content) is future work.

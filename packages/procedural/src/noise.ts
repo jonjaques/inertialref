@@ -12,9 +12,18 @@ import type { Seed } from './seed.ts'
  */
 
 const GRADIENTS: readonly (readonly [number, number, number])[] = [
-  [1, 1, 0], [-1, 1, 0], [1, -1, 0], [-1, -1, 0],
-  [1, 0, 1], [-1, 0, 1], [1, 0, -1], [-1, 0, -1],
-  [0, 1, 1], [0, -1, 1], [0, 1, -1], [0, -1, -1],
+  [1, 1, 0],
+  [-1, 1, 0],
+  [1, -1, 0],
+  [-1, -1, 0],
+  [1, 0, 1],
+  [-1, 0, 1],
+  [1, 0, -1],
+  [-1, 0, -1],
+  [0, 1, 1],
+  [0, -1, 1],
+  [0, 1, -1],
+  [0, -1, -1],
 ]
 
 /** Quintic smoothstep — C2 continuous, so fBm derivatives stay clean. */
@@ -22,8 +31,17 @@ const fade = (t: number): number => t * t * t * (t * (t * 6 - 15) + 10)
 
 const lerp = (a: number, b: number, t: number): number => a + (b - a) * t
 
-function gradientDot(seed: number, ix: number, iy: number, iz: number, dx: number, dy: number, dz: number): number {
-  const g = GRADIENTS[hash3(ix ^ seed, iy, iz) % GRADIENTS.length] ?? GRADIENTS[0]
+function gradientDot(
+  seed: number,
+  ix: number,
+  iy: number,
+  iz: number,
+  dx: number,
+  dy: number,
+  dz: number,
+): number {
+  const g =
+    GRADIENTS[hash3(ix ^ seed, iy, iz) % GRADIENTS.length] ?? GRADIENTS[0]
   if (g === undefined) return 0
   return g[0] * dx + g[1] * dy + g[2] * dz
 }
@@ -79,7 +97,10 @@ export function fbm3(
   z: number,
   options: Partial<FbmOptions> = {},
 ): number {
-  const { octaves, frequency, lacunarity, gain } = { ...DEFAULT_FBM, ...options }
+  const { octaves, frequency, lacunarity, gain } = {
+    ...DEFAULT_FBM,
+    ...options,
+  }
   let sum = 0
   let amplitude = 1
   let norm = 0
@@ -104,7 +125,10 @@ export function ridged3(
   z: number,
   options: Partial<FbmOptions> = {},
 ): number {
-  const { octaves, frequency, lacunarity, gain } = { ...DEFAULT_FBM, ...options }
+  const { octaves, frequency, lacunarity, gain } = {
+    ...DEFAULT_FBM,
+    ...options,
+  }
   let sum = 0
   let amplitude = 1
   let norm = 0

@@ -3,7 +3,12 @@ import { expect as unwrap } from '@inertialref/shared'
 import { SAVE_SCHEMA_VERSION } from '@inertialref/protocol'
 import { UV, Vec, vec3 } from '@inertialref/spatial'
 import { World } from '@inertialref/simulation'
-import { bodyFrameId, systemFrameId, systemId, walkBodies } from '@inertialref/universe'
+import {
+  bodyFrameId,
+  systemFrameId,
+  systemId,
+  walkBodies,
+} from '@inertialref/universe'
 import { migrateSave } from './migrate.ts'
 import { captureSave, parseSave, restoreSave, serializeSave } from './save.ts'
 import { MemorySaveStore } from './store.ts'
@@ -13,11 +18,20 @@ const SOL = systemId('SOL')
 function flownWorld(ticks = 500) {
   const world = new World({ seed: 'inertialref' })
   const system = world.loadSystem(SOL)
-  const planet = [...walkBodies(system)].find((b) => b.kind === 'rocky' && b.radius > 1e6)
+  const planet = [...walkBodies(system)].find(
+    (b) => b.kind === 'rocky' && b.radius > 1e6,
+  )
   if (planet === undefined) throw new Error('no planet')
-  const ship = world.spawnShip('Debug One', bodyFrameId(planet.address), vec3(planet.radius * 3, 0, 0))
+  const ship = world.spawnShip(
+    'Debug One',
+    bodyFrameId(planet.address),
+    vec3(planet.radius * 3, 0, 0),
+  )
   world.entities.update(ship.id, {
-    state: { ...world.entities.require(ship.id).state, velocity: vec3(0, 0, -3_000) },
+    state: {
+      ...world.entities.require(ship.id).state,
+      velocity: vec3(0, 0, -3_000),
+    },
     control: { translation: vec3(0, 0, 0.4), rotation: vec3(0, 0.1, 0) },
   })
   world.runTicks(ticks)
@@ -57,11 +71,20 @@ describe('save round trip', () => {
   it('regenerates a surface frame for a landed ship', () => {
     const world = new World({ seed: 'inertialref' })
     const system = world.loadSystem(SOL)
-    const planet = [...walkBodies(system)].find((b) => b.kind === 'rocky' && b.atmosphere !== null)
+    const planet = [...walkBodies(system)].find(
+      (b) => b.kind === 'rocky' && b.atmosphere !== null,
+    )
     if (planet === undefined) throw new Error('no landable planet')
-    const ship = world.spawnShip('Lander', bodyFrameId(planet.address), vec3(planet.radius + 30, 0, 0))
+    const ship = world.spawnShip(
+      'Lander',
+      bodyFrameId(planet.address),
+      vec3(planet.radius + 30, 0, 0),
+    )
     world.entities.update(ship.id, {
-      state: { ...world.entities.require(ship.id).state, velocity: vec3(-2, 0, 0) },
+      state: {
+        ...world.entities.require(ship.id).state,
+        velocity: vec3(-2, 0, 0),
+      },
     })
     for (let i = 0; i < 60_000 && !world.isLanded(ship.id); i += 1) world.step()
     expect(world.isLanded(ship.id)).toBe(true)
@@ -72,14 +95,21 @@ describe('save round trip', () => {
     // the frame id, and terrain being a pure function of the seed is what makes
     // that land in exactly the same place.
     expect(restored.world.isLanded(ship.id)).toBe(true)
-    expect(UV.distance(restored.world.canonicalPositionOf(ship.id), before)).toBeLessThan(1e-3)
+    expect(
+      UV.distance(restored.world.canonicalPositionOf(ship.id), before),
+    ).toBeLessThan(1e-3)
   })
 
   it('survives a trip through text', () => {
     const { world, ship } = flownWorld(120)
-    const parsed = unwrap(parseSave(serializeSave(captureSave(world, ship.id))), 'parse')
+    const parsed = unwrap(
+      parseSave(serializeSave(captureSave(world, ship.id))),
+      'parse',
+    )
     expect(parsed.schemaVersion).toBe(SAVE_SCHEMA_VERSION)
-    expect(unwrap(restoreSave(parsed), 'restore').world.stateHash()).toBe(world.stateHash())
+    expect(unwrap(restoreSave(parsed), 'restore').world.stateHash()).toBe(
+      world.stateHash(),
+    )
   })
 
   it('goes through a store', async () => {
@@ -91,12 +121,17 @@ describe('save round trip', () => {
     const store = new MemorySaveStore()
     const { world, ship } = flownWorld(90)
 
-    unwrap(await store.write('slot-1', serializeSave(captureSave(world, ship.id))), 'write')
+    unwrap(
+      await store.write('slot-1', serializeSave(captureSave(world, ship.id))),
+      'write',
+    )
     expect(await store.list()).toEqual(['slot-1'])
 
     const contents = unwrap(await store.read('slot-1'), 'read')
     const loaded = unwrap(parseSave(contents), 'parse')
-    expect(unwrap(restoreSave(loaded), 'restore').world.stateHash()).toBe(world.stateHash())
+    expect(unwrap(restoreSave(loaded), 'restore').world.stateHash()).toBe(
+      world.stateHash(),
+    )
 
     expect((await store.read('missing')).ok).toBe(false)
 
@@ -162,7 +197,13 @@ describe('migrations', () => {
             id: '#0',
             kind: 'ship',
             name: 'x',
-            state: { frame: 's:SOL', position: [1, 2], orientation: [0, 0, 0, 1], velocity: [0, 0, 0], angularVelocity: [0, 0, 0] },
+            state: {
+              frame: 's:SOL',
+              position: [1, 2],
+              orientation: [0, 0, 0, 1],
+              velocity: [0, 0, 0],
+              angularVelocity: [0, 0, 0],
+            },
             mass: 1,
             landed: false,
             hasThrusters: false,

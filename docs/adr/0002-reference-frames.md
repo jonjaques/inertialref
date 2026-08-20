@@ -7,7 +7,7 @@ Status: accepted · 2026-08-19
 Most engines that span large scales use a hierarchy of reference frames to
 rescue floating-point precision: coordinates are kept small by being relative to
 a nearby parent. Having chosen sectorised coordinates (ADR-0001), precision is
-already solved everywhere in the universe, which changes what frames are *for*.
+already solved everywhere in the universe, which changes what frames are _for_.
 
 Something still has to answer: what does "3 m above the launch pad" mean while
 the planet orbits at 30 km/s and rotates underneath at 465 m/s?
@@ -33,11 +33,11 @@ into a planet frame mid-flight.
 
 Three frames exist per body, and the distinction is load-bearing:
 
-| Prefix | Frame | Used by |
-|---|---|---|
-| `b:` | body-centred inertial — translates along the orbit, does not spin | satellites, approaching ships |
-| `bf:` | body-fixed — spins with the body | terrain, anything bolted down |
-| `sf:` | local tangent at one lat/lon, +Y up | metre-scale gameplay, landing |
+| Prefix | Frame                                                             | Used by                       |
+| ------ | ----------------------------------------------------------------- | ----------------------------- |
+| `b:`   | body-centred inertial — translates along the orbit, does not spin | satellites, approaching ships |
+| `bf:`  | body-fixed — spins with the body                                  | terrain, anything bolted down |
+| `sf:`  | local tangent at one lat/lon, +Y up                               | metre-scale gameplay, landing |
 
 ## Alternatives considered
 

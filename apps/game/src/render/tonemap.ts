@@ -1,5 +1,13 @@
 import { CustomToneMapping, type Node, type Renderer } from 'three/webgpu'
-import { clamp, Fn, luminance, mat3, smoothstep, uniform, vec3 } from 'three/tsl'
+import {
+  clamp,
+  Fn,
+  luminance,
+  mat3,
+  smoothstep,
+  uniform,
+  vec3,
+} from 'three/tsl'
 
 /*
  * One tone curve, two output ranges.
@@ -32,15 +40,27 @@ import { clamp, Fn, luminance, mat3, smoothstep, uniform, vec3 } from 'three/tsl
 // three's `acesFilmicToneMapping` rather than referenced because the built-in
 // is not decomposed — the fit and the clamp are one function there.
 const ACES_INPUT = /*@__PURE__*/ mat3(
-  0.59719, 0.35458, 0.04823,
-  0.076, 0.90834, 0.01566,
-  0.0284, 0.13383, 0.83777,
+  0.59719,
+  0.35458,
+  0.04823,
+  0.076,
+  0.90834,
+  0.01566,
+  0.0284,
+  0.13383,
+  0.83777,
 )
 
 const ACES_OUTPUT = /*@__PURE__*/ mat3(
-  1.60475, -0.53108, -0.07367,
-  -0.10208, 1.10813, -0.00605,
-  -0.00327, -0.07276, 1.07602,
+  1.60475,
+  -0.53108,
+  -0.07367,
+  -0.10208,
+  1.10813,
+  -0.00605,
+  -0.00327,
+  -0.07276,
+  1.07602,
 )
 
 /**
@@ -74,18 +94,25 @@ const DEFAULT_SHOULDER = 0.72
  * about `CustomToneMapping` logs "Unsupported Tone Mapping configuration" and
  * renders untonemapped.
  */
-export function installToneCurve(renderer: Renderer, headroom: number): ToneCurveControls {
+export function installToneCurve(
+  renderer: Renderer,
+  headroom: number,
+): ToneCurveControls {
   const headroomUniform = uniform(headroom)
   const shoulderUniform = uniform(DEFAULT_SHOULDER)
 
   const toneCurve = Fn(([color, exposure]: [Node, Node]) => {
-    const graded = ACES_OUTPUT.mul(rrtAndOdtFit(ACES_INPUT.mul(color.mul(exposure).div(0.6))))
+    const graded = ACES_OUTPUT.mul(
+      rrtAndOdtFit(ACES_INPUT.mul(color.mul(exposure).div(0.6))),
+    )
 
     // Lift by luminance, not per channel: scaling the channels independently
     // would pull a saturated highlight towards white as it brightens, which is
     // the one thing a star's colour must not do — the star is the scene's
     // reference white and its temperature is data, not art direction.
-    const lift = smoothstep(shoulderUniform, 1, luminance(graded)).mul(headroomUniform.sub(1)).add(1)
+    const lift = smoothstep(shoulderUniform, 1, luminance(graded))
+      .mul(headroomUniform.sub(1))
+      .add(1)
 
     // Both bounds explicitly `vec3`. `clamp` builds its node from whatever it is
     // handed, and a vec3 value against float bounds generates a WGSL `clamp`

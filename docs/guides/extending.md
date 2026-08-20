@@ -56,7 +56,7 @@ sequenceDiagram
    different universe.
 5. Add a test that generates it in shuffled order and compares.
 
-**The trap.** Anything that reads *sibling* state — "make this moon bigger if
+**The trap.** Anything that reads _sibling_ state — "make this moon bigger if
 the previous one was small" — reintroduces order dependence. If you need
 correlation between siblings, derive both from the parent in a single pure
 function that produces the whole set at once.
@@ -73,7 +73,7 @@ export const myTask = defineTask<Request, Response>({
     if (context.cancelled()) return partial
     return result
   },
-  transfers: (r) => [r.buffer.buffer],   // if it returns a typed array
+  transfers: (r) => [r.buffer.buffer], // if it returns a typed array
 })
 ```
 
@@ -130,7 +130,7 @@ flowchart LR
 ```
 
 **The trap.** Doing the deciding in the React component. If the component knows
-*where* something is, that logic is untestable and the boundary has moved. The
+_where_ something is, that logic is untestable and the boundary has moved. The
 component's job is to copy numbers onto objects.
 
 Two practical rules from the existing renderer:
@@ -176,7 +176,7 @@ import { openSession } from '@inertialref/devtools'
 
 const session = openSession({
   seed: 'inertialref',
-  workers: () => createInlineWorker(registry),   // or null for no pool
+  workers: () => createInlineWorker(registry), // or null for no pool
   store: new MemorySaveStore(),
 })
 session.harness.orbit('g:milky-way/s:SOL/b:0', 400)
@@ -187,14 +187,14 @@ seed, load a system, choose a landable body, put a ship above it, stand up a
 worker pool, pick a save store, wire the harness — and returns `{ world, player,
 harness, pool, store, system, target, dispose }`.
 
-| Option | For |
-|---|---|
-| `seed`, `system`, `shipName` | what to generate |
-| `workers` | a `WorkerFactory`, or `null` for no pool at all |
-| `poolSize`, `now` | pool sizing and an injected clock |
-| `store` | a `SaveStore`; defaults to in-memory |
-| `presentation` | `scene()` / `frameStats()`, for a host that draws |
-| `onWorldReplaced` | drop derived state when a load swaps the world |
+| Option                       | For                                               |
+| ---------------------------- | ------------------------------------------------- |
+| `seed`, `system`, `shipName` | what to generate                                  |
+| `workers`                    | a `WorkerFactory`, or `null` for no pool at all   |
+| `poolSize`, `now`            | pool sizing and an injected clock                 |
+| `store`                      | a `SaveStore`; defaults to in-memory              |
+| `presentation`               | `scene()` / `frameStats()`, for a host that draws |
+| `onWorldReplaced`            | drop derived state when a load swaps the world    |
 
 Three things about it are load-bearing:
 

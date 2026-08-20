@@ -23,7 +23,12 @@ export interface ControlBindings {
   readonly onShowPerformance: () => void
 }
 
-const AXIS_KEYS: Readonly<Record<string, [axis: 'translation' | 'rotation', index: 0 | 1 | 2, sign: number]>> = {
+const AXIS_KEYS: Readonly<
+  Record<
+    string,
+    [axis: 'translation' | 'rotation', index: 0 | 1 | 2, sign: number]
+  >
+> = {
   KeyW: ['translation', 2, 1],
   KeyS: ['translation', 2, -1],
   KeyD: ['translation', 0, 1],
@@ -57,7 +62,10 @@ function isTyping(event: KeyboardEvent): boolean {
   )
 }
 
-export function useShipControls(engine: GameEngine, bindings: ControlBindings): void {
+export function useShipControls(
+  engine: GameEngine,
+  bindings: ControlBindings,
+): void {
   const held = useRef(new Set<string>())
   // The bindings close over React state, so a new object arrives on every
   // render — several times a second while the HUD polls. Reading them through a

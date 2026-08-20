@@ -89,7 +89,11 @@ export class TerrainStreamer {
    * every patch on the body and stale for all of them together — one place to
    * be wrong is better than nine.
    */
-  #pose: { origin: RenderOrigin; centre: UniverseVector; orientation: Q.Quat } | null = null
+  #pose: {
+    origin: RenderOrigin
+    centre: UniverseVector
+    orientation: Q.Quat
+  } | null = null
 
   constructor(pool: WorkerPool | null) {
     this.#pool = pool
@@ -104,7 +108,12 @@ export class TerrainStreamer {
           ? []
           : [...this.#patches.values()].map((patch) => ({
               patch,
-              placement: patchPlacement(patch, pose.origin, pose.centre, pose.orientation),
+              placement: patchPlacement(
+                patch,
+                pose.origin,
+                pose.centre,
+                pose.orientation,
+              ),
             })),
       pending: this.#inFlight.size,
       cached: this.#fields.size,
@@ -138,7 +147,11 @@ export class TerrainStreamer {
     const resolved = this.#resolve(world, renderTime, bodyAddress)
     if (resolved === null) return
     const { body, bodyPose, spinPose } = resolved
-    this.#pose = { origin, centre: bodyPose.position, orientation: spinPose.orientation }
+    this.#pose = {
+      origin,
+      centre: bodyPose.position,
+      orientation: spinPose.orientation,
+    }
 
     const distance = UV.distance(camera, bodyPose.position)
     // Away from the ground the 3×3 window is a lone tile on the datum sphere,

@@ -48,12 +48,16 @@ export function hashString(text: string, seed = 0): number {
 
 /** Mix two 32-bit values into one. Used for lattice coordinates in noise. */
 export function hash2(a: number, b: number): number {
-  return mix32((Math.imul(a | 0, 0x9e37_79b1) ^ Math.imul(b | 0, 0x85eb_ca6b)) | 0)
+  return mix32(
+    (Math.imul(a | 0, 0x9e37_79b1) ^ Math.imul(b | 0, 0x85eb_ca6b)) | 0,
+  )
 }
 
 export function hash3(a: number, b: number, c: number): number {
   return mix32(
-    (Math.imul(a | 0, 0x9e37_79b1) ^ Math.imul(b | 0, 0x85eb_ca6b) ^ Math.imul(c | 0, 0xc2b2_ae35)) |
+    (Math.imul(a | 0, 0x9e37_79b1) ^
+      Math.imul(b | 0, 0x85eb_ca6b) ^
+      Math.imul(c | 0, 0xc2b2_ae35)) |
       0,
   )
 }

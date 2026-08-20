@@ -7,7 +7,12 @@ import { HudDock, type HudCommands, type HudTab } from './hud/HudDock.tsx'
 import { usePersistentState } from './hud/panelState.ts'
 import { useShipControls } from './hud/useShipControls.ts'
 import { EXTENDED_RANGE_QUERY, watchDynamicRange } from './render/capability.ts'
-import { commitToneCurve, createRenderer, releaseRenderer, type RendererHandle } from './render/createRenderer.ts'
+import {
+  commitToneCurve,
+  createRenderer,
+  releaseRenderer,
+  type RendererHandle,
+} from './render/createRenderer.ts'
 import type { OutputPreference, RendererDescription } from './render/output.ts'
 import { SceneView } from './scene/SceneView.tsx'
 
@@ -30,7 +35,10 @@ import { SceneView } from './scene/SceneView.tsx'
 let singleton: GameEngine | null = null
 
 function engineInstance(): GameEngine {
-  singleton ??= new GameEngine({ seed: new URLSearchParams(window.location.search).get('seed') ?? 'inertialref' })
+  singleton ??= new GameEngine({
+    seed:
+      new URLSearchParams(window.location.search).get('seed') ?? 'inertialref',
+  })
   return singleton
 }
 
@@ -56,7 +64,10 @@ const HDR_STATES: readonly OutputPreference[] = ['auto', 'extended', 'standard']
  * preference a window dragged between monitors changes nothing, and remounting
  * the whole scene for it would be a visible stall in exchange for no difference.
  */
-function rendererKey(preference: OutputPreference, dynamicRangeHigh: boolean): string {
+function rendererKey(
+  preference: OutputPreference,
+  dynamicRangeHigh: boolean,
+): string {
   return preference === 'auto' ? `auto:${dynamicRangeHigh}` : preference
 }
 
@@ -75,7 +86,10 @@ export default function App() {
    * directions. Persisted, because a player who turned it off did not mean
    * "until the next reload".
    */
-  const [hdr, setHdr] = usePersistentState<OutputPreference>('render.hdr', 'auto')
+  const [hdr, setHdr] = usePersistentState<OutputPreference>(
+    'render.hdr',
+    'auto',
+  )
   const [dynamicRangeHigh, setDynamicRangeHigh] = useState(
     () => window.matchMedia(EXTENDED_RANGE_QUERY).matches,
   )
@@ -113,9 +127,16 @@ export default function App() {
     const globalScope = window as unknown as Record<string, unknown>
     globalScope['ir'] = engine.harness
     globalScope['engine'] = engine
-    console.info('%cInertialRef', 'color:#38bdf8;font-weight:bold', '— harness ready. Try ir.help()')
+    console.info(
+      '%cInertialRef',
+      'color:#38bdf8;font-weight:bold',
+      '— harness ready. Try ir.help()',
+    )
 
-    const timer = window.setInterval(() => setStatus(engine.harness.status()), 1000 / PANEL_HZ)
+    const timer = window.setInterval(
+      () => setStatus(engine.harness.status()),
+      1000 / PANEL_HZ,
+    )
     return () => window.clearInterval(timer)
   }, [engine])
 
@@ -133,11 +154,18 @@ export default function App() {
     warp: (direction) => {
       const current = engine.world.clock.timeScale
       const index = WARP_STEPS.findIndex((step) => step >= current)
-      const next = WARP_STEPS[Math.min(WARP_STEPS.length - 1, Math.max(0, (index < 0 ? 0 : index) + direction))] ?? 1
+      const next =
+        WARP_STEPS[
+          Math.min(
+            WARP_STEPS.length - 1,
+            Math.max(0, (index < 0 ? 0 : index) + direction),
+          )
+        ] ?? 1
       engine.world.clock.setTimeScale(next)
       flash(`time warp ${next}×`)
     },
-    toggleAssist: () => flash(`flight assist ${engine.toggleFlightAssist() ? 'on' : 'off'}`),
+    toggleAssist: () =>
+      flash(`flight assist ${engine.toggleFlightAssist() ? 'on' : 'off'}`),
     killRotation: () => {
       engine.killRotation()
       flash('rotation killed')
@@ -218,7 +246,9 @@ export default function App() {
             preference: hdr,
             output,
             onCyclePreference: () => {
-              const next = HDR_STATES[(HDR_STATES.indexOf(hdr) + 1) % HDR_STATES.length] ?? 'auto'
+              const next =
+                HDR_STATES[(HDR_STATES.indexOf(hdr) + 1) % HDR_STATES.length] ??
+                'auto'
               // The renderer is rebuilt for this, so say what happened —
               // otherwise the only feedback is a frame the player may not be
               // able to see the difference in, which is the whole problem.

@@ -9,17 +9,17 @@ and to this machine, and points at AGENTS.md for everything else.
 
 ## Orientation
 
-| File | What it is |
-|---|---|
-| `AGENTS.md` | How to work here: rules, conventions, testing, the harness. Read first. |
-| `docs/` | Explanatory documentation — concepts, diagrams, guides, decision records. |
-| `docs/design/` | The game design bible — what the game is, and why each mechanic is shaped that way. |
-| `docs/vision.md` | What the project is for, and the principles behind architectural choices. |
-| `docs/architecture.md` | The system in one sitting. |
-| `docs/adr/` | The nine foundational decisions, with alternatives and consequences. |
-| `docs/roadmap.md` | What is deliberately not built yet, and the seam for each. |
-| `CONTEXT.md` | Build log — what exists, what was decided, which bugs must not return. |
-| `README.md` | Overview and the twelve proven capabilities. |
+| File                   | What it is                                                                          |
+| ---------------------- | ----------------------------------------------------------------------------------- |
+| `AGENTS.md`            | How to work here: rules, conventions, testing, the harness. Read first.             |
+| `docs/`                | Explanatory documentation — concepts, diagrams, guides, decision records.           |
+| `docs/design/`         | The game design bible — what the game is, and why each mechanic is shaped that way. |
+| `docs/vision.md`       | What the project is for, and the principles behind architectural choices.           |
+| `docs/architecture.md` | The system in one sitting.                                                          |
+| `docs/adr/`            | The nine foundational decisions, with alternatives and consequences.                |
+| `docs/roadmap.md`      | What is deliberately not built yet, and the seam for each.                          |
+| `CONTEXT.md`           | Build log — what exists, what was decided, which bugs must not return.              |
+| `README.md`            | Overview and the twelve proven capabilities.                                        |
 
 ## Commands
 
@@ -45,7 +45,7 @@ pnpm vitest run <substring>    # a single test file
 
 ## Toolchain facts that will otherwise surprise you
 
-- **Vite 8** with `@vitejs/plugin-react` (Oxc transform) *and*
+- **Vite 8** with `@vitejs/plugin-react` (Oxc transform) _and_
   `@rolldown/plugin-babel` running `reactCompilerPreset()`. **React Compiler is
   on** — do not hand-write `useMemo`/`useCallback` memoisation. `useMemo` for a
   stable Three.js object is a different thing and is fine.

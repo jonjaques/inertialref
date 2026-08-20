@@ -9,7 +9,12 @@ import {
   Vec,
   vec3,
 } from '@inertialref/spatial'
-import { generateHeightfield, HEIGHTFIELD_RESOLUTION, isLandable, walkBodies } from '@inertialref/universe'
+import {
+  generateHeightfield,
+  HEIGHTFIELD_RESOLUTION,
+  isLandable,
+  walkBodies,
+} from '@inertialref/universe'
 import {
   bodyFrameId,
   catalogStub,
@@ -24,7 +29,11 @@ import { generateSystem, MILKY_WAY } from '@inertialref/universe'
 import { snapshot, World } from '@inertialref/simulation'
 import { captureSave, restoreSave } from '@inertialref/persistence'
 import { placeAt } from '@inertialref/rendering'
-import { generateHeightfieldTask, runInline, type WorkerPool } from '@inertialref/workers'
+import {
+  generateHeightfieldTask,
+  runInline,
+  type WorkerPool,
+} from '@inertialref/workers'
 
 /*
  * The twelve capability checks.
@@ -70,14 +79,22 @@ function firstSolidBody(world: World) {
   throw new Error('no solid body in SOL')
 }
 
-const pass = (index: number, name: string, detail: string): CapabilityResult => ({
+const pass = (
+  index: number,
+  name: string,
+  detail: string,
+): CapabilityResult => ({
   index,
   name,
   passed: true,
   detail,
 })
 
-const failure = (index: number, name: string, detail: string): CapabilityResult => ({
+const failure = (
+  index: number,
+  name: string,
+  detail: string,
+): CapabilityResult => ({
   index,
   name,
   passed: false,
@@ -87,30 +104,59 @@ const failure = (index: number, name: string, detail: string): CapabilityResult 
 /** 1. Deterministically generate the same systems from the global seed. */
 function checkDeterministicGeneration(): CapabilityResult {
   const stub = catalogStub(CATALOG[2] as (typeof CATALOG)[number])
-  const a = JSON.stringify(generateSystem(rootSeed('inertialref'), MILKY_WAY, stub))
-  const b = JSON.stringify(generateSystem(rootSeed('inertialref'), MILKY_WAY, stub))
-  const other = JSON.stringify(generateSystem(rootSeed('different'), MILKY_WAY, stub))
-  if (a !== b) return failure(1, 'Deterministic generation', 'same seed produced two universes')
-  if (a === other) return failure(1, 'Deterministic generation', 'seed had no effect')
-  return pass(1, 'Deterministic generation', `${stub.name} identical across runs, differs by seed`)
+  const a = JSON.stringify(
+    generateSystem(rootSeed('inertialref'), MILKY_WAY, stub),
+  )
+  const b = JSON.stringify(
+    generateSystem(rootSeed('inertialref'), MILKY_WAY, stub),
+  )
+  const other = JSON.stringify(
+    generateSystem(rootSeed('different'), MILKY_WAY, stub),
+  )
+  if (a !== b)
+    return failure(
+      1,
+      'Deterministic generation',
+      'same seed produced two universes',
+    )
+  if (a === other)
+    return failure(1, 'Deterministic generation', 'seed had no effect')
+  return pass(
+    1,
+    'Deterministic generation',
+    `${stub.name} identical across runs, differs by seed`,
+  )
 }
 
 /** 2. Address every generated object with a stable id. */
 function checkStableAddressing(world: World): CapabilityResult {
   const system = world.system(SOL)
-  if (system === undefined) return failure(2, 'Stable addressing', 'SOL not loaded')
+  if (system === undefined)
+    return failure(2, 'Stable addressing', 'SOL not loaded')
   let count = 0
   for (const body of walkBodies(system)) {
     const text = formatAddress(body.address)
     if (formatAddress(parseAddress(text)) !== text) {
-      return failure(2, 'Stable addressing', `${text} did not survive a round trip`)
+      return failure(
+        2,
+        'Stable addressing',
+        `${text} did not survive a round trip`,
+      )
     }
     if (body.id !== `@${text}`) {
-      return failure(2, 'Stable addressing', `entity id ${body.id} disagrees with ${text}`)
+      return failure(
+        2,
+        'Stable addressing',
+        `entity id ${body.id} disagrees with ${text}`,
+      )
     }
     count += 1
   }
-  return pass(2, 'Stable addressing', `${count} bodies addressed and round-tripped`)
+  return pass(
+    2,
+    'Stable addressing',
+    `${count} bodies addressed and round-tripped`,
+  )
 }
 
 /** 3. Place systems at astronomical distances. */
@@ -119,22 +165,41 @@ function checkAstronomicalDistances(world: World): CapabilityResult {
   const alpha = world.loadSystem(ALPHA_CENTAURI)
   const lightYears = UV.distance(sol.position, alpha.position) / LIGHT_YEAR
   if (Math.abs(lightYears - 4.365) > 0.01) {
-    return failure(3, 'Astronomical distances', `Sol to Alpha Centauri came out ${lightYears.toFixed(3)} ly`)
+    return failure(
+      3,
+      'Astronomical distances',
+      `Sol to Alpha Centauri came out ${lightYears.toFixed(3)} ly`,
+    )
   }
-  return pass(3, 'Astronomical distances', `Sol to Alpha Centauri: ${lightYears.toFixed(4)} ly`)
+  return pass(
+    3,
+    'Astronomical distances',
+    `Sol to Alpha Centauri: ${lightYears.toFixed(4)} ly`,
+  )
 }
 
 /** 4. Move within a system. */
 function checkMovementWithinSystem(): CapabilityResult {
   const world = scratchWorld()
   const ship = world.spawnShip('probe', systemFrameId(SOL), vec3(1e9, 0, 0))
-  world.entities.update(ship.id, { control: { translation: vec3(0, 0, 1), rotation: Vec.ZERO } })
+  world.entities.update(ship.id, {
+    control: { translation: vec3(0, 0, 1), rotation: Vec.ZERO },
+  })
   const before = world.canonicalPositionOf(ship.id)
   world.runTicks(640)
   const travelled = UV.distance(before, world.canonicalPositionOf(ship.id))
   // 10 s at 30 m/s² is ~1.5 km under thrust alone.
-  if (travelled < 1_000) return failure(4, 'Movement within a system', `only moved ${travelled.toFixed(1)} m`)
-  return pass(4, 'Movement within a system', `${(travelled / 1000).toFixed(2)} km under thrust in 10 s`)
+  if (travelled < 1_000)
+    return failure(
+      4,
+      'Movement within a system',
+      `only moved ${travelled.toFixed(1)} m`,
+    )
+  return pass(
+    4,
+    'Movement within a system',
+    `${(travelled / 1000).toFixed(2)} km under thrust in 10 s`,
+  )
 }
 
 /**
@@ -150,7 +215,11 @@ function checkApproach(): CapabilityResult {
   const world = scratchWorld()
   const planet = firstSolidBody(world)
   const radius = planet.radius * 20
-  const ship = world.spawnShip('inbound', bodyFrameId(planet.address), vec3(radius, 0, 0))
+  const ship = world.spawnShip(
+    'inbound',
+    bodyFrameId(planet.address),
+    vec3(radius, 0, 0),
+  )
   const seconds = 60
   world.runTicks(64 * seconds)
 
@@ -159,7 +228,8 @@ function checkApproach(): CapabilityResult {
   const gravity = planet.mu / (radius * radius)
   const predicted = 0.5 * gravity * seconds * seconds
   const error = Math.abs(fallen - predicted) / predicted
-  if (fallen <= 0) return failure(5, 'Approach a planet', 'gravity did not pull the ship in')
+  if (fallen <= 0)
+    return failure(5, 'Approach a planet', 'gravity did not pull the ship in')
   if (error > 0.02) {
     return failure(
       5,
@@ -182,7 +252,10 @@ function checkFrameTransition(): CapabilityResult {
   const planetPose = world.frames.pose(bodyFrameId(planet.address), t)
   const systemPose = world.frames.pose(systemFrameId(SOL), t)
   const toPlanet = UV.difference(planetPose.position, systemPose.position)
-  const start = Vec.withLength(toPlanet, Vec.length(toPlanet) - planet.sphereOfInfluence * 1.02)
+  const start = Vec.withLength(
+    toPlanet,
+    Vec.length(toPlanet) - planet.sphereOfInfluence * 1.02,
+  )
   const ship = world.spawnShip('inbound', systemFrameId(SOL), start)
   world.entities.update(ship.id, {
     state: {
@@ -197,7 +270,8 @@ function checkFrameTransition(): CapabilityResult {
     world.step()
     changed = world.entities.require(ship.id).state.frame !== systemFrameId(SOL)
   }
-  if (!changed) return failure(6, 'Frame transitions', 'never entered the planet frame')
+  if (!changed)
+    return failure(6, 'Frame transitions', 'never entered the planet frame')
   const drift = UV.distance(canonicalBefore, world.canonicalPositionOf(ship.id))
   return pass(
     6,
@@ -216,7 +290,11 @@ function checkSurfacePrecision(world: World): CapabilityResult {
   const measured = UV.distance(origin, inch)
   const error = Math.abs(measured - 0.0254)
   if (error > UV.POSITION_RESOLUTION * 4) {
-    return failure(7, 'Precision near the surface', `an inch measured ${measured} m`)
+    return failure(
+      7,
+      'Precision near the surface',
+      `an inch measured ${measured} m`,
+    )
   }
   const outFromGalacticCentre = UV.distance(origin, UV.UNIVERSE_ORIGIN)
   return pass(
@@ -234,18 +312,31 @@ function checkMeterScaleRendering(world: World): CapabilityResult {
   const origin = createRenderOrigin(pose.position)
   const a = placeAt(origin, UV.translate(pose.position, vec3(0, 1.8, 0)), 0.5)
   const b = placeAt(origin, UV.translate(pose.position, vec3(1, 1.8, 0)), 0.5)
-  const separation = Vec.distance(Vec.toFloat32(a.position), Vec.toFloat32(b.position))
+  const separation = Vec.distance(
+    Vec.toFloat32(a.position),
+    Vec.toFloat32(b.position),
+  )
   if (Math.abs(separation - 1) > 1e-3) {
-    return failure(8, 'Meter-scale rendering', `two points 1 m apart rendered ${separation} m apart`)
+    return failure(
+      8,
+      'Meter-scale rendering',
+      `two points 1 m apart rendered ${separation} m apart`,
+    )
   }
-  if (a.compressed) return failure(8, 'Meter-scale rendering', 'near field was compressed')
-  return pass(8, 'Meter-scale rendering', `1 m separation survives float32 at ${(UV.distance(pose.position, UV.UNIVERSE_ORIGIN) / 3.0857e19).toFixed(2)} kpc`)
+  if (a.compressed)
+    return failure(8, 'Meter-scale rendering', 'near field was compressed')
+  return pass(
+    8,
+    'Meter-scale rendering',
+    `1 m separation survives float32 at ${(UV.distance(pose.position, UV.UNIVERSE_ORIGIN) / 3.0857e19).toFixed(2)} kpc`,
+  )
 }
 
 /** 9. Rebase rendering origins without moving canonical entities. */
 function checkOriginRebasing(world: World): CapabilityResult {
   const system = world.system(SOL)
-  if (system === undefined) return failure(9, 'Origin rebasing', 'SOL not loaded')
+  if (system === undefined)
+    return failure(9, 'Origin rebasing', 'SOL not loaded')
   const target = system.position
   let origin = createRenderOrigin(target)
   const entity = UV.translate(target, vec3(3_000, 200, -50))
@@ -258,14 +349,26 @@ function checkOriginRebasing(world: World): CapabilityResult {
   const shift = UV.difference(origin.position, target)
   const expected = renderBefore.x - shift.x
   if (Math.abs(renderAfter.x - expected) > 1e-6) {
-    return failure(9, 'Origin rebasing', `render position drifted by ${renderAfter.x - expected} m`)
+    return failure(
+      9,
+      'Origin rebasing',
+      `render position drifted by ${renderAfter.x - expected} m`,
+    )
   }
-  if (shift.x % 1024 !== 0) return failure(9, 'Origin rebasing', 'origin left the snap grid')
-  return pass(9, 'Origin rebasing', `500 rebases, ${(shift.x / 1000).toFixed(0)} km of origin travel, zero drift`)
+  if (shift.x % 1024 !== 0)
+    return failure(9, 'Origin rebasing', 'origin left the snap grid')
+  return pass(
+    9,
+    'Origin rebasing',
+    `500 rebases, ${(shift.x / 1000).toFixed(0)} km of origin travel, zero drift`,
+  )
 }
 
 /** 10. Run at least one meaningful procedural task in a worker. */
-async function checkWorkerTask(world: World, pool: WorkerPool | null): Promise<CapabilityResult> {
+async function checkWorkerTask(
+  world: World,
+  pool: WorkerPool | null,
+): Promise<CapabilityResult> {
   const planet = firstSolidBody(world)
   const payload = {
     surfaceSeed: formatSeed(planet.surface.seed),
@@ -279,11 +382,18 @@ async function checkWorkerTask(world: World, pool: WorkerPool | null): Promise<C
     region: payload.region,
     resolution: HEIGHTFIELD_RESOLUTION,
   })
-  const remote = pool === null ? await runInline(generateHeightfieldTask, payload) : await pool.run(generateHeightfieldTask, payload)
+  const remote =
+    pool === null
+      ? await runInline(generateHeightfieldTask, payload)
+      : await pool.run(generateHeightfieldTask, payload)
 
   for (let i = 0; i < local.elevations.length; i += 1) {
     if (local.elevations[i] !== remote.elevations[i]) {
-      return failure(10, 'Worker task', `sample ${i} differed between worker and main thread`)
+      return failure(
+        10,
+        'Worker task',
+        `sample ${i} differed between worker and main thread`,
+      )
     }
   }
   return pass(
@@ -300,10 +410,18 @@ function checkSaveRoundTrip(world: World): CapabilityResult {
   const restored = restoreSave(save)
   if (!restored.ok) return failure(11, 'Save round trip', restored.error)
   if (restored.value.world.stateHash() !== world.stateHash()) {
-    return failure(11, 'Save round trip', 'restored world has a different state hash')
+    return failure(
+      11,
+      'Save round trip',
+      'restored world has a different state hash',
+    )
   }
   const bytes = JSON.stringify(save).length
-  return pass(11, 'Save round trip', `${bytes} bytes restored to an identical state hash`)
+  return pass(
+    11,
+    'Save round trip',
+    `${bytes} bytes restored to an identical state hash`,
+  )
 }
 
 /** 12. Run the simulation independently of render frame rate. */
@@ -312,9 +430,16 @@ function checkFrameRateIndependence(): CapabilityResult {
     const world = scratchWorld()
     const planet = firstSolidBody(world)
     const speed = circularSpeed(planet.mu, planet.radius * 2)
-    const ship = world.spawnShip('probe', bodyFrameId(planet.address), vec3(planet.radius * 2, 0, 0))
+    const ship = world.spawnShip(
+      'probe',
+      bodyFrameId(planet.address),
+      vec3(planet.radius * 2, 0, 0),
+    )
     world.entities.update(ship.id, {
-      state: { ...world.entities.require(ship.id).state, velocity: vec3(0, 0, -speed) },
+      state: {
+        ...world.entities.require(ship.id).state,
+        velocity: vec3(0, 0, -speed),
+      },
     })
     return world
   }
@@ -329,9 +454,17 @@ function checkFrameRateIndependence(): CapabilityResult {
   }
   steady.runTicks(jittery.clock.tick)
   if (jittery.stateHash() !== steady.stateHash()) {
-    return failure(12, 'Frame-rate independence', 'jittery frames produced a different universe')
+    return failure(
+      12,
+      'Frame-rate independence',
+      'jittery frames produced a different universe',
+    )
   }
-  return pass(12, 'Frame-rate independence', `identical state hash ${steady.stateHash()} at tick ${steady.clock.tick}`)
+  return pass(
+    12,
+    'Frame-rate independence',
+    `identical state hash ${steady.stateHash()} at tick ${steady.clock.tick}`,
+  )
 }
 
 /**
@@ -341,9 +474,12 @@ function checkFrameRateIndependence(): CapabilityResult {
  * self-test, because the most useful time to run this is when something is
  * already broken.
  */
-export async function runCapabilityChecks(context: CapabilityContext): Promise<readonly CapabilityResult[]> {
+export async function runCapabilityChecks(
+  context: CapabilityContext,
+): Promise<readonly CapabilityResult[]> {
   const world = context.world
-  const checks: readonly (() => CapabilityResult | Promise<CapabilityResult>)[] = [
+  const checks: readonly (() =>
+    CapabilityResult | Promise<CapabilityResult>)[] = [
     () => checkDeterministicGeneration(),
     () => checkStableAddressing(world),
     () => checkAstronomicalDistances(world),
@@ -364,19 +500,28 @@ export async function runCapabilityChecks(context: CapabilityContext): Promise<r
       results.push(await check())
     } catch (cause) {
       results.push(
-        failure(index + 1, 'Capability check', cause instanceof Error ? cause.message : String(cause)),
+        failure(
+          index + 1,
+          'Capability check',
+          cause instanceof Error ? cause.message : String(cause),
+        ),
       )
     }
   }
   return results
 }
 
-export function summarizeCapabilities(results: readonly CapabilityResult[]): string {
+export function summarizeCapabilities(
+  results: readonly CapabilityResult[],
+): string {
   const passed = results.filter((r) => r.passed).length
   const lines = results.map(
-    (r) => `${r.passed ? 'PASS' : 'FAIL'} ${String(r.index).padStart(2)}. ${r.name} — ${r.detail}`,
+    (r) =>
+      `${r.passed ? 'PASS' : 'FAIL'} ${String(r.index).padStart(2)}. ${r.name} — ${r.detail}`,
   )
-  return [`${passed}/${results.length} capabilities proven`, ...lines].join('\n')
+  return [`${passed}/${results.length} capabilities proven`, ...lines].join(
+    '\n',
+  )
 }
 
 export { snapshot }

@@ -6,9 +6,9 @@ who this is for and what it is up against.
 > Read this and [loops](loops.md) and you have the game. Everything else in this
 > directory is depth.
 
-| Version | Date | Author | Changes |
-|---|---|---|---|
-| 0.1 | 2026-08-19 | Jon Jaques | First edition, written against milestone 1 |
+| Version | Date       | Author     | Changes                                    |
+| ------- | ---------- | ---------- | ------------------------------------------ |
+| 0.1     | 2026-08-19 | Jon Jaques | First edition, written against milestone 1 |
 
 ---
 
@@ -38,7 +38,7 @@ orbit to surface but its planets are airless outside expansions and its galaxy i
 synthetic beyond the local bubble. Star Citizen is seamless and gorgeous inside a
 handful of hand-built systems and is not a galaxy at all. No Man's Sky is a
 galaxy and is not real, and its planet-to-space transition is a curated wipe. The
-intersection — *real astronomy, continuous scale, one body, one cockpit* — is
+intersection — _real astronomy, continuous scale, one body, one cockpit_ — is
 empty.
 
 **2. The hard part is already done and it is provable.** Milestone 1 was not a
@@ -53,8 +53,8 @@ refactor.
 
 **3. Zero install is a distribution advantage nobody in this genre has.** The
 comparable titles are 100 GB downloads gated behind a store account. This is a
-link. That is not a small thing for a genre whose central pleasure — *look at
-this thing I found* — is inherently social and inherently a thing you want to
+link. That is not a small thing for a genre whose central pleasure — _look at
+this thing I found_ — is inherently social and inherently a thing you want to
 send someone. A 696-byte save means a coordinate **is** the share.
 
 > 🎮 Designer's Note: The instinct will be to fight the browser and chase Star
@@ -68,7 +68,7 @@ send someone. A 696-byte save means a coordinate **is** the share.
 ## The four pillars
 
 Every feature must serve at least one. A feature serving none is cut. A feature
-that *violates* one needs an ADR, not a discussion.
+that _violates_ one needs an ADR, not a discussion.
 
 ```mermaid
 flowchart TB
@@ -90,12 +90,12 @@ through half a dozen internal representation changes and must not be able to nam
 a single one of them. No loading screen, no fade, no cutscene, no docking
 animation that hides a level swap, no "entering atmosphere" transition.
 
-*What this forbids:* any feature whose implementation is easiest as a separate
+_What this forbids:_ any feature whose implementation is easiest as a separate
 scene. Interiors are in the world. Stations are in the world. The galaxy map is a
 HUD overlay drawn over a still-running cockpit, not a screen you go to.
 
-*Already proven:* frame transitions mid-flight, floating-origin rebasing, landing.
-*Still required:* LOD cross-fade and terrain geomorphing — see
+_Already proven:_ frame transitions mid-flight, floating-origin rebasing, landing.
+_Still required:_ LOD cross-fade and terrain geomorphing — see
 [art](art.md#continuity--the-no-pop-in-specification).
 
 ### Pillar 2 — The Sky Is Real
@@ -106,19 +106,19 @@ from published data wherever published data exists, and every derived property �
 luminosity, habitable zone, colour on screen — follows from it physically rather
 than aesthetically.
 
-*What this forbids:* inventing a nicer sky. If Barnard's Star is a dim red dwarf
+_What this forbids:_ inventing a nicer sky. If Barnard's Star is a dim red dwarf
 it is a dim red dwarf in the cockpit, and if that makes for a boring system then
 the boring system is the content. The interesting design work is making truth
 interesting, not replacing it.
 
-*The data is real; the image is photographed.* The canopy is a sensor, not a
+_The data is real; the image is photographed._ The canopy is a sensor, not a
 window — an image composited from hull sensors with gain, integration time and a
 selectable response curve. That distinction is what lets the game be as beautiful
 as the cosmos actually is without falsifying a single number, because nearly
-everything that would make space more beautiful is *already there* and merely
+everything that would make space more beautiful is _already there_ and merely
 below the threshold of human vision. See [art](art.md#the-canopy-is-a-sensor-not-a-window).
 
-*Consequence:* the dataset changes underneath us, permanently and forever. That is
+_Consequence:_ the dataset changes underneath us, permanently and forever. That is
 not a bug to be managed but the source of a mechanic — see
 [galaxy](galaxy.md#catalogue-revisions).
 
@@ -126,17 +126,17 @@ not a bug to be managed but the source of a mechanic — see
 
 Nothing in the game stops instantly. Not the ship, not the player, not a thrown
 object. Every travel mechanic — attitude thrusters, the main burn, even the jump
-— is fundamentally a problem of *shedding velocity you already have*, and the fun
+— is fundamentally a problem of _shedding velocity you already have_, and the fun
 is in planning that well and then executing it.
 
-*What this forbids:* a brake key. Arcade "space friction". A travel mode that
+_What this forbids:_ a brake key. Arcade "space friction". A travel mode that
 snaps to a stop on arrival. Autopilot that makes the problem go away rather than
 solving it visibly.
 
-*How it is expressed:* [brachistochrone burns](flight.md#the-burn) — accelerate,
+_How it is expressed:_ [brachistochrone burns](flight.md#the-burn) — accelerate,
 flip, decelerate. Not a throttle you correct, a plan you commit to.
 
-*Already proven:* 6-DoF rigid-body integration, patched-conic gravity, drag,
+_Already proven:_ 6-DoF rigid-body integration, patched-conic gravity, drag,
 landing at free-fall accuracy within 0.03%.
 
 ### Pillar 4 — You Are One Person
@@ -147,10 +147,10 @@ sheet you visit. You see a cockpit through a visor, or a corridor through a
 visor, and the interface is diegetic wherever a real instrument could plausibly
 show it.
 
-*What this forbids:* fleet command, base-building from above, an RTS layer, an
+_What this forbids:_ fleet command, base-building from above, an RTS layer, an
 inventory screen that pauses the world.
 
-*Consequence:* every system in the game needs an answer to "where is this
+_Consequence:_ every system in the game needs an answer to "where is this
 displayed, physically?" That constraint is what will make the cockpit good.
 
 > 🎮 Designer's Note: Pillar 4 is the one that will be argued with most, because
@@ -170,16 +170,16 @@ systems-RPG progression.
 
 Positioned in one line each:
 
-| | What it is | What we take | What we do differently |
-|---|---|---|---|
-| **Elite Dangerous** | The exploration loop, perfected | Fuel-gated route planning, first-discovery credit, cockpit discipline, the A–E module grades | A *real* local galaxy rather than a synthetic one; seamless atmospheric worlds as the base case; *The Expanse*-style burns instead of supercruise; no grind economy |
-| **Star Citizen** | Fidelity and continuity in a few systems | Seamless ship interiors, physicalised interaction, first-person everything | Galaxy scale instead of set scale; ships in a browser tab instead of a 120 GB install; shipping instead of not |
-| **No Man's Sky** | Procedural breadth and the joy of naming things | Discovery-as-reward, generation as content, planetary variety | Real astronomy underneath, real orbital mechanics, real momentum |
+|                     | What it is                                      | What we take                                                                                 | What we do differently                                                                                                                                              |
+| ------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Elite Dangerous** | The exploration loop, perfected                 | Fuel-gated route planning, first-discovery credit, cockpit discipline, the A–E module grades | A _real_ local galaxy rather than a synthetic one; seamless atmospheric worlds as the base case; _The Expanse_-style burns instead of supercruise; no grind economy |
+| **Star Citizen**    | Fidelity and continuity in a few systems        | Seamless ship interiors, physicalised interaction, first-person everything                   | Galaxy scale instead of set scale; ships in a browser tab instead of a 120 GB install; shipping instead of not                                                      |
+| **No Man's Sky**    | Procedural breadth and the joy of naming things | Discovery-as-reward, generation as content, planetary variety                                | Real astronomy underneath, real orbital mechanics, real momentum                                                                                                    |
 
 The positioning sentence, for external use:
 
-> *Elite Dangerous's exploration loop, run on real astronomy, seamless all the way
-> down to your hands, in a browser tab.*
+> _Elite Dangerous's exploration loop, run on real astronomy, seamless all the way
+> down to your hands, in a browser tab._
 
 See [competitive](competitive.md) for the full analysis.
 
@@ -189,8 +189,8 @@ See [competitive](competitive.md) for the full analysis.
 
 **Primary — the survey pilot.** 25–50, plays Elite Dangerous, Kerbal Space
 Program, Microsoft Flight Simulator, Outer Wilds. Reads a Wikipedia article about
-a star after visiting it. Owns a HOTAS or wants an excuse to. Values *knowing
-where they are* more than winning. Will spend an hour flying somewhere quiet and
+a star after visiting it. Owns a HOTAS or wants an excuse to. Values _knowing
+where they are_ more than winning. Will spend an hour flying somewhere quiet and
 call it a good evening.
 
 **Secondary — the technically curious.** Developers, astronomy hobbyists, and
@@ -204,7 +204,7 @@ optimised for them and attempts to serve them will damage pillars 3 and 4.
 
 **Session assumption:** 45–120 minutes typical, and the design must tolerate a
 30-minute session ending mid-flight. The save is 696 bytes and restores an
-identical state hash, so *quit anywhere* is already true and should be treated as
+identical state hash, so _quit anywhere_ is already true and should be treated as
 a hard requirement rather than a nicety.
 
 ---
@@ -225,20 +225,20 @@ cost question, which is hosting the persistent universe.
 
 ## At a glance
 
-| | |
-|---|---|
-| **Working title** | InertialRef (engine and game share the name) *(Resolved: engine and game share the name. The
-[Reference Drive](flight.md#the-reference-drive) fiction makes it diegetic rather
-than technical, and for an open-source project the engine identity is an asset.)* |
-| **Genre** | First-person spaceflight simulator / exploration sim |
-| **Platform** | Browser (WebGPU); desktop wrapper considered later, not designed for |
-| **Audience** | 25–50, simulation-literate, hardcore-patient |
-| **Modes** | Solo offline · Solo online · Persistent universe |
-| **Business model** | Open source, non-commercial |
-| **Team** | One person directing coding agents |
-| **Engine** | Custom TypeScript simulation core; Three.js today, WebGPU planned |
-| **Current state** | Milestone 1 complete — 12/12 capability checks pass in Node and Chrome, online and offline |
-| **Named MVP** | **The Explorer** — see [production](production.md#the-mvp-the-explorer) |
+|                                                                                   |                                                                                              |
+| --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| **Working title**                                                                 | InertialRef (engine and game share the name) *(Resolved: engine and game share the name. The |
+| [Reference Drive](flight.md#the-reference-drive) fiction makes it diegetic rather |
+| than technical, and for an open-source project the engine identity is an asset.)* |
+| **Genre**                                                                         | First-person spaceflight simulator / exploration sim                                         |
+| **Platform**                                                                      | Browser (WebGPU); desktop wrapper considered later, not designed for                         |
+| **Audience**                                                                      | 25–50, simulation-literate, hardcore-patient                                                 |
+| **Modes**                                                                         | Solo offline · Solo online · Persistent universe                                             |
+| **Business model**                                                                | Open source, non-commercial                                                                  |
+| **Team**                                                                          | One person directing coding agents                                                           |
+| **Engine**                                                                        | Custom TypeScript simulation core; Three.js today, WebGPU planned                            |
+| **Current state**                                                                 | Milestone 1 complete — 12/12 capability checks pass in Node and Chrome, online and offline   |
+| **Named MVP**                                                                     | **The Explorer** — see [production](production.md#the-mvp-the-explorer)                      |
 
 ---
 
@@ -246,13 +246,13 @@ than technical, and for an open-source project the engine identity is an asset.)
 
 Stated here so no page below has to relitigate them.
 
-| Constraint | Consequence for design |
-|---|---|
-| One person and coding agents | Every system must be *generated or simulated*, never authored by hand at volume. A feature requiring 200 hand-made assets is not a feature. |
+| Constraint                                       | Consequence for design                                                                                                                                                       |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| One person and coding agents                     | Every system must be _generated or simulated_, never authored by hand at volume. A feature requiring 200 hand-made assets is not a feature.                                  |
 | Browser, WebGPU, ~10 W of GPU budget on a laptop | Geometric fidelity is well below Star Citizen. [art](art.md) spends the budget on light transport and HDR output instead, which is where this subject matter actually lives. |
-| Non-commercial | No revenue to fund servers, so [modes](modes.md) must make solo the complete experience and the persistent universe an addition. |
-| No content pipeline | Ships, stations and interiors must be procedurally assembled from parts, not modelled. See [content](content.md). |
-| Real data, forever changing | Address stability and generation purity are non-negotiable. See [galaxy](galaxy.md). |
+| Non-commercial                                   | No revenue to fund servers, so [modes](modes.md) must make solo the complete experience and the persistent universe an addition.                                             |
+| No content pipeline                              | Ships, stations and interiors must be procedurally assembled from parts, not modelled. See [content](content.md).                                                            |
+| Real data, forever changing                      | Address stability and generation purity are non-negotiable. See [galaxy](galaxy.md).                                                                                         |
 
 > 🎮 Designer's Note: The largest risk in this document is not technical. It is
 > that the vision is a fusion of three games that cost, between them, something

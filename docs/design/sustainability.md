@@ -18,12 +18,12 @@ awkward for anyone who read carefully. That is now fixed.
 
 ### The decision
 
-| What | Licence | Why |
-|---|---|---|
-| `packages/*` — the simulation core | **Apache-2.0** | Permissive maximises adoption, and the engine identity is an asset for a project that wants contributors. The explicit patent grant is worth having. |
-| `apps/*` — the game client | **Apache-2.0** | Same tree, same terms; splitting licences within one repository creates confusion for no benefit here |
-| Ingested catalogue data | **Inherits its source** | Non-negotiable — see below |
-| Authored art and audio | **CC BY-SA 4.0** | Standard for game assets; keeps derivative asset work open |
+| What                               | Licence                 | Why                                                                                                                                                  |
+| ---------------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/*` — the simulation core | **Apache-2.0**          | Permissive maximises adoption, and the engine identity is an asset for a project that wants contributors. The explicit patent grant is worth having. |
+| `apps/*` — the game client         | **Apache-2.0**          | Same tree, same terms; splitting licences within one repository creates confusion for no benefit here                                                |
+| Ingested catalogue data            | **Inherits its source** | Non-negotiable — see below                                                                                                                           |
+| Authored art and audio             | **CC BY-SA 4.0**        | Standard for game assets; keeps derivative asset work open                                                                                           |
 
 ### The non-commercial trap, stated plainly
 
@@ -51,12 +51,12 @@ file first**; it is the cheapest and most overdue item in the entire bible.
 [spike 4](../spikes.md#4--gaia-and-hyg-attribution-terms). One of the four rows
 below was wrong, and it was the one that mattered.
 
-| Source | Terms | Consequence |
-|---|---|---|
-| **HYG database** v4.x | **CC BY-SA 4.0** (v3.x was 2.5) | **Share-alike reaches the packed binary.** § 4(b) makes a database containing a substantial portion of the contents *Adapted Material* — but explicitly "**not its individual contents**", so the obligation attaches to the catalogue and not to the code |
-| **Gaia** (ESA) | ⛔ **CC BY-NC 3.0 IGO** | **Non-commercial.** Not "open with attribution", which is what this page previously said. Commercial use needs prior written authorisation from `data.licences@esa.int` |
-| **NASA Exoplanet Archive** | **No licence stated** | Operated by Caltech under NASA contract; **not confirmed public domain**. The measurements are facts, the compilation may attract EU database right. Use the requested acknowledgement and stop calling it public domain |
-| **Open Exoplanet Catalogue** | MIT | Unrestricted with notice |
+| Source                       | Terms                           | Consequence                                                                                                                                                                                                                                                |
+| ---------------------------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **HYG database** v4.x        | **CC BY-SA 4.0** (v3.x was 2.5) | **Share-alike reaches the packed binary.** § 4(b) makes a database containing a substantial portion of the contents _Adapted Material_ — but explicitly "**not its individual contents**", so the obligation attaches to the catalogue and not to the code |
+| **Gaia** (ESA)               | ⛔ **CC BY-NC 3.0 IGO**         | **Non-commercial.** Not "open with attribution", which is what this page previously said. Commercial use needs prior written authorisation from `data.licences@esa.int`                                                                                    |
+| **NASA Exoplanet Archive**   | **No licence stated**           | Operated by Caltech under NASA contract; **not confirmed public domain**. The measurements are facts, the compilation may attract EU database right. Use the requested acknowledgement and stop calling it public domain                                   |
+| **Open Exoplanet Catalogue** | MIT                             | Unrestricted with notice                                                                                                                                                                                                                                   |
 
 #### Gaia is the problem, and it is our own argument turned around
 
@@ -67,8 +67,8 @@ Apache-2.0 code stays Apache-2.0, and the shipped artefact is no longer somethin
 a downstream user may commercialise. **That is the outcome this section exists to
 prevent**, arriving through the data rather than the code.
 
-There is a conflicting statement in Gaia's DR3 documentation — *"The Gaia data are
-open and free to use, provided credit is given to 'ESA/Gaia/DPAC'"* — which reads
+There is a conflicting statement in Gaia's DR3 documentation — _"The Gaia data are
+open and free to use, provided credit is given to 'ESA/Gaia/DPAC'"_ — which reads
 far more permissively than the licence page. When a licence page and a
 documentation page disagree, **the stricter one governs until the licensor says
 otherwise in writing.**
@@ -81,12 +81,12 @@ anything.
 
 #### The attribution strings, verbatim
 
-| Source | What must appear |
-|---|---|
-| Gaia, credit line | `Credit: ESA, Gaia DPAC` |
-| Gaia, acknowledgement | *"This work has made use of data from the European Space Agency (ESA) mission Gaia (https://www.cosmos.esa.int/gaia), processed by the Gaia Data Processing and Analysis Consortium (DPAC, https://www.cosmos.esa.int/web/gaia/dpac/consortium). Funding for the DPAC has been provided by national institutions, in particular the institutions participating in the Gaia Multilateral Agreement."* |
-| HYG | *The HYG Database*, astronexus, CC BY-SA 4.0 — with the licence URI, the source URI, and a statement that it was modified |
-| NASA Exoplanet Archive | *"This research has made use of the NASA Exoplanet Archive, which is operated by the California Institute of Technology, under contract with the National Aeronautics and Space Administration under the Exoplanet Exploration Program."* Cite Christiansen et al. (2025) |
+| Source                 | What must appear                                                                                                                                                                                                                                                                                                                                                                                     |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Gaia, credit line      | `Credit: ESA, Gaia DPAC`                                                                                                                                                                                                                                                                                                                                                                             |
+| Gaia, acknowledgement  | _"This work has made use of data from the European Space Agency (ESA) mission Gaia (https://www.cosmos.esa.int/gaia), processed by the Gaia Data Processing and Analysis Consortium (DPAC, https://www.cosmos.esa.int/web/gaia/dpac/consortium). Funding for the DPAC has been provided by national institutions, in particular the institutions participating in the Gaia Multilateral Agreement."_ |
+| HYG                    | _The HYG Database_, astronexus, CC BY-SA 4.0 — with the licence URI, the source URI, and a statement that it was modified                                                                                                                                                                                                                                                                            |
+| NASA Exoplanet Archive | _"This research has made use of the NASA Exoplanet Archive, which is operated by the California Institute of Technology, under contract with the National Aeronautics and Space Administration under the Exoplanet Exploration Program."_ Cite Christiansen et al. (2025)                                                                                                                            |
 
 CC BY-SA § 3(a)(1) sets the contents of the notice: creator identification, a
 copyright notice, a notice referring to the licence, a notice referring to the
@@ -115,15 +115,15 @@ what the design wants anyway. The obligation and the design agree.
 One maintainer, working with coding agents. That is the reality and the
 governance model should say so rather than pretending at a committee.
 
-| | |
-|---|---|
-| **Decision authority** | Single maintainer |
-| **What is written down** | [ADRs](../adr/) for anything expensive to reverse; [CONTEXT.md](../../CONTEXT.md) for facts learned the hard way; this bible for design |
-| **What is enforced automatically** | Layering (`pnpm graph`), lint, types, tests, build — all via `pnpm check` |
-| **What a contributor must not have to ask** | Anything. [vision.md](../vision.md#assume-it-will-be-built-by-agents) makes "no tribal knowledge" a charter principle. |
+|                                             |                                                                                                                                         |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| **Decision authority**                      | Single maintainer                                                                                                                       |
+| **What is written down**                    | [ADRs](../adr/) for anything expensive to reverse; [CONTEXT.md](../../CONTEXT.md) for facts learned the hard way; this bible for design |
+| **What is enforced automatically**          | Layering (`pnpm graph`), lint, types, tests, build — all via `pnpm check`                                                               |
+| **What a contributor must not have to ask** | Anything. [vision.md](../vision.md#assume-it-will-be-built-by-agents) makes "no tribal knowledge" a charter principle.                  |
 
 The repository is already optimised for this: deterministic non-interactive
-commands with useful exit codes, documentation that explains *why*, decision
+commands with useful exit codes, documentation that explains _why_, decision
 records, and a build log. That is unusually good ground for contribution and it
 should be protected.
 
@@ -149,20 +149,20 @@ afterwards means shipping a release that was out of compliance.
 The design's shape makes some contributions much easier than others, and saying
 so up front is worth more than a generic invitation.
 
-| Easy to contribute | Why |
-|---|---|
+| Easy to contribute                | Why                                                                                                 |
+| --------------------------------- | --------------------------------------------------------------------------------------------------- |
 | Catalogue ingest and data quality | Self-contained, testable, and the identity-resolution work is genuinely hard and genuinely valuable |
-| Biome material sets | One authored artefact, a clear interface |
-| Ship and interior parts | Same |
-| Terrain and noise algorithms | Pure functions with golden vectors |
-| Accessibility work | Well-specified in [ux](ux.md#accessibility) and independently verifiable |
-| Translations | Text is centralised and there is no voice acting |
+| Biome material sets               | One authored artefact, a clear interface                                                            |
+| Ship and interior parts           | Same                                                                                                |
+| Terrain and noise algorithms      | Pure functions with golden vectors                                                                  |
+| Accessibility work                | Well-specified in [ux](ux.md#accessibility) and independently verifiable                            |
+| Translations                      | Text is centralised and there is no voice acting                                                    |
 
-| Hard to contribute | Why |
-|---|---|
-| Anything touching precision or determinism | [Five decisions are expensive to reverse](../../CONTEXT.md) and a well-meaning `Vector3` breaks the whole premise |
-| Renderer architecture | One coherent doctrine ([art](art.md)) that is easy to erode incrementally |
-| Anything that adds a dependency below `apps/` | Enforced against, deliberately |
+| Hard to contribute                            | Why                                                                                                               |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Anything touching precision or determinism    | [Five decisions are expensive to reverse](../../CONTEXT.md) and a well-meaning `Vector3` breaks the whole premise |
+| Renderer architecture                         | One coherent doctrine ([art](art.md)) that is easy to erode incrementally                                         |
+| Anything that adds a dependency below `apps/` | Enforced against, deliberately                                                                                    |
 
 ---
 
@@ -170,11 +170,11 @@ so up front is worth more than a generic invitation.
 
 The only thing in this project that costs money.
 
-| Mode | What runs | Cost shape |
-|---|---|---|
-| **Solo offline** | Nothing | **Zero, forever.** Static hosting only. |
-| **Solo online** | A database and an API — discovery records, catalogue revisions, sync | Small and predictable; scales with players, not with activity |
-| **Persistent universe** | A live authority per active star system | **Real, and it scales with concurrency** |
+| Mode                    | What runs                                                            | Cost shape                                                    |
+| ----------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------- |
+| **Solo offline**        | Nothing                                                              | **Zero, forever.** Static hosting only.                       |
+| **Solo online**         | A database and an API — discovery records, catalogue revisions, sync | Small and predictable; scales with players, not with activity |
+| **Persistent universe** | A live authority per active star system                              | **Real, and it scales with concurrency**                      |
 
 [ADR-0008](../adr/0008-multiplayer-partitions.md) names the likely direction:
 Cloudflare Workers plus Durable Objects, with a Durable Object per active

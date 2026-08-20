@@ -17,7 +17,9 @@ export function FlightStrip({ status }: { status: HarnessStatus | null }) {
       <div className="text-sky-300">{player.name}</div>
       <div>{player.localSpeedText} relative to frame</div>
       <div className="text-slate-400">
-        {player.altitude === null ? player.frame : `alt ${formatDistance(player.altitude)}`}
+        {player.altitude === null
+          ? player.frame
+          : `alt ${formatDistance(player.altitude)}`}
       </div>
       <div className="text-slate-500">
         tick {world.tick} · {world.timeScale}×{world.paused ? ' · paused' : ''}

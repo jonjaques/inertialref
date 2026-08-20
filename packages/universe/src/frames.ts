@@ -10,7 +10,12 @@ import {
   Vec,
   vec3,
 } from '@inertialref/spatial'
-import { formatAddress, parseAddress, type SystemId, type UniverseAddress } from './address.ts'
+import {
+  formatAddress,
+  parseAddress,
+  type SystemId,
+  type UniverseAddress,
+} from './address.ts'
 import type { Body, StarSystem } from './system.ts'
 import { type BodyFixedDirection, surfaceRadius } from './terrain.ts'
 
@@ -31,7 +36,8 @@ import { type BodyFixedDirection, surfaceRadius } from './terrain.ts'
  *         This is where meter-scale gameplay happens.
  */
 
-export const systemFrameId = (system: SystemId): FrameId => frameId(`s:${system}`)
+export const systemFrameId = (system: SystemId): FrameId =>
+  frameId(`s:${system}`)
 export const bodyFrameId = (address: UniverseAddress): FrameId =>
   frameId(`b:${formatAddress(address)}`)
 export const bodyFixedFrameId = (address: UniverseAddress): FrameId =>
@@ -71,7 +77,9 @@ export const surfaceFrameId = (
   latitude: Radians,
   longitude: Radians,
 ): FrameId =>
-  frameId(`sf:${formatAddress(address)}@${formatAngle(latitude)},${formatAngle(longitude)}`)
+  frameId(
+    `sf:${formatAddress(address)}@${formatAngle(latitude)},${formatAngle(longitude)}`,
+  )
 
 /**
  * Read a surface frame id back into the three things that determine it.
@@ -113,7 +121,10 @@ export function parseSurfaceFrameId(id: FrameId): {
 }
 
 /** Orbit evaluator for a body about a primary with gravitational parameter `mu`. */
-function orbitEvaluator(body: Body, primaryMu: number): (t: Seconds) => LocalPose {
+function orbitEvaluator(
+  body: Body,
+  primaryMu: number,
+): (t: Seconds) => LocalPose {
   return (t) => {
     const { position, velocity } = stateVectorAt(body.elements, primaryMu, t)
     return {
@@ -149,18 +160,29 @@ function spinEvaluator(body: Body): (t: Seconds) => LocalPose {
  * installed on approach and removed when it leaves the interest set without
  * any generation work happening at the boundary.
  */
-export function installSystemFrames(graph: FrameGraph, system: StarSystem): void {
+export function installSystemFrames(
+  graph: FrameGraph,
+  system: StarSystem,
+): void {
   const systemFrame = systemFrameId(system.id)
   if (!graph.has(systemFrame)) {
     graph.define({
       id: systemFrame,
       parent: ROOT_FRAME,
       kind: 'system',
-      anchor: { kind: 'fixed', position: system.position, orientation: Q.IDENTITY },
+      anchor: {
+        kind: 'fixed',
+        position: system.position,
+        orientation: Q.IDENTITY,
+      },
     })
   }
 
-  const installBody = (body: Body, parentFrame: FrameId, primaryMu: number): void => {
+  const installBody = (
+    body: Body,
+    parentFrame: FrameId,
+    primaryMu: number,
+  ): void => {
     const frame = bodyFrameId(body.address)
     if (!graph.has(frame)) {
       graph.define({
@@ -179,14 +201,20 @@ export function installSystemFrames(graph: FrameGraph, system: StarSystem): void
     for (const moon of body.moons) installBody(moon, frame, body.mu)
   }
 
-  for (const planet of system.planets) installBody(planet, systemFrame, system.star.mu)
+  for (const planet of system.planets)
+    installBody(planet, systemFrame, system.star.mu)
 }
 
-export function uninstallSystemFrames(graph: FrameGraph, system: StarSystem): void {
+export function uninstallSystemFrames(
+  graph: FrameGraph,
+  system: StarSystem,
+): void {
   const removeBody = (body: Body): void => {
     for (const moon of body.moons) removeBody(moon)
-    if (graph.has(bodyFixedFrameId(body.address))) graph.remove(bodyFixedFrameId(body.address))
-    if (graph.has(bodyFrameId(body.address))) graph.remove(bodyFrameId(body.address))
+    if (graph.has(bodyFixedFrameId(body.address)))
+      graph.remove(bodyFixedFrameId(body.address))
+    if (graph.has(bodyFrameId(body.address)))
+      graph.remove(bodyFrameId(body.address))
   }
   for (const planet of system.planets) removeBody(planet)
   const systemFrame = systemFrameId(system.id)
@@ -194,7 +222,10 @@ export function uninstallSystemFrames(graph: FrameGraph, system: StarSystem): vo
 }
 
 /** Unit vector at a latitude/longitude in body-fixed axes (+Y is the pole). */
-export function geodeticDirection(latitude: Radians, longitude: Radians): BodyFixedDirection {
+export function geodeticDirection(
+  latitude: Radians,
+  longitude: Radians,
+): BodyFixedDirection {
   const cosLat = Math.cos(latitude)
   // Body-fixed by construction: a surface frame's parent is the `bf:` frame, so
   // lat/long here already mean "on the turning body".

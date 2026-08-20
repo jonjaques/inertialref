@@ -39,7 +39,7 @@ registry, serialising through the same envelopes — so a bug that only appears
 when something is not structured-cloneable still shows up in a Node test.
 
 It is **not** the browser's fallback, though it used to say so. A browser
-without module workers gets *no pool at all*: the starfield survey runs on the
+without module workers gets _no pool at all_: the starfield survey runs on the
 main thread and terrain streaming stops until a pool exists, because
 `TerrainStreamer` returns early without one. The inline worker's four callers are
 all Node — the headless runner and three test files. It does go through
@@ -65,12 +65,12 @@ cannot drift from the handler shape.
 
 Today's tasks:
 
-| Task | Work |
-|---|---|
+| Task                           | Work                                                                 |
+| ------------------------------ | -------------------------------------------------------------------- |
 | `universe.generateHeightfield` | 65×65 samples × 14 octaves of 3D noise → transferable `Float32Array` |
-| `universe.generateCell` | every star in one 20 ly generation cell |
-| `universe.surveyRegion` | a block of cells — tens of thousands of stars |
-| `universe.surveySystem` | a whole system's bodies, for the map |
+| `universe.generateCell`        | every star in one 20 ly generation cell                              |
+| `universe.surveyRegion`        | a block of cells — tens of thousands of stars                        |
+| `universe.surveySystem`        | a whole system's bodies, for the map                                 |
 
 ---
 
@@ -97,7 +97,7 @@ sequenceDiagram
 The worker also posts `{kind:'ready', tasks}` when it starts, so the pool can log
 which tasks a worker actually serves.
 
-The version check matters more than it looks. An offline-first app is *designed*
+The version check matters more than it looks. An offline-first app is _designed_
 to be left open across a deploy. Without the check, a page could generate half a
 planet with algorithm v1 and half with v2 and never notice. With it, the job
 fails loudly.
@@ -147,11 +147,11 @@ A job can be cancelled whether or not it has started:
 
 ## What is deliberately not here
 
-| Not used | Why |
-|---|---|
-| `SharedArrayBuffer` | Requires cross-origin isolation headers, which constrains hosting. Nothing yet needs shared mutable memory; transferables cover the current traffic. |
-| The simulation itself in a worker | Plausible rather than proven: `apps/headless` shows the core runs unchanged with no DOM, no React and no WebGL — but nothing yet requires it. [Roadmap](../roadmap.md#simulation-in-a-worker). |
-| A second pool for a different priority class | One pool, FIFO. Priorities become interesting when terrain competes with something else. |
+| Not used                                     | Why                                                                                                                                                                                            |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SharedArrayBuffer`                          | Requires cross-origin isolation headers, which constrains hosting. Nothing yet needs shared mutable memory; transferables cover the current traffic.                                           |
+| The simulation itself in a worker            | Plausible rather than proven: `apps/headless` shows the core runs unchanged with no DOM, no React and no WebGL — but nothing yet requires it. [Roadmap](../roadmap.md#simulation-in-a-worker). |
+| A second pool for a different priority class | One pool, FIFO. Priorities become interesting when terrain competes with something else.                                                                                                       |
 
 ---
 

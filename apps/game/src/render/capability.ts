@@ -33,7 +33,9 @@ export async function probeOutputCapability(): Promise<OutputCapability> {
   // showed `dynamic-range: high = false` there would be describing the browser
   // rather than the display and hiding the disagreement it exists to expose.
   const dynamicRangeHigh =
-    typeof window === 'undefined' ? false : window.matchMedia(EXTENDED_RANGE_QUERY).matches
+    typeof window === 'undefined'
+      ? false
+      : window.matchMedia(EXTENDED_RANGE_QUERY).matches
 
   if (typeof navigator === 'undefined' || navigator.gpu === undefined) {
     return { webgpu: false, dynamicRangeHigh, extendedCanvas: false }
@@ -41,14 +43,24 @@ export async function probeOutputCapability(): Promise<OutputCapability> {
 
   let device: GPUDevice | null = null
   try {
-    const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' })
+    const adapter = await navigator.gpu.requestAdapter({
+      powerPreference: 'high-performance',
+    })
     // WebGPU present and unusable: a blocklisted driver, or a browser with no
     // GPU process to give. three's own fallback will take the WebGL backend.
-    if (adapter === null) return { webgpu: true, dynamicRangeHigh, extendedCanvas: false }
+    if (adapter === null)
+      return { webgpu: true, dynamicRangeHigh, extendedCanvas: false }
     device = await adapter.requestDevice()
-    return { webgpu: true, dynamicRangeHigh, extendedCanvas: probeExtendedCanvas(device) }
+    return {
+      webgpu: true,
+      dynamicRangeHigh,
+      extendedCanvas: probeExtendedCanvas(device),
+    }
   } catch (cause) {
-    log.warn('WebGPU device request failed; falling back to the WebGL backend', { cause: String(cause) })
+    log.warn(
+      'WebGPU device request failed; falling back to the WebGL backend',
+      { cause: String(cause) },
+    )
     return { webgpu: true, dynamicRangeHigh, extendedCanvas: false }
   } finally {
     /*
@@ -77,7 +89,11 @@ function probeExtendedCanvas(device: GPUDevice): boolean {
   const context = document.createElement('canvas').getContext('webgpu')
   if (context === null) return false
   try {
-    context.configure({ device, format: 'rgba16float', toneMapping: { mode: 'extended' } })
+    context.configure({
+      device,
+      format: 'rgba16float',
+      toneMapping: { mode: 'extended' },
+    })
     // `configure` is specified to accept an unknown tone mapping mode silently,
     // so acceptance alone is not proof. Reading it back is — the spike verified
     // the echo against a `vec4f(8,4,2,1)` clear that survived the swap chain.
@@ -96,7 +112,9 @@ function probeExtendedCanvas(device: GPUDevice): boolean {
  * the canvas probe is a property of the browser build and cannot change without
  * a reload. Returns its own unsubscribe.
  */
-export function watchDynamicRange(onChange: (high: boolean) => void): () => void {
+export function watchDynamicRange(
+  onChange: (high: boolean) => void,
+): () => void {
   const query = window.matchMedia(EXTENDED_RANGE_QUERY)
   const listener = (event: MediaQueryListEvent): void => onChange(event.matches)
   query.addEventListener('change', listener)

@@ -22,7 +22,7 @@ two, so it is exactly representable in float64 and float32 alike. 10,000 rebases
 accumulate zero drift rather than 10,000 roundings, which `origin.test.ts`
 asserts by checking the origin is still exactly on the grid afterwards.
 
-**2. Logarithmic depth compression.** Anything whose *surface* is more than
+**2. Logarithmic depth compression.** Anything whose _surface_ is more than
 2e6 m away is moved onto a compressed radial scale:
 
 ```
@@ -60,7 +60,7 @@ ground it represents ended up 30 km apart and no terrain was visible at all.
   apart after rounding to float32.
 - Depth is not metric for far objects. Nothing may measure distance in render
   space; `placement.distance` carries the true value for anything that needs it.
-- The mapping is non-decreasing everywhere but only *strictly* increasing while
+- The mapping is non-decreasing everywhere but only _strictly_ increasing while
   the separation survives double precision. Past ~1e17 m two objects a hundred
   metres apart compress to the same depth. They are also the same pixel.
 - A rebase invalidates built geometry, so terrain patches record the origin

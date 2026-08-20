@@ -10,17 +10,21 @@ import type { WorkerPort } from '@inertialref/workers'
  * transfer list are decided once.
  */
 export function createBrowserWorkerPort(): WorkerPort {
-  const worker = new Worker(new URL('../workers/universe.worker.ts', import.meta.url), {
-    type: 'module',
-    name: 'inertialref-universe',
-  })
+  const worker = new Worker(
+    new URL('../workers/universe.worker.ts', import.meta.url),
+    {
+      type: 'module',
+      name: 'inertialref-universe',
+    },
+  )
 
   return {
     post(message: WorkerInbound, transfer: readonly ArrayBufferLike[] = []) {
       worker.postMessage(message, transfer as Transferable[])
     },
     subscribe(handler: (message: WorkerOutbound) => void) {
-      const listener = (event: MessageEvent): void => handler(event.data as WorkerOutbound)
+      const listener = (event: MessageEvent): void =>
+        handler(event.data as WorkerOutbound)
       worker.addEventListener('message', listener)
       return () => worker.removeEventListener('message', listener)
     },

@@ -34,7 +34,8 @@ export interface Migration {
 const v0ToV1: Migration = {
   from: 0,
   to: 1,
-  describe: 'wrap the single ship in an entity list and record generation versions',
+  describe:
+    'wrap the single ship in an entity list and record generation versions',
   migrate(raw) {
     const ship = raw['ship']
     return {
@@ -44,7 +45,8 @@ const v0ToV1: Migration = {
       tick: raw['tick'] ?? 0,
       generation: raw['generation'] ?? {},
       entities: ship === undefined ? [] : [ship],
-      playerEntity: ship === undefined ? null : (ship as { id?: string }).id ?? null,
+      playerEntity:
+        ship === undefined ? null : ((ship as { id?: string }).id ?? null),
       dynamicIdCounter: raw['dynamicIdCounter'] ?? 1,
       loadedSystems: raw['loadedSystems'] ?? [],
       mutations: [],
@@ -55,7 +57,9 @@ const v0ToV1: Migration = {
 
 export const MIGRATIONS: readonly Migration[] = [v0ToV1]
 
-export function migrateSave(raw: unknown): Result<Record<string, unknown>, string> {
+export function migrateSave(
+  raw: unknown,
+): Result<Record<string, unknown>, string> {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
     return err('save is not an object')
   }
@@ -74,7 +78,8 @@ export function migrateSave(raw: unknown): Result<Record<string, unknown>, strin
   let guard = 0
   while (version < SAVE_SCHEMA_VERSION) {
     const step = MIGRATIONS.find((m) => m.from === version)
-    if (step === undefined) return err(`no migration from save schema v${version}`)
+    if (step === undefined)
+      return err(`no migration from save schema v${version}`)
     current = step.migrate(current)
     version = step.to
     guard += 1

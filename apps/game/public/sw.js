@@ -27,7 +27,9 @@ self.addEventListener('install', (event) => {
     caches
       .open(CACHE)
       // Individually, so one missing optional file cannot fail the whole install.
-      .then((cache) => Promise.allSettled(PRECACHE.map((url) => cache.add(url))))
+      .then((cache) =>
+        Promise.allSettled(PRECACHE.map((url) => cache.add(url))),
+      )
       .then(() => self.skipWaiting()),
   )
 })
@@ -36,7 +38,11 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches
       .keys()
-      .then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))))
+      .then((keys) =>
+        Promise.all(
+          keys.filter((key) => key !== CACHE).map((key) => caches.delete(key)),
+        ),
+      )
       .then(() => self.clients.claim()),
   )
 })
@@ -55,7 +61,11 @@ self.addEventListener('fetch', (event) => {
           void caches.open(CACHE).then((cache) => cache.put(request, copy))
           return response
         })
-        .catch(() => caches.match(request).then((cached) => cached ?? caches.match('/index.html'))),
+        .catch(() =>
+          caches
+            .match(request)
+            .then((cached) => cached ?? caches.match('/index.html')),
+        ),
     )
     return
   }

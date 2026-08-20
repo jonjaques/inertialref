@@ -1,7 +1,25 @@
-import { AU, getLogger, LIGHT_YEAR, logHub, type LogRecord, type Result, RingBufferSink } from '@inertialref/shared'
+import {
+  AU,
+  getLogger,
+  LIGHT_YEAR,
+  logHub,
+  type LogRecord,
+  type Result,
+  RingBufferSink,
+} from '@inertialref/shared'
 import { circularSpeed } from '@inertialref/physics'
-import { Quaternion as Q, type UniverseVector, UV, Vec, vec3 } from '@inertialref/spatial'
-import { snapshot, type World, type WorldSnapshot } from '@inertialref/simulation'
+import {
+  Quaternion as Q,
+  type UniverseVector,
+  UV,
+  Vec,
+  vec3,
+} from '@inertialref/spatial'
+import {
+  snapshot,
+  type World,
+  type WorldSnapshot,
+} from '@inertialref/simulation'
 import {
   type Body,
   bodyFrameId,
@@ -17,11 +35,27 @@ import {
   systemsWithin,
   walkBodies,
 } from '@inertialref/universe'
-import { captureSave, parseSave, restoreSave, serializeSave } from '@inertialref/persistence'
+import {
+  captureSave,
+  parseSave,
+  restoreSave,
+  serializeSave,
+} from '@inertialref/persistence'
 import type { RenderScene } from '@inertialref/rendering'
 import type { PoolStats, WorkerPool } from '@inertialref/workers'
-import { runCapabilityChecks, summarizeCapabilities, type CapabilityResult } from './capabilities.ts'
-import { inspectEntity, inspectRender, inspectWorld, type EntityInspection, type RenderInspection, type WorldInspection } from './inspect.ts'
+import {
+  runCapabilityChecks,
+  summarizeCapabilities,
+  type CapabilityResult,
+} from './capabilities.ts'
+import {
+  inspectEntity,
+  inspectRender,
+  inspectWorld,
+  type EntityInspection,
+  type RenderInspection,
+  type WorldInspection,
+} from './inspect.ts'
 import {
   currentSystemOf,
   resolveDestination,
@@ -152,7 +186,9 @@ export class GameHarness {
       `tick ${status.world.tick} (${status.world.timeText}, ${status.world.timeScale}x${status.world.paused ? ', paused' : ''})`,
       `hash ${status.world.stateHash}`,
       player === null ? 'no player' : `${player.name} in ${player.frame}`,
-      player === null ? '' : `${player.speedText}${player.altitudeText === null ? '' : ` alt ${player.altitudeText}`}`,
+      player === null
+        ? ''
+        : `${player.speedText}${player.altitudeText === null ? '' : ` alt ${player.altitudeText}`}`,
       `systems ${status.world.loadedSystems.length}, frames ${status.world.frames}`,
     ]
       .filter((part) => part.length > 0)
@@ -165,7 +201,9 @@ export class GameHarness {
 
   inspect(id?: string): EntityInspection | null {
     const target = (id as EntityId | undefined) ?? this.#host.player()
-    return target === null || target === undefined ? null : inspectEntity(this.world, target)
+    return target === null || target === undefined
+      ? null
+      : inspectEntity(this.world, target)
   }
 
   logs(limit = 40): readonly LogRecord[] {
@@ -173,7 +211,9 @@ export class GameHarness {
   }
 
   /** Star systems within `lightYears` of the player, nearest first. */
-  systemsNearby(lightYears = 8): readonly { id: string; name: string; lightYears: number }[] {
+  systemsNearby(
+    lightYears = 8,
+  ): readonly { id: string; name: string; lightYears: number }[] {
     const centre = this.#here()
     return systemsWithin(this.world.galaxySeed, centre, lightYears * LIGHT_YEAR)
       .map((stub) => ({
@@ -203,14 +243,31 @@ export class GameHarness {
    * next system along used to require flying to it first. This is the seam that
    * makes looking cheaper than travelling.
    */
-  loadSystem(system: string): readonly { address: string; name: string; kind: string; radiusKm: number; auFromStar: number; moons: number }[] {
+  loadSystem(system: string): readonly {
+    address: string
+    name: string
+    kind: string
+    radiusKm: number
+    auFromStar: number
+    moons: number
+  }[] {
     const target = this.world.loadSystem(systemId(system))
     return this.bodies(target.id)
   }
 
   /** Bodies of a loaded system, as a flat listing. */
-  bodies(system?: string): readonly { address: string; name: string; kind: string; radiusKm: number; auFromStar: number; moons: number }[] {
-    const target = this.world.system((system as SystemId | undefined) ?? (this.world.loadedSystems()[0]?.id as SystemId))
+  bodies(system?: string): readonly {
+    address: string
+    name: string
+    kind: string
+    radiusKm: number
+    auFromStar: number
+    moons: number
+  }[] {
+    const target = this.world.system(
+      (system as SystemId | undefined) ??
+        (this.world.loadedSystems()[0]?.id as SystemId),
+    )
     if (target === undefined) return []
     return [...walkBodies(target)].map((body) => ({
       address: formatAddress(body.address),
@@ -250,13 +307,20 @@ export class GameHarness {
   }
 
   /** Set the player's control input directly, as the keyboard would. */
-  control(input: { translation?: [number, number, number]; rotation?: [number, number, number] }): void {
+  control(input: {
+    translation?: [number, number, number]
+    rotation?: [number, number, number]
+  }): void {
     const player = this.#requirePlayer()
     const entity = this.world.entities.require(player)
     this.world.setControl(
       player,
-      input.translation === undefined ? entity.control.translation : vec3(...input.translation),
-      input.rotation === undefined ? entity.control.rotation : vec3(...input.rotation),
+      input.translation === undefined
+        ? entity.control.translation
+        : vec3(...input.translation),
+      input.rotation === undefined
+        ? entity.control.rotation
+        : vec3(...input.rotation),
     )
   }
 
@@ -276,7 +340,8 @@ export class GameHarness {
    */
   orbit(address: string, altitudeKm = 400): HarnessStatus {
     const parsed = parseAddress(address)
-    if (parsed.kind !== 'body') throw new Error(`${address} is not a body address`)
+    if (parsed.kind !== 'body')
+      throw new Error(`${address} is not a body address`)
     const system = this.world.loadSystem(parsed.system)
     const body = findBody(system, parsed.body)
     if (body === undefined) throw new Error(`No body at ${address}`)
@@ -298,7 +363,10 @@ export class GameHarness {
         : Vec.normalize(
             Q.rotateInverse(
               bodyPose.orientation,
-              UV.difference(this.world.frames.pose(parent, time).position, bodyPose.position),
+              UV.difference(
+                this.world.frames.pose(parent, time).position,
+                bodyPose.position,
+              ),
             ),
           )
     const alongOrbit = Vec.normalize(Vec.cross(vec3(0, 1, 0), toStar))
@@ -319,12 +387,18 @@ export class GameHarness {
   /** Park the player on the ground at a latitude/longitude, ready to fly. */
   land(address: string, latitude = 0, longitude = 0): HarnessStatus {
     const parsed = parseAddress(address)
-    if (parsed.kind !== 'body') throw new Error(`${address} is not a body address`)
+    if (parsed.kind !== 'body')
+      throw new Error(`${address} is not a body address`)
     const system = this.world.loadSystem(parsed.system)
     const body = findBody(system, parsed.body)
     if (body === undefined) throw new Error(`No body at ${address}`)
 
-    const frame = installSurfaceFrame(this.world.frames, body, latitude, longitude)
+    const frame = installSurfaceFrame(
+      this.world.frames,
+      body,
+      latitude,
+      longitude,
+    )
     const player = this.#requirePlayer()
     this.world.teleport(player, {
       frame,
@@ -366,7 +440,10 @@ export class GameHarness {
    * take exactly one kind of argument each — this dispatches to them rather
    * than reimplementing them, so there is one placement rule per manoeuvre.
    */
-  goTo(destination: string, options: { altitudeKm?: number; distanceAu?: number } = {}): HarnessStatus {
+  goTo(
+    destination: string,
+    options: { altitudeKm?: number; distanceAu?: number } = {},
+  ): HarnessStatus {
     const target = resolveDestination(
       destination,
       this.world.galaxy,
@@ -375,21 +452,33 @@ export class GameHarness {
     const system = this.world.loadSystem(target.system)
 
     if (target.kind === 'body') {
-      const body = findBody(system, target.address.kind === 'body' ? target.address.body : [])
+      const body = findBody(
+        system,
+        target.address.kind === 'body' ? target.address.body : [],
+      )
       if (body === undefined) throw new Error(`No body at ${target.text}`)
       return this.#arriveAt(target.text, body, options.altitudeKm)
     }
 
     const first = system.planets[0]
     if (first !== undefined && options.distanceAu === undefined) {
-      return this.#arriveAt(formatAddress(first.address), first, options.altitudeKm)
+      return this.#arriveAt(
+        formatAddress(first.address),
+        first,
+        options.altitudeKm,
+      )
     }
 
     this.goToSystem(target.system, options.distanceAu ?? ARRIVAL_DISTANCE_AU)
     // Arriving with the nose pointed at nothing is how you conclude the game is
     // broken. `goToSystem` places the ship on the +X axis of the system frame,
     // whose origin is the star.
-    this.#lookAt(this.world.frames.pose(systemFrameId(target.system), this.world.clock.time).position)
+    this.#lookAt(
+      this.world.frames.pose(
+        systemFrameId(target.system),
+        this.world.clock.time,
+      ).position,
+    )
     return this.status()
   }
 
@@ -463,11 +552,27 @@ export class GameHarness {
   /* --------------------------------------------------------------------- */
 
   /** Run the twelve milestone capability checks against the live build. */
-  async selfTest(): Promise<{ passed: number; total: number; results: readonly CapabilityResult[]; report: string }> {
-    const results = await runCapabilityChecks({ world: this.world, pool: this.#host.pool() })
+  async selfTest(): Promise<{
+    passed: number
+    total: number
+    results: readonly CapabilityResult[]
+    report: string
+  }> {
+    const results = await runCapabilityChecks({
+      world: this.world,
+      pool: this.#host.pool(),
+    })
     const report = summarizeCapabilities(results)
-    log.info('self test complete', { passed: results.filter((r) => r.passed).length, total: results.length })
-    return { passed: results.filter((r) => r.passed).length, total: results.length, results, report }
+    log.info('self test complete', {
+      passed: results.filter((r) => r.passed).length,
+      total: results.length,
+    })
+    return {
+      passed: results.filter((r) => r.passed).length,
+      total: results.length,
+      results,
+      report,
+    }
   }
 
   /** Named, repeatable set-ups. Each returns the resulting status. */
@@ -478,7 +583,11 @@ export class GameHarness {
         const target = this.#firstSolidBodyAddress()
         this.orbit(target, 300)
         this.step(64)
-        return this.#scenarioResult(name, before, `circular orbit 300 km above ${target}`)
+        return this.#scenarioResult(
+          name,
+          before,
+          `circular orbit 300 km above ${target}`,
+        )
       }
       case 'approach': {
         const target = this.#firstSolidBodyAddress()
@@ -499,7 +608,9 @@ export class GameHarness {
         return this.#scenarioResult(name, before, 'holding off Alpha Centauri')
       }
       default:
-        throw new Error(`Unknown scenario "${name}". Try: orbit, approach, surface, interstellar`)
+        throw new Error(
+          `Unknown scenario "${name}". Try: orbit, approach, surface, interstellar`,
+        )
     }
   }
 
@@ -534,14 +645,17 @@ export class GameHarness {
   /** Where the listing is taken from: the player, or the first system loaded. */
   #here(): UniverseVector {
     const player = this.#host.player()
-    if (player === null) return this.world.loadedSystems()[0]?.position ?? UV.UNIVERSE_ORIGIN
+    if (player === null)
+      return this.world.loadedSystems()[0]?.position ?? UV.UNIVERSE_ORIGIN
     return this.world.canonicalPositionOf(player)
   }
 
   #bodyPosition(address: string): UniverseVector {
     const parsed = parseAddress(address)
-    if (parsed.kind !== 'body') throw new Error(`${address} is not a body address`)
-    return this.world.frames.pose(bodyFrameId(parsed), this.world.clock.time).position
+    if (parsed.kind !== 'body')
+      throw new Error(`${address} is not a body address`)
+    return this.world.frames.pose(bodyFrameId(parsed), this.world.clock.time)
+      .position
   }
 
   /**
@@ -569,12 +683,22 @@ export class GameHarness {
     })
   }
 
-  #scenarioResult(name: string, beforeTick: number, detail: string): ScenarioResult {
-    return { name, ticks: this.world.clock.tick - beforeTick, detail, status: this.status() }
+  #scenarioResult(
+    name: string,
+    beforeTick: number,
+    detail: string,
+  ): ScenarioResult {
+    return {
+      name,
+      ticks: this.world.clock.tick - beforeTick,
+      detail,
+      status: this.status(),
+    }
   }
 
   #firstSolidBodyAddress(): string {
-    const system = this.world.loadedSystems()[0] ?? this.world.loadSystem(systemId('SOL'))
+    const system =
+      this.world.loadedSystems()[0] ?? this.world.loadSystem(systemId('SOL'))
     for (const body of walkBodies(system)) {
       if (isLandable(body)) return formatAddress(body.address)
     }

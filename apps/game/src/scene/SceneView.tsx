@@ -118,7 +118,11 @@ function CameraRig({ engine }: { engine: GameEngine }) {
     // terminators line up with where the star actually is.
     const star = scene.stars[0]
     if (star !== undefined && light.current !== null) {
-      light.current.position.set(star.placement.position.x, star.placement.position.y, star.placement.position.z)
+      light.current.position.set(
+        star.placement.position.x,
+        star.placement.position.y,
+        star.placement.position.z,
+      )
       light.current.color.setRGB(star.color.r, star.color.g, star.color.b)
     }
   })
@@ -164,7 +168,11 @@ function Starfield({ engine }: { engine: GameEngine }) {
     const scene = engine.scene()
     const stars = engine.starField
     if (scene === null) return
-    if (generation.current === scene.origin.generation && surveyed.current === stars.positions.length) return
+    if (
+      generation.current === scene.origin.generation &&
+      surveyed.current === stars.positions.length
+    )
+      return
 
     generation.current = scene.origin.generation
     surveyed.current = stars.positions.length
@@ -218,7 +226,14 @@ function Bodies({ engine }: { engine: GameEngine }) {
     const seen = new Set<string>()
     const draw = (
       key: string,
-      body: Pick<RenderBody, 'placement' | 'orientation' | 'hasAtmosphere' | 'atmosphereScale' | 'kind'>,
+      body: Pick<
+        RenderBody,
+        | 'placement'
+        | 'orientation'
+        | 'hasAtmosphere'
+        | 'atmosphereScale'
+        | 'kind'
+      >,
       color: Color,
       star: { r: number; g: number; b: number } | null,
     ): void => {
@@ -228,7 +243,10 @@ function Bodies({ engine }: { engine: GameEngine }) {
         if (visuals.size >= MAX_BODIES) return
         const starMaterial = star === null ? null : createStarMaterial()
         const atmosphereMaterial = createAtmosphereMaterial()
-        const mesh = new Mesh(geometry, starMaterial?.material ?? createBodyMaterial(color))
+        const mesh = new Mesh(
+          geometry,
+          starMaterial?.material ?? createBodyMaterial(color),
+        )
         const atmosphere = new Mesh(geometry, atmosphereMaterial.material)
         atmosphere.visible = false
         container.add(mesh)
@@ -238,8 +256,17 @@ function Bodies({ engine }: { engine: GameEngine }) {
       }
 
       const { placement, orientation } = body
-      visual.mesh.position.set(placement.position.x, placement.position.y, placement.position.z)
-      visual.mesh.quaternion.set(orientation.x, orientation.y, orientation.z, orientation.w)
+      visual.mesh.position.set(
+        placement.position.x,
+        placement.position.y,
+        placement.position.z,
+      )
+      visual.mesh.quaternion.set(
+        orientation.x,
+        orientation.y,
+        orientation.z,
+        orientation.w,
+      )
       visual.mesh.scale.setScalar(placement.scale)
       visual.mesh.visible = true
       // A body drawn as streamed terrain does not also need its datum sphere,
@@ -249,9 +276,11 @@ function Bodies({ engine }: { engine: GameEngine }) {
       // The colour is a uniform rather than a construction argument because a
       // star's rendered colour is derived from its temperature every frame, and
       // a material built once from the first frame's value would freeze it.
-      if (star !== null && visual.star !== null) visual.star.color.value.setRGB(star.r, star.g, star.b)
+      if (star !== null && visual.star !== null)
+        visual.star.color.value.setRGB(star.r, star.g, star.b)
 
-      visual.atmosphere.visible = body.hasAtmosphere && placement.tier !== 'point'
+      visual.atmosphere.visible =
+        body.hasAtmosphere && placement.tier !== 'point'
       if (visual.atmosphere.visible) {
         const shell = placement.scale * body.atmosphereScale
         visual.atmosphere.position.copy(visual.mesh.position)
@@ -354,7 +383,10 @@ function TerrainPatches({ engine }: { engine: GameEngine }) {
       let mesh = meshes.get(key)
       if (mesh === undefined) {
         const geometry = new BufferGeometry()
-        geometry.setAttribute('position', new BufferAttribute(patch.positions, 3))
+        geometry.setAttribute(
+          'position',
+          new BufferAttribute(patch.positions, 3),
+        )
         geometry.setAttribute('normal', new BufferAttribute(patch.normals, 3))
         geometry.setIndex(new BufferAttribute(patch.indices, 1))
         geometry.computeBoundingSphere()
@@ -362,7 +394,11 @@ function TerrainPatches({ engine }: { engine: GameEngine }) {
         container.add(mesh)
         meshes.set(key, mesh)
       }
-      mesh.position.set(placement.position.x, placement.position.y, placement.position.z)
+      mesh.position.set(
+        placement.position.x,
+        placement.position.y,
+        placement.position.z,
+      )
       mesh.quaternion.set(
         placement.orientation.x,
         placement.orientation.y,
@@ -394,9 +430,17 @@ function TerrainPatches({ engine }: { engine: GameEngine }) {
  * a graph, and the pipeline is compiled the first time something draws with it.
  */
 const debugMaterials = {
-  hull: new MeshStandardNodeMaterial({ color: 0xd8dde6, roughness: 0.6, metalness: 0.2 }),
+  hull: new MeshStandardNodeMaterial({
+    color: 0xd8dde6,
+    roughness: 0.6,
+    metalness: 0.2,
+  }),
   wing: new MeshStandardNodeMaterial({ color: 0x8f98a8, roughness: 0.7 }),
-  bell: new MeshStandardNodeMaterial({ color: 0x3a4048, roughness: 0.4, metalness: 0.6 }),
+  bell: new MeshStandardNodeMaterial({
+    color: 0x3a4048,
+    roughness: 0.4,
+    metalness: 0.6,
+  }),
   metre: new MeshStandardNodeMaterial({ color: 0xe0b060, roughness: 0.8 }),
   foot: new MeshStandardNodeMaterial({ color: 0x60c0a0, roughness: 0.8 }),
   inch: new MeshStandardNodeMaterial({ color: 0xe06060, roughness: 0.8 }),
@@ -411,8 +455,17 @@ function ShipModel({ engine }: { engine: GameEngine }) {
     if (scene === null || group.current === null) return
     const ship = scene.entities.find((entity) => entity.isCamera)
     if (ship === undefined) return
-    group.current.position.set(ship.position.x, ship.position.y, ship.position.z)
-    group.current.quaternion.set(ship.orientation.x, ship.orientation.y, ship.orientation.z, ship.orientation.w)
+    group.current.position.set(
+      ship.position.x,
+      ship.position.y,
+      ship.position.z,
+    )
+    group.current.quaternion.set(
+      ship.orientation.x,
+      ship.orientation.y,
+      ship.orientation.z,
+      ship.orientation.w,
+    )
   })
 
   return (
@@ -447,8 +500,17 @@ function NearFieldProps({ engine }: { engine: GameEngine }) {
     if (scene === null || group.current === null) return
     const ship = scene.entities.find((entity) => entity.isCamera)
     if (ship === undefined) return
-    group.current.position.set(ship.position.x, ship.position.y, ship.position.z)
-    group.current.quaternion.set(ship.orientation.x, ship.orientation.y, ship.orientation.z, ship.orientation.w)
+    group.current.position.set(
+      ship.position.x,
+      ship.position.y,
+      ship.position.z,
+    )
+    group.current.quaternion.set(
+      ship.orientation.x,
+      ship.orientation.y,
+      ship.orientation.z,
+      ship.orientation.w,
+    )
   })
 
   return (

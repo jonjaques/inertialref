@@ -24,7 +24,9 @@ import { cellOf, cellKey } from './galaxy.ts'
 export type PartitionKey = Brand<string, 'partition'>
 
 export function partitionForAddress(address: UniverseAddress): PartitionKey {
-  return (address.kind === 'galaxy' ? `g:${address.galaxy}` : `s:${address.system}`) as PartitionKey
+  return (
+    address.kind === 'galaxy' ? `g:${address.galaxy}` : `s:${address.system}`
+  ) as PartitionKey
 }
 
 /** Partition covering a point in interstellar space. */
@@ -33,7 +35,8 @@ export function partitionForPosition(position: UniverseVector): PartitionKey {
 }
 
 /** Whether two partitions could ever need to exchange state this tick. */
-export const partitionsAdjacent = (a: PartitionKey, b: PartitionKey): boolean => a === b
+export const partitionsAdjacent = (a: PartitionKey, b: PartitionKey): boolean =>
+  a === b
 
 export const formatPartition = (key: PartitionKey): string => key
 
@@ -42,10 +45,14 @@ export const PARTITION_ENTRY_RADIUS = 4e12
 
 export function partitionForFlight(
   position: UniverseVector,
-  systems: readonly { readonly key: PartitionKey; readonly position: UniverseVector }[],
+  systems: readonly {
+    readonly key: PartitionKey
+    readonly position: UniverseVector
+  }[],
 ): PartitionKey {
   for (const system of systems) {
-    if (UV.distance(system.position, position) <= PARTITION_ENTRY_RADIUS) return system.key
+    if (UV.distance(system.position, position) <= PARTITION_ENTRY_RADIUS)
+      return system.key
   }
   return partitionForPosition(position)
 }

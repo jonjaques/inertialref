@@ -37,15 +37,15 @@ pixels.
 
 ## Reading state
 
-| Call | Returns |
-|---|---|
-| `ir.summary()` | one line: tick, hash, frame, speed, systems |
-| `ir.status()` | everything the debug overlay shows, structured |
-| `ir.inspect(id?)` | one entity in full — frames, canonical + local coords, velocities |
-| `ir.snapshot(alpha?)` | the raw presentation snapshot |
-| `ir.bodies(system?)` | flat listing of a system's bodies with addresses |
-| `ir.systemsNearby(ly)` | nearest star systems, catalogue and procedural |
-| `ir.logs(n)` | recent structured log records |
+| Call                   | Returns                                                           |
+| ---------------------- | ----------------------------------------------------------------- |
+| `ir.summary()`         | one line: tick, hash, frame, speed, systems                       |
+| `ir.status()`          | everything the debug overlay shows, structured                    |
+| `ir.inspect(id?)`      | one entity in full — frames, canonical + local coords, velocities |
+| `ir.snapshot(alpha?)`  | the raw presentation snapshot                                     |
+| `ir.bodies(system?)`   | flat listing of a system's bodies with addresses                  |
+| `ir.systemsNearby(ly)` | nearest star systems, catalogue and procedural                    |
+| `ir.logs(n)`           | recent structured log records                                     |
 
 ```js
 ir.summary()
@@ -56,12 +56,12 @@ ir.summary()
 
 ## Driving the clock
 
-| Call | Effect |
-|---|---|
-| `ir.step(ticks)` | advance exactly N ticks, ignoring wall clock |
-| `ir.runSeconds(s)` | advance exactly `s × 64` ticks |
-| `ir.pause()` / `ir.resume()` | |
-| `ir.timeWarp(x)` | multiplier on how many ticks a second of wall clock buys (1 = real time) |
+| Call                         | Effect                                                                   |
+| ---------------------------- | ------------------------------------------------------------------------ |
+| `ir.step(ticks)`             | advance exactly N ticks, ignoring wall clock                             |
+| `ir.runSeconds(s)`           | advance exactly `s × 64` ticks                                           |
+| `ir.pause()` / `ir.resume()` |                                                                          |
+| `ir.timeWarp(x)`             | multiplier on how many ticks a second of wall clock buys (1 = real time) |
 
 `step` is the deterministic one — it does not consult the clock at all, which is
 what makes scripted scenarios reproducible.
@@ -96,7 +96,7 @@ Two notes worth internalising:
 - **`face` and `burnToward` are separate** because looking and accelerating are
   different acts. `face` costs nothing and does not perturb the trajectory.
 - **`land` does not land you.** It puts the ship on the pad — local `y = 0` in a
-  surface frame *is* the ground — and the contact test makes it landed on the
+  surface frame _is_ the ground — and the contact test makes it landed on the
   next tick, so `ir.land(...).player.landed` is `false` and one `ir.step()`
   fixes it. `ir.scenario('surface')` hides this because it steps 64 ticks. The
   previous version asserted landedness directly while sitting three metres up;
@@ -113,9 +113,9 @@ Two notes worth internalising:
 ## Scenarios
 
 ```js
-await ir.scenario('orbit')        // circular orbit, 300 km
-await ir.scenario('approach')     // burning toward a world
-await ir.scenario('surface')      // parked on the ground
+await ir.scenario('orbit') // circular orbit, 300 km
+await ir.scenario('approach') // burning toward a world
+await ir.scenario('surface') // parked on the ground
 await ir.scenario('interstellar') // holding off Alpha Centauri
 ```
 
@@ -152,8 +152,8 @@ than one. Worth knowing before using the self-test as a mid-session probe.
 ## Persistence
 
 ```js
-const text = ir.save()       // serialised save, ~700 bytes
-ir.load(text)                // → Result<stateHash, error>
+const text = ir.save() // serialised save, ~700 bytes
+ir.load(text) // → Result<stateHash, error>
 ```
 
 `load` returns a `Result` rather than throwing — a save is untrusted input.
@@ -179,7 +179,7 @@ sequenceDiagram
 ```
 
 Read state back as JSON and assert on it. A screenshot tells you something
-rendered; `ir.status()` tells you *what*.
+rendered; `ir.status()` tells you _what_.
 
 ---
 

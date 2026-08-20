@@ -53,11 +53,19 @@ export interface SaveEntity {
    * mid-burn and resuming coasting is a different universe, and the round-trip
    * determinism test caught exactly that.
    */
-  readonly control: { readonly translation: WireVec3; readonly rotation: WireVec3 }
+  readonly control: {
+    readonly translation: WireVec3
+    readonly rotation: WireVec3
+  }
   readonly flightAssist: boolean
 }
 
-export const SAVE_MUTATION_KINDS = ['discovered', 'destroyed', 'placed', 'terrain'] as const
+export const SAVE_MUTATION_KINDS = [
+  'discovered',
+  'destroyed',
+  'placed',
+  'terrain',
+] as const
 export type SaveMutationKind = (typeof SAVE_MUTATION_KINDS)[number]
 
 export interface SaveMutation {
@@ -102,25 +110,33 @@ export const decodeSaveEntity: Decoder<SaveEntity> = decodeObject({
   flightAssist: decodeOptional(decodeBoolean, true),
 })
 
-const decodeStringRecord: Decoder<Readonly<Record<string, string>>> = (value, path) => {
+const decodeStringRecord: Decoder<Readonly<Record<string, string>>> = (
+  value,
+  path,
+) => {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return { ok: false, error: `${path}: expected an object` }
   }
   const out: Record<string, string> = {}
   for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
-    if (typeof entry !== 'string') return { ok: false, error: `${path}.${key}: expected a string` }
+    if (typeof entry !== 'string')
+      return { ok: false, error: `${path}.${key}: expected a string` }
     out[key] = entry
   }
   return ok(out)
 }
 
-const decodeNumberRecord: Decoder<Readonly<Record<string, number>>> = (value, path) => {
+const decodeNumberRecord: Decoder<Readonly<Record<string, number>>> = (
+  value,
+  path,
+) => {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return { ok: false, error: `${path}: expected an object` }
   }
   const out: Record<string, number> = {}
   for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
-    if (typeof entry !== 'number') return { ok: false, error: `${path}.${key}: expected a number` }
+    if (typeof entry !== 'number')
+      return { ok: false, error: `${path}.${key}: expected a number` }
     out[key] = entry
   }
   return ok(out)
@@ -148,7 +164,8 @@ export const decodeSaveGame: Decoder<SaveGame> = decodeObject({
   tick: decodeInteger,
   generation: decodeNumberRecord,
   entities: decodeArray(decodeSaveEntity),
-  playerEntity: (value, path) => (value === null ? ok(null) : decodeString(value, path)),
+  playerEntity: (value, path) =>
+    value === null ? ok(null) : decodeString(value, path),
   dynamicIdCounter: decodeInteger,
   loadedSystems: decodeArray(decodeString),
   mutations: decodeOptional(decodeArray(decodeSaveMutation), []),

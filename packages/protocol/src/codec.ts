@@ -15,7 +15,11 @@ import { err, ok, type Result } from '@inertialref/shared'
 
 export type Decoder<T> = (value: unknown, path: string) => Result<T, string>
 
-const fail = (path: string, expected: string, value: unknown): Result<never, string> =>
+const fail = (
+  path: string,
+  expected: string,
+  value: unknown,
+): Result<never, string> =>
   err(`${path || 'value'}: expected ${expected}, got ${describe(value)}`)
 
 function describe(value: unknown): string {
@@ -25,10 +29,14 @@ function describe(value: unknown): string {
 }
 
 export const decodeNumber: Decoder<number> = (value, path) =>
-  typeof value === 'number' && Number.isFinite(value) ? ok(value) : fail(path, 'a finite number', value)
+  typeof value === 'number' && Number.isFinite(value)
+    ? ok(value)
+    : fail(path, 'a finite number', value)
 
 export const decodeInteger: Decoder<number> = (value, path) =>
-  typeof value === 'number' && Number.isInteger(value) ? ok(value) : fail(path, 'an integer', value)
+  typeof value === 'number' && Number.isInteger(value)
+    ? ok(value)
+    : fail(path, 'an integer', value)
 
 export const decodeString: Decoder<string> = (value, path) =>
   typeof value === 'string' ? ok(value) : fail(path, 'a string', value)
@@ -37,10 +45,13 @@ export const decodeBoolean: Decoder<boolean> = (value, path) =>
   typeof value === 'boolean' ? ok(value) : fail(path, 'a boolean', value)
 
 export function decodeLiteral<const T extends string>(literal: T): Decoder<T> {
-  return (value, path) => (value === literal ? ok(literal) : fail(path, `"${literal}"`, value))
+  return (value, path) =>
+    value === literal ? ok(literal) : fail(path, `"${literal}"`, value)
 }
 
-export function decodeEnum<const T extends string>(...options: readonly T[]): Decoder<T> {
+export function decodeEnum<const T extends string>(
+  ...options: readonly T[]
+): Decoder<T> {
   return (value, path) =>
     typeof value === 'string' && (options as readonly string[]).includes(value)
       ? ok(value as T)
@@ -65,7 +76,9 @@ export function refine<T, U extends T>(
   return (value, path) => {
     const decoded = inner(value, path)
     if (!decoded.ok) return decoded
-    return predicate(decoded.value) ? ok(decoded.value) : fail(path, expected, value)
+    return predicate(decoded.value)
+      ? ok(decoded.value)
+      : fail(path, expected, value)
   }
 }
 
@@ -83,7 +96,9 @@ export function decodeArray<T>(item: Decoder<T>): Decoder<readonly T[]> {
 }
 
 /** Fixed-length tuple of numbers — the wire form for vectors. */
-export function decodeNumberTuple<N extends number>(length: N): Decoder<readonly number[]> {
+export function decodeNumberTuple<N extends number>(
+  length: N,
+): Decoder<readonly number[]> {
   return (value, path) => {
     if (!Array.isArray(value) || value.length !== length) {
       return fail(path, `an array of ${length} numbers`, value)
@@ -92,13 +107,15 @@ export function decodeNumberTuple<N extends number>(length: N): Decoder<readonly
   }
 }
 
-
 export function decodeOptional<T>(inner: Decoder<T>, fallback: T): Decoder<T> {
-  return (value, path) => (value === undefined ? ok(fallback) : inner(value, path))
+  return (value, path) =>
+    value === undefined ? ok(fallback) : inner(value, path)
 }
 
 type Shape = Readonly<Record<string, Decoder<unknown>>>
-type Decoded<S extends Shape> = { readonly [K in keyof S]: S[K] extends Decoder<infer T> ? T : never }
+type Decoded<S extends Shape> = {
+  readonly [K in keyof S]: S[K] extends Decoder<infer T> ? T : never
+}
 
 export function decodeObject<S extends Shape>(shape: S): Decoder<Decoded<S>> {
   return (value, path) => {
@@ -119,16 +136,23 @@ export function decodeObject<S extends Shape>(shape: S): Decoder<Decoded<S>> {
 }
 
 /** Run a decoder against a root value. */
-export const decode = <T>(decoder: Decoder<T>, value: unknown): Result<T, string> =>
-  decoder(value, '')
+export const decode = <T>(
+  decoder: Decoder<T>,
+  value: unknown,
+): Result<T, string> => decoder(value, '')
 
 /** Parse JSON text and decode it, reporting both kinds of failure the same way. */
-export function decodeJson<T>(decoder: Decoder<T>, text: string): Result<T, string> {
+export function decodeJson<T>(
+  decoder: Decoder<T>,
+  text: string,
+): Result<T, string> {
   let parsed: unknown
   try {
     parsed = JSON.parse(text)
   } catch (cause) {
-    return err(`malformed JSON: ${cause instanceof Error ? cause.message : String(cause)}`)
+    return err(
+      `malformed JSON: ${cause instanceof Error ? cause.message : String(cause)}`,
+    )
   }
   return decode(decoder, parsed)
 }

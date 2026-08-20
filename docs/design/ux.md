@@ -14,19 +14,19 @@ The cockpit, the two maps, the visor, and the first hour.
 There are seven interfaces in the entire game, and only two of them take over the
 view.
 
-| Interface | Where it physically is | Takes over? | Entry | Exit |
-|---|---|---|---|---|
-| **Cockpit HUD** | Projected on the canopy | Never | Always on | Never |
-| **System map** | Canopy overlay, 70% opacity | No — cockpit visible behind | `M` | `M`, Esc, or selecting a target |
-| **Galaxy map** | Canopy overlay, full | Visually yes; ship still flying | `G` | `G`, Esc, or plotting |
-| **Ship panel** | A physical console to the pilot's right | No | Look at it and `F` | Look away |
-| **Almanac** | Same console, second page | No | From ship panel | Look away |
-| **Visor HUD** | On the helmet visor | Never | On foot | Never |
-| **Station services** | Terminals you walk to | No | Walk up, `F` | Walk away |
+| Interface            | Where it physically is                  | Takes over?                     | Entry              | Exit                            |
+| -------------------- | --------------------------------------- | ------------------------------- | ------------------ | ------------------------------- |
+| **Cockpit HUD**      | Projected on the canopy                 | Never                           | Always on          | Never                           |
+| **System map**       | Canopy overlay, 70% opacity             | No — cockpit visible behind     | `M`                | `M`, Esc, or selecting a target |
+| **Galaxy map**       | Canopy overlay, full                    | Visually yes; ship still flying | `G`                | `G`, Esc, or plotting           |
+| **Ship panel**       | A physical console to the pilot's right | No                              | Look at it and `F` | Look away                       |
+| **Almanac**          | Same console, second page               | No                              | From ship panel    | Look away                       |
+| **Visor HUD**        | On the helmet visor                     | Never                           | On foot            | Never                           |
+| **Station services** | Terminals you walk to                   | No                              | Walk up, `F`       | Walk away                       |
 
 **There is no pause menu that stops the world**, because there is no state in
 which stopping the world is correct — the save is 696 bytes and restores an
-identical state hash, so *quit anywhere* is already true. Settings open as an
+identical state hash, so _quit anywhere_ is already true. Settings open as an
 overlay while the simulation runs.
 
 **Resolved: solo modes pause, the persistent universe does not.**
@@ -79,30 +79,30 @@ silently correcting.
 
 ### What is always on
 
-| Element | Position | Why it is permanent |
-|---|---|---|
-| Pips | Bottom centre | Changed constantly; must be readable in peripheral vision |
-| **g-meter** | Bottom centre | Felt acceleration, and the compensation margin. The cost of being in a hurry, on your body. |
-| Thermal | Bottom right | The gauge that kills you — and a hard burn is [the largest routine load in the game](ships.md#heat) |
-| Fuel | Bottom right | The gauge that strands you |
-| Attitude / horizon | Bottom centre, subtle | Only near a body; fades in interstellar space |
+| Element            | Position              | Why it is permanent                                                                                 |
+| ------------------ | --------------------- | --------------------------------------------------------------------------------------------------- |
+| Pips               | Bottom centre         | Changed constantly; must be readable in peripheral vision                                           |
+| **g-meter**        | Bottom centre         | Felt acceleration, and the compensation margin. The cost of being in a hurry, on your body.         |
+| Thermal            | Bottom right          | The gauge that kills you — and a hard burn is [the largest routine load in the game](ships.md#heat) |
+| Fuel               | Bottom right          | The gauge that strands you                                                                          |
+| Attitude / horizon | Bottom centre, subtle | Only near a body; fades in interstellar space                                                       |
 
 ### What appears contextually
 
-| Element | Appears when | Disappears when |
-|---|---|---|
-| Target panel | A target is selected | Deselected |
-| Burn plan | A solution is plotted | Arrival, cutoff, or re-plot |
-| Lead marker | A solution is plotted **and** the target is moving | With the plan |
-| Flip cue | 5 s before the flip point | Flip complete, or window missed |
-| Overshoot warning | Projected arrival velocity > 1.5 km/s | Re-plotted |
-| Scan progress ring | Detail scan in range | Complete or out of range |
-| Contacts list | A contact within sensor range | 8 s after the last leaves |
-| Damage panel | Any module below 100% | All repaired |
-| Heat warning | Above 80% | Below 75% — hysteresis, so it does not flicker |
+| Element            | Appears when                                       | Disappears when                                |
+| ------------------ | -------------------------------------------------- | ---------------------------------------------- |
+| Target panel       | A target is selected                               | Deselected                                     |
+| Burn plan          | A solution is plotted                              | Arrival, cutoff, or re-plot                    |
+| Lead marker        | A solution is plotted **and** the target is moving | With the plan                                  |
+| Flip cue           | 5 s before the flip point                          | Flip complete, or window missed                |
+| Overshoot warning  | Projected arrival velocity > 1.5 km/s              | Re-plotted                                     |
+| Scan progress ring | Detail scan in range                               | Complete or out of range                       |
+| Contacts list      | A contact within sensor range                      | 8 s after the last leaves                      |
+| Damage panel       | Any module below 100%                              | All repaired                                   |
+| Heat warning       | Above 80%                                          | Below 75% — hysteresis, so it does not flicker |
 
 **Everything not in these two tables is off.** A cockpit that shows nine panels at
-all times teaches nothing; a cockpit where a panel *appearing* is itself
+all times teaches nothing; a cockpit where a panel _appearing_ is itself
 information teaches constantly.
 
 ---
@@ -112,14 +112,14 @@ information teaches constantly.
 [The canopy is a sensor, not a window](art.md#the-canopy-is-a-sensor-not-a-window),
 and its controls are physical, on the console, always reachable.
 
-| Control | What it does |
-|---|---|
-| **Mode** | Direct ↔ Composite. A real two-position switch, not a menu. |
-| **Gain** | Sensor sensitivity. In Direct this is the whole exposure control. |
-| **Integration** | How long the sensor accumulates. Longer reveals faint structure and smears anything moving. |
-| **Response** | Composite only — the tone curve's shoulder, from near-linear to fully filmic |
-| **View** | Which direction the composite is assembled from. **This is what lets you watch your destination through the second half of a burn**, when the ship is pointed the other way. |
-| **Filter** | Broadband, narrowband, false-colour composites |
+| Control         | What it does                                                                                                                                                                 |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Mode**        | Direct ↔ Composite. A real two-position switch, not a menu.                                                                                                                  |
+| **Gain**        | Sensor sensitivity. In Direct this is the whole exposure control.                                                                                                            |
+| **Integration** | How long the sensor accumulates. Longer reveals faint structure and smears anything moving.                                                                                  |
+| **Response**    | Composite only — the tone curve's shoulder, from near-linear to fully filmic                                                                                                 |
+| **View**        | Which direction the composite is assembled from. **This is what lets you watch your destination through the second half of a burn**, when the ship is pointed the other way. |
+| **Filter**      | Broadband, narrowband, false-colour composites                                                                                                                               |
 
 Two design rules. **The composited view never rotates the cockpit** — the ship's
 attitude indicator and the physical window always tell you where the hull
@@ -212,17 +212,17 @@ The shape is in [loops](loops.md#the-first-hour). This is the specification.
 objective marker. There is a ship, a system that everybody already knows, and a
 prompt hierarchy that appears only when it is relevant.
 
-| Time | Situation | What the game does | What it teaches |
-|---|---|---|---|
-| **0:00** | Cockpit, unpowered, in low Earth orbit. Earth through the **physical window** — harsh, blown out on the day side, black on the night side. Silence. | Nothing at all for 15 seconds. | Scale, and that the game is patient |
-| **0:00–0:02** | The Canopy comes up and the same view resolves into something composed. | A single prompt on the console: `POWER` | There is one thing to do — and what the Canopy is, without a word of explanation |
-| **0:02–0:08** | Systems up. Free flight, no objective. | Prompts appear for a control **only after the player has used the previous one** | Attitude, translation, momentum |
-| **0:08–0:12** | Player notices the Moon. Targeting prompt appears when they look at it. | The nav computer offers a solution; the throttle shows time against fuel | The burn plan, and the one decision in it |
-| **0:12–0:20** | First burn. Probably a missed flip and an overshoot. | The overshoot is **not commented on**. The plan bar showed it coming; that is the lesson. | The micro loop; that failure is cheap |
-| **0:20–0:28** | Lunar approach and landing. Radar altimeter appears under 5 km. | Touchdown speed shown large under 200 m | Landing |
-| **0:28–0:38** | Egress prompt at the seat. Walk out onto the Moon. Earth above. | Nothing. No music sting, no achievement. | **One continuous space** — the game's whole thesis, delivered without a word |
-| **0:38–0:50** | Sample prompt on an obvious feature. Detail scan of the Moon. First Almanac entry. | The Almanac opens itself, once, on the first entry | The reward model |
-| **0:50–1:00** | Fuel gauge becomes relevant. Galaxy map prompt. Jump to Proxima. | The router shows the fuel cost before committing | The frontier, and that fuel is finite |
+| Time          | Situation                                                                                                                                           | What the game does                                                                        | What it teaches                                                                  |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| **0:00**      | Cockpit, unpowered, in low Earth orbit. Earth through the **physical window** — harsh, blown out on the day side, black on the night side. Silence. | Nothing at all for 15 seconds.                                                            | Scale, and that the game is patient                                              |
+| **0:00–0:02** | The Canopy comes up and the same view resolves into something composed.                                                                             | A single prompt on the console: `POWER`                                                   | There is one thing to do — and what the Canopy is, without a word of explanation |
+| **0:02–0:08** | Systems up. Free flight, no objective.                                                                                                              | Prompts appear for a control **only after the player has used the previous one**          | Attitude, translation, momentum                                                  |
+| **0:08–0:12** | Player notices the Moon. Targeting prompt appears when they look at it.                                                                             | The nav computer offers a solution; the throttle shows time against fuel                  | The burn plan, and the one decision in it                                        |
+| **0:12–0:20** | First burn. Probably a missed flip and an overshoot.                                                                                                | The overshoot is **not commented on**. The plan bar showed it coming; that is the lesson. | The micro loop; that failure is cheap                                            |
+| **0:20–0:28** | Lunar approach and landing. Radar altimeter appears under 5 km.                                                                                     | Touchdown speed shown large under 200 m                                                   | Landing                                                                          |
+| **0:28–0:38** | Egress prompt at the seat. Walk out onto the Moon. Earth above.                                                                                     | Nothing. No music sting, no achievement.                                                  | **One continuous space** — the game's whole thesis, delivered without a word     |
+| **0:38–0:50** | Sample prompt on an obvious feature. Detail scan of the Moon. First Almanac entry.                                                                  | The Almanac opens itself, once, on the first entry                                        | The reward model                                                                 |
+| **0:50–1:00** | Fuel gauge becomes relevant. Galaxy map prompt. Jump to Proxima.                                                                                    | The router shows the fuel cost before committing                                          | The frontier, and that fuel is finite                                            |
 
 **The design rule for prompts:** a prompt appears when the player is in a
 situation where the action is both possible and useful, and never before. It
@@ -242,11 +242,11 @@ anything the player can discover by looking.
 **Three schemes, all first-class.** The design does not assume a HOTAS, and does
 not punish having one.
 
-| Scheme | Assumption | Notes |
-|---|---|---|
-| **Mouse + keyboard** | Default | Relative mouse for pitch/yaw with a configurable deadzone and return-to-centre. This has to be *good*, not tolerated — it is what most players will use. |
-| **Gamepad** | Full parity | Dual sticks for rotation and translation; pips on the d-pad |
-| **HOTAS / HOSAS** | Full 6-DoF binding | Direct axis binding, no emulation layer, per-device profiles. **Chromium only** — see below |
+| Scheme               | Assumption         | Notes                                                                                                                                                    |
+| -------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Mouse + keyboard** | Default            | Relative mouse for pitch/yaw with a configurable deadzone and return-to-centre. This has to be _good_, not tolerated — it is what most players will use. |
+| **Gamepad**          | Full parity        | Dual sticks for rotation and translation; pips on the d-pad                                                                                              |
+| **HOTAS / HOSAS**    | Full 6-DoF binding | Direct axis binding, no emulation layer, per-device profiles. **Chromium only** — see below                                                              |
 
 Everything is rebindable, including modifier layers. Bindings are part of the
 save and sync across modes.
@@ -257,25 +257,25 @@ save and sync across modes.
 in three browsers and read the caps out of Chromium's source. The answer is yes,
 with a browser named.
 
-| | Chrome 151 | Safari 26.5 | Firefox 153 |
-|---|---|---|---|
-| `navigator.hid` | **present** | absent | absent |
-| Gamepad API | present | present | present |
+|                 | Chrome 151  | Safari 26.5 | Firefox 153 |
+| --------------- | ----------- | ----------- | ----------- |
+| `navigator.hid` | **present** | absent      | absent      |
+| Gamepad API     | present     | present     | present     |
 
-Mozilla's position on WebHID is **negative** and settled — *"devices are generally
-not designed with access from arbitrary websites in their threat model"* — and
+Mozilla's position on WebHID is **negative** and settled — _"devices are generally
+not designed with access from arbitrary websites in their threat model"_ — and
 WebKit has stated no position and not shipped it. **Plan for WebHID being
 Chromium-only indefinitely.**
 
 The Gamepad API is the universal floor, and it has hard limits that shape the
 binding UI:
 
-| Limit | Value | Where it hurts |
-|---|---|---|
-| Axes | **16** | A HOSAS pair plus rudder pedals can reach it |
-| Buttons | **32** | A single mid-range throttle exceeds it |
-| Poll rate | **250 Hz** (4 ms, dedicated thread) | Fine for flight; downsamples a 1000 Hz device |
-| Axis resolution | The device's own, 8/16/32-bit | **Not a constraint** — a 16-bit axis keeps all 65,536 steps |
+| Limit           | Value                               | Where it hurts                                              |
+| --------------- | ----------------------------------- | ----------------------------------------------------------- |
+| Axes            | **16**                              | A HOSAS pair plus rudder pedals can reach it                |
+| Buttons         | **32**                              | A single mid-range throttle exceeds it                      |
+| Poll rate       | **250 Hz** (4 ms, dedicated thread) | Fine for flight; downsamples a 1000 Hz device               |
+| Axis resolution | The device's own, 8/16/32-bit       | **Not a constraint** — a 16-bit axis keeps all 65,536 steps |
 
 The button cap is worse than a cap. On macOS, Chromium indexes buttons by **HID
 usage number** and drops anything above 32 without reporting it:
@@ -286,7 +286,7 @@ if (button_index >= Gamepad::kButtonsLengthCap)
   continue;
 ```
 
-So a throttle whose report descriptor declares buttons above usage 32 will *appear*
+So a throttle whose report descriptor declares buttons above usage 32 will _appear_
 to work and quietly lose inputs. **The binding UI must never present
 `gamepad.buttons` as the device's real button set**, and a device with more
 physical buttons than reported ones should say so rather than letting the player
@@ -315,17 +315,17 @@ the audience.
 Not a compliance checklist. Several of these are load-bearing for a game about
 looking at things.
 
-| Requirement | Specification |
-|---|---|
+| Requirement         | Specification                                                                                                                                                                                                                                                                                                                                                                  |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Motion sickness** | Configurable FOV 60–110°; head-bob off by default; roll-compensation option that keeps the horizon level; a "reduce camera shake" toggle that affects all shake. **The flip is the highest-risk moment in the game** — a 180° rotation under freefall — so it gets its own option: assist-flip, which is slower and smoother, and a fixed-horizon option through the rotation. |
-| **Text size** | Three sizes, scaling all UI including HUD. Minimum body text 16 px at 1080p. |
-| **Colour** | No information conveyed by colour alone. Provenance uses **dash pattern** as well as opacity; scan state uses **glyphs**. Protanopia, deuteranopia and tritanopia palettes. |
-| **Contrast** | HUD elements meet 4.5:1 against the brightest plausible background — which, in this game, is a star filling the canopy. That is the design case, not a corner case. |
-| **Subtitles** | All correspondence is text already. Audio cues that convey information — heat warning, lock warning, scan complete — have visual equivalents, always. |
-| **Remapping** | Everything, including modifiers. No fixed keys. |
-| **Input** | Full one-handed control scheme; no chorded inputs required; no timing-critical inputs outside combat |
-| **Reduced motion** | Disables the jump tunnel visual, the map cross-fades, and HUD animation |
-| **Audio** | Independent music / effects / interface / voice-adjacent sliders; mono downmix |
+| **Text size**       | Three sizes, scaling all UI including HUD. Minimum body text 16 px at 1080p.                                                                                                                                                                                                                                                                                                   |
+| **Colour**          | No information conveyed by colour alone. Provenance uses **dash pattern** as well as opacity; scan state uses **glyphs**. Protanopia, deuteranopia and tritanopia palettes.                                                                                                                                                                                                    |
+| **Contrast**        | HUD elements meet 4.5:1 against the brightest plausible background — which, in this game, is a star filling the canopy. That is the design case, not a corner case.                                                                                                                                                                                                            |
+| **Subtitles**       | All correspondence is text already. Audio cues that convey information — heat warning, lock warning, scan complete — have visual equivalents, always.                                                                                                                                                                                                                          |
+| **Remapping**       | Everything, including modifiers. No fixed keys.                                                                                                                                                                                                                                                                                                                                |
+| **Input**           | Full one-handed control scheme; no chorded inputs required; no timing-critical inputs outside combat                                                                                                                                                                                                                                                                           |
+| **Reduced motion**  | Disables the jump tunnel visual, the map cross-fades, and HUD animation                                                                                                                                                                                                                                                                                                        |
+| **Audio**           | Independent music / effects / interface / voice-adjacent sliders; mono downmix                                                                                                                                                                                                                                                                                                 |
 
 **Exposure and HDR interact with accessibility and need care.** A game that flies
 from a star at display peak luminance to interstellar dark does a great deal of
@@ -334,11 +334,11 @@ HDR, where the peak is brighter than any SDR display can reach.
 
 Three controls, all findable, none buried:
 
-| Control | Default | Why |
-|---|---|---|
-| Adaptation rate and range clamp | On, moderate | The single most important comfort setting in the game |
-| HDR peak luminance cap | Display maximum | Some viewers want the range without the glare |
-| HDR output | On when the display reports it | **Must be overridable in both directions** — auto-detection will be wrong sometimes |
+| Control                         | Default                        | Why                                                                                 |
+| ------------------------------- | ------------------------------ | ----------------------------------------------------------------------------------- |
+| Adaptation rate and range clamp | On, moderate                   | The single most important comfort setting in the game                               |
+| HDR peak luminance cap          | Display maximum                | Some viewers want the range without the glare                                       |
+| HDR output                      | On when the display reports it | **Must be overridable in both directions** — auto-detection will be wrong sometimes |
 
 See [art](art.md#hdr).
 

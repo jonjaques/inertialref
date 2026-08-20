@@ -55,7 +55,8 @@ export interface EntityInit {
 }
 
 export function createEntity(init: EntityInit): Entity {
-  const state = init.state ?? restState(init.frame ?? ('universe' as FrameState['frame']))
+  const state =
+    init.state ?? restState(init.frame ?? ('universe' as FrameState['frame']))
   return {
     id: init.id,
     kind: init.kind,
@@ -126,7 +127,9 @@ export class EntityStore {
    * the step deterministic even once entities start interacting.
    */
   ordered(): readonly Entity[] {
-    return [...this.#entities.values()].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+    return [...this.#entities.values()].sort((a, b) =>
+      a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
+    )
   }
 
   all(): IterableIterator<Entity> {

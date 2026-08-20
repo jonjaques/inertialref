@@ -1,4 +1,9 @@
-import { AU, formatDistance, LIGHT_YEAR, type Meters } from '@inertialref/shared'
+import {
+  AU,
+  formatDistance,
+  LIGHT_YEAR,
+  type Meters,
+} from '@inertialref/shared'
 import { UV, type UniverseVector } from '@inertialref/spatial'
 import type { World } from '@inertialref/simulation'
 import {
@@ -73,9 +78,14 @@ export function travelTargets(
   options: TravelTargetOptions = {},
 ): readonly TravelTarget[] {
   const time = world.clock.time
-  const loaded = new Map<SystemId, StarSystem>(world.loadedSystems().map((s) => [s.id, s]))
+  const loaded = new Map<SystemId, StarSystem>(
+    world.loadedSystems().map((s) => [s.id, s]),
+  )
 
-  const stars = new Map<SystemId, { name: string; position: UniverseVector; detail: string }>()
+  const stars = new Map<
+    SystemId,
+    { name: string; position: UniverseVector; detail: string }
+  >()
   for (const stub of systemsWithin(
     world.galaxySeed,
     from,
@@ -97,7 +107,8 @@ export function travelTargets(
 
   const targets: TravelTarget[] = []
   const ordered = [...stars.entries()].sort(
-    (a, b) => UV.distance(a[1].position, from) - UV.distance(b[1].position, from),
+    (a, b) =>
+      UV.distance(a[1].position, from) - UV.distance(b[1].position, from),
   )
 
   for (const [id, star] of ordered) {
@@ -122,7 +133,10 @@ export function travelTargets(
       // elements say where it is relative to its primary, and the listing wants
       // how far away it is from the player, which is a different question once
       // the player is in another system entirely.
-      const position = world.frames.pose(bodyFrameId(body.address), time).position
+      const position = world.frames.pose(
+        bodyFrameId(body.address),
+        time,
+      ).position
       const bodyDistance = UV.distance(position, from)
       targets.push({
         kind: 'body',
@@ -189,14 +203,17 @@ export function resolveDestination(
   if (trimmed.length === 0) throw new Error('No destination given')
 
   // No tags at all: a system designation, `SOL` or `HIP71683`.
-  if (!trimmed.includes(':')) return { kind: 'system', system: systemId(trimmed) }
+  if (!trimmed.includes(':'))
+    return { kind: 'system', system: systemId(trimmed) }
 
   let full = trimmed
   if (!full.startsWith('g:')) {
     const relativeToSystem = /^[bro]:/.test(full)
     if (relativeToSystem) {
       if (currentSystem === null) {
-        throw new Error(`"${trimmed}" is relative to a system, and the player is not in one`)
+        throw new Error(
+          `"${trimmed}" is relative to a system, and the player is not in one`,
+        )
       }
       full = `g:${galaxy}/s:${currentSystem}/${full}`
     } else {
@@ -209,7 +226,12 @@ export function resolveDestination(
     case 'system':
       return { kind: 'system', system: address.system }
     case 'body':
-      return { kind: 'body', system: address.system, address, text: formatAddress(address) }
+      return {
+        kind: 'body',
+        system: address.system,
+        address,
+        text: formatAddress(address),
+      }
     case 'region':
     case 'object': {
       // You cannot be sent to a patch of ground or a rock on it yet, so the
@@ -220,10 +242,17 @@ export function resolveDestination(
         system: address.system,
         body: address.body,
       }
-      return { kind: 'body', system: address.system, address: body, text: formatAddress(body) }
+      return {
+        kind: 'body',
+        system: address.system,
+        address: body,
+        text: formatAddress(body),
+      }
     }
     default:
-      throw new Error(`"${trimmed}" names a galaxy, which is not somewhere you can be sent`)
+      throw new Error(
+        `"${trimmed}" names a galaxy, which is not somewhere you can be sent`,
+      )
   }
 }
 
@@ -234,7 +263,10 @@ export function resolveDestination(
  * same rule authority follows, for the same reason — containment is what makes
  * a ship *in* Sol, not a field on the ship.
  */
-export function currentSystemOf(world: World, id: EntityId | null): SystemId | null {
+export function currentSystemOf(
+  world: World,
+  id: EntityId | null,
+): SystemId | null {
   if (id === null) return null
   const entity = world.entities.get(id)
   if (entity === undefined || !world.frames.has(entity.state.frame)) return null

@@ -14,7 +14,10 @@ import {
  * a sequence number and no wall-clock timestamp, so it is worth asserting.
  */
 
-const collect = (): { sink: { write(r: LogRecord): void }; records: LogRecord[] } => {
+const collect = (): {
+  sink: { write(r: LogRecord): void }
+  records: LogRecord[]
+} => {
   const records: LogRecord[] = []
   return { sink: { write: (r) => records.push(r) }, records }
 }
@@ -48,7 +51,10 @@ describe('the log hub', () => {
     const hub = new LogHub()
     const { sink, records } = collect()
     hub.addSink(sink)
-    hub.logger('game', { build: 'dev' }).child('terrain', { body: 'b:0' }).info('patch', { level: 6 })
+    hub
+      .logger('game', { build: 'dev' })
+      .child('terrain', { body: 'b:0' })
+      .info('patch', { level: 6 })
     const record = records[0]
     expect(record?.scope).toBe('game.terrain')
     expect(record?.fields).toEqual({ build: 'dev', body: 'b:0', level: 6 })
@@ -83,7 +89,8 @@ describe('the ring buffer sink', () => {
     const buffer = new RingBufferSink(3)
     const hub = new LogHub()
     hub.addSink(buffer)
-    for (const message of ['a', 'b', 'c', 'd', 'e']) hub.logger('x').info(message)
+    for (const message of ['a', 'b', 'c', 'd', 'e'])
+      hub.logger('x').info(message)
     expect(buffer.records().map((r) => r.message)).toEqual(['c', 'd', 'e'])
   })
 
@@ -128,7 +135,12 @@ describe('the console sink', () => {
     const record = (...a: unknown[]): void => {
       args.push(a)
     }
-    const target: ConsoleLike = { debug: record, info: record, warn: record, error: record }
+    const target: ConsoleLike = {
+      debug: record,
+      info: record,
+      warn: record,
+      error: record,
+    }
     const hub = new LogHub()
     hub.addSink(createConsoleSink(target, 'info'))
     hub.logger('sim').info('bare')

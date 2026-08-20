@@ -51,7 +51,7 @@ These are the ones where a violation is a rewrite later rather than a refactor.
   `packages/*` may know what a Durable Object is.
 - **Never let React Compiler memoise a component that reads mutable state.** It
   assumes the values it derives are pure functions of their inputs, and an engine
-  or a metrics buffer is a stable reference whose *contents* change every frame —
+  or a metrics buffer is a stable reference whose _contents_ change every frame —
   so the component renders once and shows that forever. `'use no memo'` is the
   opt-out, and `apps/game/src/hud/PerfPanel.tsx` is the worked example. This is
   not licence to hand-write `useMemo`; see CLAUDE.md.
@@ -77,7 +77,7 @@ These are the ones where a violation is a rewrite later rather than a refactor.
 - **No `enum`, no parameter properties, no runtime namespaces** —
   `erasableSyntaxOnly` is on. Use `const` objects plus union types.
 - **`import type` for type-only imports** — `verbatimModuleSyntax` is on.
-- Comments explain *why*, and specifically why the obvious thing does not work.
+- Comments explain _why_, and specifically why the obvious thing does not work.
   Do not restate the code.
 
 ## Layout and layering
@@ -96,11 +96,11 @@ emit, and declaration-emitting eleven source-only packages to satisfy `tsc -b`
 buys nothing. Three independent tsconfig projects type-check the three real
 environments instead:
 
-| Project | Covers | Environment |
-|---|---|---|
-| `tsconfig.json` | `packages/*/src` | **no DOM lib** — must run in a browser, a worker and Node |
-| `apps/game/tsconfig.json` | the client | DOM, WebWorker, JSX |
-| `apps/headless/tsconfig.json` | the Node runner | Node types |
+| Project                       | Covers           | Environment                                               |
+| ----------------------------- | ---------------- | --------------------------------------------------------- |
+| `tsconfig.json`               | `packages/*/src` | **no DOM lib** — must run in a browser, a worker and Node |
+| `apps/game/tsconfig.json`     | the client       | DOM, WebWorker, JSX                                       |
+| `apps/headless/tsconfig.json` | the Node runner  | Node types                                                |
 
 If a package needs a host capability, it declares a **port** and the host
 implements it. See `packages/workers/src/transport.ts` and
@@ -156,19 +156,19 @@ runner uses, so a scenario that reproduces a bug in Chrome can be replayed in a
 test.
 
 ```js
-ir.help()                       // the whole API
-ir.summary()                    // one line
-ir.status()                     // everything, structured
+ir.help() // the whole API
+ir.summary() // one line
+ir.status() // everything, structured
 ir.step(640) / ir.runSeconds(10)
-ir.targets()                    // everywhere you can go, nearest first
-ir.goTo('HIP71683') / ir.goTo('b:2')   // system or body; dispatches
-ir.loadSystem('HIP71683')       // generate a system without travelling to it
+ir.targets() // everywhere you can go, nearest first
+ir.goTo('HIP71683') / ir.goTo('b:2') // system or body; dispatches
+ir.loadSystem('HIP71683') // generate a system without travelling to it
 ir.orbit('g:milky-way/s:SOL/b:2', 400)
 ir.land('g:milky-way/s:SOL/b:0', 0.35, -1.1)
 ir.face(address) / ir.burnToward(address)
 ir.save() / ir.load(text)
-await ir.selfTest()             // the twelve capabilities
-await ir.scenario('surface')    // orbit | approach | surface | interstellar
+await ir.selfTest() // the twelve capabilities
+await ir.scenario('surface') // orbit | approach | surface | interstellar
 ```
 
 **Start with `ir.targets()`.** Every other verb takes an address and none of

@@ -95,7 +95,11 @@ export interface WorldSnapshot {
   readonly stateHash: string
 }
 
-const lerpState = (previous: FrameState, current: FrameState, alpha: number): FrameState => {
+const lerpState = (
+  previous: FrameState,
+  current: FrameState,
+  alpha: number,
+): FrameState => {
   // A frame change between the two ticks makes the local coordinates
   // incomparable; snapping to the newer frame for one frame is invisible, while
   // interpolating between them would fling the entity across the system.
@@ -109,7 +113,10 @@ const lerpState = (previous: FrameState, current: FrameState, alpha: number): Fr
   }
 }
 
-export function snapshot(world: World, alpha = world.clock.alpha): WorldSnapshot {
+export function snapshot(
+  world: World,
+  alpha = world.clock.alpha,
+): WorldSnapshot {
   const status = world.clock.status()
   // Present one tick behind so there is always a pair to interpolate between.
   const renderTime = status.time - (1 - alpha) * TICK_DURATION
@@ -124,7 +131,9 @@ export function snapshot(world: World, alpha = world.clock.alpha): WorldSnapshot
       name: entity.name,
       kind: entity.kind,
       frame: state.frame,
-      frameChain: world.frames.has(state.frame) ? world.frames.chain(state.frame) : [state.frame],
+      frameChain: world.frames.has(state.frame)
+        ? world.frames.chain(state.frame)
+        : [state.frame],
       address: address === null ? null : formatAddress(address),
       position: canonicalPosition(world.frames, state, renderTime),
       orientation: canonicalOrientation(world.frames, state, renderTime),

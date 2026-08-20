@@ -54,18 +54,39 @@ export interface RegionAddress {
   readonly j: number
 }
 
-export function regionAddress(face: number, level: number, i: number, j: number): RegionAddress {
-  invariant(Number.isInteger(face) && face >= 0 && face < 6, `Bad cube face ${face}`)
-  invariant(Number.isInteger(level) && level >= 0 && level <= 24, `Bad region level ${level}`)
+export function regionAddress(
+  face: number,
+  level: number,
+  i: number,
+  j: number,
+): RegionAddress {
+  invariant(
+    Number.isInteger(face) && face >= 0 && face < 6,
+    `Bad cube face ${face}`,
+  )
+  invariant(
+    Number.isInteger(level) && level >= 0 && level <= 24,
+    `Bad region level ${level}`,
+  )
   const span = 2 ** level
-  invariant(Number.isInteger(i) && i >= 0 && i < span, `Region i out of range: ${i}`)
-  invariant(Number.isInteger(j) && j >= 0 && j < span, `Region j out of range: ${j}`)
+  invariant(
+    Number.isInteger(i) && i >= 0 && i < span,
+    `Region i out of range: ${i}`,
+  )
+  invariant(
+    Number.isInteger(j) && j >= 0 && j < span,
+    `Region j out of range: ${j}`,
+  )
   return { face, level, i, j }
 }
 
 export type UniverseAddress =
   | { readonly kind: 'galaxy'; readonly galaxy: GalaxyId }
-  | { readonly kind: 'system'; readonly galaxy: GalaxyId; readonly system: SystemId }
+  | {
+      readonly kind: 'system'
+      readonly galaxy: GalaxyId
+      readonly system: SystemId
+    }
   | {
       readonly kind: 'body'
       readonly galaxy: GalaxyId
@@ -89,9 +110,15 @@ export type UniverseAddress =
       readonly index: number
     }
 
-export const galaxyAddress = (galaxy: GalaxyId): UniverseAddress => ({ kind: 'galaxy', galaxy })
+export const galaxyAddress = (galaxy: GalaxyId): UniverseAddress => ({
+  kind: 'galaxy',
+  galaxy,
+})
 
-export const systemAddress = (galaxy: GalaxyId, system: SystemId): UniverseAddress => ({
+export const systemAddress = (
+  galaxy: GalaxyId,
+  system: SystemId,
+): UniverseAddress => ({
   kind: 'system',
   galaxy,
   system,
@@ -110,12 +137,24 @@ export function bodyAddress(
   return { kind: 'body', galaxy, system, body }
 }
 
-export const regionOf = (body: UniverseAddress, region: RegionAddress): UniverseAddress => {
+export const regionOf = (
+  body: UniverseAddress,
+  region: RegionAddress,
+): UniverseAddress => {
   invariant(body.kind === 'body', 'Regions belong to bodies')
-  return { kind: 'region', galaxy: body.galaxy, system: body.system, body: body.body, region }
+  return {
+    kind: 'region',
+    galaxy: body.galaxy,
+    system: body.system,
+    body: body.body,
+    region,
+  }
 }
 
-export const objectOf = (region: UniverseAddress, index: number): UniverseAddress => {
+export const objectOf = (
+  region: UniverseAddress,
+  index: number,
+): UniverseAddress => {
   invariant(region.kind === 'region', 'Objects belong to regions')
   invariant(Number.isInteger(index) && index >= 0, `Bad object index ${index}`)
   return {
@@ -132,7 +171,8 @@ export const objectOf = (region: UniverseAddress, index: number): UniverseAddres
 /* Text form                                                                  */
 /* ------------------------------------------------------------------------- */
 
-const formatRegion = (r: RegionAddress): string => `${r.face}.${r.level}.${r.i}.${r.j}`
+const formatRegion = (r: RegionAddress): string =>
+  `${r.face}.${r.level}.${r.i}.${r.j}`
 
 export function formatAddress(address: UniverseAddress): string {
   const parts = [`g:${address.galaxy}`]
@@ -191,8 +231,16 @@ export function parseAddress(text: string): UniverseAddress {
         break
       case 'r': {
         const parts = parseIntegerList(value, 'region address')
-        invariant(parts.length === 4, `Region address needs face.level.i.j, got ${value}`)
-        region = regionAddress(parts[0] as number, parts[1] as number, parts[2] as number, parts[3] as number)
+        invariant(
+          parts.length === 4,
+          `Region address needs face.level.i.j, got ${value}`,
+        )
+        region = regionAddress(
+          parts[0] as number,
+          parts[1] as number,
+          parts[2] as number,
+          parts[3] as number,
+        )
         break
       }
       case 'o':
@@ -237,7 +285,9 @@ export function addressLabels(address: UniverseAddress): readonly string[] {
 }
 
 /** The containing address one level up, or null at the galaxy. */
-export function parentAddress(address: UniverseAddress): UniverseAddress | null {
+export function parentAddress(
+  address: UniverseAddress,
+): UniverseAddress | null {
   switch (address.kind) {
     case 'galaxy':
       return null
@@ -260,8 +310,10 @@ export function parentAddress(address: UniverseAddress): UniverseAddress | null 
   }
 }
 
-export const addressEquals = (a: UniverseAddress, b: UniverseAddress): boolean =>
-  formatAddress(a) === formatAddress(b)
+export const addressEquals = (
+  a: UniverseAddress,
+  b: UniverseAddress,
+): boolean => formatAddress(a) === formatAddress(b)
 
 /** The system an address lives in, if any. Interest management keys off this. */
 export function systemOf(address: UniverseAddress): SystemId | null {
@@ -290,7 +342,10 @@ export const entityIdForAddress = (address: UniverseAddress): EntityId =>
   `@${formatAddress(address)}` as EntityId
 
 export const dynamicEntityId = (counter: number): EntityId => {
-  invariant(Number.isInteger(counter) && counter >= 0, `Bad dynamic entity counter ${counter}`)
+  invariant(
+    Number.isInteger(counter) && counter >= 0,
+    `Bad dynamic entity counter ${counter}`,
+  )
   return `#${counter}` as EntityId
 }
 

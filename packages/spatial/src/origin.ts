@@ -1,5 +1,10 @@
 import type { Meters, Seconds } from '@inertialref/shared'
-import { type FrameGraph, type FrameId, type FramePose, ROOT_FRAME } from './frame.ts'
+import {
+  type FrameGraph,
+  type FrameId,
+  type FramePose,
+  ROOT_FRAME,
+} from './frame.ts'
 import * as Q from './quat.ts'
 import type { Quat } from './quat.ts'
 import { difference, translate, type UniverseVector } from './universeVector.ts'
@@ -55,18 +60,31 @@ export function originForFrame(
   generation = 0,
 ): RenderOrigin {
   const pose: FramePose = graph.pose(frame, t)
-  return { position: pose.position, orientation: pose.orientation, anchorFrame: frame, generation }
+  return {
+    position: pose.position,
+    orientation: pose.orientation,
+    anchorFrame: frame,
+    generation,
+  }
 }
 
-export const toRenderSpace = (origin: RenderOrigin, position: UniverseVector): Vec3 =>
+export const toRenderSpace = (
+  origin: RenderOrigin,
+  position: UniverseVector,
+): Vec3 =>
   Q.rotateInverse(origin.orientation, difference(position, origin.position))
 
-export const fromRenderSpace = (origin: RenderOrigin, render: Vec3): UniverseVector =>
+export const fromRenderSpace = (
+  origin: RenderOrigin,
+  render: Vec3,
+): UniverseVector =>
   translate(origin.position, Q.rotate(origin.orientation, render))
 
 /** Rotate a universe-axes direction or velocity into render axes. */
-export const directionToRenderSpace = (origin: RenderOrigin, direction: Vec3): Vec3 =>
-  Q.rotateInverse(origin.orientation, direction)
+export const directionToRenderSpace = (
+  origin: RenderOrigin,
+  direction: Vec3,
+): Vec3 => Q.rotateInverse(origin.orientation, direction)
 
 /** Orientation of an object with universe orientation `q`, in render axes. */
 export const orientationToRenderSpace = (origin: RenderOrigin, q: Quat): Quat =>
@@ -78,10 +96,15 @@ export function needsRebase(
   threshold: Meters = REBASE_THRESHOLD,
 ): boolean {
   const d = difference(camera, origin.position)
-  return Math.abs(d.x) > threshold || Math.abs(d.y) > threshold || Math.abs(d.z) > threshold
+  return (
+    Math.abs(d.x) > threshold ||
+    Math.abs(d.y) > threshold ||
+    Math.abs(d.z) > threshold
+  )
 }
 
-const snap = (value: number, grid: number): number => Math.round(value / grid) * grid
+const snap = (value: number, grid: number): number =>
+  Math.round(value / grid) * grid
 
 /**
  * Move the origin to the snapped grid point nearest the camera.
@@ -113,7 +136,9 @@ export function maintainOrigin(
   threshold: Meters = REBASE_THRESHOLD,
   grid: Meters = REBASE_SNAP,
 ): RenderOrigin {
-  return needsRebase(origin, camera, threshold) ? rebase(origin, camera, grid) : origin
+  return needsRebase(origin, camera, threshold)
+    ? rebase(origin, camera, grid)
+    : origin
 }
 
 /** Re-anchor render axes to another frame, keeping the origin point put. */

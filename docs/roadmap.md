@@ -40,28 +40,28 @@ a production build. What follows is depth, not foundations.
 
 ## Status at a glance
 
-| Area | Status | Notes |
-|---|---|---|
-| Universe coordinates and precision | ✅ | [ADR-0001](adr/0001-universe-coordinates.md) |
-| Reference frames and transitions | ✅ | [ADR-0002](adr/0002-reference-frames.md) |
-| Render coordinates, floating origin | ✅ | [ADR-0003](adr/0003-render-coordinates.md) |
-| Stable identity and addressing | ✅ | [ADR-0004](adr/0004-entity-addressing.md) |
-| Deterministic generation | ✅ | Core proven; most *content types* unbuilt — see [content](#content-the-rest-of-the-vision) |
-| Simulation clock and determinism | 🟡 | All of it except [replay](#replay-and-reconciliation) |
-| Simulation / rendering separation | ✅ | Proven by `apps/headless` |
-| Worker architecture | ✅ | Pool, contracts, cancellation, instrumentation |
-| Offline-first | ✅ | Service worker + IndexedDB + migrations |
-| Persistence model | 🟡 | Proven; [mutations](#persistent-mutations) unbuilt |
-| Streaming | 🟡 | Systems and terrain stream; [policy is naive](#streaming-and-scale) |
-| Level of detail | 🟡 | Tiers exist; [terrain LOD](#terrain) is single-level |
-| Units and conventions | ✅ | |
-| Repository structure and layering | ✅ | Enforced by `pnpm graph` |
-| Protocols and serialization | 🟡 | Worker + save done; net, replay and binary unbuilt |
-| Observability | ✅ | All twelve inspectable fields |
-| Automation and DX | 🟡 | Commands, docs and [CI](#automation-gaps) done; no formatter, no save fixture |
-| Testing | 🟡 | Strong; [replay and fixtures](#automation-gaps) missing |
-| Performance | 🟡 | Designed for, [barely measured](#performance-work) |
-| Multiplayer | ⛔ | Deferred. Seams only — [ADR-0008](adr/0008-multiplayer-partitions.md); the partition key is a live debug field |
+| Area                                | Status | Notes                                                                                                          |
+| ----------------------------------- | ------ | -------------------------------------------------------------------------------------------------------------- |
+| Universe coordinates and precision  | ✅     | [ADR-0001](adr/0001-universe-coordinates.md)                                                                   |
+| Reference frames and transitions    | ✅     | [ADR-0002](adr/0002-reference-frames.md)                                                                       |
+| Render coordinates, floating origin | ✅     | [ADR-0003](adr/0003-render-coordinates.md)                                                                     |
+| Stable identity and addressing      | ✅     | [ADR-0004](adr/0004-entity-addressing.md)                                                                      |
+| Deterministic generation            | ✅     | Core proven; most _content types_ unbuilt — see [content](#content-the-rest-of-the-vision)                     |
+| Simulation clock and determinism    | 🟡     | All of it except [replay](#replay-and-reconciliation)                                                          |
+| Simulation / rendering separation   | ✅     | Proven by `apps/headless`                                                                                      |
+| Worker architecture                 | ✅     | Pool, contracts, cancellation, instrumentation                                                                 |
+| Offline-first                       | ✅     | Service worker + IndexedDB + migrations                                                                        |
+| Persistence model                   | 🟡     | Proven; [mutations](#persistent-mutations) unbuilt                                                             |
+| Streaming                           | 🟡     | Systems and terrain stream; [policy is naive](#streaming-and-scale)                                            |
+| Level of detail                     | 🟡     | Tiers exist; [terrain LOD](#terrain) is single-level                                                           |
+| Units and conventions               | ✅     |                                                                                                                |
+| Repository structure and layering   | ✅     | Enforced by `pnpm graph`                                                                                       |
+| Protocols and serialization         | 🟡     | Worker + save done; net, replay and binary unbuilt                                                             |
+| Observability                       | ✅     | All twelve inspectable fields                                                                                  |
+| Automation and DX                   | 🟡     | Commands, docs and [CI](#automation-gaps) done; no formatter, no save fixture                                  |
+| Testing                             | 🟡     | Strong; [replay and fixtures](#automation-gaps) missing                                                        |
+| Performance                         | 🟡     | Designed for, [barely measured](#performance-work)                                                             |
+| Multiplayer                         | ⛔     | Deferred. Seams only — [ADR-0008](adr/0008-multiplayer-partitions.md); the partition key is a live debug field |
 
 ---
 
@@ -71,20 +71,20 @@ The [vision](vision.md) names the eventual inhabitants of the galaxy. Most are
 not built. The important thing is that **none of them need architectural
 change** — they are generators plus representations.
 
-| Thing | Status | Seam |
-|---|---|---|
-| Galaxy, systems, stars | ✅ | |
-| Planets, moons | ✅ | |
-| Planetary terrain | 🟡 | Heightfields only; no biomes or materials |
-| Ships | 🟡 | One debug spacecraft, no variants or subsystems |
-| Rings | ⬜ | A body property + an instanced renderer |
-| Asteroids / belts | ⬜ | Wants a *population* generator: many small bodies from one cell seed, addressed as `o:` objects within a region |
-| Star clusters, nebulae | ⬜ | Density modulation in the galaxy generator + volumetric rendering |
-| Black holes | ⬜ | A body kind; the interesting part is rendering, not simulation |
-| Vegetation, flora, fauna | ⬜ | Region-seeded scatter on terrain — the `o:` address segment exists for this |
-| Structures, settlements | ⬜ | First real consumer of [persistent mutations](#persistent-mutations) |
-| Humanoids | ⬜ | Needs a character controller on a surface frame |
-| Small physical objects | 🟡 | Debug cubes render at the right scale; no interaction |
+| Thing                    | Status | Seam                                                                                                            |
+| ------------------------ | ------ | --------------------------------------------------------------------------------------------------------------- |
+| Galaxy, systems, stars   | ✅     |                                                                                                                 |
+| Planets, moons           | ✅     |                                                                                                                 |
+| Planetary terrain        | 🟡     | Heightfields only; no biomes or materials                                                                       |
+| Ships                    | 🟡     | One debug spacecraft, no variants or subsystems                                                                 |
+| Rings                    | ⬜     | A body property + an instanced renderer                                                                         |
+| Asteroids / belts        | ⬜     | Wants a _population_ generator: many small bodies from one cell seed, addressed as `o:` objects within a region |
+| Star clusters, nebulae   | ⬜     | Density modulation in the galaxy generator + volumetric rendering                                               |
+| Black holes              | ⬜     | A body kind; the interesting part is rendering, not simulation                                                  |
+| Vegetation, flora, fauna | ⬜     | Region-seeded scatter on terrain — the `o:` address segment exists for this                                     |
+| Structures, settlements  | ⬜     | First real consumer of [persistent mutations](#persistent-mutations)                                            |
+| Humanoids                | ⬜     | Needs a character controller on a surface frame                                                                 |
+| Small physical objects   | 🟡     | Debug cubes render at the right scale; no interaction                                                           |
 
 **Gameplay verbs**: piloting ✅, in-system travel ✅, approach and orbit ✅,
 landing ✅. Interstellar travel is 🟡 — possible but takes hours of
@@ -115,24 +115,24 @@ flowchart TB
     style A fill:#0369a1,stroke:#0c4a6e,color:#fff
 ```
 
-| Gap | Consequence today | Seam |
-|---|---|---|
-| Single LOD level | The visible horizon is a few patches wide | `terrainLevelFor` already picks a level from altitude; the streamer needs a per-patch level |
-| No edge stitching | Hairline seams between patches | `buildPatch` uses one-sided differences at edges; it needs the neighbours' edge rows |
-| No cube-face wrapping | Patches at a face boundary are skipped | The streamer skips out-of-range `i`/`j` rather than crossing to the adjacent face |
-| Spherical-only normals for the datum sphere | Fallback sphere is featureless | Acceptable; it is only visible beyond the streamed set |
-| No terrain materials | One flat colour | Elevation and slope are already available per vertex |
+| Gap                                         | Consequence today                         | Seam                                                                                        |
+| ------------------------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Single LOD level                            | The visible horizon is a few patches wide | `terrainLevelFor` already picks a level from altitude; the streamer needs a per-patch level |
+| No edge stitching                           | Hairline seams between patches            | `buildPatch` uses one-sided differences at edges; it needs the neighbours' edge rows        |
+| No cube-face wrapping                       | Patches at a face boundary are skipped    | The streamer skips out-of-range `i`/`j` rather than crossing to the adjacent face           |
+| Spherical-only normals for the datum sphere | Fallback sphere is featureless            | Acceptable; it is only visible beyond the streamed set                                      |
+| No terrain materials                        | One flat colour                           | Elevation and slope are already available per vertex                                        |
 
 ---
 
 ## Streaming and scale
 
-| Gap | Consequence | Seam |
-|---|---|---|
-| Interest is a radius scan over cells | Fine at 6 ly; a 100 ly query touches ~1,000 cells | `systemsWithin` already bounds and refuses oversized queries; a spatial index goes behind the same call |
-| No predictive loading | Patches pop in rather than pre-loading | The streamer knows camera velocity; extrapolate the request set |
-| No budget on generation per frame | A fast descent can queue a burst | The pool measures queue latency; a budget belongs in the streamer |
-| Simulation interest = render interest | Distant systems do not simulate at all | `updateInterest` is the seam; a coarser tier for "simulated but not rendered" is the next step |
+| Gap                                   | Consequence                                       | Seam                                                                                                    |
+| ------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Interest is a radius scan over cells  | Fine at 6 ly; a 100 ly query touches ~1,000 cells | `systemsWithin` already bounds and refuses oversized queries; a spatial index goes behind the same call |
+| No predictive loading                 | Patches pop in rather than pre-loading            | The streamer knows camera velocity; extrapolate the request set                                         |
+| No budget on generation per frame     | A fast descent can queue a burst                  | The pool measures queue latency; a budget belongs in the streamer                                       |
+| Simulation interest = render interest | Distant systems do not simulate at all            | `updateInterest` is the seam; a coarser tier for "simulated but not rendered" is the next step          |
 
 ### Simulation in a worker
 
@@ -155,18 +155,18 @@ The model is proven; the data is not built.
 ```
 
 The field exists and validates today, so adding the first real mutation is a
-migration of *data* rather than a change of *model*. What each needs:
+migration of _data_ rather than a change of _model_. What each needs:
 
-| Mutation | Needs |
-|---|---|
-| `discovered` | A player-state blob; trivial |
-| `destroyed` | A generated entity to be suppressible at generation time — the generator must consult a mutation set |
-| `placed` | Dynamic entities that persist, which already works for the ship |
-| `terrain` | A sparse height delta keyed by region address, applied after `elevationAt` |
+| Mutation     | Needs                                                                                                |
+| ------------ | ---------------------------------------------------------------------------------------------------- |
+| `discovered` | A player-state blob; trivial                                                                         |
+| `destroyed`  | A generated entity to be suppressible at generation time — the generator must consult a mutation set |
+| `placed`     | Dynamic entities that persist, which already works for the ship                                      |
+| `terrain`    | A sparse height delta keyed by region address, applied after `elevationAt`                           |
 
 The one to design carefully is `destroyed`, because it inverts the direction of
 dependence: generation currently knows nothing about saved state, and it must
-stay a pure function. The likely shape is a filter applied *after* generation,
+stay a pure function. The likely shape is a filter applied _after_ generation,
 not a branch inside it.
 
 ---
@@ -211,21 +211,21 @@ contains, which is not a coincidence and is worth preserving.
 
 ## Performance work
 
-The principle is *design for these, measure before optimising*
+The principle is _design for these, measure before optimising_
 ([vision](vision.md#measure-before-optimising)). The design admits all of them;
 almost none are applied, and almost nothing is measured.
 
-| Technique | Status | Where it would go first |
-|---|---|---|
-| Typed arrays | ✅ | Heightfields, vertex buffers |
-| Transferable buffers | ✅ | Worker results |
-| Worker pools | ✅ | |
-| Instanced rendering | 🟡 | Star field is instanced sprites — WebGPU has no point size. Asteroids and scatter are not |
-| Object pooling | ⬜ | `Vec3` allocation in the flight inner loop |
-| Spatial indexes | ⬜ | Interest queries |
-| WASM | ⬜ | Noise generation, if profiling justifies it |
-| WebGPU | 🟡 | `WebGPURenderer` + TSL shipped, WebGL 2 retained as fallback. Compute shaders, storage buffers and indirect draw are not used yet |
-| `SharedArrayBuffer` | ⬜ | Requires cross-origin isolation; nothing needs it yet |
+| Technique            | Status | Where it would go first                                                                                                           |
+| -------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| Typed arrays         | ✅     | Heightfields, vertex buffers                                                                                                      |
+| Transferable buffers | ✅     | Worker results                                                                                                                    |
+| Worker pools         | ✅     |                                                                                                                                   |
+| Instanced rendering  | 🟡     | Star field is instanced sprites — WebGPU has no point size. Asteroids and scatter are not                                         |
+| Object pooling       | ⬜     | `Vec3` allocation in the flight inner loop                                                                                        |
+| Spatial indexes      | ⬜     | Interest queries                                                                                                                  |
+| WASM                 | ⬜     | Noise generation, if profiling justifies it                                                                                       |
+| WebGPU               | 🟡     | `WebGPURenderer` + TSL shipped, WebGL 2 retained as fallback. Compute shaders, storage buffers and indirect draw are not used yet |
+| `SharedArrayBuffer`  | ⬜     | Requires cross-origin isolation; nothing needs it yet                                                                             |
 
 **What is measured today:** simulation throughput (~100–105k ticks/s headless,
 ~1.25M ticks/s browser for one entity), worker queue latency and execution time,
@@ -245,7 +245,7 @@ brotli**, measured 2026-08-20), dominated by Three.js, with no code splitting. I
 grew 177 KB gzip
 with the WebGPU migration — the node system and the WebGPU backend — and roughly
 150 KB raw of that is dead weight: React Three Fiber imports `three`, which pulls
-in the classic `WebGLRenderer` that nothing uses, because the WebGL *fallback*
+in the classic `WebGLRenderer` that nothing uses, because the WebGL _fallback_
 here is `WebGPURenderer`'s own backend. Dropping R3F or code-splitting would both
 recover it. The budget is 900 KB gzip with splitting, so this is inside it.
 
@@ -268,13 +268,13 @@ recover it. The budget is 900 KB gzip with splitting, so this is inside it.
 
 ## Automation gaps
 
-| Gap | Note |
-|---|---|
-| ~~No CI configuration~~ ✅ | `.github/workflows/check.yml` runs `pnpm check` and the capability self-test on every pull request |
-| No formatter | oxlint only; no prettier or dprint. Deliberate so far, but a formatter is cheap consistency |
-| No stored save fixture | Compatibility testing currently synthesises old saves in-test rather than loading a real one from disk |
-| No performance regression tests | See above |
-| No visual regression testing | Would need a GPU in CI; the harness's structured output covers more than screenshots would |
+| Gap                             | Note                                                                                                   |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| ~~No CI configuration~~ ✅      | `.github/workflows/check.yml` runs `pnpm check` and the capability self-test on every pull request     |
+| No formatter                    | oxlint only; no prettier or dprint. Deliberate so far, but a formatter is cheap consistency            |
+| No stored save fixture          | Compatibility testing currently synthesises old saves in-test rather than loading a real one from disk |
+| No performance regression tests | See above                                                                                              |
+| No visual regression testing    | Would need a GPU in CI; the harness's structured output covers more than screenshots would             |
 
 ---
 
@@ -282,14 +282,14 @@ recover it. The budget is 900 KB gzip with splitting, so this is inside it.
 
 Not roadmap items so much as honest labels on what is modelled:
 
-| Simplification | Reality |
-|---|---|
+| Simplification                                 | Reality                                                                                           |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------- |
 | Multiple-star systems modelled as single stars | The catalogue records true component counts — α Cen, Sirius, Procyon and 61 Cyg are all multiples |
-| Patched conics, no n-body | Lagrange points, resonances and perturbations do not exist |
-| No collision except ground contact | No hull, no entity-to-entity, no terrain slope response |
-| Circular-ish orbits, coplanar-ish systems | Generated inclinations and eccentricities are small |
-| Atmospheres are isothermal exponential | No layers, no weather, no wind |
-| Bodies are spheres | No oblateness, so no J2 precession |
+| Patched conics, no n-body                      | Lagrange points, resonances and perturbations do not exist                                        |
+| No collision except ground contact             | No hull, no entity-to-entity, no terrain slope response                                           |
+| Circular-ish orbits, coplanar-ish systems      | Generated inclinations and eccentricities are small                                               |
+| Atmospheres are isothermal exponential         | No layers, no weather, no wind                                                                    |
+| Bodies are spheres                             | No oblateness, so no J2 precession                                                                |
 
 ---
 

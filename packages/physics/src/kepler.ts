@@ -1,4 +1,10 @@
-import { invariant, type Meters, type Mu, type Radians, type Seconds } from '@inertialref/shared'
+import {
+  invariant,
+  type Meters,
+  type Mu,
+  type Radians,
+  type Seconds,
+} from '@inertialref/shared'
 import { Quaternion as Q, type Vec3, vec3 } from '@inertialref/spatial'
 import { astroToSim, simToAstro } from './frameConvention.ts'
 
@@ -52,7 +58,8 @@ export const visViva = (mu: Mu, r: Meters, semiMajorAxis: Meters): number =>
 
 export const circularSpeed = (mu: Mu, r: Meters): number => Math.sqrt(mu / r)
 
-export const escapeSpeed = (mu: Mu, r: Meters): number => Math.sqrt((2 * mu) / r)
+export const escapeSpeed = (mu: Mu, r: Meters): number =>
+  Math.sqrt((2 * mu) / r)
 
 /**
  * Radius of the sphere of influence of a body orbiting a primary.
@@ -76,7 +83,11 @@ export function sphereOfInfluence(
  * per body per resolved frame, which is several hundred times a tick when a
  * system is loaded.
  */
-export function solveKepler(meanAnomaly: Radians, eccentricity: number, tolerance = 1e-12): Radians {
+export function solveKepler(
+  meanAnomaly: Radians,
+  eccentricity: number,
+  tolerance = 1e-12,
+): Radians {
   invariant(
     eccentricity >= 0 && eccentricity < 1,
     `solveKepler expects an elliptical orbit, got e=${eccentricity}`,
@@ -102,7 +113,10 @@ export function normalizeAngle(angle: Radians): Radians {
   return wrapped < 0 ? wrapped + twoPi : wrapped
 }
 
-export function trueAnomalyFromEccentric(E: Radians, eccentricity: number): Radians {
+export function trueAnomalyFromEccentric(
+  E: Radians,
+  eccentricity: number,
+): Radians {
   return (
     2 *
     Math.atan2(
@@ -112,9 +126,14 @@ export function trueAnomalyFromEccentric(E: Radians, eccentricity: number): Radi
   )
 }
 
-export function meanAnomalyAt(elements: OrbitalElements, mu: Mu, t: Seconds): Radians {
+export function meanAnomalyAt(
+  elements: OrbitalElements,
+  mu: Mu,
+  t: Seconds,
+): Radians {
   return normalizeAngle(
-    elements.meanAnomalyAtEpoch + meanMotion(mu, elements.semiMajorAxis) * (t - elements.epoch),
+    elements.meanAnomalyAtEpoch +
+      meanMotion(mu, elements.semiMajorAxis) * (t - elements.epoch),
   )
 }
 
@@ -134,7 +153,11 @@ function orbitOrientation(elements: OrbitalElements): Q.Quat {
 }
 
 /** Position and velocity relative to the primary, in simulation axes. */
-export function stateVectorAt(elements: OrbitalElements, mu: Mu, t: Seconds): StateVector {
+export function stateVectorAt(
+  elements: OrbitalElements,
+  mu: Mu,
+  t: Seconds,
+): StateVector {
   const { semiMajorAxis: a, eccentricity: e } = elements
   const E = solveKepler(meanAnomalyAt(elements, mu, t), e)
   const nu = trueAnomalyFromEccentric(E, e)
@@ -143,7 +166,11 @@ export function stateVectorAt(elements: OrbitalElements, mu: Mu, t: Seconds): St
   const speedScale = Math.sqrt(mu / p)
 
   const perifocalPosition = vec3(r * Math.cos(nu), r * Math.sin(nu), 0)
-  const perifocalVelocity = vec3(-speedScale * Math.sin(nu), speedScale * (e + Math.cos(nu)), 0)
+  const perifocalVelocity = vec3(
+    -speedScale * Math.sin(nu),
+    speedScale * (e + Math.cos(nu)),
+    0,
+  )
 
   const rotation = orbitOrientation(elements)
   return {
@@ -158,7 +185,11 @@ export function stateVectorAt(elements: OrbitalElements, mu: Mu, t: Seconds): St
  * Used by the round-trip tests, by trajectory readouts in the HUD, and
  * eventually by anything that puts a ship into an orbit it did not start in.
  */
-export function elementsFromStateVector(state: StateVector, mu: Mu, t: Seconds): OrbitalElements {
+export function elementsFromStateVector(
+  state: StateVector,
+  mu: Mu,
+  t: Seconds,
+): OrbitalElements {
   const r = simToAstro(state.position)
   const v = simToAstro(state.velocity)
   const rMag = Math.hypot(r.x, r.y, r.z)
@@ -166,7 +197,11 @@ export function elementsFromStateVector(state: StateVector, mu: Mu, t: Seconds):
   invariant(rMag > 0, 'elementsFromStateVector: zero radius')
 
   // Specific angular momentum; its direction fixes the orbital plane.
-  const h = vec3(r.y * v.z - r.z * v.y, r.z * v.x - r.x * v.z, r.x * v.y - r.y * v.x)
+  const h = vec3(
+    r.y * v.z - r.z * v.y,
+    r.z * v.x - r.x * v.z,
+    r.x * v.y - r.y * v.x,
+  )
   const hMag = Math.hypot(h.x, h.y, h.z)
   invariant(hMag > 0, 'elementsFromStateVector: degenerate (radial) trajectory')
 
@@ -206,7 +241,12 @@ export function elementsFromStateVector(state: StateVector, mu: Mu, t: Seconds):
     : r.z / Math.sin(inclination)
   const argumentOfLatitude = Math.atan2(acrossNode, alongNode)
 
-  const E = 2 * Math.atan2(Math.sqrt(1 - e) * Math.sin(nu / 2), Math.sqrt(1 + e) * Math.cos(nu / 2))
+  const E =
+    2 *
+    Math.atan2(
+      Math.sqrt(1 - e) * Math.sin(nu / 2),
+      Math.sqrt(1 + e) * Math.cos(nu / 2),
+    )
   const M = normalizeAngle(E - e * Math.sin(E))
 
   return {

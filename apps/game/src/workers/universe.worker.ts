@@ -17,7 +17,8 @@ serveTasks(
       scope.postMessage(message, transfer as Transferable[])
     },
     subscribe(handler: (message: WorkerInbound) => void) {
-      const listener = (event: MessageEvent): void => handler(event.data as WorkerInbound)
+      const listener = (event: MessageEvent): void =>
+        handler(event.data as WorkerInbound)
       scope.addEventListener('message', listener)
       return () => scope.removeEventListener('message', listener)
     },

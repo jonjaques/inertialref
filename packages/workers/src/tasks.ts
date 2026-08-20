@@ -1,6 +1,9 @@
 import { invariant } from '@inertialref/shared'
 import { parseSeed, type Seed } from '@inertialref/procedural'
-import { encodeUniverseVector, type WireUniverseVector } from '@inertialref/protocol'
+import {
+  encodeUniverseVector,
+  type WireUniverseVector,
+} from '@inertialref/protocol'
 import {
   type GalacticCell,
   galaxyId,
@@ -48,7 +51,10 @@ export interface GenerateCellResponse {
   readonly stars: readonly GeneratedStar[]
 }
 
-export const generateCellTask = defineTask<GenerateCellRequest, GenerateCellResponse>({
+export const generateCellTask = defineTask<
+  GenerateCellRequest,
+  GenerateCellResponse
+>({
   name: 'universe.generateCell',
   version: 1,
   run({ seed, cell }) {
@@ -71,7 +77,10 @@ export interface SurveyRegionRequest {
   readonly max: GalacticCell
 }
 
-export const surveyRegionTask = defineTask<SurveyRegionRequest, GenerateCellResponse[]>({
+export const surveyRegionTask = defineTask<
+  SurveyRegionRequest,
+  GenerateCellResponse[]
+>({
   name: 'universe.surveyRegion',
   version: 1,
   run({ seed, min, max }, context) {
@@ -123,7 +132,10 @@ export interface HeightfieldResponse {
   readonly maxElevation: number
 }
 
-export const generateHeightfieldTask = defineTask<HeightfieldRequestPayload, HeightfieldResponse>({
+export const generateHeightfieldTask = defineTask<
+  HeightfieldRequestPayload,
+  HeightfieldResponse
+>({
   name: 'universe.generateHeightfield',
   version: 1,
   run(payload) {
@@ -180,11 +192,18 @@ export interface SurveyedBody {
 export interface SurveySystemResponse {
   readonly system: string
   readonly name: string
-  readonly star: { readonly spectralType: string; readonly mass: number; readonly luminosity: number }
+  readonly star: {
+    readonly spectralType: string
+    readonly mass: number
+    readonly luminosity: number
+  }
   readonly bodies: readonly SurveyedBody[]
 }
 
-export const surveySystemTask = defineTask<SurveySystemRequest, SurveySystemResponse>({
+export const surveySystemTask = defineTask<
+  SurveySystemRequest,
+  SurveySystemResponse
+>({
   name: 'universe.surveySystem',
   version: 1,
   run({ seed, galaxy, system }) {
@@ -192,7 +211,10 @@ export const surveySystemTask = defineTask<SurveySystemRequest, SurveySystemResp
     const galaxyName = galaxyId(galaxy)
     // Derived through the same helper the world uses: a survey has to describe
     // the universe the player is actually flying through, not a parallel one.
-    const stub = resolveSystem(galaxySeedOf(rootSeed, galaxyName), systemId(system))
+    const stub = resolveSystem(
+      galaxySeedOf(rootSeed, galaxyName),
+      systemId(system),
+    )
     invariant(stub !== undefined, `Unknown system ${system}`)
     const generated = generateSystem(rootSeed, galaxyName, stub)
     return {
@@ -226,4 +248,3 @@ export function createTaskRegistry(): TaskRegistry {
   registry.register(surveySystemTask)
   return registry
 }
-

@@ -76,5 +76,7 @@ export function usedHeapMb(): number {
   const memory = (performance as Performance & { memory?: ChromeMemory }).memory
   // NaN rather than 0: `Series` drops it, so the panel shows an empty plot
   // instead of a flat line at zero that looks like a measurement.
-  return memory === undefined ? Number.NaN : memory.usedJSHeapSize / (1024 * 1024)
+  return memory === undefined
+    ? Number.NaN
+    : memory.usedJSHeapSize / (1024 * 1024)
 }

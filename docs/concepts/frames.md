@@ -13,7 +13,7 @@
 
 ## Frames are not the precision mechanism
 
-Most engines that span large scales use nested frames to *rescue* floating-point
+Most engines that span large scales use nested frames to _rescue_ floating-point
 precision — coordinates stay small because they are relative to something
 nearby. InertialRef does not need that, because
 [coordinates](coordinates.md) are already sub-millimetre everywhere.
@@ -55,11 +55,11 @@ flowchart TB
 
 Three frames exist per body, and the distinction is load-bearing:
 
-| Prefix | Frame | Spins? | Who lives here |
-|---|---|---|---|
-| `b:` | body-centred **inertial** | no | satellites, approaching ships, anything integrating |
-| `bf:` | body-**fixed** | yes | terrain, anything bolted to the ground |
-| `sf:` | **surface** tangent plane at one lat/lon, +Y up | with the body | landed ships, metre-scale gameplay |
+| Prefix | Frame                                           | Spins?        | Who lives here                                      |
+| ------ | ----------------------------------------------- | ------------- | --------------------------------------------------- |
+| `b:`   | body-centred **inertial**                       | no            | satellites, approaching ships, anything integrating |
+| `bf:`  | body-**fixed**                                  | yes           | terrain, anything bolted to the ground              |
+| `sf:`  | **surface** tangent plane at one lat/lon, +Y up | with the body | landed ships, metre-scale gameplay                  |
 
 A ship's frame chain reads top-down in the debug overlay, which is often the
 fastest way to understand what the simulation thinks is happening:
@@ -196,8 +196,8 @@ several hundred metres per second, and no line of code computes that.
 A frame-local `Vec3` is a double. Express a point in a frame four light-years
 away and it degrades to metres. This is documented by a test rather than hidden:
 
-> `frame.test.ts` → *"degrades predictably when a position is expressed in a
-> far-away frame"* — asserts the error is **greater than** the coordinate
+> `frame.test.ts` → _"degrades predictably when a position is expressed in a
+> far-away frame"_ — asserts the error is **greater than** the coordinate
 > resolution and bounded, and that canonical position is preserved regardless.
 
 If that test ever starts passing with a tiny error, something has started
@@ -219,7 +219,7 @@ Two bugs came from violating it:
    `"-0.000000"`, which re-parses to `-0`, which formats as `"0.000000"`. The id
    was not idempotent, and a ship landed a hair south of the equator could not be
    restored at all.
-2. The frame's *geometry* was built from unrounded angles while its id was
+2. The frame's _geometry_ was built from unrounded angles while its id was
    rounded, and the ground elevation was passed in by the caller. A restored
    landing site sat half a metre — then 21 mm — from the original.
 

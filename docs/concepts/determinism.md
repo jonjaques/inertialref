@@ -18,7 +18,7 @@ Here is the tempting version:
 ```ts
 const rng = new Rng(systemSeed)
 for (const planet of planets) {
-  planet.mass   = rng.next()
+  planet.mass = rng.next()
   planet.radius = rng.next()
 }
 ```
@@ -97,16 +97,16 @@ The tests assert exactly that, rather than asserting a value:
 `Math.imul`, shifts and XOR.
 
 That last property is the reason. ECMAScript specifies those operations
-*exactly*, so Chrome, a Web Worker, Node and a future server produce identical
+_exactly_, so Chrome, a Web Worker, Node and a future server produce identical
 streams bit for bit. Floating-point-derived randomness makes no such promise,
 and a universe that differs subtly between a client and a server is a class of
 bug that only appears in production.
 
-| Rejected | Why |
-|---|---|
-| `Math.random` with a seeded shim | Not reproducible across engines; the global stream is the order-dependence trap by construction |
-| PCG64 / splitmix64 via BigInt | Better statistics, ~10× slower — not viable in the terrain inner loop |
-| One RNG per system, drawn sequentially | Order-independent *between* systems but not within one; adding a planet still rewrites its siblings |
+| Rejected                               | Why                                                                                                 |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `Math.random` with a seeded shim       | Not reproducible across engines; the global stream is the order-dependence trap by construction     |
+| PCG64 / splitmix64 via BigInt          | Better statistics, ~10× slower — not viable in the terrain inner loop                               |
+| One RNG per system, drawn sequentially | Order-independent _between_ systems but not within one; adding a planet still rewrites its siblings |
 
 ### Seed derivation has to avalanche
 
@@ -154,7 +154,7 @@ worker are byte-identical — which capability check 10 asserts by comparing all
 first four `uint32`s of a stream, and a noise and an fBm sample.
 
 These are **not** testing that the numbers are right — any stream would do. They
-are testing that the numbers *never change*. A silent tweak to the mixing
+are testing that the numbers _never change_. A silent tweak to the mixing
 function would regenerate every player's universe out from under their save
 file, and this is the tripwire.
 
@@ -173,7 +173,7 @@ generation: { galaxy: 1, system: 1, terrain: 1 }
 ```
 
 So "this save was made with terrain v2" is a statement the loader can act on,
-rather than a mystery about why the coastline moved. Deciding *what* to do about
+rather than a mystery about why the coastline moved. Deciding _what_ to do about
 it — regenerate, pin the old version, migrate content — is future work, but the
 information is captured now, which is the part that cannot be added
 retroactively.
@@ -186,7 +186,7 @@ Generation determinism is only half. The simulation half is enforced by a single
 comparison value:
 
 ```ts
-world.stateHash()   // '804b2d58'
+world.stateHash() // '804b2d58'
 ```
 
 A hash over the tick, the seed, and every entity's frame, position, velocity,
@@ -202,16 +202,16 @@ ticks. If you add a field to canonical state, add it here too.
 
 Every determinism test in the suite is an assertion about it:
 
-| Test | Asserts |
-|---|---|
-| 60 Hz vs 144 Hz | same hash at the same tick |
-| jittery frames (4–60 ms) vs steady | same hash at the same tick |
-| 1× for 100 s vs 100× for 1 s | same hash, same simulated time |
-| save → step → load | hash returns to the saved value |
-| worlds differing only in control input | different hashes |
-| worlds differing only in flight assist | different hashes |
-| worlds differing only in angular velocity | different hashes |
-| replay with identical inputs | same hash |
+| Test                                      | Asserts                         |
+| ----------------------------------------- | ------------------------------- |
+| 60 Hz vs 144 Hz                           | same hash at the same tick      |
+| jittery frames (4–60 ms) vs steady        | same hash at the same tick      |
+| 1× for 100 s vs 100× for 1 s              | same hash, same simulated time  |
+| save → step → load                        | hash returns to the saved value |
+| worlds differing only in control input    | different hashes                |
+| worlds differing only in flight assist    | different hashes                |
+| worlds differing only in angular velocity | different hashes                |
+| replay with identical inputs              | same hash                       |
 
 See [simulation time](time.md) for why the clock makes this possible.
 
