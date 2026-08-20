@@ -80,7 +80,9 @@ reopening one is a deliberate act rather than a drift.
 ## Still open — five engineering spikes
 
 Not decisions. Each needs a measurement or a verification, and each blocks
-something specific.
+something specific. **Each is written up as a self-contained handoff in
+[`docs/spikes.md`](../spikes.md)** — context, what to find out, what a good answer
+looks like, and the fallback if it comes back negative.
 
 | # | Spike | Blocks | Question |
 |---|---|---|---|
