@@ -54,7 +54,11 @@ Full reasoning is in `docs/adr/`. The short version:
    vectors lock the PRNG output; changing them is deliberate and comes with an
    algorithm-version bump.
 4. **Identity is an address**, and the address is also the seed path and the
-   text form used in saves, logs and the harness.
+   text form used in saves, logs and the harness. A body's index is the ordinal
+   it was **issued** at, not its orbital position (ADR-0009) — so a newly
+   confirmed exoplanet can be added without renaming every world outward of it.
+   Adopted in pre-alpha because it is a generator change now and an unresolvable
+   migration once any save corpus exists.
 5. **64 Hz fixed tick**, because 1/64 is exact in binary. Wall clock only
    decides how many steps to run.
 6. **Orbits are analytic**, not integrated. Bodies have no interpolation error

@@ -145,7 +145,7 @@ diagrams and decision records.
 | [Vision and scope](docs/vision.md) | what this is for, and the principles behind it |
 | [Architecture](docs/architecture.md) | the system in one sitting |
 | [Concepts](docs/README.md#concepts) | how each mechanism works, and why |
-| [ADRs](docs/adr/README.md) | eight decisions that are expensive to reverse |
+| [ADRs](docs/adr/README.md) | nine decisions that are expensive to reverse |
 | [Roadmap](docs/roadmap.md) | what is deliberately not built yet |
 | [Design bible](docs/design/README.md) | what the game is, and why each mechanic is shaped that way |
 

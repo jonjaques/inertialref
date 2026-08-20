@@ -16,7 +16,7 @@ and to this machine, and points at AGENTS.md for everything else.
 | `docs/design/` | The game design bible — what the game is, and why each mechanic is shaped that way. |
 | `docs/vision.md` | What the project is for, and the principles behind architectural choices. |
 | `docs/architecture.md` | The system in one sitting. |
-| `docs/adr/` | The eight foundational decisions, with alternatives and consequences. |
+| `docs/adr/` | The nine foundational decisions, with alternatives and consequences. |
 | `docs/roadmap.md` | What is deliberately not built yet, and the seam for each. |
 | `CONTEXT.md` | Build log — what exists, what was decided, which bugs must not return. |
 | `README.md` | Overview and the twelve proven capabilities. |

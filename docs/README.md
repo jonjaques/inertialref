@@ -16,6 +16,7 @@ flowchart LR
     CONCEPTS --> ADR["<b>ADRs</b><br/>why, and what was rejected"]
     ARCH --> GUIDES["<b>Guides</b><br/>how to work on it"]
     ARCH --> ROADMAP["<b>Roadmap</b><br/>what is not built yet"]
+    ROADMAP --> SPIKES["<b>Spikes</b><br/>what must be measured"]
     VIS --> DESIGN["<b>Design bible</b><br/>what the game is"]
 
     classDef entry fill:#0ea5e9,stroke:#0369a1,color:#fff
@@ -34,6 +35,7 @@ flowchart LR
 | Drive the game from code or a console | [The harness](guides/harness.md) |
 | Add a feature without breaking an invariant | [Extending](guides/extending.md) |
 | Know what is deliberately not built | [Roadmap](roadmap.md) |
+| Pick up a self-contained piece of work | [Spikes](spikes.md) — five measurements, written as handoffs |
 | Look up a term | [Glossary](glossary.md) |
 
 ## Concepts
@@ -86,7 +88,7 @@ Where the bible and [vision.md](vision.md) disagree, vision.md wins.
 
 ## Decision records
 
-Eight decisions are expensive to reverse. Each has an ADR with context,
+Nine decisions are expensive to reverse. Each has an ADR with context,
 alternatives and consequences — see the [index](adr/README.md).
 
 ## How these documents relate

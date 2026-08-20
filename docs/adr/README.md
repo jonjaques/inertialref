@@ -1,6 +1,6 @@
 # Architectural decision records
 
-Eight decisions that are expensive to reverse. Each records the **context**, the
+Nine decisions that are expensive to reverse. Each records the **context**, the
 **decision**, the **alternatives that were rejected**, and the **consequences**
 — including the ones that turned out to be costs.
 
@@ -18,6 +18,7 @@ Eight decisions that are expensive to reverse. Each records the **context**, the
 | [0006](0006-simulation-clock.md) | Simulation clock | accepted | 64 Hz fixed timestep, because 1/64 is exact in binary. Wall clock decides only how many. |
 | [0007](0007-persistence.md) | Persistence | accepted | A save is the seed, the tick, and what could not be regenerated — under 700 bytes. |
 | [0008](0008-multiplayer-partitions.md) | Multiplayer partitions | **proposed** | Authority partitions by star system. Design only; multiplayer is a later phase, though the partition key is already a live debug field. |
+| [0009](0009-issue-ordinal-addressing.md) | Issue-ordinal addressing | accepted | A body index is the ordinal it was issued at, not its orbital position — so real astronomy can add a planet without renaming every world outward of it. |
 
 ---
 
@@ -33,6 +34,7 @@ flowchart TB
     A6["<b>0006</b><br/>simulation clock"]
     A7["<b>0007</b><br/>persistence"]
     A8["<b>0008</b><br/>multiplayer partitions"]
+    A9["<b>0009</b><br/>issue-ordinal addressing"]
 
     A1 -->|"precision already solved,<br/>so frames are free to be<br/>about motion"| A2
     A1 -->|"canonical → GPU"| A3
@@ -43,9 +45,12 @@ flowchart TB
     A6 -->|"state is a function<br/>of tick count"| A7
     A2 -->|"gravitational coupling<br/>bounds authority"| A8
     A7 -->|"replicate what a client<br/>cannot derive"| A8
+    A4 -->|"amended: orbital order<br/>is not identity"| A9
+    A5 -->|"the catalogue version<br/>joins the manifest"| A9
 
     style A1 fill:#0369a1,stroke:#0c4a6e,color:#fff
     style A8 fill:#334155,stroke:#1e293b,color:#94a3b8,stroke-dasharray: 5 5
+    style A9 fill:#0e7490,stroke:#155e75,color:#fff
 ```
 
 Two dependencies are worth noticing because they are not obvious:
@@ -56,6 +61,11 @@ Two dependencies are worth noticing because they are not obvious:
 - **0005 + 0004 → 0007.** Determinism plus stable identity is what makes a save
   a few hundred bytes instead of gigabytes. Persistence did not need a clever format; it
   needed the other two decisions to have been made correctly.
+- **0004 → 0009.** ADR-0004's own consequences section admitted that bodies are
+  addressed by orbital index and that changing the layout renames them. That was
+  acceptable while the only thing changing the layout was us. It stops being
+  acceptable when real astronomy is a generation input, which is what 0009
+  corrects — and it is free to correct only while there is no save corpus.
 
 ---
 

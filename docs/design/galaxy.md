@@ -123,7 +123,8 @@ that manifest and rides the same machinery.
 
 **Rule 2 — address indices are issue ordinals, not orbital ordinals.**
 
-This is the load-bearing change and it deserves an ADR. Today `b:2` reads as
+This is the load-bearing change and it now has one:
+[ADR-0009](../adr/0009-issue-ordinal-addressing.md). Today `b:2` reads as
 "the third planet". It must instead read as "the third body ever issued in this
 system", with orbital order computed for display. Then a newly confirmed planet
 interior to everything else takes the *next free index* rather than index 0, and

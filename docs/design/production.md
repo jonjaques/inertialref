@@ -182,7 +182,7 @@ See [charter](charter.md#business-posture).
 | **Benchmark harness** | M2 | Without it, no performance claim can be evaluated |
 | **Parts-assembly for hulls and interiors** | M3 | The whole content strategy rests on it and it has never been built |
 | **Cross-catalogue identity resolution** | M4 | Silent corruption here poisons addressing, saves and discovery records simultaneously |
-| **Issue-ordinal addressing** | M4 | A change to the addressing model; needs an ADR and it touches saves |
+| **Issue-ordinal addressing** | M4 | A change to the addressing model that touches saves. [ADR-0009](../adr/0009-issue-ordinal-addressing.md) accepted; **free only while there is no save corpus**, so land it early rather than at M4 |
 | **Character controller on a rotating frame** | M5 | Correctness here is subtle and the failure mode is nausea |
 | **Client prediction** | M7 | The hardest single piece of engineering in the plan |
 
