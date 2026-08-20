@@ -2,7 +2,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import type { RenderBody } from '@inertialref/rendering'
-import { placeOnStarShell } from '@inertialref/rendering'
+import { chaseCameraPosition, placeOnStarShell } from '@inertialref/rendering'
 import type { GameEngine } from '../engine/GameEngine.ts'
 
 /*
@@ -65,20 +65,10 @@ function EngineTick({ engine }: { engine: GameEngine }) {
   return null
 }
 
-/**
- * Camera offset from the ship, in ship axes: behind and slightly above.
- *
- * A chase view rather than a cockpit, because the point of this milestone is to
- * see the ship, the metre-scale reference objects beside it and the planet in
- * one frame.
- */
-const CHASE_OFFSET = new THREE.Vector3(0, 2.5, 14)
-
 /** Drives the real camera from the ship's canonical state, once per frame. */
 function CameraRig({ engine }: { engine: GameEngine }) {
   const camera = useThree((state) => state.camera)
   const light = useRef<THREE.PointLight>(null)
-  const offset = useMemo(() => new THREE.Vector3(), [])
 
   useFrame(() => {
     const scene = engine.scene()
@@ -90,12 +80,12 @@ function CameraRig({ engine }: { engine: GameEngine }) {
       scene.camera.orientation.z,
       scene.camera.orientation.w,
     )
-    offset.copy(CHASE_OFFSET).applyQuaternion(camera.quaternion)
-    camera.position.set(
-      scene.camera.position.x + offset.x,
-      scene.camera.position.y + offset.y,
-      scene.camera.position.z + offset.z,
-    )
+    // Offset and ground clearance both come from `chaseCameraPosition`. They
+    // were three lines of vector arithmetic here, which is exactly where a rule
+    // goes to become untestable: nothing in Node could see that pitching up on
+    // the pad put the camera under the crust.
+    const eye = chaseCameraPosition(scene)
+    camera.position.set(eye.x, eye.y, eye.z)
     camera.updateMatrixWorld()
 
     // Sunlight comes from the nearest star's rendered position, so shadows and
@@ -268,7 +258,16 @@ function bodyColor(kind: string): THREE.ColorRepresentation {
   }
 }
 
-/** Streamed terrain patches, rebuilt by the engine and drawn here. */
+/**
+ * Streamed terrain patches: geometry uploaded once, moved every frame.
+ *
+ * The two halves are separate on purpose. A patch's vertices are body-fixed and
+ * never change, so re-uploading them is pure waste — this used to hand Three.js
+ * three new BufferAttributes per patch per frame. Where the patch *is* changes
+ * constantly, because the planet is orbiting and turning, and that is a position
+ * and a quaternion. Baking the second into the first is what made the ground
+ * slide away from the ship between origin rebases.
+ */
 function TerrainPatches({ engine }: { engine: GameEngine }) {
   const group = useRef<THREE.Group>(null)
   const meshes = useMemo(() => new Map<string, THREE.Mesh>(), [])
@@ -283,21 +282,27 @@ function TerrainPatches({ engine }: { engine: GameEngine }) {
     const state = engine.terrainState()
     const seen = new Set<string>()
 
-    for (const patch of state.patches) {
+    for (const { patch, placement } of state.patches) {
       const key = `${patch.region.face}.${patch.region.level}.${patch.region.i}.${patch.region.j}`
       seen.add(key)
       let mesh = meshes.get(key)
       if (mesh === undefined) {
         const geometry = new THREE.BufferGeometry()
+        geometry.setAttribute('position', new THREE.BufferAttribute(patch.positions, 3))
+        geometry.setAttribute('normal', new THREE.BufferAttribute(patch.normals, 3))
+        geometry.setIndex(new THREE.BufferAttribute(patch.indices, 1))
+        geometry.computeBoundingSphere()
         mesh = new THREE.Mesh(geometry, material)
         container.add(mesh)
         meshes.set(key, mesh)
       }
-      const geometry = mesh.geometry
-      geometry.setAttribute('position', new THREE.BufferAttribute(patch.positions, 3))
-      geometry.setAttribute('normal', new THREE.BufferAttribute(patch.normals, 3))
-      geometry.setIndex(new THREE.BufferAttribute(patch.indices, 1))
-      geometry.computeBoundingSphere()
+      mesh.position.set(placement.position.x, placement.position.y, placement.position.z)
+      mesh.quaternion.set(
+        placement.orientation.x,
+        placement.orientation.y,
+        placement.orientation.z,
+        placement.orientation.w,
+      )
       mesh.visible = true
     }
 

@@ -252,6 +252,27 @@ again in a neighbouring system.
   behind, and the star overhead contributing nothing. They are sorted by
   apparent brightness now. Found by flying there and looking, not by a test —
   the test came after.
+- **The ground slid out from under a landed ship, ten times a second.** Terrain
+  patches were emitted in render space against the body's pose at build time and
+  only rebuilt when the render origin rebased, so between rebases the ground was
+  frozen at a pose the planet had already left — 865 m of slide per frame on a
+  world orbiting at 52 km/s, snapping back on every rebase. Geometry is
+  body-fixed and anchor-relative now, built once and placed per frame, which is
+  what the datum sphere beside it had always done. A second cause of the same
+  shape was hiding behind it: the streamer read `world.clock.time` while a
+  snapshot presents the world one tick earlier, putting the ground 812 m ahead
+  of everything standing on it. The regression test measures the invariant
+  rather than either mechanism — a landed ship and the ground beneath it are
+  both fixed in body-fixed axes, so their separation in render space is a
+  constant — and it fails at 2,101 m and 90 m respectively.
+- **The chase camera had no floor.** The offset is 14 m behind the ship in
+  *ship* axes, so pitching the nose up swings it down: 10° puts it at ground
+  level and 40° puts it 7 m under. Underground, the near terrain vanishes to
+  backface culling, stars show through the crust and the far terrain reads as a
+  second band of land above the hole — it looks like broken geometry and it is a
+  camera with no floor. `chaseCameraPosition` in `rendering` owns the rule now,
+  because the three lines of vector arithmetic it replaces lived in a React
+  component where nothing in Node could reach them.
 - **Two clamps for one spiral.** The view clamped the frame delta to 0.25 s,
   which changed nothing (`SimulationClock.advance` already caps a step) and
   corrupted `droppedTicks`: a three-minute background stall was reported in the
@@ -294,6 +315,44 @@ expensively.
 - **The Gamepad API caps at 16 axes / 32 buttons**, and on macOS Chromium indexes
   buttons by HID usage and *silently drops* any usage above 32. WebHID has no such
   cap but exists only in Chromium.
+
+## Open: the horizon gap (unresolved, 19 Aug 2026)
+
+**Standing on a world, there is a band of empty space at the horizon with stars
+through it.** Three separate bugs were found and fixed while chasing this (the
+sliding patch set, the render-time mismatch, the camera with no floor) and the
+band is still there afterwards. It is not a regression and it is not any of
+those three. The measurements, so the next attempt does not have to re-derive
+them — all from `s:SOL/b:0`, landed at 0.35, −1.1, and reproduced identically at
+the commit before any of this work:
+
+| Quantity | Value |
+|---|---|
+| Body radius | 2,864,333 m |
+| `surface.maxElevation` (= `relief`) | 11,133 m |
+| Datum sphere drawn radius (`radius − relief`) | 2,853,200 m |
+| Camera height above that sphere, standing on the ground | 11,436 m |
+| Sphere's limb, below the horizontal | **5.121°** (≈ 64 px at 65° FOV / 812 px) |
+| Streamed terrain, edge to edge | 5.2 km (3×3 patches at level 12) |
+| Farthest terrain vertex from the camera | 4.3 km |
+
+So the ground you stand on is a 5 km mesa floating 11 km above a featureless
+sphere, and between the mesa's edge and that sphere's limb there is a wedge of
+sky. The sink is deliberate — `scene.ts` explains that a sphere at the datum
+hides every valley on the planet — and it is the *right* call from orbit and the
+wrong one from the ground.
+
+Approaches considered and not taken, with the arithmetic:
+
+- **Blend the sink to zero near the surface.** Shrinks the band from 5.1° to
+  ~1° (64 px to 13 px). Cheap, but a mitigation: any sphere below your feet has
+  its limb below your horizon, so the band never closes.
+- **Sphere at the local ground radius.** Closes the band exactly, and submerges
+  every near patch that dips below it — an ocean without water.
+- **Terrain to the horizon.** The only one that removes it rather than shrinking
+  it, and it is [the terrain quadtree](docs/roadmap.md#terrain) already named as
+  the next milestone. The true horizon from 2 m up on this body is 3.4 km, so
+  the streamed set is already within a factor of two of covering it.
 
 ## Known gaps
 

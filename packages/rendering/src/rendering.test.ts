@@ -12,7 +12,7 @@ import {
   vec3,
 } from '@inertialref/spatial'
 import { snapshot, World } from '@inertialref/simulation'
-import { bodyFrameId, regionAddress, systemFrameId, systemId, walkBodies } from '@inertialref/universe'
+import { bodyFrameId, installSurfaceFrame, regionAddress, systemFrameId, systemId, walkBodies } from '@inertialref/universe'
 import { generateHeightfield } from '@inertialref/universe'
 import { angularRadius, selectLod, starColor, terrainLevelFor } from './lod.ts'
 import {
@@ -22,8 +22,9 @@ import {
   placeOnStarShell,
   STAR_SHELL_RADIUS,
 } from './placement.ts'
-import { buildScene, nearestBody, originForCamera } from './scene.ts'
-import { buildPatch } from './terrainMesh.ts'
+import { buildScene, nearestBody, originForCamera, type RenderScene } from './scene.ts'
+import { CAMERA_GROUND_CLEARANCE, CHASE_OFFSET, chaseCameraPosition } from './camera.ts'
+import { buildPatch, patchPlacement } from './terrainMesh.ts'
 
 const ORIGIN = createRenderOrigin(UV.fromMeters(4.2 * LIGHT_YEAR, 0, 0))
 
@@ -251,6 +252,69 @@ describe('scene', () => {
   })
 })
 
+describe('chase camera', () => {
+  /*
+   * The camera has 14 m of lever arm behind the ship, and the offset is in ship
+   * axes so it swings with the attitude. Landed and nose-high that swings it
+   * *down*: 10° puts it at ground level and 40° puts it 7 m under, where the
+   * near terrain is backface-culled, stars show through the ground and the far
+   * terrain reads as a second band of land. It looks like broken geometry and
+   * it is a camera with no floor.
+   */
+  function landedScene(pitchDegrees: number): RenderScene {
+    const world = new World({ seed: 'inertialref' })
+    const system = world.loadSystem(systemId('SOL'))
+    const planet = [...walkBodies(system)].find((b) => b.kind === 'rocky' && b.radius > 1e6)
+    if (planet === undefined) throw new Error('no planet')
+
+    const frame = installSurfaceFrame(world.frames, planet, 0.35, -1.1)
+    const ship = world.spawnShip('cam', frame, vec3(0, 0, 0))
+    world.runTicks(64)
+    world.teleport(ship.id, {
+      ...world.entities.require(ship.id).state,
+      orientation: Q.fromAxisAngle(vec3(1, 0, 0), (pitchDegrees * Math.PI) / 180),
+    })
+    world.runTicks(1)
+
+    const shot = snapshot(world)
+    const view = shot.entities.find((e) => e.id === ship.id)
+    if (view === undefined) throw new Error('no camera')
+    return buildScene(shot, originForCamera(null, view.position), ship.id)
+  }
+
+  it('knows which way is up independently of where the ship is pointing', () => {
+    const level = landedScene(0)
+    const nose = landedScene(80)
+    // Up is the radial direction, so it does not care about attitude.
+    expect(Vec.dot(level.camera.up, nose.camera.up)).toBeCloseTo(1, 6)
+    expect(Vec.length(level.camera.up)).toBeCloseTo(1, 9)
+    // Parked, so the altitude is zero to within the millimetre the contact
+    // clamp and the one-tick-old snapshot leave behind.
+    expect(Math.abs(level.camera.altitude ?? 1)).toBeLessThan(0.01)
+  })
+
+  it('keeps the camera above the ground at any attitude', () => {
+    for (const pitch of [0, 10, 20, 40, 60, 90, 180, -40]) {
+      const scene = landedScene(pitch)
+      const eye = chaseCameraPosition(scene)
+      // Height of the eye over the ship, along local up, plus the ship's own
+      // altitude — which is zero, because it is parked.
+      const height = Vec.dot(Vec.sub(eye, scene.camera.position), scene.camera.up)
+      expect(`pitch ${pitch}: ${height >= CAMERA_GROUND_CLEARANCE - 1e-9}`).toBe(`pitch ${pitch}: true`)
+    }
+  })
+
+  it('leaves the offset alone when there is room', () => {
+    // Nothing to clip through in deep space, and nothing to lift the camera
+    // off: an unclamped chase view is the normal case and must stay exact.
+    const scene = landedScene(0)
+    const free: RenderScene = { ...scene, camera: { ...scene.camera, altitude: null } }
+    const eye = chaseCameraPosition(free)
+    const expected = Vec.add(free.camera.position, Q.rotate(free.camera.orientation, CHASE_OFFSET))
+    expect(Vec.length(Vec.sub(eye, expected))).toBeLessThan(1e-9)
+  })
+})
+
 describe('terrain mesh', () => {
   it('builds a patch that sits on the body, in render space', () => {
     const world = new World({ seed: 'inertialref' })
@@ -262,24 +326,36 @@ describe('terrain mesh', () => {
     const region = regionAddress(0, 4, 8, 8)
     const field = generateHeightfield(planet.surface, { region, resolution: 17 })
     const origin = createRenderOrigin(bodyPose.position)
-    const patch = buildPatch(
-      {
-        region,
-        resolution: 17,
-        elevations: field.elevations,
-        bodyRadius: planet.radius,
-        bodyCentre: bodyPose.position,
-        bodyOrientation: Q.IDENTITY,
-      },
-      origin,
-    )
+    const patch = buildPatch({
+      region,
+      resolution: 17,
+      elevations: field.elevations,
+      bodyRadius: planet.radius,
+    })
 
     expect(patch.positions.length).toBe(17 * 17 * 3)
     expect(patch.indices.length).toBe(16 * 16 * 6)
-    expect(patch.originGeneration).toBe(origin.generation)
-    // Every vertex is at the planet's radius plus its own elevation.
+
+    // Vertices are anchor-relative, which is what keeps them inside float32's
+    // useful range: measured from the body's centre they would be ~10^6 m,
+    // where a float32 step is 0.17 m and the relief this test checks for is
+    // gone. A patch is a few hundred metres across at this level.
     for (let i = 0; i < patch.positions.length; i += 3) {
-      const r = Math.hypot(patch.positions[i] as number, patch.positions[i + 1] as number, patch.positions[i + 2] as number)
+      expect(Math.abs(patch.positions[i] as number)).toBeLessThan(1e5)
+    }
+
+    // Put the pose back on: every vertex is then at the planet's radius plus
+    // its own elevation, measured from the body's centre in render space.
+    const placement = patchPlacement(patch, origin, bodyPose.position, Q.IDENTITY)
+    const bodyInRender = toRenderSpace(origin, bodyPose.position)
+    for (let i = 0; i < patch.positions.length; i += 3) {
+      const local = vec3(
+        patch.positions[i] as number,
+        patch.positions[i + 1] as number,
+        patch.positions[i + 2] as number,
+      )
+      const world = Vec.add(placement.position, Q.rotate(placement.orientation, local))
+      const r = Vec.length(Vec.sub(world, bodyInRender))
       expect(Math.abs(r - planet.radius)).toBeLessThanOrEqual(planet.surface.maxElevation * 1.5)
     }
     /*

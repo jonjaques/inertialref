@@ -12,14 +12,28 @@ import { type RegionAddress, regionDirection } from '@inertialref/universe'
 /*
  * Terrain patch geometry.
  *
- * A pure function from (heightfield, region, body pose, render origin) to
- * vertex buffers. Deliberately not a React component and not a Three.js call:
- * it is the expensive part, it is the part worth testing, and keeping it here
- * means the same code could run in a worker later without moving anything.
+ * A pure function from (heightfield, region, body radius) to vertex buffers.
+ * Deliberately not a React component and not a Three.js call: it is the
+ * expensive part, it is the part worth testing, and keeping it here means the
+ * same code could run in a worker later without moving anything.
  *
- * Vertices are emitted in render space, relative to the current origin, so they
- * are small numbers that float32 holds exactly. A rebase invalidates them —
- * which is why `RenderPatch` records the origin generation it was built for.
+ * Vertices are emitted in **body-fixed axes, relative to the patch's own
+ * anchor** — the point on the datum sphere at the middle of the patch. Two
+ * things follow, and both matter:
+ *
+ *   - The geometry does not depend on where the planet is or which way it is
+ *     facing, so it is built once and never rebuilt. It used to bake the body's
+ *     pose and the render origin into every vertex, which made it wrong the
+ *     instant the planet moved — and a planet is always moving. Landed on a
+ *     world orbiting at 52 km/s, the ground slid ~865 m *per frame* away from
+ *     the ship and snapped back on the next rebase, ten times a second.
+ *   - The numbers stay small. Vertices measured from the body's centre are
+ *     ~10^6 m, where float32 resolves 0.17 m and metre-scale relief disappears;
+ *     measured from the patch anchor they are a few hundred metres.
+ *
+ * The pose goes back on at draw time, as a position and a rotation, which is
+ * what `patchPlacement` computes and exactly what the datum sphere beside it
+ * has always done.
  */
 
 export interface PatchInput {
@@ -27,34 +41,33 @@ export interface PatchInput {
   readonly resolution: number
   readonly elevations: Float32Array
   readonly bodyRadius: Meters
-  /** Universe position of the body's centre. */
-  readonly bodyCentre: UniverseVector
-  /** Body-fixed orientation, so the patch turns with the planet. */
-  readonly bodyOrientation: Q.Quat
 }
 
 export interface RenderPatch {
   readonly region: RegionAddress
   readonly resolution: number
-  /** xyz triples in render space. */
+  /** xyz triples in body-fixed axes, relative to `anchor`. */
   readonly positions: Float32Array
+  /** Unit normals in body-fixed axes. */
   readonly normals: Float32Array
   readonly indices: Uint32Array
-  /** Render origin generation this was built against. */
-  readonly originGeneration: number
-  /** Centre of the patch in render space, for culling and sorting. */
-  readonly centre: Vec3
+  /**
+   * The patch's origin: the datum-sphere point at its centre, in body-fixed
+   * axes. Every vertex is measured from here, and `patchPlacement` turns it
+   * back into a render-space position.
+   */
+  readonly anchor: Vec3
 }
 
-export function buildPatch(input: PatchInput, origin: RenderOrigin): RenderPatch {
-  const { region, resolution, elevations, bodyRadius, bodyCentre, bodyOrientation } = input
+export function buildPatch(input: PatchInput): RenderPatch {
+  const { region, resolution, elevations, bodyRadius } = input
   const count = resolution * resolution
   const positions = new Float32Array(count * 3)
   const normals = new Float32Array(count * 3)
 
-  const centreUniverse = toRenderSpace(origin, bodyCentre)
-  // Body-fixed → render axes, applied once per patch rather than per vertex.
-  const toRender = Q.multiply(Q.conjugate(origin.orientation), bodyOrientation)
+  // The datum point at the middle of the patch. Subtracting it is what keeps
+  // the vertices small enough for float32 to hold metre-scale relief.
+  const anchor = Vec.scale(regionDirection(region, 0.5, 0.5), bodyRadius)
 
   for (let row = 0; row < resolution; row += 1) {
     const t = row / (resolution - 1)
@@ -63,17 +76,15 @@ export function buildPatch(input: PatchInput, origin: RenderOrigin): RenderPatch
       const index = row * resolution + col
       const direction = regionDirection(region, s, t)
       const elevation = elevations[index] ?? 0
-      const local = Vec.scale(direction, bodyRadius + elevation)
-      const rendered = Vec.add(centreUniverse, Q.rotate(toRender, local))
-      positions[index * 3] = rendered.x
-      positions[index * 3 + 1] = rendered.y
-      positions[index * 3 + 2] = rendered.z
+      const local = Vec.sub(Vec.scale(direction, bodyRadius + elevation), anchor)
+      positions[index * 3] = local.x
+      positions[index * 3 + 1] = local.y
+      positions[index * 3 + 2] = local.z
       // Radial direction is kept for the normal pass below, which needs it to
       // decide which way is out.
-      const radial = Q.rotate(toRender, direction)
-      normals[index * 3] = radial.x
-      normals[index * 3 + 1] = radial.y
-      normals[index * 3 + 2] = radial.z
+      normals[index * 3] = direction.x
+      normals[index * 3 + 1] = direction.y
+      normals[index * 3 + 2] = direction.z
     }
   }
 
@@ -97,19 +108,34 @@ export function buildPatch(input: PatchInput, origin: RenderOrigin): RenderPatch
     }
   }
 
-  const centreIndex = (Math.floor(resolution / 2) * resolution + Math.floor(resolution / 2)) * 3
+  return { region, resolution, positions, normals, indices, anchor }
+}
+
+/** Where a patch sits, and which way it faces, in render space right now. */
+export interface PatchPlacement {
+  readonly position: Vec3
+  readonly orientation: Q.Quat
+}
+
+/**
+ * Put a body-fixed patch back into render space.
+ *
+ * Called once per patch per frame, and that frequency is the point: the body's
+ * pose changes every tick, so anything that bakes it into vertex data is stale
+ * before it is drawn. This is the same two lines the datum sphere gets from
+ * `placeAt`, which is why the sphere tracked the planet correctly while the
+ * terrain in front of it did not.
+ */
+export function patchPlacement(
+  patch: RenderPatch,
+  origin: RenderOrigin,
+  bodyCentre: UniverseVector,
+  bodyOrientation: Q.Quat,
+): PatchPlacement {
+  const orientation = Q.multiply(Q.conjugate(origin.orientation), bodyOrientation)
   return {
-    region,
-    resolution,
-    positions,
-    normals,
-    indices,
-    originGeneration: origin.generation,
-    centre: {
-      x: positions[centreIndex] ?? 0,
-      y: positions[centreIndex + 1] ?? 0,
-      z: positions[centreIndex + 2] ?? 0,
-    },
+    position: Vec.add(toRenderSpace(origin, bodyCentre), Q.rotate(orientation, patch.anchor)),
+    orientation,
   }
 }
 

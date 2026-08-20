@@ -1,4 +1,4 @@
-import { getLogger } from '@inertialref/shared'
+import { getLogger, type Seconds } from '@inertialref/shared'
 import { formatSeed } from '@inertialref/procedural'
 import {
   type FramePose,
@@ -20,15 +20,28 @@ import {
   regionAddress,
   regionForDirection,
 } from '@inertialref/universe'
-import { buildPatch, type RenderPatch, terrainLevelFor } from '@inertialref/rendering'
+import {
+  buildPatch,
+  type PatchPlacement,
+  patchPlacement,
+  type RenderPatch,
+  terrainLevelFor,
+} from '@inertialref/rendering'
 import { generateHeightfieldTask, type WorkerPool } from '@inertialref/workers'
 
 /*
  * Terrain streaming.
  *
  * Requests the patches under the player from the worker pool, caches the
- * heightfields (not the meshes — a rebase invalidates meshes and heightfields
- * are the expensive half), and rebuilds geometry when the render origin moves.
+ * heightfields and the geometry built from them, and re-places that geometry
+ * every frame as the planet turns.
+ *
+ * Geometry is built once per region and never rebuilt. It used to be rebuilt on
+ * every render-origin rebase, because the vertices were baked in render space
+ * against the body's pose at the moment of building — which meant that between
+ * rebases the ground was frozen at a pose the planet had already left. Landed on
+ * a world orbiting at 52 km/s that is ~865 m of slide per frame, snapping back
+ * ten times a second: the strobe you could see and not screenshot.
  *
  * Loading and unloading are ordinary operations here, not a mode: the streamer
  * is asked what should be visible every frame and reconciles.
@@ -44,9 +57,15 @@ interface CachedField {
   readonly region: RegionAddress
 }
 
+/** A patch's static geometry plus where it belongs this frame. */
+export interface PlacedPatch {
+  readonly patch: RenderPatch
+  readonly placement: PatchPlacement
+}
+
 export interface TerrainState {
   readonly bodyAddress: string | null
-  readonly patches: readonly RenderPatch[]
+  readonly patches: readonly PlacedPatch[]
   readonly pending: number
   readonly cached: number
   readonly level: number
@@ -59,15 +78,30 @@ export class TerrainStreamer {
   readonly #inFlight = new Set<string>()
   #bodyAddress: string | null = null
   #level = 0
+  /*
+   * The transform the patches are drawn with, refreshed by `update` every frame.
+   *
+   * Held rather than passed to `state()` because the answer is the same for
+   * every patch on the body and stale for all of them together — one place to
+   * be wrong is better than nine.
+   */
+  #pose: { origin: RenderOrigin; centre: UniverseVector; orientation: Q.Quat } | null = null
 
   constructor(pool: WorkerPool | null) {
     this.#pool = pool
   }
 
   state(): TerrainState {
+    const pose = this.#pose
     return {
       bodyAddress: this.#bodyAddress,
-      patches: [...this.#patches.values()],
+      patches:
+        pose === null
+          ? []
+          : [...this.#patches.values()].map((patch) => ({
+              patch,
+              placement: patchPlacement(patch, pose.origin, pose.centre, pose.orientation),
+            })),
       pending: this.#inFlight.size,
       cached: this.#fields.size,
       level: this.#level,
@@ -80,7 +114,13 @@ export class TerrainStreamer {
    * Called every frame; cheap when nothing has changed, because the work is
    * keyed by (body, region) and both are stable while the player hovers.
    */
-  update(world: World, camera: UniverseVector, origin: RenderOrigin, bodyAddress: string | null): void {
+  update(
+    world: World,
+    renderTime: Seconds,
+    camera: UniverseVector,
+    origin: RenderOrigin,
+    bodyAddress: string | null,
+  ): void {
     if (bodyAddress === null) {
       this.clear()
       return
@@ -90,9 +130,10 @@ export class TerrainStreamer {
       this.#bodyAddress = bodyAddress
     }
 
-    const resolved = this.#resolve(world, bodyAddress)
+    const resolved = this.#resolve(world, renderTime, bodyAddress)
     if (resolved === null) return
     const { body, bodyPose, spinPose } = resolved
+    this.#pose = { origin, centre: bodyPose.position, orientation: spinPose.orientation }
 
     const distance = UV.distance(camera, bodyPose.position)
     // Which patch of ground is under the camera. `bodyFixedDirection` is the
@@ -116,7 +157,7 @@ export class TerrainStreamer {
         const region = regionAddress(centre.face, this.#level, i, j)
         const key = this.#key(bodyAddress, region)
         wanted.add(key)
-        this.#ensure(key, body, region, bodyPose.position, spinPose.orientation, origin)
+        this.#ensure(key, body, region)
       }
     }
 
@@ -134,9 +175,17 @@ export class TerrainStreamer {
    * The `bf:` spin pose and the `b:` orbital pose are different frames and the
    * difference is the whole "terrain is sampled in body-fixed axes" rule, so
    * they are looked up in one place rather than at each caller.
+   *
+   * The time is a parameter rather than `world.clock.time`, and that is not a
+   * detail. A snapshot presents the world one tick in the past so there is
+   * always a pair of states to interpolate between, so the ship and the datum
+   * sphere are drawn at `renderTime` while the clock has already moved on.
+   * Reading the clock here put the ground up to a tick ahead of everything
+   * standing on it — 800 m at orbital speed, oscillating at the frame rate.
    */
   #resolve(
     world: World,
+    time: Seconds,
     bodyAddress: string,
   ): { body: Body; bodyPose: FramePose; spinPose: FramePose } | null {
     const address = parseAddress(bodyAddress)
@@ -145,7 +194,6 @@ export class TerrainStreamer {
     if (system === undefined) return null
     const body = findBody(system, address.body)
     if (body === undefined) return null
-    const time = world.clock.time
     return {
       body,
       bodyPose: world.frames.pose(bodyFrameId(body.address), time),
@@ -153,31 +201,20 @@ export class TerrainStreamer {
     }
   }
 
-  #ensure(
-    key: string,
-    body: Body,
-    region: RegionAddress,
-    bodyCentre: UniverseVector,
-    bodyOrientation: Q.Quat,
-    origin: RenderOrigin,
-  ): void {
+  #ensure(key: string, body: Body, region: RegionAddress): void {
     const cached = this.#fields.get(key)
     if (cached !== undefined) {
-      const existing = this.#patches.get(key)
-      if (existing === undefined || existing.originGeneration !== origin.generation) {
+      // Built once. The geometry is body-fixed, so nothing that happens to the
+      // planet or to the render origin can invalidate it.
+      if (!this.#patches.has(key)) {
         this.#patches.set(
           key,
-          buildPatch(
-            {
-              region,
-              resolution: HEIGHTFIELD_RESOLUTION,
-              elevations: cached.elevations,
-              bodyRadius: body.radius,
-              bodyCentre,
-              bodyOrientation,
-            },
-            origin,
-          ),
+          buildPatch({
+            region,
+            resolution: HEIGHTFIELD_RESOLUTION,
+            elevations: cached.elevations,
+            bodyRadius: body.radius,
+          }),
         )
       }
       return
@@ -210,6 +247,7 @@ export class TerrainStreamer {
     this.#fields.clear()
     this.#patches.clear()
     this.#bodyAddress = null
+    this.#pose = null
   }
 
   #key(bodyAddress: string, region: RegionAddress): string {

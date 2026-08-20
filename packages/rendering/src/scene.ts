@@ -1,15 +1,19 @@
 import { type Meters, invariant } from '@inertialref/shared'
 import {
   createRenderOrigin,
+  directionToRenderSpace,
   maintainOrigin,
   orientationToRenderSpace,
   type Quat,
   type RenderOrigin,
   toRenderSpace,
+  UV,
   type UniverseVector,
+  Vec,
   type Vec3,
+  vec3,
 } from '@inertialref/spatial'
-import type { EntitySnapshot, WorldSnapshot } from '@inertialref/simulation'
+import type { BodySnapshot, EntitySnapshot, WorldSnapshot } from '@inertialref/simulation'
 import type { EntityId } from '@inertialref/universe'
 import { type LodTier, starColor } from './lod.ts'
 import { placeAt, type RenderPlacement } from './placement.ts'
@@ -58,6 +62,16 @@ export interface RenderScene {
     readonly position: Vec3
     readonly orientation: Quat
     readonly universePosition: UniverseVector
+    /**
+     * Local up in render axes — away from the centre of the nearest body.
+     *
+     * Not the camera's own up: that rotates with the ship, and the question
+     * "which way is away from the ground" has to survive the ship pointing
+     * anywhere. Falls back to +Y with no body in reach.
+     */
+    readonly up: Vec3
+    /** Height above the terrain, or null away from any body. */
+    readonly altitude: Meters | null
   }
   readonly bodies: readonly RenderBody[]
   /** Brightest apparent first: `stars[0]` is the scene's key light. */
@@ -154,12 +168,37 @@ export function buildScene(
       position: toRenderSpace(origin, camera.position),
       orientation: orientationToRenderSpace(origin, camera.orientation),
       universePosition: camera.position,
+      // From the *snapshot's* body positions, not the placed ones: placement
+      // compresses distance, and while that leaves the direction intact it is
+      // not a property worth depending on from over here.
+      up: upFrom(snapshot, origin, camera.position),
+      altitude: camera.altitude,
     },
     bodies,
     stars,
     entities,
     terrainCandidates,
   }
+}
+
+/** Which way is away from the ground, in render axes. */
+function upFrom(snapshot: WorldSnapshot, origin: RenderOrigin, camera: UniverseVector): Vec3 {
+  let nearest: BodySnapshot | null = null
+  let best = Infinity
+  for (const body of snapshot.bodies) {
+    const surface = UV.distance(camera, body.position) - body.radius
+    if (surface < best) {
+      best = surface
+      nearest = body
+    }
+  }
+  if (nearest === null) return vec3(0, 1, 0)
+  const radial = UV.difference(camera, nearest.position)
+  const length = Vec.length(radial)
+  // Dead centre of a body has no up. Nothing can be there, but the normalise
+  // would produce NaN and every consumer would inherit it.
+  if (length === 0) return vec3(0, 1, 0)
+  return directionToRenderSpace(origin, Vec.scale(radial, 1 / length))
 }
 
 /** Nearest body, for HUD readouts and for deciding what to stream. */

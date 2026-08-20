@@ -190,13 +190,10 @@ export class GameEngine implements PresentationHost {
     this.#scene = buildScene(shot, this.origin, player)
 
     const surfaceBody = this.#scene.terrainCandidates[0] ?? null
-    // No rebase branch here. `TerrainStreamer.#ensure` already rebuilds any
-    // patch whose `originGeneration` is stale, and it does it only for the
-    // patches that should be visible. The explicit `rebuild()` this replaces
-    // walked the whole 64-entry heightfield cache instead, re-adding patches
-    // `update()` had just pruned — one frame of off-screen geometry uploads on
-    // every rebase, which is every 4096 m of camera travel.
-    this.terrain.update(this.world, camera.position, this.origin, surfaceBody?.address ?? null)
+    // `shot.renderTime`, not the clock: the snapshot presents the world one tick
+    // in the past, and terrain that disagrees with the ship about what time it
+    // is drifts from under it by 800 m at orbital speed.
+    this.terrain.update(this.world, shot.renderTime, camera.position, this.origin, surfaceBody?.address ?? null)
 
     this.#maybeSurveyStars(camera.position)
 
