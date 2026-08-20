@@ -142,6 +142,16 @@ export class WorkerPool {
     }
   }
 
+  /**
+   * Jobs waiting for a worker.
+   *
+   * Beside `stats()` because the performance overlay samples it every frame and
+   * `stats()` allocates — an object, and an array to count the idle workers.
+   */
+  get queued(): number {
+    return this.#queue.length
+  }
+
   stats(): PoolStats {
     return {
       workers: this.#workers.length,

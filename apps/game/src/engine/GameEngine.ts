@@ -13,7 +13,10 @@ import {
   type Session,
 } from '@inertialref/devtools'
 import { DEFAULT_SLOT, type SaveStore } from '@inertialref/persistence'
+import type { RendererHandle } from '../render/createRenderer.ts'
 import { createBrowserWorkerPort, poolSize } from './browserWorker.ts'
+import type { Camera, Object3D } from 'three/webgpu'
+import { FrameMetrics, usedHeapMb } from './frameMetrics.ts'
 import { IndexedDbSaveStore } from './indexedDbStore.ts'
 import { TerrainStreamer, type TerrainState } from './terrainStreamer.ts'
 
@@ -71,9 +74,34 @@ export class GameEngine implements PresentationHost {
   readonly harness: GameHarness
   readonly saves: SaveStore
   readonly terrain: TerrainStreamer
+  /** Rolling per-frame samples for the performance overlay. */
+  readonly metrics = new FrameMetrics()
+
+  /*
+   * The scene and camera R3F built, for measurements that drive the renderer
+   * directly rather than watch it.
+   *
+   * Held because `measureGpuFrameMs` submits its own frames and there is no
+   * other way to reach them: R3F keeps its root state in a store keyed by the
+   * canvas element and does not hand it out. `null` until `onCreated`.
+   */
+  view: { readonly scene: Object3D; readonly camera: Camera } | null = null
 
   origin: RenderOrigin | null = null
   snapshot: WorldSnapshot | null = null
+
+  /*
+   * The host's renderer, once it has one. `null` under Node, and for as long as
+   * the capability probe is still running.
+   *
+   * Here rather than only in React state because a renderer you cannot reach
+   * from the console is a renderer you cannot debug: `engine.gl.description`
+   * answers "am I actually on WebGPU", `engine.gl.tone.shoulder.value = 0.6`
+   * retunes the highlight roll-off without a reload, and `engine.gl.renderer.info`
+   * is the draw-call count. The dock reads the same object, so what is displayed
+   * and what is inspected cannot disagree.
+   */
+  gl: RendererHandle | null = null
 
   #scene: RenderScene | null = null
   #frameMs = 16
@@ -186,6 +214,46 @@ export class GameEngine implements PresentationHost {
    */
   frame(delta: Seconds): void {
     const started = performance.now()
+    this.#step(delta)
+    const elapsed = performance.now() - started
+
+    this.#frameMs = this.#frameMs * 0.9 + elapsed * 0.1
+    this.#fps = delta > 0 ? this.#fps * 0.9 + (1 / delta) * 0.1 : this.#fps
+
+    /*
+     * Sampled out here rather than at the end of `#step`, because `#step`
+     * returns early on a frame with no player and those are exactly the frames
+     * worth seeing on a plot — a gap in the trace during a load is information,
+     * and a plot that quietly omits them shows a frame rate the session never
+     * had.
+     *
+     * `renderer.info` is last frame's, because this runs before the draw. That
+     * is the correct pairing anyway: the draw call count belongs to the scene
+     * that produced it, not the one being built now.
+     *
+     * Nothing here allocates. `clock.achievedTimeScale` and `pool.queued` exist
+     * as getters precisely so this loop does not build two throwaway objects a
+     * frame to read two numbers off them.
+     */
+    const render = this.gl?.renderer.info.render
+    this.metrics.sample({
+      periodMs: delta * 1000,
+      engineMs: elapsed,
+      ticks: this.#ticksLastFrame,
+      achievedTimeScale: this.world.clock.achievedTimeScale,
+      drawCalls: render?.drawCalls ?? Number.NaN,
+      triangles: render?.triangles ?? Number.NaN,
+      queuedJobs: this.pool()?.queued ?? Number.NaN,
+      heapMb: usedHeapMb(),
+    })
+
+    // Now that the previous frame's counters have been recorded, clear them for
+    // the draw that follows. `autoReset` is off for the reason given where it is
+    // turned off; this is the other half of that decision.
+    this.gl?.renderer.info.reset()
+  }
+
+  #step(delta: Seconds): void {
     this.#ticksLastFrame = this.world.advance(delta)
 
     const player = this.session.player()
@@ -206,10 +274,6 @@ export class GameEngine implements PresentationHost {
     this.terrain.update(this.world, shot.renderTime, camera.position, this.origin, surfaceBody?.address ?? null)
 
     this.#maybeSurveyStars(camera.position)
-
-    const elapsed = performance.now() - started
-    this.#frameMs = this.#frameMs * 0.9 + elapsed * 0.1
-    this.#fps = delta > 0 ? this.#fps * 0.9 + (1 / delta) * 0.1 : this.#fps
   }
 
   /**

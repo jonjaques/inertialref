@@ -23,12 +23,33 @@ export const TICK_DURATION: Seconds = 1 / TICK_RATE
 export const timeOfTick = (tick: Tick): Seconds => tick / TICK_RATE
 
 /**
- * How many ticks may be run for a single frame before we give up and let the
- * clock fall behind. Without a cap, a tab that was backgrounded for a minute
+ * How many ticks may be run for a single frame *at 1×* before we give up and let
+ * the clock fall behind. Without a cap, a tab that was backgrounded for a minute
  * comes back and tries to run 3,840 ticks in one frame, which freezes the page
  * and then tries again next frame — the classic spiral of death.
  */
 export const DEFAULT_MAX_STEPS = 8
+
+/**
+ * The ceiling on ticks per frame at any time warp.
+ *
+ * A fixed budget of 8 is the right guard against a *stalled* frame and the wrong
+ * one for a *deliberate* one, and for a long time this class could not tell the
+ * difference. The measurement: at 60 fps a budget of 8 delivers 480 ticks per
+ * second, which is 7.5× real time — so of the seven detents the dev dock offers,
+ * from 1× to 100,000×, everything past 5× was identical and every tick above it
+ * went straight into `droppedTicks`. Silently: the clock was scrupulous about
+ * reporting the drops and nothing displayed them next to the number they
+ * contradicted.
+ *
+ * Warp therefore gets a budget proportional to what was asked for, bounded here.
+ * 2048 ticks is ~1.6 ms at the ~1.25M ticks/s measured in-browser for one entity
+ * — inside a 16.6 ms frame with room for a machine several times slower — and
+ * buys about 1,920× at 60 fps. It is a measured number and not a principled one;
+ * when the benchmark harness can say what a tick costs *here*, this should
+ * become a time budget rather than a count.
+ */
+export const MAX_WARP_STEPS = 2048
 
 export interface ClockStatus {
   readonly tick: Tick
@@ -39,6 +60,16 @@ export interface ClockStatus {
   readonly alpha: number
   /** Ticks dropped because the step budget ran out, cumulative. */
   readonly droppedTicks: number
+  /**
+   * The time scale actually being delivered, as of the last `advance`.
+   *
+   * Exactly `timeScale` whenever the clock is keeping up — this is a ratio of
+   * ticks wanted to ticks run, not a sampled rate, so it does not wobble at 1×.
+   * Below it, the step budget is capping and the difference is being dropped.
+   * That gap is the number `timeScale` alone cannot tell you, and not showing it
+   * is how a 100,000× button that delivers 7.5× survives.
+   */
+  readonly achievedTimeScale: number
 }
 
 export class SimulationClock {
@@ -47,6 +78,7 @@ export class SimulationClock {
   #timeScale = 1
   #paused = false
   #droppedTicks = 0
+  #achievedTimeScale = 1
   readonly #maxSteps: number
 
   constructor(options: { startTick?: Tick; maxSteps?: number } = {}) {
@@ -68,6 +100,16 @@ export class SimulationClock {
 
   get timeScale(): number {
     return this.#timeScale
+  }
+
+  /**
+   * The time scale actually being delivered. See `ClockStatus.achievedTimeScale`.
+   *
+   * A getter beside the one in `status()` because the performance overlay reads
+   * it once per frame, and `status()` allocates an object to answer.
+   */
+  get achievedTimeScale(): number {
+    return this.#achievedTimeScale
   }
 
   /** Interpolation factor in [0, 1) between the last tick and the next. */
@@ -97,10 +139,17 @@ export class SimulationClock {
    * `realDelta` again.
    */
   advance(realDelta: Seconds): number {
-    if (this.#paused || realDelta <= 0) return 0
+    if (this.#paused || realDelta <= 0) {
+      this.#achievedTimeScale = 0
+      return 0
+    }
     this.#accumulator += realDelta * this.#timeScale
     const wanted = Math.floor(this.#accumulator / TICK_DURATION)
-    const steps = Math.min(wanted, this.#maxSteps)
+    const steps = Math.min(wanted, this.#stepBudget())
+    // Ratio rather than a rate, so a frame that wanted one tick and ran one
+    // reports 1× and not 0.94× — the accumulator carries the remainder and a
+    // sampled rate would oscillate around the truth instead of stating it.
+    this.#achievedTimeScale = wanted === 0 ? this.#timeScale : (this.#timeScale * steps) / wanted
     if (wanted > steps) {
       // Drop the excess rather than letting the accumulator grow without bound.
       this.#droppedTicks += wanted - steps
@@ -108,6 +157,18 @@ export class SimulationClock {
     }
     this.#accumulator -= steps * TICK_DURATION
     return steps
+  }
+
+  /**
+   * Ticks this frame may run.
+   *
+   * At 1× this is the stall guard and nothing else, so a backgrounded tab
+   * behaves exactly as it always has. Above 1× the player has asked for more
+   * simulation per frame and gets it, up to `MAX_WARP_STEPS`.
+   */
+  #stepBudget(): number {
+    if (this.#timeScale <= 1) return this.#maxSteps
+    return Math.min(MAX_WARP_STEPS, Math.ceil(this.#maxSteps * this.#timeScale))
   }
 
   /** Called by the world once per completed tick. */
@@ -130,6 +191,7 @@ export class SimulationClock {
       timeScale: this.#timeScale,
       alpha: this.alpha,
       droppedTicks: this.#droppedTicks,
+      achievedTimeScale: this.#achievedTimeScale,
     }
   }
 

@@ -20,6 +20,7 @@ export interface ControlBindings {
   readonly onLoad: () => void
   readonly onToggleHud: () => void
   readonly onShowNavigation: () => void
+  readonly onShowPerformance: () => void
 }
 
 const AXIS_KEYS: Readonly<Record<string, [axis: 'translation' | 'rotation', index: 0 | 1 | 2, sign: number]>> = {
@@ -121,6 +122,9 @@ export function useShipControls(engine: GameEngine, bindings: ControlBindings): 
         case 'KeyG':
           latest.current.onShowNavigation()
           break
+        case 'KeyP':
+          latest.current.onShowPerformance()
+          break
         default:
           break
       }
@@ -158,5 +162,6 @@ export const CONTROL_HELP: readonly (readonly [string, string])[] = [
   ['[ / ]', 'time warp'],
   ['F5 / F9', 'save / load'],
   ['G', 'navigation panel'],
+  ['P', 'performance panel'],
   ['Tab', 'collapse the dock'],
 ]

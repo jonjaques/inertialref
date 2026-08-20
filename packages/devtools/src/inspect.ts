@@ -53,6 +53,8 @@ export interface WorldInspection {
   readonly time: number
   readonly timeText: string
   readonly timeScale: number
+  /** What the clock is actually delivering. Below `timeScale` when warp is capped. */
+  readonly achievedTimeScale: number
   readonly paused: boolean
   readonly droppedTicks: number
   readonly stateHash: string
@@ -127,6 +129,7 @@ export function inspectWorld(world: World): WorldInspection {
     time: status.time,
     timeText: formatDuration(status.time),
     timeScale: status.timeScale,
+    achievedTimeScale: status.achievedTimeScale,
     paused: status.paused,
     droppedTicks: status.droppedTicks,
     stateHash: world.stateHash(),

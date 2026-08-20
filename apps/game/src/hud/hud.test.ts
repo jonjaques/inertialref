@@ -39,6 +39,7 @@ describe('the dev dock', () => {
         tab: 'telemetry' as const,
         onTabChange: () => {},
         onNotice: () => {},
+        render: { preference: 'auto' as const, output: null, onCyclePreference: () => {} },
         commands: {
           togglePause: () => {},
           warp: () => {},
@@ -95,6 +96,7 @@ describe('the dev dock', () => {
         tab: 'navigate' as const,
         onTabChange: () => {},
         onNotice: () => {},
+        render: { preference: 'auto' as const, output: null, onCyclePreference: () => {} },
         commands: {
           togglePause: () => {},
           warp: () => {},

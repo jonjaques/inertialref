@@ -1,3 +1,4 @@
+import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
 import { LIGHT_YEAR, type Meters, type Seconds, SECONDS_PER_DAY } from '@inertialref/shared'
 import { Rng, rootSeed } from '@inertialref/procedural'
@@ -19,7 +20,7 @@ import {
   systemId,
   walkBodies,
 } from '@inertialref/universe'
-import { TICK_DURATION, TICK_RATE } from './clock.ts'
+import { MAX_WARP_STEPS, TICK_DURATION, TICK_RATE } from './clock.ts'
 import { snapshot } from './snapshot.ts'
 import { World } from './world.ts'
 
@@ -115,6 +116,74 @@ describe('simulation clock', () => {
     const ran = world.advance(60)
     expect(ran).toBeLessThanOrEqual(8)
     expect(world.clock.status().droppedTicks).toBeGreaterThan(3_000)
+  })
+
+  it('still guards the stall at 1x once warp has been used', () => {
+    // The warp budget must not become a bigger stall budget: coming back from a
+    // backgrounded minute has to behave the same whether or not the player
+    // warped earlier in the session.
+    const world = solarWorld()
+    world.clock.setTimeScale(1_000)
+    world.advance(1 / 60)
+    world.clock.setTimeScale(1)
+    expect(world.advance(60)).toBeLessThanOrEqual(8)
+  })
+
+  it('delivers every time-warp detent the dock offers, up to the ceiling', () => {
+    // The regression this exists for: the step budget was a flat 8 ticks per
+    // frame, which is 480 ticks/s at 60 fps — 7.5x real time — so 25x, 100x,
+    // 1000x and 100000x were all the same speed and the difference went into
+    // droppedTicks without ever being shown. Reinstate `min(wanted, 8)` and this
+    // goes red at 25x.
+    const frame = 1 / 60
+    for (const scale of [1, 5, 25, 100, 1_000]) {
+      const world = solarWorld()
+      world.clock.setTimeScale(scale)
+      let ticks = 0
+      for (let i = 0; i < 60; i++) ticks += world.advance(frame)
+      // A second of frames should buy `scale` seconds of simulation. The bound
+      // is one tick, not a tolerance: the accumulator carries a fractional
+      // remainder across the last frame and that is the whole of the error.
+      expect(Math.abs(ticks - scale * TICK_RATE)).toBeLessThanOrEqual(1)
+      expect(world.clock.status().droppedTicks).toBe(0)
+    }
+  })
+
+  it('says how much of the requested warp it is actually delivering', () => {
+    const frame = 1 / 60
+    const keepingUp = solarWorld()
+    keepingUp.clock.setTimeScale(100)
+    keepingUp.advance(frame)
+    // Exactly, not approximately: it is a ratio of ticks wanted to ticks run.
+    expect(keepingUp.clock.status().achievedTimeScale).toBe(100)
+
+    const capped = solarWorld()
+    capped.clock.setTimeScale(100_000)
+    expect(capped.advance(frame)).toBe(MAX_WARP_STEPS)
+    const status = capped.clock.status()
+    expect(status.achievedTimeScale).toBeLessThan(100_000)
+
+    // MAX_WARP_STEPS ticks per frame at 60 fps, as a multiple of the 64 Hz tick
+    // rate — the ceiling stated where it comes from rather than as a number that
+    // happens to pass.
+    const ceiling = MAX_WARP_STEPS / frame / TICK_RATE
+    // The ratio's denominator is floored to a whole tick, so it can be short by
+    // one out of the ~107,000 this frame wanted. That, and not a chosen
+    // tolerance, is the entire width of this bound.
+    const wanted = Math.floor((100_000 * frame) / TICK_DURATION)
+    expect(status.achievedTimeScale).toBeGreaterThanOrEqual(ceiling)
+    expect(status.achievedTimeScale).toBeLessThanOrEqual(ceiling * (1 + 1 / wanted))
+  })
+
+  it('never runs more ticks in one frame than the ceiling allows', () => {
+    fc.assert(
+      fc.property(fc.double({ min: 1, max: 1e6, noNaN: true }), fc.double({ min: 1 / 240, max: 1, noNaN: true }), (scale, delta) => {
+        const world = solarWorld()
+        world.clock.setTimeScale(scale)
+        expect(world.advance(delta)).toBeLessThanOrEqual(MAX_WARP_STEPS)
+      }),
+      { numRuns: 40 },
+    )
   })
 
   it('pauses without drifting', () => {

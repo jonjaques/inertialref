@@ -44,7 +44,7 @@ whole universe in under 700 bytes, and get the same answer twice.
 |---|---|---|
 | **Node.js** | **26 or newer** | The headless runner executes the TypeScript sources directly through type stripping — that is how `pnpm sim` works with no build step |
 | **pnpm** | **11** (11.22.0 pinned) | The lockfile is pnpm's, and `packages/*` are source-only workspace links |
-| **A browser with WebGL 2** | Any current Chrome, Firefox, Safari or Edge | The client is WebGL today; the [WebGPU migration](docs/design/technical.md#the-webgpu-migration) is designed but not built |
+| **A browser with WebGPU** | Chrome, Edge or Safari 26+ | The client renders through `WebGPURenderer` with TSL. WebGL 2 is a retained fallback, so Firefox runs — without extended-range HDR output, which it [cannot do at all](docs/spikes.md#1--hdr-display-detection) |
 | **git** | any | |
 
 Nothing else. There is no native toolchain, no Python, no database, and
@@ -207,7 +207,7 @@ Full reasoning, alternatives and consequences are in [`docs/adr/`](docs/adr/).
 
 ```
 apps/
-  game               React + React Three Fiber client
+  game               React + React Three Fiber client, WebGPU/TSL renderer
   headless           Node runner — no DOM, no React, no WebGL
 packages/
   shared             units, invariants, structured logging          (layer 0)
@@ -327,9 +327,18 @@ Stated plainly, because discovering these by surprise is worse than reading them
 - **Gravity is patched-conic** — no n-body perturbation.
 - **Collision is ground contact only** — no hull, no entity-to-entity.
 - **Terrain patches do not stitch** across cube faces or between LOD levels yet.
-- **The renderer is WebGL and the graphics are primitives.** The
-  [WebGPU migration](docs/design/technical.md#the-webgpu-migration) is designed and
-  measured but not built.
+- **Almost nothing is measured on the target machine.** The dev dock's perf tab
+  (`P`) plots frame time, engine time, draw calls, worker queue and heap, and can
+  time GPU frames properly — but every number recorded so far is from an Apple M5
+  at 1000×760, not the 2023-class laptop at 1920×1080 the budgets are written
+  for. Cold load to interactive is still unmeasured.
+- **The graphics are primitives.** The renderer is WebGPU and TSL and the HDR
+  output path is real, but what it draws is spheres, cones and boxes. Compute
+  terrain, GPU-driven instancing and Bruneton atmosphere LUTs are the
+  [migration's](docs/design/technical.md#the-webgpu-migration) remaining half.
+- **The atmosphere is an analytic shell, not scattering.** Uniform density and a
+  path length, standing in for the precomputed LUTs that
+  [spike 2](docs/spikes.md#2--tsl-and-the-atmosphere-integral) made a requirement.
 
 ---
 

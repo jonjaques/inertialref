@@ -35,7 +35,7 @@ including frame resolution.
 | `persistence` | 5 | done — save/restore, migration chain, store port |
 | `rendering` | 5 | done — LOD, depth compression, terrain meshing |
 | `devtools` | 6 | done — inspection, twelve capability checks, harness, `openSession` |
-| `apps/game` | — | done — React + R3F client, worker pool, IndexedDB saves |
+| `apps/game` | — | done — React + R3F client on `WebGPURenderer`/TSL, worker pool, IndexedDB saves |
 | `apps/headless` | — | done — Node runner, ~100–105k ticks/s, `pnpm sim --self-test` |
 
 ## Decisions that are expensive to reverse
@@ -398,6 +398,119 @@ arithmetic:
   the next milestone. The true horizon from 2 m up on this body is 3.4 km, so
   the streamed set is already within a factor of two of covering it.
 
+## The WebGPU and TSL migration (20 Aug 2026)
+
+`docs/design/technical.md` § The WebGPU migration, carried out. The renderer is
+now `WebGPURenderer` with TSL node materials; WebGL 2 is retained as
+`WebGPURenderer`'s own fallback backend, so there is one set of node graphs and
+no second material path. `packages/rendering` did not change and could not — it
+emits plain data and has never imported Three.js, which is the whole reason the
+swap was confined to `apps/game/src/render/` and `apps/game/src/scene/`.
+
+Verified on the real GPU rather than only in CI: WebGPU backend, extended-range
+output resolved on a display reporting `dynamic-range: high`, 60–70 fps in orbit,
+on the surface and on approach, zero GPU validation errors.
+
+What is genuinely new rather than ported: a capability probe and the three-state
+HDR override `docs/design/art.md` calls mandatory; a tone curve that *is* stock
+ACES at headroom 1 and lifts only above the shoulder beyond it; an analytic
+atmosphere with a real path integral; and a star field of instanced sprites.
+
+### Four things that must not come back
+
+- **WebGPU has no point size.** `PointsNodeMaterial.sizeNode` is ignored on a
+  `Points` object under the WebGPU backend — every point renders at one pixel —
+  and honoured on the WebGL fallback. The star field is a `Sprite` with an
+  instanced position attribute and `Sprite.count` for exactly this reason. A bug
+  visible only on the *primary* backend is the worst shape a rendering bug has.
+- **A `vec3` clamped against `float` bounds renders black, silently.**
+  `clamp(graded, 0, headroomUniform)` generated a WGSL `clamp` whose arguments did
+  not agree on a type: no warning, no exception, no console output, an entirely
+  black frame. `graded.clamp()` gets away with plain numbers because a const is
+  converted where a uniform node is not. Both bounds are `vec3(...)` now.
+- **React Three Fiber cannot release a `WebGPURenderer`.** Its unmount path calls
+  `renderLists.dispose()` and `forceContextLoss()`, both WebGL-only and both
+  optional-chained, so both are silent no-ops. Two renderers then share one canvas
+  and disagree about its size — `depthBuffer` at 300×150 against attachments at
+  1800×1026 — and every frame submits an invalid command buffer until Chrome kills
+  the tab. StrictMode's double mount reaches it in development and the HDR toggle
+  reaches it by design. `releaseRenderer()` in the factory owns this now.
+  **It does not reproduce at devicePixelRatio 1**, where the two renderers happen
+  to agree, so headless verification reported it fixed while a Retina display was
+  losing the tab on every load.
+- **Never share the probe's `GPUDevice` with the renderer.** `requestDevice` is
+  honoured once per adapter, so a renderer that later wants its own gets a device
+  that is already lost, and a device shared with something that outlives its
+  creator has no owner. The probe destroys its own; three requests its own from a
+  fresh adapter.
+
+### And one instrument that lies
+
+R3F sets `outputColorSpace` and `toneMapping` itself, in `configure()`, which runs
+*after* the async `gl` factory resolves — so it lands on top of the custom tone
+curve and reverts the renderer to stock ACES with its clamp to [0, 1]. Invisible
+on the sRGB path; on the extended path it discards the entire range the migration
+exists for. `commitToneCurve` in `onCreated` puts it back.
+
+## Time warp, and the overlay that found it (20 Aug 2026)
+
+`SimulationClock` capped every frame at `DEFAULT_MAX_STEPS = 8` ticks. At 60 fps
+that is 480 ticks per second, which is **7.5× real time** — so of the seven
+detents the dev dock offers, 1× through 100,000×, everything past 5× ran at
+exactly the same speed and every tick above it was counted into `droppedTicks`
+and never shown. The cap had been there since the clock was written.
+
+The mistake was one budget doing two jobs. Eight ticks is the right guard against
+a *stalled* frame — a backgrounded tab returning after a minute must not try to
+run 3,840 ticks — and the wrong one for a *deliberate* frame, and the clock could
+not tell the difference. The budget now scales with the requested time scale,
+bounded by `MAX_WARP_STEPS = 2048`, so 1× behaves exactly as it always did and
+warp gets what it asks for up to a ceiling. Measured after: 1×, 5×, 25×, 100× and
+1000× all deliver in full; 100,000× delivers 1,927× and says so.
+
+`ClockStatus.achievedTimeScale` is the "says so". It is a ratio of ticks wanted
+to ticks run, not a sampled rate, so it reads exactly `timeScale` when the clock
+is keeping up and does not wobble at 1×.
+
+### The perf overlay
+
+Dock tab three, `P`. `Series` in `packages/devtools` is the ring buffer and its
+statistics — pure arithmetic, property-tested in Node against a plain array,
+because a wrapped index and a nearest-rank percentile are three chances to be off
+by one and none of them would look wrong on a plot. `apps/game` supplies what to
+sample. `push` allocates nothing; `clock.achievedTimeScale` and `pool.queued`
+exist as getters so the per-frame sample does not build two throwaway objects to
+read two numbers.
+
+Measured on an M5 at 1000×760, dpr 2, extended HDR — 60 fps in orbit, on approach
+and on the surface; engine 0.19–0.23 ms; GPU 1.85–2.70 ms/frame; 10–17 draw
+calls; 66–74 MB heap.
+
+### Three more things that must not come back
+
+- **`renderer.info` is reset by three's own rAF loop, not by the render.**
+  `Info.autoReset` is honoured inside `Animation`, a `requestAnimationFrame`
+  three starts for itself and keeps running whether or not anything uses it. With
+  R3F driving the renderer instead, that reset lands at a moment unrelated to any
+  frame R3F draws: `info.render.drawCalls` read from the frame loop was reliably
+  **0** while the identical field read from the console was **11**. A counter
+  that is right when you inspect it and wrong when you record it is worse than no
+  counter. `autoReset` is off and `GameEngine.frame` resets it after sampling.
+- **React Compiler froze the entire overlay on its first render.** Every input to
+  the panel is a `GameEngine` that never changes identity, so
+  `metrics.period.summarise()` looks like a pure call on a stable object and is
+  computed once. It is not pure — it reads a ring buffer the frame loop is still
+  writing to. The panel showed its first frame's numbers for the rest of the
+  session, reporting `starting…` for a renderer that had been live for minutes.
+  `'use no memo'` is the documented opt-out and those three components carry it.
+  This will happen again to anything that renders live mutable state.
+- **A frame *period* is not a frame *budget*.** The budget is 16.6 ms of work;
+  the plot samples the interval between animation frames, and on a vsynced
+  display that interval is pinned near 16.67 ms no matter how little work
+  happened. Colouring the plot on the budget alone marked a comfortable 60 fps as
+  over budget permanently. The dashed rule is the budget; the warning fires at
+  25 ms, which jitter cannot reach and a missed vsync always does.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).
@@ -407,6 +520,22 @@ Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md
 - No n-body perturbation; patched conics only.
 - Terrain has no persistence of modifications yet (the schema anticipates it).
 - Collision is ground contact only — no hull, no other entities.
+- The atmosphere is an analytic uniform-density shell, not scattering — a
+  placeholder for the Bruneton LUTs spike 2 made a requirement.
+- No compute passes, storage buffers or indirect draw yet: the WebGPU migration
+  delivered the renderer and the HDR path, not GPU-driven terrain or culling.
+- Cold load to interactive is still unmeasured, and it is the budget most likely
+  to be missed: the bundle is 503 KB gzip with no code splitting.
+- Every performance number recorded here is from an Apple M5 in a 1000×760
+  window. The target is a 2023-class laptop at 1920×1080 — roughly three times
+  the pixels on a much weaker GPU — so these establish that the instrument works,
+  not that the budget is met.
+- The tone curve has no test. It is a TSL node graph, there is no CPU backend to
+  evaluate one in Node, and a scalar mirror of the same arithmetic would pass
+  while the graph drifted — which is the failure the terrain-normals test is
+  remembered for. It is verified on a GPU or not at all, and the benchmark
+  harness `docs/design/technical.md` already calls an M2 prerequisite is what
+  would do it.
 - `World.updateInterest` is the core's own system-streaming policy and has no
   production caller: both apps load one system and never stream another, and the
   client runs a separate starfield survey with its own radius and hysteresis.

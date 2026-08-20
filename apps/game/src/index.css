@@ -20,3 +20,22 @@ canvas {
   display: block;
   touch-action: none;
 }
+
+/*
+ * Everything drawn over the scene, held at standard range.
+ *
+ * On the extended path the canvas carries values above diffuse white, and the
+ * dock and the flight strip sit on top of it behind a `backdrop-filter` — which
+ * samples what is behind it. Without this, flying past a star pushes the HUD's
+ * own background through the compositor at twice white and the readouts wash
+ * out at exactly the moment they are being read. `docs/design/art.md` puts it as
+ * "composited after tonemapping at fixed luminance".
+ *
+ * `dynamic-range-limit` inherits, which is why this is one declaration on a
+ * wrapper rather than one per overlay — and why it must never move to `#root`,
+ * where it would clamp the canvas along with them. Chrome and Safari implement
+ * it; Firefox does not, and has no extended-range output to need it.
+ */
+.hud-layer {
+  dynamic-range-limit: standard;
+}

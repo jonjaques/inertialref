@@ -1,9 +1,28 @@
 import { useFrame, useThree } from '@react-three/fiber'
 import { useMemo, useRef } from 'react'
-import * as THREE from 'three'
+import {
+  BufferAttribute,
+  BufferGeometry,
+  Color,
+  type Group,
+  Mesh,
+  MeshStandardNodeMaterial,
+  type PointLight,
+  SphereGeometry,
+  Sprite,
+} from 'three/webgpu'
 import type { RenderBody } from '@inertialref/rendering'
 import { chaseCameraPosition, placeOnStarShell } from '@inertialref/rendering'
 import type { GameEngine } from '../engine/GameEngine.ts'
+import {
+  type AtmosphereMaterial,
+  createAtmosphereMaterial,
+  createBodyMaterial,
+  createStarfieldMaterial,
+  createStarMaterial,
+  createTerrainMaterial,
+  type StarMaterial,
+} from '../render/materials.ts'
 
 /*
  * The React Three Fiber layer.
@@ -17,6 +36,13 @@ import type { GameEngine } from '../engine/GameEngine.ts'
  * reconcile per planet per frame at 144 Hz is a great deal of work to arrive at
  * the same matrix, and the scene graph is small and fixed enough that direct
  * mutation stays legible.
+ *
+ * Everything imports from `three/webgpu`, never `three`. The two entry points
+ * share `three.core.js`, so `Mesh` is the same class either way and R3F's own
+ * `instanceof` checks hold — but only `three/webgpu` carries the node system,
+ * and a material picked out of the wrong one is a classic material that the
+ * renderer has to convert behind your back. Materials themselves live in
+ * `../render/materials.ts`; what is here is placement.
  */
 
 const MAX_BODIES = 64
@@ -68,7 +94,7 @@ function EngineTick({ engine }: { engine: GameEngine }) {
 /** Drives the real camera from the ship's canonical state, once per frame. */
 function CameraRig({ engine }: { engine: GameEngine }) {
   const camera = useThree((state) => state.camera)
-  const light = useRef<THREE.PointLight>(null)
+  const light = useRef<PointLight>(null)
 
   useFrame(() => {
     const scene = engine.scene()
@@ -107,28 +133,42 @@ function CameraRig({ engine }: { engine: GameEngine }) {
   )
 }
 
-/** Distant stars as a single point cloud, positioned in render space. */
+/**
+ * Distant stars, as one instanced sprite draw.
+ *
+ * A `Points` cloud until the WebGPU migration, and it could not stay one: WebGPU
+ * has no point size, so every star would have been a single pixel on the backend
+ * this renderer is for while still looking right on the WebGL fallback. The
+ * geometry is the sprite's own unit quad; `count` and the instanced position
+ * buffer are what move. See `createStarfieldMaterial`.
+ */
 function Starfield({ engine }: { engine: GameEngine }) {
-  const points = useRef<THREE.Points>(null)
-  const geometry = useMemo(() => {
-    const g = new THREE.BufferGeometry()
-    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(MAX_STARS * 3), 3))
-    g.setDrawRange(0, 0)
-    return g
-  }, [])
+  const field = useMemo(() => createStarfieldMaterial(MAX_STARS), [])
+  const sprite = useMemo(() => {
+    const object = new Sprite(field.material)
+    object.count = 0
+    // The bounding sphere describes the unit quad at the origin, not the shell
+    // the instances are scattered over, so culling it would remove the entire
+    // sky the moment the camera looked away from the origin.
+    object.frustumCulled = false
+    // Behind everything. The shell is far outside the depth range and the stars
+    // are additive, so what protects the planets from being drawn over is order.
+    object.renderOrder = -2
+    return object
+  }, [field])
+
   const generation = useRef(-1)
-  const count = useRef(0)
+  const surveyed = useRef(-1)
 
   useFrame(() => {
     const scene = engine.scene()
-    const field = engine.starField
-    if (scene === null || points.current === null) return
-    if (generation.current === scene.origin.generation && count.current === field.positions.length) return
+    const stars = engine.starField
+    if (scene === null) return
+    if (generation.current === scene.origin.generation && surveyed.current === stars.positions.length) return
 
     generation.current = scene.origin.generation
-    count.current = field.positions.length
-    const attribute = geometry.getAttribute('position') as THREE.BufferAttribute
-    const array = attribute.array as Float32Array
+    surveyed.current = stars.positions.length
+    const array = field.positions.array as Float32Array
 
     // Stars sit far outside the depth range, so they are drawn on a fixed
     // sphere around the camera: direction is what matters, distance is not
@@ -136,7 +176,7 @@ function Starfield({ engine }: { engine: GameEngine }) {
     // `rendering`, which owns render space — doing it here meant a hand-written
     // copy of the sector arithmetic that also forgot the origin's orientation.
     let written = 0
-    for (const position of field.positions) {
+    for (const position of stars.positions) {
       if (written >= MAX_STARS) break
       const point = placeOnStarShell(scene.origin, position)
       if (point === null) continue
@@ -145,62 +185,55 @@ function Starfield({ engine }: { engine: GameEngine }) {
       array[written * 3 + 2] = point.z
       written += 1
     }
-    attribute.needsUpdate = true
-    geometry.setDrawRange(0, written)
+    field.positions.needsUpdate = true
+    sprite.count = written
   })
 
-  return (
-    <points ref={points} geometry={geometry} frustumCulled={false}>
-      <pointsMaterial size={2} sizeAttenuation={false} color="#cfd8ff" />
-    </points>
-  )
+  return <primitive object={sprite} />
 }
 
 interface BodyVisual {
-  readonly mesh: THREE.Mesh
-  readonly atmosphere: THREE.Mesh
+  readonly mesh: Mesh
+  readonly atmosphere: Mesh
+  readonly atmosphereMaterial: AtmosphereMaterial
+  readonly star: StarMaterial | null
 }
 
 /** Planets, moons and stars as spheres, placed from the scene description. */
 function Bodies({ engine }: { engine: GameEngine }) {
-  const group = useRef<THREE.Group>(null)
+  const group = useRef<Group>(null)
   const visuals = useMemo(() => new Map<string, BodyVisual>(), [])
-  const geometry = useMemo(() => new THREE.SphereGeometry(1, 48, 32), [])
+  const geometry = useMemo(() => new SphereGeometry(1, 48, 32), [])
 
   useFrame(() => {
     const scene = engine.scene()
     const container = group.current
     if (scene === null || container === null) return
 
+    // Render-space position of the key light, for the atmosphere terminator.
+    // `stars[0]` is documented as brightest-apparent-first, which is the same
+    // star `CameraRig` lights the scene with — they must not disagree.
+    const keyLight = scene.stars[0]?.placement.position ?? null
+
     const seen = new Set<string>()
     const draw = (
       key: string,
       body: Pick<RenderBody, 'placement' | 'orientation' | 'hasAtmosphere' | 'atmosphereScale' | 'kind'>,
-      color: THREE.ColorRepresentation,
-      emissive: boolean,
+      color: Color,
+      star: { r: number; g: number; b: number } | null,
     ): void => {
       seen.add(key)
       let visual = visuals.get(key)
       if (visual === undefined) {
         if (visuals.size >= MAX_BODIES) return
-        const material = emissive
-          ? new THREE.MeshBasicMaterial({ color })
-          : new THREE.MeshStandardMaterial({ color, roughness: 0.95, metalness: 0 })
-        const mesh = new THREE.Mesh(geometry, material)
-        const atmosphere = new THREE.Mesh(
-          geometry,
-          new THREE.MeshBasicMaterial({
-            color: '#6fa8ff',
-            transparent: true,
-            opacity: 0.14,
-            side: THREE.BackSide,
-            depthWrite: false,
-          }),
-        )
+        const starMaterial = star === null ? null : createStarMaterial()
+        const atmosphereMaterial = createAtmosphereMaterial()
+        const mesh = new Mesh(geometry, starMaterial?.material ?? createBodyMaterial(color))
+        const atmosphere = new Mesh(geometry, atmosphereMaterial.material)
         atmosphere.visible = false
         container.add(mesh)
         container.add(atmosphere)
-        visual = { mesh, atmosphere }
+        visual = { mesh, atmosphere, atmosphereMaterial, star: starMaterial }
         visuals.set(key, visual)
       }
 
@@ -213,22 +246,52 @@ function Bodies({ engine }: { engine: GameEngine }) {
       // except as the sea floor below it.
       visual.mesh.renderOrder = placement.tier === 'surface' ? -1 : 0
 
+      // The colour is a uniform rather than a construction argument because a
+      // star's rendered colour is derived from its temperature every frame, and
+      // a material built once from the first frame's value would freeze it.
+      if (star !== null && visual.star !== null) visual.star.color.value.setRGB(star.r, star.g, star.b)
+
       visual.atmosphere.visible = body.hasAtmosphere && placement.tier !== 'point'
       if (visual.atmosphere.visible) {
+        const shell = placement.scale * body.atmosphereScale
         visual.atmosphere.position.copy(visual.mesh.position)
-        visual.atmosphere.scale.setScalar(placement.scale * body.atmosphereScale)
+        visual.atmosphere.scale.setScalar(shell)
+
+        // The shell's shader needs the same geometry the transform above encodes,
+        // in render space, because it integrates along the view ray rather than
+        // shading a surface. Written every frame for the same reason the matrix
+        // is: distance compression rescales both radii whenever the tier moves.
+        const air = visual.atmosphereMaterial
+        air.centre.value.copy(visual.mesh.position)
+        air.outerRadius.value = shell
+        air.innerRadius.value = placement.scale
+        if (keyLight !== null) {
+          air.sunDirection.value
+            .set(keyLight.x, keyLight.y, keyLight.z)
+            .sub(visual.mesh.position)
+            // A body sitting exactly on its star — which is what a star's own
+            // entry would be — leaves this zero-length, and a normalised zero is
+            // NaN across the whole shell.
+            .normalize()
+        }
       }
     }
 
     for (const body of scene.bodies) {
-      draw(body.address, body, bodyColor(body.kind), false)
+      draw(body.address, body, bodyColor(body.kind), null)
     }
     for (const star of scene.stars) {
       draw(
         `star:${star.system}`,
-        { placement: star.placement, orientation: { x: 0, y: 0, z: 0, w: 1 }, hasAtmosphere: false, atmosphereScale: 1, kind: 'star' },
-        new THREE.Color(star.color.r, star.color.g, star.color.b),
-        true,
+        {
+          placement: star.placement,
+          orientation: { x: 0, y: 0, z: 0, w: 1 },
+          hasAtmosphere: false,
+          atmosphereScale: 1,
+          kind: 'star',
+        },
+        new Color(star.color.r, star.color.g, star.color.b),
+        star.color,
       )
     }
 
@@ -243,18 +306,18 @@ function Bodies({ engine }: { engine: GameEngine }) {
   return <group ref={group} />
 }
 
-function bodyColor(kind: string): THREE.ColorRepresentation {
+function bodyColor(kind: string): Color {
   switch (kind) {
     case 'gas-giant':
-      return '#c9a27a'
+      return new Color('#c9a27a')
     case 'ice-giant':
-      return '#7fb3d3'
+      return new Color('#7fb3d3')
     case 'ice':
-      return '#cfe4ee'
+      return new Color('#cfe4ee')
     case 'moon':
-      return '#9a9a96'
+      return new Color('#9a9a96')
     default:
-      return '#8a6f56'
+      return new Color('#8a6f56')
   }
 }
 
@@ -269,12 +332,9 @@ function bodyColor(kind: string): THREE.ColorRepresentation {
  * slide away from the ship between origin rebases.
  */
 function TerrainPatches({ engine }: { engine: GameEngine }) {
-  const group = useRef<THREE.Group>(null)
-  const meshes = useMemo(() => new Map<string, THREE.Mesh>(), [])
-  const material = useMemo(
-    () => new THREE.MeshStandardMaterial({ color: '#9c8367', roughness: 1, flatShading: false }),
-    [],
-  )
+  const group = useRef<Group>(null)
+  const meshes = useMemo(() => new Map<string, Mesh>(), [])
+  const material = useMemo(() => createTerrainMaterial(), [])
 
   useFrame(() => {
     const container = group.current
@@ -293,12 +353,12 @@ function TerrainPatches({ engine }: { engine: GameEngine }) {
       seen.add(key)
       let mesh = meshes.get(key)
       if (mesh === undefined) {
-        const geometry = new THREE.BufferGeometry()
-        geometry.setAttribute('position', new THREE.BufferAttribute(patch.positions, 3))
-        geometry.setAttribute('normal', new THREE.BufferAttribute(patch.normals, 3))
-        geometry.setIndex(new THREE.BufferAttribute(patch.indices, 1))
+        const geometry = new BufferGeometry()
+        geometry.setAttribute('position', new BufferAttribute(patch.positions, 3))
+        geometry.setAttribute('normal', new BufferAttribute(patch.normals, 3))
+        geometry.setIndex(new BufferAttribute(patch.indices, 1))
         geometry.computeBoundingSphere()
-        mesh = new THREE.Mesh(geometry, material)
+        mesh = new Mesh(geometry, material)
         container.add(mesh)
         meshes.set(key, mesh)
       }
@@ -325,9 +385,26 @@ function TerrainPatches({ engine }: { engine: GameEngine }) {
   return <group ref={group} />
 }
 
+/**
+ * Materials for the debug hardware.
+ *
+ * Module-level because there are six of them, they never change, and a node
+ * material is a pipeline: rebuilding them per mount would be six pipeline builds
+ * to draw the same grey box. Constructing a node material touches no GPU — it is
+ * a graph, and the pipeline is compiled the first time something draws with it.
+ */
+const debugMaterials = {
+  hull: new MeshStandardNodeMaterial({ color: 0xd8dde6, roughness: 0.6, metalness: 0.2 }),
+  wing: new MeshStandardNodeMaterial({ color: 0x8f98a8, roughness: 0.7 }),
+  bell: new MeshStandardNodeMaterial({ color: 0x3a4048, roughness: 0.4, metalness: 0.6 }),
+  metre: new MeshStandardNodeMaterial({ color: 0xe0b060, roughness: 0.8 }),
+  foot: new MeshStandardNodeMaterial({ color: 0x60c0a0, roughness: 0.8 }),
+  inch: new MeshStandardNodeMaterial({ color: 0xe06060, roughness: 0.8 }),
+}
+
 /** The debug spacecraft. Primitives on purpose: this proves architecture, not art. */
 function ShipModel({ engine }: { engine: GameEngine }) {
-  const group = useRef<THREE.Group>(null)
+  const group = useRef<Group>(null)
 
   useFrame(() => {
     const scene = engine.scene()
@@ -341,18 +418,15 @@ function ShipModel({ engine }: { engine: GameEngine }) {
   return (
     <group ref={group}>
       {/* Nose along −Z, matching the forward convention the whole codebase uses. */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} material={debugMaterials.hull}>
         <coneGeometry args={[1.4, 6, 4]} />
-        <meshStandardMaterial color="#d8dde6" roughness={0.6} metalness={0.2} />
       </mesh>
-      <mesh position={[0, 0, 1.6]}>
+      <mesh position={[0, 0, 1.6]} material={debugMaterials.wing}>
         <boxGeometry args={[5.2, 0.3, 1.6]} />
-        <meshStandardMaterial color="#8f98a8" roughness={0.7} />
       </mesh>
       {/* Engine bell, so which way is aft is unambiguous at a glance. */}
-      <mesh position={[0, 0, 3.2]}>
+      <mesh position={[0, 0, 3.2]} material={debugMaterials.bell}>
         <cylinderGeometry args={[0.9, 1.2, 1.2, 12]} />
-        <meshStandardMaterial color="#3a4048" roughness={0.4} metalness={0.6} />
       </mesh>
     </group>
   )
@@ -366,7 +440,7 @@ function ShipModel({ engine }: { engine: GameEngine }) {
  * claim is something you can look at rather than only assert in a test.
  */
 function NearFieldProps({ engine }: { engine: GameEngine }) {
-  const group = useRef<THREE.Group>(null)
+  const group = useRef<Group>(null)
 
   useFrame(() => {
     const scene = engine.scene()
@@ -380,20 +454,17 @@ function NearFieldProps({ engine }: { engine: GameEngine }) {
   return (
     <group ref={group}>
       {/* One metre. */}
-      <mesh position={[4, 0, 0]}>
+      <mesh position={[4, 0, 0]} material={debugMaterials.metre}>
         <boxGeometry args={[1, 1, 1]} />
-        <meshStandardMaterial color="#e0b060" roughness={0.8} />
       </mesh>
       {/* One foot. */}
-      <mesh position={[-4, 0, 0]}>
+      <mesh position={[-4, 0, 0]} material={debugMaterials.foot}>
         <boxGeometry args={[0.3048, 0.3048, 0.3048]} />
-        <meshStandardMaterial color="#60c0a0" roughness={0.8} />
       </mesh>
       {/* One inch — the smallest thing the spec asks the coordinate system to
           resolve, sitting 8 kiloparsecs from the universe origin. */}
-      <mesh position={[-4.7, 0, 0]}>
+      <mesh position={[-4.7, 0, 0]} material={debugMaterials.inch}>
         <boxGeometry args={[0.0254, 0.0254, 0.0254]} />
-        <meshStandardMaterial color="#e06060" roughness={0.8} />
       </mesh>
     </group>
   )

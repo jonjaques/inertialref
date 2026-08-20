@@ -220,21 +220,33 @@ almost none are applied, and almost nothing is measured.
 | Typed arrays | ✅ | Heightfields, vertex buffers |
 | Transferable buffers | ✅ | Worker results |
 | Worker pools | ✅ | |
-| Instanced rendering | ⬜ | Asteroids, scatter, star fields |
+| Instanced rendering | 🟡 | Star field is instanced sprites — WebGPU has no point size. Asteroids and scatter are not |
 | Object pooling | ⬜ | `Vec3` allocation in the flight inner loop |
 | Spatial indexes | ⬜ | Interest queries |
 | WASM | ⬜ | Noise generation, if profiling justifies it |
-| WebGPU | ⬜ | A renderer decision, not an architecture one |
+| WebGPU | 🟡 | `WebGPURenderer` + TSL shipped, WebGL 2 retained as fallback. Compute shaders, storage buffers and indirect draw are not used yet |
 | `SharedArrayBuffer` | ⬜ | Requires cross-origin isolation; nothing needs it yet |
 
 **What is measured today:** simulation throughput (~100–105k ticks/s headless,
 ~1.25M ticks/s browser for one entity), worker queue latency and execution time,
-frame time. **What is not:** allocation rate, GC pressure, draw calls, or any
-regression baseline. A benchmark harness is a prerequisite for taking any of the
-above seriously.
+frame time, engine time, draw calls, triangles, JS heap, and GPU milliseconds per
+frame — the last measured across a drained queue rather than from
+`renderer.info.render.timestamp`, which
+[lies](spikes.md#2--tsl-and-the-atmosphere-integral). All of it is live in the
+dev dock's **perf** tab. **What is not:** allocation rate, GC pressure, cold load
+to interactive, anything at all on the target machine, and any stored baseline —
+so there is still nothing that can fail a pull request for getting slower.
 
-Also unaddressed: the client bundle is 1.19 MB raw (**324.6 KB gzip / 249.3 KB
-brotli**, measured 2026-08-19), dominated by Three.js, with no code splitting.
+The overlay earned itself on the first day: it found that the simulation clock
+capped time warp at 7.5× while the UI offered 100,000×.
+
+Also unaddressed: the client bundle is 1.77 MB raw (**499.0 KB gzip**, measured
+2026-08-20), dominated by Three.js, with no code splitting. It grew 169 KB gzip
+with the WebGPU migration — the node system and the WebGPU backend — and roughly
+150 KB raw of that is dead weight: React Three Fiber imports `three`, which pulls
+in the classic `WebGLRenderer` that nothing uses, because the WebGL *fallback*
+here is `WebGPURenderer`'s own backend. Dropping R3F or code-splitting would both
+recover it. The budget is 900 KB gzip with splitting, so this is inside it.
 
 **Two numbers arrived from [the spikes](spikes.md) and both belong here.**
 

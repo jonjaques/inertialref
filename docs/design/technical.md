@@ -14,10 +14,10 @@ every visual decision in [art](art.md).
 | | |
 |---|---|
 | Simulation core | 11 layered TypeScript packages, ~13,700 lines, framework-free below `apps/` |
-| Renderer | Three.js 0.182 via React Three Fiber 9, WebGL |
+| Renderer | Three.js 0.182 `WebGPURenderer` with TSL, via React Three Fiber 9. WebGL 2 backend retained as the fallback |
 | Build | Vite 8 with the Oxc transform; React Compiler on |
 | Runtime | Node 26, pnpm 11; Node runs the TypeScript sources directly |
-| Bundle | ~1.15 MB, 324 KB gzipped, dominated by Three.js, **no code splitting** |
+| Bundle | ~1.77 MB, **499 KB gzipped**, dominated by Three.js, **no code splitting** |
 | Simulation throughput | ~1.25M ticks/s in-browser for one entity; ~100–105k ticks/s headless including frame resolution |
 | Offline | Service worker + IndexedDB + a migration chain, verified with the server stopped |
 | Gate | `pnpm check` — graph, lint, typecheck, test, build. Runs in CI on every pull request, alongside `pnpm sim --self-test`. |
@@ -39,6 +39,39 @@ The single largest technical item in the plan, and the enabler for
 | **Storage buffers, indirect draw** | Culling on the GPU; the CPU stops being the draw-call bottleneck |
 | **`rgba16float` throughout** | The [eleven orders of magnitude of exposure](art.md#hdr) requires HDR everywhere, not a post pass |
 | **Extended-range output** | `WebGPURenderer({ outputType: HalfFloatType })` with `outputColorSpace = ExtendedSRGBColorSpace` gives genuine HDR presentation. There is no WebGL equivalent — this capability is WebGPU-only. |
+
+### What has landed
+
+The renderer swap itself, on 2026-08-20. `apps/game/src/render/` holds it:
+`WebGPURenderer` with `logarithmicDepthBuffer`, TSL node materials for every
+surface the game draws, the extended-range output path behind a capability probe
+and its three-state override, and an ACES-derived tone curve that is the stock
+curve exactly at headroom 1 and lifts only the highlights above it. WebGL 2 is
+retained as `WebGPURenderer`'s own fallback backend rather than a second renderer,
+so there is one set of node graphs and no second material path to keep in sync.
+
+**What has not**: compute shaders, storage buffers, indirect draw and GPU-driven
+culling — the capabilities in the table above that the table promised. Nothing
+here uses a compute pass yet. The star field is instanced, and it is the only
+thing that is. The atmosphere is an analytic shell awaiting its LUTs.
+
+Three things came out of doing it that are worth carrying forward:
+
+- **WebGPU has no point size.** `PointsNodeMaterial.sizeNode` is silently ignored
+  on a `Points` object under the WebGPU backend — every point is one pixel — and
+  works fine on the WebGL fallback. Anything wanting sized points is a `Sprite`
+  with an instanced position attribute. A rendering bug that appears *only* on the
+  primary backend is the worst-shaped one available.
+- **A `vec3` clamped against `float` bounds compiles and renders black.** TSL
+  builds the node from whatever it is handed; the generated WGSL `clamp` had
+  arguments that did not agree on a type, and it produced no warning, no
+  exception and no console output — just an entirely black frame.
+- **React Three Fiber cannot release a `WebGPURenderer`.** Its unmount path calls
+  `renderLists.dispose()` and `forceContextLoss()`, both WebGL-only and both
+  optional-chained, so both are silent no-ops. Two renderers then share a canvas
+  and disagree about its size, every frame submits an invalid command buffer, and
+  the tab dies. It does not reproduce at devicePixelRatio 1, so a headless check
+  calls it fixed when it is not.
 
 ### The path
 
@@ -143,24 +176,48 @@ invalidation policy at M2, not for a faster inner loop.
 
 ### Other budgets
 
+> **Where these numbers come from now.** The dev dock's **perf** tab (`P`) plots
+> frame period, engine time, ticks per frame, draw calls, worker queue depth and
+> JS heap over a four-second window, with a `measure gpu` button that times GPU
+> frames the way [spike 2](../spikes.md#2--tsl-and-the-atmosphere-integral) says
+> to — wall clock across a drained queue, never
+> `renderer.info.render.timestamp`. The right-hand column below is what it read
+> on 2026-08-20.
+>
+> **Read the machine before the numbers.** They were taken on an Apple M5 in a
+> 1000×760 window at devicePixelRatio 2 — a GPU far above the target machine and
+> about a third of the target's pixels. They establish that the instrument works
+> and that nothing is pathological; they are not evidence that the budget is met
+> on a 2023-class laptop at 1920×1080, and the row that matters most — cold load
+> — is still unmeasured.
+
 | Budget | Target | Current |
 |---|---|---|
 | Cold load to interactive | ≤ 4 s on a 20 Mbit connection | Unmeasured |
-| Client bundle, gzipped | ≤ 900 KB with code splitting | **324.6 KB gzip / 249.3 KB brotli**, measured 2026-08-19, no splitting, pre-WebGPU |
+| Client bundle, gzipped | ≤ 900 KB with code splitting | **503 KB gzip**, measured 2026-08-20, no splitting |
 | Catalogue, 150 ly, over the wire | Was a guess at ~2 MB | **159 KB brotli**, measured — [spike 3](../spikes.md#3--catalogue-bundle-size) |
 | Material sets, per biome | ≤ 12 MB | — |
-| Peak JS heap | ≤ 900 MB | Unmeasured |
+| Peak JS heap | ≤ 900 MB | **66–74 MB** across orbit, approach and surface |
 | Terrain patch generation | ≤ 8 ms per patch per worker | Measured; within |
-| Worker queue latency, p95 | ≤ 40 ms | Instrumented; unmeasured under load |
+| Worker queue latency, p95 | ≤ 40 ms | Instrumented and plotted; still unmeasured *under load* |
+| GPU, whole frame | (within the 5.0 + 3.0 ms lines above) | **1.85–2.70 ms** on an M5 at 1000×760 |
+| Engine — ticks, snapshot, scene build, terrain | 3.0 ms (sum of the first three lines) | **0.19–0.23 ms** |
 | Save size | ≤ 4 KB | 696 bytes today |
-| Draw calls | ≤ 1,200 | Unmeasured |
+| Draw calls | ≤ 1,200 | **10–17** — the scene is spheres and one instanced star field, so this says more about the content than the renderer |
 
-> 🎮 Designer's Note: The right-hand column is mostly "unmeasured", and that is
-> the honest state. [`docs/roadmap.md`](../roadmap.md#performance-work) says it
-> plainly: the design admits every optimisation technique and almost none are
-> applied, because almost nothing is measured. **A benchmark harness is a
-> prerequisite for M2**, not a nice-to-have — without it, every performance
-> claim in this table is a guess and the WebGPU migration cannot be evaluated.
+> 🎮 Designer's Note: The right-hand column used to be mostly "unmeasured", and
+> the first thing the instrument found was not a budget overrun. It was that
+> **time warp did not work**: the simulation clock capped every frame at eight
+> ticks, which is 7.5× real time at 60 fps, so of the seven detents the dock
+> offers — 1× to 100,000× — everything past 5× ran at the same speed and the
+> difference went into a `droppedTicks` counter nothing displayed. It had been
+> that way since the clock was written and no amount of playing found it,
+> because the only symptom was a number that did not do anything.
+>
+> That is the argument for the harness, made better than the argument could be.
+> An overlay is not a nicety for a project whose defects are shaped like this
+> one — a plot that showed *requested against delivered* would have shown it on
+> the first afternoon.
 
 ---
 
@@ -206,9 +263,10 @@ inventory.
 
 | Dependency | Layer | Note |
 |---|---|---|
-| Three.js | `apps/game` only | Never below the app layer; `pnpm graph` enforces it |
+| Three.js | `apps/game` only | Never below the app layer; `pnpm graph` enforces it. Imported as `three/webgpu` and `three/tsl` — both share `three.core.js`, so class identity holds across the two entry points |
 | React + React Three Fiber | `apps/game` only | |
 | Vite, Vitest, oxlint, TypeScript, fast-check | Tooling | |
+| `@webgpu/types` | Tooling, `apps/game` | Types only. Arrives transitively through `@types/three` as well; named explicitly because that reference is three's to remove |
 | **Nothing else** | | No physics library, no networking SDK, no analytics, no telemetry, no vendor SDK anywhere in `packages/*` |
 
 The absence of a vendor SDK in the package graph is

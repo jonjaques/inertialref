@@ -49,6 +49,18 @@ These are the ones where a violation is a rewrite later rather than a refactor.
   and it is not a save.
 - **Never import a hosting vendor's SDK below the adapter layer.** Nothing in
   `packages/*` may know what a Durable Object is.
+- **Never let React Compiler memoise a component that reads mutable state.** It
+  assumes the values it derives are pure functions of their inputs, and an engine
+  or a metrics buffer is a stable reference whose *contents* change every frame —
+  so the component renders once and shows that forever. `'use no memo'` is the
+  opt-out, and `apps/game/src/hud/PerfPanel.tsx` is the worked example. This is
+  not licence to hand-write `useMemo`; see CLAUDE.md.
+- **Never import from `three` in `apps/game`.** It is `three/webgpu` and
+  `three/tsl`. Both share `three.core.js`, so `Mesh` is the same class either way
+  and nothing breaks loudly — but only `three/webgpu` carries the node system, and
+  a material taken from `three` is a classic material the renderer has to convert
+  behind your back. `packages/*` may not import Three.js at all; `pnpm graph`
+  enforces that half.
 
 ## Conventions
 
@@ -100,6 +112,13 @@ can be driven by an in-process fake in Node tests.
 Tests live beside the code and run in plain Node — that is the check that the
 core stays free of DOM, React and WebGL. Nothing registers a browser
 environment.
+
+That check has a cost worth naming: **a TSL node graph cannot be evaluated in
+Node**, so shader code is verified on a GPU or not at all. Do not write a scalar
+mirror of a shader and test that instead — it passes while the graph it claims to
+describe drifts, which is the terrain-normals trap one paragraph down. And a
+headless GPU check is not the same as a real one: the renderer bug that killed a
+tab on every load reproduced only at devicePixelRatio 2.
 
 What to reach for:
 
@@ -164,9 +183,14 @@ flags.
 
 The same verbs are on the dev dock, top right in the browser: **navigate** lists
 the destinations with a button per manoeuvre, **telemetry** is the inspection
-overlay, `Tab` collapses the whole thing and `G` opens navigation. It calls the
-harness and nothing else, so anything you can do by clicking is reproducible in
-a test.
+overlay, **perf** plots frame time, engine time, ticks per frame, draw calls,
+worker queue and heap over a rolling window. `Tab` collapses the whole thing,
+`G` opens navigation and `P` opens perf. It calls the harness and nothing else,
+so anything you can do by clicking is reproducible in a test.
+
+**Look at the perf tab before optimising anything, and before believing a
+performance claim in a design document.** The first thing it found was that time
+warp had never worked above 5×.
 
 One gotcha when driving a browser: Chrome throttles `requestAnimationFrame` in
 backgrounded tabs, so a freshly reloaded page that is not focused sits at tick 0

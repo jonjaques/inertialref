@@ -1,4 +1,5 @@
 import type { HarnessStatus } from '@inertialref/devtools'
+import { describeOutput, type RendererDescription } from '../render/output.ts'
 import { CONTROL_HELP } from './useShipControls.ts'
 import { Row, Section } from './widgets.tsx'
 
@@ -21,7 +22,13 @@ import { Row, Section } from './widgets.tsx'
  * way of the thing it was reporting on.
  */
 
-export function TelemetryPanel({ status }: { status: HarnessStatus | null }) {
+export function TelemetryPanel({
+  status,
+  output,
+}: {
+  status: HarnessStatus | null
+  output: RendererDescription | null
+}) {
   if (status === null) return <div className="text-slate-500">waiting for the first frame…</div>
   const { world, player, render, workers, frame } = status
 
@@ -56,6 +63,31 @@ export function TelemetryPanel({ status }: { status: HarnessStatus | null }) {
           <Row label="speed" value={`${player.localSpeedText} local · ${player.speedText} universe`} />
           <Row label="altitude" value={player.altitudeText ?? '—'} />
           <Row label="state" value={player.landed ? 'landed' : 'flying'} />
+        </Section>
+      )}
+
+      {/*
+        * The three HDR signals, separately, because they routinely disagree and
+        * the interesting cases are the disagreements. Spike 1 measured one
+        * physical display reporting `dynamic-range: high` as true, true and
+        * false across three browsers — so a single "HDR: on" line would be a
+        * claim this page is not in a position to make.
+        */}
+      {output !== null && (
+        <Section id="tel.output" title="output" trailing={output.mode}>
+          <Row label="pipeline" value={describeOutput(output)} />
+          <Row label="backend" value={output.backend} />
+          <Row
+            label="range"
+            value={output.mode === 'extended' ? `extended · ${output.headroom}× headroom` : 'sRGB · clamped at white'}
+          />
+          <Row label="preference" value={output.preference} />
+          <Row label="navigator.gpu" value={output.capability.webgpu ? 'present' : 'absent'} />
+          <Row label="dynamic-range: high" value={String(output.capability.dynamicRangeHigh)} />
+          <Row
+            label="rgba16float canvas"
+            value={output.capability.extendedCanvas ? 'configured' : 'refused'}
+          />
         </Section>
       )}
 

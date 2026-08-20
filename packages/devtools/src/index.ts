@@ -1,5 +1,6 @@
 export * from './capabilities.ts'
 export * from './harness.ts'
 export * from './inspect.ts'
+export * from './metrics.ts'
 export * from './session.ts'
 export * from './travel.ts'

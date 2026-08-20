@@ -23,6 +23,7 @@ flowchart LR
     ORIGIN["RenderOrigin"] --> BUILD
     BUILD --> SCENE["RenderScene<br/><i>positions · scales · tiers · buffers</i>"]
     SCENE --> R3F["React Three Fiber<br/><i>mutates Three.js objects</i>"]
+    R3F --> GPU["WebGPURenderer + TSL<br/><i>WebGL 2 backend as fallback</i>"]
 
     SCENE -.- NOTE["plain data — which is why the<br/>'where should this be drawn' logic<br/>has tests, in Node"]
     classDef note fill:none,stroke:none,color:#64748b,font-style:italic
@@ -240,6 +241,87 @@ far:  1e10 m
 A linear depth buffer over that range has no usable precision anywhere in it.
 The logarithmic buffer costs a fragment shader instruction and makes the range
 workable. Reversed-Z is complementary and can be added later.
+
+---
+
+## The renderer
+
+`WebGPURenderer` with TSL, built in `apps/game/src/render/`. The reasoning is in
+[`docs/design/technical.md`](../design/technical.md#the-webgpu-migration); what
+matters here is the shape.
+
+**WebGL is a backend, not a second renderer.** `WebGPURenderer` carries its own
+WebGL 2 backend and swaps to it when the device request fails. So the fallback
+runs the same node graphs, and there is no second set of materials to keep in
+sync — which is what "retained as a reduced-fidelity fallback" has to mean if it
+is to survive contact with a deadline. What the fallback loses is extended-range
+output, because that is `rgba16float` canvas configuration and WebGL 2 has no
+equivalent.
+
+```mermaid
+flowchart TB
+    PROBE["probeOutputCapability()"]
+    Q1{"navigator.gpu?"}
+    Q2{"(dynamic-range: high)?"}
+    Q3{"rgba16float canvas<br/>configures?"}
+    PREF["three-state preference"]
+    EXT["<b>extended</b><br/>outputType: HalfFloatType<br/>tone curve headroom 2×"]
+    STD["<b>sRGB</b><br/>tone curve headroom 1×<br/><i>= stock ACES, exactly</i>"]
+
+    PROBE --> Q1 --> Q2 --> Q3
+    Q3 --> PREF
+    PREF -->|auto: all three| EXT
+    PREF -->|extended: probe only| EXT
+    PREF -->|standard| STD
+    Q3 -.->|refused| STD
+
+    style EXT fill:#065f46,stroke:#064e3b,color:#fff
+    style STD fill:#0369a1,stroke:#0c4a6e,color:#fff
+```
+
+Two of those three signals are opinions and one is a fact.
+[Spike 1](../spikes.md#1--hdr-display-detection) put them in front of three
+browsers on one physical panel: `(dynamic-range: high)` came back true, true and
+**false** for the same display, and there is no headroom API anywhere, so the page
+cannot tell a 2×-EDR laptop from an XDR display. The `configure()` probe is the
+only signal that cannot be argued with, which is why `extended` may overrule the
+media query and may not overrule the probe.
+
+### One curve, two ranges
+
+The tone curve is three's `acesFilmicToneMapping` exactly, up to its final clamp,
+and the *only* difference between the two paths is how far that clamp goes. At
+headroom 1 it is bit-identical to the stock tonemapper; above 1, values the sRGB
+path would have clipped are re-expanded and nothing below the shoulder moves.
+That is the mechanism behind [art](../design/art.md#hdr)'s requirement that the
+SDR render be *a tonemapped version of the same image*, never a differently
+authored one — and it is why the stock tonemapper could not simply be selected:
+it ends in `color.clamp()`, which throws away exactly the range extended output
+exists to carry.
+
+### Three passes that stayed separable
+
+Terrain, atmosphere and the star field are the three places
+[technical](../design/technical.md#the-path) says a hand-written pipeline might
+one day be worth it, so each is a self-contained material that reaches into
+nothing else.
+
+The atmosphere is the interesting one. It integrates along the view ray rather
+than shading a surface: the shell is drawn back-side, so the fragment is always on
+its far wall and the opaque planet has already depth-killed the middle. What is
+left is a ray–sphere intersection with the near end clamped to the camera, which
+is what lets one expression serve both an orbital limb and a sky seen from the
+ground. It is *not* scattering — uniform density, a path length, authored
+constants — and the replacement is named:
+[Bruneton's precomputed LUTs](../spikes.md#2--tsl-and-the-atmosphere-integral),
+which spike 2 promoted from optimisation to requirement when a 256-sample raymarch
+measured 7.27 ms against a 3.0 ms budget.
+
+The star field is instanced sprites rather than a point cloud, and that is not a
+stylistic choice: **WebGPU renders point primitives at exactly one pixel**, so
+`PointsNodeMaterial.sizeNode` is silently ignored on a `Points` object under the
+WebGPU backend and honoured under the WebGL one. The field would have shrunk on
+the primary backend and looked correct on the fallback.
 
 ---
 
