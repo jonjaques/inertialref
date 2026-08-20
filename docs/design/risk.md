@@ -1,0 +1,87 @@
+# Risk register
+
+Ranked by expected damage, not by category. The mitigation column is the useful
+one — a risk without a specific mitigation is a worry, not a risk.
+
+---
+
+## The top five
+
+Read these even if you read nothing else on this page.
+
+| # | Risk | P | Impact | Mitigation |
+|---|---|---|---|---|
+| 1 | **Maintainer stops.** Bus factor is 1, this is unpaid, and [M2 is 4–7 months with no new gameplay](production.md#m2--the-believable-world) — which is exactly where solo projects end | High | Fatal | Ruthless milestone gating; visible partial wins inside M2; the 90-second test as an early, attemptable target; documentation good enough that someone else could continue (already largely true) |
+| 2 | **M2 overruns and morale collapses with it.** WebGPU migration plus atmosphere plus terrain quadtree is three hard problems stacked | High | Severe | Sequence them so each produces something visible: geomorphing before biomes, biomes before WebGPU. Keep the WebGL path alive so progress is always playable. |
+| 3 | **Scope reverts to the fusion pitch.** "Star Citizen + Elite + NMS" invites re-adding the FPS, the economy, base building, and everything else already cut | High | Severe | The [pillars](charter.md#the-four-pillars) are the cut criterion, and the [MVP](production.md#the-mvp-the-explorer) is named. Any addition needs an ADR, not a conversation. |
+| 4 | **Nobody finds it.** No marketing budget, no publisher, no store placement, and browser games carry a quality stigma | High | Severe | The demo *is* the marketing — a link that opens on a real galaxy is inherently shareable. The [696-byte save means a coordinate is the share](charter.md#why-this-is-worth-making). Lead with the loop, never the tech (see risk 8). |
+| 5 | **Cross-catalogue identity resolution corrupts silently.** Deciding HIP 71683 = HD 128620 = GJ 559 A is where an ingest quietly poisons addressing, saves and discovery records at once | Medium | Severe | Golden vectors; a manually reviewed list for the nearest few hundred systems; a diff gate between catalogue versions that fails loudly on any identity change; treat it as [ADR](../adr/)-worthy |
+
+---
+
+## Technical
+
+| Risk | P | Impact | Mitigation |
+|---|---|---|---|
+| WebGPU migration overruns | Med | Severe | Three.js `WebGPURenderer` + TSL rather than a hand-written renderer; keep the WebGL path as a working fallback rather than a deleted one. Note that **HDR output exists only on the WebGPU path**, so the fallback is visually reduced by design. |
+| Browser memory limits kill long sessions in dense systems | Med | Major | Hard caps on streamed patch count and instance buffers; measure before M2 completes; the [benchmark harness](technical.md#performance-budgets) is M2 scope precisely for this |
+| Atmosphere correct from orbit *and* the ground proves intractable in one shader | Med | Major | Prototype the integral in isolation before M2 is committed; a visible switch between two shaders breaks [pillar 1](charter.md#pillar-1--one-continuous-space) and would need re-planning |
+| 60 fps at 1080p on the target laptop is not achievable | Med | Major | Budgets are set at 80% of frame time, not 100%; reduce instance counts and terrain level ceiling before reducing scope |
+| HOTAS support is not achievable in a browser | Med | Minor | **Do not promise it** until a WebHID/Gamepad spike proves it. Mouse and keyboard must be genuinely good regardless. |
+| A determinism regression slips in | Low | Severe | Already well-defended: golden vectors, algorithm versions, state-hash comparison, `pnpm check`. The residual risk is agent-generated code that looks right — hence the [CONTEXT.md](../../CONTEXT.md) bug log |
+| Shader compilation stalls on first entry to a visual state | Med | Minor | Pre-warm pipelines during the [jump tunnel](flight.md#jump-), which exists partly for this |
+| No CI, so a regression reaches a release | Med | Major | `pnpm check` is designed to be the entire CI job. Configuring it is hours, not days, and it is overdue. |
+
+## Market and positioning
+
+| Risk | P | Impact | Mitigation |
+|---|---|---|---|
+| **Space Engine deflates the technical pitch** — real astronomy at continuous scale has existed for fifteen years | High | Major | Never lead with the tech. Lead with the loop and with discovery credit. See [competitive](competitive.md#space-engine--vladimir-romanyuk-2010) |
+| Audience is saturated by three enormous incumbents | Med | Major | Do not compete on fidelity or breadth. The [feature matrix](competitive.md#feature-matrix)'s honest bottom rows are the strategy |
+| "Browser game" reads as low effort | Med | Major | The first thirty seconds must be visually credible. This is another argument for M2 first. |
+| Real astronomy proves *boring* — most nearby systems are dim M dwarfs with nothing confirmed | Med | Major | Genuine risk and it cuts against [pillar 2](charter.md#pillar-2--the-sky-is-real). Mitigation is that [projections fill the gaps](galaxy.md#the-three-layer-body-model) and terrain quality carries the experience. **If playtesting shows arrival is routinely disappointing, that is a pillar-level problem and needs an ADR, not a tuning pass.** |
+| Exploration without combat is too thin for launch | Med | Major | The [MVP gate](production.md#m4--the-explorer--mvp) is a 10-hour session producing a filled Almanac. If it fails, M6 moves ahead of release. |
+
+## Team and process
+
+| Risk | P | Impact | Mitigation |
+|---|---|---|---|
+| Agent-generated code accretes plausible-looking wrongness | Med | Major | Already defended: layer enforcement, property-based tests, executable capability checks, [AGENTS.md](../../AGENTS.md) rules that exist because violating them is a rewrite |
+| The design bible goes stale against the code | High | Minor | Each page names its seams and links to the roadmap. Staleness is visible rather than silent. Review at each milestone gate. |
+| Estimates in [production](production.md) are wrong | High | Minor | They are marked as assumptions and the lower bounds are flagged as unlikely. They exist for sequencing, not for commitment. |
+
+## External
+
+| Risk | P | Impact | Mitigation |
+|---|---|---|---|
+| ~~No LICENSE file~~ — **resolved 2026-08-19** | — | — | [Apache-2.0](../../LICENSE) written. The repository is now open in fact as well as in description. |
+| HYG's CC BY-SA share-alike obligation is missed on derived data | Med | Major | The packed catalogue is a derivative and must carry the licence. In-product attribution, not just a repo file. |
+| A dataset changes terms or availability | Low | Major | Multiple sources for the same facts; NASA data is public domain and unencumbered |
+| WebGPU spec or browser behaviour changes | Low | Major | Retain the WebGL fallback |
+| Hosting for the persistent universe becomes unaffordable | Med | Minor | **Designed for already**: PU degrades to solo online degrades to solo offline, and nothing is lost but other people's records — because the universe is derived |
+| Player-named universe requires moderation at a scale one person cannot handle | Med | Major | Filtered names plus a report path; unfiltered in solo modes. `[OPEN QUESTION in world.md]` |
+
+---
+
+## What is deliberately accepted
+
+Risks taken with open eyes, so they are not re-discovered later as surprises:
+
+- **Fidelity will lose to Star Citizen, permanently.** Accepted. See
+  [art](art.md#the-style-statement).
+- **Content breadth will lose to No Man's Sky and Elite.** Accepted; six hulls
+  and eight biomes is the plan, not a shortfall.
+- **Combat will not match Elite's decade of tuning.** Accepted, and it is why
+  combat's job is [to make being hunted frightening rather than to make fighting fun](combat.md#what-combat-is-for).
+- **The capability curve flattens early.** Deliberate. See
+  [progression](progression.md#ratchet-1--capability).
+- **There is no retention machinery at all.** Deliberate, and it is the
+  [non-commercial posture's](charter.md#business-posture) main dividend.
+
+---
+
+## Related
+
+- [production](production.md#critical-path-and-the-things-that-will-go-wrong) — the critical path these threaten
+- [charter](charter.md#the-honest-constraints) — the constraints most of these follow from
+- [`CONTEXT.md`](../../CONTEXT.md) — the bugs already found and defended against

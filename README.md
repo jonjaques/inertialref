@@ -147,9 +147,25 @@ diagrams and decision records.
 | [Concepts](docs/README.md#concepts) | how each mechanism works, and why |
 | [ADRs](docs/adr/README.md) | eight decisions that are expensive to reverse |
 | [Roadmap](docs/roadmap.md) | what is deliberately not built yet |
+| [Design bible](docs/design/README.md) | what the game is, and why each mechanic is shaped that way |
 
 ## Contributing
 
 `AGENTS.md` is the working guide, for humans and coding agents alike.
 `CONTEXT.md` is the build log: what exists, what was decided, what is
 deliberately unfinished.
+
+## Licence
+
+[Apache-2.0](LICENSE).
+
+The project is non-commercial, but it is deliberately **not** licensed with a
+non-commercial clause — such a clause is not an open source licence under the OSI
+definition and would make the project ineligible for most package ecosystems. The
+right way to be non-commercial is a genuine open licence and simply not
+commercialising it. The reasoning is in
+[sustainability](docs/design/sustainability.md#licensing).
+
+Ingested astronomical data will carry its own terms — the HYG database is CC BY-SA,
+and Gaia requires attribution — and those obligations attach at ingest, which has
+not happened yet.

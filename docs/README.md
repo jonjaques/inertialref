@@ -16,6 +16,7 @@ flowchart LR
     CONCEPTS --> ADR["<b>ADRs</b><br/>why, and what was rejected"]
     ARCH --> GUIDES["<b>Guides</b><br/>how to work on it"]
     ARCH --> ROADMAP["<b>Roadmap</b><br/>what is not built yet"]
+    VIS --> DESIGN["<b>Design bible</b><br/>what the game is"]
 
     classDef entry fill:#0ea5e9,stroke:#0369a1,color:#fff
     class START entry
@@ -26,6 +27,7 @@ flowchart LR
 | If you want to… | Read |
 |---|---|
 | Know what this project is for | [Vision and scope](vision.md) |
+| Know what the **game** is, and why each mechanic is shaped that way | [Design bible](design/README.md) |
 | Run it and fly around | [Getting started](guides/getting-started.md) |
 | Understand the system in one sitting | [Architecture](architecture.md) |
 | Know why a decision was made | [ADRs](adr/README.md) |
@@ -52,6 +54,27 @@ problem, the mechanism, the numbers, and what breaks if you get it wrong.
 | [Persistence](concepts/persistence.md) | What is worth storing when everything can be regenerated? |
 | [Observability](concepts/observability.md) | How do you debug a coordinate system you cannot see? |
 
+## The design bible
+
+[`design/`](design/README.md) is the game-design counterpart to this
+documentation: what the player does, and why each mechanic is shaped the way it
+is. Twenty-two cross-linked pages. Start with
+[charter](design/charter.md) and [loops](design/loops.md) — together they are the
+whole game in about twenty minutes.
+
+| Page | What it settles |
+|---|---|
+| [charter](design/charter.md) | High concept, the four pillars, positioning |
+| [loops](design/loops.md) | The micro, macro and meta loops |
+| [flight](design/flight.md) · [ships](design/ships.md) | The Reference Drive, travel regimes, modules, power, heat |
+| [galaxy](design/galaxy.md) | Real astronomy, catalogue revisions, the two maps |
+| [exploration](design/exploration.md) | Scanning, discovery credit, the data economy |
+| [onfoot](design/onfoot.md) · [combat](design/combat.md) | The first-person layer, and conflict |
+| [art](design/art.md) | The photorealism doctrine and the no-pop-in specification |
+| [production](design/production.md) | Milestones M2–M7 and the named MVP |
+
+Where the bible and [vision.md](vision.md) disagree, vision.md wins.
+
 ## Guides
 
 | Page | What it covers |
@@ -77,6 +100,10 @@ flowchart TB
         GLOS[glossary.md]
     end
 
+    subgraph Designing
+        DESIGN[design/*<br/><i>what the game is</i>]
+    end
+
     subgraph Understanding
         ARCH[architecture.md]
         CON[concepts/*]
@@ -92,6 +119,8 @@ flowchart TB
 
     RM --> DOC
     DOC --> VISION
+    VISION --> DESIGN
+    DESIGN -.->|"seams"| ROAD
     VISION --> ARCH
     DOC --> ARCH
     ARCH --> CON

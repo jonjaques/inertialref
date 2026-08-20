@@ -13,6 +13,7 @@ and to this machine, and points at AGENTS.md for everything else.
 |---|---|
 | `AGENTS.md` | How to work here: rules, conventions, testing, the harness. Read first. |
 | `docs/` | Explanatory documentation — concepts, diagrams, guides, decision records. |
+| `docs/design/` | The game design bible — what the game is, and why each mechanic is shaped that way. |
 | `docs/vision.md` | What the project is for, and the principles behind architectural choices. |
 | `docs/architecture.md` | The system in one sitting. |
 | `docs/adr/` | The eight foundational decisions, with alternatives and consequences. |
