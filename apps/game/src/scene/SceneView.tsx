@@ -280,6 +280,12 @@ function TerrainPatches({ engine }: { engine: GameEngine }) {
     const container = group.current
     if (container === null) return
     const state = engine.terrainState()
+    // The streamer owns how present terrain is at this altitude; the material
+    // just wears the number. `transparent` toggles with it because an opaque
+    // material ignores opacity, and a permanently transparent one would be
+    // sorted and blended on every frame of ordinary ground.
+    material.opacity = state.opacity
+    material.transparent = state.opacity < 1
     const seen = new Set<string>()
 
     for (const { patch, placement } of state.patches) {

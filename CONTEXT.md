@@ -292,6 +292,15 @@ again in a neighbouring system.
   regression test asserts the geometric normal of every triangle points out of
   the planet, on all six faces, because each face maps (s, t) to different axes
   and a one-face test could pass with hard-coded handedness.
+- **A stale starfield survey could land in a replaced world** (20 Aug 2026).
+  `#invalidateDerived` cleared the starfield but nothing stopped a survey
+  already in flight from repopulating it after the load — a save loaded in
+  another system briefly wore the old system's stars. Masked for as long as
+  terrain tasks queued ahead of the survey delayed it past every observer, and
+  surfaced the moment the streamer stopped requesting patches from orbit: the
+  existing invalidation test failed on scheduling alone. The survey now carries
+  the world generation it was asked about and a result from a gone world is
+  dropped.
 
 ## The five spikes, measured (19 Aug 2026)
 
@@ -349,7 +358,13 @@ full relief below the datum, so once the camera is high enough that the edge of
 the streamed set dips below the sphere's limb (~150 m at this site), the sunken
 sphere shows beyond the terrain's edge again. That seam is the real "terrain to
 the horizon" work — [the terrain quadtree](docs/roadmap.md#terrain) the roadmap
-already names as the next milestone. The measurements below are kept because
+already names as the next milestone. From orbit the winding fix exposed the
+other end of the same seam — the 3×3 window read as a lone tile floating on
+the sphere — so `terrainOpacity` in `lod.ts` now fades streamed terrain out
+entirely above one octave of the full-detail altitude (solid below ~16 km on
+this body, gone above ~32 km, a transparency ramp between); the streamer stops
+requesting patches at zero, and the sphere alone represents the planet up
+there until the quadtree can do better. The measurements below are kept because
 they are correct and the next milestone needs them — all from `s:SOL/b:0`,
 landed at 0.35, −1.1:
 

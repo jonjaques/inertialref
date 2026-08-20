@@ -82,6 +82,15 @@ export class GameEngine implements PresentationHost {
   #starField: StarField = { positions: [], names: [] }
   #starFieldCentre: UniverseVector | null = null
   #starFieldPending = false
+  /*
+   * Which world the in-flight survey belongs to. A survey is asynchronous and
+   * the world can be replaced under it; without this, its result landed in the
+   * new world's starfield — a save loaded in another system briefly wore the
+   * old system's stars. Masked for as long as terrain tasks queued ahead of
+   * the survey delayed it past every observer, and surfaced the moment the
+   * streamer stopped requesting patches from orbit.
+   */
+  #starFieldWorld = 0
 
   constructor(options: GameEngineOptions = {}) {
     this.session = openSession({
@@ -148,6 +157,7 @@ export class GameEngine implements PresentationHost {
     this.#scene = null
     this.#starField = { positions: [], names: [] }
     this.#starFieldCentre = null
+    this.#starFieldWorld += 1
     this.terrain.clear()
     log.info('world replaced, derived state dropped', { tick: this.world.clock.tick })
   }
@@ -218,6 +228,7 @@ export class GameEngine implements PresentationHost {
 
     this.#starFieldCentre = centre
     this.#starFieldPending = true
+    const world = this.#starFieldWorld
     const radiusCells = 2
     // `cellOf`, not a hand-inlined copy of it. The copy restated CELL_SIZE as
     // `20 * 9.4607304725808e15` and recomputed `approxMeters` three times, so
@@ -238,6 +249,9 @@ export class GameEngine implements PresentationHost {
 
     void Promise.resolve(run)
       .then((cells) => {
+        // The world this survey was asked about is gone; let the next frame
+        // start one against the world that replaced it.
+        if (world !== this.#starFieldWorld) return
         const positions: UniverseVector[] = []
         const names: string[] = []
         for (const entry of cells) {

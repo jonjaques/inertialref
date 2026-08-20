@@ -14,7 +14,7 @@ import {
 import { snapshot, World } from '@inertialref/simulation'
 import { bodyFrameId, installSurfaceFrame, regionAddress, systemFrameId, systemId, walkBodies } from '@inertialref/universe'
 import { generateHeightfield } from '@inertialref/universe'
-import { angularRadius, selectLod, starColor, terrainLevelFor } from './lod.ts'
+import { angularRadius, selectLod, starColor, terrainLevelFor, terrainOpacity } from './lod.ts'
 import {
   compressDistance,
   NEAR_LIMIT,
@@ -52,6 +52,45 @@ describe('LOD selection', () => {
     const low = terrainLevelFor(radius, radius + 1e3)
     expect(low).toBeGreaterThan(high)
     expect(terrainLevelFor(radius, radius + 1)).toBeLessThanOrEqual(12)
+  })
+
+  it('hides streamed terrain from orbit and fades it in on the way down', () => {
+    /*
+     * The streamed set is a fixed 3×3 window, so from altitude it is a lone
+     * raised tile on the datum sphere — invisible for as long as the winding
+     * bug culled terrain from above, and a floating sticker the moment that
+     * was fixed. The rule: fully present exactly where `terrainLevelFor`
+     * saturates at its maximum, gone one octave of altitude above that.
+     */
+    const radius = 2.864333e6 // the first planet, where this was observed
+    const full = radius * 2 ** (4.5 - 12)
+
+    // Landed and anywhere at full streaming detail: solid ground.
+    expect(terrainOpacity(radius, radius + 1)).toBe(1)
+    expect(terrainOpacity(radius, radius + full * 0.99)).toBe(1)
+    // A 300 km orbit: nothing at all, so the streamer can skip the workers.
+    expect(terrainOpacity(radius, radius + 300_000)).toBe(0)
+    // In the fade band it is genuinely between, which is the landing transition.
+    const mid = terrainOpacity(radius, radius + full * 1.5)
+    expect(mid).toBeGreaterThan(0)
+    expect(mid).toBeLessThan(1)
+
+    // Presence and level saturation are the same boundary: partially or fully
+    // hidden terrain is exactly the terrain that would have streamed coarse.
+    fc.assert(
+      fc.property(
+        fc.double({ min: 1e5, max: 1e8, noNaN: true }),
+        fc.double({ min: 0, max: 25, noNaN: true }),
+        (r, exponent) => {
+          const altitude = r * 2 ** -exponent
+          const opacity = terrainOpacity(r, r + altitude)
+          if (opacity === 1) expect(terrainLevelFor(r, r + altitude)).toBe(12)
+          if (terrainLevelFor(r, r + altitude) < 12) expect(opacity).toBeLessThan(1)
+          // And it never increases with altitude.
+          expect(terrainOpacity(r, r + altitude * 2)).toBeLessThanOrEqual(opacity)
+        },
+      ),
+    )
   })
 
   it('gives hot stars blue light and cool stars red', () => {

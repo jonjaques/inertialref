@@ -26,6 +26,7 @@ import {
   patchPlacement,
   type RenderPatch,
   terrainLevelFor,
+  terrainOpacity,
 } from '@inertialref/rendering'
 import { generateHeightfieldTask, type WorkerPool } from '@inertialref/workers'
 
@@ -69,6 +70,8 @@ export interface TerrainState {
   readonly pending: number
   readonly cached: number
   readonly level: number
+  /** `terrainOpacity` for this frame; the view maps it straight onto the material. */
+  readonly opacity: number
 }
 
 export class TerrainStreamer {
@@ -78,6 +81,7 @@ export class TerrainStreamer {
   readonly #inFlight = new Set<string>()
   #bodyAddress: string | null = null
   #level = 0
+  #opacity = 0
   /*
    * The transform the patches are drawn with, refreshed by `update` every frame.
    *
@@ -105,6 +109,7 @@ export class TerrainStreamer {
       pending: this.#inFlight.size,
       cached: this.#fields.size,
       level: this.#level,
+      opacity: this.#opacity,
     }
   }
 
@@ -136,6 +141,15 @@ export class TerrainStreamer {
     this.#pose = { origin, centre: bodyPose.position, orientation: spinPose.orientation }
 
     const distance = UV.distance(camera, bodyPose.position)
+    // Away from the ground the 3×3 window is a lone tile on the datum sphere,
+    // not a representation of the surface, so it is neither drawn nor worth a
+    // worker's time. The heightfield cache is kept: a descent should fade the
+    // ground in, not re-generate it.
+    this.#opacity = terrainOpacity(body.radius, distance)
+    if (this.#opacity === 0) {
+      this.#patches.clear()
+      return
+    }
     // Which patch of ground is under the camera. `bodyFixedDirection` is the
     // only producer of the branded direction the terrain functions accept, so
     // this cannot drift back to an inertial sample the way it once did.
@@ -248,6 +262,7 @@ export class TerrainStreamer {
     this.#patches.clear()
     this.#bodyAddress = null
     this.#pose = null
+    this.#opacity = 0
   }
 
   #key(bodyAddress: string, region: RegionAddress): string {

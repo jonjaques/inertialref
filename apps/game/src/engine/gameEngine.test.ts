@@ -203,6 +203,53 @@ describe('the game engine, headless', () => {
     expect(nearest).toBeLessThan(40)
   }, 30_000)
 
+  it('streams no terrain from orbit, and fades it in on the way down', async () => {
+    /*
+     * From a 300 km orbit the 3×3 patch window is a lone raised tile on the
+     * datum sphere — 11 km proud of it, since the sphere is sunk a full relief
+     * below the datum. The winding fix made that tile visible for the first
+     * time, floating on the planet like a sticker. Up there the sphere alone is
+     * the honest representation, so the streamer must not spend workers on
+     * patches nobody should see; through the fade band the ground comes back
+     * as a transparency ramp rather than a pop.
+     */
+    const game = engine()
+    const target = game.harness.targets().find((candidate) => candidate.landable)
+    if (target === undefined) throw new Error('nowhere to land')
+
+    game.harness.orbit(target.address, 300)
+    for (let i = 0; i < 10; i += 1) {
+      game.frame(1 / 60)
+      await new Promise((resolve) => setTimeout(resolve, 2))
+    }
+    const orbit = game.terrainState()
+    expect(orbit.opacity).toBe(0)
+    expect(orbit.patches.length).toBe(0)
+    expect(orbit.pending).toBe(0)
+
+    // 24 km up is inside the fade band on this body (fully solid below ~16 km,
+    // gone above ~32 km): terrain streams, but wears a partial opacity.
+    game.harness.orbit(target.address, 24)
+    for (let i = 0; i < 20; i += 1) {
+      game.frame(1 / 60)
+      await new Promise((resolve) => setTimeout(resolve, 2))
+    }
+    const descending = game.terrainState()
+    expect(descending.opacity).toBeGreaterThan(0)
+    expect(descending.opacity).toBeLessThan(1)
+    expect(descending.patches.length).toBeGreaterThan(0)
+
+    game.harness.land(target.address, 0.35, -1.1)
+    for (let i = 0; i < 20; i += 1) {
+      game.frame(1 / 60)
+      await new Promise((resolve) => setTimeout(resolve, 2))
+    }
+    const landed = game.terrainState()
+    expect(landed.opacity).toBe(1)
+    expect(landed.patches.length).toBeGreaterThan(0)
+    game.dispose()
+  }, 30_000)
+
   it('reads the world through the session rather than a captured reference', async () => {
     const game = engine()
     game.frame(1 / 60)
