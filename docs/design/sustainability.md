@@ -47,12 +47,61 @@ file first**; it is the cheapest and most overdue item in the entire bible.
 
 ### Data licensing is the constraint that bites
 
+**Verified 2026-08-19 against the licensors' own pages, not from memory** —
+[spike 4](../spikes.md#4--gaia-and-hyg-attribution-terms). One of the four rows
+below was wrong, and it was the one that mattered.
+
 | Source | Terms | Consequence |
 |---|---|---|
-| **HYG database** | CC BY-SA | **Share-alike is viral for the data.** Any derived catalogue must also be CC BY-SA and attributed. The packed binary format is a derivative. |
-| **Gaia** (ESA) | Open with attribution | Attribution string must appear in-product, not only in a repo file |
-| **NASA Exoplanet Archive** | US Government work, public domain | Unrestricted; attribution is courtesy |
+| **HYG database** v4.x | **CC BY-SA 4.0** (v3.x was 2.5) | **Share-alike reaches the packed binary.** § 4(b) makes a database containing a substantial portion of the contents *Adapted Material* — but explicitly "**not its individual contents**", so the obligation attaches to the catalogue and not to the code |
+| **Gaia** (ESA) | ⛔ **CC BY-NC 3.0 IGO** | **Non-commercial.** Not "open with attribution", which is what this page previously said. Commercial use needs prior written authorisation from `data.licences@esa.int` |
+| **NASA Exoplanet Archive** | **No licence stated** | Operated by Caltech under NASA contract; **not confirmed public domain**. The measurements are facts, the compilation may attract EU database right. Use the requested acknowledgement and stop calling it public domain |
 | **Open Exoplanet Catalogue** | MIT | Unrestricted with notice |
+
+#### Gaia is the problem, and it is our own argument turned around
+
+[The non-commercial trap](#the-non-commercial-trap-stated-plainly), above, is this
+page's own reasoning for why the project refuses an NC clause. Bundling Gaia
+attaches exactly that clause to the data the game cannot run without — the
+Apache-2.0 code stays Apache-2.0, and the shipped artefact is no longer something
+a downstream user may commercialise. **That is the outcome this section exists to
+prevent**, arriving through the data rather than the code.
+
+There is a conflicting statement in Gaia's DR3 documentation — *"The Gaia data are
+open and free to use, provided credit is given to 'ESA/Gaia/DPAC'"* — which reads
+far more permissively than the licence page. When a licence page and a
+documentation page disagree, **the stricter one governs until the licensor says
+otherwise in writing.**
+
+**Resolved: ship HYG + NASA. Gaia stays out of the bundle** until ESA answers a
+request at `data.licences@esa.int`. The ingest may consult Gaia for verification;
+it does not redistribute it. Note that **AT-HYG inherits the problem** — it is
+published as CC BY-SA 4.0 but built on Gaia DR3, so adopting it does not launder
+anything.
+
+#### The attribution strings, verbatim
+
+| Source | What must appear |
+|---|---|
+| Gaia, credit line | `Credit: ESA, Gaia DPAC` |
+| Gaia, acknowledgement | *"This work has made use of data from the European Space Agency (ESA) mission Gaia (https://www.cosmos.esa.int/gaia), processed by the Gaia Data Processing and Analysis Consortium (DPAC, https://www.cosmos.esa.int/web/gaia/dpac/consortium). Funding for the DPAC has been provided by national institutions, in particular the institutions participating in the Gaia Multilateral Agreement."* |
+| HYG | *The HYG Database*, astronexus, CC BY-SA 4.0 — with the licence URI, the source URI, and a statement that it was modified |
+| NASA Exoplanet Archive | *"This research has made use of the NASA Exoplanet Archive, which is operated by the California Institute of Technology, under contract with the National Aeronautics and Space Administration under the Exoplanet Exploration Program."* Cite Christiansen et al. (2025) |
+
+CC BY-SA § 3(a)(1) sets the contents of the notice: creator identification, a
+copyright notice, a notice referring to the licence, a notice referring to the
+warranty disclaimer, a URI to the source, and an indication that it was modified —
+satisfiable "in any reasonable manner based on the medium".
+
+#### The engineering consequence
+
+**The packed catalogue ships as its own asset with its own licence notice beside
+it — never inlined into the JS bundle.** A `.bin` fetched at runtime is an
+aggregation of two separately licensed works. A base64 literal compiled into
+`index.js` invites the argument that it is not, and blurs precisely the boundary
+that lets Apache-2.0 code and CC BY-SA data coexist. This is a licence requirement
+expressed as a build constraint, and it should be enforced by the build rather
+than remembered.
 
 **Attribution must be in the game, not just the repository.** The catalogue panel
 that shows a star's data should show its source, which is both a licence
@@ -86,9 +135,12 @@ description.
 A `NOTICE` file is **not** needed yet. Apache-2.0 §4(d) only requires one where
 the work already carries attribution notices, and the eighteen catalogue stars in
 `packages/universe/src/catalog.ts` are hand-transcribed published measurements —
-facts, not a licensed dataset. That changes the moment the
-[ingest pipeline](galaxy.md#ingest-pipeline) lands, and the NOTICE should be
-written in the same change that first reads HYG or Gaia.
+facts, not a licensed dataset.
+
+**That changes the moment the [ingest pipeline](galaxy.md#ingest-pipeline) lands.**
+The NOTICE goes in the same change that first reads a dataset, and it carries the
+CC BY-SA 4.0 text plus every attribution string in the table above. Writing it
+afterwards means shipping a release that was out of compliance.
 
 ---
 

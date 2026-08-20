@@ -159,7 +159,9 @@ progression loop are the same loop. See
 
 ---
 
-## Power ⬜
+## Power
+
+⬜ **Designed, not built.**
 
 Six pips, three subsystems, redistributable at any moment.
 
@@ -193,7 +195,9 @@ that is driven and a ship that is *operated*.
 
 ---
 
-## Heat ⬜
+## Heat
+
+⬜ **Designed, not built.**
 
 The system that ties everything together, and the one most likely to be
 under-built.
@@ -244,7 +248,9 @@ No ammunition economy — see [flight](flight.md#fuel).
 
 ---
 
-## Damage ⬜
+## Damage
+
+⬜ **Designed, not built.**
 
 **Hull integrity** is a single 0–100% value. At 0 the ship is destroyed. Nothing
 else keys off it.
@@ -285,7 +291,9 @@ performance is the product of the two.
 
 ---
 
-## Sensors and targeting ⬜
+## Sensors and targeting
+
+⬜ **Designed, not built.**
 
 The hardware. What it *does* for exploration is in
 [exploration](exploration.md); what it does in a fight is in
@@ -308,7 +316,9 @@ blind, fuel tank to force a decision. This is what makes ship combat a
 
 ---
 
-## Autopilot ⬜
+## Autopilot
+
+⬜ **Designed, not built.**
 
 Requested in the brief, and worth being careful about, because a badly-scoped
 autopilot deletes the game.

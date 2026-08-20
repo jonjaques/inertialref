@@ -16,7 +16,7 @@ flowchart LR
     CONCEPTS --> ADR["<b>ADRs</b><br/>why, and what was rejected"]
     ARCH --> GUIDES["<b>Guides</b><br/>how to work on it"]
     ARCH --> ROADMAP["<b>Roadmap</b><br/>what is not built yet"]
-    ROADMAP --> SPIKES["<b>Spikes</b><br/>what must be measured"]
+    ROADMAP --> SPIKES["<b>Spikes</b><br/>what was measured"]
     VIS --> DESIGN["<b>Design bible</b><br/>what the game is"]
 
     classDef entry fill:#0ea5e9,stroke:#0369a1,color:#fff
@@ -35,7 +35,7 @@ flowchart LR
 | Drive the game from code or a console | [The harness](guides/harness.md) |
 | Add a feature without breaking an invariant | [Extending](guides/extending.md) |
 | Know what is deliberately not built | [Roadmap](roadmap.md) |
-| Pick up a self-contained piece of work | [Spikes](spikes.md) — five measurements, written as handoffs |
+| See what was measured, and what it changed | [Spikes](spikes.md) — five measurements, with the numbers |
 | Look up a term | [Glossary](glossary.md) |
 
 ## Concepts

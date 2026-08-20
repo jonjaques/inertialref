@@ -169,36 +169,87 @@ processing.
 tonemaps to SDR at the end — actual extended-range output to displays that can
 show it.
 
-This is specifiable today rather than aspirational. Three.js's WebGPU renderer
-has a working HDR path:
+This is verified rather than aspirational. Three.js's WebGPU renderer has a
+working HDR path, and **one constructor parameter turns the whole thing on**:
 
 ```js
+// outputType: HalfFloatType does two things at once, and both are required:
+//   WebGPUUtils.getPreferredCanvasFormat() → 'rgba16float'
+//   WebGPUBackend                          → context.configure({ toneMapping: { mode: 'extended' } })
 const renderer = new THREE.WebGPURenderer({
   antialias: true,
-  outputType: THREE.HalfFloatType,        // half-float render targets
-});
-renderer.outputColorSpace = ExtendedSRGBColorSpace;
-
-THREE.ColorManagement.define({
-  [ExtendedSRGBColorSpace]: ExtendedSRGBColorSpaceImpl,
+  outputType: THREE.HalfFloatType,
 });
 ```
 
-with a reference implementation in the repository's `webgpu_hdr` example, and
-`renderOutput(color, toneMapping, outputColorSpace)` in TSL for explicit control
-inside a post chain — remembering `postProcessing.outputColorTransform = false`
-so the transform is not applied twice.
-[Source: three.js `examples/webgpu_hdr.html` and `docs/pages/TSL.html`, current
-`dev` branch.]
+> ⚠️ **Setting `renderer.outputColorSpace = ExtendedSRGBColorSpace` alone does
+> nothing.** In r182 `ExtendedSRGBColorSpace` is an *addon*
+> (`three/examples/jsm/math/ColorSpaces.js`), not a core export, and the
+> `toneMappingMode` it declares is never read — `ColorManagement.getToneMappingMode()`
+> has no caller anywhere in `src/`. The WebGPU backend derives the mode solely
+> from `outputType`. This was verified against the r182 sources, and an earlier
+> revision of this page had it wrong.
 
-`[OPEN QUESTION: HDR display detection and opt-out at the browser level — the (dynamic-range: high) media query, CSS dynamic-range-limit, and screen.isExtended. These were not verified against current browser support and must be before the M2 spec is closed.]`
+`renderOutput(color, toneMapping, outputColorSpace)` in TSL gives explicit control
+inside a post chain — remembering `postProcessing.outputColorTransform = false` so
+the transform is not applied twice.
+
+### Detection: measured, and it does not work
+
+[Spike 1](../spikes.md#1--hdr-display-detection) put the three candidate signals
+in front of three browsers on one physical display, at the same second:
+
+| Signal | Chrome 151 | Safari 26.5 | Firefox 153 |
+|---|---|---|---|
+| `(dynamic-range: high)` | **true** | **true** | **false** |
+| `(dynamic-range: standard)` | true | true | true |
+| `(video-dynamic-range: high)` | false | false | true |
+| `screen.isExtended` | false | *absent* | *absent* |
+| `screen.highDynamicRangeHeadroom` | *absent* | *absent* | *absent* |
+| `dynamic-range-limit: standard` / `no-limit` | ✅ | ✅ | ❌ |
+| WebGPU `rgba16float` + `toneMapping: 'extended'` | ✅ verified end to end | ✅ verified end to end | **throws** |
+
+The display in that test is an ordinary laptop panel with **2× EDR headroom and no
+reference HDR mode**, and Chrome and Safari both call it `dynamic-range: high`.
+They are answering *"will extended range be carried?"* — not *"is this display
+worth authoring HDR for."* Only the first question has an API, and **there is no
+headroom API at all**, so the page cannot tell 2× from an XDR display's ~16×.
+
+Three consequences, and all three are design constraints rather than
+implementation notes:
+
+1. **`auto` is a capability test, not a display test.** The media query says the
+   compositor will carry the values; a WebGPU `configure` probe says this browser
+   can produce them. Firefox fails the second and passes nothing else, so the
+   probe is the load-bearing half.
+2. **The tone curve must be headroom-agnostic.** It cannot be tuned to a peak
+   luminance the page is not allowed to know. Design for graceful behaviour across
+   2×–16× rather than a mapping that assumes one of them.
+3. **The three-state override stops being a nicety.** Auto will be wrong for
+   somebody on every one of these browsers, in both directions.
+
+```js
+const canOutputExtendedRange =
+  'gpu' in navigator &&
+  window.matchMedia('(dynamic-range: high)').matches &&
+  await probeExtendedCanvas()      // configure rgba16float + toneMapping 'extended'
+```
+
+`dynamic-range-limit` computes to `no-limit` initially, so nothing is needed to
+opt *in*; `standard` is the opt-*out* lever and it inherits, which makes "clamp
+this subtree" one CSS declaration. Attach a `change` listener to the media query
+rather than reading it once — a window can move between displays.
+
+**Firefox has no HDR output path at all** ([bug 1834395](https://bugzilla.mozilla.org/show_bug.cgi?id=1834395)),
+so the SDR path is not a fallback for weak hardware; it is the path for an entire
+browser. It has to be genuinely good.
 
 | Requirement | Specification |
 |---|---|
 | Internal pipeline | HDR throughout; `rgba16float` targets; tonemap once, at the end |
-| Output | Extended sRGB when the display reports it; ACES-derived tonemap to SDR otherwise |
+| Output | Extended range when the browser can produce it — **capability probe, not media query alone**; ACES-derived tonemap to SDR otherwise |
 | The two paths must agree | The SDR render is a *tonemapped version of the same image*, never a differently-authored one |
-| Peak luminance | Mapped so a G star's disc reaches display peak and everything else sits below it — the star is the reference white, always |
+| Peak luminance | Mapped so a G star's disc reaches display peak and everything else sits below it — the star is the reference white, always. **Peak is unknowable from the page**, so the mapping is relative and the curve must hold from 2× to 16× headroom |
 | Tonemapper | ACES-derived, configurable shoulder, exposed as the Composite mode's response curve |
 | Adaptation | Asymmetric: 0.4 s to bright, 3.5 s to dark, qualitatively matching human dark adaptation |
 | Adaptation clamp | User-settable rate and range. **Mandatory.** See [ux](ux.md#accessibility). |

@@ -25,11 +25,11 @@ Read these even if you read nothing else on this page.
 |---|---|---|---|
 | WebGPU migration overruns | Med | Severe | Three.js `WebGPURenderer` + TSL rather than a hand-written renderer; keep the WebGL path as a working fallback rather than a deleted one. Note that **HDR output exists only on the WebGPU path**, so the fallback is visually reduced by design. |
 | Browser memory limits kill long sessions in dense systems | Med | Major | Hard caps on streamed patch count and instance buffers; measure before M2 completes; the [benchmark harness](technical.md#performance-budgets) is M2 scope precisely for this |
-| Atmosphere correct from orbit *and* the ground proves intractable in one shader | Med | Major | Prototype the integral in isolation before M2 is committed; a visible switch between two shaders breaks [pillar 1](charter.md#pillar-1--one-continuous-space) and would need re-planning |
+| Atmosphere correct from orbit *and* the ground proves intractable in one shader | Med | Major | Prototype the integral in isolation before M2 is committed; a visible switch between two shaders breaks [pillar 1](charter.md#pillar-1--one-continuous-space) and would need re-planning. **Partly retired 2026-08-19** — [spike 2](../spikes.md#2--tsl-and-the-atmosphere-integral) ran one shader correct from both, in TSL, and the language is not the obstacle. The remaining risk is the LUT precomputation, not the formulation |
 | 60 fps at 1080p on the target laptop is not achievable | Med | Major | Budgets are set at 80% of frame time, not 100%; reduce instance counts and terrain level ceiling before reducing scope |
-| HOTAS support is not achievable in a browser | Med | Minor | **Do not promise it** until a WebHID/Gamepad spike proves it. Mouse and keyboard must be genuinely good regardless. |
+| HOTAS support is not achievable in a browser | ~~Med~~ **Low** | Minor | **Downgraded 2026-08-19** — [spike 5](../spikes.md#5--webhid-and-gamepad-for-hotas) shows WebHID reaches Joystick and Gamepad collections uncapped in Chromium. The residual risk is **browser coverage, not capability**: Firefox and Safari will not ship WebHID, so the promise must name Chromium. Hardware verification still outstanding. Mouse and keyboard must be genuinely good regardless. |
 | A determinism regression slips in | Low | Severe | Already well-defended: golden vectors, algorithm versions, state-hash comparison, `pnpm check`. The residual risk is agent-generated code that looks right — hence the [CONTEXT.md](../../CONTEXT.md) bug log |
-| Shader compilation stalls on first entry to a visual state | Med | Minor | Pre-warm pipelines during the [jump tunnel](flight.md#jump-), which exists partly for this |
+| Shader compilation stalls on first entry to a visual state | Med | Minor | Pre-warm pipelines during the [jump tunnel](flight.md#jump), which exists partly for this |
 | ~~No CI~~ — **resolved 2026-08-19** | — | — | `.github/workflows/check.yml` runs `pnpm check` and the capability self-test on every pull request. |
 
 ## Market and positioning
@@ -55,8 +55,9 @@ Read these even if you read nothing else on this page.
 | Risk | P | Impact | Mitigation |
 |---|---|---|---|
 | ~~No LICENSE file~~ — **resolved 2026-08-19** | — | — | [Apache-2.0](../../LICENSE) written. The repository is now open in fact as well as in description. |
-| HYG's CC BY-SA share-alike obligation is missed on derived data | Med | Major | The packed catalogue is a derivative and must carry the licence. In-product attribution, not just a repo file. |
-| A dataset changes terms or availability | Low | Major | Multiple sources for the same facts; NASA data is public domain and unencumbered |
+| HYG's CC BY-SA share-alike obligation is missed on derived data | Med | Major | Confirmed 2026-08-19: CC BY-SA 4.0 § 4(b) makes the packed catalogue *Adapted Material*. It must carry the licence, ship as its own asset rather than inlined into the bundle, and attribute in-product. See [sustainability](sustainability.md#data-licensing-is-the-constraint-that-bites) |
+| **Gaia's CC BY-NC clause attaches a non-commercial restriction to the shipped game** | ~~unidentified~~ **Realised** | Major | **Found 2026-08-19** by [spike 4](../spikes.md#4--gaia-and-hyg-attribution-terms); the bible had recorded Gaia as "open with attribution". Mitigation is to ship HYG + NASA and keep Gaia out of the bundle pending a written answer from `data.licences@esa.int`. **AT-HYG inherits the problem.** |
+| A dataset changes terms or availability | ~~Low~~ **Med** | Major | **Already happened once**: HYG moved from GitHub to Codeberg and the GitHub mirror froze at v4.1. Pin source URLs, assert on row counts at ingest, and keep multiple sources for the same facts. NASA's archive states **no licence at all**, so "unencumbered" was an assumption rather than a finding |
 | WebGPU spec or browser behaviour changes | Low | Major | Retain the WebGL fallback |
 | Hosting for the persistent universe becomes unaffordable | Med | Minor | **Designed for already**: PU degrades to solo online degrades to solo offline, and nothing is lost but other people's records — because the universe is derived |
 | Player-named universe requires moderation at a scale one person cannot handle | Med | Major | Filtered names plus a report path; unfiltered in solo modes. `[OPEN QUESTION in world.md]` |
@@ -68,7 +69,7 @@ Read these even if you read nothing else on this page.
 Risks taken with open eyes, so they are not re-discovered later as surprises:
 
 - **Fidelity will lose to Star Citizen, permanently.** Accepted. See
-  [art](art.md#the-style-statement).
+  [art](art.md#the-beauty-budget).
 - **Content breadth will lose to No Man's Sky and Elite.** Accepted; six hulls
   and eight biomes is the plan, not a shortfall.
 - **Combat will not match Elite's decade of tuning.** Accepted, and it is why

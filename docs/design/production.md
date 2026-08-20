@@ -97,7 +97,7 @@ without measurement cannot be evaluated or defended.
 | | |
 |---|---|
 | **Delivers** | The cockpit, the three travel regimes, and every simulated ship system |
-| **Scope** | Cockpit interior and HUD · the Canopy and its two camera modes · the module system, 6 hulls, ~60 modules · power pips · heat · damage and subsystem model · [the burn, flip and nav solver](flight.md#the-burn) · inertial compensation and the g-meter · [jump](flight.md#jump-) · fuel and scooping · targeting · burn assist · the three control schemes · **flight assist off** |
+| **Scope** | Cockpit interior and HUD · the Canopy and its two camera modes · the module system, 6 hulls, ~60 modules · power pips · heat · damage and subsystem model · [the burn, flip and nav solver](flight.md#the-burn) · inertial compensation and the g-meter · [jump](flight.md#jump) · fuel and scooping · targeting · burn assist · the three control schemes · **flight assist off** |
 | **Depends on** | M2 for the world to fly through; the parts-assembly system for hulls |
 | **Gate** | A pilot can fly Sol end to end — Earth orbit to a Titan landing — plotting and flying burns, managing heat and fuel, with no debug tooling. Inner-system burn pacing verified against the ~2:24 Earth–Mars target. Full control-scheme parity. |
 | **Estimate** | `[Assumption: 3–5 months. The parts-assembly system for hulls and interiors is the least-understood item.]` |

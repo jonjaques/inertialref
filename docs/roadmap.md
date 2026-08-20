@@ -185,7 +185,9 @@ multiplayer arrives.
 
 ---
 
-## Multiplayer ⛔
+## Multiplayer
+
+⛔ **Deliberately deferred.**
 
 Deliberately deferred to a later phase. What exists:
 
@@ -231,8 +233,23 @@ frame time. **What is not:** allocation rate, GC pressure, draw calls, or any
 regression baseline. A benchmark harness is a prerequisite for taking any of the
 above seriously.
 
-Also unaddressed: the client bundle is ~1.15 MB (324 KB gzipped), dominated by
-Three.js, with no code splitting.
+Also unaddressed: the client bundle is 1.19 MB raw (**324.6 KB gzip / 249.3 KB
+brotli**, measured 2026-08-19), dominated by Three.js, with no code splitting.
+
+**Two numbers arrived from [the spikes](spikes.md) and both belong here.**
+
+- A single-scattering atmosphere raymarch at 256 samples per pixel costs
+  **7.27 ms at 1080p on an Apple M5** — 2.4× the frame budget's atmosphere line on
+  a GPU well above target. Precomputed LUTs are a requirement, not an
+  optimisation.
+- The whole 150 ly catalogue is **159 KB brotli**. It is not a performance
+  problem and does not need streaming.
+
+> ⚠️ **When the benchmark harness is built, do not use
+> `renderer.info.render.timestamp`.** It double-counts on the canvas path — it
+> reported 14.6 ms for a frame whose true cost is 7.27 ms. Wall clock across
+> `queue.onSubmittedWorkDone()`, or a raw `timestamp-query`, agree with each other
+> and with reality.
 
 ---
 

@@ -45,7 +45,9 @@ contains, which is not a coincidence and is worth preserving.*
 
 ---
 
-## Solo offline ✅ (foundation), ⬜ (asset caching)
+## Solo offline
+
+✅ **Built and proven** (foundation) · ⬜ **Designed, not built** (asset caching)
 
 The complete game, with no network of any kind.
 
@@ -66,22 +68,29 @@ calls for it and it is a real piece of work — the player chooses to cache the
 client, the catalogue chunks for a chosen volume, and the material sets, and the
 UI shows what is cached and how large it is.
 
-| Cache tier | Contents | Est. size |
+| Cache tier | Contents | Size |
 |---|---|---|
-| Client | App, workers, shaders | ~2–4 MB `[Assumption: current bundle is 1.15 MB / 324 KB gzipped, pre-WebGPU and pre-materials]` |
-| Catalogue, 25 ly | ~200 systems | < 100 KB |
-| Catalogue, 150 ly | ~10,000 systems | ~2 MB `[PLAYTEST: needs measurement — see galaxy.md]` |
+| Client | App, workers, shaders | ~2–4 MB `[Assumption: measured at 1.19 MB raw / 260 KB brotli on 2026-08-19, pre-WebGPU and pre-materials]` |
+| Catalogue, 25 ly | 166 stars, 84 planets | **~5 KB brotli** ✅ measured |
+| Catalogue, 150 ly | 7,529 stars, 861 planets | **~159 KB brotli** ✅ measured — [spike 3](../spikes.md#3--catalogue-bundle-size) |
 | Material sets, 8 biomes | Textures | 40–120 MB, the dominant cost |
 
-> 🎮 Designer's Note: The material sets are the only thing in this game that
-> resembles a traditional asset download, and they are therefore the only thing
-> that threatens the "it's a link" pitch. Budget them hard, stream them by biome
-> rather than all at once, and make the offline preparation screen honest about
-> the size.
+**The catalogue tier collapsed.** It was estimated at ~2 MB and measured at 159 KB
+— small enough that there is nothing to choose about it. The preparation screen
+does not need a catalogue-volume slider; **it ships the whole 150 ly sphere as
+part of the client** and the screen is entirely about material sets.
+
+> 🎮 Designer's Note: The material sets are now the *only* thing in this game that
+> resembles a traditional asset download, and therefore the only thing that
+> threatens the "it's a link" pitch. That is a simplification worth having: one
+> download decision, not two. Budget them hard, stream them by biome rather than
+> all at once, and make the offline preparation screen honest about the size.
 
 ---
 
-## Solo online ⬜
+## Solo online
+
+⬜ **Designed, not built.**
 
 The same game, connected. **No other players are present in your instance.**
 
@@ -107,7 +116,7 @@ project.
 
 Other players, present, in a shared, continuously-running galaxy.
 
-**Deliberately deferred**, matching [`docs/roadmap.md`](../roadmap.md#multiplayer-).
+**Deliberately deferred**, matching [`docs/roadmap.md`](../roadmap.md#multiplayer).
 What exists today is seams only: `partitionForAddress` and
 `partitionForPosition` map to opaque string keys, authority follows an entity's
 frame chain, no vendor SDK appears anywhere in `packages/*`, and the partition
@@ -181,6 +190,6 @@ reason to be online.
 ## Related
 
 - [ADR-0008](../adr/0008-multiplayer-partitions.md) — the partition topology
-- [`docs/roadmap.md`](../roadmap.md#multiplayer-) — the engineering gap list
+- [`docs/roadmap.md`](../roadmap.md#multiplayer) — the engineering gap list
 - [exploration](exploration.md#discovery-credit) — the one thing that differs
 - [sustainability](sustainability.md) — who pays for the persistent universe

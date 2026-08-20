@@ -199,4 +199,4 @@ discovers by running out of upgrades.
 - [exploration](exploration.md#the-data-economy) — the faucet feeding all three ratchets
 - [ships](ships.md#modules) — what capability actually buys
 - [modes](modes.md) — where standing exists and where it does not
-- [loops](loops.md#meta-loop--the-frontier) — the ratchet in motion
+- [loops](loops.md#meta-loop--the-frontier-weeks-to-months) — the ratchet in motion

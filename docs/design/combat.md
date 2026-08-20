@@ -28,7 +28,9 @@ for it is a design that punishes correct play.
 
 ---
 
-## Ship combat ⬜
+## Ship combat
+
+⬜ **Designed, not built.**
 
 ### The shape of an engagement
 
@@ -174,7 +176,9 @@ escape is always viable.
 
 ---
 
-## On-foot combat ⬜
+## On-foot combat
+
+⬜ **Designed, not built.**
 
 Scarce, lethal, and slow. See [onfoot](onfoot.md) for the scoping decision and
 its reasoning.
@@ -213,6 +217,6 @@ interesting antagonist. Hostile humanoids, if they arrive at all, arrive with M6
 ## Related
 
 - [ships](ships.md#power) — pips and heat, which are most of this page's depth
-- [flight](flight.md#manoeuvre-and-landing-) — flight assist off, which is where combat flying lives
+- [flight](flight.md#manoeuvre-and-landing) — flight assist off, which is where combat flying lives
 - [onfoot](onfoot.md) — the suit, which is the on-foot health model
 - [modes](modes.md) — PvP consent and where combat can happen at all

@@ -77,20 +77,18 @@ reopening one is a deliberate act rather than a drift.
 
 ---
 
-## Still open — five engineering spikes
+## The five engineering spikes — run 2026-08-19
 
-Not decisions. Each needs a measurement or a verification, and each blocks
-something specific. **Each is written up as a self-contained handoff in
-[`docs/spikes.md`](../spikes.md)** — context, what to find out, what a good answer
-looks like, and the fallback if it comes back negative.
+Not decisions; measurements. **All five have been run**, and the full write-ups
+with method and numbers are in [`docs/spikes.md`](../spikes.md).
 
-| # | Spike | Blocks | Question |
+| # | Spike | Blocks | Result |
 |---|---|---|---|
-| 1 | **HDR display detection** | M2 | Do `(dynamic-range: high)`, CSS `dynamic-range-limit` and `screen.isExtended` work well enough to detect an extended-range display? Ship a user override regardless. |
-| 2 | **TSL and the atmosphere integral** | M2 | Does Three.js's shading-language abstraction cost anything material on a multiple-scattering integral, or is a hand-written pass needed? |
-| 3 | **Catalogue bundle size** | M4 | What does a packed 150 ly sphere actually cost over the wire? The 25 ly sphere should be well under 200 KB; the larger one is a different conversation. |
-| 4 | **Gaia attribution terms** | M4 | Confirm the exact licence terms and the required in-product attribution string before ingest. |
-| 5 | **WebHID / Gamepad for HOTAS** | M3 | Is many-axis HOTAS support achievable in a browser at all? **Do not promise it until this is answered.** |
+| 1 | **HDR display detection** | M2 | ✅ **Negative and useful.** `(dynamic-range: high)` is true on a 2×-headroom laptop panel in Chrome and Safari and false in Firefox, on the *same display*. There is no headroom API. `auto` becomes a WebGPU capability probe; the tone curve must be headroom-agnostic; the three-state override is mandatory. Firefox cannot output extended range at all. → [art](art.md#hdr) |
+| 2 | **TSL and the atmosphere integral** | M2 | ✅ **Free.** TSL-generated WGSL runs at **1.000×** hand-written, pixel-identical, in an interleaved same-harness comparison. Take TSL everywhere. Sideways finding: 256 samples/pixel costs 7.27 ms at 1080p on an M5, **2.4× over budget**, so Bruneton LUTs are a requirement rather than an optimisation. → [technical](technical.md#the-webgpu-migration) |
+| 3 | **Catalogue bundle size** | M4 | ✅ **Cheap.** 150 ly = 7,529 stars + 861 planets = **159 KB brotli**, against a 260 KB client. Bundle everything; no streaming boundary needed. The real constraint is **completeness** — HYG holds ~52% of CNS5 within 25 pc. → [galaxy](galaxy.md#measured-the-local-tier-is-cheap) |
+| 4 | **Gaia attribution terms** | M4 | ⚠️ **Reverses a decision.** Gaia is **CC BY-NC 3.0 IGO**, not "open with attribution". Non-commercial is the exact clause this project refuses. Ship HYG + NASA; keep Gaia out of the bundle. The stated fallback was backwards. → [sustainability](sustainability.md#data-licensing-is-the-constraint-that-bites) |
+| 5 | **WebHID / Gamepad for HOTAS** | M3 | 🟡 **Software yes, hardware outstanding.** WebHID is Chromium-only (Mozilla: negative; WebKit: unshipped). Gamepad API caps at 16 axes / 32 buttons and **silently drops** buttons above HID usage 32. Promise HOTAS *with the browser named*. Dual-device and latency still need real hardware. → [ux](ux.md#what-a-browser-can-actually-do-with-a-hotas) |
 
 ---
 
@@ -119,7 +117,7 @@ its source.
 | Jump range mass exponent | 0.6 | Do players ever voluntarily fly empty? |
 | Safe touchdown speed | ≤ 3.0 m/s | May be too tight without a radar altimeter |
 | Time to "can go anywhere" | 40–60 hours | The core pacing target |
-| Offline catalogue cache, 150 ly | ~2 MB | Needs measurement, not estimation — see spike 3 |
+| ~~Offline catalogue cache, 150 ly~~ | ~~~2 MB~~ → **159 KB brotli** | ✅ Measured, [spike 3](../spikes.md#3--catalogue-bundle-size). The estimate was 12× too high |
 | Relay beacon cost | 1,200 units | High enough to be a decision, low enough to be carried |
 
 ---
@@ -134,7 +132,7 @@ Terms specific to this design. Engine and architecture terms are in
 | **Almanac** | The player's permanent, local record of every body personally scanned. [exploration](exploration.md#the-almanac) |
 | **Ballistic transfer** | An impulse, a long coast on a conic, and a capture burn. Nearly free in fuel, measured in weeks of simulated time. ⬜ |
 | **Brachistochrone** | The burn profile: accelerate half the distance, flip, decelerate the other half. The fastest transfer under a thrust limit. |
-| **Burn, the** | The [micro loop](loops.md#micro-loop--the-burn): plot, burn, flip, burn, arrive, scan |
+| **Burn, the** | The [micro loop](loops.md#micro-loop--the-burn-27-minutes): plot, burn, flip, burn, arrive, scan |
 | **Banking** | Uploading survey data at a station, converting it from provisional to real. Unbanked data is lost on death. |
 | **Catalogue revision** | A published update to the astronomical dataset, delivered in-fiction as a Survey revision. [galaxy](galaxy.md#catalogue-revisions) |
 | **Canopy, the** | The cockpit view. An image composited from hull sensors with gain, integration and a selectable response — not a window. The fiction that grants artistic licence without falsifying data. |
@@ -145,7 +143,7 @@ Terms specific to this design. Engine and architecture terms are in
 | **Detail scan** | [Tier 2](exploration.md#tier-2--detail-scan): the scan that converts a projection into a surveyed body |
 | **Discovery credit** | Permanent attribution of a body to the first player to survey and bank it |
 | **Discovery scan** | [Tier 1](exploration.md#tier-1--discovery-scan): the system-wide reveal on arrival |
-| **Frontier, the** | The [meta loop](loops.md#meta-loop--the-frontier); also, informally, the edge of surveyed space |
+| **Frontier, the** | The [meta loop](loops.md#meta-loop--the-frontier-weeks-to-months); also, informally, the edge of surveyed space |
 | **Ground truth** | [Tier 4](exploration.md#tier-4--ground-truth): sampling on foot. The highest-value data in the game. |
 | **Horizon of knowledge** | The shell in the galaxy map beyond which catalogue completeness collapses and everything is projection |
 | **Issue ordinal** | A body's address index, assigned in the order bodies were *issued* rather than by orbit. [galaxy](galaxy.md#the-four-rules) |

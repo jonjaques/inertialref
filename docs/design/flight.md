@@ -171,7 +171,9 @@ genuinely interesting:
 > comes back the other way. Everything unsecured in the ship floats and then
 > falls. It costs almost nothing to build and it is what people will record.
 
-### Why there is no ballistic transfer ⛔
+### Why there is no ballistic transfer
+
+⛔ **Deliberately deferred.**
 
 An earlier draft offered a cheap, slow alternative — one impulse, a long coast on
 a conic, a capture burn — on the grounds that it would make the torch burn's fuel
@@ -186,7 +188,9 @@ goal, this is the first thing to reconsider.
 
 ---
 
-## Manoeuvre and landing ✅
+## Manoeuvre and landing
+
+✅ **Built and proven.**
 
 Below transit power, this is ordinary Newtonian 6-DoF flight and **it already
 exists** — `packages/simulation/src/flight.ts`, with patched-conic gravity,
@@ -213,7 +217,9 @@ advanced mode is correct for
 [pillar 3](charter.md#pillar-3--momentum-is-law), and it means the skill ceiling
 is set by physics rather than by a designer.
 
-### Landing 🟡
+### Landing
+
+🟡 **Partially built.**
 
 Contact under **3 m/s vertical** and **12° off local vertical** attaches the ship
 to the surface frame. Outside those bounds it is a crash: integrity loss
@@ -224,7 +230,9 @@ contact at anything other than a single ground point are ⬜.
 
 ---
 
-## Jump ⬜
+## Jump
+
+⬜ **Designed, not built.**
 
 Discrete re-anchoring to a distant system's frame. The interstellar mechanic, and
 the one that makes fuel matter.
@@ -301,7 +309,9 @@ route and the cheapest route are different routes. See
 
 ---
 
-## Fuel ⬜
+## Fuel
+
+⬜ **Designed, not built.**
 
 One resource: **hydrogen, in tonnes**. It powers jumps, burns, and the reactor
 everything else draws from. No second fuel, no consumables, no ammunition.
@@ -377,7 +387,7 @@ which is the property that matters.
 ## Related
 
 - [ships](ships.md) — the modules that set every coefficient here
-- [loops](loops.md#micro-loop--the-burn) — the burn as the player experiences it
+- [loops](loops.md#micro-loop--the-burn-27-minutes) — the burn as the player experiences it
 - [galaxy](galaxy.md#route-planning) — jump range and fuel as a puzzle
 - [onfoot](onfoot.md#during-a-burn) — what thrust gravity does to a person
 - [`docs/concepts/frames.md`](../concepts/frames.md) — the frame graph the drive fiction describes

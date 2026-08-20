@@ -246,12 +246,67 @@ not punish having one.
 |---|---|---|
 | **Mouse + keyboard** | Default | Relative mouse for pitch/yaw with a configurable deadzone and return-to-centre. This has to be *good*, not tolerated — it is what most players will use. |
 | **Gamepad** | Full parity | Dual sticks for rotation and translation; pips on the d-pad |
-| **HOTAS / HOSAS** | Full 6-DoF binding | Direct axis binding, no emulation layer, per-device profiles |
+| **HOTAS / HOSAS** | Full 6-DoF binding | Direct axis binding, no emulation layer, per-device profiles. **Chromium only** — see below |
 
 Everything is rebindable, including modifier layers. Bindings are part of the
 save and sync across modes.
 
-`[OPEN QUESTION: browser gamepad and HID support is uneven, and HOTAS devices with many axes are the worst case. The WebHID and Gamepad API path needs a spike before HOTAS support is promised. See technical.md.]`
+### What a browser can actually do with a HOTAS
+
+[Spike 5](../spikes.md#5--webhid-and-gamepad-for-hotas) measured the API surface
+in three browsers and read the caps out of Chromium's source. The answer is yes,
+with a browser named.
+
+| | Chrome 151 | Safari 26.5 | Firefox 153 |
+|---|---|---|---|
+| `navigator.hid` | **present** | absent | absent |
+| Gamepad API | present | present | present |
+
+Mozilla's position on WebHID is **negative** and settled — *"devices are generally
+not designed with access from arbitrary websites in their threat model"* — and
+WebKit has stated no position and not shipped it. **Plan for WebHID being
+Chromium-only indefinitely.**
+
+The Gamepad API is the universal floor, and it has hard limits that shape the
+binding UI:
+
+| Limit | Value | Where it hurts |
+|---|---|---|
+| Axes | **16** | A HOSAS pair plus rudder pedals can reach it |
+| Buttons | **32** | A single mid-range throttle exceeds it |
+| Poll rate | **250 Hz** (4 ms, dedicated thread) | Fine for flight; downsamples a 1000 Hz device |
+| Axis resolution | The device's own, 8/16/32-bit | **Not a constraint** — a 16-bit axis keeps all 65,536 steps |
+
+The button cap is worse than a cap. On macOS, Chromium indexes buttons by **HID
+usage number** and drops anything above 32 without reporting it:
+
+```cpp
+// Ignore buttons with large usage values.
+if (button_index >= Gamepad::kButtonsLengthCap)
+  continue;
+```
+
+So a throttle whose report descriptor declares buttons above usage 32 will *appear*
+to work and quietly lose inputs. **The binding UI must never present
+`gamepad.buttons` as the device's real button set**, and a device with more
+physical buttons than reported ones should say so rather than letting the player
+discover it during a fight.
+
+WebHID has no such caps, exposes the raw report descriptor, is event-driven rather
+than polled, and — verified in Chromium's protected-usage list — **does not block
+Joystick (0x04) or Gamepad (0x05) collections**. Permission is per-origin, granted
+through a device chooser behind a user gesture, persistent, enumerable via
+`getDevices()`, and revocable with `device.forget()`.
+
+**How to say it in public:** "full 6-DoF axis binding with no emulation layer, in
+Chrome and Edge." Unqualified "HOTAS support" would have to be withdrawn for half
+the audience.
+
+> ⚠️ **The hardware half of the spike has not been run.** No stick-and-throttle
+> pair was available. Dual-device enumeration, reconnect stability, end-to-end
+> latency against native, and whether real devices actually declare buttons above
+> usage 32 are all still unknown. The software says it is possible; hardware says
+> whether it is pleasant. **Run it before this paragraph goes in a README.**
 
 ---
 

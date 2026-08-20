@@ -196,7 +196,9 @@ the interior is a safe mode.
 
 ---
 
-## Structures ⬜
+## Structures
+
+⬜ **Designed, not built.**
 
 Buildings on planets. Enter and exit with no transition, same as ships.
 

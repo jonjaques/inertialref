@@ -96,7 +96,7 @@ HUD overlay drawn over a still-running cockpit, not a screen you go to.
 
 *Already proven:* frame transitions mid-flight, floating-origin rebasing, landing.
 *Still required:* LOD cross-fade and terrain geomorphing — see
-[art](art.md#lod-continuity).
+[art](art.md#continuity--the-no-pop-in-specification).
 
 ### Pillar 2 — The Sky Is Real
 

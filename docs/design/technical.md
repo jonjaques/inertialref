@@ -54,12 +54,53 @@ yet need; TSL gets compute and HDR immediately.
 **The escape hatch matters.** Terrain, atmosphere and the star-field passes are
 the three places where a custom pipeline may eventually be worth it. The design
 should keep them expressible as standalone passes so that decision stays
-available. `[OPEN QUESTION: does TSL's abstraction cost anything material for the atmosphere integral? Needs a spike before M2 is committed.]`
+available.
+
+### Measured: TSL costs nothing
+
+[Spike 2](../spikes.md#2--tsl-and-the-atmosphere-integral) wrote the same
+single-scattering atmosphere raymarch twice — once in TSL, once by hand in WGSL —
+harvested the WGSL that three's node system generates, and ran **both through one
+raw WebGPU harness**: same `rgba16float` 1920×1080 target, same fullscreen
+triangle, GPU time from `timestamp-query`, A and B interleaved, outputs verified
+pixel-identical first.
+
+| 32 view × 8 light samples, 1920×1080, Apple M5 | Hand-written | TSL-generated | Ratio |
+|---|---|---|---|
+| Orbit, 400 km | 0.393 ms | 0.393 ms | **1.000×** |
+| High, 60 km | 7.274 ms | 7.274 ms | **1.000×** |
+| Ground, 2 m | 7.274 ms | 7.274 ms | **1.000×** |
+| Pipeline build, median of 6 | 1.00 ms | 0.90 ms | 0.90× |
+| Source size | 3,859 B | 5,196 B | +35% |
+
+**Resolved: TSL for everything, including the atmosphere.** The generator inlines
+every `Fn` and hoists every intermediate to a function-scope `var` where a person
+would write `let` — the one structural difference that could have cost register
+pressure — and on Metal the backend compiler removes the difference entirely. The
+15% threshold the spike set was met by a factor of ten.
+
+three's renderer around it is nearly free too: the canvas output pass costs
+**0.11 ms (1.5%)**, measured as wall clock across a drained queue.
+
+> ⚠️ **`renderer.info.render.timestamp` is not trustworthy on the canvas path.**
+> It reported 14.615 ms for a frame whose true cost is 7.27 ms — it double-counts
+> when there is an output pass, and the first run of this spike concluded "TSL is
+> 2× slower" on the strength of it. Measure with a raw timestamp query, or with
+> wall clock across `queue.onSubmittedWorkDone()`. This will bite the benchmark
+> harness too.
+
+The escape hatch stays open on principle, but it is no longer pointed at the
+atmosphere. What the atmosphere actually needs is
+[precomputed LUTs](#the-atmosphere-does-not-fit-the-budget-at-any-language), which
+is a different problem.
 
 ### Fallback
 
 WebGPU availability is good on desktop Chrome, Edge and Safari 26+, and weaker
-elsewhere `[Assumption: verify against current caniuse data at implementation time — this moves]`. The WebGL path is **retained as a reduced-fidelity fallback**, not deleted:
+elsewhere. Measured 2026-08-19 on macOS: `navigator.gpu` is present in **all
+three** of Chrome 151, Safari 26.5 and Firefox 153 — but Firefox rejects
+`rgba16float` canvas configuration, so *WebGPU present* and *HDR possible* are
+different questions and must be probed separately. The WebGL path is **retained as a reduced-fidelity fallback**, not deleted:
 no compute terrain, simpler atmosphere, fewer instances, lower LOD ceiling. The
 game must remain playable on it, because "it's a link" is the pitch and a link
 that fails is worse than an install.
@@ -81,15 +122,32 @@ game that requires a desktop GPU has given up its only distribution advantage.
 | Terrain reconciliation | 1.0 ms | Upload and swap only; generation is off-thread |
 | Culling + draw submission | 2.5 ms | Target: GPU-driven, so this falls with WebGPU |
 | GPU — geometry | 5.0 ms | |
-| GPU — atmosphere + post | 3.0 ms | The atmosphere integral is the expensive one |
+| GPU — atmosphere + post | 3.0 ms | The atmosphere integral is the expensive one — and **a direct raymarch does not fit**, see below |
 | Headroom | 3.1 ms | Non-negotiable; the budget is 80%, not 100% |
+
+### The atmosphere does not fit the budget at any language
+
+The measurement that came out of [spike 2](../spikes.md#2--tsl-and-the-atmosphere-integral)
+sideways, and it is the more important half of it:
+
+**7.274 ms for 256 samples per pixel at 1080p on an Apple M5** — a GPU far above
+the target machine — is already **2.4× over this table's 3.0 ms line**. Scaled to
+fit, the budget buys about 105 samples per pixel, roughly 16 view × 6 light, which
+is not enough for a clean horizon.
+
+So **Bruneton's precomputed transmittance and multiple-scattering LUTs are a
+requirement, not an optimisation.** The spike asked whether TSL could express the
+integral cheaply enough; it can, and the integral still cannot be evaluated
+per-pixel per-frame in any language. Budget for LUT precomputation and its
+invalidation policy at M2, not for a faster inner loop.
 
 ### Other budgets
 
 | Budget | Target | Current |
 |---|---|---|
 | Cold load to interactive | ≤ 4 s on a 20 Mbit connection | Unmeasured |
-| Client bundle, gzipped | ≤ 900 KB with code splitting | 324 KB, no splitting, pre-WebGPU |
+| Client bundle, gzipped | ≤ 900 KB with code splitting | **324.6 KB gzip / 249.3 KB brotli**, measured 2026-08-19, no splitting, pre-WebGPU |
+| Catalogue, 150 ly, over the wire | Was a guess at ~2 MB | **159 KB brotli**, measured — [spike 3](../spikes.md#3--catalogue-bundle-size) |
 | Material sets, per biome | ≤ 12 MB | — |
 | Peak JS heap | ≤ 900 MB | Unmeasured |
 | Terrain patch generation | ≤ 8 ms per patch per worker | Measured; within |
@@ -115,11 +173,12 @@ The ones that will actually cause problems, with what they force.
 | **No `SharedArrayBuffer` without cross-origin isolation** | Worker results must be copied or transferred, not shared | Transferables already used; COOP/COEP headers are available if it becomes necessary, at the cost of embedding third-party content |
 | **Tab backgrounding throttles timers** | A returning tab could try to run thousands of ticks | **Already solved** — a step budget in the clock, in exactly one place |
 | **Memory pressure kills the tab, silently** | A long session in a dense system is the risk case | Hard caps on streamed patch count and instance buffers; measure before M2 |
-| **Gamepad / WebHID support is uneven** | HOTAS support is genuinely uncertain in a browser | Needs a spike. Do not promise HOTAS before it is proven. See [ux](ux.md#controls). |
+| **WebHID is Chromium-only** | Full-fidelity HOTAS exists in Chrome and Edge and nowhere else; Mozilla's position is *negative* and Safari has not shipped it | Measured — [spike 5](../spikes.md#5--webhid-and-gamepad-for-hotas). Gamepad API everywhere as the floor; **name the browser when promising HOTAS**. See [ux](ux.md#controls). |
+| **Gamepad API caps at 16 axes / 32 buttons** | A many-button HOTAS silently loses inputs: on macOS Chromium indexes buttons by HID usage and drops any usage above 32 without reporting it | WebHID for those devices. Do not build binding UI that assumes `gamepad.buttons` is the device's real button set. |
 | **Audio requires a user gesture** | First sound must follow an interaction | The FTUE's `POWER` prompt is the gesture, by design |
 | **No filesystem** | Saves are IndexedDB; export is a download | Already handled; export/import of the 696-byte save is trivial and should be exposed |
-| **Shader compilation stalls** | A first-frame hitch when entering a new visual state | Pre-warm pipelines during the [jump tunnel](flight.md#jump-) — which is the one place the game has six spare seconds |
-| **HDR display detection is unverified** | The page may output extended range to a display that cannot show it, or fail to when it can | Spike `(dynamic-range: high)`, CSS `dynamic-range-limit` and `screen.isExtended` before M2 closes. Ship an explicit user override regardless. |
+| **Shader compilation stalls** | A first-frame hitch when entering a new visual state | Pre-warm pipelines during the [jump tunnel](flight.md#jump) — which is the one place the game has six spare seconds. Measured: an atmosphere-class pipeline builds in ~1 ms warm, but the **first** compile of a session cost 8.5 ms, so the warm-up is per-session, not per-shader |
+| **HDR display detection does not work** | Chrome and Safari report `(dynamic-range: high)` for a 2×-headroom laptop panel; Firefox reports `false` for the same display and cannot output extended range at all | Measured — [spike 1](../spikes.md#1--hdr-display-detection). `auto` is a **capability probe**, not a media query; the tone curve must be headroom-agnostic; the three-state override is mandatory. |
 
 ---
 

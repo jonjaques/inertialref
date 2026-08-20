@@ -27,12 +27,20 @@ flowchart LR
     style L fill:#0e7490,stroke:#155e75,color:#fff
 ```
 
-> **Current version: 0.3.** All twenty-eight open design questions are resolved
-> and recorded in [appendix](appendix.md#decisions-taken); five engineering spikes
-> remain, along with two named content gaps. Earlier revisions: v0.2 replaced the
-> cruise throttle with [brachistochrone burns](flight.md#the-burn), established
-> the [Canopy as a sensor rather than a window](art.md#the-canopy-is-a-sensor-not-a-window)
+> **Current version: 0.4.** All twenty-eight open design questions are resolved
+> and recorded in [appendix](appendix.md#decisions-taken). **All five engineering
+> spikes have now been run** ([`docs/spikes.md`](../spikes.md)) — four are closed,
+> one waits on hardware — and their results are folded into the pages below. Two
+> named content gaps remain. Earlier revisions: v0.3 resolved the design
+> questions; v0.2 replaced the cruise throttle with
+> [brachistochrone burns](flight.md#the-burn), established the
+> [Canopy as a sensor rather than a window](art.md#the-canopy-is-a-sensor-not-a-window)
 > with real [HDR output](art.md#hdr), and widened the jump-range spread to ~7.7×.
+>
+> **What v0.4 changed, in one line each:** Gaia is non-commercial and leaves the
+> bundle · the catalogue is 12× cheaper than estimated · TSL is free · HDR
+> detection does not work and `auto` becomes a capability probe · HOTAS is a
+> Chromium promise.
 
 ## Contents
 
@@ -94,10 +102,12 @@ should be marked ⬜ and left alone** — the same rule
 ## Decisions, spikes and gaps
 
 Design questions are resolved inline where they arise and collected in
-[appendix](appendix.md#decisions-taken). What remains is tagged: five
-`[OPEN QUESTION: …]` spikes that need a measurement rather than an opinion, and
-`[PLAYTEST: …]` values awaiting evidence. Both are listed in the appendix so
-nothing hides in a paragraph.
+[appendix](appendix.md#decisions-taken). The five `[OPEN QUESTION: …]` spikes that
+needed a measurement rather than an opinion **have been run** — their results are
+in [`docs/spikes.md`](../spikes.md) and folded into the pages that held the guess.
+What remains is `[PLAYTEST: …]` values awaiting evidence, plus the hardware half
+of [spike 5](../spikes.md#5--webhid-and-gamepad-for-hotas). Everything is listed
+in the appendix so nothing hides in a paragraph.
 
 ## Related
 
