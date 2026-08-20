@@ -58,7 +58,7 @@ a production build. What follows is depth, not foundations.
 | Repository structure and layering | ✅ | Enforced by `pnpm graph` |
 | Protocols and serialization | 🟡 | Worker + save done; net, replay and binary unbuilt |
 | Observability | ✅ | All twelve inspectable fields |
-| Automation and DX | 🟡 | Commands and docs done; [no CI](#automation-gaps) |
+| Automation and DX | 🟡 | Commands, docs and [CI](#automation-gaps) done; no formatter, no save fixture |
 | Testing | 🟡 | Strong; [replay and fixtures](#automation-gaps) missing |
 | Performance | 🟡 | Designed for, [barely measured](#performance-work) |
 | Multiplayer | ⛔ | Deferred. Seams only — [ADR-0008](adr/0008-multiplayer-partitions.md); the partition key is a live debug field |
@@ -240,7 +240,7 @@ Three.js, with no code splitting.
 
 | Gap | Note |
 |---|---|
-| No CI configuration | `pnpm check` is designed to be the whole CI job — non-interactive, useful exit code |
+| ~~No CI configuration~~ ✅ | `.github/workflows/check.yml` runs `pnpm check` and the capability self-test on every pull request |
 | No formatter | oxlint only; no prettier or dprint. Deliberate so far, but a formatter is cheap consistency |
 | No stored save fixture | Compatibility testing currently synthesises old saves in-test rather than loading a real one from disk |
 | No performance regression tests | See above |

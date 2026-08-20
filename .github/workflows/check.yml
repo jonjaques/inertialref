@@ -1,0 +1,59 @@
+# Health check for pull requests.
+#
+# `pnpm check` is deliberately the whole job. It was designed to be exactly that
+# — non-interactive, with a useful exit code — so CI does not get its own list of
+# stages that can drift out of step with what a developer runs locally. See
+# docs/roadmap.md ("Automation gaps").
+#
+# The self-test runs separately because it proves something different: `check`
+# says the code compiles, lints and passes its unit tests; `sim --self-test`
+# executes the twelve milestone capability claims against the real simulation in
+# Node, with no DOM. A regression in precision, determinism or frame-rate
+# independence shows up there and nowhere else.
+
+name: check
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+# A PR that is pushed to twice does not need the first run to finish.
+concurrency:
+  group: check-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: pnpm check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v5
+
+      # Reads the pinned version from package.json's `packageManager` field, so
+      # the lockfile format and the CI pnpm can never disagree.
+      - uses: pnpm/action-setup@v4
+
+      # Node 26 is required: the headless runner executes the TypeScript sources
+      # directly through type stripping, which is how `pnpm sim` works with no
+      # build step. Pinned here because the repository has no .nvmrc or `engines`
+      # field yet — if one is added, switch this to `node-version-file`.
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '26'
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # graph → lint → typecheck → test → build, in that order, failing fast.
+      - name: Check
+        run: pnpm check
+
+      # The twelve capability claims, executed rather than described.
+      - name: Capability self-test
+        run: pnpm sim --self-test

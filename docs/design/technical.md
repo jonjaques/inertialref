@@ -20,7 +20,7 @@ every visual decision in [art](art.md).
 | Bundle | ~1.15 MB, 324 KB gzipped, dominated by Three.js, **no code splitting** |
 | Simulation throughput | ~1.25M ticks/s in-browser for one entity; ~100–105k ticks/s headless including frame resolution |
 | Offline | Service worker + IndexedDB + a migration chain, verified with the server stopped |
-| Gate | `pnpm check` — graph, lint, typecheck, test, build. **No CI configuration yet.** |
+| Gate | `pnpm check` — graph, lint, typecheck, test, build. Runs in CI on every pull request, alongside `pnpm sim --self-test`. |
 
 ---
 
@@ -136,7 +136,7 @@ Nothing here is architectural. Everything lands on a seam that already exists.
 | **Replay** | An input log of `(tick, entityId, controlInput)` plus a driver | Everything else exists: canonical tick, state hash, persisted input |
 | **Catalogue** | The [ingest pipeline](galaxy.md#ingest-pipeline) and catalogue versioning in the generation manifest | `algorithm()` and `manifest()` already version generation |
 | **Character** | A controller attached kinematically to a rotating surface frame | The same approach `flight.ts` takes for a landed ship |
-| **Automation** | CI, a stored save fixture, performance regression tests, a formatter | `pnpm check` is designed to be the entire CI job |
+| **Automation** | ~~CI~~ ✅ · a stored save fixture, performance regression tests, a formatter | CI runs `pnpm check` plus the capability self-test on every PR |
 
 ---
 

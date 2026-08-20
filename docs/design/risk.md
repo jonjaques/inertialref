@@ -30,7 +30,7 @@ Read these even if you read nothing else on this page.
 | HOTAS support is not achievable in a browser | Med | Minor | **Do not promise it** until a WebHID/Gamepad spike proves it. Mouse and keyboard must be genuinely good regardless. |
 | A determinism regression slips in | Low | Severe | Already well-defended: golden vectors, algorithm versions, state-hash comparison, `pnpm check`. The residual risk is agent-generated code that looks right — hence the [CONTEXT.md](../../CONTEXT.md) bug log |
 | Shader compilation stalls on first entry to a visual state | Med | Minor | Pre-warm pipelines during the [jump tunnel](flight.md#jump-), which exists partly for this |
-| No CI, so a regression reaches a release | Med | Major | `pnpm check` is designed to be the entire CI job. Configuring it is hours, not days, and it is overdue. |
+| ~~No CI~~ — **resolved 2026-08-19** | — | — | `.github/workflows/check.yml` runs `pnpm check` and the capability self-test on every pull request. |
 
 ## Market and positioning
 
