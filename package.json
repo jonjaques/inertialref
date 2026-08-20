@@ -6,6 +6,8 @@
   "packageManager": "pnpm@11.22.0",
   "scripts": {
     "dev": "pnpm --filter @inertialref/game dev",
+    "format": "prettier -w .",
+    "format:check": "prettier -c .",
     "build": "pnpm typecheck && pnpm --filter @inertialref/game build",
     "preview": "pnpm --filter @inertialref/game preview",
     "test": "vitest run",
@@ -14,12 +16,13 @@
     "lint": "oxlint",
     "graph": "node scripts/check-graph.mjs",
     "sim": "node apps/headless/src/main.ts",
-    "check": "pnpm graph && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+    "check": "pnpm graph && pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",
     "fast-check": "^4.1.1",
     "oxlint": "^1.75.0",
+    "prettier": "^3.9.6",
     "typescript": "~6.0.2",
     "vite": "^8.2.0",
     "vitest": "^4.0.5"
