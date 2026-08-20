@@ -13,6 +13,8 @@
  *
  *   pnpm sim                       # default scenario
  *   pnpm sim --seed voyager --ticks 6400 --self-test
+ *   pnpm sim --targets             # where can this session go?
+ *   pnpm sim --goto b:2 --ticks 0  # and go there
  */
 import { parseArgs } from 'node:util'
 import { createConsoleSink, logHub } from '@inertialref/shared'
@@ -20,16 +22,32 @@ import { openSession } from '@inertialref/devtools'
 import { createInlineWorker, createTaskRegistry } from '@inertialref/workers'
 import { captureSave, serializeSave } from '@inertialref/persistence'
 
-const { values } = parseArgs({
-  options: {
-    seed: { type: 'string', default: 'inertialref' },
-    system: { type: 'string', default: 'SOL' },
-    ticks: { type: 'string', default: '3840' },
-    scenario: { type: 'string', default: 'orbit' },
-    'self-test': { type: 'boolean', default: false },
-    quiet: { type: 'boolean', default: false },
-  },
-})
+const OPTIONS = {
+  seed: { type: 'string', default: 'inertialref' },
+  system: { type: 'string', default: 'SOL' },
+  ticks: { type: 'string', default: '3840' },
+  scenario: { type: 'string', default: 'orbit' },
+  /** A system designation or a body address, applied after the scenario. */
+  goto: { type: 'string' },
+  /** Print the travel listing, which is also the answer to "what exists?". */
+  targets: { type: 'boolean', default: false },
+  'self-test': { type: 'boolean', default: false },
+  quiet: { type: 'boolean', default: false },
+  help: { type: 'boolean', default: false },
+} as const
+
+const { values } = parseArgs({ options: OPTIONS })
+
+if (values.help === true) {
+  // The working guide has always said this flag exists; it did not, and
+  // `parseArgs` answered it by throwing "Unknown option".
+  console.log('pnpm sim — headless InertialRef runner\n')
+  for (const [name, option] of Object.entries(OPTIONS)) {
+    const fallback = 'default' in option ? ` (default ${String(option.default)})` : ''
+    console.log(`  --${name}${option.type === 'string' ? ' <value>' : ''}${fallback}`)
+  }
+  process.exit(0)
+}
 
 if (!values.quiet) {
   logHub.addSink(createConsoleSink(console, 'info'))
@@ -51,6 +69,23 @@ const { harness, system, target } = session
 
 console.log(`InertialRef headless — seed "${session.world.seedText}", ${system.name}, target ${target.name}`)
 await harness.scenario(values.scenario ?? 'orbit')
+
+// After the scenario, not instead of it: a scenario sets up a situation and
+// `--goto` says where to watch it from, so the two compose.
+if (values.goto !== undefined) {
+  harness.goTo(values.goto)
+  console.log(`goTo ${values.goto} — ${harness.summary()}`)
+}
+
+if (values.targets === true) {
+  for (const entry of harness.targets()) {
+    const indent = '  '.repeat(entry.depth)
+    const mark = entry.kind === 'system' ? '*' : entry.landable ? 'o' : '.'
+    console.log(
+      `${indent}${mark} ${entry.name.padEnd(24 - indent.length)} ${entry.detail.padEnd(30)} ${entry.distanceText.padStart(12)}  ${entry.address}`,
+    )
+  }
+}
 
 const ticks = Number.parseInt(values.ticks ?? '3840', 10)
 const started = performance.now()

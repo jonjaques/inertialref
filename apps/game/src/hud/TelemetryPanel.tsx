@@ -1,9 +1,9 @@
 import type { HarnessStatus } from '@inertialref/devtools'
-import { formatDistance } from '@inertialref/shared'
 import { CONTROL_HELP } from './useShipControls.ts'
+import { Row, Section } from './widgets.tsx'
 
 /*
- * The debug overlay.
+ * The debug readout.
  *
  * Spec §20 asks for every invisible thing to be inspectable: entity id,
  * universe address, reference frame, local *and* canonical coordinates,
@@ -14,22 +14,20 @@ import { CONTROL_HELP } from './useShipControls.ts'
  * It reads a `HarnessStatus` — the same structure the scriptable harness
  * returns — so what a human sees and what an automated check asserts on cannot
  * drift apart.
+ *
+ * Every group collapses and remembers it. Twelve inspectable fields is the
+ * right number to *have* and the wrong number to read at once while flying;
+ * before the dock existed this panel was 40 lines tall and permanently in the
+ * way of the thing it was reporting on.
  */
 
-export function DebugPanel({ status, visible }: { status: HarnessStatus | null; visible: boolean }) {
-  if (!visible || status === null) {
-    return (
-      <div className="pointer-events-none absolute right-3 top-3 rounded bg-slate-950/70 px-2 py-1 font-mono text-[11px] text-slate-400">
-        Tab · panel
-      </div>
-    )
-  }
-
+export function TelemetryPanel({ status }: { status: HarnessStatus | null }) {
+  if (status === null) return <div className="text-slate-500">waiting for the first frame…</div>
   const { world, player, render, workers, frame } = status
 
   return (
-    <div className="pointer-events-none absolute right-3 top-3 max-h-[calc(100vh-1.5rem)] w-96 overflow-auto rounded-lg border border-slate-700/60 bg-slate-950/80 p-3 font-mono text-[11px] leading-relaxed text-slate-300 shadow-xl backdrop-blur">
-      <Section title="simulation">
+    <div>
+      <Section id="tel.simulation" title="simulation" trailing={`tick ${world.tick}`}>
         <Row label="seed" value={`${world.seed} · ${world.seedHex.slice(0, 12)}…`} />
         <Row label="tick" value={`${world.tick} · ${world.timeText}`} />
         <Row
@@ -44,7 +42,7 @@ export function DebugPanel({ status, visible }: { status: HarnessStatus | null; 
       </Section>
 
       {player !== null && (
-        <Section title="player">
+        <Section id="tel.player" title="player" trailing={player.landed ? 'landed' : 'flying'}>
           <Row label="entity" value={`${player.id} · ${player.name}`} />
           <Row label="address" value={player.address ?? '(dynamic)'} />
           <Row label="frame" value={player.frame} />
@@ -62,14 +60,11 @@ export function DebugPanel({ status, visible }: { status: HarnessStatus | null; 
       )}
 
       {render !== null && (
-        <Section title="render">
+        <Section id="tel.render" title="render" trailing={`${render.starCount} stars`}>
           <Row label="origin sector" value={render.originSector.join(', ')} />
           <Row label="rebases" value={String(render.originGeneration)} />
           <Row label="anchor" value={render.anchorFrame} />
-          <Row
-            label="camera"
-            value={render.cameraRenderPosition.map((n) => n.toFixed(1)).join(', ')}
-          />
+          <Row label="camera" value={render.cameraRenderPosition.map((n) => n.toFixed(1)).join(', ')} />
           <Row label="stars" value={String(render.starCount)} />
           <Row label="streaming" value={render.terrainCandidates.join(', ') || '—'} wrap />
           <div className="mt-1 border-t border-slate-800 pt-1">
@@ -86,7 +81,7 @@ export function DebugPanel({ status, visible }: { status: HarnessStatus | null; 
         </Section>
       )}
 
-      <Section title="universe">
+      <Section id="tel.universe" title="universe" trailing={`${world.loadedSystems.length} systems`}>
         <Row label="systems" value={world.loadedSystems.map((s) => `${s.name} (${s.bodies})`).join(', ')} wrap />
         <Row label="frames" value={String(world.frames)} />
         <Row label="entities" value={String(world.entityCount)} />
@@ -102,7 +97,7 @@ export function DebugPanel({ status, visible }: { status: HarnessStatus | null; 
       </Section>
 
       {world.events.length > 0 && (
-        <Section title="events">
+        <Section id="tel.events" title="events" trailing={String(world.events.length)}>
           {world.events.slice(-5).map((event, index) => (
             <div key={`${event.tick}-${index}`} className="truncate text-slate-400">
               <span className="text-slate-600">{event.tick}</span> {event.kind} · {event.detail}
@@ -111,7 +106,7 @@ export function DebugPanel({ status, visible }: { status: HarnessStatus | null; 
         </Section>
       )}
 
-      <Section title="controls">
+      <Section id="tel.controls" title="controls">
         <div className="grid grid-cols-[5.5rem_1fr] gap-x-2">
           {CONTROL_HELP.map(([key, description]) => (
             <div key={key} className="contents">
@@ -122,47 +117,9 @@ export function DebugPanel({ status, visible }: { status: HarnessStatus | null; 
         </div>
         <div className="mt-2 text-slate-500">
           console: <span className="text-sky-300">ir.help()</span> ·{' '}
-          <span className="text-sky-300">await ir.selfTest()</span>
+          <span className="text-sky-300">ir.targets()</span> · <span className="text-sky-300">ir.goTo(&apos;b:2&apos;)</span>
         </div>
       </Section>
-    </div>
-  )
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="mb-3 last:mb-0">
-      <div className="mb-1 text-[10px] uppercase tracking-widest text-sky-400/80">{title}</div>
-      {children}
-    </div>
-  )
-}
-
-function Row({ label, value, wrap = false }: { label: string; value: string; wrap?: boolean }) {
-  return (
-    <div className="flex justify-between gap-3">
-      <span className="shrink-0 text-slate-500">{label}</span>
-      <span className={wrap ? 'break-all text-right text-slate-300' : 'truncate text-right text-slate-300'}>
-        {value}
-      </span>
-    </div>
-  )
-}
-
-/** Compact flight readout, bottom left, for when the panel is hidden. */
-export function FlightStrip({ status }: { status: HarnessStatus | null }) {
-  if (status === null || status.player === null) return null
-  const { player, world } = status
-  return (
-    <div className="pointer-events-none absolute bottom-3 left-3 rounded-lg border border-slate-700/60 bg-slate-950/75 px-3 py-2 font-mono text-xs text-slate-200 backdrop-blur">
-      <div className="text-sky-300">{player.name}</div>
-      <div>{player.localSpeedText} relative to frame</div>
-      <div className="text-slate-400">
-        {player.altitude === null ? player.frame : `alt ${formatDistance(player.altitude)}`}
-      </div>
-      <div className="text-slate-500">
-        tick {world.tick} · {world.timeScale}×{world.paused ? ' · paused' : ''}
-      </div>
     </div>
   )
 }

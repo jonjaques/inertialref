@@ -2,7 +2,9 @@ import { Canvas } from '@react-three/fiber'
 import { useCallback, useEffect, useState } from 'react'
 import type { HarnessStatus } from '@inertialref/devtools'
 import { GameEngine } from './engine/GameEngine.ts'
-import { DebugPanel, FlightStrip } from './hud/DebugPanel.tsx'
+import { FlightStrip } from './hud/FlightStrip.tsx'
+import { HudDock, type HudCommands, type HudTab } from './hud/HudDock.tsx'
+import { usePersistentState } from './hud/panelState.ts'
 import { useShipControls } from './hud/useShipControls.ts'
 import { SceneView } from './scene/SceneView.tsx'
 
@@ -15,6 +17,11 @@ import { SceneView } from './scene/SceneView.tsx'
  * per simulated tick. Canonical state never enters component state — the panel
  * receives a snapshot description, and if this component unmounted the universe
  * would carry on unchanged.
+ *
+ * Every command below exists exactly once and is bound to both a key and a
+ * button. Two implementations of "time warp" that drift by one step is a bug
+ * nobody would find, and the dock is what makes the game drivable without
+ * memorising the keyboard first.
  */
 
 let singleton: GameEngine | null = null
@@ -27,10 +34,14 @@ function engineInstance(): GameEngine {
 /** HUD refresh rate. The simulation runs at 64 Hz; a human reads about 8. */
 const PANEL_HZ = 8
 
+/** Time-warp detents. Powers of ten with a 5 and a 25 where the gaps are worst. */
+const WARP_STEPS = [1, 5, 25, 100, 1_000, 10_000, 100_000]
+
 export default function App() {
   const engine = engineInstance()
   const [status, setStatus] = useState<HarnessStatus | null>(null)
-  const [panelVisible, setPanelVisible] = useState(true)
+  const [dockOpen, setDockOpen] = usePersistentState('dock.open', true)
+  const [tab, setTab] = usePersistentState<HudTab>('dock.tab', 'navigate')
   const [notice, setNotice] = useState<string | null>(null)
 
   useEffect(() => {
@@ -51,32 +62,44 @@ export default function App() {
     window.setTimeout(() => setNotice(null), 2_500)
   }, [])
 
-  useShipControls(engine, {
-    onToggleAssist: () => flash(`flight assist ${engine.toggleFlightAssist() ? 'on' : 'off'}`),
-    onKillRotation: () => {
-      engine.killRotation()
-      flash('rotation killed')
-    },
-    onPause: () => {
+  const commands: HudCommands = {
+    togglePause: () => {
       const paused = !engine.world.clock.paused
       engine.world.clock.setPaused(paused)
       flash(paused ? 'paused' : 'running')
     },
-    onWarp: (direction) => {
-      const steps = [1, 5, 25, 100, 1_000, 10_000, 100_000]
+    warp: (direction) => {
       const current = engine.world.clock.timeScale
-      const index = steps.findIndex((step) => step >= current)
-      const next = steps[Math.min(steps.length - 1, Math.max(0, (index < 0 ? 0 : index) + direction))] ?? 1
+      const index = WARP_STEPS.findIndex((step) => step >= current)
+      const next = WARP_STEPS[Math.min(WARP_STEPS.length - 1, Math.max(0, (index < 0 ? 0 : index) + direction))] ?? 1
       engine.world.clock.setTimeScale(next)
       flash(`time warp ${next}×`)
     },
-    onSave: () => {
+    toggleAssist: () => flash(`flight assist ${engine.toggleFlightAssist() ? 'on' : 'off'}`),
+    killRotation: () => {
+      engine.killRotation()
+      flash('rotation killed')
+    },
+    save: () => {
       void engine.save().then((text) => flash(`saved ${text.length} bytes`))
     },
-    onLoad: () => {
+    load: () => {
       void engine.load().then((ok) => flash(ok ? 'loaded' : 'nothing to load'))
     },
-    onToggleHud: () => setPanelVisible((visible) => !visible),
+  }
+
+  useShipControls(engine, {
+    onToggleAssist: commands.toggleAssist,
+    onKillRotation: commands.killRotation,
+    onPause: commands.togglePause,
+    onWarp: commands.warp,
+    onSave: commands.save,
+    onLoad: commands.load,
+    onToggleHud: () => setDockOpen(!dockOpen),
+    onShowNavigation: () => {
+      setTab('navigate')
+      setDockOpen(true)
+    },
   })
 
   return (
@@ -98,7 +121,16 @@ export default function App() {
         <SceneView engine={engine} />
       </Canvas>
 
-      <DebugPanel status={status} visible={panelVisible} />
+      <HudDock
+        engine={engine}
+        status={status}
+        open={dockOpen}
+        onOpenChange={setDockOpen}
+        tab={tab}
+        onTabChange={setTab}
+        commands={commands}
+        onNotice={flash}
+      />
       <FlightStrip status={status} />
 
       {notice !== null && (

@@ -60,6 +60,7 @@ export interface RenderScene {
     readonly universePosition: UniverseVector
   }
   readonly bodies: readonly RenderBody[]
+  /** Brightest apparent first: `stars[0]` is the scene's key light. */
   readonly stars: readonly RenderStar[]
   readonly entities: readonly RenderEntity[]
   /** Bodies close enough to want streamed terrain, nearest first. */
@@ -116,13 +117,23 @@ export function buildScene(
     return { star, placement, apparent }
   })
 
-  const stars: RenderStar[] = rawStars.map(({ star, placement, apparent }) => ({
-    system: star.system,
-    name: star.name,
-    placement,
-    color: starColor(star.temperature),
-    brightness: brightest === 0 ? 0 : Math.min(1, (apparent / brightest) ** 0.25),
-  }))
+  // Sorted, because `stars[0]` is what the renderer lights the scene from. The
+  // order used to be the snapshot's — the order systems happened to be loaded
+  // in — which was invisible while only one system was ever loaded and wrong
+  // the moment travelling between them became ordinary: arriving 40 AU from
+  // Proxima left the scene lit by Sol, four light years behind, and the star
+  // overhead contributing nothing. Apparent brightness rather than distance,
+  // because that is what "which star lights this place" means.
+  const stars: RenderStar[] = rawStars
+    .slice()
+    .sort((a, b) => b.apparent - a.apparent)
+    .map(({ star, placement, apparent }) => ({
+      system: star.system,
+      name: star.name,
+      placement,
+      color: starColor(star.temperature),
+      brightness: brightest === 0 ? 0 : Math.min(1, (apparent / brightest) ** 0.25),
+    }))
 
   const entities: RenderEntity[] = snapshot.entities.map((entity: EntitySnapshot) => ({
     id: entity.id,

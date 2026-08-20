@@ -12,7 +12,7 @@ import {
   vec3,
 } from '@inertialref/spatial'
 import { snapshot, World } from '@inertialref/simulation'
-import { bodyFrameId, regionAddress, systemId, walkBodies } from '@inertialref/universe'
+import { bodyFrameId, regionAddress, systemFrameId, systemId, walkBodies } from '@inertialref/universe'
 import { generateHeightfield } from '@inertialref/universe'
 import { angularRadius, selectLod, starColor, terrainLevelFor } from './lod.ts'
 import {
@@ -211,6 +211,35 @@ describe('scene', () => {
   it('finds the body the player is closest to the surface of', () => {
     const { scene, planet } = sceneFixture()
     expect(nearestBody(scene)?.address).toBe(planet.id.slice(1))
+  })
+
+  it('lights the scene from the star you are actually at', () => {
+    /*
+     * `stars[0]` is the key light. It used to be whichever system was loaded
+     * first, which nothing could notice until travelling between systems became
+     * an ordinary thing to do: arriving 40 AU from Proxima left the scene lit by
+     * Sol, 4.2 light years behind, and the star overhead contributing nothing.
+     */
+    const { world, ship } = sceneFixture()
+    const proxima = world.loadSystem(systemId('HIP70890'))
+    world.teleport(ship.id, {
+      frame: systemFrameId(proxima.id),
+      position: vec3(40 * AU, 0, 0),
+      orientation: Q.IDENTITY,
+      velocity: Vec.ZERO,
+      angularVelocity: Vec.ZERO,
+    })
+    world.runTicks(1)
+    const shot = snapshot(world)
+    const camera = shot.entities.find((e) => e.id === ship.id)
+    if (camera === undefined) throw new Error('no camera')
+    const scene = buildScene(shot, originForCamera(null, camera.position), ship.id)
+
+    expect(scene.stars).toHaveLength(2)
+    expect(scene.stars[0]?.name).toBe('Proxima Centauri')
+    // Sol is still in the scene — it is simply not the sun any more.
+    expect(scene.stars[1]?.name).toBe('Sol')
+    expect(scene.stars[0]?.brightness).toBe(1)
   })
 
   it('culls what would be smaller than a pixel', () => {

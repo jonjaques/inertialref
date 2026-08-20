@@ -19,6 +19,7 @@ export interface ControlBindings {
   readonly onSave: () => void
   readonly onLoad: () => void
   readonly onToggleHud: () => void
+  readonly onShowNavigation: () => void
 }
 
 const AXIS_KEYS: Readonly<Record<string, [axis: 'translation' | 'rotation', index: 0 | 1 | 2, sign: number]>> = {
@@ -36,8 +37,35 @@ const AXIS_KEYS: Readonly<Record<string, [axis: 'translation' | 'rotation', inde
   KeyE: ['rotation', 2, -1],
 }
 
+/**
+ * Whether the keystroke belongs to something being typed into.
+ *
+ * The overlay grew a text field for addresses, and flight input is a
+ * window-level listener: without this, typing `SOL` fires the retro thruster
+ * twice and toggles nothing you meant. The keys are not remapped and the field
+ * is not special — the handler simply declines to read input aimed elsewhere.
+ */
+function isTyping(event: KeyboardEvent): boolean {
+  const target = event.target
+  if (!(target instanceof HTMLElement)) return false
+  return (
+    target.isContentEditable ||
+    target.tagName === 'INPUT' ||
+    target.tagName === 'TEXTAREA' ||
+    target.tagName === 'SELECT'
+  )
+}
+
 export function useShipControls(engine: GameEngine, bindings: ControlBindings): void {
   const held = useRef(new Set<string>())
+  // The bindings close over React state, so a new object arrives on every
+  // render — several times a second while the HUD polls. Reading them through a
+  // ref keeps one subscription for the life of the engine instead of tearing
+  // down and rebuilding three window listeners at the HUD's refresh rate.
+  const latest = useRef(bindings)
+  useEffect(() => {
+    latest.current = bindings
+  })
 
   useEffect(() => {
     const apply = (): void => {
@@ -54,7 +82,7 @@ export function useShipControls(engine: GameEngine, bindings: ControlBindings): 
     }
 
     const down = (event: KeyboardEvent): void => {
-      if (event.repeat) return
+      if (event.repeat || isTyping(event)) return
       if (event.code in AXIS_KEYS) {
         held.current.add(event.code)
         apply()
@@ -63,32 +91,35 @@ export function useShipControls(engine: GameEngine, bindings: ControlBindings): 
       }
       switch (event.code) {
         case 'KeyZ':
-          bindings.onToggleAssist()
+          latest.current.onToggleAssist()
           break
         case 'KeyX':
-          bindings.onKillRotation()
+          latest.current.onKillRotation()
           break
         case 'Space':
-          bindings.onPause()
+          latest.current.onPause()
           event.preventDefault()
           break
         case 'BracketRight':
-          bindings.onWarp(1)
+          latest.current.onWarp(1)
           break
         case 'BracketLeft':
-          bindings.onWarp(-1)
+          latest.current.onWarp(-1)
           break
         case 'F5':
-          bindings.onSave()
+          latest.current.onSave()
           event.preventDefault()
           break
         case 'F9':
-          bindings.onLoad()
+          latest.current.onLoad()
           event.preventDefault()
           break
         case 'Tab':
-          bindings.onToggleHud()
+          latest.current.onToggleHud()
           event.preventDefault()
+          break
+        case 'KeyG':
+          latest.current.onShowNavigation()
           break
         default:
           break
@@ -112,7 +143,7 @@ export function useShipControls(engine: GameEngine, bindings: ControlBindings): 
       window.removeEventListener('keyup', up)
       window.removeEventListener('blur', blur)
     }
-  }, [engine, bindings])
+  }, [engine])
 }
 
 export const CONTROL_HELP: readonly (readonly [string, string])[] = [
@@ -126,5 +157,6 @@ export const CONTROL_HELP: readonly (readonly [string, string])[] = [
   ['Space', 'pause'],
   ['[ / ]', 'time warp'],
   ['F5 / F9', 'save / load'],
-  ['Tab', 'hide panel'],
+  ['G', 'navigation panel'],
+  ['Tab', 'collapse the dock'],
 ]

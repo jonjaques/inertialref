@@ -141,6 +141,9 @@ ir.help()                       // the whole API
 ir.summary()                    // one line
 ir.status()                     // everything, structured
 ir.step(640) / ir.runSeconds(10)
+ir.targets()                    // everywhere you can go, nearest first
+ir.goTo('HIP71683') / ir.goTo('b:2')   // system or body; dispatches
+ir.loadSystem('HIP71683')       // generate a system without travelling to it
 ir.orbit('g:milky-way/s:SOL/b:2', 400)
 ir.land('g:milky-way/s:SOL/b:0', 0.35, -1.1)
 ir.face(address) / ir.burnToward(address)
@@ -149,8 +152,21 @@ await ir.selfTest()             // the twelve capabilities
 await ir.scenario('surface')    // orbit | approach | surface | interstellar
 ```
 
-`pnpm sim --self-test` does the same headlessly. `pnpm sim --help` lists the
+**Start with `ir.targets()`.** Every other verb takes an address and none of
+them will tell you one; that is the call that answers "where am I and what else
+is there". `goTo` is the only verb that accepts all the forms a human types —
+`SOL`, `s:SOL/b:2`, `b:2` relative to the system you are in — because
+`parseAddress` is deliberately strict everywhere else.
+
+`pnpm sim --self-test` does the same headlessly, and `pnpm sim --targets
+--goto b:2` is the same navigation from a terminal. `pnpm sim --help` lists the
 flags.
+
+The same verbs are on the dev dock, top right in the browser: **navigate** lists
+the destinations with a button per manoeuvre, **telemetry** is the inspection
+overlay, `Tab` collapses the whole thing and `G` opens navigation. It calls the
+harness and nothing else, so anything you can do by clicking is reproducible in
+a test.
 
 One gotcha when driving a browser: Chrome throttles `requestAnimationFrame` in
 backgrounded tabs, so a freshly reloaded page that is not focused sits at tick 0

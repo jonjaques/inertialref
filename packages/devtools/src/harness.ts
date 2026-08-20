@@ -1,8 +1,9 @@
 import { AU, getLogger, LIGHT_YEAR, logHub, type LogRecord, type Result, RingBufferSink } from '@inertialref/shared'
 import { circularSpeed } from '@inertialref/physics'
-import { Quaternion as Q, UV, Vec, vec3 } from '@inertialref/spatial'
+import { Quaternion as Q, type UniverseVector, UV, Vec, vec3 } from '@inertialref/spatial'
 import { snapshot, type World, type WorldSnapshot } from '@inertialref/simulation'
 import {
+  type Body,
   bodyFrameId,
   type EntityId,
   findBody,
@@ -21,6 +22,14 @@ import type { RenderScene } from '@inertialref/rendering'
 import type { PoolStats, WorkerPool } from '@inertialref/workers'
 import { runCapabilityChecks, summarizeCapabilities, type CapabilityResult } from './capabilities.ts'
 import { inspectEntity, inspectRender, inspectWorld, type EntityInspection, type RenderInspection, type WorldInspection } from './inspect.ts'
+import {
+  currentSystemOf,
+  resolveDestination,
+  type TravelTarget,
+  type TravelTargetOptions,
+  travelTargets,
+  viewingAltitudeKm,
+} from './travel.ts'
 
 /*
  * The scriptable harness.
@@ -95,6 +104,16 @@ export interface ScenarioResult {
 
 const log = getLogger('devtools.harness')
 
+/**
+ * The hold-off distance for a system with nothing to orbit.
+ *
+ * Outside every planet of a typical system, so arriving never drops the ship
+ * inside a body or inside a sphere of influence it did not ask for. It is a
+ * long way from anything to look at, which is why it is the fallback rather
+ * than the default.
+ */
+const ARRIVAL_DISTANCE_AU = 40
+
 export class GameHarness {
   readonly #host: HarnessHost
   readonly #logSink = new RingBufferSink(256)
@@ -155,9 +174,7 @@ export class GameHarness {
 
   /** Star systems within `lightYears` of the player, nearest first. */
   systemsNearby(lightYears = 8): readonly { id: string; name: string; lightYears: number }[] {
-    const player = this.#host.player()
-    const centre =
-      player === null ? (this.world.loadedSystems()[0]?.position ?? UV.UNIVERSE_ORIGIN) : this.world.canonicalPositionOf(player)
+    const centre = this.#here()
     return systemsWithin(this.world.galaxySeed, centre, lightYears * LIGHT_YEAR)
       .map((stub) => ({
         id: stub.id as string,
@@ -165,6 +182,30 @@ export class GameHarness {
         lightYears: UV.distance(stub.position, centre) / LIGHT_YEAR,
       }))
       .sort((a, b) => a.lightYears - b.lightYears)
+  }
+
+  /**
+   * Everywhere the player can be sent right now, nearest system first, each
+   * system followed by its bodies if it is loaded.
+   *
+   * The one call that answers "where can I go?", which nothing answered before:
+   * every other verb here takes an address and none of them would tell you one.
+   * The debug overlay renders this list and the console prints it.
+   */
+  targets(options: TravelTargetOptions = {}): readonly TravelTarget[] {
+    return travelTargets(this.world, this.#here(), options)
+  }
+
+  /**
+   * Generate a system and install its frames without going there.
+   *
+   * `bodies()` only sees systems that are loaded, so browsing what is in the
+   * next system along used to require flying to it first. This is the seam that
+   * makes looking cheaper than travelling.
+   */
+  loadSystem(system: string): readonly { address: string; name: string; kind: string; radiusKm: number; auFromStar: number; moons: number }[] {
+    const target = this.world.loadSystem(systemId(system))
+    return this.bodies(target.id)
   }
 
   /** Bodies of a loaded system, as a flat listing. */
@@ -307,6 +348,65 @@ export class GameHarness {
     return this.status()
   }
 
+  /**
+   * Go anywhere, given anything that names it.
+   *
+   * The god-mode front door, and the only travel verb that does not require you
+   * to already know what kind of thing you are naming. A body address arrives
+   * in a circular orbit framing that body; a system designation arrives at its
+   * first planet, because a star system's *contents* are what you asked for.
+   *
+   * Passing `distanceAu` asks for the other thing — a hold-off in the system
+   * frame, out in the dark, which is where `goToSystem` alone leaves you. That
+   * is a real place to want to be and a terrible place to arrive by default: at
+   * 40 AU a red dwarf is a sub-pixel point, so "travel to Proxima" appeared to
+   * do nothing at all.
+   *
+   * `orbit`, `land`, `goToSystem` and `face` are still the primitives and still
+   * take exactly one kind of argument each — this dispatches to them rather
+   * than reimplementing them, so there is one placement rule per manoeuvre.
+   */
+  goTo(destination: string, options: { altitudeKm?: number; distanceAu?: number } = {}): HarnessStatus {
+    const target = resolveDestination(
+      destination,
+      this.world.galaxy,
+      currentSystemOf(this.world, this.#host.player()),
+    )
+    const system = this.world.loadSystem(target.system)
+
+    if (target.kind === 'body') {
+      const body = findBody(system, target.address.kind === 'body' ? target.address.body : [])
+      if (body === undefined) throw new Error(`No body at ${target.text}`)
+      return this.#arriveAt(target.text, body, options.altitudeKm)
+    }
+
+    const first = system.planets[0]
+    if (first !== undefined && options.distanceAu === undefined) {
+      return this.#arriveAt(formatAddress(first.address), first, options.altitudeKm)
+    }
+
+    this.goToSystem(target.system, options.distanceAu ?? ARRIVAL_DISTANCE_AU)
+    // Arriving with the nose pointed at nothing is how you conclude the game is
+    // broken. `goToSystem` places the ship on the +X axis of the system frame,
+    // whose origin is the star.
+    this.#lookAt(this.world.frames.pose(systemFrameId(target.system), this.world.clock.time).position)
+    return this.status()
+  }
+
+  /**
+   * Circular orbit at a framing altitude, nose on the body.
+   *
+   * The second half is the part that is easy to leave out: `orbit` aims along
+   * the track, which is right for flying and wrong for arriving — you teleport
+   * into orbit and see empty space, which reads as "the planet did not load".
+   * A rotation does not change the orbit, and `GameEngine`'s opening shot has
+   * always done this exact pair for this exact reason.
+   */
+  #arriveAt(address: string, body: Body, altitudeKm?: number): HarnessStatus {
+    this.orbit(address, altitudeKm ?? viewingAltitudeKm(body))
+    return this.face(address)
+  }
+
   /** Drop the player into interstellar space near a system. */
   goToSystem(system: string, distanceAu = 60): HarnessStatus {
     const target = this.world.loadSystem(systemId(system))
@@ -330,42 +430,14 @@ export class GameHarness {
    * checking that a body is where the HUD says it is.
    */
   face(address: string): HarnessStatus {
-    const player = this.#requirePlayer()
-    const parsed = parseAddress(address)
-    if (parsed.kind !== 'body') throw new Error(`${address} is not a body address`)
-    const time = this.world.clock.time
-    const bodyPose = this.world.frames.pose(bodyFrameId(parsed), time)
-    const state = this.world.entities.require(player).state
-    const framePose = this.world.frames.pose(state.frame, time)
-    const toTarget = Q.rotateInverse(
-      framePose.orientation,
-      UV.difference(bodyPose.position, this.world.canonicalPositionOf(player)),
-    )
-    this.world.teleport(player, {
-      ...state,
-      orientation: Q.fromUnitVectors(vec3(0, 0, -1), Vec.normalize(toTarget)),
-      angularVelocity: Vec.ZERO,
-    })
+    this.#lookAt(this.#bodyPosition(address))
     return this.status()
   }
 
   /** Aim the ship at a body and light the main drive. */
   burnToward(address: string, throttle = 1): HarnessStatus {
-    const player = this.#requirePlayer()
-    const parsed = parseAddress(address)
-    if (parsed.kind !== 'body') throw new Error(`${address} is not a body address`)
-    const bodyPose = this.world.frames.pose(bodyFrameId(parsed), this.world.clock.time)
-    const state = this.world.entities.require(player).state
-    const framePose = this.world.frames.pose(state.frame, this.world.clock.time)
-    const here = this.world.canonicalPositionOf(player)
-    const toTarget = Q.rotateInverse(framePose.orientation, UV.difference(bodyPose.position, here))
-    // Forward is −Z, so the orientation that points the nose at the target is
-    // the rotation taking −Z onto the target direction.
-    const orientation = Q.fromUnitVectors(vec3(0, 0, -1), Vec.normalize(toTarget))
-    // Through `teleport`, not `entities.update`: this is a discontinuous change
-    // of attitude and the interpolation history has to be reset with it.
-    this.world.teleport(player, { ...state, orientation, angularVelocity: Vec.ZERO })
-    this.world.setControl(player, vec3(0, 0, throttle), Vec.ZERO)
+    this.#lookAt(this.#bodyPosition(address))
+    this.world.setControl(this.#requirePlayer(), vec3(0, 0, throttle), Vec.ZERO)
     return this.status()
   }
 
@@ -445,6 +517,9 @@ export class GameHarness {
       '  ir.step(ticks) / ir.runSeconds(s)',
       '  ir.pause() / ir.resume() / ir.timeWarp(x)',
       '  ir.control({translation,rotation}) / ir.hold()',
+      '  ir.targets()                  everywhere you can go, nearest first',
+      '  ir.goTo(target)               a system id or a body address; does the right thing',
+      '  ir.loadSystem(id)             generate a system without travelling to it',
       '  ir.bodies() / ir.systemsNearby(ly)',
       '  ir.orbit(address, altitudeKm) / ir.land(address, lat, lon)',
       '  ir.face(address)              point the nose at something',
@@ -454,6 +529,44 @@ export class GameHarness {
       '  await ir.scenario(name)       ' + this.scenarios().join(', '),
       '  ir.logs(n)',
     ].join('\n')
+  }
+
+  /** Where the listing is taken from: the player, or the first system loaded. */
+  #here(): UniverseVector {
+    const player = this.#host.player()
+    if (player === null) return this.world.loadedSystems()[0]?.position ?? UV.UNIVERSE_ORIGIN
+    return this.world.canonicalPositionOf(player)
+  }
+
+  #bodyPosition(address: string): UniverseVector {
+    const parsed = parseAddress(address)
+    if (parsed.kind !== 'body') throw new Error(`${address} is not a body address`)
+    return this.world.frames.pose(bodyFrameId(parsed), this.world.clock.time).position
+  }
+
+  /**
+   * Point the nose at a universe position, changing nothing else.
+   *
+   * One implementation, because `face` and `burnToward` had two: the same
+   * frame-relative rotation written out twice, differing only in whether it
+   * then set the throttle. Forward is −Z, so the orientation that aims at the
+   * target is the rotation taking −Z onto the target direction, and it goes
+   * through `teleport` rather than `entities.update` because a discontinuous
+   * change of attitude has to reset the interpolation history with it.
+   */
+  #lookAt(target: UniverseVector): void {
+    const player = this.#requirePlayer()
+    const state = this.world.entities.require(player).state
+    const framePose = this.world.frames.pose(state.frame, this.world.clock.time)
+    const toTarget = Q.rotateInverse(
+      framePose.orientation,
+      UV.difference(target, this.world.canonicalPositionOf(player)),
+    )
+    this.world.teleport(player, {
+      ...state,
+      orientation: Q.fromUnitVectors(vec3(0, 0, -1), Vec.normalize(toTarget)),
+      angularVelocity: Vec.ZERO,
+    })
   }
 
   #scenarioResult(name: string, beforeTick: number, detail: string): ScenarioResult {

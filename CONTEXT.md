@@ -142,6 +142,54 @@ The load-bearing changes:
   while nothing enforced it. It now rejects any third-party runtime dependency
   in `packages/*` — of which there are, and should be, none.
 
+## Navigation and the dev dock (19 Aug 2026)
+
+Milestone 1 proved the architecture and left the game unplayable in one specific
+way: a session opened in orbit above the first landable body of Sol and there
+was no way, from inside the running game, to learn that anywhere else existed.
+Every driving verb took an address and nothing produced one.
+
+- **`ir.targets()` is the missing question.** `packages/devtools/travel.ts` walks
+  the loaded systems and the star survey into one flat listing — address, name,
+  what it is, how far away, whether you can land on it — with a depth of 0, 1 or
+  2 so the flat list renders as the containment tree the addresses already
+  describe. A loaded system stays in the listing however far you fly, because a
+  debug tool that drops the place you came from strands you.
+- **`ir.goTo()` is the only lenient address parser in the codebase.** It takes
+  `SOL`, `s:SOL/b:2` and `b:2`-relative-to-here, and dispatches to `orbit` or
+  `goToSystem` rather than reimplementing either. `parseAddress` stays strict:
+  an address whose meaning depends on who is asking is fine at a debug prompt
+  and nowhere else.
+- **The viewing altitude is one body radius, clamped to 0.9 of the sphere of
+  influence.** A "circular orbit" placed outside the SOI is reframed to the
+  parent — `stepFlight` leaves at 1.05 × SOI — so the verb that promised to park
+  you somewhere would instead fling you across the system, and only for the
+  small moons. There is a test that walks every body of a system and checks the
+  frame still holds after a minute; it was confirmed to fail by raising the
+  altitude to 40 body radii. Both numbers were settled by looking at the screen
+  rather than by argument: a quarter radius fills the frame edge to edge with no
+  limb visible, and half the SOI is *inside the surface* of a planet orbiting at
+  0.005 AU, which collapsed the clamp onto its floor and parked the ship 10 km
+  up.
+- **Arriving somewhere points the nose at it.** `orbit` aims along the track,
+  which is right for flying and wrong for arriving: you teleport into orbit and
+  see empty space, which reads as a planet that failed to load. Naming a *system*
+  arrives at its first planet for the same reason — 40 AU out in the dark, a red
+  dwarf is a sub-pixel point and travelling looks like a no-op. `distanceAu`
+  asks for the hold-off explicitly.
+- **The overlay became a dock.** Two tabs — navigate and telemetry — sharing one
+  panel, every section collapsible and remembered in `localStorage`, and a
+  toolbar so pause, time warp, assist and save/load are not keyboard-only. The
+  panel calls the harness and nothing else, which is the rule that keeps a
+  clicked manoeuvre reproducible in a test.
+- **Flight input now ignores keystrokes aimed at a text field.** The address box
+  is the first input in the game; without the guard, typing `SOL` fires the
+  retro thruster. Buttons blur themselves on click for the same reason — a
+  focused button eats Space, which is pause.
+- `apps/game/src/hud/hud.test.ts` renders the dock to static markup in Node.
+  It proves nothing about layout and cannot; what it catches is a HUD that
+  throws on first render, which nothing else in the suite would notice.
+
 ## Bugs the tests found (worth not reintroducing)
 
 Each of these was invisible in a running browser and caught by a test or by
@@ -197,10 +245,55 @@ again in a neighbouring system.
 - **The normals test could not fail.** It asserted only that a normal was unit
   length, and a radial normal is also unit length — so it passed both before and
   after the fix for the bug it exists to guard.
+- **The scene was lit by whichever star loaded first.** `stars[0]` is the key
+  light, and `buildScene` emitted them in snapshot order — which is load order.
+  Invisible while one system was ever loaded, and wrong the moment travel made
+  two normal: arriving at Proxima left the scene lit by Sol, 4.2 light years
+  behind, and the star overhead contributing nothing. They are sorted by
+  apparent brightness now. Found by flying there and looking, not by a test —
+  the test came after.
 - **Two clamps for one spiral.** The view clamped the frame delta to 0.25 s,
   which changed nothing (`SimulationClock.advance` already caps a step) and
   corrupted `droppedTicks`: a three-minute background stall was reported in the
   HUD as 8 dropped ticks instead of 11,520.
+
+## The five spikes, measured (19 Aug 2026)
+
+Full write-ups with method and numbers in [`docs/spikes.md`](docs/spikes.md).
+What matters here is the handful of facts that will otherwise be rediscovered
+expensively.
+
+- **`renderer.info.render.timestamp` lies on the canvas path.** It reported
+  14.615 ms for a frame whose true GPU cost is 7.27 ms — it double-counts when
+  three renders an output pass. Wall clock across `queue.onSubmittedWorkDone()`
+  and a raw `timestamp-query` both agree with reality; that instrument does not.
+  The first run of the TSL spike concluded "TSL is 2× slower" on the strength of
+  it, which was false. This will bite the benchmark harness.
+- **TSL costs nothing.** Generated WGSL ran at 1.000× hand-written, pixel-identical,
+  in an interleaved same-harness comparison. The generator inlines every `Fn` and
+  hoists every intermediate to a function-scope `var`; Metal removes the
+  difference.
+- **HDR output is one constructor parameter.** `WebGPURenderer({ outputType:
+  HalfFloatType })` sets both the `rgba16float` canvas format and
+  `toneMapping: { mode: 'extended' }`. Setting `outputColorSpace` alone does
+  nothing — `ColorManagement.getToneMappingMode()` has no caller in three r182.
+- **`(dynamic-range: high)` is not a display test.** Chrome and Safari report true
+  for an ordinary 2×-EDR laptop panel; Firefox reports false for the same display
+  and cannot configure an `rgba16float` canvas at all. Detection has to be a
+  capability probe.
+- **Gaia is CC BY-NC 3.0 IGO.** Non-commercial, verified against ESA's licence
+  page — not "open with attribution", which is what the design bible said. It
+  stays out of any shipped bundle until ESA says otherwise in writing.
+- **The catalogue is 12× cheaper than estimated.** 150 ly of HYG plus every
+  confirmed planet inside it packs to ~159 KB brotli, against an estimate of
+  ~2 MB. Size was never the constraint; HYG's completeness is — it holds ~52% of
+  CNS5 within 25 pc.
+- **HYG moved to Codeberg** and the GitHub copy is frozen at v4.1. The files are
+  git-lfs pointers, so a `raw/` fetch silently returns 133 bytes of pointer text
+  instead of data. Use the `media/` path and assert on the row count.
+- **The Gamepad API caps at 16 axes / 32 buttons**, and on macOS Chromium indexes
+  buttons by HID usage and *silently drops* any usage above 32. WebHID has no such
+  cap but exists only in Chromium.
 
 ## Known gaps
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createInlineWorker, createTaskRegistry } from '@inertialref/workers'
-import { formatAddress } from '@inertialref/universe'
+import { formatAddress, type EntityId } from '@inertialref/universe'
+import { Quaternion as Q, Vec, vec3 } from '@inertialref/spatial'
 import { runCapabilityChecks, summarizeCapabilities } from './capabilities.ts'
 import type { GameHarness } from './harness.ts'
 import { inspectWorld } from './inspect.ts'
@@ -160,5 +161,116 @@ describe('landing through the harness', () => {
     session.world.runTicks(64 * 60)
     expect(height()).toBeCloseTo(0, 6)
     expect(session.world.isLanded(player)).toBe(true)
+  })
+})
+
+describe('travel targets', () => {
+  /*
+   * The gap these cover is not a broken calculation, it is a missing question.
+   * Every driving verb the harness had took an address, and nothing in the
+   * running game would tell you one — a session opened above the first landable
+   * body of Sol and the only way to learn that anywhere else existed was to read
+   * the generator. `targets()` is the answer, so what it must never do is omit
+   * somewhere you can actually go.
+   */
+  it('lists the loaded system, its bodies, and the neighbouring stars', () => {
+    const { harness: ir } = harness()
+    const targets = ir.targets({ lightYears: 6 })
+
+    const sol = targets.find((t) => t.kind === 'system' && t.system === 'SOL')
+    expect(sol?.loaded).toBe(true)
+    expect(sol?.depth).toBe(0)
+
+    const bodies = targets.filter((t) => t.kind === 'body')
+    expect(bodies.length).toBeGreaterThan(0)
+    expect(bodies.every((t) => t.system === 'SOL')).toBe(true)
+    // Planets sit one level under their system and moons one under those, which
+    // is what makes the listing renderable as a tree without a second pass.
+    expect(bodies.some((t) => t.depth === 1)).toBe(true)
+    expect(bodies.some((t) => t.depth === 2)).toBe(true)
+    expect(bodies.some((t) => t.landable)).toBe(true)
+
+    // The nearest catalogue neighbours, unloaded but addressable.
+    const proxima = targets.find((t) => t.name === 'Proxima Centauri')
+    expect(proxima?.loaded).toBe(false)
+    expect(proxima?.address).toBe('g:milky-way/s:HIP70890')
+
+    // Systems nearest first, so the top of the list is the useful end of it.
+    const systems = targets.filter((t) => t.kind === 'system').map((t) => t.distance)
+    expect([...systems].sort((a, b) => a - b)).toEqual(systems)
+  })
+
+  it('keeps a system listed after the player has left its survey radius', () => {
+    // Flying four light years away and having the place you came from drop out
+    // of the list is how a debug tool strands you.
+    const { harness: ir } = harness()
+    ir.goTo('HIP71683')
+    const named = ir.targets({ lightYears: 1 }).map((t) => t.system)
+    expect(named).toContain('SOL')
+    expect(named).toContain('HIP71683')
+  })
+})
+
+describe('going places', () => {
+  it('sends the ship to a body named relative to the system it is in', () => {
+    const { harness: ir, session } = harness()
+    ir.goTo('b:2')
+    const player = ir.inspect()
+    expect(player?.frame).toBe('b:g:milky-way/s:SOL/b:2')
+
+    // And arrives looking at it. `orbit` alone aims along the track, so the
+    // planet is off to one side and the screen is empty — which reads as a
+    // planet that failed to load rather than as a heading.
+    const entity = session.world.entities.require(session.player() as EntityId)
+    const forward = Q.rotate(entity.state.orientation, vec3(0, 0, -1))
+    // The body is at the origin of its own frame, so the way to it is simply
+    // back down the position vector.
+    const toBody = Vec.normalize(Vec.negate(entity.state.position))
+    expect(Vec.dot(forward, toBody)).toBeCloseTo(1, 6)
+  })
+
+  it('sends the ship to another star system, at something worth looking at', () => {
+    const { harness: ir } = harness()
+    expect(ir.status().world.loadedSystems).toHaveLength(1)
+    ir.goTo('HIP71683')
+    expect(ir.status().world.loadedSystems.map((s) => s.id)).toContain('HIP71683')
+    // Naming a system asks for its contents. Arriving 40 AU out in the dark is
+    // where `goToSystem` leaves you and it looks exactly like nothing happened:
+    // at that range a dwarf star is a sub-pixel point.
+    expect(ir.inspect()?.frame).toBe('b:g:milky-way/s:HIP71683/b:0')
+
+    // ...unless you ask for the hold-off explicitly, which is a real place to
+    // want to be — just not the default one.
+    ir.goTo('HIP71683', { distanceAu: 40 })
+    expect(ir.inspect()?.frame).toBe('s:HIP71683')
+    expect(ir.inspect()?.local.x).toBeGreaterThan(0)
+  })
+
+  it('parks inside the sphere of influence of every body it offers', () => {
+    /*
+     * The one that is easy to get wrong. A "circular orbit" placed outside a
+     * body's sphere of influence is reframed to the parent — so a debug verb
+     * that promised to park you somewhere instead flings you across the system,
+     * and only for the small moons, which is exactly the case nobody checks by
+     * hand. Confirmed to fail: raising the viewing altitude to 40 body radii
+     * turns the first moon's frame into its planet's on the very first pass.
+     */
+    const { harness: ir } = harness()
+    for (const target of ir.targets({ lightYears: 1 }).filter((t) => t.kind === 'body')) {
+      ir.goTo(target.address)
+      const frame = ir.inspect()?.frame
+      expect(frame).toBe(`b:${target.address}`)
+      ir.step(64 * 60)
+      const player = ir.inspect()
+      expect(`${target.name}: ${player?.frame}`).toBe(`${target.name}: ${frame}`)
+      expect(`${target.name}: landed ${player?.landed}`).toBe(`${target.name}: landed false`)
+    }
+  }, 20_000)
+
+  it('refuses what it cannot send you to', () => {
+    const { harness: ir } = harness()
+    expect(() => ir.goTo('')).toThrow(/No destination/)
+    expect(() => ir.goTo('g:milky-way')).toThrow(/galaxy/)
+    expect(() => ir.goTo('g:milky-way/s:SOL/b:99')).toThrow(/No body/)
   })
 })
