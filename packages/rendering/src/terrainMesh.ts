@@ -90,6 +90,16 @@ export function buildPatch(input: PatchInput): RenderPatch {
 
   computeNormals(positions, normals, resolution)
 
+  /*
+   * Winding must be counter-clockwise seen from *outside* the planet, because
+   * the renderer's material is single-sided and the GPU culls by winding, not
+   * by the normal attribute. These triangles were (a, c, b) / (b, c, d) —
+   * clockwise from outside on every cube face — so every patch was invisible
+   * from above and the "ground" on screen was the datum sphere 11 km below it,
+   * with the far slopes of distant ridges leaking through as a band floating
+   * over the horizon. `faceToDirection` gives ∂/∂s × ∂/∂t = outward on all six
+   * faces, so one order is right everywhere; the test asserts it face by face.
+   */
   const quads = (resolution - 1) * (resolution - 1)
   const indices = new Uint32Array(quads * 6)
   let cursor = 0
@@ -100,11 +110,11 @@ export function buildPatch(input: PatchInput): RenderPatch {
       const c = a + resolution
       const d = c + 1
       indices[cursor++] = a
-      indices[cursor++] = c
-      indices[cursor++] = b
       indices[cursor++] = b
       indices[cursor++] = c
+      indices[cursor++] = b
       indices[cursor++] = d
+      indices[cursor++] = c
     }
   }
 

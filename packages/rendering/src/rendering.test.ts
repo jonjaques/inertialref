@@ -393,6 +393,67 @@ describe('terrain mesh', () => {
     expect(maxTilt).toBeGreaterThan(1e-3)
   })
 
+  it('winds every triangle counter-clockwise seen from outside the body', () => {
+    /*
+     * The renderer's terrain material is single-sided, and the GPU culls by
+     * screen-space winding — the normal attribute has no say in it. So this is
+     * the property the whole feature stands on: wound the other way, every
+     * patch is culled from above, the datum sphere 11 km below reads as the
+     * ground, and the far slopes of ridges above eye level leak through as a
+     * terrain-coloured band floating over the horizon. That shipped, and it
+     * passed every distance-based test in this file, because winding is
+     * invisible to arithmetic about vertex positions.
+     *
+     * Checked on all six cube faces because each face maps (s, t) to a
+     * different pair of axes, so a fix that hard-codes one face's handedness
+     * would pass anywhere a single-face test happened to land.
+     */
+    const world = new World({ seed: 'inertialref' })
+    const system = world.loadSystem(systemId('SOL'))
+    const planet = [...walkBodies(system)].find((b) => b.surface.maxElevation > 0)
+    if (planet === undefined) throw new Error('no solid body')
+
+    const resolution = 9
+    for (let face = 0; face < 6; face += 1) {
+      for (const [level, i, j] of [
+        [4, 8, 8],
+        [12, 3090, 2886],
+      ] as const) {
+        const span = 2 ** level
+        const region = regionAddress(face, level, Math.min(i, span - 1), Math.min(j, span - 1))
+        const field = generateHeightfield(planet.surface, { region, resolution })
+        const patch = buildPatch({
+          region,
+          resolution,
+          elevations: field.elevations,
+          bodyRadius: planet.radius,
+        })
+
+        const vertex = (index: number) =>
+          vec3(
+            patch.positions[index * 3] as number,
+            patch.positions[index * 3 + 1] as number,
+            patch.positions[index * 3 + 2] as number,
+          )
+        for (let t = 0; t < patch.indices.length; t += 3) {
+          const a = vertex(patch.indices[t] as number)
+          const b = vertex(patch.indices[t + 1] as number)
+          const c = vertex(patch.indices[t + 2] as number)
+          const geometric = Vec.cross(Vec.sub(b, a), Vec.sub(c, a))
+          // True radial direction at the triangle, which needs the anchor put
+          // back on — the positions alone are anchor-relative.
+          const centroid = Vec.add(
+            patch.anchor,
+            Vec.scale(Vec.add(Vec.add(a, b), c), 1 / 3),
+          )
+          expect(
+            `face ${face} level ${level} triangle ${t / 3}: ${Vec.dot(geometric, centroid) > 0}`,
+          ).toBe(`face ${face} level ${level} triangle ${t / 3}: true`)
+        }
+      }
+    }
+  })
+
   it('places meter-scale detail on an astronomically distant surface', () => {
     // Requirement 8 of the milestone, checked at the level that decides it: a
     // vertex a metre from its neighbour must still be a metre from it after

@@ -277,6 +277,21 @@ again in a neighbouring system.
   which changed nothing (`SimulationClock.advance` already caps a step) and
   corrupted `droppedTicks`: a three-minute background stall was reported in the
   HUD as 8 dropped ticks instead of 11,520.
+- **Every terrain triangle was wound clockwise seen from outside the planet**
+  (20 Aug 2026), so the single-sided material culled the entire mesh from
+  above, on every cube face, since the day it was written. The "ground" on
+  screen was always the datum sphere 11 km below, dead flat; the only terrain
+  ever drawn was the far slopes of ridges poking above eye level, leaking
+  through as a thin terrain-coloured band floating over the horizon — visible
+  landed, gone by ~100 m up, which is what finally localised it. No
+  distance-based test could catch it: winding is invisible to arithmetic about
+  vertex positions, and the strobe test's invariant (constant ship–patch
+  separation) holds in either order. Found by rebuilding the exact scene in
+  Node and raycasting it — `THREE.Raycaster` honours `material.side`, so
+  "FrontSide: no hit, BackSide: hit at 2.39 m" was the whole diagnosis. The
+  regression test asserts the geometric normal of every triangle points out of
+  the planet, on all six faces, because each face maps (s, t) to different axes
+  and a one-face test could pass with hard-coded handedness.
 
 ## The five spikes, measured (19 Aug 2026)
 
@@ -316,15 +331,27 @@ expensively.
   buttons by HID usage and *silently drops* any usage above 32. WebHID has no such
   cap but exists only in Chromium.
 
-## Open: the horizon gap (unresolved, 19 Aug 2026)
+## The horizon gap (resolved 20 Aug 2026 — it was the triangle winding)
 
-**Standing on a world, there is a band of empty space at the horizon with stars
-through it.** Three separate bugs were found and fixed while chasing this (the
-sliding patch set, the render-time mismatch, the camera with no floor) and the
-band is still there afterwards. It is not a regression and it is not any of
-those three. The measurements, so the next attempt does not have to re-derive
-them — all from `s:SOL/b:0`, landed at 0.35, −1.1, and reproduced identically at
-the commit before any of this work:
+**Standing on a world, there was a band of empty space at the horizon with
+stars through it.** Three separate bugs were found and fixed while chasing this
+(the sliding patch set, the render-time mismatch, the camera with no floor) and
+the band survived all three, because the actual cause was the terrain winding
+bug above: the mesh was culled from above everywhere, so the "ground" was the
+datum sphere and the wedge between its limb (5.121° below the horizontal) and
+eye level was open sky. With the winding fixed, the streamed terrain occludes
+that wedge from the ground, exactly as real terrain should — a headless raycast
+down the screen's centre column now crosses from sky to terrain at eye level
+and never reaches the sphere.
+
+What remains true, and still matters from altitude: the datum sphere is drawn a
+full relief below the datum, so once the camera is high enough that the edge of
+the streamed set dips below the sphere's limb (~150 m at this site), the sunken
+sphere shows beyond the terrain's edge again. That seam is the real "terrain to
+the horizon" work — [the terrain quadtree](docs/roadmap.md#terrain) the roadmap
+already names as the next milestone. The measurements below are kept because
+they are correct and the next milestone needs them — all from `s:SOL/b:0`,
+landed at 0.35, −1.1:
 
 | Quantity | Value |
 |---|---|
@@ -337,12 +364,14 @@ the commit before any of this work:
 | Farthest terrain vertex from the camera | 4.3 km |
 
 So the ground you stand on is a 5 km mesa floating 11 km above a featureless
-sphere, and between the mesa's edge and that sphere's limb there is a wedge of
-sky. The sink is deliberate — `scene.ts` explains that a sphere at the datum
-hides every valley on the planet — and it is the *right* call from orbit and the
-wrong one from the ground.
+sphere. From the ground the mesa now hides the sphere entirely; from altitude
+the wedge of sky between the mesa's edge and the sphere's limb reappears. The
+sink is deliberate — `scene.ts` explains that a sphere at the datum hides every
+valley on the planet — and it is the *right* call from orbit and the wrong one
+near the ground.
 
-Approaches considered and not taken, with the arithmetic:
+Approaches considered and not taken for that remaining seam, with the
+arithmetic:
 
 - **Blend the sink to zero near the surface.** Shrinks the band from 5.1° to
   ~1° (64 px to 13 px). Cheap, but a mitigation: any sphere below your feet has
