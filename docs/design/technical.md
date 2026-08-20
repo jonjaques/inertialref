@@ -17,7 +17,7 @@ every visual decision in [art](art.md).
 | Renderer | Three.js 0.182 `WebGPURenderer` with TSL, via React Three Fiber 9. WebGL 2 backend retained as the fallback |
 | Build | Vite 8 with the Oxc transform; React Compiler on |
 | Runtime | Node 26, pnpm 11; Node runs the TypeScript sources directly |
-| Bundle | ~1.77 MB, **499 KB gzipped**, dominated by Three.js, **no code splitting** |
+| Bundle | 1.78 MB, **501.7 KB gzip / 371.9 KB brotli**, dominated by Three.js, **no code splitting** |
 | Simulation throughput | ~1.25M ticks/s in-browser for one entity; ~100–105k ticks/s headless including frame resolution |
 | Offline | Service worker + IndexedDB + a migration chain, verified with the server stopped |
 | Gate | `pnpm check` — graph, lint, typecheck, test, build. Runs in CI on every pull request, alongside `pnpm sim --self-test`. |
@@ -194,7 +194,7 @@ invalidation policy at M2, not for a faster inner loop.
 | Budget | Target | Current |
 |---|---|---|
 | Cold load to interactive | ≤ 4 s on a 20 Mbit connection | Unmeasured |
-| Client bundle, gzipped | ≤ 900 KB with code splitting | **503 KB gzip**, measured 2026-08-20, no splitting |
+| Client bundle, gzipped | ≤ 900 KB with code splitting | **501.7 KB gzip / 371.9 KB brotli**, measured 2026-08-20, no splitting |
 | Catalogue, 150 ly, over the wire | Was a guess at ~2 MB | **159 KB brotli**, measured — [spike 3](../spikes.md#3--catalogue-bundle-size) |
 | Material sets, per biome | ≤ 12 MB | — |
 | Peak JS heap | ≤ 900 MB | **66–74 MB** across orbit, approach and surface |

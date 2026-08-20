@@ -525,7 +525,7 @@ Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md
 - No compute passes, storage buffers or indirect draw yet: the WebGPU migration
   delivered the renderer and the HDR path, not GPU-driven terrain or culling.
 - Cold load to interactive is still unmeasured, and it is the budget most likely
-  to be missed: the bundle is 503 KB gzip with no code splitting.
+  to be missed: the bundle is 501.7 KB gzip with no code splitting.
 - Every performance number recorded here is from an Apple M5 in a 1000×760
   window. The target is a 2023-class laptop at 1920×1080 — roughly three times
   the pixels on a much weaker GPU — so these establish that the instrument works,

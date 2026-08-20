@@ -240,8 +240,9 @@ so there is still nothing that can fail a pull request for getting slower.
 The overlay earned itself on the first day: it found that the simulation clock
 capped time warp at 7.5× while the UI offered 100,000×.
 
-Also unaddressed: the client bundle is 1.77 MB raw (**499.0 KB gzip**, measured
-2026-08-20), dominated by Three.js, with no code splitting. It grew 169 KB gzip
+Also unaddressed: the client bundle is 1.78 MB raw (**501.7 KB gzip / 371.9 KB
+brotli**, measured 2026-08-20), dominated by Three.js, with no code splitting. It
+grew 177 KB gzip
 with the WebGPU migration — the node system and the WebGPU backend — and roughly
 150 KB raw of that is dead weight: React Three Fiber imports `three`, which pulls
 in the classic `WebGLRenderer` that nothing uses, because the WebGL *fallback*
