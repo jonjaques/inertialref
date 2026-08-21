@@ -28,8 +28,6 @@ import {
   type Body,
   bodyFixedFrameId,
   bodyFrameId,
-  CATALOG,
-  catalogStub,
   directionToGeodetic,
   dynamicEntityId,
   type EntityId,
@@ -42,6 +40,8 @@ import {
   MILKY_WAY,
   parseSurfaceFrameId,
   resolveSystem,
+  SOL_ONLY_CATALOG,
+  type StarCatalog,
   type StarSystem,
   systemFrameId,
   type SystemId,
@@ -93,6 +93,17 @@ export interface WorldOptions {
   readonly galaxy?: GalaxyId
   readonly startTick?: Tick
   readonly maxSteps?: number
+  /**
+   * The star catalogue this world is generated against.
+   *
+   * A second generation input alongside the seed, and required to be explicit
+   * for the reason `docs/design/galaxy.md` Rule 1 gives: the catalogue changes
+   * when astronomy publishes, and a universe that changed silently underneath a
+   * save would invalidate every address in it. Defaults to `SOL_ONLY_CATALOG`,
+   * which is one star and no claims — enough for a test, and a working if much
+   * emptier galaxy for a host whose catalogue asset failed to load.
+   */
+  readonly catalog?: StarCatalog
 }
 
 export class World implements FlightWorld {
@@ -100,6 +111,7 @@ export class World implements FlightWorld {
   readonly rootSeed: Seed
   readonly galaxy: GalaxyId
   readonly galaxySeed: Seed
+  readonly catalog: StarCatalog
   readonly frames = new FrameGraph()
   readonly entities = new EntityStore()
   readonly clock: SimulationClock
@@ -118,6 +130,7 @@ export class World implements FlightWorld {
     this.rootSeed = rootSeed(options.seed)
     this.galaxy = options.galaxy ?? MILKY_WAY
     this.galaxySeed = galaxySeedOf(this.rootSeed, this.galaxy)
+    this.catalog = options.catalog ?? SOL_ONLY_CATALOG
     this.clock = new SimulationClock({
       ...(options.startTick === undefined
         ? {}
@@ -135,7 +148,7 @@ export class World implements FlightWorld {
     const existing = this.#systems.get(id)
     if (existing !== undefined) return existing
 
-    const stub = resolveSystem(this.galaxySeed, id)
+    const stub = resolveSystem(this.galaxySeed, this.catalog, id)
     invariant(stub !== undefined, `Unknown system ${id}`)
     const system = generateSystem(this.rootSeed, this.galaxy, stub)
     installSystemFrames(this.frames, system)
@@ -539,7 +552,7 @@ export class World implements FlightWorld {
     loaded: readonly SystemId[]
     unloaded: readonly SystemId[]
   } {
-    const wanted = systemsWithin(this.galaxySeed, centre, radius)
+    const wanted = systemsWithin(this.galaxySeed, this.catalog, centre, radius)
     const loaded: SystemId[] = []
     for (const stub of wanted) {
       if (!this.#systems.has(stub.id)) {
@@ -630,13 +643,6 @@ export class World implements FlightWorld {
   landedEntities(): readonly EntityId[] {
     return [...this.#landed]
   }
-}
-
-/** Convenience for tests and the harness: the catalogue stub for a known star. */
-export function catalogSystemStub(id: SystemId) {
-  const star = CATALOG.find((s) => s.id === id)
-  invariant(star !== undefined, `No catalogue star ${id}`)
-  return catalogStub(star)
 }
 
 export { timeOfTick, Q }

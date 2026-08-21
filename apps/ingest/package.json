@@ -1,0 +1,18 @@
+{
+  "name": "@inertialref/ingest",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Turns published star and exoplanet catalogues into the packed asset the game ships.",
+  "scripts": {
+    "fetch": "node src/main.ts fetch",
+    "build": "node src/main.ts build",
+    "report": "node src/main.ts report"
+  },
+  "dependencies": {
+    "@inertialref/procedural": "workspace:*",
+    "@inertialref/shared": "workspace:*",
+    "@inertialref/spatial": "workspace:*",
+    "@inertialref/universe": "workspace:*"
+  }
+}

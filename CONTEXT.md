@@ -90,13 +90,16 @@ Full reasoning is in `docs/adr/`. The short version:
 pnpm dev         # vite dev server (apps/game)
 pnpm dev:server  # wrangler dev on 8787; `pnpm dev` proxies /api and /ws to it
 pnpm test        # vitest, node environment only
-pnpm typecheck   # four tsconfig projects
+pnpm typecheck   # five tsconfig projects
 pnpm lint        # oxlint
 pnpm graph       # dependency layering + cycle check
 pnpm build
 pnpm check       # all of the above
 pnpm vitest run <substring>   # single test file
 pnpm run deploy:worker        # pnpm build, then wrangler deploy
+
+pnpm catalog:report           # build the star catalogue and print the counts
+pnpm catalog:build            # ...and write data/catalog
 ```
 
 ## The architecture pass (19 Aug 2026)
@@ -624,12 +627,190 @@ a byte-identical hash to one opened without.
   transport that transports nothing is how a seam becomes fiction. `submitted`
   is on the overlay reading `0`, which is the first number worth having at H4.
 
+## Real astronomy (20 Aug 2026)
+
+The catalogue stopped being 18 hand-transcribed stars and became an ingest.
+`data/catalog/stars-150ly.irsc` is **7,123 real systems and 702 confirmed
+planets** out to 150 light-years, built by `apps/ingest` from HYG v4.4 and the
+NASA Exoplanet Archive, committed at 458 KB (179 KB brotli), and fetched at
+runtime as its own asset. Operating it is
+[`docs/guides/catalogue.md`](docs/guides/catalogue.md); the design it implements
+is [`docs/design/galaxy.md`](docs/design/galaxy.md).
+
+The old `catalog.ts` said its shape was chosen "so that swapping the source does
+not change anything downstream". It was right — the swap changed three function
+signatures and no architecture — but "downstream" turned out to include four
+things that were not obvious.
+
+### The catalogue is a second generation input, and it has to be an argument
+
+`docs/design/galaxy.md` Rule 1 says the catalogue version is an explicit input to
+generation. The cheap implementation is a module-level singleton the generator
+reads, and it would have been wrong in the specific way this project cannot
+afford: the catalogue changes when astronomy publishes, and a universe that
+changes silently underneath a save invalidates every address in it.
+
+So `resolveSystem`, `systemsWithin` and `new World({ … })` all take it. Five call
+sites, one line each. `SaveGame` records `catalog` beside `generation` — it is a
+string and `generation` is a map of numbers, which is the only reason it sits
+beside rather than inside.
+
+### Workers cannot have it, so tasks take what they need
+
+Every worker task used to take a system id and resolve it, which now needs a
+458 KB table in every worker in every pool to answer a question the caller
+already knew the answer to. Two changes, both narrowing:
+
+- `generateCell` takes a `CellContext` — how many catalogued stars are in this
+  cell, and the radius inside which the catalogue is complete. Those two scalars
+  are the whole of what procedural generation needs from the catalogue.
+- `surveySystemTask` takes the resolved stub instead of an id. The caller had
+  already resolved it; passing the id was asking for the work twice.
+
+### Procedural fill has to subtract, and then stop
+
+The density model says how many stars there **are**. The catalogue says how many
+of them somebody has written down. Those are different numbers and the difference
+is the whole quantity:
+
+- Generating the full expected count _on top of_ the catalogue doubles the solar
+  neighbourhood — 7,123 real systems within 150 ly plus the ~40,000 the density
+  model expects in the same volume.
+- Generating none leaves it five times too sparse, because HYG holds about 59% of
+  the known stars within 25 pc and none of the brown dwarfs.
+
+So the fill is `expected − catalogued`. That was still wrong near the Sun: the
+first run put a procedural M dwarf **3.4 light-years away**, closer than Proxima
+Centauri, which would have been the astronomical discovery of the century. The
+density model is right about how many stars there are and says nothing about how
+many are _unknown_, and within a few parsecs that is all of the difference. Fill
+is now suppressed inside `completeRadiusLightYears` (25 ly) and
+`ingest.test.ts` asserts it.
+
+The cost, stated rather than hidden: RECONS counts 462 objects within 10 parsecs
+where HYG has 324, so the inner volume is now slightly under-populated with what
+would be brown dwarfs and close companions. Under-populating with L and T dwarfs
+is a smaller lie than over-populating with front-page news.
+
+### Addresses had to become issue ordinals
+
+`b:2` used to mean "the third planet". With confirmed planets arriving from a
+catalogue that gains entries, it has to mean "the third body ever issued in this
+system" — or confirming a hot Jupiter interior to everything else renumbers the
+system and every save pointing at those worlds is silently wrong (ADR-0009,
+Rule 2). Confirmed planets are issued first in discovery order, which the
+exoplanet letters already encode; projected ones fill after, and any projection
+landing within a factor of 1.5 of a confirmed orbit is dropped rather than moved.
+`orbitalOrder(system)` sorts for display. Earth is `b:2` and stays `b:2`.
+
+## What the data itself taught (20 Aug 2026)
+
+Four things that were measured rather than assumed, and one that reversed an
+assumption.
+
+**The spectral classification beats the colour index.** B−V is the obvious
+temperature source — 89% of the catalogue carries one — and it is worse: 4.7%
+mean absolute error against 17 published temperatures, versus 2.8% for the
+classification, and 18% at the worst case against 5%. Ballesteros' fit bends
+badly at the red end, which is where three quarters of the neighbourhood lives.
+The measured exception is giants, where B−V wins because the classification ladder
+is coarse exactly where a giant's temperature moves fast.
+
+**Two defensible tables are not interchangeable inputs to one calculation.** The
+first version paired Pecaut & Mamajek bolometric corrections with an older
+temperature scale. Each is standard. Together they put Proxima Centauri at a
+third of its real luminosity, because the correction was being read at a
+temperature the correction's own authors would not have assigned. Everything is
+on one calibration now: **T 1.3%, L 12%, R 6%** mean absolute error.
+
+**The published bolometric correction polynomial is wrong where most stars are.**
+Flower (1996) with Torres' (2010) corrected coefficients is the usual reference
+and is fine above ~4,000 K. Below that it extrapolates past its calibrators: it
+returned −3.11 for Barnard's Star where the published luminosity implies −2.36,
+putting the star at **twice** its real luminosity. M dwarfs are three quarters of
+the solar neighbourhood, so the polynomial was wrong about most of the sky.
+
+**`spect[0]` is wrong about 13% of the catalogue and never says so.** `dM4` is an
+M dwarf, `sdM4` is a subdwarf, `DA2` is a white dwarf, `A0m...` is an A0 with a
+peculiarity, and 571 entries within 150 ly are the single lowercase letter `m`.
+The parser now has a golden vector for every one of those shapes and leaves 2 of
+7,123 unread.
+
+**An id is not a name, and a name is not stable.** Three jobs, and conflating
+them is how a star gets displayed as `HIP71683`. The id ladder is ordered by how
+_stable_ each designation is, because nobody reads an id and everything depends
+on it not moving; the name ladder is ordered by how _familiar_ it is. Two clauses
+in the naming rule were arrived at only by looking at the output:
+
+- **α Centauri's components are named Rigil Kentaurus and Toliman**, and neither
+  names the system. When more than one component carries a proper name, the
+  shared designation is the only name that refers to the whole thing. Sirius is
+  the opposite case and must keep its proper name, which is why the rule counts
+  named components rather than preferring designations for every multiple.
+- **HYG's proper names contain both `Sirius` and `Ran`**, and nobody has ever
+  called ε Eridani "Ran". The IAU's 2015–2018 assignments largely went to fainter
+  stars whose designations were already the name in use, so a proper name loses
+  below naked-eye prominence (magnitude 3). Alcor at 4.0 is the known miss.
+
+Expanding Bayer and Flamsteed designations through the constellation genitive is
+what turns `Tau Cet` into `Tau Ceti`. Only 214 systems within 150 ly have an IAU
+proper name; 649 have a Bayer or Flamsteed designation, so one 88-row table
+roughly quadruples the number of stars with a name a human recognises.
+
+**Completeness, not size, is the constraint.** 178 confirmed planets around 117
+hosts are dropped because HYG does not contain the host at all — TRAPPIST-1 among
+them, at V = 18.8. That is not a matching failure; it is the horizon of knowledge,
+and the star map is supposed to draw it.
+
+**A version has to digest what ships, not what was downloaded.** The catalogue
+version is a generation input, so it must change exactly when the data changes.
+Hashing the source files fails that in both directions — the NASA archive's TAP
+service returned two different digests an hour apart for a query whose 702
+matched planets were identical. It digests the packed output instead, with the
+metadata excluded because the metadata contains the version.
+
+**Flux is not brightness.** The starfield now carries a per-star blackbody colour
+and an apparent brightness instead of one hard-coded blue-white, and the first
+attempt normalised linear flux against the brightest star in view. Measured in
+Chrome at Alpha Centauri: a 40 ly sweep spans **20.7 magnitudes** — a factor of
+10^8 — with the median at 13.2, so the median star came out at 10^-5 of the
+maximum and the sky rendered black. Converting to apparent magnitude and mapping
+that onto a ramp is what a magnitude scale is _for_, and it is roughly how the
+eye responds. Both size and intensity keep a floor, because a sprite that is only
+smaller stops reading as fainter once it is down to a pixel. Only reproducible in
+a browser: this is a shader path, and there is no CPU backend to evaluate a TSL
+graph in.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).
 
 - Binary and multiple-star systems are modelled as single stars (`components`
-  in the catalogue records the truth).
+  in the catalogue records the truth for all 375 of them within 150 ly).
+- **Every moon in the game is a projection, including Luna.** No exoplanet moon
+  has been confirmed, so that is right everywhere except the Solar System, where
+  it is conspicuously wrong: Earth gets an 87 km moon at 217,000 km. The seam is
+  a moon list on `PackedPlanet` and a table beside `solarSystem.ts`.
+- **Nothing diffs two catalogue versions.** Every save records the version it was
+  written against and every build records its own, which is both halves of the
+  input to a revision notice — and no code compares them. Until it does, a
+  rebuild that moves a body is invisible to a loaded save.
+- The 50 systems whose only identifier is HYG's own row key (0.7%) have ids a
+  rebuild can move. They are counted on every ingest and asserted under 1%.
+- **The procedural fill's IMF is not conditioned on what the catalogue is missing.**
+  It draws B stars at their true 0.13% frequency, so a 40 ly sweep can put an
+  invented 5,000 L☉ B star in the sky brighter than anything real in it — and real
+  B stars that close do not exist, which is precisely why the catalogue has none.
+  The fix is a per-spectral-class completeness curve, which
+  `docs/design/galaxy.md` already argues the horizon of knowledge needs anyway.
+- Proper motion and radial velocity are not stored, so the sky is a snapshot at
+  J2000 rather than a sky. Two columns and a `positionAt(epoch)`; the sentinel
+  that would have to be handled (`9999.99 mas/yr`) is already detected and
+  counted by the ingest.
+- A handful of HYG rows carry a spectral string that parses cleanly to the wrong
+  answer rather than failing: Capella's is `M1: comp`, so a G-type giant binary is
+  rendered as a red dwarf. Two rows in 7,123 fail outright; this class is not
+  counted because nothing distinguishes it from a correct parse.
 - No n-body perturbation; patched conics only.
 - Terrain has no persistence of modifications yet (the schema anticipates it).
 - Collision is ground contact only — no hull, no other entities.

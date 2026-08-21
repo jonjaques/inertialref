@@ -129,9 +129,16 @@ pnpm sim --help                # all flags
 
 ## What it does today
 
-- A galaxy centred on the **real galactic centre**, with 18 nearby stars from a
-  real catalogue converted through ICRS → galactic coordinates, and procedural
-  stars everywhere else.
+- A galaxy centred on the **real galactic centre**, with **7,123 real star
+  systems out to 150 light-years** — HYG v4.4 converted through ICRS → galactic
+  coordinates — and procedural stars filling the gap the catalogue leaves.
+- **702 confirmed exoplanets** around 444 of them, with their published orbits,
+  masses and radii, plus the eight planets of the Solar System. Every body says
+  whether it is `observed` or `projected`; the game never claims a generated
+  planet is real.
+- **Stars named the way people name them** — `Sirius`, `Alpha Centauri`,
+  `Tau Ceti`, `61 Cygni` — with every alternate designation searchable, and one
+  stable address per system whatever the catalogue calls it next year.
 - **Deterministic star systems** — planets, moons, orbits, atmospheres and
   terrain, all a pure function of a global seed and an address.
 - A debug spacecraft with **6-DoF flight**, patched-conic gravity, atmospheric
@@ -209,6 +216,7 @@ Full reasoning, alternatives and consequences are in [`docs/adr/`](docs/adr/).
 apps/
   game               React + React Three Fiber client, WebGPU/TSL renderer
   headless           Node runner — no DOM, no React, no WebGL
+  ingest             turns published catalogues into the packed star asset
 packages/
   shared             units, invariants, structured logging          (layer 0)
   spatial            UniverseVector, frame graph, floating origin    (1)
@@ -222,6 +230,7 @@ packages/
   net                authority port, local authority                 (5)
   rendering          canonical→render bridge, LOD, terrain meshing   (5)
   devtools           inspection, capability checks, harness          (6)
+data/catalog/        the packed star catalogue, committed, CC BY-SA 4.0
 docs/                concepts, ADRs, guides, and the design bible
 scripts/             the dependency-graph checker
 ```
@@ -381,18 +390,21 @@ commercialising it. The reasoning is in
 
 ### Astronomical data
 
-The eighteen catalogue stars in `packages/universe/src/catalog.ts` today are
-hand-transcribed published measurements — facts, not a licensed dataset. **That
-changes at the first ingest**, and the terms have been verified rather than
-assumed ([spike 4](docs/spikes.md#4--gaia-and-hyg-attribution-terms)):
+`data/catalog/` is a **derived database** and is not covered by the Apache
+licence. It is CC BY-SA 4.0. The terms were verified rather than assumed
+([spike 4](docs/spikes.md#4--gaia-and-hyg-attribution-terms)):
 
-| Source                     | Terms                                                                                                          |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| **HYG database** v4.x      | CC BY-SA 4.0. Share-alike reaches the packed catalogue, which must carry the licence and ship as its own asset |
-| **Gaia** (ESA)             | **CC BY-NC 3.0 IGO — non-commercial.** Kept out of the shipped bundle for exactly that reason                  |
-| **NASA Exoplanet Archive** | No licence stated; operated by Caltech under NASA contract. Use its requested acknowledgement                  |
+| Source                     | Terms                                                                                                    |
+| -------------------------- | -------------------------------------------------------------------------------------------------------- |
+| **HYG database** v4.4      | CC BY-SA 4.0. Share-alike reaches the packed catalogue, which ships as its own asset with its own notice |
+| **NASA Exoplanet Archive** | No licence stated; operated by Caltech under NASA contract. Its requested acknowledgement is carried     |
+| **Gaia** (ESA)             | **CC BY-NC 3.0 IGO — non-commercial.** Deliberately unused, for exactly that reason                      |
 
-A `NOTICE` file becomes required in the same change that first reads any of them.
+Share-alike attaches to the database and not to the software that reads it —
+CC BY-SA 4.0 § 4(b) says "but not its individual contents" — so Apache-2.0 on
+`packages/*` and CC BY-SA 4.0 on the catalogue cover different works and do not
+conflict. See [`NOTICE`](NOTICE), `data/catalog/LICENSE.md`, and
+[the catalogue guide](docs/guides/catalogue.md).
 
 ---
 

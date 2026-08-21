@@ -18,7 +18,9 @@ import {
 import {
   GENERATION_VERSIONS,
   galaxyId,
+  SOL_ONLY_CATALOG,
   type EntityId,
+  type StarCatalog,
   type SystemId,
 } from '@inertialref/universe'
 import { migrateSave } from './migrate.ts'
@@ -68,6 +70,11 @@ export function captureSave(
     galaxy: world.galaxy,
     tick: world.clock.tick,
     generation: GENERATION_VERSIONS,
+    // The second generation input. `generation` is a map of numbers and the
+    // catalogue version is not one, so it rides beside it rather than inside —
+    // but it is exactly as load-bearing: a save written against `hyg-4.4` and
+    // reloaded against `hyg-4.5` may find a body the catalogue has moved.
+    catalog: world.catalog.version,
     entities,
     playerEntity,
     dynamicIdCounter: world.entities.dynamicIdCounter,
@@ -84,6 +91,8 @@ export interface RestoredWorld {
   readonly playerEntity: EntityId | null
   /** Generation versions the save was written with, for the caller to compare. */
   readonly generation: Readonly<Record<string, number>>
+  /** The catalogue version the save was written against. */
+  readonly catalog: string
 }
 
 /**
@@ -93,11 +102,15 @@ export interface RestoredWorld {
  * only exists once its system does, and surface frames are regenerated on
  * demand from the frame id.
  */
-export function restoreSave(save: SaveGame): Result<RestoredWorld, string> {
+export function restoreSave(
+  save: SaveGame,
+  catalog: StarCatalog = SOL_ONLY_CATALOG,
+): Result<RestoredWorld, string> {
   const world = new World({
     seed: save.seed,
     galaxy: galaxyId(save.galaxy),
     startTick: asTick(save.tick),
+    catalog,
   })
 
   for (const system of save.loadedSystems) {
@@ -154,6 +167,7 @@ export function restoreSave(save: SaveGame): Result<RestoredWorld, string> {
     playerEntity:
       save.playerEntity === null ? null : (save.playerEntity as EntityId),
     generation: save.generation,
+    catalog: save.catalog,
   })
 }
 

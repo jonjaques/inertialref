@@ -42,6 +42,7 @@ const sampleSave: SaveGame = {
   galaxy: 'milky-way',
   tick: 12_345,
   generation: { system: 1, terrain: 1, galaxy: 1 },
+  catalog: 'hyg-4.4+test',
   entities: [
     {
       id: '#0',

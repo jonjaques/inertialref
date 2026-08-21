@@ -1,5 +1,7 @@
 import { useFrame, useThree } from '@react-three/fiber'
 import { useMemo, useRef } from 'react'
+import { LIGHT_YEAR } from '@inertialref/shared'
+import { UV, type UniverseVector } from '@inertialref/spatial'
 import {
   BufferAttribute,
   BufferGeometry,
@@ -47,6 +49,20 @@ import {
 
 const MAX_BODIES = 64
 const MAX_STARS = 20_000
+
+/** Fallback colour for a star whose survey predates the colour column. */
+const WHITE: readonly [number, number, number] = [1, 1, 1]
+
+/**
+ * Magnitudes below the brightest star at which a star reaches the floor.
+ *
+ * Measured, not chosen: a 40 ly sweep from Alpha Centauri spans 20.7 magnitudes
+ * with a median at 13.2. At 17 the median star lands around a fifth of the ramp
+ * and the top percentile is clearly separated, which is what makes the sky read
+ * as a sky rather than as noise. Larger flattens it; smaller loses everything
+ * below the median into the floor.
+ */
+const MAGNITUDE_RANGE = 17
 
 export function SceneView({ engine }: { engine: GameEngine }) {
   return (
@@ -177,22 +193,67 @@ function Starfield({ engine }: { engine: GameEngine }) {
     generation.current = scene.origin.generation
     surveyed.current = stars.positions.length
     const array = field.positions.array as Float32Array
+    const colours = field.colours.array as Float32Array
+    const prominence = field.prominence.array as Float32Array
 
     // Stars sit far outside the depth range, so they are drawn on a fixed
     // sphere around the camera: direction is what matters, distance is not
     // representable and not observable. The projection itself belongs to
     // `rendering`, which owns render space — doing it here meant a hand-written
     // copy of the sector arithmetic that also forgot the origin's orientation.
+    //
+    // Distance is not observable *in the geometry*, which is why how bright each
+    // star looks has to be computed here, before it is discarded.
     let written = 0
-    for (const position of stars.positions) {
+    let brightest = 0
+    const flux: number[] = []
+    for (let i = 0; i < stars.positions.length; i += 1) {
       if (written >= MAX_STARS) break
+      const position = stars.positions[i] as UniverseVector
       const point = placeOnStarShell(scene.origin, position)
       if (point === null) continue
       array[written * 3] = point.x
       array[written * 3 + 1] = point.y
       array[written * 3 + 2] = point.z
+      const colour = stars.colours[i] ?? WHITE
+      colours[written * 3] = colour[0]
+      colours[written * 3 + 1] = colour[1]
+      colours[written * 3 + 2] = colour[2]
+
+      const metres = UV.distance(position, scene.origin.position)
+      // The one-light-year floor keeps a star the camera is inside from
+      // dividing by nothing. Nothing is that close except the system's own sun,
+      // which is drawn as a body rather than a point.
+      const light = Math.max(metres, LIGHT_YEAR)
+      const value = (stars.luminosities[i] ?? 1) / (light * light)
+      flux.push(value)
+      if (value > brightest) brightest = value
       written += 1
     }
+
+    /*
+     * Flux to a magnitude, then a magnitude to a ramp.
+     *
+     * Magnitudes because the range is otherwise unusable: within a 40 ly sweep
+     * the apparent flux spans 20 magnitudes — a factor of 10^8 — so a linear
+     * normalisation leaves the median star at 10^-5 of the brightest and the sky
+     * comes out black. That was the first attempt and it is what a photometer
+     * would see; a magnitude scale is the logarithmic one astronomy uses for
+     * exactly this reason, and it is also roughly how the eye responds.
+     *
+     * Relative to the brightest star currently in view rather than an absolute
+     * zero point, because that is what adaptation does. An absolute scale would
+     * darken the whole sky on the way out of the neighbourhood, when what really
+     * happens is that your eyes adjust.
+     */
+    for (let i = 0; i < written; i += 1) {
+      const magnitude =
+        brightest === 0 ? 0 : -2.5 * Math.log10((flux[i] as number) / brightest)
+      prominence[i] = Math.max(0, Math.min(1, 1 - magnitude / MAGNITUDE_RANGE))
+    }
+
+    field.colours.needsUpdate = true
+    field.prominence.needsUpdate = true
     field.positions.needsUpdate = true
     sprite.count = written
   })

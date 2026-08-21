@@ -3,12 +3,19 @@ import { formatSeed, rootSeed } from '@inertialref/procedural'
 import { decodeUniverseVector } from '@inertialref/protocol'
 import { expect as unwrap } from '@inertialref/shared'
 import { UV } from '@inertialref/spatial'
-import { generateCell, galaxySeedOf, MILKY_WAY } from '@inertialref/universe'
+import {
+  catalogStub,
+  generateCell,
+  galaxySeedOf,
+  MILKY_WAY,
+  TEST_CATALOG,
+} from '@inertialref/universe'
 import { createInlineWorker } from './inline.ts'
 import { WorkerPool } from './pool.ts'
 import { defineTask, runInline, TaskRegistry } from './task.ts'
 import {
   createTaskRegistry,
+  encodeStub,
   generateCellTask,
   generateHeightfieldTask,
   surveySystemTask,
@@ -212,14 +219,36 @@ describe('terrain task', () => {
   })
 
   it('surveys a system through the same generator the world uses', async () => {
+    // The stub travels, not the id. The worker has no star catalogue and cannot
+    // resolve one — see the header of `tasks.ts` — and the caller has already
+    // resolved it, so passing the id would be asking for the work twice.
+    const sol = TEST_CATALOG.get('SOL' as never)
+    if (sol === undefined) throw new Error('no Sol in the fixture')
     const survey = await pool().run(surveySystemTask, {
       seed: formatSeed(SEED),
       galaxy: MILKY_WAY,
-      system: 'SOL',
+      stub: encodeStub(catalogStub(sol)),
     })
     expect(survey.name).toBe('Sol')
     expect(survey.bodies.length).toBeGreaterThan(0)
     expect(survey.bodies[0]?.address).toMatch(/^g:milky-way\/s:SOL\/b:/)
+  })
+
+  it('generates the same cell with and without the catalogue context', async () => {
+    // The context is what stops the worker inventing stars the catalogue has
+    // already accounted for. A wrong value has to change the answer, or passing
+    // it is decorative.
+    const cell = { x: 0, y: 0, z: 0 }
+    const bare = await pool().run(generateCellTask, {
+      seed: formatSeed(GALAXY_SEED),
+      cell,
+    })
+    const filled = await pool().run(generateCellTask, {
+      seed: formatSeed(GALAXY_SEED),
+      cell,
+      context: { catalogued: 5, completeRadius: 0 },
+    })
+    expect(filled.stars.length).toBe(Math.max(0, bare.stars.length - 5))
   })
 })
 

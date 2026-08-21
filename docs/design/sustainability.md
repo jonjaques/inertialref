@@ -132,15 +132,15 @@ configuration, and a git remote. `LICENSE` ✅ landed 2026-08-19. The remaining
 four are prerequisites for the project being open in practice rather than in
 description.
 
-A `NOTICE` file is **not** needed yet. Apache-2.0 §4(d) only requires one where
-the work already carries attribution notices, and the eighteen catalogue stars in
-`packages/universe/src/catalog.ts` are hand-transcribed published measurements —
-facts, not a licensed dataset.
+✅ **`NOTICE` landed with the ingest**, in the same change that first read a
+dataset — which is the only time it can land without shipping a release that was
+out of compliance. It carries the CC BY-SA 4.0 reference and every attribution
+string in the table above, and it states where the share-alike boundary falls:
+on `data/catalog/`, not on the Apache-2.0 code that reads it.
 
-**That changes the moment the [ingest pipeline](galaxy.md#ingest-pipeline) lands.**
-The NOTICE goes in the same change that first reads a dataset, and it carries the
-CC BY-SA 4.0 text plus every attribution string in the table above. Writing it
-afterwards means shipping a release that was out of compliance.
+The attribution also travels _inside_ the packed file, so a copy of the asset
+alone still states its terms — `data/catalog/LICENSE.md` is the notice beside it
+and `CatalogMetadata.attribution` is the same text within it.
 
 ---
 

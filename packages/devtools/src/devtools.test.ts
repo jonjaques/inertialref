@@ -8,6 +8,7 @@ import {
   type PartitionKey,
   systemAddress,
   systemId,
+  TEST_CATALOG,
   type EntityId,
 } from '@inertialref/universe'
 import { Quaternion as Q, Vec, vec3 } from '@inertialref/spatial'
@@ -24,6 +25,11 @@ function harness(): { harness: GameHarness; session: Session } {
   const session = openSession({
     seed: 'inertialref',
     workers: () => createInlineWorker(registry),
+    // The catalogue is a generation input, so a session without one is a
+    // different universe — one containing Sol and nothing else that is real.
+    // The fixture is five stars rather than 7,123, which is enough for every
+    // assertion here and does not make these tests depend on a built asset.
+    catalog: TEST_CATALOG,
   })
   return { harness: session.harness, session }
 }

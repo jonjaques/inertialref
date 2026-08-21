@@ -16,7 +16,7 @@ import {
   regionAddress,
   systemAddress,
 } from './address.ts'
-import { CATALOG, catalogStarPosition } from './catalog.ts'
+import { TEST_CATALOG } from './catalog/fixture.ts'
 import {
   bodyFixedFrameId,
   bodyFrameId,
@@ -31,6 +31,7 @@ import {
 } from './frames.ts'
 import {
   catalogStub,
+  cellContext,
   cellOf,
   galaxySeedOf,
   generateCell,
@@ -41,7 +42,7 @@ import {
   systemSeedOf,
   systemsWithin,
 } from './galaxy.ts'
-import { findBody, generateSystem, walkBodies } from './system.ts'
+import { findBody, generateSystem, orbitalOrder, walkBodies } from './system.ts'
 import {
   directionToFace,
   elevationAt,
@@ -59,8 +60,12 @@ import {
 
 const ROOT = rootSeed('inertialref')
 const GALAXY_SEED = galaxySeedOf(ROOT)
-const SOL = catalogStub(CATALOG[0] as (typeof CATALOG)[number])
+const CATALOG = TEST_CATALOG
+const SOL = catalogStub(CATALOG.stars[0]!)
+const CATALOG_STARS = CATALOG.stars
 const stringify = (value: unknown): string => JSON.stringify(value)
+const context = (cell: Parameters<typeof cellContext>[1]) =>
+  cellContext(CATALOG, cell)
 
 describe('galaxy', () => {
   it('generates a cell identically no matter who asks or when', () => {
@@ -107,36 +112,45 @@ describe('galaxy', () => {
 
   it('resolves any system id without a global index', () => {
     const cell = cellOf(SOL.position)
-    const stars = generateCell(GALAXY_SEED, cell)
+    const stars = generateCell(GALAXY_SEED, cell, context(cell))
     expect(stars.length).toBeGreaterThan(0)
     const target = stars[0]
     if (target === undefined) throw new Error('expected a star')
-    expect(stringify(resolveSystem(GALAXY_SEED, target.id))).toBe(
+    expect(stringify(resolveSystem(GALAXY_SEED, CATALOG, target.id))).toBe(
       stringify(target),
     )
-    expect(resolveSystem(GALAXY_SEED, SOL.id)?.name).toBe('Sol')
+    expect(resolveSystem(GALAXY_SEED, CATALOG, SOL.id)?.name).toBe('Sol')
   })
 
   it('finds the real neighbours of Sol', () => {
-    const near = systemsWithin(GALAXY_SEED, SOL.position, 5 * LIGHT_YEAR)
+    const near = systemsWithin(
+      GALAXY_SEED,
+      CATALOG,
+      SOL.position,
+      5 * LIGHT_YEAR,
+    )
     const names = near.filter((s) => s.catalogued).map((s) => s.name)
     expect(names).toContain('Proxima Centauri')
     expect(names).toContain('Alpha Centauri')
     expect(names).not.toContain('Sirius')
     // Stable ordering, so two clients asking the same question agree.
     expect(
-      stringify(systemsWithin(GALAXY_SEED, SOL.position, 5 * LIGHT_YEAR)),
+      stringify(
+        systemsWithin(GALAXY_SEED, CATALOG, SOL.position, 5 * LIGHT_YEAR),
+      ),
     ).toBe(stringify(near))
   })
 
   it('thins out above the galactic plane', () => {
     const inPlane = systemsWithin(
       GALAXY_SEED,
+      CATALOG,
       SOL.position,
       30 * LIGHT_YEAR,
     ).length
     const aboveDisk = systemsWithin(
       GALAXY_SEED,
+      CATALOG,
       UV.translate(SOL.position, vec3(0, 3_000 * LIGHT_YEAR, 0)),
       30 * LIGHT_YEAR,
     ).length
@@ -156,7 +170,7 @@ describe('system generation', () => {
   })
 
   it('does not depend on generation order', () => {
-    const stubs = CATALOG.map(catalogStub)
+    const stubs = CATALOG_STARS.map(catalogStub)
     const sequential = stubs.map((s) =>
       stringify(generateSystem(ROOT, MILKY_WAY, s)),
     )
@@ -171,10 +185,13 @@ describe('system generation', () => {
   })
 
   it('lays planets out in increasing orbits with plausible physics', () => {
-    for (const stub of CATALOG.map(catalogStub)) {
+    for (const stub of CATALOG_STARS.map(catalogStub)) {
       const system = generateSystem(ROOT, MILKY_WAY, stub)
       let previous = 0
-      for (const planet of system.planets) {
+      // `orbitalOrder`, because `planets` is in *issue* order: a confirmed
+      // planet takes the next free index whatever its orbit, so the array is
+      // deliberately not sorted by semi-major axis. See ADR-0009.
+      for (const planet of orbitalOrder(system)) {
         expect(planet.elements.semiMajorAxis).toBeGreaterThan(previous)
         previous = planet.elements.semiMajorAxis
         expect(planet.radius).toBeGreaterThan(1e5)
@@ -381,32 +398,138 @@ describe('system frames', () => {
 })
 
 describe('catalogue', () => {
+  const byId = (id: string) => {
+    const star = CATALOG.get(id as never)
+    if (star === undefined) throw new Error(`no fixture star ${id}`)
+    return star
+  }
+
   it('reproduces published distances between real stars', () => {
-    const sol = catalogStarPosition(CATALOG[0] as (typeof CATALOG)[number])
-    for (const star of CATALOG.slice(1)) {
-      const computed = UV.distance(sol, catalogStarPosition(star)) / LIGHT_YEAR
-      expect(computed).toBeCloseTo(star.distanceLightYears, 3)
+    // Published distances, and the fixture's positions were converted from
+    // published right ascension, declination and parallax — three numbers each,
+    // through a rotation and a translation. Agreeing to a hundredth of a light
+    // year is the whole ICRS → galactic → universe chain being right.
+    const published: readonly [string, number][] = [
+      ['HIP70890', 4.2465],
+      ['HIP71683', 4.3441],
+      ['HIP87937', 5.9629],
+      ['HIP32349', 8.6094],
+    ]
+    const sol = byId('SOL')
+    for (const [id, lightYears] of published) {
+      const star = byId(id)
+      expect(star.distanceLightYears).toBeCloseTo(lightYears, 1)
+      expect(UV.distance(sol.position, star.position) / LIGHT_YEAR).toBeCloseTo(
+        lightYears,
+        1,
+      )
     }
   })
 
   it('separates Proxima from Alpha Centauri by the observed 0.2 ly', () => {
     // Computed from two independent RA/Dec/parallax entries, so agreeing with
     // the published separation validates the whole coordinate conversion.
-    const proxima = catalogStarPosition(CATALOG[1] as (typeof CATALOG)[number])
-    const alpha = catalogStarPosition(CATALOG[2] as (typeof CATALOG)[number])
-    expect(UV.distance(proxima, alpha) / LIGHT_YEAR).toBeCloseTo(0.2, 1)
+    const proxima = byId('HIP70890')
+    const alpha = byId('HIP71683')
+    expect(
+      UV.distance(proxima.position, alpha.position) / LIGHT_YEAR,
+    ).toBeCloseTo(0.2, 1)
   })
 
   it('places the Sun 8.178 kpc from the galactic centre', () => {
-    const sol = catalogStarPosition(CATALOG[0] as (typeof CATALOG)[number])
     expect(
-      UV.distance(sol, UV.UNIVERSE_ORIGIN) / (3.085677581491367e16 * 1000),
+      UV.distance(byId('SOL').position, UV.UNIVERSE_ORIGIN) /
+        (3.085677581491367e16 * 1000),
     ).toBeCloseTo(8.178, 3)
+  })
+
+  it('finds a star by any of its names', () => {
+    const alpha = byId('HIP71683')
+    for (const query of [
+      'Alpha Centauri',
+      'alpha centauri',
+      'Rigil Kentaurus',
+      'HIP 71683',
+      'hip71683',
+      'HD 128620',
+      'Gliese 559A',
+      'gliese559a',
+      'Alpha¹ Centauri',
+    ])
+      expect(CATALOG.find(query)?.id, query).toBe(alpha.id)
+  })
+
+  it("shows the system name, not one component's proper name", () => {
+    // Both components of α Cen carry an IAU proper name — Rigil Kentaurus and
+    // Toliman — and neither of them names the system. Sirius is the opposite
+    // case and must keep its proper name rather than becoming Alpha Canis
+    // Majoris, which is why the rule counts named components rather than
+    // preferring designations for every multiple.
+    expect(byId('HIP71683').name).toBe('Alpha Centauri')
+    expect(byId('HIP32349').name).toBe('Sirius')
+    expect(byId('HIP71683').designations[0]?.text).toBe('Alpha Centauri')
+    expect(byId('HIP71683').designations.map((d) => d.text)).toContain(
+      'Rigil Kentaurus',
+    )
   })
 
   it('puts a day-long rotation in the right ballpark', () => {
     expect(SECONDS_PER_DAY).toBe(86_400)
     expect(AU / 1e11).toBeCloseTo(1.496, 3)
+  })
+})
+
+describe('observed planets', () => {
+  it('issues confirmed planets first, in discovery order', () => {
+    const barnard = CATALOG.get('HIP87937' as never)
+    if (barnard === undefined) throw new Error('no Barnard')
+    const system = generateSystem(ROOT, MILKY_WAY, catalogStub(barnard))
+
+    expect(system.observedPlanets).toBe(2)
+    expect(system.planets[0]?.provenance).toBe('observed')
+    expect(system.planets[1]?.provenance).toBe('observed')
+    expect(system.planets[0]?.name).toBe("Barnard's Star b")
+    expect(system.planets[1]?.name).toBe("Barnard's Star c")
+    // Issue ordinals, not orbital ones: b is address 0 forever.
+    expect(formatAddress(system.planets[0]!.address)).toBe(
+      'g:milky-way/s:HIP87937/b:0',
+    )
+    for (const planet of system.planets.slice(2))
+      expect(planet.provenance).toBe('projected')
+  })
+
+  it('uses the published orbit verbatim', () => {
+    const barnard = CATALOG.get('HIP87937' as never)
+    if (barnard === undefined) throw new Error('no Barnard')
+    const system = generateSystem(ROOT, MILKY_WAY, catalogStub(barnard))
+    const b = system.planets[0]
+    if (b === undefined) throw new Error('no planet b')
+    expect(b.elements.semiMajorAxis / AU).toBeCloseTo(0.0229, 4)
+    expect(b.elements.eccentricity).toBe(0)
+    expect(b.measurement?.massIsLowerBound).toBe(true)
+    // No radius is published for either, so both are inferred from the mass and
+    // the panel has to be able to say so.
+    expect(b.measurement?.radiusInferred).toBe(true)
+    expect(b.measurement?.massInferred).toBe(false)
+    // 0.023 AU is well inside the locking distance; a world that close is not
+    // spinning freely.
+    expect(b.rotationPeriod).toBeCloseTo(b.orbitalPeriod, 6)
+  })
+
+  it('does not project a body onto a confirmed orbit', () => {
+    const barnard = CATALOG.get('HIP87937' as never)
+    if (barnard === undefined) throw new Error('no Barnard')
+    const system = generateSystem(ROOT, MILKY_WAY, catalogStub(barnard))
+    const observed = system.planets
+      .filter((p) => p.provenance === 'observed')
+      .map((p) => p.elements.semiMajorAxis)
+    for (const projected of system.planets.filter(
+      (p) => p.provenance === 'projected',
+    ))
+      for (const known of observed) {
+        const ratio = projected.elements.semiMajorAxis / known
+        expect(ratio > 1.5 || ratio < 1 / 1.5).toBe(true)
+      }
   })
 })
 
@@ -423,7 +546,7 @@ describe('the ground has one owner', () => {
   // than a system named: which star gets one is a property of the seed, and
   // pinning it here would make this test fail for the wrong reason.
   const oceanWorld = () => {
-    for (const stub of CATALOG.map(catalogStub)) {
+    for (const stub of CATALOG_STARS.map(catalogStub)) {
       const system = generateSystem(ROOT, MILKY_WAY, stub)
       const wet = [...walkBodies(system)].find(
         (body) => body.surface.seaLevel !== null,

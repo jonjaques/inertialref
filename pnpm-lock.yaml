@@ -148,6 +148,21 @@ importers:
         specifier: workspace:*
         version: link:../../packages/workers
 
+  apps/ingest:
+    dependencies:
+      '@inertialref/procedural':
+        specifier: workspace:*
+        version: link:../../packages/procedural
+      '@inertialref/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      '@inertialref/spatial':
+        specifier: workspace:*
+        version: link:../../packages/spatial
+      '@inertialref/universe':
+        specifier: workspace:*
+        version: link:../../packages/universe
+
   apps/server:
     dependencies:
       '@inertialref/protocol':

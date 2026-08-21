@@ -1,5 +1,6 @@
 export * from './address.ts'
-export * from './catalog.ts'
+export * from './catalog/index.ts'
+export * from './cells.ts'
 export * from './frames.ts'
 export * from './galaxy.ts'
 export * from './partition.ts'

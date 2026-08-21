@@ -6,6 +6,8 @@ import {
   bodyFrameId,
   type EntityId,
   isLandable,
+  SOL_ONLY_CATALOG,
+  type StarCatalog,
   type StarSystem,
   systemId,
   walkBodies,
@@ -53,6 +55,12 @@ const SPAWN_DISTANCE = 3
 export interface SessionOptions {
   readonly seed?: string
   readonly system?: string
+  /**
+   * The star catalogue. A host that has the packed asset passes it; a test that
+   * does not gets `SOL_ONLY_CATALOG` and a galaxy that is entirely procedural
+   * outside the Solar System.
+   */
+  readonly catalog?: StarCatalog
   /**
    * Where worker tasks run. `null` means no pool at all — generation falls back
    * to the main thread, which is a degraded but working game.
@@ -116,7 +124,8 @@ export function landingTarget(system: StarSystem): Body {
  */
 export function openSession(options: SessionOptions = {}): Session {
   const seed = options.seed ?? 'inertialref'
-  let world = new World({ seed })
+  const catalog = options.catalog ?? SOL_ONLY_CATALOG
+  let world = new World({ seed, catalog })
   const system = world.loadSystem(systemId(options.system ?? 'SOL'))
   const target = landingTarget(system)
 

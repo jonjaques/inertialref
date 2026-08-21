@@ -235,7 +235,12 @@ export class GameHarness {
     lightYears = 8,
   ): readonly { id: string; name: string; lightYears: number }[] {
     const centre = this.#here()
-    return systemsWithin(this.world.galaxySeed, centre, lightYears * LIGHT_YEAR)
+    return systemsWithin(
+      this.world.galaxySeed,
+      this.world.catalog,
+      centre,
+      lightYears * LIGHT_YEAR,
+    )
       .map((stub) => ({
         id: stub.id as string,
         name: stub.name,
@@ -561,7 +566,11 @@ export class GameHarness {
   load(text: string): Result<string, string> {
     const parsed = parseSave(text)
     if (!parsed.ok) return parsed
-    const restored = restoreSave(parsed.value)
+    // Restored against *this* world's catalogue, not the one the save names.
+    // A save is a set of references, and resolving them needs the catalogue the
+    // client actually has; `restored.catalog` is what the save was written
+    // against, and comparing the two is how a revision notice gets built.
+    const restored = restoreSave(parsed.value, this.world.catalog)
     if (!restored.ok) return restored
     this.#host.replaceWorld(restored.value.world, restored.value.playerEntity)
     return { ok: true, value: restored.value.world.stateHash() }

@@ -1,0 +1,26 @@
+{
+  "version": "hyg-4.4+nea-b76fcc57",
+  "radiusLightYears": 150,
+  "completeRadiusLightYears": 25,
+  "file": "stars-150ly.irsc",
+  "bytes": 469240,
+  "brotliBytes": 183444,
+  "systems": 7123,
+  "planets": 702,
+  "hostSystems": 444,
+  "unstableIds": 50,
+  "sources": [
+    {
+      "name": "HYG v4.4",
+      "url": "https://codeberg.org/astronexus/hyg/media/branch/main/data/hyg/CURRENT/hyg_v44.csv.gz",
+      "licence": "CC BY-SA 4.0",
+      "retrieved": "ea0e1699a1e7d48d"
+    },
+    {
+      "name": "NASA Exoplanet Archive (pscomppars)",
+      "url": "https://exoplanetarchive.ipac.caltech.edu/TAP/sync?format=csv&query=select%20pl_name%2Cpl_letter%2Chostname%2Chd_name%2Chip_name%2Csy_snum%2Csy_pnum%2Ccb_flag%2Cdiscoverymethod%2Cdisc_year%2Cpl_orbper%2Cpl_orbsmax%2Cpl_rade%2Cpl_bmasse%2Cpl_bmassprov%2Cpl_orbeccen%2Cpl_orbincl%2Cpl_orblper%2Cpl_eqt%2Cpl_insol%2Cst_spectype%2Cst_teff%2Cst_rad%2Cst_mass%2Cra%2Cdec%2Csy_dist%20from%20pscomppars%20where%20sy_dist%20is%20not%20null%20and%20sy_dist%20%3C%2046.0",
+      "licence": "No licence stated; acknowledgement requested",
+      "retrieved": "ac1ba4e2840d067f"
+    }
+  ]
+}

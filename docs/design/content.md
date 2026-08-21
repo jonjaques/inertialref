@@ -34,7 +34,7 @@ is the engineering-facing view of this same table.
 
 | Thing                  | Status | Launch target                        | Notes                                                                                             |
 | ---------------------- | ------ | ------------------------------------ | ------------------------------------------------------------------------------------------------- |
-| Galaxy, systems, stars | ✅     | Catalogue + procedural fill          | 18 hand-entered stars today; wants the [ingest pipeline](galaxy.md#ingest-pipeline)               |
+| Galaxy, systems, stars | ✅     | Catalogue + procedural fill          | 7,123 real systems within 150 ly, from the [ingest pipeline](galaxy.md#ingest-pipeline)           |
 | Planets, moons         | ✅     | Full                                 | Deterministic from address                                                                        |
 | Planetary terrain      | 🟡     | Quadtree LOD, biomes, materials      | The visible ceiling on everything — see [production](production.md)                               |
 | Ships                  | 🟡     | 6 hulls, ~60 modules                 | One debug ship today                                                                              |

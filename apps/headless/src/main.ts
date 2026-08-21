@@ -20,6 +20,7 @@ import { parseArgs } from 'node:util'
 import { createConsoleSink, logHub } from '@inertialref/shared'
 import { openSession } from '@inertialref/devtools'
 import { createInlineWorker, createTaskRegistry } from '@inertialref/workers'
+import { loadStarCatalog } from './catalog.ts'
 import { captureSave, serializeSave } from '@inertialref/persistence'
 
 const OPTIONS = {
@@ -60,6 +61,7 @@ const registry = createTaskRegistry()
 const session = openSession({
   ...(values.seed === undefined ? {} : { seed: values.seed }),
   ...(values.system === undefined ? {} : { system: values.system }),
+  catalog: loadStarCatalog(),
   // Node has worker_threads, but the point of this runner is the *simulation*,
   // and an in-process pool exercises the identical host loop without the
   // module-resolution ceremony of spawning a worker for a source-only package.

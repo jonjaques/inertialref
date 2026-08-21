@@ -2,9 +2,11 @@
  * Service worker.
  *
  * The game is offline-first: once the application assets are cached, a
- * single-player universe needs no server at all. It does not need one for
- * *content* either — the universe is a pure function of a seed, so there is
- * nothing to download beyond the code itself, and saves live in IndexedDB.
+ * single-player universe needs no server at all. Nearly all of the content is a
+ * pure function of a seed, so there is very little to download beyond the code —
+ * the one exception is the packed star catalogue, which is a content-hashed
+ * asset under /assets and is therefore covered by the cache-first branch below
+ * like any other. Saves live in IndexedDB.
  *
  * Deliberately hand-written rather than generated. The whole policy is one
  * screen, it has no build-manifest dependency to go stale, and being able to

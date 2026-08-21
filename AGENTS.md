@@ -47,6 +47,20 @@ These are the ones where a violation is a rewrite later rather than a refactor.
 - **Never persist anything regenerable.** A save stores references and
   mutations. If you are tempted to store generated content, you want a cache,
   and it is not a save.
+- **Never make the star catalogue ambient.** It is a generation input alongside
+  the seed, and it is passed as an argument everywhere — `resolveSystem`,
+  `systemsWithin`, `new World({ catalog })`. A singleton would be smaller and
+  would make the catalogue _version_ a hidden input, which is what invalidates
+  every save the next time astronomy publishes. `docs/design/galaxy.md` Rule 1.
+- **Never store what the catalogue can derive.** HYG ships a `lum` column that is
+  its own `absmag` restated in the wrong band. The packed file carries
+  measurements; temperature, luminosity, radius, mass and colour are computed at
+  load. The same rule is why a Bayer designation is two small integers and
+  `Alpha Centauri` is a string nobody stores.
+- **Never sort a system's planets by orbit and call it order.** `b:2` is the
+  third body _issued_, not the third one out. Confirming a planet interior to
+  every known orbit must not renumber anything. `orbitalOrder` is for display;
+  see ADR-0009.
 - **Never import a hosting vendor's SDK below the adapter layer.** Nothing in
   `packages/*` may know what a Durable Object is.
 - **Never let React Compiler memoise a component that reads mutable state.** It
@@ -96,12 +110,13 @@ emit, and declaration-emitting twelve source-only packages to satisfy `tsc -b`
 buys nothing. Four independent tsconfig projects type-check the four real
 environments instead:
 
-| Project                       | Covers           | Environment                                                 |
-| ----------------------------- | ---------------- | ----------------------------------------------------------- |
-| `tsconfig.json`               | `packages/*/src` | **no DOM lib** — must run in a browser, a worker and Node   |
-| `apps/game/tsconfig.json`     | the client       | DOM, WebWorker, JSX                                         |
-| `apps/headless/tsconfig.json` | the Node runner  | Node types                                                  |
-| `apps/server/tsconfig.json`   | the Worker       | workerd globals and `Env`, from `worker-configuration.d.ts` |
+| Project                       | Covers              | Environment                                                 |
+| ----------------------------- | ------------------- | ----------------------------------------------------------- |
+| `tsconfig.json`               | `packages/*/src`    | **no DOM lib, no Node lib** — must run in all three         |
+| `apps/game/tsconfig.json`     | the client          | DOM, WebWorker, JSX                                         |
+| `apps/headless/tsconfig.json` | the Node runner     | Node types                                                  |
+| `apps/server/tsconfig.json`   | the Worker          | workerd globals and `Env`, from `worker-configuration.d.ts` |
+| `apps/ingest/tsconfig.json`   | the catalogue build | Node types; runs offline, never at play time                |
 
 The fourth is neither the browser nor Node, and its types are **generated**:
 `pnpm --filter @inertialref/server run types` writes `worker-configuration.d.ts`

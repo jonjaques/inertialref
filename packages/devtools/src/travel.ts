@@ -88,6 +88,7 @@ export function travelTargets(
   >()
   for (const stub of systemsWithin(
     world.galaxySeed,
+    world.catalog,
     from,
     (options.lightYears ?? DEFAULT_SURVEY_LIGHT_YEARS) * LIGHT_YEAR,
   )) {

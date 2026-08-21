@@ -46,7 +46,8 @@ a production build. What follows is depth, not foundations.
 | Reference frames and transitions    | ✅     | [ADR-0002](adr/0002-reference-frames.md)                                                                       |
 | Render coordinates, floating origin | ✅     | [ADR-0003](adr/0003-render-coordinates.md)                                                                     |
 | Stable identity and addressing      | ✅     | [ADR-0004](adr/0004-entity-addressing.md)                                                                      |
-| Deterministic generation            | ✅     | Core proven; most _content types_ unbuilt — see [content](#content-the-rest-of-the-vision)                     |
+| Deterministic generation            | ✅     | Core proven; two inputs now — seed _and_ catalogue version                                                     |
+| Real astronomical data              | ✅     | 7,123 systems and 702 planets within 150 ly; [guide](guides/catalogue.md)                                      |
 | Simulation clock and determinism    | 🟡     | All of it except [replay](#replay-and-reconciliation)                                                          |
 | Simulation / rendering separation   | ✅     | Proven by `apps/headless`                                                                                      |
 | Worker architecture                 | ✅     | Pool, contracts, cancellation, instrumentation                                                                 |
@@ -73,8 +74,10 @@ change** — they are generators plus representations.
 
 | Thing                    | Status | Seam                                                                                                            |
 | ------------------------ | ------ | --------------------------------------------------------------------------------------------------------------- |
-| Galaxy, systems, stars   | ✅     |                                                                                                                 |
-| Planets, moons           | ✅     |                                                                                                                 |
+| Galaxy, systems, stars   | ✅     | Real out to 150 ly, procedural beyond — [catalogue guide](guides/catalogue.md)                                  |
+| Planets, moons           | ✅     | Confirmed exoplanets and the Solar System are `observed`; the rest is `projected`                               |
+| Moons of real planets    | ⬜     | `PackedPlanet` needs a moon list; every moon in the game is currently a projection, including Luna              |
+| Catalogue revision diff  | ⬜     | Both versions are recorded — in every save and every manifest — and nothing compares them yet                   |
 | Planetary terrain        | 🟡     | Heightfields only; no biomes or materials                                                                       |
 | Ships                    | 🟡     | One debug spacecraft, no variants or subsystems                                                                 |
 | Rings                    | ⬜     | A body property + an instanced renderer                                                                         |
@@ -282,14 +285,14 @@ recover it. The budget is 900 KB gzip with splitting, so this is inside it.
 
 Not roadmap items so much as honest labels on what is modelled:
 
-| Simplification                                 | Reality                                                                                           |
-| ---------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| Multiple-star systems modelled as single stars | The catalogue records true component counts — α Cen, Sirius, Procyon and 61 Cyg are all multiples |
-| Patched conics, no n-body                      | Lagrange points, resonances and perturbations do not exist                                        |
-| No collision except ground contact             | No hull, no entity-to-entity, no terrain slope response                                           |
-| Circular-ish orbits, coplanar-ish systems      | Generated inclinations and eccentricities are small                                               |
-| Atmospheres are isothermal exponential         | No layers, no weather, no wind                                                                    |
-| Bodies are spheres                             | No oblateness, so no J2 precession                                                                |
+| Simplification                                 | Reality                                                                       |
+| ---------------------------------------------- | ----------------------------------------------------------------------------- |
+| Multiple-star systems modelled as single stars | The catalogue records true component counts for all 375 of them within 150 ly |
+| Patched conics, no n-body                      | Lagrange points, resonances and perturbations do not exist                    |
+| No collision except ground contact             | No hull, no entity-to-entity, no terrain slope response                       |
+| Circular-ish orbits, coplanar-ish systems      | Generated inclinations and eccentricities are small                           |
+| Atmospheres are isothermal exponential         | No layers, no weather, no wind                                                |
+| Bodies are spheres                             | No oblateness, so no J2 precession                                            |
 
 ---
 

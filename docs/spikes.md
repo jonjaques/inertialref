@@ -318,6 +318,16 @@ sentinel and must be dropped, not clamped).
 > Codeberg's `media/` path. Both facts cost time to discover; the ingest pipeline
 > should pin the source URL and assert on the decompressed row count.
 
+> **Reproduced by the ingest, 20 Aug 2026.** Every row count below came back
+> identical from the real pipeline. The shipped record is _not_ the 16-byte one
+> sketched here: it carries a stable id and the designations a star is known by,
+> which the spike did not price, and it drops proper motion, which the spike did
+> not need either. **458 KB packed, 179 KB brotli for 7,123 systems and 702
+> planets** — 25.8 bytes per system against the 16 estimated here, for names that
+> turned out to be the difference between "HIP71683" and "Alpha Centauri" on the
+> HUD. See [`design/galaxy.md`](design/galaxy.md#ingest-pipeline) and
+> [`guides/catalogue.md`](guides/catalogue.md).
+
 ### The packed record
 
 16 bytes per star, which is the whole answer to "what does it cost":
@@ -425,6 +435,12 @@ none**, **163 are white dwarfs** (`DA2`, `DZ`…), and around 200 use Yale-style
 prefixes (`dM4`, `sdK7`, `gK5`) that a `spect[0]` test mislabels. A naive
 first-character parse classifies 6,551 of 7,529 — **87%**, quietly wrong about the
 other 13%. Strip the prefix, handle `D…` as its own class.
+
+✅ Done, with a golden vector per shape in
+`packages/universe/src/catalog/catalog.test.ts`. The built parser leaves **2 of
+7,123 systems** unread. The spike missed one thing worth adding: 571 entries are
+the single lowercase letter `m`, which is neither a prefix nor a class and is the
+largest single group after "no spectral type at all".
 
 ---
 

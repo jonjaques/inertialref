@@ -1,0 +1,35 @@
+InertialRef
+Copyright 2026 Jon Jaques
+
+This product includes software developed as part of the InertialRef project,
+licensed under the Apache License, Version 2.0. See LICENSE.
+
+--------------------------------------------------------------------------------
+Astronomical data
+--------------------------------------------------------------------------------
+
+The star catalogue in `data/catalog/` is a DERIVED DATABASE and is NOT covered by
+the Apache License. It is licensed CC BY-SA 4.0. See `data/catalog/LICENSE.md`
+for the full notice, and `docs/guides/catalogue.md` for how it is built.
+
+The obligation attaches to that database, not to the software that reads it:
+CC BY-SA 4.0 § 4(b) makes a database containing a substantial portion of the
+licensed contents Adapted Material, explicitly excluding "its individual
+contents". Apache-2.0 on the source and CC BY-SA 4.0 on the catalogue therefore
+cover different works and do not conflict.
+
+The HYG Database
+  David Nash (astronexus), https://codeberg.org/astronexus/hyg
+  Licensed CC BY-SA 4.0 — https://creativecommons.org/licenses/by-sa/4.0/
+  Modified: filtered by distance, grouped into systems, re-projected into
+  galactic coordinates, and repacked into a binary format.
+
+NASA Exoplanet Archive
+  This research has made use of the NASA Exoplanet Archive, which is operated by
+  the California Institute of Technology, under contract with the National
+  Aeronautics and Space Administration under the Exoplanet Exploration Program.
+
+Gaia (ESA) is deliberately NOT used. Its data are distributed under
+CC BY-NC 3.0 IGO, and a non-commercial clause on the data this game cannot run
+without would attach that restriction to the shipped artefact. See
+docs/spikes.md § 4.

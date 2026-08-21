@@ -11,7 +11,14 @@ import {
   type World,
   type WorldSnapshot,
 } from '@inertialref/simulation'
-import { cellOf, type EntityId, type SystemId } from '@inertialref/universe'
+import {
+  type CatalogStar,
+  cellKey,
+  cellOf,
+  type EntityId,
+  type StarCatalog,
+  type SystemId,
+} from '@inertialref/universe'
 import {
   buildScene,
   originForCamera,
@@ -52,16 +59,39 @@ import { TerrainStreamer, type TerrainState } from './terrainStreamer.ts'
 
 const log = getLogger('game.engine')
 
+const EMPTY_STAR_FIELD: StarField = {
+  positions: [],
+  names: [],
+  colours: [],
+  luminosities: [],
+}
+
 /** How far the player must move before the starfield is surveyed again. */
 const STARFIELD_HYSTERESIS = 8 * LIGHT_YEAR
 
 export interface StarField {
   readonly positions: readonly UniverseVector[]
   readonly names: readonly string[]
+  /**
+   * Linear sRGB per star, from the blackbody colour of its temperature.
+   *
+   * Carried per star rather than picked in the shader because the temperature
+   * comes from a published colour index for the catalogued half of the sky and
+   * from a mass for the rest, and neither is available to a vertex program.
+   */
+  readonly colours: readonly [number, number, number][]
+  /**
+   * Bolometric luminosity in solar units. The renderer turns this and the
+   * distance into an apparent brightness; a star's size on screen is not a
+   * constant.
+   */
+  readonly luminosities: readonly number[]
 }
 
 export interface GameEngineOptions {
   readonly seed?: string
+  /** The star catalogue this world is generated against. */
+  readonly catalog?: StarCatalog
   /**
    * Where worker tasks run. Omit for the browser default; pass `null` to
    * generate on the main thread; pass an in-process factory to run the whole
@@ -124,7 +154,7 @@ export class GameEngine implements PresentationHost {
   #frameMs = 16
   #fps = 60
   #ticksLastFrame = 0
-  #starField: StarField = { positions: [], names: [] }
+  #starField: StarField = EMPTY_STAR_FIELD
   #starFieldCentre: UniverseVector | null = null
   #starFieldPending = false
   /*
@@ -140,6 +170,7 @@ export class GameEngine implements PresentationHost {
   constructor(options: GameEngineOptions = {}) {
     this.session = openSession({
       ...(options.seed === undefined ? {} : { seed: options.seed }),
+      ...(options.catalog === undefined ? {} : { catalog: options.catalog }),
       // `undefined` means "the browser default"; `null` means "no pool at all".
       workers:
         options.workers === undefined
@@ -207,7 +238,7 @@ export class GameEngine implements PresentationHost {
     this.origin = null
     this.snapshot = null
     this.#scene = null
-    this.#starField = { positions: [], names: [] }
+    this.#starField = EMPTY_STAR_FIELD
     this.#starFieldCentre = null
     this.#starFieldWorld += 1
     this.terrain.clear()
@@ -314,6 +345,12 @@ export class GameEngine implements PresentationHost {
    * Re-surveyed only when the player has actually gone somewhere, because a
    * 40 ly sweep is tens of thousands of stars and belongs in a worker — which
    * is exactly where it goes.
+   *
+   * Two halves. The worker invents the procedural stars, which is the expensive
+   * part; the catalogued ones are read straight out of the local index, which is
+   * cheaper than serialising them across a thread boundary would be, and means
+   * the real sky is on screen on the first frame after a jump even if the worker
+   * pool is busy or absent.
    */
   #maybeSurveyStars(centre: UniverseVector): void {
     if (this.#starFieldPending) return
@@ -332,6 +369,22 @@ export class GameEngine implements PresentationHost {
     // cells that no longer correspond to where the player is — a compile-clean
     // change that presents as "the stars are in the wrong place".
     const cell = cellOf(centre)
+    const catalog = this.world.catalog
+
+    // The worker has no catalogue, so what it needs to know about one travels
+    // with the request: how many stars are already in each cell, and the radius
+    // inside which it should invent none. Only non-empty cells are listed.
+    const catalogued: Record<string, number> = {}
+    const catalogStars: CatalogStar[] = []
+    for (let x = cell.x - radiusCells; x <= cell.x + radiusCells; x += 1)
+      for (let y = cell.y - radiusCells; y <= cell.y + radiusCells; y += 1)
+        for (let z = cell.z - radiusCells; z <= cell.z + radiusCells; z += 1) {
+          const stars = catalog.inCell({ x, y, z })
+          if (stars.length === 0) continue
+          catalogued[cellKey({ x, y, z })] = stars.length
+          catalogStars.push(...stars)
+        }
+
     const payload = {
       seed: formatSeed(this.world.galaxySeed),
       min: {
@@ -344,6 +397,8 @@ export class GameEngine implements PresentationHost {
         y: cell.y + radiusCells,
         z: cell.z + radiusCells,
       },
+      catalogued,
+      completeRadius: catalog.completeRadius,
     }
 
     const run =
@@ -360,15 +415,30 @@ export class GameEngine implements PresentationHost {
         if (world !== this.#starFieldWorld) return
         const positions: UniverseVector[] = []
         const names: string[] = []
+        const colours: [number, number, number][] = []
+        const luminosities: number[] = []
+
+        for (const star of catalogStars) {
+          positions.push(star.position)
+          names.push(star.name)
+          const c = star.physical.colour
+          colours.push([c.r, c.g, c.b])
+          luminosities.push(star.physical.solarLuminosities)
+        }
         for (const entry of cells) {
           for (const star of entry.stars) {
             const [sx, sy, sz, ox, oy, oz] = star.position
             positions.push(UV.universeVector(sx, sy, sz, ox, oy, oz))
             names.push(star.name)
+            colours.push([...star.colour] as [number, number, number])
+            luminosities.push(star.solarLuminosities)
           }
         }
-        this.#starField = { positions, names }
-        log.info('starfield surveyed', { stars: positions.length })
+        this.#starField = { positions, names, colours, luminosities }
+        log.info('starfield surveyed', {
+          stars: positions.length,
+          catalogued: catalogStars.length,
+        })
       })
       .catch((cause: unknown) =>
         log.warn('starfield survey failed', { cause: String(cause) }),

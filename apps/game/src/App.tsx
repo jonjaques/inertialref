@@ -1,6 +1,7 @@
 import { Canvas } from '@react-three/fiber'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { HarnessStatus } from '@inertialref/devtools'
+import type { StarCatalog } from '@inertialref/universe'
 import { GameEngine } from './engine/GameEngine.ts'
 import { FlightStrip } from './hud/FlightStrip.tsx'
 import { HudDock, type HudCommands, type HudTab } from './hud/HudDock.tsx'
@@ -39,10 +40,11 @@ import { SceneView } from './scene/SceneView.tsx'
 
 let singleton: GameEngine | null = null
 
-function engineInstance(): GameEngine {
+function engineInstance(catalog: StarCatalog): GameEngine {
   singleton ??= new GameEngine({
     seed:
       new URLSearchParams(window.location.search).get('seed') ?? 'inertialref',
+    catalog,
   })
   return singleton
 }
@@ -76,8 +78,8 @@ function rendererKey(
   return preference === 'auto' ? `auto:${dynamicRangeHigh}` : preference
 }
 
-export default function App() {
-  const engine = engineInstance()
+export default function App({ catalog }: { catalog: StarCatalog }) {
+  const engine = engineInstance(catalog)
   const [status, setStatus] = useState<HarnessStatus | null>(null)
   const [dockOpen, setDockOpen] = usePersistentState('dock.open', true)
   const [tab, setTab] = usePersistentState<HudTab>('dock.tab', 'navigate')

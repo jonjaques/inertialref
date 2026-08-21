@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { createConsoleSink, logHub } from '@inertialref/shared'
 import App from './App.tsx'
 import { BUILD_ID } from './build.ts'
+import { loadStarCatalog } from './engine/catalogAsset.ts'
 import './index.css'
 
 /*
@@ -19,9 +20,21 @@ logHub.addSink(createConsoleSink(console, 'info'))
 const root = document.getElementById('root')
 if (root === null) throw new Error('#root is missing from index.html')
 
+/*
+ * The catalogue is awaited before the first render.
+ *
+ * It is a *generation input*, not a decoration: the world is built from a seed
+ * and a catalogue together, so a world constructed before it arrives is a
+ * different world and would have to be thrown away and rebuilt — replacing the
+ * ship, the frames and the starfield a second or two after the player is already
+ * flying. One fetch of a precached 460 KB asset is the cheaper trade, and a
+ * failed fetch falls back rather than blocking.
+ */
+const catalog = await loadStarCatalog()
+
 createRoot(root).render(
   <StrictMode>
-    <App />
+    <App catalog={catalog} />
   </StrictMode>,
 )
 

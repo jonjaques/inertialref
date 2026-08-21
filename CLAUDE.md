@@ -9,17 +9,18 @@ and to this machine, and points at AGENTS.md for everything else.
 
 ## Orientation
 
-| File                   | What it is                                                                          |
-| ---------------------- | ----------------------------------------------------------------------------------- |
-| `AGENTS.md`            | How to work here: rules, conventions, testing, the harness. Read first.             |
-| `docs/`                | Explanatory documentation — concepts, diagrams, guides, decision records.           |
-| `docs/design/`         | The game design bible — what the game is, and why each mechanic is shaped that way. |
-| `docs/vision.md`       | What the project is for, and the principles behind architectural choices.           |
-| `docs/architecture.md` | The system in one sitting.                                                          |
-| `docs/adr/`            | The nine foundational decisions, with alternatives and consequences.                |
-| `docs/roadmap.md`      | What is deliberately not built yet, and the seam for each.                          |
-| `CONTEXT.md`           | Build log — what exists, what was decided, which bugs must not return.              |
-| `README.md`            | Overview and the twelve proven capabilities.                                        |
+| File                       | What it is                                                                          |
+| -------------------------- | ----------------------------------------------------------------------------------- |
+| `AGENTS.md`                | How to work here: rules, conventions, testing, the harness. Read first.             |
+| `docs/`                    | Explanatory documentation — concepts, diagrams, guides, decision records.           |
+| `docs/design/`             | The game design bible — what the game is, and why each mechanic is shaped that way. |
+| `docs/guides/catalogue.md` | The star catalogue: how it is built, what it stores, and what will bite you.        |
+| `docs/vision.md`           | What the project is for, and the principles behind architectural choices.           |
+| `docs/architecture.md`     | The system in one sitting.                                                          |
+| `docs/adr/`                | The nine foundational decisions, with alternatives and consequences.                |
+| `docs/roadmap.md`          | What is deliberately not built yet, and the seam for each.                          |
+| `CONTEXT.md`               | Build log — what exists, what was decided, which bugs must not return.              |
+| `README.md`                | Overview and the twelve proven capabilities.                                        |
 
 ## Commands
 
@@ -31,7 +32,7 @@ pnpm here.
 pnpm install
 pnpm dev          # vite dev server for apps/game
 pnpm test         # vitest, node environment only
-pnpm typecheck    # four tsconfig projects — see AGENTS.md for why four
+pnpm typecheck    # five tsconfig projects — see AGENTS.md for why
 pnpm lint         # oxlint — NOT eslint; oxlint --fix applies autofixes
 pnpm graph        # dependency layering + cycle check
 pnpm build        # typecheck, then vite build
@@ -39,6 +40,12 @@ pnpm check        # graph, lint, typecheck, test, build
 
 pnpm sim --self-test           # headless Node run + the twelve capability checks
 pnpm vitest run <substring>    # a single test file
+
+# The star catalogue. `data/catalog/` is committed, so none of these is needed
+# to run the game or the tests — only to rebuild after astronomy publishes.
+pnpm catalog:report            # build and print the counts, without writing
+pnpm catalog:build             # ...and write data/catalog
+pnpm catalog:build --refresh   # re-download rather than using .data/raw
 
 # The Cloudflare Worker (apps/server). `pnpm dev` proxies /api and /ws to 8787,
 # so without dev:server running the client correctly reports "no server".
@@ -64,7 +71,9 @@ deploys to the `inertialrefd` Worker, live at
   stable Three.js object is a different thing and is fine.
 - **`tsconfig.json` at the root is the `packages/*` project**, deliberately with
   no DOM lib. Apps have their own. Project references are not used; AGENTS.md
-  explains why.
+  explains why. It has no Node lib either, so `TextEncoder`, `fetch` and
+  `node:fs` are all out of scope there — `packages/universe/src/catalog/` decodes
+  bytes and each host supplies them.
 - **`strict`, `noUncheckedIndexedAccess`, `erasableSyntaxOnly` and
   `verbatimModuleSyntax` are all on.** No enums, no parameter properties,
   `import type` for types, and local imports carry their `.ts` extension.

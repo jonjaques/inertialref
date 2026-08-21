@@ -84,6 +84,7 @@ Where the bible and [vision.md](vision.md) disagree, vision.md wins.
 | -------------------------------------------- | --------------------------------------------------------------- |
 | [Getting started](guides/getting-started.md) | Install, run, fly, and the first things to try                  |
 | [The harness](guides/harness.md)             | Driving the simulation from a console, a test or an agent       |
+| [The star catalogue](guides/catalogue.md)    | Where the real astronomy comes from, and how to rebuild it      |
 | [Testing](guides/testing.md)                 | What to test, which style, and how to write an honest assertion |
 | [Extending](guides/extending.md)             | Adding generated content, a worker task, a body type, a frame   |
 

@@ -18,7 +18,6 @@ import {
 import {
   bodyFrameId,
   catalogStub,
-  CATALOG,
   formatAddress,
   installSurfaceFrame,
   parseAddress,
@@ -26,6 +25,7 @@ import {
   systemId,
 } from '@inertialref/universe'
 import { generateSystem, MILKY_WAY } from '@inertialref/universe'
+import type { CatalogStar } from '@inertialref/universe'
 import { snapshot, World } from '@inertialref/simulation'
 import { captureSave, restoreSave } from '@inertialref/persistence'
 import { placeAt } from '@inertialref/rendering'
@@ -102,8 +102,14 @@ const failure = (
 })
 
 /** 1. Deterministically generate the same systems from the global seed. */
-function checkDeterministicGeneration(): CapabilityResult {
-  const stub = catalogStub(CATALOG[2] as (typeof CATALOG)[number])
+function checkDeterministicGeneration(world: World): CapabilityResult {
+  // The star the checks fly to, taken from the world's own catalogue rather
+  // than a hard-coded index: the catalogue is a generation input now, and a
+  // check that read a different one would be testing a different universe.
+  const star = world.catalog.stars[
+    Math.min(2, world.catalog.stars.length - 1)
+  ] as CatalogStar
+  const stub = catalogStub(star)
   const a = JSON.stringify(
     generateSystem(rootSeed('inertialref'), MILKY_WAY, stub),
   )
@@ -160,11 +166,28 @@ function checkStableAddressing(world: World): CapabilityResult {
 }
 
 /** 3. Place systems at astronomical distances. */
+/*
+ * Sol to α Centauri, as published.
+ *
+ * The tolerance is the disagreement between measurements, not a fudge. The
+ * Hipparcos parallax HYG carries puts the system at 4.321 ly and the modern
+ * consensus is 4.344; a catalogue revision that swapped one for the other would
+ * move this number and would not be a bug. Anything outside that band is a
+ * broken coordinate conversion, which is what this check is for — the check
+ * previously asserted 4.365 ± 0.01 against a hand-transcribed table, and the
+ * first real ingest failed it by being more accurate.
+ */
+const ALPHA_CENTAURI_LIGHT_YEARS = 4.33
+const PARALLAX_SPREAD_LIGHT_YEARS = 0.05
+
 function checkAstronomicalDistances(world: World): CapabilityResult {
   const sol = world.loadSystem(SOL)
   const alpha = world.loadSystem(ALPHA_CENTAURI)
   const lightYears = UV.distance(sol.position, alpha.position) / LIGHT_YEAR
-  if (Math.abs(lightYears - 4.365) > 0.01) {
+  if (
+    Math.abs(lightYears - ALPHA_CENTAURI_LIGHT_YEARS) >
+    PARALLAX_SPREAD_LIGHT_YEARS
+  ) {
     return failure(
       3,
       'Astronomical distances',
@@ -407,7 +430,7 @@ async function checkWorkerTask(
 function checkSaveRoundTrip(world: World): CapabilityResult {
   const player = world.entities.ordered()[0]
   const save = captureSave(world, player?.id ?? null)
-  const restored = restoreSave(save)
+  const restored = restoreSave(save, world.catalog)
   if (!restored.ok) return failure(11, 'Save round trip', restored.error)
   if (restored.value.world.stateHash() !== world.stateHash()) {
     return failure(
@@ -480,7 +503,7 @@ export async function runCapabilityChecks(
   const world = context.world
   const checks: readonly (() =>
     CapabilityResult | Promise<CapabilityResult>)[] = [
-    () => checkDeterministicGeneration(),
+    () => checkDeterministicGeneration(world),
     () => checkStableAddressing(world),
     () => checkAstronomicalDistances(world),
     () => checkMovementWithinSystem(),

@@ -28,3 +28,8 @@ dist-ssr
 *.tsbuildinfo
 coverage
 .vitest
+
+# Raw catalogue downloads. 34 MB of HYG to produce a 460 KB asset, and the asset
+# is what the game needs — `pnpm catalog:fetch` re-downloads them, and
+# `data/catalog/manifest.json` records the digest of exactly what was used.
+.data/

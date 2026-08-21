@@ -220,7 +220,23 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
 export interface StarfieldMaterial {
   readonly material: PointsNodeMaterial
   readonly positions: InstancedBufferAttribute
-  /** Screen size of a star, in logical pixels. */
+  /** Linear sRGB per star, from its blackbody temperature. */
+  readonly colours: InstancedBufferAttribute
+  /**
+   * How prominent each star should be, 0 to 1, computed by the host.
+   *
+   * Not flux. What a star looks like is its luminosity over the square of its
+   * distance, and a catalogue drawn at uniform brightness looks like a
+   * screensaver rather than a sky — but *linear* flux is unusable directly: the
+   * apparent flux of the stars within 150 ly spans 20 magnitudes, a factor of
+   * 10^8, and normalising against the brightest leaves the median star at 10^-5
+   * and the sky black. The host converts flux to apparent magnitude and maps
+   * that onto a perceptual ramp, which is what a magnitude scale is for. See
+   * `SceneView`; the distance it needs has been thrown away by the time the
+   * sprites reach the shell.
+   */
+  readonly prominence: InstancedBufferAttribute
+  /** Screen size of the brightest star, in logical pixels. */
   readonly size: { value: number }
 }
 
@@ -243,26 +259,49 @@ export function createStarfieldMaterial(capacity: number): StarfieldMaterial {
     new Float32Array(capacity * 3),
     3,
   )
-  const size = uniform(2.4)
+  const colours = new InstancedBufferAttribute(
+    new Float32Array(capacity * 3),
+    3,
+  )
+  const prominence = new InstancedBufferAttribute(new Float32Array(capacity), 1)
+  const size = uniform(3.4)
 
   // Round, with a soft edge. A star is a point source seen through an aperture,
   // and the corners of the quad fade to nothing rather than being discarded —
   // the blend is cheaper than the branch at this instance count.
   const radius = length(uv().sub(0.5)).mul(2)
   const profile = oneMinus(smoothstep(0.15, 1, radius))
+  const scale = instancedBufferAttribute(prominence)
 
   const material = new PointsNodeMaterial()
   material.positionNode = instancedBufferAttribute(positions)
-  material.sizeNode = size
+  /*
+   * Prominence is spent on *size* as well as intensity, and both keep a floor.
+   *
+   * A real star is far smaller than a pixel; what makes Sirius look bigger than
+   * its neighbours is the eye's and the lens's response to a brighter point
+   * source, not its angular diameter. So size carries most of the range — but
+   * intensity has to carry some of it too, because a sprite that is only
+   * *smaller* stops reading as fainter once it is down to a pixel.
+   *
+   * Neither goes to zero. The faintest star in a 40 ly sweep is 20 magnitudes
+   * below the brightest; drawn to scale it would be invisible, and so would the
+   * three quarters of the sky that are M dwarfs. The floors are where a real
+   * sky's limiting magnitude is: past it, everything is drawn at the threshold
+   * of visibility rather than not drawn at all.
+   */
+  material.sizeNode = size.mul(scale.mul(0.55).add(0.45))
   material.sizeAttenuation = false
-  material.colorNode = vec3(0.81, 0.85, 1).mul(profile.mul(profile)).mul(1.6)
+  material.colorNode = instancedBufferAttribute(colours)
+    .mul(profile.mul(profile))
+    .mul(scale.mul(1.15).add(0.45))
   material.opacityNode = profile
   material.transparent = true
   material.depthWrite = false
   // Overlapping stars in a dense field add rather than occlude, and the Milky
   // Way's band is that addition and nothing else.
   material.blending = AdditiveBlending
-  return { material, positions, size }
+  return { material, positions, colours, prominence, size }
 }
 
 /** A planet, moon or gas giant. No TSL: the standard model is what these want. */

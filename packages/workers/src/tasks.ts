@@ -1,23 +1,26 @@
-import { invariant } from '@inertialref/shared'
 import { parseSeed, type Seed } from '@inertialref/procedural'
 import {
   encodeUniverseVector,
   type WireUniverseVector,
 } from '@inertialref/protocol'
 import {
+  type CatalogPlanet,
+  type CellContext,
+  cellKey,
+  NO_CATALOGUE,
   type GalacticCell,
   galaxyId,
-  galaxySeedOf,
   generateCell,
   generateHeightfield,
   generateSystem,
   type Heightfield,
   type RegionAddress,
   regionAddress,
-  resolveSystem,
-  systemId,
+  type SystemId,
+  type SystemStub,
   walkBodies,
 } from '@inertialref/universe'
+import { UV } from '@inertialref/spatial'
 import { defineTask, TaskRegistry } from './task.ts'
 
 /*
@@ -32,19 +35,86 @@ import { defineTask, TaskRegistry } from './task.ts'
  * thousands of stars. Both would be visible frame hitches on the main thread.
  */
 
+/*
+ * The catalogue is not shipped to workers.
+ *
+ * Every task here used to take a system id and resolve it, which now needs the
+ * 200 KB star catalogue — in every worker, for every pool, to answer questions
+ * the caller already knows the answer to. Instead the caller passes what it
+ * resolved: a cell's catalogued *count* for generation, and a whole stub for a
+ * survey. The count is the only thing procedural generation needs from the
+ * catalogue (see `proceduralCount`), and passing it makes the dependency an
+ * argument rather than an ambient table that has to be kept in sync across a
+ * thread boundary.
+ */
 export interface GenerateCellRequest {
   readonly seed: string
   readonly cell: GalacticCell
+  /**
+   * What the catalogue contributes: how many stars it already has in this cell,
+   * and the radius inside which it is complete. Procedural stars fill the
+   * difference between the catalogue and the density model, so wrong values here
+   * give a different galaxy — loudly, not subtly.
+   */
+  readonly context?: CellContext
 }
 
+/** A `SystemStub` in a form that survives structured clone. */
 export interface GeneratedStar {
   readonly id: string
   readonly name: string
   readonly position: WireUniverseVector
   readonly spectralType: string
   readonly solarMasses: number
+  readonly solarRadii: number
+  readonly solarLuminosities: number
+  readonly temperature: number
+  readonly colour: readonly [number, number, number]
+  readonly components: number
   readonly catalogued: boolean
+  readonly planets: readonly CatalogPlanet[]
 }
+
+export const encodeStub = (stub: SystemStub): GeneratedStar => ({
+  id: stub.id as string,
+  name: stub.name,
+  position: encodeUniverseVector(stub.position),
+  spectralType: stub.spectralType,
+  solarMasses: stub.solarMasses,
+  solarRadii: stub.solarRadii,
+  solarLuminosities: stub.solarLuminosities,
+  temperature: stub.temperature,
+  colour: [stub.colour.r, stub.colour.g, stub.colour.b],
+  components: stub.components,
+  catalogued: stub.catalogued,
+  planets: stub.planets,
+})
+
+export const decodeStub = (wire: GeneratedStar): SystemStub => ({
+  id: wire.id as SystemId,
+  name: wire.name,
+  // `UV.universeVector` rather than the protocol's validating decoder: this is
+  // a value `encodeStub` produced a moment ago on the other side of a
+  // structured clone, not untrusted input, and the decoder returns a Result the
+  // caller would have to unwrap for a case that cannot happen.
+  position: UV.universeVector(
+    wire.position[0],
+    wire.position[1],
+    wire.position[2],
+    wire.position[3],
+    wire.position[4],
+    wire.position[5],
+  ),
+  spectralType: wire.spectralType,
+  solarMasses: wire.solarMasses,
+  solarRadii: wire.solarRadii,
+  solarLuminosities: wire.solarLuminosities,
+  temperature: wire.temperature,
+  colour: { r: wire.colour[0], g: wire.colour[1], b: wire.colour[2] },
+  components: wire.components,
+  catalogued: wire.catalogued,
+  planets: wire.planets,
+})
 
 export interface GenerateCellResponse {
   readonly cell: GalacticCell
@@ -56,17 +126,14 @@ export const generateCellTask = defineTask<
   GenerateCellResponse
 >({
   name: 'universe.generateCell',
-  version: 1,
-  run({ seed, cell }) {
-    const stars = generateCell(parseSeed(seed), cell).map((star) => ({
-      id: star.id as string,
-      name: star.name,
-      position: encodeUniverseVector(star.position),
-      spectralType: star.spectralType,
-      solarMasses: star.solarMasses,
-      catalogued: star.catalogued,
-    }))
-    return { cell, stars }
+  version: 2,
+  run({ seed, cell, context }) {
+    return {
+      cell,
+      stars: generateCell(parseSeed(seed), cell, context ?? NO_CATALOGUE).map(
+        encodeStub,
+      ),
+    }
   },
 })
 
@@ -75,6 +142,10 @@ export interface SurveyRegionRequest {
   /** Inclusive cell bounds. */
   readonly min: GalacticCell
   readonly max: GalacticCell
+  /** Catalogued star counts by `cellKey`; absent cells are zero. */
+  readonly catalogued?: Readonly<Record<string, number>>
+  /** Radius inside which the catalogue is complete; see `CellContext`. */
+  readonly completeRadius?: number
 }
 
 export const surveyRegionTask = defineTask<
@@ -82,8 +153,8 @@ export const surveyRegionTask = defineTask<
   GenerateCellResponse[]
 >({
   name: 'universe.surveyRegion',
-  version: 1,
-  run({ seed, min, max }, context) {
+  version: 2,
+  run({ seed, min, max, catalogued, completeRadius }, context) {
     const parsed = parseSeed(seed)
     const out: GenerateCellResponse[] = []
     for (let x = min.x; x <= max.x; x += 1) {
@@ -94,19 +165,12 @@ export const surveyRegionTask = defineTask<
           // costing more than the work.
           if (context.cancelled()) return out
           const cell = { x, y, z }
-          const stars = generateCell(parsed, cell)
-          if (stars.length === 0) continue
-          out.push({
-            cell,
-            stars: stars.map((star) => ({
-              id: star.id as string,
-              name: star.name,
-              position: encodeUniverseVector(star.position),
-              spectralType: star.spectralType,
-              solarMasses: star.solarMasses,
-              catalogued: star.catalogued,
-            })),
+          const stars = generateCell(parsed, cell, {
+            catalogued: catalogued?.[cellKey(cell)] ?? 0,
+            completeRadius: completeRadius ?? 0,
           })
+          if (stars.length === 0) continue
+          out.push({ cell, stars: stars.map(encodeStub) })
         }
       }
     }
@@ -175,13 +239,23 @@ export const generateHeightfieldTask = defineTask<
 export interface SurveySystemRequest {
   readonly seed: string
   readonly galaxy: string
-  readonly system: string
+  /**
+   * The system to survey, already resolved.
+   *
+   * An id would be smaller, but resolving one needs the star catalogue and this
+   * runs where there isn't one. The caller has already resolved it — that is how
+   * it knew there was a system worth surveying — so passing the stub also stops
+   * the work being done twice.
+   */
+  readonly stub: GeneratedStar
 }
 
 export interface SurveyedBody {
   readonly address: string
   readonly name: string
   readonly kind: string
+  /** `observed` came from a catalogue; `projected` is the ship's computer. */
+  readonly provenance: string
   readonly radius: number
   readonly semiMajorAxis: number
   readonly orbitalPeriod: number
@@ -196,6 +270,7 @@ export interface SurveySystemResponse {
     readonly spectralType: string
     readonly mass: number
     readonly luminosity: number
+    readonly temperature: number
   }
   readonly bodies: readonly SurveyedBody[]
 }
@@ -205,30 +280,26 @@ export const surveySystemTask = defineTask<
   SurveySystemResponse
 >({
   name: 'universe.surveySystem',
-  version: 1,
-  run({ seed, galaxy, system }) {
+  version: 2,
+  run({ seed, galaxy, stub: wire }) {
     const rootSeed = parseSeed(seed)
     const galaxyName = galaxyId(galaxy)
-    // Derived through the same helper the world uses: a survey has to describe
-    // the universe the player is actually flying through, not a parallel one.
-    const stub = resolveSystem(
-      galaxySeedOf(rootSeed, galaxyName),
-      systemId(system),
-    )
-    invariant(stub !== undefined, `Unknown system ${system}`)
+    const stub = decodeStub(wire)
     const generated = generateSystem(rootSeed, galaxyName, stub)
     return {
-      system,
+      system: stub.id as string,
       name: generated.name,
       star: {
         spectralType: generated.star.spectralType,
         mass: generated.star.mass,
         luminosity: generated.star.luminosity,
+        temperature: generated.star.temperature,
       },
       bodies: [...walkBodies(generated)].map((body) => ({
         address: body.id.slice(1),
         name: body.name,
         kind: body.kind,
+        provenance: body.provenance,
         radius: body.radius,
         semiMajorAxis: body.elements.semiMajorAxis,
         orbitalPeriod: body.orbitalPeriod,

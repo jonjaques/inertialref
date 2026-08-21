@@ -18,6 +18,7 @@ import {
   regionAddress,
   systemFrameId,
   systemId,
+  TEST_CATALOG,
   walkBodies,
 } from '@inertialref/universe'
 import { generateHeightfield } from '@inertialref/universe'
@@ -230,7 +231,7 @@ describe('render placement', () => {
 
 describe('scene', () => {
   function sceneFixture() {
-    const world = new World({ seed: 'inertialref' })
+    const world = new World({ seed: 'inertialref', catalog: TEST_CATALOG })
     const system = world.loadSystem(systemId('SOL'))
     const planet = [...walkBodies(system)].find(
       (b) => b.kind === 'rocky' && b.radius > 1e6,
@@ -351,7 +352,7 @@ describe('chase camera', () => {
    * it is a camera with no floor.
    */
   function landedScene(pitchDegrees: number): RenderScene {
-    const world = new World({ seed: 'inertialref' })
+    const world = new World({ seed: 'inertialref', catalog: TEST_CATALOG })
     const system = world.loadSystem(systemId('SOL'))
     const planet = [...walkBodies(system)].find(
       (b) => b.kind === 'rocky' && b.radius > 1e6,
@@ -422,7 +423,7 @@ describe('chase camera', () => {
 
 describe('terrain mesh', () => {
   it('builds a patch that sits on the body, in render space', () => {
-    const world = new World({ seed: 'inertialref' })
+    const world = new World({ seed: 'inertialref', catalog: TEST_CATALOG })
     const system = world.loadSystem(systemId('SOL'))
     const planet = [...walkBodies(system)].find(
       (b) => b.surface.maxElevation > 0,
@@ -531,7 +532,7 @@ describe('terrain mesh', () => {
      * different pair of axes, so a fix that hard-codes one face's handedness
      * would pass anywhere a single-face test happened to land.
      */
-    const world = new World({ seed: 'inertialref' })
+    const world = new World({ seed: 'inertialref', catalog: TEST_CATALOG })
     const system = world.loadSystem(systemId('SOL'))
     const planet = [...walkBodies(system)].find(
       (b) => b.surface.maxElevation > 0,
