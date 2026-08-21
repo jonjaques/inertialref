@@ -44,7 +44,7 @@ export type MapKind = 'albedo' | 'normal' | 'night' | 'clouds' | 'ring'
 
 export interface BodyTextures {
   readonly albedo: Texture | null
-  /** Tangent-space normals in RGB; an ocean mask in alpha where there is one. */
+  /** Tangent-space slopes in RG, Z reconstructed; an ocean mask in blue. */
   readonly normal: Texture | null
   readonly night: Texture | null
   readonly clouds: Texture | null

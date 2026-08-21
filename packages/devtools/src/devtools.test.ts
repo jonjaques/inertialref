@@ -1,18 +1,21 @@
 import { describe, expect, it } from 'vitest'
-import { err, ok } from '@inertialref/shared'
+import { AU, err, ok } from '@inertialref/shared'
 import { createInlineWorker, createTaskRegistry } from '@inertialref/workers'
 import type { AuthorityPort, ClientHello } from '@inertialref/net'
 import {
+  bodyFrameId,
   formatAddress,
+  parseAddress,
   partitionForAddress,
   type PartitionKey,
   systemAddress,
+  systemFrameId,
   systemId,
   TEST_CATALOG,
   walkBodies,
   type EntityId,
 } from '@inertialref/universe'
-import { Quaternion as Q, Vec, vec3 } from '@inertialref/spatial'
+import { Quaternion as Q, UV, Vec, vec3 } from '@inertialref/spatial'
 import { runCapabilityChecks, summarizeCapabilities } from './capabilities.ts'
 import { canHoldOrbit } from './travel.ts'
 import type { GameHarness } from './harness.ts'
@@ -382,23 +385,92 @@ describe('going places', () => {
     expect(Vec.dot(forward, toBody)).toBeCloseTo(1, 6)
   })
 
-  it('sends the ship to another star system, at something worth looking at', () => {
-    const { harness: ir } = harness()
+  it('composes shots of a moon against the sun, not against its planet', () => {
+    /*
+     * The sun direction fed to `placeShot` used to be the direction of the
+     * frame's *parent* — the system frame for a planet, which is the star, but
+     * the planet frame for a moon. Every bookmark on a moon was therefore
+     * composed against its planet: `full-face` on Luna framed the earthlit
+     * side at whatever phase Earth was in. Confirmed to fail before the fix:
+     * the measured sun–moon–camera angle came out wherever the Earth–Moon–Sun
+     * geometry happened to put it, tens of degrees off the 90° the bookmark
+     * promises.
+     */
+    const { harness: ir, session } = harness()
+    ir.shot('half', 'b:2.0')
+    const world = session.world
+    const time = world.clock.time
+    const player = session.player() as EntityId
+    const camera = world.canonicalPositionOf(player)
+    const moon = world.frames.pose(
+      bodyFrameId(parseAddress('g:milky-way/s:SOL/b:2.0')),
+      time,
+    ).position
+    const star = world.frames.pose(
+      systemFrameId(systemId('SOL')),
+      time,
+    ).position
+    const toSun = Vec.normalize(UV.difference(star, moon))
+    const toCamera = Vec.normalize(UV.difference(camera, moon))
+    const phase = (Math.acos(Vec.dot(toSun, toCamera)) * 180) / Math.PI
+    // 'half' promises a terminator down the middle: a 90° phase angle.
+    expect(phase).toBeCloseTo(90, 1)
+  })
+
+  it('keeps a framed shot pointing at the body as the orbit proceeds', () => {
+    /*
+     * A bookmark used to teleport in with zero angular velocity: a nose fixed
+     * in inertial space, so the body slid out of frame as the orbit carried
+     * the ship around it. A locked-on camera turns once per revolution about
+     * the orbit normal. Twenty minutes of Luna's `gibbous` orbit is ~10° of
+     * arc — confirmed to fail before the fix at dot ≈ 0.983.
+     */
+    const { harness: ir, session } = harness()
+    ir.shot('gibbous', 'b:2.0')
+    ir.step(64 * 1200)
+    const entity = session.world.entities.require(session.player() as EntityId)
+    const forward = Q.rotate(entity.state.orientation, vec3(0, 0, -1))
+    const toBody = Vec.normalize(Vec.negate(entity.state.position))
+    expect(Vec.dot(forward, toBody)).toBeGreaterThan(0.995)
+  })
+
+  it('sends the ship to another star system, orbiting the star itself', () => {
+    const { harness: ir, session } = harness()
     expect(ir.status().world.loadedSystems).toHaveLength(1)
     ir.goTo('HIP71683')
     expect(ir.status().world.loadedSystems.map((s) => s.id)).toContain(
       'HIP71683',
     )
-    // Naming a system asks for its contents. Arriving 40 AU out in the dark is
-    // where `goToSystem` leaves you and it looks exactly like nothing happened:
-    // at that range a dwarf star is a sub-pixel point.
-    expect(ir.inspect()?.frame).toBe('b:g:milky-way/s:HIP71683/b:0')
+    // Naming a system asks for the star: the ship ends in the *system* frame —
+    // whose origin is the star — not in the frame of whichever body happened
+    // to be issued first, which is where this used to leave you.
+    expect(ir.inspect()?.frame).toBe('s:HIP71683')
 
-    // ...unless you ask for the hold-off explicitly, which is a real place to
-    // want to be — just not the default one.
+    // In a genuine circular orbit of it, close enough that the disc reads as
+    // a sun rather than a bright point...
+    const star = session.world.system(systemId('HIP71683'))?.star
+    if (star === undefined) throw new Error('HIP71683 not loaded')
+    const entity = session.world.entities.require(session.player() as EntityId)
+    expect(Vec.length(entity.state.position)).toBeLessThan(star.radius * 12)
+    ir.step(64 * 120)
+    const after = ir.inspect()?.local
+    const radius = Math.hypot(after?.x ?? 0, after?.y ?? 0, after?.z ?? 0)
+    expect(radius / Vec.length(entity.state.position)).toBeCloseTo(1, 2)
+
+    // ...and looking at it: the star sits at the frame's origin, so the way
+    // to it is back down the position vector.
+    const held = session.world.entities.require(session.player() as EntityId)
+    const forward = Q.rotate(held.state.orientation, vec3(0, 0, -1))
+    const toStar = Vec.normalize(Vec.negate(held.state.position))
+    expect(Vec.dot(forward, toStar)).toBeGreaterThan(0.99)
+  })
+
+  it('holds off in the dark only when asked to', () => {
+    const { harness: ir } = harness()
     ir.goTo('HIP71683', { distanceAu: 40 })
     expect(ir.inspect()?.frame).toBe('s:HIP71683')
-    expect(ir.inspect()?.local.x).toBeGreaterThan(0)
+    const local = ir.inspect()?.local
+    expect(local?.x).toBeGreaterThan(39 * AU)
   })
 
   it('parks inside the sphere of influence of every body that has one', () => {

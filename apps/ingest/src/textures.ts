@@ -57,15 +57,32 @@ export interface TextureManifest {
  * WebP rather than PNG or JPEG.
  *
  * PNG is lossless and four times the size for imagery that came off a camera.
- * JPEG has no alpha, and three of these maps need one — a cloud deck, an ocean
- * mask and a ring. AVIF is smaller again and decodes slowly enough to be visible
- * as a stall when eight bodies stream in at once.
+ * JPEG has no alpha, and two of these maps need one — a cloud deck and a ring.
+ * AVIF is smaller again and decodes slowly enough to be visible as a stall
+ * when eight bodies stream in at once.
  *
  * Quality 82 is where the belts on Jupiter stop showing ringing. Below about 75
  * they do, and a compression artefact on a planet reads as a real feature —
  * which is the one kind of visual error this project cannot tolerate.
  */
 const WEBP = { quality: 82, effort: 6 } as const
+
+/*
+ * Normal maps are encoded losslessly, and this is not an optimisation knob.
+ *
+ * Lossy WebP is a *photographic* codec: VP8 quantises per block, and on the
+ * smooth slope fields of a normal map that quantisation lands as whole 8-pixel
+ * rows of the green channel offset by up to ±39 around neutral — measured on
+ * the Moon's map, worst at high latitude where equirectangular stretching
+ * makes the data smoothest. Each such row is a band of surface tilted ~15°
+ * north or south. Face-on it is invisible; under the grazing light at the limb
+ * (every full-phase shot) it renders as black latitude-parallel scratches, and
+ * the relief exaggeration multiplies it. Quality 82 was tuned on Jupiter's
+ * *albedo*, where ringing hides in the clouds; data has nowhere to hide.
+ * Lossless VP8L on these maps is a few MB against the artefact that motivated
+ * the "cannot tolerate" rule above.
+ */
+const WEBP_DATA = { lossless: true, effort: 6 } as const
 
 /** Elevation only: cos(latitude) below this is treated as this. */
 const POLE_CLAMP = 0.15
@@ -162,7 +179,7 @@ async function elevationToNormal(
   // cos(latitude), which is the whole reason for the correction below.
   const metresPerPixel = (Math.PI * radius) / height
 
-  const out = Buffer.alloc(width * height * 4)
+  const out = Buffer.alloc(width * height * 3)
   for (let y = 0; y < height; y += 1) {
     const latitude = ((y + 0.5) / height - 0.5) * Math.PI
     const cosLatitude = Math.max(POLE_CLAMP, Math.cos(latitude))
@@ -181,24 +198,33 @@ async function elevationToNormal(
        * gradient going *down* the image, and north is the opposite direction,
        * so `-dh/dnorth` is `+south`. That sign is the difference between craters
        * and domes, and it is invisible until the terminator crosses one.
+       *
+       * Only X and Y are stored; the shader reconstructs Z as √(1 − x² − y²),
+       * which is exact for a unit normal. That frees the blue channel for the
+       * ocean mask — and the mask must NOT ride in alpha, which is where it
+       * used to be. Alpha is semantic to every codec and canvas in the path:
+       * libwebp's lossless encoder "cleans" the RGB under transparent pixels
+       * to compress better, which zeroed the *entire* Moon map (no ocean, so
+       * alpha 0 everywhere) and every land normal on Earth. A mask in a colour
+       * channel is just data, and nothing in the pipeline has opinions about
+       * data.
        */
       const nx = -east
       const ny = south
       const inverseLength = 1 / Math.hypot(nx, ny, 1)
 
-      const index = (y * width + x) * 4
+      const index = (y * width + x) * 3
       out[index] = Math.round((nx * inverseLength * 0.5 + 0.5) * 255)
       out[index + 1] = Math.round((ny * inverseLength * 0.5 + 0.5) * 255)
-      out[index + 2] = Math.round((inverseLength * 0.5 + 0.5) * 255)
-      // Alpha is the ocean mask where the body has one, and zero otherwise.
-      // Packed here rather than shipped as a fifth file: it is one bit per
-      // texel and it is always sampled at the same coordinate as the normal.
-      out[index + 3] = at(x, y) <= oceanLevel ? 255 : 0
+      // The ocean mask where the body has one, and zero otherwise. Packed here
+      // rather than shipped as a fifth file: it is one bit per texel and it is
+      // always sampled at the same coordinate as the normal.
+      out[index + 2] = at(x, y) <= oceanLevel ? 255 : 0
     }
   }
 
-  return sharp(out, { raw: { width, height, channels: 4 } })
-    .webp(WEBP)
+  return sharp(out, { raw: { width, height, channels: 3 } })
+    .webp(WEBP_DATA)
     .toBuffer()
 }
 

@@ -989,6 +989,103 @@ canvas remounts, and `SunFlare` reads the toggle per frame. Turning a feature
 off to isolate an artifact is how the alpha bug above was pinned to the flare
 rather than the tone curve.
 
+**Shots and orbits take their sun from the system, not the frame parent**
+(21 Aug 2026, `devtools/harness.ts` `#toStar`). The sun direction fed to
+`placeShot` and `orbit` was the direction of the frame's _parent_ — the star
+for a planet, the **planet** for a moon — so every bookmark on a moon was
+composed against its primary: `full-face` on Luna framed the earthlit side at
+whatever phase Earth was in. The regression test measures the actual
+sun–moon–camera angle of a `half` shot on Luna and demands 90°; it failed at
+82° before the fix. A system frame's origin is its star, which is the one fact
+the helper needs.
+
+**Travelling to a star means the star** (21 Aug 2026). `goTo` with a system
+designation used to arrive at `planets[0]`; it now parks in the _system_ frame
+in a circular orbit of the star itself — eight stellar radii, where the disc
+subtends ~14° — with the nose on it, and `orbit` accepts a system address the
+same way. The star has no `Body` and no frame of its own; it _is_ the system
+frame's origin, which is why none of the body machinery applied and the case
+needed its own `#orbitStar`.
+
+**Framed compositions hold** (21 Aug 2026, `#trackOrbit`). A teleport leaves
+angular velocity at zero — a nose fixed in inertial space — so the body a shot
+had framed slid out of the picture as the orbit proceeded. Every arrival that
+promises "looking at it" now spins the ship at its own orbital rate,
+`ω = r × v / |r|²`, written in **body axes** because that is what the
+integrator composes; twenty minutes of Luna's gibbous orbit drifted 10° off
+target before, and holds to a fraction of a degree now. Flight assist is
+switched off with it, deliberately: assist reads the tracking spin as tumble
+and damps it away within seconds.
+
+**The hidden-load black screen** (21 Aug 2026, `App.tsx`). R3F sizes its
+canvas from a ResizeObserver, and Chrome does not deliver the initial
+observation to a hidden document — which this page _is_ during every Vite
+full-reload triggered from an editor in front of the browser. Becoming visible
+again does not replay the lost observation: the canvas sat at the default
+300×150 with no renderer built, a black screen with a healthy HUD that only a
+manual window resize revived. The measurement hook also listens to window
+`resize`, so App replays a synthetic one on `visibilitychange`; verified live
+— the stuck canvas went from 300×150 to full size and built the WebGPU
+renderer the moment the window surfaced.
+
+**Normal maps are lossless, and the ocean mask moved to blue** (21 Aug 2026,
+`ingest/textures.ts`, `render/planet.ts`). Two compounding artefacts, one
+autopsy. Lossy WebP block-quantised the smooth slope fields: whole 8-pixel
+rows of the Moon's green channel offset ±39 around neutral — bands of surface
+tilted ~15°, invisible face-on, black latitude-parallel scratches under the
+grazing light at every full-phase limb. Re-encoding losslessly then erased the
+maps _entirely_: libwebp's lossless encoder "cleans" RGB under transparent
+pixels, and the ocean mask lived in alpha — the Moon has no ocean, so its
+alpha was 0 everywhere and its RGB went with it. The mask now rides the blue
+channel (the shader reconstructs Z as √(1 − x² − y²), exact for a unit
+normal), the maps ship as 3-channel lossless VP8L, and nothing in the pipeline
+has opinions about a colour channel. Measured: the Moon's worst adjacent-row
+jump fell from 58.6 to 9.7, and what remains is terrain.
+
+**Giants stopped wearing gaskets** (21 Aug 2026, `render/materials.ts`,
+`SceneView`). The atmosphere shell was a sphere around an oblate planet: at
+Saturn's 9.8% flattening the shell floated a tenth of a radius off each pole,
+and the analytic "ground" — a sphere of the _equatorial_ radius — drew air
+over ground the planet never fills, a detached grey ring around the whole
+limb. Both ray endpoints are now mapped into a space stretched 1/flattening
+along the spin axis, where the ellipsoid is the sphere the intersection maths
+assumes, and the mesh is scaled oblate to match. The density also gains a
+`(1 − altitude)` factor so the shell ends by vanishing: the exponential alone
+left ~1% at the ceiling, which the HDR canvas rendered as a hard hairline
+ring.
+
+**Giants got limb darkening, chroma and moving weather** (`render/planet.ts`,
+tuning in `SceneView`). A deep atmosphere reflects from optical depth ~1, so
+a grazing view sees higher, thinner, darker gas — `pow(μ, 0.55)` blended at
+0.72 for giants, and the flat decal became a ball. The published maps are
+near-true-colour, paler than any released photograph; giants get the same
+chroma stretch every press image has had (1.3 gas, 1.15 ice). And the bands
+shear: a zonal-jet UV warp at the _real_ magnitudes (~110 m/s gas, ~400 m/s
+ice) — invisible at 1×, visible differential rotation at high warp, exactly
+like the real thing.
+
+**Mapless rings are generated, not slabs** (`render/proceduralRings.ts`).
+The opaque-white fallback drew Uranus's ring system as a cyan charcoal
+compact disc four radii across. A mapless ring now gets a strip generated
+from the owning body's kind, seeded from its address: ice giants get sparse
+near-black threads with an ε-ring analogue near the outer edge, gas giants a
+banded sheet with gaps. The same strip feeds the ring slab and the
+ring-shadow projection on the planet, so the shadow bands match the rings
+that cast them; procedural strips keep their own greys (the body tint is what
+dyed Uranus's threads cyan).
+
+**The star has a surface** (`render/materials.ts`). Worley-noise granulation
+— bright convection cells draining into dark intergranular lanes — over a
+fractal mottling octave, churned by presentation time so a held star simmers
+under warp; a chromosphere-orange warm-up at the limb. Visible because the
+disc now _stops down_: at the authored radiance 8 every lane clips to the
+tone ceiling and the surface work is one white circle, so `exposure` ramps
+from 1 to 0.1 as the disc grows from 0.015 to 0.1 rad — a camera exposed for
+the sun once the sun is the picture — and the lens flare fades on the same
+ramp rather than repainting the stopped-down photosphere back to white. From
+afar nothing changes: the star stays the reference white the HDR path is
+built on.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

@@ -153,7 +153,7 @@ export function NavPanel({
                     <Action
                       label="travel"
                       tone="primary"
-                      title="Arrive in this system, looking at its star"
+                      title="Orbit this system's star, looking at it"
                       onClick={() =>
                         run(`travelling to ${target.name}`, () =>
                           engine.harness.goTo(target.address),

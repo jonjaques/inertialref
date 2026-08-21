@@ -35,6 +35,7 @@ import {
 import { createLensFlare } from '../render/flare.ts'
 import { type FlareOccluder, sunVisibility } from '../render/flareMath.ts'
 import { texturesFor } from '../render/planetTextures.ts'
+import { proceduralRingStrip } from '../render/proceduralRings.ts'
 import type { PerspectiveCamera } from 'three/webgpu'
 
 /*
@@ -122,11 +123,20 @@ function SunFlare({ engine }: { engine: GameEngine }) {
       position: body.placement.position,
       radius: body.placement.scale,
     }))
+    // The flare is a lens's response to an unresolved point of glare. Once
+    // the disc is genuinely resolved — the star-orbit arrival subtends ~15°
+    // — the camera is exposed for the surface and the artifact stack fades,
+    // or the flare's core repaints the stopped-down photosphere back to a
+    // clipped white circle. Same ramp as the disc's own exposure.
+    const filling = Math.min(
+      1,
+      Math.max(0, (star.placement.angularRadius - 0.015) / 0.085),
+    )
     flare.update(
       camera as PerspectiveCamera,
       star.placement.position,
       star.color,
-      star.brightness,
+      star.brightness * (1 - filling * 0.85),
       star.placement.angularRadius,
       sunVisibility(scene.camera.position, star.placement.position, occluders),
     )
@@ -410,6 +420,10 @@ interface PlanetTuning {
   readonly reliefScale: number
   readonly specular: number
   readonly night: number
+  readonly limbDarkening: number
+  readonly saturation: number
+  /** Equatorial jet, UV turns per second. Real magnitudes; see `planet.ts`. */
+  readonly flowRate: number
 }
 
 function tuningFor(body: RenderBody): PlanetTuning {
@@ -424,12 +438,24 @@ function tuningFor(body: RenderBody): PlanetTuning {
       reliefScale: 0,
       specular: 0,
       night: 0,
+      // The two knobs that separate a decal from a photograph of a giant:
+      // the disc rolls off toward the limb, and the published near-true-colour
+      // maps get the chroma stretch every released image has had.
+      limbDarkening: 0.72,
+      saturation: body.kind === 'gas-giant' ? 1.3 : 1.15,
+      // ~110 m/s of equatorial jet for a gas giant, ~400 m/s for an ice
+      // giant (Neptune's winds are the fastest in the system), as a fraction
+      // of a typical circumference per second.
+      flowRate: body.kind === 'gas-giant' ? 2.5e-7 : 2.5e-6,
     }
   return {
     // Closer to Lambert than it was: the aerial veil now brightens the limb
     // on top of this, and 0.45 under the veil left the disc reading flat.
     lunarLambert: air ? 0.3 : 0.92,
     terminator: air ? 0.09 : 0.025,
+    limbDarkening: 0,
+    saturation: 1,
+    flowRate: 0,
     /*
      * Normal-map exaggeration, and the honest name for it.
      *
@@ -639,8 +665,24 @@ function Bodies({ engine }: { engine: GameEngine }) {
       // The colour is a uniform rather than a construction argument because a
       // star's rendered colour is derived from its temperature every frame, and
       // a material built once from the first frame's value would freeze it.
-      if (star !== null && visual.star !== null)
+      if (star !== null && visual.star !== null) {
         visual.star.color.value.setRGB(star.r, star.g, star.b)
+        // Presentation time, for the granulation churn — simulation seconds,
+        // so time warp stirs the photosphere faster, which reads as intended.
+        visual.star.time.value = engine.snapshot?.renderTime ?? 0
+        // Stop down as the disc grows: a sun that fills the frame is exposed
+        // for its surface, not for the scene it lights. From afar this is 1
+        // and the star stays the reference white the HDR path is built on.
+        // Fully stopped down by ~0.1 rad — the star-orbit arrival parks at
+        // 0.125 — where the ceiling of the tone curve finally lets the
+        // granulation through: at radiance 8 every lane clips to the same
+        // white and the surface work is invisible.
+        const filling = Math.min(
+          1,
+          Math.max(0, (placement.angularRadius - 0.015) / 0.085),
+        )
+        visual.star.exposure.value = 1 - filling * 0.9
+      }
 
       const sun = scratch.sun
       if (keyLight !== null)
@@ -659,12 +701,17 @@ function Bodies({ engine }: { engine: GameEngine }) {
         // The ring-shadow strip lives under the *ring's* manifest key
         // ('saturn-ring'), not the body's — the body's own set never carries
         // a ring map, so looking it up there disables the shadow entirely.
+        // Mapless rings shadow with the same generated strip they are drawn
+        // from, so the shadow bands match the rings that cast them.
         planet.setTextures(
           body.rings === null
             ? maps
             : {
                 ...maps,
-                ring: texturesFor(body.rings.texture, anisotropy).ring,
+                ring:
+                  body.rings.texture === null
+                    ? proceduralRingStrip(body.kind, body.address)
+                    : texturesFor(body.rings.texture, anisotropy).ring,
               },
         )
         planet.sunDirection.value.copy(sun)
@@ -682,6 +729,10 @@ function Bodies({ engine }: { engine: GameEngine }) {
         planet.lunarLambert.value = tuning.lunarLambert
         planet.terminator.value = tuning.terminator
         planet.reliefScale.value = maps.normal === null ? 0 : tuning.reliefScale
+        planet.limbDarkening.value = tuning.limbDarkening
+        planet.saturation.value = tuning.saturation
+        planet.flowRate.value = tuning.flowRate
+        planet.time.value = engine.snapshot?.renderTime ?? 0
         /*
          * The aerial term reads the same authored haze the shell does, so the
          * air over the ground and the air past the limb cannot disagree about
@@ -707,7 +758,7 @@ function Bodies({ engine }: { engine: GameEngine }) {
           )
         }
         // Sun-glint needs an ocean to land on, and the mask that says where one
-        // is rides in the normal map's alpha. No normal map, no ocean, no glint.
+        // is rides in the normal map's blue. No normal map, no ocean, no glint.
         planet.specularStrength.value =
           maps.normal === null ? 0 : tuning.specular
         planet.nightStrength.value = maps.night === null ? 0 : tuning.night
@@ -795,7 +846,11 @@ function Bodies({ engine }: { engine: GameEngine }) {
           visual.rings.quaternion.copy(quaternion)
           visual.rings.scale.setScalar(extent)
           const material = visual.ringMaterial
-          material.setTexture(texturesFor(ring.texture, anisotropy).ring)
+          material.setTexture(
+            ring.texture === null
+              ? proceduralRingStrip(body.kind, body.address)
+              : texturesFor(ring.texture, anisotropy).ring,
+          )
           material.sunDirection.value.copy(sun)
           material.sunColour.value.setRGB(keyColour.r, keyColour.g, keyColour.b)
           material.innerFraction.value = ring.innerScale / ring.outerScale
@@ -804,13 +859,16 @@ function Bodies({ engine }: { engine: GameEngine }) {
           // mesh-local value (1/outerScale) never shadowed a single fragment.
           material.bodyRadius.value = placement.scale
           material.opticalDepth.value = ring.opticalDepth
-          // A ring with no map is a procedural giant's: uniform ice, tinted by
-          // the planet it belongs to so it does not read as a foreign object.
-          material.baseColour.value.setRGB(
-            appearance.colour.r,
-            appearance.colour.g,
-            appearance.colour.b,
-          )
+          // A generated strip carries its own greys — re-dying it with the
+          // body's tint is how Uranus's charcoal threads came out cyan. Only
+          // a photographed strip is neutral enough to take the tint.
+          if (ring.texture === null) material.baseColour.value.setRGB(1, 1, 1)
+          else
+            material.baseColour.value.setRGB(
+              appearance.colour.r,
+              appearance.colour.g,
+              appearance.colour.b,
+            )
         }
       }
 
@@ -820,7 +878,11 @@ function Bodies({ engine }: { engine: GameEngine }) {
       if (visual.atmosphere.visible) {
         const shell = placement.scale * body.atmosphereScale
         visual.atmosphere.position.copy(visual.mesh.position)
-        visual.atmosphere.scale.setScalar(shell)
+        // Oblate like the body it wraps, or the shell floats a tenth of a
+        // radius off Saturn's poles; the shader unstretches it — see the
+        // material for what the spherical version looked like.
+        visual.atmosphere.quaternion.copy(quaternion)
+        visual.atmosphere.scale.set(shell, shell * body.flattening, shell)
         visual.atmosphere.geometry = geometryFor(placement.angularRadius)
 
         // The shell's shader needs the same geometry the transform above encodes,
@@ -831,6 +893,8 @@ function Bodies({ engine }: { engine: GameEngine }) {
         air.centre.value.copy(visual.mesh.position)
         air.outerRadius.value = shell
         air.innerRadius.value = placement.scale
+        air.spinAxis.value.set(0, 1, 0).applyQuaternion(quaternion).normalize()
+        air.flattening.value = body.flattening
         const haze = appearance.haze
         if (haze !== null) {
           air.zenithColour.value.setRGB(

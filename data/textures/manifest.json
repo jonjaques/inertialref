@@ -48,11 +48,11 @@
       "file": "earth_normal.webp",
       "width": 4096,
       "height": 2048,
-      "bytes": 86226,
+      "bytes": 1460054,
       "licence": "public-domain",
       "credit": "NASA Earth Observatory / NASA Scientific Visualization Studio",
       "source": "https://eoimages.gsfc.nasa.gov/images/imagerecords/73000/73934/gebco_08_rev_elev_21600x10800.png",
-      "sha256": "964fb70ca406cff6"
+      "sha256": "99ce6a9f20b574ac"
     },
     {
       "body": "luna",
@@ -72,11 +72,11 @@
       "file": "luna_normal.webp",
       "width": 4096,
       "height": 2048,
-      "bytes": 62180,
+      "bytes": 7524966,
       "licence": "public-domain",
       "credit": "NASA Earth Observatory / NASA Scientific Visualization Studio / LRO LOLA",
       "source": "https://svs.gsfc.nasa.gov/vis/a000000/a004700/a004720/ldem_16_uint.tif",
-      "sha256": "f4d6586a755cf003"
+      "sha256": "f2a64ad2ee5d18bf"
     },
     {
       "body": "io",

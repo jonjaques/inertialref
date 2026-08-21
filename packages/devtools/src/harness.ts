@@ -9,10 +9,12 @@ import {
 } from '@inertialref/shared'
 import { circularSpeed } from '@inertialref/physics'
 import {
+  type FrameId,
   Quaternion as Q,
   type UniverseVector,
   UV,
   Vec,
+  type Vec3,
   vec3,
 } from '@inertialref/spatial'
 import {
@@ -149,16 +151,6 @@ export interface ScenarioResult {
 }
 
 const log = getLogger('devtools.harness')
-
-/**
- * The hold-off distance for a system with nothing to orbit.
- *
- * Outside every planet of a typical system, so arriving never drops the ship
- * inside a body or inside a sphere of influence it did not ask for. It is a
- * long way from anything to look at, which is why it is the fallback rather
- * than the default.
- */
-const ARRIVAL_DISTANCE_AU = 40
 
 export class GameHarness {
   readonly #host: HarnessHost
@@ -359,20 +351,27 @@ export class GameHarness {
   }
 
   /**
-   * Put the player in a circular orbit around a body.
+   * Put the player in a circular orbit around a body — or, given a system
+   * address, around its star.
    *
    * Named for what it does physically rather than "teleport": it sets a state
    * that is a valid solution of the two-body problem, so the ship stays there.
    */
-  orbit(address: string, altitudeKm = 400): HarnessStatus {
+  orbit(address: string, altitudeKm?: number): HarnessStatus {
     const parsed = parseAddress(address)
+    // A star is somewhere you can orbit too: a system address names one, and
+    // refusing it forced "orbit the star" through goToSystem's hold-off in the
+    // dark. The star lives at its system frame's origin, so this is the same
+    // manoeuvre with the system frame standing in for a body frame.
+    if (parsed.kind === 'system')
+      return this.#orbitStar(parsed.system, altitudeKm)
     if (parsed.kind !== 'body')
       throw new Error(`${address} is not a body address`)
     const system = this.world.loadSystem(parsed.system)
     const body = findBody(system, parsed.body)
     if (body === undefined) throw new Error(`No body at ${address}`)
 
-    const radius = body.radius + altitudeKm * 1000
+    const radius = body.radius + (altitudeKm ?? 400) * 1000
     const speed = circularSpeed(body.mu, radius)
     const player = this.#requirePlayer()
     const frame = bodyFrameId(body.address)
@@ -380,21 +379,7 @@ export class GameHarness {
     // Placed on the sunward side, and pointing along the orbit. A debug tool
     // that drops you on the night side of an unlit world, facing away from
     // everything, is technically correct and useless.
-    const time = this.world.clock.time
-    const bodyPose = this.world.frames.pose(frame, time)
-    const parent = this.world.frames.get(frame).parent
-    const toStar =
-      parent === null
-        ? vec3(1, 0, 0)
-        : Vec.normalize(
-            Q.rotateInverse(
-              bodyPose.orientation,
-              UV.difference(
-                this.world.frames.pose(parent, time).position,
-                bodyPose.position,
-              ),
-            ),
-          )
+    const toStar = this.#toStar(parsed.system, frame)
     const alongOrbit = Vec.normalize(Vec.cross(vec3(0, 1, 0), toStar))
 
     this.world.teleport(player, {
@@ -407,6 +392,92 @@ export class GameHarness {
     })
     this.world.setControl(player, Vec.ZERO, Vec.ZERO)
     log.info('placed in orbit', { address, altitudeKm, speed })
+    return this.status()
+  }
+
+  /**
+   * Unit vector from a frame's origin towards the system's star, in that
+   * frame's axes.
+   *
+   * The *star*, not the frame's parent. For a planet the two agree — its
+   * parent is the system frame, whose origin is the star — and that
+   * coincidence is exactly how the parent version shipped: every shot of a
+   * moon was composed against the direction of its **planet**, so `full-face`
+   * on Luna framed the earthlit side at whatever phase Earth happened to be
+   * in, and `sunset` chased Earth's azimuth instead of the sun's.
+   */
+  #toStar(system: SystemId, frame: FrameId): Vec3 {
+    const time = this.world.clock.time
+    const pose = this.world.frames.pose(frame, time)
+    const star = this.world.frames.pose(systemFrameId(system), time).position
+    const offset = UV.difference(star, pose.position)
+    // The star's own frame asking for the star: no direction exists. The +X
+    // convention matches goToSystem's placement axis.
+    if (Vec.length(offset) < 1) return vec3(1, 0, 0)
+    return Vec.normalize(Q.rotateInverse(pose.orientation, offset))
+  }
+
+  /**
+   * Spin the ship at its own orbital rate, so a framed composition *holds*.
+   *
+   * A teleport leaves the angular velocity at zero, which is a ship whose nose
+   * points at a fixed direction in inertial space — so as the orbit proceeds,
+   * the body it was framing slides out of the picture. What a locked-on camera
+   * does is rotate once per revolution about the orbit normal, and that rate is
+   * `ω = r × v / |r|²` exactly — set it and the nose stays on the body while
+   * the terrain turns underneath, which is the whole point of watching a
+   * bookmark with time running.
+   *
+   * Flight assist is switched off with it, deliberately: assist reads any
+   * uncommanded spin as tumble and damps it back to zero within seconds,
+   * un-tracking the shot. `ir.flightAssist(true)` or the keybinding restores
+   * it the moment you want to fly rather than film.
+   */
+  #trackOrbit(): void {
+    const player = this.#requirePlayer()
+    const state = this.world.entities.require(player).state
+    const r2 = Vec.lengthSquared(state.position)
+    if (r2 < 1) return
+    const omegaFrame = Vec.scale(
+      Vec.cross(state.position, state.velocity),
+      1 / r2,
+    )
+    this.world.setFlightAssist(player, false)
+    this.world.teleport(player, {
+      ...state,
+      // The integrator composes angular velocity in *body* axes.
+      angularVelocity: Q.rotateInverse(state.orientation, omegaFrame),
+    })
+  }
+
+  /**
+   * A circular orbit around the system's star itself.
+   *
+   * The star is not a `Body` — it has no address and no frame of its own; it
+   * *is* the system frame's origin — so none of the body machinery applies.
+   * The default altitude parks eight stellar radii out, where the disc
+   * subtends ~14°: a sun hanging in the sky. The one-radius-up rule planets
+   * use would put a wall of light across the whole view.
+   */
+  #orbitStar(system: SystemId, altitudeKm?: number): HarnessStatus {
+    const target = this.world.loadSystem(systemId(system))
+    const star = target.star
+    const radius = star.radius + (altitudeKm ?? (star.radius * 7) / 1000) * 1000
+    const speed = circularSpeed(star.mu, radius)
+    const player = this.#requirePlayer()
+
+    // On +X of the system frame — the same axis goToSystem uses — orbiting in
+    // the system's reference plane, prograde like everything else in it.
+    const alongOrbit = Vec.cross(vec3(0, 1, 0), vec3(1, 0, 0))
+    this.world.teleport(player, {
+      frame: systemFrameId(target.id),
+      position: vec3(radius, 0, 0),
+      orientation: Q.fromUnitVectors(vec3(0, 0, -1), alongOrbit),
+      velocity: Vec.scale(alongOrbit, speed),
+      angularVelocity: Vec.ZERO,
+    })
+    this.world.setControl(player, Vec.ZERO, Vec.ZERO)
+    log.info('placed in orbit of the star', { system: target.id, speed })
     return this.status()
   }
 
@@ -443,23 +514,9 @@ export class GameHarness {
 
     const player = this.#requirePlayer()
     const frame = bodyFrameId(body.address)
-    const time = this.world.clock.time
 
     // The sun direction in the body's frame, exactly as `orbit` derives it.
-    const bodyPose = this.world.frames.pose(frame, time)
-    const parent = this.world.frames.get(frame).parent
-    const toStar =
-      parent === null
-        ? vec3(1, 0, 0)
-        : Vec.normalize(
-            Q.rotateInverse(
-              bodyPose.orientation,
-              UV.difference(
-                this.world.frames.pose(parent, time).position,
-                bodyPose.position,
-              ),
-            ),
-          )
+    const toStar = this.#toStar(target.system, frame)
 
     // Clamped inside the sphere of influence for the same reason
     // `viewingAltitudeKm` is: a "parking orbit" outside the SOI is reframed to
@@ -479,6 +536,7 @@ export class GameHarness {
       angularVelocity: Vec.ZERO,
     })
     this.world.setControl(player, Vec.ZERO, Vec.ZERO)
+    this.#trackOrbit()
     log.info('framed shot', { shot: name, address: target.text, distance })
     return this.status()
   }
@@ -531,8 +589,9 @@ export class GameHarness {
    *
    * The god-mode front door, and the only travel verb that does not require you
    * to already know what kind of thing you are naming. A body address arrives
-   * in a circular orbit framing that body; a system designation arrives at its
-   * first planet, because a star system's *contents* are what you asked for.
+   * in a circular orbit framing that body; a system designation arrives in a
+   * close orbit of the star itself, looking at it — you asked for the star,
+   * and the star is what fills the view.
    *
    * Passing `distanceAu` asks for the other thing — a hold-off in the system
    * frame, out in the dark, which is where `goToSystem` alone leaves you. That
@@ -564,16 +623,23 @@ export class GameHarness {
       return this.#arriveAt(target.text, body, options.altitudeKm)
     }
 
-    const first = system.planets[0]
-    if (first !== undefined && options.distanceAu === undefined) {
-      return this.#arriveAt(
-        formatAddress(first.address),
-        first,
-        options.altitudeKm,
+    // A system designation arrives at the star itself, in a close orbit with
+    // the nose on it. It used to arrive at the first planet, which answered a
+    // question nobody asked: travel to *Proxima* should end with Proxima
+    // filling the view, and its planets are one `ir.targets()` away.
+    if (options.distanceAu === undefined) {
+      this.#orbitStar(target.system, options.altitudeKm)
+      this.#lookAt(
+        this.world.frames.pose(
+          systemFrameId(target.system),
+          this.world.clock.time,
+        ).position,
       )
+      this.#trackOrbit()
+      return this.status()
     }
 
-    this.goToSystem(target.system, options.distanceAu ?? ARRIVAL_DISTANCE_AU)
+    this.goToSystem(target.system, options.distanceAu)
     // Arriving with the nose pointed at nothing is how you conclude the game is
     // broken. `goToSystem` places the ship on the +X axis of the system frame,
     // whose origin is the star.
@@ -597,7 +663,11 @@ export class GameHarness {
    */
   #arriveAt(address: string, body: Body, altitudeKm?: number): HarnessStatus {
     this.orbit(address, altitudeKm ?? viewingAltitudeKm(body))
-    return this.face(address)
+    this.face(address)
+    // Arrivals are for looking too: hold the body in frame around the orbit
+    // rather than letting it drift out over the next few minutes of warp.
+    this.#trackOrbit()
+    return this.status()
   }
 
   /** Drop the player into interstellar space near a system. */

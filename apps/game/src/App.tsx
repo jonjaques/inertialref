@@ -126,6 +126,31 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
   // without, and reading it once at startup gets that permanently wrong.
   useEffect(() => watchDynamicRange(setDynamicRangeHigh), [])
 
+  /*
+   * Replay the canvas measurement when the document becomes visible.
+   *
+   * R3F sizes its canvas from a ResizeObserver, and Chrome does not deliver
+   * the *initial* observation to a hidden document — which is what this page
+   * is during every Vite full-reload triggered from the editor in front of
+   * it. Becoming visible again does not replay the lost observation either:
+   * the canvas sits at the default 300×150 with no renderer behind it, a
+   * black screen with a healthy HUD that only a manual window resize could
+   * revive. The measurement hook also listens to window `resize`, so a
+   * synthetic one on return to visibility is exactly the kick it is waiting
+   * for; when the measurement already landed, re-measuring the same size is a
+   * no-op. Verified live: dispatching `resize` on the stuck page took the
+   * canvas from 300×150 to full size and built the renderer.
+   */
+  useEffect(() => {
+    const kick = (): void => {
+      if (document.visibilityState === 'visible')
+        window.dispatchEvent(new Event('resize'))
+    }
+    kick()
+    document.addEventListener('visibilitychange', kick)
+    return () => document.removeEventListener('visibilitychange', kick)
+  }, [])
+
   useEffect(() => {
     engine.lensFlare = lensFlare
     engine.fov = fov

@@ -9,11 +9,13 @@ import {
 } from 'three/webgpu'
 import {
   cameraPosition,
+  cos,
   cross,
   dot,
   exp,
   float,
   length,
+  luminance,
   max,
   min,
   mix,
@@ -26,6 +28,7 @@ import {
   saturate,
   sin,
   smoothstep,
+  sqrt,
   step,
   texture,
   uniform,
@@ -69,9 +72,16 @@ import type { BodyTextures } from './planetTextures.ts'
  * | map      | carries                                                     |
  * | -------- | ----------------------------------------------------------- |
  * | `albedo` | the surface, sRGB                                            |
- * | `normal` | tangent-space normals, with an ocean mask in **alpha**       |
+ * | `normal` | tangent-space slopes in **RG**, an ocean mask in **B**       |
  * | `night`  | city lights, revealed as the terminator passes               |
  * | `clouds` | coverage in alpha, on its own shell — and its shadow, here   |
+ *
+ * The normal's Z is reconstructed as √(1 − x² − y²) — exact for a unit normal
+ * — because the blue channel carries the ocean mask instead. The mask lived in
+ * alpha once, and alpha is semantic to everything that touches an image:
+ * libwebp's lossless encoder zeroes the RGB under transparent pixels, which
+ * erased the whole Moon map the day the encoder went lossless. A colour
+ * channel is just data.
  *
  * A body with none of them still shades: the maps default to flat, and the base
  * colour and albedo carry it. That is the procedural case, and it is most of the
@@ -96,12 +106,13 @@ function pixel(r: number, g: number, b: number, a: number): Texture {
  * pipeline and a second thing to keep correct. A 1×1 texture costs one cache hit
  * per fragment and nothing else.
  *
- * `FLAT_NORMAL` is `(128, 128, 255, 0)`: straight up in tangent space, and alpha
- * zero because a world with no ocean mask has no ocean, not an ocean everywhere.
+ * `FLAT_NORMAL` is `(128, 128, 0, 255)`: zero slope in RG — the shader
+ * reconstructs Z, so flat needs no blue — and blue zero because a world with
+ * no ocean mask has no ocean, not an ocean everywhere.
  */
 const WHITE = pixel(255, 255, 255, 255)
 const BLACK = pixel(0, 0, 0, 255)
-const FLAT_NORMAL = pixel(128, 128, 255, 0)
+const FLAT_NORMAL = pixel(128, 128, 0, 255)
 const CLEAR = pixel(255, 255, 255, 0)
 
 export interface PlanetMaterial {
@@ -121,6 +132,30 @@ export interface PlanetMaterial {
   readonly lunarLambert: { value: number }
   /** Multiplier on the normal map's horizontal gradients. */
   readonly reliefScale: { value: number }
+  /**
+   * How much the disc darkens towards its edge, 0..1. A deep atmosphere
+   * reflects from optical depth ~1, so a grazing view sees higher, thinner,
+   * darker gas: every Cassini and Hubble giant rolls off at the limb, and a
+   * giant drawn without it is a flat decal. Airless photometry gets this from
+   * lunar-Lambert instead, so rocky worlds leave it at 0.
+   */
+  readonly limbDarkening: { value: number }
+  /**
+   * Chroma multiplier, 1 neutral. The published giant maps are near true
+   * colour, which is paler than any released photograph — press images are
+   * stretched, and the stretched look is what a planet "looks like" to every
+   * eye that will judge this render. A quarter more chroma is the difference
+   * between a cream ball and Jupiter.
+   */
+  readonly saturation: { value: number }
+  /**
+   * Equatorial jet speed in UV turns per second, 0 for solid surfaces. Real
+   * magnitudes are ~1e-7: invisible at 1×, a visible shear of the bands at
+   * high time warp — which is exactly how the real thing behaves.
+   */
+  readonly flowRate: { value: number }
+  /** Presentation seconds; the band flow integrates against it. */
+  readonly time: { value: number }
   /** Half-width of the terminator, in cosine of the incidence angle. */
   readonly terminator: { value: number }
   readonly nightStrength: { value: number }
@@ -175,6 +210,10 @@ export function createPlanetMaterial(): PlanetMaterial {
   const albedoScale = uniform(1)
   const lunarLambert = uniform(0.9)
   const reliefScale = uniform(1)
+  const limbDarkening = uniform(0)
+  const saturation = uniform(1)
+  const flowRate = uniform(0)
+  const time = uniform(0)
   const terminator = uniform(0.02)
   const nightStrength = uniform(1)
   const specularStrength = uniform(0)
@@ -194,6 +233,23 @@ export function createPlanetMaterial(): PlanetMaterial {
 
   const surfaceUv = uv()
 
+  /*
+   * Differential rotation, as a UV shear.
+   *
+   * A giant has no surface; its "map" is weather, and the weather moves. The
+   * equatorial jet leads and the higher-latitude jets alternate — the cosine
+   * stands in for the measured zonal wind profile — so under time warp the
+   * bands genuinely shear past each other instead of turning as a shell.
+   * `flowRate` carries the real magnitude, which keeps this honest: nothing
+   * visibly moves in real time, exactly as nothing visibly does.
+   */
+  const latitude = surfaceUv.y.sub(0.5).mul(Math.PI)
+  const jets = cos(latitude.mul(8)).mul(0.6).add(0.4)
+  const flowUv = vec2(
+    surfaceUv.x.add(time.mul(flowRate).mul(jets)),
+    surfaceUv.y,
+  )
+
   /* --- the surface frame -------------------------------------------------- */
 
   // The geometric normal: the sphere's, not the map's. Every *shadowing*
@@ -210,12 +266,23 @@ export function createPlanetMaterial(): PlanetMaterial {
   // Right-handed (east, north, up): east × north = up.
   const east = cross(north, geometric)
 
-  const tangentNormal = normalMap.xyz.mul(2).sub(1)
+  // Slopes from RG; Z reconstructed, because B is the ocean mask (see header).
+  const tangentSlope = normalMap.xy.mul(2).sub(1)
+  const tangentUp = sqrt(
+    max(
+      oneMinus(
+        tangentSlope.x
+          .mul(tangentSlope.x)
+          .add(tangentSlope.y.mul(tangentSlope.y)),
+      ),
+      float(0),
+    ),
+  )
   const shaded = normalize(
     east
-      .mul(tangentNormal.x.mul(reliefScale))
-      .add(north.mul(tangentNormal.y.mul(reliefScale)))
-      .add(geometric.mul(tangentNormal.z)),
+      .mul(tangentSlope.x.mul(reliefScale))
+      .add(north.mul(tangentSlope.y.mul(reliefScale)))
+      .add(geometric.mul(tangentUp)),
   )
 
   const view = normalize(cameraPosition.sub(positionWorld))
@@ -306,17 +373,28 @@ export function createPlanetMaterial(): PlanetMaterial {
   /*
    * Water and land are different materials, not different colours.
    *
-   * The mask rides in the normal map's alpha. Where it says water, the map's
+   * The mask rides in the normal map's blue. Where it says water, the map's
    * colour is mostly *bathymetry* — the sea floor, which no photograph from
    * orbit shows — so the albedo is pulled towards a uniform deep-ocean blue.
    * Fully replacing it would erase the real shallow-water turquoise on the
    * banks and reefs, which photographs do show; 0.65 keeps them.
    */
-  const ocean = normalMap.a
-  const surfaceAlbedo = albedoMap.rgb.mul(baseColour).mul(albedoScale)
-  const albedo = mix(surfaceAlbedo, oceanColour, ocean.mul(0.65))
+  const ocean = normalMap.b
+  const surfaceAlbedo = albedoMap
+    .sample(flowUv)
+    .rgb.mul(baseColour)
+    .mul(albedoScale)
+  // Chroma about the sample's own luminance; past 1 the mix extrapolates,
+  // which is what a saturation boost is.
+  const rich = mix(vec3(luminance(surfaceAlbedo)), surfaceAlbedo, saturation)
+  const albedo = mix(rich, oceanColour, ocean.mul(0.65))
 
-  const diffuse = albedo.mul(photometric).mul(sunlight).mul(lit)
+  // See `limbDarkening` on the interface. The exponent is gentle because the
+  // aerial veil re-brightens the last few degrees on top of this.
+  const facingView = max(dot(geometric, view), float(0.02))
+  const limbShade = mix(float(1), pow(facingView, 0.55), limbDarkening)
+
+  const diffuse = albedo.mul(photometric).mul(sunlight).mul(lit).mul(limbShade)
 
   /*
    * Sun-glint, on water only: the star mirrored in the wave field.
@@ -405,6 +483,10 @@ export function createPlanetMaterial(): PlanetMaterial {
     albedoScale,
     lunarLambert,
     reliefScale,
+    limbDarkening,
+    saturation,
+    flowRate,
+    time,
     terminator,
     nightStrength,
     specularStrength,

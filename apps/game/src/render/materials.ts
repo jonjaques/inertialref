@@ -24,9 +24,12 @@ import {
   length,
   max,
   mix,
+  mx_fractal_noise_float,
+  mx_worley_noise_float,
   normalize,
   normalWorld,
   oneMinus,
+  positionLocal,
   positionWorld,
   pow,
   saturate,
@@ -68,10 +71,23 @@ const LIMB_DARKENING = 0.6
 export interface StarMaterial {
   readonly material: MeshBasicNodeMaterial
   readonly color: { value: Color }
+  /** Presentation seconds; the granulation churns against it. */
+  readonly time: { value: number }
+  /**
+   * Multiplier on the disc's radiance, 1 from afar.
+   *
+   * The camera's stop-down when a star fills the frame. At the authored
+   * radiance the whole disc clips to the tone curve's ceiling and every
+   * surface feature vanishes into one white circle; a real photograph of a
+   * near sun is exposed *for the sun*, which is when the granulation and the
+   * limb become the picture. Driven from the star's angular radius by the
+   * host — the nearest thing this renderer yet has to eye adaptation.
+   */
+  readonly exposure: { value: number }
 }
 
 /**
- * A star's disc: unlit, above white, limb-darkened.
+ * A star's disc: unlit, above white, limb-darkened — and alive.
  *
  * This is the material the HDR path exists for. `docs/design/art.md` makes the
  * star the scene's reference white — everything else sits below it — so its
@@ -83,9 +99,21 @@ export interface StarMaterial {
  * Limb darkening rather than a flat disc because `I(mu)/I(1) = 1 − u(1 − mu)`
  * costs one dot product and is the difference between a light source and a hole
  * cut in the sky.
+ *
+ * The surface itself is two octaves of cellular convection. Worley noise *is*
+ * what granulation looks like — bright cell centres draining into dark
+ * intergranular lanes — and a fractal octave underneath stands in for
+ * supergranulation and mottling. Drawn at a scale the eye can read rather than
+ * the Sun's true one (a real granule is a thousandth of the radius, sub-pixel
+ * from any orbit), and drifted slowly with presentation time so a star held in
+ * frame at time warp visibly simmers. Near the limb the lanes warm toward the
+ * chromosphere's orange — the same reason eclipse photographs ring the disc in
+ * red — keyed to `mu` so it costs nothing at disc centre.
  */
 export function createStarMaterial(): StarMaterial {
   const color = uniform(new Color(1, 1, 1))
+  const time = uniform(0)
+  const exposure = uniform(1)
 
   // `abs` because a sphere seen from inside — which happens for exactly one
   // frame if the origin rebases while a star fills the view — otherwise flips
@@ -95,9 +123,30 @@ export function createStarMaterial(): StarMaterial {
   )
   const limb = oneMinus(float(LIMB_DARKENING).mul(oneMinus(mu)))
 
+  // The unit sphere's own surface as the noise domain, so the pattern rides
+  // the star at every drawn size and never swims when the mesh rescales.
+  const surface = normalize(positionLocal)
+  const churn = time.mul(0.003)
+  const granulation = oneMinus(
+    mx_worley_noise_float(surface.mul(48).add(vec3(churn, churn, 0))).mul(0.34),
+  )
+  const mottling = mx_fractal_noise_float(
+    surface.mul(7).add(vec3(0, churn.mul(0.4), 0)),
+  ).mul(0.05)
+
+  const chromosphere = mix(
+    vec3(1),
+    vec3(1.12, 0.74, 0.52),
+    pow(oneMinus(mu), 3).mul(0.55),
+  )
+
   const material = new MeshBasicNodeMaterial()
-  material.colorNode = color.mul(limb).mul(STAR_RADIANCE)
-  return { material, color }
+  material.colorNode = color
+    .mul(limb)
+    .mul(granulation.add(mottling))
+    .mul(chromosphere)
+    .mul(float(STAR_RADIANCE).mul(exposure))
+  return { material, color, time, exposure }
 }
 
 export interface AtmosphereMaterial {
@@ -115,6 +164,10 @@ export interface AtmosphereMaterial {
   readonly sunDirection: { value: Vector3 }
   /** The haze's authored optical thickness, 0..1 with Earth at 1. */
   readonly opticalThickness: { value: number }
+  /** The body's spin axis in render space; the oblateness is along it. */
+  readonly spinAxis: { value: Vector3 }
+  /** Polar radius over equatorial, 1 for a sphere. See the stretch note. */
+  readonly flattening: { value: number }
 }
 
 /**
@@ -156,9 +209,37 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
   const zenithColour = uniform(new Color(0.28, 0.48, 0.95))
   const limbColour = uniform(new Color(0.86, 0.45, 0.26))
   const opticalThickness = uniform(1)
+  const spinAxis = uniform(new Vector3(0, 1, 0))
+  const flattening = uniform(1)
 
-  const rayDirection = normalize(positionWorld.sub(cameraPosition))
-  const toCentre = centre.sub(cameraPosition)
+  /*
+   * The intersection maths below assumes spheres, and a giant is not one:
+   * Saturn's air follows a surface 9.8% flatter than its equator. Drawn
+   * spherical anyway, the shell floats a tenth of a radius above each pole —
+   * and worse, the analytic "ground" is a sphere of the *equatorial* radius,
+   * so the polar sky is drawn as air over ground the oblate planet never
+   * fills: a detached grey gasket around the whole limb, unmissable on
+   * Jupiter and Saturn. So both endpoints are mapped into a space stretched
+   * 1/flattening along the spin axis, where the ellipsoid *is* the sphere the
+   * maths assumes, and the mesh itself is scaled oblate to match. Path
+   * lengths in stretched space run up to `flattening` short along the axis —
+   * a bounded few percent, spent on air over a pole, against a shell that
+   * visibly detaches from the planet.
+   */
+  const axis = normalize(spinAxis)
+  const stretchGain = float(1)
+    .div(max(flattening, float(1e-3)))
+    .sub(1)
+  // Both relative to the centre already, so `centre` drops out below.
+  const eyeRelative = cameraPosition.sub(centre)
+  const eye = eyeRelative.add(axis.mul(dot(eyeRelative, axis).mul(stretchGain)))
+  const wallRelative = positionWorld.sub(centre)
+  const wall = wallRelative.add(
+    axis.mul(dot(wallRelative, axis).mul(stretchGain)),
+  )
+
+  const rayDirection = normalize(wall.sub(eye))
+  const toCentre = eye.negate()
 
   // Closest approach along the ray, and the impact parameter squared. `|d × c|`
   // with d a unit vector gives the perpendicular distance directly and, unlike
@@ -200,12 +281,14 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
    * so the shell ends by vanishing rather than by being cut.
    */
   const tClosest = clamp(closest, near, far)
-  const closePoint = cameraPosition.add(rayDirection.mul(tClosest))
+  const closePoint = eye.add(rayDirection.mul(tClosest))
   const thickness = max(outerRadius.sub(innerRadius), 1e-6)
-  const altitude = saturate(
-    length(closePoint.sub(centre)).sub(innerRadius).div(thickness),
-  )
-  const density = exp(altitude.mul(-4.5))
+  const altitude = saturate(length(closePoint).sub(innerRadius).div(thickness))
+  // The `(1 − a)` factor takes the density to exactly zero at the ceiling.
+  // The exponential alone leaves e⁻⁴·⁵ ≈ 1% there, which on the HDR canvas
+  // renders the shell's outer edge as a visible cut — a hard hairline ring
+  // around every giant, where a real limb simply runs out of air.
+  const density = exp(altitude.mul(-4.5)).mul(oneMinus(altitude))
 
   // Normalised against the deepest path the shell admits — grazing it at the
   // planet's edge — so a moon's wisp and a gas giant's envelope read the same,
@@ -235,11 +318,12 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
   // the air being shaded, and using it puts the terminator on the wrong limb.
   // The midpoint degrades correctly at both ends: from orbit it is the graze
   // point, from the ground it is a few kilometres over the player's head.
-  const sample = cameraPosition.add(rayDirection.mul(near.add(far).mul(0.5)))
+  const sample = eye.add(rayDirection.mul(near.add(far).mul(0.5)))
   // Signed, not saturated: the twilight ring below needs to know how far past
   // the terminator the air is, and saturating collapsed the whole night side
-  // onto one value.
-  const sunlit = dot(normalize(sample.sub(centre)), normalize(sunDirection))
+  // onto one value. The sample is in stretched space and the sun direction is
+  // not; the terminator this misplaces by is bounded by the flattening.
+  const sunlit = dot(normalize(sample), normalize(sunDirection))
   // A wide terminator rather than a step: air scatters around the edge, which is
   // the entire reason twilight exists.
   const daylight = smoothstep(-0.35, 0.25, sunlit)
@@ -311,6 +395,8 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
     zenithColour,
     limbColour,
     opticalThickness,
+    spinAxis,
+    flattening,
   }
 }
 
