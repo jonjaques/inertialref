@@ -16,7 +16,6 @@ import { EXTENDED_RANGE_QUERY, watchDynamicRange } from './render/capability.ts'
 import {
   commitToneCurve,
   createRenderer,
-  releaseRenderer,
   type RendererHandle,
 } from './render/createRenderer.ts'
 import type { OutputPreference, RendererDescription } from './render/output.ts'
@@ -142,22 +141,17 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
   }, [monitor])
 
   /*
-   * Release the renderer when the canvas is torn down.
-   *
-   * Keyed on the same string the canvas is, so it runs exactly when one is being
-   * replaced. It has to be here because R3F's unmount cannot release a
-   * `WebGPURenderer` — see `releaseRenderer`, which is also called by the
-   * factory, because effect cleanup and R3F's own configure do not run in a
-   * guaranteed order and the factory is the one place that always precedes a
-   * second renderer.
+   * No release-on-unmount effect here, deliberately — the factory is the
+   * *sole* owner of renderer disposal. An effect keyed on the canvas string
+   * used to call `releaseRenderer()` in its cleanup, and under StrictMode
+   * that cleanup fires once between the doubled mounts: it could dispose the
+   * very renderer the surviving mount had adopted, whose animation loop died
+   * with it — a black canvas, a healthy HUD, and nothing in the console.
+   * R3F's unmount cannot release a `WebGPURenderer` either way; the factory
+   * releases the previous build before starting the next, which covers the
+   * one real replacement path (the HDR preference remounting the canvas).
    */
   const canvasKey = rendererKey(hdr, dynamicRangeHigh)
-  useEffect(() => {
-    return () => {
-      releaseRenderer()
-      renderer.current = null
-    }
-  }, [canvasKey])
 
   useEffect(() => {
     // Expose the harness for the console and for automated drivers. This is the

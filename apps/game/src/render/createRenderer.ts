@@ -76,92 +76,155 @@ interface CanvasProps {
  */
 let live: RendererHandle | null = null
 
+/*
+ * One build per (canvas, preference), whoever asks and however often.
+ *
+ * StrictMode double-invokes this async factory, and for weeks the two builds
+ * raced on the same canvas: whichever R3F root survived adopted the renderer
+ * *its* invocation returned and bound the animation loop to it, and then the
+ * other invocation's `releaseRenderer()` disposed exactly that renderer —
+ * killing the loop with it — before building a replacement that nothing
+ * drives. About half of all page loads came up as a black canvas with a
+ * healthy HUD, a selected tone curve, a full-size framebuffer and not one
+ * line in the console: `engine.gl` pointed at the loopless newcomer, whose
+ * `_animationLoop` was null. Serialising the builds only made the kill
+ * deterministic; the actual invariant is that *both* invocations must
+ * resolve to the *same* renderer, so nothing ever disposes one a live root
+ * has adopted. A genuinely new configuration — the HDR preference remounting
+ * the canvas — still rebuilds, queued behind whatever is in flight.
+ */
+interface PendingBuild {
+  readonly canvas: EventTarget
+  readonly preference: OutputPreference
+  readonly promise: Promise<WebGPURenderer>
+}
+
+let building: Promise<unknown> = Promise.resolve()
+let current: PendingBuild | null = null
+
 export function createRenderer(
   preference: OutputPreference,
   onReady: (handle: RendererHandle) => void,
 ): (props: CanvasProps) => Promise<WebGPURenderer> {
-  return async ({ canvas }) => {
-    // Before anything else. Two renderers on one canvas is a killed tab.
-    releaseRenderer()
-
-    // See `CanvasProps`: the web renderer only ever hands over the element.
-    const surface = canvas as HTMLCanvasElement
-    const capability = await probeOutputCapability()
-    const requested = resolveOutputMode(preference, capability)
-
-    const renderer = new WebGPURenderer({
-      canvas: surface,
-      antialias: true,
-      // Twenty orders of magnitude of depth in one scene. A linear buffer
-      // z-fights everywhere in that range and this costs one fragment shader
-      // instruction. Reversed-Z is complementary and is a separate change.
-      logarithmicDepthBuffer: true,
-      powerPreference: 'high-performance',
-      // The single switch. `outputType: HalfFloatType` sets *both* the canvas
-      // format (`rgba16float`) and `context.configure({ toneMapping: { mode:
-      // 'extended' } })`. Spike 1 verified that setting `outputColorSpace`
-      // instead does nothing whatever, because nothing in r182 reads it.
-      ...(requested === 'extended' ? { outputType: HalfFloatType } : {}),
-    })
-
-    await renderer.init()
-
-    /*
-     * Clear to *opaque* black. The default clear alpha is 0, and on the
-     * extended path that zero reaches the `rgba16float` canvas, which Chrome
-     * composites premultiplied — so the alpha channel becomes visible
-     * structure. That is how the lens flare's additive quads (whose preset
-     * blending also adds alpha) drew their own footprints as hard rectangles,
-     * dimmed every star inside them on an EDR display, and, once their alpha
-     * writes were silenced, vanished over empty sky instead: rgb over
-     * alpha-0 pixels is discarded by the compositor. Space is black, not
-     * transparent; nothing behind the canvas was ever meant to show through.
-     */
-    renderer.setClearColor(0x000000, 1)
-
-    /*
-     * Take ownership of the draw-call counters.
-     *
-     * `Info.autoReset` is honoured inside three's *own* `Animation` loop, which
-     * is a `requestAnimationFrame` three starts for itself and which keeps
-     * running whether or not anything uses it. R3F drives the renderer from its
-     * loop instead, so the reset lands at a moment unrelated to any frame R3F
-     * draws — and `info.render.drawCalls` read from the frame loop is reliably
-     * zero while the same field read from the console is correct. A counter that
-     * is right when you inspect it and wrong when you record it is worse than no
-     * counter, so the reset moves to `GameEngine.frame`, right after sampling.
-     */
-    renderer.info.autoReset = false
-
-    // Ask afterwards rather than assume. `init` is where the device request can
-    // still fail and take the WebGL backend instead, and extended output does
-    // not exist there whatever the probe said a moment earlier.
-    const backend = 'isWebGPUBackend' in renderer.backend ? 'webgpu' : 'webgl'
-    const mode: OutputMode = backend === 'webgpu' ? requested : 'standard'
-    const headroom = headroomFor(mode)
-
-    const tone = installToneCurve(renderer, headroom)
-    const description: RendererDescription = {
-      backend,
-      mode,
-      preference,
-      headroom,
-      capability,
+  return ({ canvas }) => {
+    if (
+      current !== null &&
+      current.canvas === canvas &&
+      current.preference === preference
+    ) {
+      // The StrictMode re-invocation. Same renderer — but this mount's
+      // `onReady` still has to fire, because it closes over this render's
+      // state setters and the previous one's writes may have landed in a
+      // discarded pass. The writes are idempotent.
+      return current.promise.then((renderer) => {
+        if (live !== null) onReady(live)
+        return renderer
+      })
     }
 
-    log.info('renderer ready', {
-      backend,
-      output: mode,
-      headroom,
-      preference,
-      dynamicRangeHigh: capability.dynamicRangeHigh,
-      extendedCanvas: capability.extendedCanvas,
+    const build = building.then(() =>
+      buildRenderer(canvas, preference, onReady),
+    )
+    // Failures propagate to R3F through `build`; neither the queue nor the
+    // memo may hold one, or every later attempt inherits a stale rejection.
+    building = build.then(
+      () => undefined,
+      () => undefined,
+    )
+    const entry: PendingBuild = { canvas, preference, promise: build }
+    current = entry
+    build.catch(() => {
+      if (current === entry) current = null
     })
-
-    live = { renderer, description, tone }
-    onReady(live)
-    return renderer
+    return build
   }
+}
+
+async function buildRenderer(
+  canvas: CanvasProps['canvas'],
+  preference: OutputPreference,
+  onReady: (handle: RendererHandle) => void,
+): Promise<WebGPURenderer> {
+  // Before anything else. Two renderers on one canvas is a killed tab.
+  releaseRenderer()
+
+  // See `CanvasProps`: the web renderer only ever hands over the element.
+  const surface = canvas as HTMLCanvasElement
+  const capability = await probeOutputCapability()
+  const requested = resolveOutputMode(preference, capability)
+
+  const renderer = new WebGPURenderer({
+    canvas: surface,
+    antialias: true,
+    // Twenty orders of magnitude of depth in one scene. A linear buffer
+    // z-fights everywhere in that range and this costs one fragment shader
+    // instruction. Reversed-Z is complementary and is a separate change.
+    logarithmicDepthBuffer: true,
+    powerPreference: 'high-performance',
+    // The single switch. `outputType: HalfFloatType` sets *both* the canvas
+    // format (`rgba16float`) and `context.configure({ toneMapping: { mode:
+    // 'extended' } })`. Spike 1 verified that setting `outputColorSpace`
+    // instead does nothing whatever, because nothing in r182 reads it.
+    ...(requested === 'extended' ? { outputType: HalfFloatType } : {}),
+  })
+
+  await renderer.init()
+
+  /*
+   * Clear to *opaque* black. The default clear alpha is 0, and on the
+   * extended path that zero reaches the `rgba16float` canvas, which Chrome
+   * composites premultiplied — so the alpha channel becomes visible
+   * structure. That is how the lens flare's additive quads (whose preset
+   * blending also adds alpha) drew their own footprints as hard rectangles,
+   * dimmed every star inside them on an EDR display, and, once their alpha
+   * writes were silenced, vanished over empty sky instead: rgb over
+   * alpha-0 pixels is discarded by the compositor. Space is black, not
+   * transparent; nothing behind the canvas was ever meant to show through.
+   */
+  renderer.setClearColor(0x000000, 1)
+
+  /*
+   * Take ownership of the draw-call counters.
+   *
+   * `Info.autoReset` is honoured inside three's *own* `Animation` loop, which
+   * is a `requestAnimationFrame` three starts for itself and which keeps
+   * running whether or not anything uses it. R3F drives the renderer from its
+   * loop instead, so the reset lands at a moment unrelated to any frame R3F
+   * draws — and `info.render.drawCalls` read from the frame loop is reliably
+   * zero while the same field read from the console is correct. A counter that
+   * is right when you inspect it and wrong when you record it is worse than no
+   * counter, so the reset moves to `GameEngine.frame`, right after sampling.
+   */
+  renderer.info.autoReset = false
+
+  // Ask afterwards rather than assume. `init` is where the device request can
+  // still fail and take the WebGL backend instead, and extended output does
+  // not exist there whatever the probe said a moment earlier.
+  const backend = 'isWebGPUBackend' in renderer.backend ? 'webgpu' : 'webgl'
+  const mode: OutputMode = backend === 'webgpu' ? requested : 'standard'
+  const headroom = headroomFor(mode)
+
+  const tone = installToneCurve(renderer, headroom)
+  const description: RendererDescription = {
+    backend,
+    mode,
+    preference,
+    headroom,
+    capability,
+  }
+
+  log.info('renderer ready', {
+    backend,
+    output: mode,
+    headroom,
+    preference,
+    dynamicRangeHigh: capability.dynamicRangeHigh,
+    extendedCanvas: capability.extendedCanvas,
+  })
+
+  live = { renderer, description, tone }
+  onReady(live)
+  return renderer
 }
 
 /**

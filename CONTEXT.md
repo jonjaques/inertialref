@@ -955,6 +955,30 @@ alpha _without_ the opaque clear inverts the failure: additive colour over
 alpha-0 sky is discarded whole by the compositor, which is its own hour of
 confusion.
 
+**The startup race** (21 Aug 2026): about half of all page loads came up
+permanently black — HUD alive, world ticking, renderer built, tone curve
+selected, framebuffer full-size, and not one line in any console. StrictMode
+invokes the async `gl` factory once per doubled mount, and the two builds ran
+_concurrently_: two `WebGPURenderer`s, each with **its own `GPUDevice`**, both
+configuring the one canvas context. A context belongs to the device that
+configured it last, so whenever that was the corpse's, the surviving
+renderer's every present targeted a foreign device's swapchain texture —
+invalid command buffers, dropped silently by Dawn, forever. The fix is one
+invariant: **one build per (canvas, preference)**. The factory memoises, so
+the StrictMode re-invocation adopts the same renderer; a real rebuild (the
+HDR preference remounting the canvas) queues behind whatever is in flight, so
+release-then-configure is atomic and the last build always belongs to the
+mount that survives. The App-level cleanup effect that also called
+`releaseRenderer()` is gone — under StrictMode its cleanup fires between the
+doubled mounts and could dispose the renderer the memo was about to hand out;
+the factory is the sole owner of disposal now. Two false trails worth
+remembering: serialising the builds _without_ the memo made the kill
+deterministic instead of fixing it (the second build disposed the renderer
+the live root had already adopted), and a page loaded in a hidden tab shows
+the same black symptom benignly — R3F defers canvas creation until the
+ResizeObserver fires, which a hidden document does not do until it becomes
+visible. That one recovers on focus and is the browser, not a bug.
+
 **Graphics and camera panels** in the dock (21 Aug 2026). `graphics` holds
 render-feature switches — lens flare only, so far — and `camera` holds a field
 of view slider (20–110°, default 65°): the knob that separates the flying

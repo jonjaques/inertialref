@@ -280,16 +280,21 @@ export class GameEngine implements PresentationHost {
 
   /** Frame the opening shot. The ship itself is placed by `openSession`. */
   #start(): void {
-    const address = this.session.target.id.slice(1)
-    this.harness.orbit(address, 400)
-    // Opening shot looks at the world you are orbiting rather than along the
-    // orbit; the trajectory is unchanged either way.
-    this.harness.face(address)
+    /*
+     * Earth, three-quarter lit, from the `gibbous` bookmark — not the session's
+     * default target in a 400 km sunward orbit, which opened on a flat
+     * full-phase wall of Mercury. The first frame is the one place the game
+     * chooses its own composition, and Earth is the one disc every player can
+     * judge at a glance. The galaxy-relative form, because the address resolves
+     * against whatever galaxy this seed named; Sol itself is in every world —
+     * it is home.
+     */
+    this.harness.shot('gibbous', 's:SOL/b:2')
     log.info('universe ready', {
       seed: this.world.seedText,
       seedHex: formatSeed(this.world.rootSeed),
       system: this.session.system.name,
-      target: this.session.target.name,
+      opening: 'Earth · gibbous',
     })
   }
 
