@@ -65,6 +65,12 @@ export interface BodySnapshot {
   readonly radius: Meters
   /** Polar radius. Smaller than `radius` for anything that spins. */
   readonly polarRadius: Meters
+  /**
+   * Sidereal rotation period, seconds, negative for retrograde. The renderer
+   * needs it because a cloud deck's drift is *relative to the surface*, and
+   * the surface's own turn rate is not recoverable from the orientation.
+   */
+  readonly rotationPeriod: Seconds
   /** What it looks like: maps, roughness, clouds, rings. */
   readonly appearance: BodyAppearance
   readonly position: UniverseVector
@@ -171,6 +177,7 @@ export function snapshot(
         kind: body.kind,
         radius: body.radius,
         polarRadius: body.polarRadius,
+        rotationPeriod: body.rotationPeriod,
         appearance: body.appearance,
         position: pose.position,
         orientation: world.frames.pose(

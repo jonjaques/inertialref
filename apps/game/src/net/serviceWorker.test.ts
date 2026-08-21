@@ -59,6 +59,8 @@ interface Harness {
   readonly deleted: string[]
   readonly put: string[]
   cacheKeys: string[]
+  /** Per-cache contents, keyed by cache name then request URL. */
+  readonly stores: Map<string, Map<string, unknown>>
 }
 
 function loadServiceWorker(): Harness {
@@ -69,6 +71,7 @@ function loadServiceWorker(): Harness {
     deleted: [],
     put: [],
     cacheKeys: [],
+    stores: new Map(),
   }
 
   const self = {
@@ -82,15 +85,32 @@ function loadServiceWorker(): Harness {
   const caches = {
     open: (name: string) => {
       harness.opened.push(name)
+      let store = harness.stores.get(name)
+      if (store === undefined) {
+        store = new Map()
+        harness.stores.set(name, store)
+      }
+      const contents = store
       return Promise.resolve({
         add: (url: string) => {
           harness.put.push(url)
+          contents.set(url, 'added')
           return Promise.resolve()
         },
-        put: (req: FakeRequest) => {
-          harness.put.push(req.url)
+        put: (req: FakeRequest | string, response?: unknown) => {
+          const url = typeof req === 'string' ? req : req.url
+          harness.put.push(url)
+          contents.set(url, response ?? 'copy')
           return Promise.resolve()
         },
+        match: (req: FakeRequest | string) =>
+          Promise.resolve(
+            contents.get(typeof req === 'string' ? req : req.url),
+          ),
+        // The activate migration walks old caches entry by entry, so the fake
+        // has to answer `keys()` with request-shaped objects.
+        keys: () =>
+          Promise.resolve([...contents.keys()].map((u) => request(u))),
       })
     },
     keys: () => Promise.resolve(harness.cacheKeys),
@@ -188,6 +208,37 @@ describe('the service worker', () => {
     let pending: Promise<unknown> = Promise.resolve()
     activate({ waitUntil: (p: Promise<unknown>) => (pending = p) })
     await pending
+    expect(sw.deleted).toEqual(['inertialref-oldbuild'])
+  })
+
+  it('rescues immutable assets from the build it replaces', async () => {
+    const sw = loadServiceWorker()
+    sw.cacheKeys = ['inertialref-oldbuild', `inertialref-${BUILD}`]
+    // What the old worker cached during the visit that fetched the new build:
+    // the new hashed chunks and catalogue went into *its* cache, because it
+    // was still the controlling worker. Deleting that cache unread is what
+    // left the next offline launch with an index.html and none of its code.
+    sw.stores.set(
+      'inertialref-oldbuild',
+      new Map<string, unknown>([
+        [`${ORIGIN}/assets/index-e5f6a7b8.js`, 'new chunk'],
+        [`${ORIGIN}/assets/stars-150ly-c9d0.irsc`, 'catalogue'],
+        // Unhashed, so a copy *could* be stale — it must not migrate.
+        [`${ORIGIN}/index.html`, 'old shell'],
+      ]),
+    )
+    const activate = sw.listeners.get('activate')
+    if (activate === undefined) throw new Error('no activate listener')
+    let pending: Promise<unknown> = Promise.resolve()
+    activate({ waitUntil: (p: Promise<unknown>) => (pending = p) })
+    await pending
+
+    const rescued = sw.stores.get(`inertialref-${BUILD}`)
+    expect(rescued?.get(`${ORIGIN}/assets/index-e5f6a7b8.js`)).toBe('new chunk')
+    expect(rescued?.get(`${ORIGIN}/assets/stars-150ly-c9d0.irsc`)).toBe(
+      'catalogue',
+    )
+    expect(rescued?.has(`${ORIGIN}/index.html`)).toBe(false)
     expect(sw.deleted).toEqual(['inertialref-oldbuild'])
   })
 })

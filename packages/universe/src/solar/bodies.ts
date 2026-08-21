@@ -405,8 +405,12 @@ export const SOLAR_PLANETS: readonly SolarBody[] = [
     polarRadius: 6_051.8 * KM,
     mass: 4.8675e24,
     // Retrograde, and slower than its own year. The negative sign is the fact.
+    // The fact sheet states retrograde twice — a negative period AND a 177.36°
+    // obliquity — but the spin evaluator applies both, and two flips make a
+    // prograde Venus. This file's convention (see the header, and Triton) is
+    // the signed period, so the tilt carries only the axis: 180° − 177.36°.
     rotationPeriod: -5_832.5 * HOUR,
-    axialTilt: 177.36 * DEG,
+    axialTilt: 2.64 * DEG,
     semiMajorAxis: 0.723_331_99 * AU,
     eccentricity: 0.006_773_23,
     inclination: 3.394_71 * DEG,
@@ -615,10 +619,13 @@ export const SOLAR_PLANETS: readonly SolarBody[] = [
     polarRadius: 24_973 * KM,
     mass: 8.681e25,
     rotationPeriod: -17.24 * HOUR,
-    // 97.77°: it orbits on its side, so for a quarter of its year one pole
-    // points at the Sun. Every other planet's tilt is a detail; this one is the
-    // planet's defining fact.
-    axialTilt: 97.77 * DEG,
+    // It orbits on its side, so for a quarter of its year one pole points at
+    // the Sun. Every other planet's tilt is a detail; this one is the planet's
+    // defining fact. The fact sheet's 97.77° obliquity already encodes the
+    // retrograde spin the negative period restates — and the evaluator applies
+    // both, which un-flips it — so under this file's signed-period convention
+    // the tilt is the supplement: 180° − 97.77°.
+    axialTilt: 82.23 * DEG,
     semiMajorAxis: 19.191_263_93 * AU,
     eccentricity: 0.047_167_71,
     inclination: 0.769_86 * DEG,

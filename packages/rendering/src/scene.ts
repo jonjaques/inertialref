@@ -41,6 +41,12 @@ export interface RenderBody {
   readonly atmosphereScale: number
   readonly trueRadius: Meters
   /**
+   * Sidereal rotation period, seconds, negative for retrograde. A cloud
+   * deck's drift is measured against the surface's own turn rate, so the
+   * renderer cannot substitute any fixed day length here.
+   */
+  readonly rotationPeriod: number
+  /**
    * Polar radius over equatorial. 1 for a sphere, 0.902 for Saturn.
    *
    * A ratio rather than a length because the renderer scales a unit sphere and
@@ -154,6 +160,7 @@ export function buildScene(
           ? 1
           : (body.radius + body.appearance.haze.height) / sphereRadius,
       trueRadius: body.radius,
+      rotationPeriod: body.rotationPeriod,
       flattening: body.polarRadius / body.radius,
       // Ring radii arrive in metres from the body's centre and leave as
       // multiples of the drawn sphere — which is not the body's radius, because

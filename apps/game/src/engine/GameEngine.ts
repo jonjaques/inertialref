@@ -401,6 +401,26 @@ export class GameEngine implements PresentationHost {
       completeRadius: catalog.completeRadius,
     }
 
+    // The catalogued half goes up *now*, not when the worker answers — that
+    // is the header's promise about the real sky being on screen on the first
+    // frame after a jump. Gated on the survey it waited behind a busy pool,
+    // and a single failed survey dropped it entirely, with the hysteresis
+    // then blocking any retry until the player had moved another 8 ly.
+    {
+      const positions: UniverseVector[] = []
+      const names: string[] = []
+      const colours: [number, number, number][] = []
+      const luminosities: number[] = []
+      for (const star of catalogStars) {
+        positions.push(star.position)
+        names.push(star.name)
+        const c = star.physical.colour
+        colours.push([c.r, c.g, c.b])
+        luminosities.push(star.physical.solarLuminosities)
+      }
+      this.#starField = { positions, names, colours, luminosities }
+    }
+
     const run =
       this.pool() === null
         ? Promise.resolve(

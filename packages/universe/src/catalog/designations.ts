@@ -251,15 +251,27 @@ export function glieseName(gl: string): string | null {
 /* Search                                                                     */
 /* ------------------------------------------------------------------------- */
 
+// Built from SUPERSCRIPTS so the fold below and `superscript()` can never
+// disagree about which marks exist.
+const SUPERSCRIPT_PATTERN = new RegExp(`[${SUPERSCRIPTS.join('')}]`, 'g')
+
 /**
  * Fold a name to the form the index is keyed by.
  *
  * Everything that is punctuation, spacing, case or diacritic is noise a player
  * should not have to reproduce: `HIP 71683`, `hip71683` and `Hip-71683` are the
  * same query, and `Boötis` must be reachable by typing `bootis`.
+ *
+ * Superscript digits fold to their ASCII forms rather than being stripped:
+ * NFD does not decompose them, and dropping them keyed `Zeta¹ Reticuli` and
+ * `Zeta² Reticuli` — two unrelated systems — to the same string, while the
+ * typeable `zeta2 reticuli` matched nothing at all.
  */
 export function searchKey(text: string): string {
   return text
+    .replace(SUPERSCRIPT_PATTERN, (mark) =>
+      String(SUPERSCRIPTS.indexOf(mark as (typeof SUPERSCRIPTS)[number])),
+    )
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
     .toLowerCase()

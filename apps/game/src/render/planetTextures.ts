@@ -98,7 +98,19 @@ function load(entry: Entry, anisotropy: number): Texture | null {
   const url = byFile.get(entry.file)
   if (url === undefined) return null
 
-  const texture = loader.load(url)
+  const texture = loader.load(url, undefined, undefined, () => {
+    /*
+     * A failed fetch must not stay cached. The loader hands back its Texture
+     * before the image arrives, so on error the object exists, samples as
+     * black, and — being non-null — beats the material's base-colour fallback
+     * for the rest of the session. Evict it, and drop the body's assembled
+     * set a few seconds later so the per-frame ask retries without hammering
+     * a dead network once per frame.
+     */
+    loaded.delete(entry.file)
+    setTimeout(() => sets.delete(entry.body), 5_000)
+    log.warn('surface map failed to load, will retry', { file: entry.file })
+  })
   texture.colorSpace = COLOUR_SPACE[entry.map] ?? NoColorSpace
   // Longitude wraps and latitude does not. Clamping longitude leaves a seam down
   // the anti-meridian; repeating latitude mirrors the arctic onto the antarctic.

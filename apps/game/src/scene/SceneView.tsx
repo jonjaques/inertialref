@@ -467,6 +467,35 @@ function Bodies({ engine }: { engine: GameEngine }) {
 
     const seen = new Set<string>()
 
+    /*
+     * At the cap, retire a visual this frame did not draw before refusing to
+     * create one. The map deliberately only grows — a body flickering across
+     * the cull threshold must not rebuild its pipelines — but without
+     * eviction every visited system leaves its meshes resident (Sol alone is
+     * 29) and after a couple of systems new arrivals silently stop rendering.
+     * Materials only: the sphere and ring geometries are shared tiers.
+     */
+    const evictStale = (): boolean => {
+      for (const [key, visual] of visuals) {
+        if (seen.has(key) || visual.mesh.visible) continue
+        for (const object of [
+          visual.mesh,
+          visual.atmosphere,
+          visual.clouds,
+          visual.rings,
+        ]) {
+          if (object === null) continue
+          object.removeFromParent()
+          const material = object.material
+          if (Array.isArray(material)) for (const m of material) m.dispose()
+          else material.dispose()
+        }
+        visuals.delete(key)
+        return true
+      }
+      return false
+    }
+
     const draw = (
       key: string,
       body: RenderBody,
@@ -476,7 +505,7 @@ function Bodies({ engine }: { engine: GameEngine }) {
       const appearance = body.appearance
       let visual = visuals.get(key)
       if (visual === undefined) {
-        if (visuals.size >= MAX_BODIES) return
+        if (visuals.size >= MAX_BODIES && !evictStale()) return
         const starMaterial = star === null ? null : createStarMaterial()
         const planet = star === null ? createPlanetMaterial() : null
         const atmosphereMaterial = createAtmosphereMaterial()
@@ -570,7 +599,17 @@ function Bodies({ engine }: { engine: GameEngine }) {
       if (planet !== null) {
         const tuning = tuningFor(body)
         const maps = texturesFor(appearance.texture, anisotropy)
-        planet.setTextures(maps)
+        // The ring-shadow strip lives under the *ring's* manifest key
+        // ('saturn-ring'), not the body's — the body's own set never carries
+        // a ring map, so looking it up there disables the shadow entirely.
+        planet.setTextures(
+          body.rings === null
+            ? maps
+            : {
+                ...maps,
+                ring: texturesFor(body.rings.texture, anisotropy).ring,
+              },
+        )
         planet.sunDirection.value.copy(sun)
         planet.sunColour.value.setRGB(keyColour.r, keyColour.g, keyColour.b)
         planet.spinAxis.value
@@ -596,8 +635,11 @@ function Bodies({ engine }: { engine: GameEngine }) {
           appearance.clouds === null
             ? 0
             : appearance.clouds.altitude / Math.max(body.trueRadius, 1)
-        planet.ringInner.value = body.rings?.innerScale ?? 0
-        planet.ringOuter.value = body.rings?.outerScale ?? 0
+        // In render metres, because the shader measures the sun ray's
+        // plane-crossing against `positionWorld` — the dimensionless scales
+        // alone sit far inside any drawn sphere and never shadow anything.
+        planet.ringInner.value = (body.rings?.innerScale ?? 0) * placement.scale
+        planet.ringOuter.value = (body.rings?.outerScale ?? 0) * placement.scale
         planet.ringOpacity.value = Math.min(1, body.rings?.opticalDepth ?? 0)
       }
 
@@ -626,17 +668,29 @@ function Bodies({ engine }: { engine: GameEngine }) {
           visual.clouds.scale.set(shell, shell * body.flattening, shell)
           visual.clouds.geometry = geometryFor(placement.angularRadius)
           const material = visual.cloudMaterial
-          material.setTexture(
-            texturesFor(appearance.texture, anisotropy).clouds,
-          )
+          const cloudMap = texturesFor(appearance.texture, anisotropy).clouds
+          material.setTexture(cloudMap)
+          // A deck with no map — Titan's, and every procedural world's — is
+          // drawn from the body's tint over the opaque fallback texel; a
+          // mapped deck keeps its own colours untinted.
+          if (cloudMap === null)
+            material.baseColour.value.setRGB(
+              appearance.colour.r,
+              appearance.colour.g,
+              appearance.colour.b,
+            )
+          else material.baseColour.value.setRGB(1, 1, 1)
           material.sunDirection.value.copy(sun)
           material.sunColour.value.setRGB(keyColour.r, keyColour.g, keyColour.b)
           material.opacity.value = clouds.opacity
-          // The deck turns against the surface. Venus laps its own ground every
-          // sixty days; Earth's weather drifts a few degrees a day.
+          // The deck turns against the surface, whose quaternion already spins
+          // at the body's own period — so the drift is the *difference* of the
+          // two rates. Subtracting a fixed 24-hour day here gave Venus's deck
+          // a spurious daily lap and slid Titan's around a tidally locked
+          // moon.
           material.drift.value =
             (engine.snapshot?.renderTime ?? 0) / clouds.rotationPeriod -
-            (engine.snapshot?.renderTime ?? 0) / (24 * 3600)
+            (engine.snapshot?.renderTime ?? 0) / body.rotationPeriod
         }
       }
 
@@ -656,8 +710,9 @@ function Bodies({ engine }: { engine: GameEngine }) {
           material.sunColour.value.setRGB(keyColour.r, keyColour.g, keyColour.b)
           material.innerFraction.value = ring.innerScale / ring.outerScale
           material.centre.value.copy(visual.mesh.position)
-          // In the ring mesh's own units, where its outer edge is 1.
-          material.bodyRadius.value = 1 / ring.outerScale
+          // In render metres: the eclipse test runs on `positionWorld`, so a
+          // mesh-local value (1/outerScale) never shadowed a single fragment.
+          material.bodyRadius.value = placement.scale
           material.opticalDepth.value = ring.opticalDepth
           // A ring with no map is a procedural giant's: uniform ice, tinted by
           // the planet it belongs to so it does not read as a foreign object.
@@ -712,6 +767,7 @@ function Bodies({ engine }: { engine: GameEngine }) {
           hasAtmosphere: false,
           atmosphereScale: 1,
           trueRadius: 1,
+          rotationPeriod: 1,
           flattening: 1,
           rings: null,
           appearance: STAR_APPEARANCE,

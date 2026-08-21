@@ -117,8 +117,17 @@ export function restoreSave(
     try {
       world.loadSystem(system as SystemId)
     } catch (cause) {
+      // A save from a degraded session — the catalogue asset failed to fetch
+      // and the game fell back to SOL_ONLY_CATALOG — can reference procedural
+      // stars the full catalogue suppresses, and vice versa. Naming both
+      // versions turns "cannot load system" from a mystery into a diagnosis;
+      // the revision notice that would *resolve* it is a roadmap seam.
+      const mismatch =
+        save.catalog === catalog.version
+          ? ''
+          : ` (saved against catalogue ${save.catalog}, loading against ${catalog.version})`
       return err(
-        `cannot load system ${system}: ${cause instanceof Error ? cause.message : String(cause)}`,
+        `cannot load system ${system}${mismatch}: ${cause instanceof Error ? cause.message : String(cause)}`,
       )
     }
   }

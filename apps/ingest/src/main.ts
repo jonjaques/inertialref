@@ -105,7 +105,10 @@ async function build({ write, refresh }: { write: boolean; refresh: boolean }) {
    * returned two different digests an hour apart for a query whose 702 matched
    * planets were identical, and a version that churns on its own turns a future
    * revision notice into noise. Metadata is excluded because it contains the
-   * version.
+   * version — with one exception: the complete radius *is* a generation input
+   * (it decides where procedural fill is suppressed) and is not derivable from
+   * the stars, so retuning it must change the version or the universe shifts
+   * under existing saves with no way to notice.
    */
   const version = `hyg-4.4+nea-${createHash('sha256')
     .update(
@@ -113,7 +116,7 @@ async function build({ write, refresh }: { write: boolean; refresh: boolean }) {
         metadata: {
           version: '',
           radiusLightYears: 0,
-          completeRadiusLightYears: 0,
+          completeRadiusLightYears: COMPLETE_RADIUS_LIGHT_YEARS,
           attribution: [],
           sources: [],
         },

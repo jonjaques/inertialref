@@ -208,15 +208,36 @@ describe('the real Solar System', () => {
   it('keeps Triton retrograde and Uranus on its side', () => {
     const system = solSystem()
     const uranus = system.planets.find((b) => b.name === 'Uranus')
-    // 97.77°: it orbits on its side, and it is the planet's defining fact.
-    expect(((uranus?.axialTilt ?? 0) * 180) / Math.PI).toBeCloseTo(97.77, 1)
+    // The fact sheet publishes 97.77° *and* a negative period — two encodings
+    // of one retrograde fact — and the spin evaluator applies both, so
+    // carrying both un-flipped the spin. The data keeps the signed period and
+    // the supplement angle: on its side either way, which is the planet's
+    // defining fact.
+    expect(((uranus?.axialTilt ?? 0) * 180) / Math.PI).toBeCloseTo(82.23, 1)
     // Retrograde rotation, carried as a negative period.
     expect(uranus?.rotationPeriod).toBeLessThan(0)
+
+    // The invariant the double-encoding silently broke: the spin component
+    // along the orbit normal is cos(tilt)·sign(period), and it must come out
+    // retrograde for exactly the bodies that really turn backwards.
+    const netSpin = (body?: {
+      axialTilt: number
+      rotationPeriod: number
+    }): number =>
+      Math.cos(body?.axialTilt ?? 0) * Math.sign(body?.rotationPeriod ?? 0)
+    expect(
+      netSpin(system.planets.find((b) => b.name === 'Venus')),
+    ).toBeLessThan(0)
+    expect(netSpin(uranus)).toBeLessThan(0)
+    expect(
+      netSpin(system.planets.find((b) => b.name === 'Earth')),
+    ).toBeGreaterThan(0)
 
     const triton = system.planets
       .find((b) => b.name === 'Neptune')
       ?.moons.find((m) => m.name === 'Triton')
     expect(triton?.rotationPeriod).toBeLessThan(0)
+    expect(netSpin(triton)).toBeLessThan(0)
     // Captured, not formed here — the only large moon in the system that was.
     expect(
       ((triton?.elements.inclination ?? 0) * 180) / Math.PI,

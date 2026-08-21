@@ -129,7 +129,11 @@ export interface PlanetMaterial {
   /** Cloud shell height as a fraction of the body's radius. */
   readonly cloudHeight: { value: number }
   readonly cloudShadow: { value: number }
-  /** Ring radii as multiples of the drawn radius. Zero disables the shadow. */
+  /**
+   * Ring radii in render space — the same units `positionWorld` carries —
+   * because the shadow test measures the sun ray's plane-crossing against
+   * them. Zero disables the shadow.
+   */
   readonly ringInner: { value: number }
   readonly ringOuter: { value: number }
   readonly ringOpacity: { value: number }
@@ -148,7 +152,11 @@ export function createPlanetMaterial(): PlanetMaterial {
   const normalMap = texture(FLAT_NORMAL)
   const nightMap = texture(BLACK)
   const cloudMap = texture(CLEAR)
-  const ringMap = texture(CLEAR)
+  // Opaque white, not CLEAR: a ring with no strip is a uniform slab, and the
+  // shadow term multiplies by the sampled alpha — a clear fallback would
+  // silently disable the shadow for every mapless ring. Ringless bodies are
+  // already excluded by `ringOpacity` and zero radii.
+  const ringMap = texture(WHITE)
 
   const sunDirection = uniform(new Vector3(1, 0, 0))
   const sunColour = uniform(new Color(1, 1, 1))
@@ -216,7 +224,10 @@ export function createPlanetMaterial(): PlanetMaterial {
   const heightAbovePlane = dot(radial, axis)
   const alongAxis = dot(light, axis)
   // Away from zero, or a ray parallel to the ring plane divides by nothing.
-  const safeAlongAxis = max(alongAxis.abs(), float(1e-4)).mul(alongAxis.sign())
+  // Not `sign()`, whose value at exactly zero is zero — precisely the input
+  // the clamp exists to survive.
+  const alongAxisSign = float(1).sub(step(alongAxis, float(0)).mul(2))
+  const safeAlongAxis = max(alongAxis.abs(), float(1e-4)).mul(alongAxisSign)
   const toPlane = heightAbovePlane.div(safeAlongAxis).negate()
   const crossing = radial.add(light.mul(toPlane))
   const crossingRadius = length(crossing)
@@ -326,7 +337,7 @@ export function createPlanetMaterial(): PlanetMaterial {
       normalMap.value = maps.normal ?? FLAT_NORMAL
       nightMap.value = maps.night ?? BLACK
       cloudMap.value = maps.clouds ?? CLEAR
-      ringMap.value = maps.ring ?? CLEAR
+      ringMap.value = maps.ring ?? WHITE
     },
   }
   return handle
@@ -344,6 +355,8 @@ export interface CloudMaterial {
   readonly opacity: { value: number }
   /** Longitude offset in turns; the deck rotates against the surface. */
   readonly drift: { value: number }
+  /** Tint for a deck with no map — Titan's, and every procedural world's. */
+  readonly baseColour: { value: Color }
   setTexture(map: Texture | null): void
 }
 
@@ -360,12 +373,16 @@ export interface CloudMaterial {
  * *away* from.
  */
 export function createCloudMaterial(): CloudMaterial {
-  const map = texture(CLEAR)
+  // Opaque white, not CLEAR: opacity comes from the sampled alpha, so a clear
+  // fallback renders a mapless deck — Titan's, which the data declares opaque
+  // — at zero opacity, an invisible shell updated every frame for nothing.
+  const map = texture(WHITE)
   const sunDirection = uniform(new Vector3(1, 0, 0))
   const sunColour = uniform(new Color(1, 1, 1))
   const sunIntensity = uniform(1)
   const opacity = uniform(1)
   const drift = uniform(0)
+  const baseColour = uniform(new Color(1, 1, 1))
 
   const surfaceUv = uv()
   const drifted = vec2(surfaceUv.x.add(drift), surfaceUv.y)
@@ -380,6 +397,7 @@ export function createCloudMaterial(): CloudMaterial {
 
   const material = new MeshBasicNodeMaterial()
   material.colorNode = cover.rgb
+    .mul(baseColour)
     .mul(sunColour)
     .mul(sunIntensity)
     .mul(max(incidence, float(0)).mul(0.85).add(0.15))
@@ -395,8 +413,9 @@ export function createCloudMaterial(): CloudMaterial {
     sunIntensity,
     opacity,
     drift,
+    baseColour,
     setTexture(value) {
-      map.value = value ?? CLEAR
+      map.value = value ?? WHITE
     },
   }
 }
@@ -414,7 +433,10 @@ export interface RingMaterial {
   readonly innerFraction: { value: number }
   /** Centre of the body that casts a shadow on the ring, render space. */
   readonly centre: { value: Vector3 }
-  /** That body's drawn radius, in the ring mesh's own units. */
+  /**
+   * That body's drawn radius in render space — the cylinder test runs on
+   * `positionWorld`, so mesh-local units would never eclipse anything.
+   */
   readonly bodyRadius: { value: number }
   readonly opticalDepth: { value: number }
   /** Tint for a ring with no map — a procedural giant's. */
@@ -442,7 +464,12 @@ export interface RingMaterial {
  * seen edge-on is a straight line and any faceting shows.
  */
 export function createRingMaterial(): RingMaterial {
-  const map = texture(CLEAR)
+  // Opaque white, not CLEAR: the optical thickness is `opticalDepth · band.a`,
+  // so a clear fallback zeroes the thickness and a mapless ring — every
+  // procedural giant's, and Jupiter's, Uranus's and Neptune's — renders fully
+  // transparent. White makes it a uniform slab whose density comes from
+  // `opticalDepth` and whose colour comes from `baseColour`.
+  const map = texture(WHITE)
   const sunDirection = uniform(new Vector3(1, 0, 0))
   const sunColour = uniform(new Color(1, 1, 1))
   const sunIntensity = uniform(1)
@@ -558,7 +585,7 @@ export function createRingMaterial(): RingMaterial {
     opticalDepth,
     baseColour,
     setTexture(value) {
-      map.value = value ?? CLEAR
+      map.value = value ?? WHITE
     },
   }
 }

@@ -10,6 +10,7 @@ import { cellKey, cellOf, cellsWithin, type GalacticCell } from '../cells.ts'
 import { heliocentricToUniverse } from './astrometry.ts'
 import {
   bayerName,
+  type BayerName,
   constellationGenitive,
   type Designation,
   flamsteedName,
@@ -306,6 +307,22 @@ export const CATALOG_TABLES = {
   constellations: CONSTELLATION_ABBREVIATIONS,
 } as const
 
+/** The packed Bayer fields expanded, or null where the star has none. */
+function expandedBayerOf(packed: PackedStar): BayerName | null {
+  const constellation =
+    packed.constellation === NO_INDEX
+      ? null
+      : (CONSTELLATION_ABBREVIATIONS[packed.constellation] ?? null)
+  if (packed.bayer === NO_INDEX || constellation === null) return null
+  const letter = BAYER_LETTERS[packed.bayer]
+  if (letter === undefined) return null
+  const raw =
+    packed.bayerSuperscript > 0
+      ? `${letter}-${packed.bayerSuperscript}`
+      : letter
+  return bayerName(raw, constellation)
+}
+
 /**
  * Every name a star is known by, most familiar first.
  *
@@ -321,17 +338,8 @@ export function designationsOf(packed: PackedStar): readonly Designation[] {
 
   if (packed.proper !== '') names.push({ kind: 'proper', text: packed.proper })
 
-  if (packed.bayer !== NO_INDEX && constellation !== null) {
-    const letter = BAYER_LETTERS[packed.bayer]
-    if (letter !== undefined) {
-      const raw =
-        packed.bayerSuperscript > 0
-          ? `${letter}-${packed.bayerSuperscript}`
-          : letter
-      const expanded = bayerName(raw, constellation)
-      if (expanded !== null) names.push({ kind: 'bayer', text: expanded.text })
-    }
-  }
+  const expanded = expandedBayerOf(packed)
+  if (expanded !== null) names.push({ kind: 'bayer', text: expanded.text })
 
   if (packed.flamsteed > 0 && constellation !== null) {
     const text = flamsteedName(String(packed.flamsteed), constellation)
@@ -417,7 +425,15 @@ class DecodedCatalog implements StarCatalog {
       stars.push(star)
 
       this.#byId.set(star.id, star)
-      for (const key of searchKeysFor(designations, [star.id]))
+      // The Greek Bayer form (`α Cen`) is search-only: designations.ts
+      // promises it is findable — it is what gets pasted out of Wikipedia —
+      // but listing it as a designation would cite the same catalogue twice
+      // on the system panel.
+      const greek = expandedBayerOf(row)?.greek
+      for (const key of searchKeysFor(
+        designations,
+        greek === undefined ? [star.id] : [star.id, greek],
+      ))
         if (!this.#byName.has(key)) this.#byName.set(key, star)
 
       const key = cellKey(cellOf(position))

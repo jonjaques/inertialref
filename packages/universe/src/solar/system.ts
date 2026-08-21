@@ -41,8 +41,8 @@ import { SOLAR_PLANETS, type SolarBody } from './bodies.ts'
  *
  * The split is the same one the rest of the generator uses. Anything published
  * is used verbatim and marked `observed`: radii, masses, oblateness, rotation
- * periods, axial tilts, orbits, albedos, ring geometry, atmospheric pressures.
- * Anything nobody publishes is drawn from the body's own seed exactly as a
+ * periods, axial tilts, orbits, albedos, ring geometry, atmospheric density
+ * profiles. Anything nobody publishes is drawn from the body's own seed exactly as a
  * projected world's would be — where a moon is along its orbit right now, and
  * what its terrain looks like at a hundred metres.
  */
@@ -190,7 +190,13 @@ function buildBody(
       discoveryYear: body.discoveryYear,
       discoveryMethod: 'Direct Observation',
       insolation: null,
-      equilibriumTemperature: body.temperature,
+      // Not `body.temperature`: that is the mean *surface* (or 1-bar)
+      // temperature, and the field's contract is the published equilibrium
+      // temperature — for Venus those are 737 K and ~227 K, and a panel
+      // labelling the first as the second would be wrong about the most
+      // checkable planet in the game. Null until the data table carries the
+      // actual equilibrium values.
+      equilibriumTemperature: null,
     },
     mass: body.mass,
     radius: body.radius,

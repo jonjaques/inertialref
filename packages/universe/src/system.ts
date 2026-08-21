@@ -808,9 +808,13 @@ function massFromPlanetRadius(radiusEarths: number): number {
   return TYPICAL_JOVIAN_MASS
 }
 
-/** Kepler's third law, the other way round: the orbit that has this period. */
-const axisFromPeriod = (starMu: Mu, period: Seconds): Meters =>
-  (starMu * (period / (2 * Math.PI)) ** 2) ** (1 / 3)
+/**
+ * Kepler's third law, the other way round: the orbit that has this period.
+ * Takes `G(M + m)` like every other orbit computation here, so a period fed
+ * in comes back out of `orbitalPeriod` exactly.
+ */
+const axisFromPeriod = (combinedMu: Mu, period: Seconds): Meters =>
+  (combinedMu * (period / (2 * Math.PI)) ** 2) ** (1 / 3)
 
 /**
  * Kind from bulk density, not from mass.
@@ -861,19 +865,10 @@ function makeObservedPlanet(
   const rng = new Rng(seed)
   const address = bodyAddress(galaxy, system, [index])
 
-  const semiMajorAxis =
-    planet.semiMajorAxisAu !== null
-      ? planet.semiMajorAxisAu * AU
-      : planet.orbitalPeriodDays !== null
-        ? axisFromPeriod(star.mu, planet.orbitalPeriodDays * SECONDS_PER_DAY)
-        : // Neither published. This is rare enough to be worth failing loudly
-          // over rather than inventing an orbit for a body labelled `observed`.
-          Number.NaN
-  invariant(
-    Number.isFinite(semiMajorAxis) && semiMajorAxis > 0,
-    `${systemName} ${planet.letter} has neither a semi-major axis nor a period`,
-  )
-
+  // Mass before orbit: deriving an axis from a published period must invert
+  // the same two-body law the simulator integrates, and that law runs on
+  // G(M + m). Inverting with the star's mu alone flew a 10-Jupiter-mass
+  // planet ~1.5% short of the very period the archive published for it.
   const massInferred = planet.massEarths === null
   const radiusInferred = planet.radiusEarths === null
   const massEarths =
@@ -886,6 +881,22 @@ function makeObservedPlanet(
   const mass = massEarths * EARTH_MASS
   const radius = radiusEarths * EARTH_RADIUS
   const bodyMu = mu(mass)
+
+  const semiMajorAxis =
+    planet.semiMajorAxisAu !== null
+      ? planet.semiMajorAxisAu * AU
+      : planet.orbitalPeriodDays !== null
+        ? axisFromPeriod(
+            star.mu + bodyMu,
+            planet.orbitalPeriodDays * SECONDS_PER_DAY,
+          )
+        : // Neither published. This is rare enough to be worth failing loudly
+          // over rather than inventing an orbit for a body labelled `observed`.
+          Number.NaN
+  invariant(
+    Number.isFinite(semiMajorAxis) && semiMajorAxis > 0,
+    `${systemName} ${planet.letter} has neither a semi-major axis nor a period`,
+  )
   const kind = classifyObserved(
     massEarths,
     radiusEarths,

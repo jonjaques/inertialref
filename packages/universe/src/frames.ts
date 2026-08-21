@@ -149,17 +149,42 @@ export function parseSurfaceFrameId(id: FrameId): {
  * around a star and a measurable error for a large moon: the Moon is 1.2% of
  * Earth, and ignoring it puts its sidereal period at 27.45 days against a
  * published 27.3217.
+ *
+ * `planeTilt` is the *parent's* axial tilt. A moon's elements are measured
+ * from its planet's equator (`solar/bodies.ts` documents them that way), but
+ * this frame's parent is the planet's untilted orbital frame — so the equator
+ * has to be erected here, with the same tilt-about-+X convention the spin
+ * evaluator uses or the two planes disagree. Evaluating the elements directly
+ * in the parent frame put Titan ~27° out of the ring plane it belongs to and
+ * flattened Uranus's near-polar satellite system onto the ecliptic.
  */
 function orbitEvaluator(
   body: Body,
   primaryMu: number,
+  planeTilt: Radians,
 ): (t: Seconds) => LocalPose {
+  if (planeTilt === 0) {
+    return (t) => {
+      const { position, velocity } = stateVectorAt(body.elements, primaryMu, t)
+      return {
+        position,
+        orientation: Q.IDENTITY,
+        velocity,
+        angularVelocity: Vec.ZERO,
+      }
+    }
+  }
+  const tilt = Q.fromAxisAngle(vec3(1, 0, 0), planeTilt)
   return (t) => {
     const { position, velocity } = stateVectorAt(body.elements, primaryMu, t)
     return {
-      position,
-      orientation: Q.IDENTITY,
-      velocity,
+      position: Q.rotate(tilt, position),
+      // The frame's axes are the parent's equatorial ones, so a satellite's
+      // zero-tilt spin axis is the equator normal rather than the system's +Y
+      // — which is what keeps a tidally locked moon's pole on its own orbit
+      // normal.
+      orientation: tilt,
+      velocity: Q.rotate(tilt, velocity),
       angularVelocity: Vec.ZERO,
     }
   }
@@ -211,6 +236,7 @@ export function installSystemFrames(
     body: Body,
     parentFrame: FrameId,
     primaryMu: number,
+    planeTilt: Radians,
   ): void => {
     const frame = bodyFrameId(body.address)
     if (!graph.has(frame)) {
@@ -220,7 +246,7 @@ export function installSystemFrames(
         kind: 'body',
         anchor: {
           kind: 'dynamic',
-          evaluate: orbitEvaluator(body, primaryMu + body.mu),
+          evaluate: orbitEvaluator(body, primaryMu + body.mu, planeTilt),
         },
       })
       graph.define({
@@ -230,11 +256,14 @@ export function installSystemFrames(
         anchor: { kind: 'dynamic', evaluate: spinEvaluator(body) },
       })
     }
-    for (const moon of body.moons) installBody(moon, frame, body.mu)
+    // Moons orbit in the parent's equatorial plane; planets orbit in the
+    // system plane their elements are already measured from.
+    for (const moon of body.moons)
+      installBody(moon, frame, body.mu, body.axialTilt)
   }
 
   for (const planet of system.planets)
-    installBody(planet, systemFrame, system.star.mu)
+    installBody(planet, systemFrame, system.star.mu, 0)
 }
 
 export function uninstallSystemFrames(

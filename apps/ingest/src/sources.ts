@@ -128,6 +128,9 @@ export async function fetchSource(
   if (!refresh && exists(path)) {
     text = readFileSync(path, 'utf8')
     cached = true
+    // A stale cache can hold a bad payload written by an older build of this
+    // tool, so cached reads are checked too — with the remedy named.
+    validate(source, text, cached)
   } else {
     const response = await fetch(source.url)
     if (!response.ok)
@@ -137,29 +140,47 @@ export async function fetchSource(
     const body = new Uint8Array(await response.arrayBuffer())
     const decoded = source.gzip === true ? gunzipSync(body) : body
     text = new TextDecoder().decode(decoded)
+    // Validated *before* it is written: a bad payload cached here would
+    // re-throw from the cached branch on every later run, long after the
+    // remote was fixed, with an error that talks about a service nobody
+    // contacted.
+    validate(source, text, cached)
     writeFileSync(path, text)
   }
 
+  return {
+    source,
+    text,
+    sha256: createHash('sha256').update(text).digest('hex'),
+    bytes: Buffer.byteLength(text),
+    cached,
+  }
+}
+
+/**
+ * Reject payloads that arrived with a 200 but are not the data — a git-lfs
+ * pointer, or the TAP service's XML error body. Runs on the download before
+ * it is cached and again on every cached read (a stale cache can hold a bad
+ * payload written by an older build of this tool), and a cached failure
+ * names its remedy: nothing about the remote is wrong, the cache is.
+ */
+function validate(source: Source, text: string, cached: boolean): void {
+  const remedy = cached
+    ? ` The cached copy in .data/raw is bad — re-run with --refresh to replace it.`
+    : ''
   const bytes = Buffer.byteLength(text)
   if (bytes < source.minimumBytes)
     throw new Error(
       `${source.name}: got ${bytes} bytes, expected at least ${source.minimumBytes}. ` +
         (source.gzip === true
           ? 'A few hundred bytes here means a git-lfs pointer rather than the file — check the URL uses the media/ path.'
-          : 'The query may have failed; the TAP service reports errors as a 200 with a VOTABLE body.'),
+          : 'The query may have failed; the TAP service reports errors as a 200 with a VOTABLE body.') +
+        remedy,
     )
   if (text.startsWith('<?xml'))
     throw new Error(
-      `${source.name}: the service returned XML, which is how its TAP endpoint reports a bad query:\n${text.slice(0, 400)}`,
+      `${source.name}: the service returned XML, which is how its TAP endpoint reports a bad query.${remedy}\n${text.slice(0, 400)}`,
     )
-
-  return {
-    source,
-    text,
-    sha256: createHash('sha256').update(text).digest('hex'),
-    bytes,
-    cached,
-  }
 }
 
 function exists(path: string): boolean {

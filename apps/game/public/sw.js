@@ -78,19 +78,36 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches
-      .keys()
-      .then((keys) =>
-        Promise.all(
-          // Only this application's caches. Deleting every key would be a
-          // service worker reaching outside its own concern, and this origin
-          // may not always hold one app.
-          keys
-            .filter((key) => key.startsWith(CACHE_PREFIX) && key !== CACHE)
-            .map((key) => caches.delete(key)),
-        ),
+    caches.keys().then(async (keys) => {
+      // Only this application's caches. Deleting every key would be a
+      // service worker reaching outside its own concern, and this origin
+      // may not always hold one app.
+      const old = keys.filter(
+        (key) => key.startsWith(CACHE_PREFIX) && key !== CACHE,
       )
-      .then(() => self.clients.claim()),
+      /*
+       * Rescue the immutable assets before the old caches go. On the first
+       * online visit after a deploy the page is still controlled by the
+       * *previous* worker, so the new build's hashed chunks — and the star
+       * catalogue — were fetched through it and stored under the previous
+       * build's cache name. Deleting that cache outright threw away exactly
+       * the files the next offline launch needs, so offline-first only
+       * recovered on a second online visit. Content-hashed names cannot be
+       * stale, which is what makes the copy unconditionally safe.
+       */
+      const target = await caches.open(CACHE)
+      for (const key of old) {
+        const source = await caches.open(key)
+        for (const request of await source.keys()) {
+          if (!isImmutable(new URL(request.url).pathname)) continue
+          if ((await target.match(request)) !== undefined) continue
+          const response = await source.match(request)
+          if (response !== undefined) await target.put(request, response)
+        }
+      }
+      await Promise.all(old.map((key) => caches.delete(key)))
+      await self.clients.claim()
+    }),
   )
 })
 
