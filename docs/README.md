@@ -35,6 +35,7 @@ flowchart LR
 | Drive the game from code or a console                               | [The harness](guides/harness.md)                          |
 | Add a feature without breaking an invariant                         | [Extending](guides/extending.md)                          |
 | Know what is deliberately not built                                 | [Roadmap](roadmap.md)                                     |
+| Know how it gets deployed, and what a server would cost             | [Hosting](hosting.md) — a plan, not a description         |
 | See what was measured, and what it changed                          | [Spikes](spikes.md) — five measurements, with the numbers |
 | Look up a term                                                      | [Glossary](glossary.md)                                   |
 
