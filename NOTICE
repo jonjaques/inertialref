@@ -29,6 +29,29 @@ NASA Exoplanet Archive
   the California Institute of Technology, under contract with the National
   Aeronautics and Space Administration under the Exoplanet Exploration Program.
 
+--------------------------------------------------------------------------------
+Planetary surface maps
+--------------------------------------------------------------------------------
+
+`data/textures/` holds surface, elevation, cloud and ring maps for the Solar
+System, built by `apps/ingest` from published imagery. **Not covered by the
+Apache License.** Per-file provenance is in `data/textures/manifest.json` and the
+terms are in `data/textures/LICENSE.md`.
+
+Most are public domain — NASA and USGS imagery is not subject to copyright:
+
+  NASA Earth Observatory — Blue Marble Next Generation, Black Marble, GEBCO_08
+  NASA Scientific Visualization Studio — LRO LROC colour, LRO LOLA topography
+  NASA / JPL / USGS Astrogeology Science Center — Voyager and Galileo global
+    mosaics of Io, Europa, Ganymede and Callisto
+
+The exceptions require attribution and impose no share-alike:
+
+  Solar System Scope — https://www.solarsystemscope.com/textures/
+  Maps of Mercury, Venus, Mars, Jupiter, Saturn, Uranus, Neptune and Saturn's
+  rings. Licensed CC BY 4.0 — https://creativecommons.org/licenses/by/4.0/
+  Modified: resized and re-encoded.
+
 Gaia (ESA) is deliberately NOT used. Its data are distributed under
 CC BY-NC 3.0 IGO, and a non-commercial clause on the data this game cannot run
 without would attach that restriction to the shipped artefact. See

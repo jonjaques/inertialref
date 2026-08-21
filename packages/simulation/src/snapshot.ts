@@ -11,6 +11,7 @@ import {
   type Vec3,
 } from '@inertialref/spatial'
 import {
+  type BodyAppearance,
   bodyFrameId,
   type EntityId,
   formatAddress,
@@ -62,6 +63,10 @@ export interface BodySnapshot {
   readonly name: string
   readonly kind: string
   readonly radius: Meters
+  /** Polar radius. Smaller than `radius` for anything that spins. */
+  readonly polarRadius: Meters
+  /** What it looks like: maps, roughness, clouds, rings. */
+  readonly appearance: BodyAppearance
   readonly position: UniverseVector
   readonly orientation: Quat
   readonly frame: FrameId
@@ -165,6 +170,8 @@ export function snapshot(
         name: body.name,
         kind: body.kind,
         radius: body.radius,
+        polarRadius: body.polarRadius,
+        appearance: body.appearance,
         position: pose.position,
         orientation: world.frames.pose(
           // The visible orientation is the rotating one, not the orbital frame.

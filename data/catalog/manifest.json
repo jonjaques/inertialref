@@ -1,13 +1,13 @@
 {
-  "version": "hyg-4.4+nea-b76fcc57",
+  "version": "hyg-4.4+nea-2b24daf0",
   "radiusLightYears": 150,
   "completeRadiusLightYears": 25,
   "file": "stars-150ly.irsc",
-  "bytes": 469240,
-  "brotliBytes": 183444,
+  "bytes": 468889,
+  "brotliBytes": 183239,
   "systems": 7123,
   "planets": 702,
-  "hostSystems": 444,
+  "hostSystems": 443,
   "unstableIds": 50,
   "sources": [
     {

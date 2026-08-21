@@ -38,6 +38,7 @@ import {
   type UniverseAddress,
 } from './address.ts'
 import { type SystemStub, systemSeedOf } from './galaxy.ts'
+import { SOL, solarSystem } from './solar/system.ts'
 import type { LinearRgb } from './catalog/photometry.ts'
 import type { CatalogPlanet } from './catalog/starCatalog.ts'
 
@@ -133,6 +134,17 @@ export interface Body {
   readonly kind: BodyKind
   readonly provenance: BodyProvenance
   /**
+   * Polar radius. Smaller than `radius` for anything that spins.
+   *
+   * Not a detail: Saturn is 9.8% flattened and Jupiter 6.5%, which is plainly
+   * visible from orbit and is the first thing that reads as wrong when a gas
+   * giant is drawn as a sphere. It is also real physics — centrifugal support
+   * against self-gravity — so procedural bodies get it too, from their own
+   * rotation and mass.
+   */
+  readonly polarRadius: Meters
+  readonly appearance: BodyAppearance
+  /**
    * How the mass and radius were arrived at, for an observed body. Radial
    * velocity gives `M sin i` — a lower bound, not a mass — and a transit gives a
    * radius with no mass at all, so one of the two is very often inferred from
@@ -150,6 +162,93 @@ export interface Body {
   readonly surface: SurfaceParameters
   readonly sphereOfInfluence: Meters
   readonly moons: readonly Body[]
+}
+
+/*
+ * What a body looks like.
+ *
+ * Separate from what it *is* because the two have different provenance and
+ * different rules. Mass, radius and orbit are measurements a player can check
+ * (`docs/design/art.md`: "the data is not negotiable"). Roughness, relief scale
+ * and how vividly a texture is rendered are the sensor's business, and the art
+ * doctrine licenses them explicitly — "albedo comes from the biome; roughness
+ * and detail are art".
+ *
+ * `texture` is a key, not a path. `packages/universe` cannot fetch anything and
+ * must not know what a URL is; the host resolves the key against the manifest in
+ * `data/textures/`, and a key it has no entry for falls back to `colour`.
+ */
+export type TextureMap =
+  'albedo' | 'normal' | 'night' | 'water' | 'clouds' | 'ring'
+
+export interface RingSystem {
+  readonly innerRadius: Meters
+  readonly outerRadius: Meters
+  /**
+   * Mean normal optical depth.
+   *
+   * Drives both opacity and the forward-scattering blaze when the rings are
+   * between you and the star — the thing Cassini photographs that no game
+   * renders. Saturn's B ring is ~1.5; Jupiter's dust ring is ~1e-6, which is why
+   * a ring system is a property rather than a boolean.
+   */
+  readonly opticalDepth: number
+  readonly texture: string | null
+}
+
+export interface CloudLayer {
+  readonly altitude: Meters
+  /**
+   * Sidereal period of the cloud deck, which is not the body's.
+   *
+   * Venus's atmosphere superrotates in 4 days against a 243-day surface; Earth's
+   * weather drifts a few degrees a day. Tying clouds to the body's rotation is
+   * the thing that makes a planet look like a painted ball.
+   */
+  readonly rotationPeriod: Seconds
+  readonly opacity: number
+}
+
+/**
+ * The visible haze above a body, which is not the same thing as its atmosphere.
+ *
+ * `Atmosphere.ceiling` is a *physics* number — where the drag model stops
+ * integrating — and for a gas giant it is a thousand kilometres or more, because
+ * there is no surface and the air just keeps going. Rendered as a shell that
+ * thick, Saturn wears a halo 3% of its own radius and looks like a moon in a
+ * jar. What you actually see above the cloud tops is a few hundred kilometres of
+ * haze.
+ *
+ * The colours are the licensed part, and `docs/design/art.md` says so
+ * explicitly: scattering coefficients are "tuned within the real range for the
+ * modelled composition". The hues are the published ones — Earth's limb is blue
+ * and its terminator is orange because Rayleigh scattering says so; Titan's is
+ * orange all the way round because its haze is tholins.
+ */
+export interface HazeLayer {
+  /** Rendered thickness above the datum. Not `Atmosphere.ceiling`. */
+  readonly height: Meters
+  /** Scattering colour looking straight down through it. */
+  readonly colour: LinearRgb
+  /** Forward-scattered colour at the terminator — the sunset seen from orbit. */
+  readonly limb: LinearRgb
+}
+
+export interface BodyAppearance {
+  /** Texture-set key, or null for a body with no maps. */
+  readonly texture: string | null
+  readonly maps: readonly TextureMap[]
+  /** Peak-to-trough elevation the normal map represents, metres. */
+  readonly relief: Meters
+  /** Geometric albedo: how bright the body is at full phase. */
+  readonly geometricAlbedo: number
+  /** Microfacet roughness of the surface. 0 is a mirror; rock is near 1. */
+  readonly roughness: number
+  readonly clouds: CloudLayer | null
+  readonly rings: RingSystem | null
+  readonly haze: HazeLayer | null
+  /** Used where there is no albedo map, and to tint one that is greyscale. */
+  readonly colour: LinearRgb
 }
 
 export interface BodyMeasurement {
@@ -330,6 +429,18 @@ function makeMoon(
     epoch: 0,
   }
 
+  const surface = makeSurface(
+    rng,
+    deriveSeed(seed, 'surface'),
+    radius,
+    'moon',
+    atmosphere !== null,
+  )
+  // Tidally locked more often than not, this close in.
+  const rotationPeriod = rng.bool(0.7)
+    ? orbitalPeriod(mu(parentMass) + bodyMu, semiMajorAxis)
+    : rng.range(0.4, 30) * SECONDS_PER_DAY
+
   return {
     address,
     id: entityIdForAddress(address),
@@ -342,22 +453,23 @@ function makeMoon(
     measurement: null,
     mass,
     radius,
+    polarRadius:
+      radius * (1 - rotationalFlattening(mass, radius, rotationPeriod)),
+    appearance: proceduralAppearance(
+      rng,
+      'moon',
+      radius,
+      surface.maxElevation,
+      atmosphere,
+    ),
     mu: bodyMu,
     elements,
-    orbitalPeriod: orbitalPeriod(mu(parentMass), semiMajorAxis),
-    // Tidally locked more often than not, this close in.
-    rotationPeriod: rng.bool(0.7)
-      ? orbitalPeriod(mu(parentMass), semiMajorAxis)
-      : rng.range(0.4, 30) * SECONDS_PER_DAY,
+    // `G(M + m)`, matching what `frames.ts` propagates with. See its comment.
+    orbitalPeriod: orbitalPeriod(mu(parentMass) + bodyMu, semiMajorAxis),
+    rotationPeriod,
     axialTilt: Math.abs(rng.gaussian(0, 0.15)),
     atmosphere,
-    surface: makeSurface(
-      rng,
-      deriveSeed(seed, 'surface'),
-      radius,
-      'moon',
-      atmosphere !== null,
-    ),
+    surface,
     sphereOfInfluence: sphereOfInfluence(semiMajorAxis, mass, parentMass),
     moons: [],
   }
@@ -457,6 +569,18 @@ function makePlanet(
     )
   }
 
+  const surface = makeSurface(
+    rng,
+    deriveSeed(seed, 'surface'),
+    radius,
+    kind,
+    atmosphere !== null,
+  )
+  // A retrograde spin one time in sixteen. Venus and Uranus are two of eight,
+  // which is a small sample and a real phenomenon; giant impacts happen.
+  const rotationPeriod =
+    rng.range(0.25, 3) * SECONDS_PER_DAY * (rng.bool(0.06) ? -1 : 1)
+
   return {
     address,
     id: entityIdForAddress(address),
@@ -466,22 +590,183 @@ function makePlanet(
     measurement: null,
     mass,
     radius,
+    polarRadius:
+      radius * (1 - rotationalFlattening(mass, radius, rotationPeriod)),
+    appearance: proceduralAppearance(
+      rng,
+      kind,
+      radius,
+      surface.maxElevation,
+      atmosphere,
+    ),
     mu: bodyMu,
     elements,
-    orbitalPeriod: orbitalPeriod(star.mu, semiMajorAxis),
-    rotationPeriod:
-      rng.range(0.25, 3) * SECONDS_PER_DAY * (rng.bool(0.06) ? -1 : 1),
+    orbitalPeriod: orbitalPeriod(star.mu + bodyMu, semiMajorAxis),
+    rotationPeriod,
     axialTilt: Math.abs(rng.gaussian(0, 0.35)),
     atmosphere,
-    surface: makeSurface(
-      rng,
-      deriveSeed(seed, 'surface'),
-      radius,
-      kind,
-      atmosphere !== null,
-    ),
+    surface,
     sphereOfInfluence: soi,
     moons,
+  }
+}
+
+/* ------------------------------------------------------------------------- */
+/* Appearance                                                                 */
+/* ------------------------------------------------------------------------- */
+
+/**
+ * Rotational flattening, from the Maclaurin relation for a uniform fluid body:
+ * `f ≈ (5/4)·ω²R³/GM`.
+ *
+ * Real for procedural bodies, and wrong by a factor of two for real ones — which
+ * is why every body in `solar/bodies.ts` carries its *measured* polar radius
+ * instead. The error is central condensation: the relation assumes uniform
+ * density, and a gas giant keeps most of its mass in the middle, so it resists
+ * being flung outwards more than the formula expects. Applied to Jupiter it
+ * gives 11% against a measured 6.5%.
+ *
+ * Kept anyway, because a procedural gas giant spinning in ten hours *should* be
+ * visibly oblate and there is nothing better to derive it from — and because a
+ * sphere is not the neutral choice here, it is the wrong one.
+ */
+export function rotationalFlattening(
+  mass: Kilograms,
+  radius: Meters,
+  rotationPeriod: Seconds,
+): number {
+  const period = Math.abs(rotationPeriod)
+  if (period <= 0 || mass <= 0 || radius <= 0) return 0
+  const omega = (2 * Math.PI) / period
+  const f =
+    1.25 * ((omega * omega * radius ** 3) / (GRAVITATIONAL_CONSTANT * mass))
+  // A body past ~0.3 would be a Jacobi ellipsoid rather than a spheroid, and
+  // this model has nothing to say about it.
+  return Math.min(0.3, Math.max(0, f))
+}
+
+/**
+ * Class-typical surface colours, linear sRGB.
+ *
+ * These are what a body looks like when nobody has photographed it, and they are
+ * deliberately desaturated: a real airless surface is grey rock or dirty ice,
+ * and the saturated palette a generator reaches for first is the single clearest
+ * tell that a world was invented. Bodies in `solar/` override these with a map.
+ */
+const KIND_COLOUR: Readonly<Record<BodyKind, LinearRgb>> = {
+  rocky: { r: 0.28, g: 0.21, b: 0.16 },
+  ice: { r: 0.62, g: 0.68, b: 0.72 },
+  moon: { r: 0.3, g: 0.3, b: 0.29 },
+  'gas-giant': { r: 0.6, g: 0.47, b: 0.34 },
+  'ice-giant': { r: 0.22, g: 0.4, b: 0.55 },
+}
+
+const KIND_ALBEDO: Readonly<Record<BodyKind, number>> = {
+  rocky: 0.15,
+  ice: 0.5,
+  moon: 0.12,
+  'gas-giant': 0.5,
+  'ice-giant': 0.45,
+}
+
+const KIND_ROUGHNESS: Readonly<Record<BodyKind, number>> = {
+  rocky: 0.95,
+  ice: 0.55,
+  moon: 0.95,
+  'gas-giant': 1,
+  'ice-giant': 1,
+}
+
+/**
+ * What a generated body looks like.
+ *
+ * No maps — those exist only for bodies somebody has been to — so this is a
+ * colour, a roughness and, for a giant, a chance of rings. The renderer's job is
+ * to make that look like a world rather than a ball, which is what the relief in
+ * `surface` and the terminator are for.
+ *
+ * Rings on roughly one gas giant in six. That is not a measured frequency,
+ * because nobody has measured one: every giant in the Solar System has a ring
+ * system and three of the four are invisible, so the honest answer is that the
+ * *visible* fraction is unknown and this is a number chosen to make them a find
+ * rather than wallpaper.
+ */
+/*
+ * Haze colour for a generated world, from its class.
+ *
+ * Rayleigh scattering goes as λ⁻⁴, so *any* clear atmosphere of small molecules
+ * is blue looking down and red looking along — which is why Earth, Uranus and
+ * Neptune are all blue for the same reason and Mars is not. A generated world's
+ * composition is not modelled, so this is the class-typical answer and the
+ * catalogued bodies in `solar/` override it with published ones.
+ */
+const KIND_HAZE: Readonly<
+  Record<BodyKind, { colour: LinearRgb; limb: LinearRgb }>
+> = {
+  rocky: {
+    colour: { r: 0.28, g: 0.48, b: 0.95 },
+    limb: { r: 0.86, g: 0.45, b: 0.26 },
+  },
+  ice: {
+    colour: { r: 0.4, g: 0.6, b: 0.9 },
+    limb: { r: 0.8, g: 0.6, b: 0.5 },
+  },
+  moon: {
+    colour: { r: 0.4, g: 0.55, b: 0.85 },
+    limb: { r: 0.8, g: 0.55, b: 0.4 },
+  },
+  'gas-giant': {
+    colour: { r: 0.72, g: 0.74, b: 0.82 },
+    limb: { r: 0.9, g: 0.72, b: 0.5 },
+  },
+  'ice-giant': {
+    colour: { r: 0.45, g: 0.72, b: 0.88 },
+    limb: { r: 0.7, g: 0.75, b: 0.9 },
+  },
+}
+
+function proceduralAppearance(
+  rng: Rng,
+  kind: BodyKind,
+  radius: Meters,
+  relief: Meters,
+  atmosphere: Atmosphere | null,
+): BodyAppearance {
+  const giant = kind === 'gas-giant' || kind === 'ice-giant'
+  const rings =
+    giant && rng.bool(1 / 6)
+      ? {
+          // Inside the Roche limit for ice, where a moon cannot hold together
+          // and rings therefore can be — the reason Saturn's stop where they do.
+          innerRadius: radius * rng.range(1.2, 1.6),
+          outerRadius: radius * rng.range(1.9, 2.6),
+          opticalDepth: rng.range(0.1, 1.2),
+          texture: null,
+        }
+      : null
+  const hue = KIND_HAZE[kind] ?? KIND_HAZE.rocky
+  return {
+    texture: null,
+    maps: [],
+    relief,
+    geometricAlbedo: KIND_ALBEDO[kind] ?? 0.15,
+    roughness: KIND_ROUGHNESS[kind] ?? 0.9,
+    clouds: null,
+    rings,
+    haze:
+      atmosphere === null
+        ? null
+        : {
+            // A giant's drag ceiling is a thousand kilometres of "there is no
+            // surface"; what is visible above its cloud tops is a fraction of a
+            // percent of the radius.
+            height: giant
+              ? radius * 0.008
+              : Math.min(atmosphere.ceiling, radius * 0.02),
+            colour: hue.colour,
+            limb: hue.limb,
+          },
+    colour: KIND_COLOUR[kind] ?? KIND_COLOUR.rocky,
   }
 }
 
@@ -625,7 +910,21 @@ function makeObservedPlanet(
     epoch: 0,
   }
 
-  const period = orbitalPeriod(star.mu, semiMajorAxis)
+  const period = orbitalPeriod(star.mu + bodyMu, semiMajorAxis)
+  const surface = makeSurface(
+    rng,
+    deriveSeed(seed, 'surface'),
+    radius,
+    kind,
+    atmosphere !== null,
+  )
+  // Nothing is published. Close in, tidal locking is the overwhelmingly likely
+  // outcome and it is the single most consequential fact about such a world;
+  // further out it is a free draw.
+  const rotationPeriod =
+    semiMajorAxis < 0.1 * AU
+      ? period
+      : rng.range(0.25, 3) * SECONDS_PER_DAY * (rng.bool(0.06) ? -1 : 1)
   const soi = sphereOfInfluence(semiMajorAxis, mass, star.mass)
   const [inner, outer] = moonOrbitBand(radius, soi)
   const moons: Body[] = []
@@ -662,25 +961,25 @@ function makeObservedPlanet(
     },
     mass,
     radius,
+    polarRadius:
+      radius * (1 - rotationalFlattening(mass, radius, rotationPeriod)),
+    // Confirmed or not, nobody has photographed an exoplanet's surface. The
+    // orbit is observed and the appearance is a projection, and the two are
+    // marked differently everywhere they are shown.
+    appearance: proceduralAppearance(
+      rng,
+      kind,
+      radius,
+      surface.maxElevation,
+      atmosphere,
+    ),
     mu: bodyMu,
     elements,
     orbitalPeriod: period,
-    // Nothing is published. Close in, tidal locking is the overwhelmingly likely
-    // outcome and it is the single most consequential fact about such a world;
-    // further out it is a free draw.
-    rotationPeriod:
-      semiMajorAxis < 0.1 * AU
-        ? period
-        : rng.range(0.25, 3) * SECONDS_PER_DAY * (rng.bool(0.06) ? -1 : 1),
+    rotationPeriod,
     axialTilt: Math.abs(rng.gaussian(0, 0.35)),
     atmosphere,
-    surface: makeSurface(
-      rng,
-      deriveSeed(seed, 'surface'),
-      radius,
-      kind,
-      atmosphere !== null,
-    ),
+    surface,
     sphereOfInfluence: soi,
     moons,
   }
@@ -710,6 +1009,12 @@ export function generateSystem(
   galaxy: GalaxyId,
   stub: SystemStub,
 ): StarSystem {
+  // The one special case in the generator, and it earns it. Sol is the only
+  // system where every body is known — eight planets and twenty moons, with
+  // measured radii, oblateness, tilts and albedos — so it is built from those
+  // rather than from a seed. See `solar/system.ts`.
+  if (stub.id === SOL) return solarSystem(rootSeed, galaxy, stub)
+
   const seed = systemSeedOf(rootSeed, galaxy, stub.id)
   const star = makeStar(stub)
   const layoutRng = new Rng(deriveSeed(seed, 'layout'))

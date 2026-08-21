@@ -18,7 +18,7 @@ import type {
   EntitySnapshot,
   WorldSnapshot,
 } from '@inertialref/simulation'
-import type { EntityId } from '@inertialref/universe'
+import type { BodyAppearance, EntityId } from '@inertialref/universe'
 import { type LodTier, starColor } from './lod.ts'
 import { placeAt, type RenderPlacement } from './placement.ts'
 
@@ -40,6 +40,22 @@ export interface RenderBody {
   readonly hasAtmosphere: boolean
   readonly atmosphereScale: number
   readonly trueRadius: Meters
+  /**
+   * Polar radius over equatorial. 1 for a sphere, 0.902 for Saturn.
+   *
+   * A ratio rather than a length because the renderer scales a unit sphere and
+   * the placement has already compressed the equatorial radius; anything else
+   * would have to undo that first.
+   */
+  readonly flattening: number
+  /** Rings in units of the placed radius, or null. */
+  readonly rings: {
+    readonly innerScale: number
+    readonly outerScale: number
+    readonly opticalDepth: number
+    readonly texture: string | null
+  } | null
+  readonly appearance: BodyAppearance
 }
 
 export interface RenderStar {
@@ -128,11 +144,32 @@ export function buildScene(
       kind: body.kind,
       placement,
       orientation: orientationToRenderSpace(origin, body.orientation),
-      hasAtmosphere: body.hasAtmosphere,
-      atmosphereScale: body.hasAtmosphere
-        ? (body.radius + body.atmosphereCeiling) / sphereRadius
-        : 1,
+      hasAtmosphere: body.appearance.haze !== null,
+      // From the *haze*, not from `atmosphereCeiling`. That ceiling is where the
+      // drag model stops integrating, which for a gas giant is a thousand
+      // kilometres of "there is no surface" — drawn as a shell it put a halo on
+      // Saturn 3% of its own radius wide.
+      atmosphereScale:
+        body.appearance.haze === null
+          ? 1
+          : (body.radius + body.appearance.haze.height) / sphereRadius,
       trueRadius: body.radius,
+      flattening: body.polarRadius / body.radius,
+      // Ring radii arrive in metres from the body's centre and leave as
+      // multiples of the drawn sphere — which is not the body's radius, because
+      // the datum sphere is sunk by a relief to let terrain sit above it. Doing
+      // this conversion here rather than in the renderer keeps that adjustment
+      // in the one place that knows about it.
+      rings:
+        body.appearance.rings === null
+          ? null
+          : {
+              innerScale: body.appearance.rings.innerRadius / sphereRadius,
+              outerScale: body.appearance.rings.outerRadius / sphereRadius,
+              opticalDepth: body.appearance.rings.opticalDepth,
+              texture: body.appearance.rings.texture,
+            },
+      appearance: body.appearance,
     })
   }
 

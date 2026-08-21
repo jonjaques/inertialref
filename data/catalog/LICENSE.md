@@ -4,7 +4,7 @@ This directory contains a **derived database** built from published astronomical
 catalogues by `apps/ingest`. It is not part of the Apache-2.0 licensed source
 code that reads it, and it carries different terms.
 
-**Catalogue version:** `hyg-4.4+nea-b76fcc57`
+**Catalogue version:** `hyg-4.4+nea-2b24daf0`
 
 ## Terms
 

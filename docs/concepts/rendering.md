@@ -230,6 +230,115 @@ is drawn one full relief below the datum, and patches always win.
 
 ---
 
+## Planetary surfaces
+
+⬜→✅ Bodies used to be a flat colour on a `MeshStandardNodeMaterial` picked by
+kind. They are now shaded from their own photometry, from measured maps where a
+map exists. `apps/game/src/render/planet.ts` is the material;
+[the catalogue guide](../guides/catalogue.md#planetary-surface-maps) is where the
+maps come from.
+
+### The lighting is hand-written, and the reason is not performance
+
+A point light and a standard material would be less code. It would also be the
+wrong model, and not by a little:
+
+> **Planetary surfaces are not Lambertian.** The full Moon is famously _flat_ —
+> no limb darkening at all — because regolith backscatters. A Lambertian moon has
+> a bright centre and a dark rim, which is what every naive renderer produces and
+> what nobody has ever photographed.
+
+So the diffuse term is the **lunar-Lambert** function planetary scientists use, a
+blend of Lambert and Lommel-Seeliger:
+
+```
+I = albedo · μ₀ · [ (1 − k) + k · 2/(μ₀ + μ) ]
+```
+
+`k = 0` is Lambert, right for a thick atmosphere. `k → 1` is Lommel-Seeliger,
+right for airless regolith. It is set per body from whether the body has air, and
+it is the single largest difference between a moon that looks photographed and
+one that looks like a billiard ball.
+
+### What the maps carry
+
+| map      | carries                                                              |
+| -------- | -------------------------------------------------------------------- |
+| `albedo` | the surface, sRGB                                                    |
+| `normal` | tangent-space normals, with an **ocean mask in alpha**               |
+| `night`  | city lights, revealed just _before_ the terminator                   |
+| `clouds` | coverage in alpha, on its own shell — and its shadow, on the surface |
+
+The tangent frame is built analytically from the body's spin axis rather than
+from a UV channel: geographic north is the axis with its radial part removed, and
+east is `north × up`. Every _shadowing_ decision uses the geometric normal rather
+than the mapped one, because a mountain on the night side is still on the night
+side — letting a normal-mapped slope catch the sun across the terminator produces
+lit specks floating in the dark, which is the classic normal-map-on-a-planet
+artefact.
+
+Normal maps are exaggerated, and the honest name for it is in `tuningFor`. At
+4096 across, one texel of Earth is ten kilometres and the real slope across ten
+kilometres is a fraction of a degree — the map's standard deviation is 2.4 out of 255. `docs/design/art.md` licenses exactly this ("roughness and detail are art")
+and forbids the thing next door to it: the elevation is the published one and the
+terrain is where it really is; only how sharply it catches the light is turned up.
+
+### Oblateness
+
+Bodies are drawn as oblate spheroids, scaled on the spin axis so the quaternion
+tilts the bulge with it. Saturn is 9.8% flattened and Jupiter 6.5%, which reads as
+wrong long before anyone can say why. Real bodies carry their measured polar
+radius; generated ones derive it from their own rotation, because the
+uniform-density relation that does so overstates Jupiter's by 70% and there is
+nothing better to derive it from — and a sphere is not the neutral choice here,
+it is the wrong one.
+
+### Rings
+
+Three things have to be right or a ring system reads as a decal, and all three
+are geometry rather than art:
+
+- **The planet's shadow falls on the rings.** A cylinder test along the sun
+  direction, with a soft edge because the Sun has an angular diameter.
+- **The rings' shadow falls on the planet.** Follow the sun ray from a surface
+  point to the equatorial plane; if it lands between the ring radii, sample the
+  ring's opacity there. Three dot products, and it is what makes Saturn look
+  photographed.
+- **The lit and unlit faces are different pictures.** The sunward face shows
+  single scattering and the dense B ring is the brightest thing on it; cross the
+  plane and you are looking at transmitted light, so the dense parts go dark and
+  the thin ones glow. The whole image inverts.
+
+The scattering is the standard slab result rather than a Lambert stand-in:
+
+```
+I/F = (ω₀/4) · μ₀/(μ₀ + μ) · [1 − e^(−τ(1/μ₀ + 1/μ))]
+```
+
+which gets saturation, edge-on brightening and the seasonal fade to nothing as
+the rings turn edge-on to the sun, all from one expression.
+
+### Tessellation
+
+Spheres are tiered by angular radius: **512×256 for a body filling the view**,
+down to 32×16 for a body that is a few pixels. A planet from orbit is a
+silhouette problem before it is a shading one — no amount of normal mapping hides
+a faceted limb, and the limb is exactly where the eye goes. Ring meshes are 768
+segments around, because a ring seen nearly edge-on is a straight line a thousand
+pixels long and any faceting shows as a scalloped edge.
+
+### The haze is not the atmosphere
+
+`Atmosphere.ceiling` is a physics number — where the drag model stops
+integrating — and for a gas giant it is a thousand kilometres of "there is no
+surface". Rendered as a shell that thick, Saturn wore a halo 3% of its own radius
+wide _and_ Earth's Rayleigh blue, because the scattering colour was a constant.
+Both are now per body: `BodyAppearance.haze` carries a rendered thickness and the
+published limb colours, and Titan's haze is orange in every direction because
+tholins are.
+
+---
+
 ## Depth buffer settings
 
 ```

@@ -14,5 +14,8 @@
     "@inertialref/shared": "workspace:*",
     "@inertialref/spatial": "workspace:*",
     "@inertialref/universe": "workspace:*"
+  },
+  "devDependencies": {
+    "sharp": "^0.35.3"
   }
 }

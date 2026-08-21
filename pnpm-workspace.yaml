@@ -9,6 +9,10 @@ packages:
 # without its postinstall there is no binary to run.
 allowBuilds:
   '@tailwindcss/oxide': true
+  # sharp is how `apps/ingest` resizes a 21600x10800 GEBCO elevation PNG into a
+  # normal map. It is a build-time tool in a build-time app; nothing it produces
+  # is imported at runtime, and `packages/*` still depends on nothing.
+  sharp: true
   esbuild: true
   oxlint: true
   workerd: true

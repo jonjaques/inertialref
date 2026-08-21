@@ -80,7 +80,7 @@ change** — they are generators plus representations.
 | Catalogue revision diff  | ⬜     | Both versions are recorded — in every save and every manifest — and nothing compares them yet                   |
 | Planetary terrain        | 🟡     | Heightfields only; no biomes or materials                                                                       |
 | Ships                    | 🟡     | One debug spacecraft, no variants or subsystems                                                                 |
-| Rings                    | ⬜     | A body property + an instanced renderer                                                                         |
+| Rings                    | ✅     | Saturn's, with the planet's shadow on them and theirs on the planet; procedural giants get a 1-in-6 chance      |
 | Asteroids / belts        | ⬜     | Wants a _population_ generator: many small bodies from one cell seed, addressed as `o:` objects within a region |
 | Star clusters, nebulae   | ⬜     | Density modulation in the galaxy generator + volumetric rendering                                               |
 | Black holes              | ⬜     | A body kind; the interesting part is rendering, not simulation                                                  |
@@ -288,6 +288,7 @@ Not roadmap items so much as honest labels on what is modelled:
 | Simplification                                 | Reality                                                                       |
 | ---------------------------------------------- | ----------------------------------------------------------------------------- |
 | Multiple-star systems modelled as single stars | The catalogue records true component counts for all 375 of them within 150 ly |
+| No vendored maps for seven Solar System moons  | They render from their measured albedo and tint; USGS has mosaics for several |
 | Patched conics, no n-body                      | Lagrange points, resonances and perturbations do not exist                    |
 | No collision except ground contact             | No hull, no entity-to-entity, no terrain slope response                       |
 | Circular-ish orbits, coplanar-ish systems      | Generated inclinations and eccentricities are small                           |

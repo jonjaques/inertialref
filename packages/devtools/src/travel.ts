@@ -309,6 +309,19 @@ export function viewingAltitudeKm(body: Body): number {
   return Math.max(MINIMUM_VIEWING_ALTITUDE, Math.min(wanted, ceiling)) / 1000
 }
 
+/**
+ * Whether anything can be in orbit around this body at all.
+ *
+ * Not a hypothetical. Phobos masses 1.07 × 10^16 kg and orbits 9,376 km from
+ * Mars, which puts its sphere of influence at **7.2 km** — inside its own
+ * 11.3 km radius. There is no altitude above Phobos that is still bound to
+ * Phobos, and the same is nearly true of Deimos. `viewingAltitudeKm` therefore
+ * parks you next to it in Mars's frame rather than refusing, and this is how a
+ * caller knows which of the two it got.
+ */
+export const canHoldOrbit = (body: Body): boolean =>
+  body.sphereOfInfluence * SOI_FRACTION > body.radius + MINIMUM_VIEWING_ALTITUDE
+
 /** How much of the sphere of influence a parking orbit may use. */
 const SOI_FRACTION = 0.9
 

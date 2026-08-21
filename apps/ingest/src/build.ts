@@ -15,7 +15,6 @@ import {
 } from '@inertialref/universe'
 import { type CsvTable, number, parseCsv } from './csv.ts'
 import { chooseCommonName, type NameSource } from './naming.ts'
-import { solarSystemPlanets } from './solarSystem.ts'
 
 /*
  * HYG + the NASA Exoplanet Archive → one packed catalogue.
@@ -290,10 +289,17 @@ export function buildCatalog(
   const { planets, matched, unmatched, unmatchedHosts, matchedBy } =
     matchPlanets(exoplanetCsv, index, stars, options.radiusLightYears)
 
-  // The archive has no Solar System, and Sol is where the player starts.
-  const sol = idToIndex.get('SOL')
-  if (sol !== undefined) planets.push(...solarSystemPlanets(sol))
-
+  /*
+   * The Solar System is deliberately absent from this file.
+   *
+   * The archive contains exoplanets, and the eight planets orbiting the star the
+   * player starts at are not among them — so an earlier version of this ingest
+   * carried them here by hand. They have moved to
+   * `packages/universe/src/solar/`, because what Sol needs is not eight rows in
+   * a planet table: it needs twenty moons, measured oblateness, axial tilts,
+   * ring geometry and albedos, none of which this format has a column for and
+   * none of which is catalogue data. They are facts, and they live in source.
+   */
   const hostSystems = new Set(planets.map((p) => p.host)).size
 
   return {

@@ -165,10 +165,77 @@ describe('the real Solar System', () => {
   it('puts Earth one astronomical unit out and at the right size', () => {
     const earth = solSystem().planets.find((b) => b.name === 'Earth')
     expect(earth?.elements.semiMajorAxis).toBeCloseTo(1.495_978_707e11, -6)
-    expect(earth?.radius).toBeCloseTo(6.371e6, -3)
+    // Equatorial and polar, not a mean: 21.4 km of difference, which is what
+    // makes the planet an ellipsoid rather than a sphere.
+    expect(earth?.radius).toBe(6_378_137)
+    expect(earth?.polarRadius).toBe(6_356_752)
     expect(earth?.mass).toBeCloseTo(5.9722e24, -21)
     expect(earth?.kind).toBe('rocky')
     expect(earth?.provenance).toBe('observed')
+  })
+
+  it('flattens the giants by the measured amount', () => {
+    // Saturn is 9.8% oblate and Jupiter 6.5%. Drawn as spheres they read as
+    // wrong before anyone can say why, so the polar radii are carried rather
+    // than derived — the uniform-density relation overstates Jupiter's by 70%.
+    const flattening = (name: string) => {
+      const body = solSystem().planets.find((b) => b.name === name)
+      if (body === undefined) throw new Error(name)
+      return 1 - body.polarRadius / body.radius
+    }
+    expect(flattening('Saturn')).toBeCloseTo(0.098, 3)
+    expect(flattening('Jupiter')).toBeCloseTo(0.065, 3)
+    expect(flattening('Mercury')).toBe(0)
+  })
+
+  it('gives the Solar System its real moons', () => {
+    const system = solSystem()
+    const moons = system.planets.flatMap((planet) => planet.moons)
+    expect(moons.map((m) => m.name)).toContain('Luna')
+    expect(moons.map((m) => m.name)).toContain('Titan')
+    expect(moons.map((m) => m.name)).toContain('Europa')
+    expect(moons.length).toBe(20)
+    for (const moon of moons) expect(moon.provenance).toBe('observed')
+
+    const luna = moons.find((m) => m.name === 'Luna')
+    expect(luna?.radius).toBe(1_737_400)
+    expect(luna?.elements.semiMajorAxis).toBe(384_400_000)
+    // Tidally locked: the same face has pointed at us for four billion years.
+    expect(luna?.rotationPeriod).toBeCloseTo(luna?.orbitalPeriod ?? 0, -4)
+  })
+
+  it('keeps Triton retrograde and Uranus on its side', () => {
+    const system = solSystem()
+    const uranus = system.planets.find((b) => b.name === 'Uranus')
+    // 97.77°: it orbits on its side, and it is the planet's defining fact.
+    expect(((uranus?.axialTilt ?? 0) * 180) / Math.PI).toBeCloseTo(97.77, 1)
+    // Retrograde rotation, carried as a negative period.
+    expect(uranus?.rotationPeriod).toBeLessThan(0)
+
+    const triton = system.planets
+      .find((b) => b.name === 'Neptune')
+      ?.moons.find((m) => m.name === 'Triton')
+    expect(triton?.rotationPeriod).toBeLessThan(0)
+    // Captured, not formed here — the only large moon in the system that was.
+    expect(
+      ((triton?.elements.inclination ?? 0) * 180) / Math.PI,
+    ).toBeGreaterThan(90)
+  })
+
+  it('gives Saturn rings that start where a moon cannot survive', () => {
+    const saturn = solSystem().planets.find((b) => b.name === 'Saturn')
+    const rings = saturn?.appearance.rings
+    expect(rings).toBeDefined()
+    // C ring inner edge to A ring outer edge, 1.24 to 2.27 Saturn radii.
+    expect((rings?.innerRadius ?? 0) / (saturn?.radius ?? 1)).toBeCloseTo(
+      1.24,
+      1,
+    )
+    expect((rings?.outerRadius ?? 0) / (saturn?.radius ?? 1)).toBeCloseTo(
+      2.27,
+      1,
+    )
+    expect(rings?.texture).toBe('saturn-ring')
   })
 
   it('classifies the giants as giants, from density rather than mass', () => {

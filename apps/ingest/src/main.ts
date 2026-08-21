@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { encodeCatalog, isUnstableId, readCatalog } from '@inertialref/universe'
 import { fetchSource, SOURCES } from './sources.ts'
 import { buildCatalog, type BuildReport } from './build.ts'
+import { buildTextures } from './textures.ts'
 
 /*
  * The ingest.
@@ -30,6 +31,7 @@ const RADIUS_LIGHT_YEARS = 150
  */
 const COMPLETE_RADIUS_LIGHT_YEARS = 25
 const OUTPUT_DIRECTORY = 'data/catalog'
+const TEXTURE_DIRECTORY = 'data/textures'
 const OUTPUT_FILE = 'stars-150ly.irsc'
 
 const root = new URL('../../../', import.meta.url).pathname
@@ -262,6 +264,55 @@ pnpm catalog:build
 Sources and their exact digests are recorded in \`manifest.json\`.
 `
 
+/**
+ * Planetary surface maps.
+ *
+ * Separate from `build` because the two have nothing in common but a manifest
+ * convention: the catalogue is 34 MB in and 458 KB out and takes seconds, and
+ * this is 600 MB in and ~20 MB out and takes minutes. Bundling them would mean
+ * re-downloading half a gigabyte of Voyager imagery every time NASA publishes a
+ * new exoplanet.
+ */
+async function textures() {
+  console.log('textures')
+  const manifest = await buildTextures({
+    root,
+    outputDirectory: TEXTURE_DIRECTORY,
+    onProgress: (message) => console.log(message),
+  })
+  const total = manifest.textures.reduce((n, t) => n + t.bytes, 0)
+  writeFileSync(
+    join(root, TEXTURE_DIRECTORY, 'manifest.json'),
+    `${JSON.stringify(manifest, null, 2)}\n`,
+  )
+  writeFileSync(
+    join(root, TEXTURE_DIRECTORY, 'LICENSE.md'),
+    textureLicence(manifest.attribution),
+  )
+  console.log(`
+  ${manifest.textures.length} maps, ${(total / 1024 / 1024).toFixed(1)} MB
+  written to ${TEXTURE_DIRECTORY}/`)
+}
+
+const textureLicence = (attribution: readonly string[]): string =>
+  `# Planetary textures — licence and attribution
+
+Surface maps for the Solar System, built by \`apps/ingest\` from published
+imagery. **Not covered by the Apache-2.0 licence on the source code.**
+
+Most of these are **public domain**: NASA and USGS imagery is not subject to
+copyright. The exceptions are marked \`cc-by-4.0\` in \`manifest.json\` and are
+listed below; CC BY 4.0 requires attribution but imposes no share-alike, so
+unlike the star catalogue these do not make anything downstream of them
+CC-licensed.
+
+${attribution.map((line) => `- ${line}`).join('\n\n')}
+
+Per-file provenance — source URL, licence and output digest — is in
+\`manifest.json\`. Rebuild with \`pnpm textures:build\`; see
+\`docs/guides/catalogue.md\`.
+`
+
 const command = process.argv[2] ?? 'build'
 const refresh = process.argv.includes('--refresh')
 
@@ -273,9 +324,11 @@ try {
     await build({ write: false, refresh })
   } else if (command === 'build') {
     await build({ write: true, refresh })
+  } else if (command === 'textures') {
+    await textures()
   } else {
     console.error(
-      `unknown command "${command}"\n\n  fetch   download the sources into .data/raw\n  report  build and print, without writing\n  build   build and write data/catalog\n\n  --refresh  re-download rather than using .data/raw`,
+      `unknown command "${command}"\n\n  fetch     download the catalogue sources into .data/raw\n  report    build the catalogue and print, without writing\n  build     build the catalogue and write data/catalog\n  textures  build the planetary surface maps into data/textures\n\n  --refresh  re-download rather than using the cache`,
     )
     process.exit(2)
   }

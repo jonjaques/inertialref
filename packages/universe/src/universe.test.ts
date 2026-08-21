@@ -197,8 +197,15 @@ describe('system generation', () => {
         expect(planet.radius).toBeGreaterThan(1e5)
         expect(planet.mass).toBeGreaterThan(0)
         expect(planet.elements.eccentricity).toBeLessThan(1)
+        // `G(M + m)`, the same two-body parameter `frames.ts` propagates with.
+        // A planet's own mass moves its period by parts per million and a large
+        // moon's by half a percent, and the number displayed has to be the one
+        // the simulation actually flies.
         expect(planet.orbitalPeriod).toBeCloseTo(
-          orbitalPeriod(system.star.mu, planet.elements.semiMajorAxis),
+          orbitalPeriod(
+            system.star.mu + planet.mu,
+            planet.elements.semiMajorAxis,
+          ),
           3,
         )
         for (const moon of planet.moons) {

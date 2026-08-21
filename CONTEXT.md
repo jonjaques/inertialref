@@ -781,16 +781,115 @@ smaller stops reading as fainter once it is down to a pixel. Only reproducible i
 a browser: this is a shader path, and there is no CPU backend to evaluate a TSL
 graph in.
 
+## The Solar System, rendered (20 Aug 2026)
+
+Sol stopped being eight generated planets around a real star and became the
+Solar System: **eight planets and twenty moons**, with measured radii,
+oblateness, axial tilts, rotation periods, albedos, ring geometry and
+atmospheres, from the NASA/JPL fact sheets. And they are drawn from photographs —
+19 surface, elevation, cloud and ring maps, 10.7 MB, built by `apps/ingest` from
+NASA, USGS and Solar System Scope imagery.
+
+Operating it is [`docs/guides/catalogue.md`](docs/guides/catalogue.md#planetary-surface-maps);
+the shading is [`docs/concepts/rendering.md`](docs/concepts/rendering.md#planetary-surfaces).
+
+### Sol is the one special case in the generator, and it earns it
+
+`generateSystem` branches on `stub.id === SOL` and delegates to
+`solar/system.ts`. Every other system in the game is a real star with projected
+bodies around it; this is the only one where the whole system is known and the
+player has seen the photographs, so a generated substitute is not merely
+unverifiable, it is visibly wrong. The Solar System's data moved _out_ of the
+packed catalogue in the same change: eight rows in a planet table cannot carry
+twenty moons, oblateness, axial tilt and ring geometry, and none of it is
+catalogue data. They are facts, and they live in source.
+
+The Sun itself is built from the IAU's defining constants rather than from its
+own catalogue row. The photometric pipeline reads Sol back as 0.973 L☉ and 0.987
+R☉, which is a fair measure of how well the method works and is the best
+available answer for every _other_ star. For this one there is a defined answer,
+and using the estimate would make the one object every player can check the only
+one that is knowably wrong.
+
+### Planetary surfaces are not Lambertian
+
+The largest single change to how a body looks, and it is a physics correction
+rather than a style choice. The full Moon is _flat_ — no limb darkening at all —
+because regolith backscatters. A Lambertian moon has a bright centre and a dark
+rim, which is what a standard material produces and what nobody has ever
+photographed. The diffuse term is now the lunar-Lambert blend of Lambert and
+Lommel-Seeliger, weighted per body by whether it has an atmosphere.
+
+Everything else follows from taking that seriously: the tangent frame is built
+from the body's spin axis rather than a UV channel, shadowing decisions use the
+geometric normal rather than the mapped one (or normal-mapped slopes catch the
+sun across the terminator and float as lit specks in the dark), and rings
+scatter through the standard slab result rather than a Lambert stand-in.
+
+### Bugs worth not reintroducing
+
+**`toColourspace('b-w')` downcasts 16-bit elevation, silently.** libvips calls
+8-bit greyscale `b-w`, so it truncated LOLA's 16-bit product; a following
+`raw({depth:'ushort'})` widened the container back to two bytes without restoring
+the range. Every gradient came out 256× too small and the Moon's normal map was
+_perfectly flat_ — a valid file, a plausible pipeline, and no error anywhere.
+`grey16` is the one that preserves it, and the metres-per-value scale now
+calibrates itself against the field's own range so a unit bug of this class
+cannot recur.
+
+**GEBCO_08 has no bathymetry.** 77.5% of it is exactly zero. The ocean mask is a
+threshold rather than a sign test, which was found by looking at the histogram
+rather than at the filename. It comes out at 69% ocean coverage against a true
+71%.
+
+**Meshes added imperatively must be removed imperatively.** Bodies are mutated
+rather than reconciled — deliberately, and the header of `SceneView.tsx` says
+why — but that means React knows nothing about them. A hot reload left the
+previous mount's objects parented to the scene with nothing updating them, and a
+stale Saturn ring forty thousand kilometres wide hung across the Moon as a set of
+dark horizontal bands that read convincingly as a texture bug. The textures were
+fine. There is an unmount effect now.
+
+**Two tests were spawning ships underground.** Both landing tests placed the ship
+relative to the _datum_, which is a sea-level convention with terrain either side
+of it. They passed only because the generated planet they happened to land on had
+low ground at that longitude; against the real Venus, whose terrain reaches
+6.9 km, "hovering 30 m up" is nearly seven kilometres below the surface. They
+spawn against `surfaceRadius` now. The hard-landing test also moved to an airless
+body: Venus's surface air is 65 kg/m³ and 400 m/s becomes a few metres per second
+long before the ground arrives, which is the drag model working and not what that
+test is about.
+
+**Phobos cannot be orbited.** Its sphere of influence is 7.2 km and its radius is
+11.3 km, so there is no altitude above it that is still bound to it. Parking
+there and being handed back to Mars is the correct outcome, `canHoldOrbit` is how
+the harness and the test agree on which case they are in, and the test asserts
+that at least one such body exists so the check cannot quietly stop testing it.
+
+**The two-body parameter is `G(M + m)`.** The frame graph propagates a body
+relative to its primary's centre, and the relative orbit obeys `G(M+m)`, not
+`G·M`. Fine to a part per million for a planet around a star; for the Moon, which
+is 1.2% of Earth, it is the difference between the published 27.3217-day sidereal
+period and 27.45.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).
 
 - Binary and multiple-star systems are modelled as single stars (`components`
   in the catalogue records the truth for all 375 of them within 150 ly).
-- **Every moon in the game is a projection, including Luna.** No exoplanet moon
-  has been confirmed, so that is right everywhere except the Solar System, where
-  it is conspicuously wrong: Earth gets an 87 km moon at 217,000 km. The seam is
-  a moon list on `PackedPlanet` and a table beside `solarSystem.ts`.
+- Moons outside the Solar System are all projections, which is right — no
+  exoplanet moon has been confirmed. Sol's twenty are real and observed.
+- **Seven Solar System bodies have no vendored surface map** — Titan, Enceladus,
+  Iapetus, Triton, Phobos, Deimos and the Uranian moons — and render from their
+  measured albedo and tint. USGS has mosaics for several; they are large, and the
+  return per gigabyte is much lower than for the four Galileans.
+- **Three of the four Galilean maps are monochrome.** That is how Voyager and
+  Galileo returned them. They are tinted with published colours, which is a
+  different and smaller lie than rendering them grey.
+- The atmosphere is still an analytic uniform-density shell with authored
+  scattering colours, not the Bruneton LUTs spike 2 made a requirement. The
+  colours are per body now, which was the loudest half of the problem.
 - **Nothing diffs two catalogue versions.** Every save records the version it was
   written against and every build records its own, which is both halves of the
   input to a revision notice — and no code compares them. Until it does, a

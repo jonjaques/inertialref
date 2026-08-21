@@ -46,6 +46,7 @@ pnpm vitest run <substring>    # a single test file
 pnpm catalog:report            # build and print the counts, without writing
 pnpm catalog:build             # ...and write data/catalog
 pnpm catalog:build --refresh   # re-download rather than using .data/raw
+pnpm textures:build            # planetary surface maps into data/textures
 
 # The Cloudflare Worker (apps/server). `pnpm dev` proxies /api and /ws to 8787,
 # so without dev:server running the client correctly reports "no server".

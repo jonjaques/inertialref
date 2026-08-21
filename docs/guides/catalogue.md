@@ -330,9 +330,76 @@ and the star map is supposed to draw it.
 
 ---
 
+---
+
+## Planetary surface maps
+
+The same app, a different artefact, and deliberately a separate command:
+the catalogue is 34 MB in and 458 KB out and takes seconds; this is 600 MB in
+and 11 MB out and takes minutes. Bundling them would re-download the Voyager
+archive every time NASA publishes an exoplanet.
+
+```bash
+pnpm textures:build     # download, process, and write data/textures
+```
+
+```
+data/textures/
+  earth_albedo.webp  earth_night.webp  earth_clouds.webp  earth_normal.webp
+  luna_albedo.webp   luna_normal.webp
+  io_albedo.webp     europa_albedo.webp  ganymede_albedo.webp  callisto_albedo.webp
+  mercury_albedo.webp  venus_albedo.webp  venus_clouds.webp  mars_albedo.webp
+  jupiter_albedo.webp  saturn_albedo.webp  saturn-ring_ring.webp
+  uranus_albedo.webp   neptune_albedo.webp
+  manifest.json      LICENSE.md
+```
+
+**19 maps, 10.7 MB**, all 4096×2048 except the two that have no source that
+large. Committed, and streamed per body at runtime — `planetTextures.ts` fetches
+a body's maps the first time it is drawn as more than a few pixels, and the
+service worker caches them like any other content-hashed asset.
+
+### Where they come from
+
+**NASA and USGS wherever a global map exists in a form this pipeline can read**,
+because it is public domain and it is the actual measurement: all of Earth, the
+Moon at LRO and LOLA resolution, and the four Galilean moons from Voyager and
+Galileo. **Solar System Scope (CC BY 4.0) for the rest** — and the gap is real
+rather than lazy. USGS publishes Mars at 232 m/px and Mercury at 166 m/px, which
+are a 12 GB and a 4 GB GeoTIFF; the gas giants have no authoritative global map
+at all, because Jupiter's belts move and every "map of Jupiter" is a mosaic from
+one particular week.
+
+Titan, Enceladus, Iapetus, Triton, Phobos, Deimos and the Uranian moons have no
+vendored map and render from their measured albedo and colour.
+
+### Two transforms that are not a resize
+
+**Elevation to normals.** Not the textbook Sobel: on an equirectangular grid a
+degree of longitude at 80° north is a sixth of a degree at the equator, so the
+horizontal gradient is divided by cos(latitude) or the poles come out as
+vertical smear. The scale calibrates itself against the height field's own range
+rather than a documented unit, which is the fix for a bug that produced a valid
+file and a **perfectly flat Moon**: `toColourspace('b-w')` is 8-bit in libvips,
+so it silently downcast LOLA's 16-bit product and every gradient came out 256
+times too small. `grey16` is the one that preserves it.
+
+**Luminance to alpha.** A cloud map published as a greyscale JPEG is a coverage
+mask wearing a colour image's clothes. Drawn as colour it is a grey shell over
+the whole planet; moved into alpha it is weather.
+
+Earth's ocean mask rides in the **alpha of its normal map** — one bit per texel,
+always sampled at the same coordinate, and it is what makes sun-glint land on
+water rather than on the Sahara. It is a threshold rather than a sign test
+because GEBCO_08 turns out to have no bathymetry: 77.5% of it is exactly zero.
+Measured, and the mask comes out at 69% ocean coverage against a true 71%.
+
+---
+
 ## Related
 
 - [galaxy](../design/galaxy.md) — the design this implements
+- [rendering](../concepts/rendering.md) — what the maps are used for
 - [spikes 3 and 4](../spikes.md) — the measurements that chose HYG and ruled out Gaia
 - [determinism](../concepts/determinism.md) — why the catalogue version is a generation input
 - [ADR-0004](../adr/0004-entity-addressing.md), [ADR-0009](../adr/0009-issue-ordinal-addressing.md) — the addressing rules the issue ordinals extend

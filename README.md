@@ -139,8 +139,13 @@ pnpm sim --help                # all flags
 - **Stars named the way people name them** — `Sirius`, `Alpha Centauri`,
   `Tau Ceti`, `61 Cygni` — with every alternate designation searchable, and one
   stable address per system whatever the catalogue calls it next year.
-- **Deterministic star systems** — planets, moons, orbits, atmospheres and
-  terrain, all a pure function of a global seed and an address.
+- **The real Solar System** — eight planets and twenty moons with measured
+  radii, oblateness, axial tilts, rotation periods, albedos and ring geometry,
+  drawn from NASA and USGS surface, elevation, cloud and ring maps. Earth has its
+  clouds, its city lights and sun-glint on its oceans; Saturn is visibly oblate
+  and casts its shadow across its own rings.
+- **Deterministic star systems everywhere else** — planets, moons, orbits,
+  atmospheres and terrain, all a pure function of a global seed and an address.
 - A debug spacecraft with **6-DoF flight**, patched-conic gravity, atmospheric
   drag, sphere-of-influence frame transitions, and landing.
 - **Streamed cube-sphere terrain**, generated in a worker pool.

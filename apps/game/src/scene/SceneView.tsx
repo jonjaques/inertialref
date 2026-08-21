@@ -1,17 +1,17 @@
 import { useFrame, useThree } from '@react-three/fiber'
-import { useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { LIGHT_YEAR } from '@inertialref/shared'
 import { UV, type UniverseVector } from '@inertialref/spatial'
 import {
   BufferAttribute,
   BufferGeometry,
-  Color,
   type Group,
   Mesh,
   MeshStandardNodeMaterial,
   type PointLight,
   SphereGeometry,
   Sprite,
+  Vector3,
 } from 'three/webgpu'
 import type { RenderBody } from '@inertialref/rendering'
 import { chaseCameraPosition, placeOnStarShell } from '@inertialref/rendering'
@@ -19,12 +19,20 @@ import type { GameEngine } from '../engine/GameEngine.ts'
 import {
   type AtmosphereMaterial,
   createAtmosphereMaterial,
-  createBodyMaterial,
   createStarfieldMaterial,
   createStarMaterial,
   createTerrainMaterial,
   type StarMaterial,
 } from '../render/materials.ts'
+import {
+  type CloudMaterial,
+  createCloudMaterial,
+  createPlanetMaterial,
+  createRingMaterial,
+  type PlanetMaterial,
+  type RingMaterial,
+} from '../render/planet.ts'
+import { texturesFor } from '../render/planetTextures.ts'
 
 /*
  * The React Three Fiber layer.
@@ -263,72 +271,280 @@ function Starfield({ engine }: { engine: GameEngine }) {
 
 interface BodyVisual {
   readonly mesh: Mesh
+  readonly planet: PlanetMaterial | null
   readonly atmosphere: Mesh
   readonly atmosphereMaterial: AtmosphereMaterial
+  readonly clouds: Mesh | null
+  readonly cloudMaterial: CloudMaterial | null
+  readonly rings: Mesh | null
+  readonly ringMaterial: RingMaterial | null
   readonly star: StarMaterial | null
 }
 
-/** Planets, moons and stars as spheres, placed from the scene description. */
+/*
+ * Sphere tessellation, by how much of the screen the body covers.
+ *
+ * A planet from orbit is a *silhouette* problem before it is a shading one. No
+ * amount of normal mapping hides a faceted limb, and the limb is where the eye
+ * goes — it is the edge against black, and it is where the atmosphere sits.
+ *
+ * The near tier is 512×256, which is 262,144 triangles for one body. That is a
+ * lot by 2010 standards and nothing at all now, and at most two bodies are ever
+ * in that tier: it is keyed on angular radius, so a planet earns it by filling
+ * the view rather than by existing. Tiers rather than one geometry because the
+ * Solar System puts twenty-eight bodies in the scene at once and most of them
+ * are a pixel across.
+ */
+const SPHERE_TIERS: readonly { minAngle: number; segments: number }[] = [
+  { minAngle: 0.06, segments: 512 },
+  { minAngle: 0.012, segments: 256 },
+  { minAngle: 0.002, segments: 96 },
+  { minAngle: 0, segments: 32 },
+]
+
+/**
+ * The rings, as an annulus in the body's equatorial plane.
+ *
+ * Built rather than taken from `RingGeometry`, for the radial coordinate: the
+ * shader wants distance from the axis and nothing else, and this way it reads it
+ * straight out of `positionLocal` with no UV channel and no seam. 768 segments
+ * because a ring seen nearly edge-on is a straight line a thousand pixels long,
+ * and any faceting at all shows as a scalloped edge.
+ */
+function ringGeometry(): BufferGeometry {
+  const segments = 768
+  const inner = 0.25
+  const positions = new Float32Array((segments + 1) * 2 * 3)
+  const indices: number[] = []
+  for (let i = 0; i <= segments; i += 1) {
+    const angle = (i / segments) * Math.PI * 2
+    const x = Math.cos(angle)
+    const z = Math.sin(angle)
+    const base = i * 6
+    positions[base] = x * inner
+    positions[base + 1] = 0
+    positions[base + 2] = z * inner
+    positions[base + 3] = x
+    positions[base + 4] = 0
+    positions[base + 5] = z
+    if (i < segments) {
+      const a = i * 2
+      indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2)
+    }
+  }
+  const geometry = new BufferGeometry()
+  geometry.setAttribute('position', new BufferAttribute(positions, 3))
+  geometry.setIndex(indices)
+  geometry.computeVertexNormals()
+  return geometry
+}
+
+/*
+ * Per-body shading parameters, from what the body is.
+ *
+ * The one number worth explaining is `lunarLambert`, the weight between Lambert
+ * and Lommel-Seeliger in `planet.ts`. It is not a style knob: it is how much the
+ * surface backscatters, it is measured for real bodies, and it is the difference
+ * between a Moon that looks like a photograph and one that looks like a
+ * billiard ball. Airless regolith is around 0.9; a thick atmosphere scatters its
+ * way to something much closer to Lambert.
+ */
+interface PlanetTuning {
+  readonly lunarLambert: number
+  readonly terminator: number
+  readonly reliefScale: number
+  readonly specular: number
+  readonly night: number
+}
+
+function tuningFor(body: RenderBody): PlanetTuning {
+  const air = body.hasAtmosphere
+  const giant = body.kind === 'gas-giant' || body.kind === 'ice-giant'
+  if (giant)
+    return {
+      // A cloud deck kilometres thick is as close to Lambert as anything gets,
+      // and its terminator is soft because there is no surface to end at.
+      lunarLambert: 0.1,
+      terminator: 0.22,
+      reliefScale: 0,
+      specular: 0,
+      night: 0,
+    }
+  return {
+    lunarLambert: air ? 0.45 : 0.92,
+    terminator: air ? 0.09 : 0.025,
+    /*
+     * Normal-map exaggeration, and the honest name for it.
+     *
+     * At 4096 across, one texel of Earth is ten kilometres, and the real slope
+     * across ten kilometres is a fraction of a degree — measured: the normal map
+     * has a standard deviation of 2.4 out of 255. Rendered at unity it is
+     * invisible. `docs/design/art.md` licenses exactly this ("roughness and
+     * detail are art") and forbids the thing next door to it: the *elevation* is
+     * the published one, the terrain is where it really is, and only how sharply
+     * it catches the light is turned up.
+     *
+     * The Moon needs far less because its craters are genuinely steep.
+     */
+    reliefScale: air ? 6 : 2.2,
+    specular: 1,
+    night: 1,
+  }
+}
+
+/** Planets, moons and stars, placed from the scene description. */
 function Bodies({ engine }: { engine: GameEngine }) {
   const group = useRef<Group>(null)
   const visuals = useMemo(() => new Map<string, BodyVisual>(), [])
-  const geometry = useMemo(() => new SphereGeometry(1, 48, 32), [])
+  const anisotropy = useThree(
+    (state) => state.gl.capabilities?.getMaxAnisotropy?.() ?? 8,
+  )
+  const spheres = useMemo(
+    () =>
+      SPHERE_TIERS.map((tier) => ({
+        minAngle: tier.minAngle,
+        geometry: new SphereGeometry(1, tier.segments, tier.segments / 2),
+      })),
+    [],
+  )
+  const rings = useMemo(ringGeometry, [])
+
+  const scratch = useMemo(
+    () => ({ axis: new Vector3(), sun: new Vector3(), centre: new Vector3() }),
+    [],
+  )
+
+  /*
+   * Take the meshes with us when this component goes.
+   *
+   * They are added to the group imperatively from inside the frame loop, which
+   * is deliberate — see the header — but it means React knows nothing about
+   * them and cannot clean them up. Without this, a hot reload leaves the
+   * previous mount's objects parented to the scene with nothing updating them:
+   * a stale Saturn ring, forty thousand kilometres across and still visible,
+   * hung across the Moon as a set of dark horizontal bands that looked
+   * convincingly like a texture bug for rather too long.
+   */
+  useEffect(
+    () => () => {
+      for (const visual of visuals.values()) {
+        for (const object of [
+          visual.mesh,
+          visual.atmosphere,
+          visual.clouds,
+          visual.rings,
+        ]) {
+          if (object === null) continue
+          object.removeFromParent()
+          const material = object.material
+          if (Array.isArray(material)) for (const m of material) m.dispose()
+          else material.dispose()
+        }
+      }
+      visuals.clear()
+      for (const tier of spheres) tier.geometry.dispose()
+      rings.dispose()
+    },
+    [visuals, spheres, rings],
+  )
 
   useFrame(() => {
     const scene = engine.scene()
     const container = group.current
     if (scene === null || container === null) return
 
-    // Render-space position of the key light, for the atmosphere terminator.
-    // `stars[0]` is documented as brightest-apparent-first, which is the same
-    // star `CameraRig` lights the scene with — they must not disagree.
+    // Render-space position of the key light. `stars[0]` is documented as
+    // brightest-apparent-first, which is the same star `CameraRig` lights the
+    // scene with — they must not disagree.
     const keyLight = scene.stars[0]?.placement.position ?? null
+    const keyColour = scene.stars[0]?.color ?? { r: 1, g: 1, b: 1 }
+
+    const geometryFor = (angle: number): SphereGeometry =>
+      (
+        spheres.find((tier) => angle >= tier.minAngle) ??
+        spheres[spheres.length - 1]!
+      ).geometry
 
     const seen = new Set<string>()
+
     const draw = (
       key: string,
-      body: Pick<
-        RenderBody,
-        | 'placement'
-        | 'orientation'
-        | 'hasAtmosphere'
-        | 'atmosphereScale'
-        | 'kind'
-      >,
-      color: Color,
+      body: RenderBody,
       star: { r: number; g: number; b: number } | null,
     ): void => {
       seen.add(key)
+      const appearance = body.appearance
       let visual = visuals.get(key)
       if (visual === undefined) {
         if (visuals.size >= MAX_BODIES) return
         const starMaterial = star === null ? null : createStarMaterial()
+        const planet = star === null ? createPlanetMaterial() : null
         const atmosphereMaterial = createAtmosphereMaterial()
         const mesh = new Mesh(
-          geometry,
-          starMaterial?.material ?? createBodyMaterial(color),
+          spheres[0]!.geometry,
+          starMaterial?.material ?? planet!.material,
         )
-        const atmosphere = new Mesh(geometry, atmosphereMaterial.material)
+        const atmosphere = new Mesh(
+          spheres[1]!.geometry,
+          atmosphereMaterial.material,
+        )
         atmosphere.visible = false
         container.add(mesh)
         container.add(atmosphere)
-        visual = { mesh, atmosphere, atmosphereMaterial, star: starMaterial }
+
+        let clouds: Mesh | null = null
+        let cloudMaterial: CloudMaterial | null = null
+        if (appearance.clouds !== null) {
+          cloudMaterial = createCloudMaterial()
+          clouds = new Mesh(spheres[0]!.geometry, cloudMaterial.material)
+          clouds.renderOrder = 1
+          container.add(clouds)
+        }
+
+        let ringMesh: Mesh | null = null
+        let ringMaterial: RingMaterial | null = null
+        if (body.rings !== null) {
+          ringMaterial = createRingMaterial()
+          ringMesh = new Mesh(rings, ringMaterial.material)
+          ringMesh.renderOrder = 2
+          container.add(ringMesh)
+        }
+
+        visual = {
+          mesh,
+          planet,
+          atmosphere,
+          atmosphereMaterial,
+          clouds,
+          cloudMaterial,
+          rings: ringMesh,
+          ringMaterial,
+          star: starMaterial,
+        }
         visuals.set(key, visual)
       }
 
       const { placement, orientation } = body
-      visual.mesh.position.set(
-        placement.position.x,
-        placement.position.y,
-        placement.position.z,
-      )
-      visual.mesh.quaternion.set(
+      const quaternion = visual.mesh.quaternion.set(
         orientation.x,
         orientation.y,
         orientation.z,
         orientation.w,
       )
-      visual.mesh.scale.setScalar(placement.scale)
+      visual.mesh.position.set(
+        placement.position.x,
+        placement.position.y,
+        placement.position.z,
+      )
+      // Oblate, in the body's own frame — so the quaternion tilts the bulge with
+      // the spin axis, which is the whole point. Saturn is 9.8% flattened and
+      // reads as wrong long before anyone can say why.
+      visual.mesh.scale.set(
+        placement.scale,
+        placement.scale * body.flattening,
+        placement.scale,
+      )
+      visual.mesh.geometry = geometryFor(placement.angularRadius)
       visual.mesh.visible = true
       // A body drawn as streamed terrain does not also need its datum sphere,
       // except as the sea floor below it.
@@ -340,12 +556,127 @@ function Bodies({ engine }: { engine: GameEngine }) {
       if (star !== null && visual.star !== null)
         visual.star.color.value.setRGB(star.r, star.g, star.b)
 
+      const sun = scratch.sun
+      if (keyLight !== null)
+        sun
+          .set(keyLight.x, keyLight.y, keyLight.z)
+          .sub(visual.mesh.position)
+          // A body sitting exactly on its star — which is what a star's own
+          // entry would be — leaves this zero-length, and a normalised zero is
+          // NaN across the whole shell.
+          .normalize()
+
+      const planet = visual.planet
+      if (planet !== null) {
+        const tuning = tuningFor(body)
+        const maps = texturesFor(appearance.texture, anisotropy)
+        planet.setTextures(maps)
+        planet.sunDirection.value.copy(sun)
+        planet.sunColour.value.setRGB(keyColour.r, keyColour.g, keyColour.b)
+        planet.spinAxis.value
+          .set(0, 1, 0)
+          .applyQuaternion(quaternion)
+          .normalize()
+        planet.centre.value.copy(visual.mesh.position)
+        planet.baseColour.value.setRGB(
+          appearance.colour.r,
+          appearance.colour.g,
+          appearance.colour.b,
+        )
+        planet.lunarLambert.value = tuning.lunarLambert
+        planet.terminator.value = tuning.terminator
+        planet.reliefScale.value = maps.normal === null ? 0 : tuning.reliefScale
+        // Sun-glint needs an ocean to land on, and the mask that says where one
+        // is rides in the normal map's alpha. No normal map, no ocean, no glint.
+        planet.specularStrength.value =
+          maps.normal === null ? 0 : tuning.specular
+        planet.nightStrength.value = maps.night === null ? 0 : tuning.night
+        planet.cloudShadow.value = maps.clouds === null ? 0 : 0.55
+        planet.cloudHeight.value =
+          appearance.clouds === null
+            ? 0
+            : appearance.clouds.altitude / Math.max(body.trueRadius, 1)
+        planet.ringInner.value = body.rings?.innerScale ?? 0
+        planet.ringOuter.value = body.rings?.outerScale ?? 0
+        planet.ringOpacity.value = Math.min(1, body.rings?.opticalDepth ?? 0)
+      }
+
+      /* --- the cloud deck ------------------------------------------------- */
+      if (visual.clouds !== null && visual.cloudMaterial !== null) {
+        const clouds = appearance.clouds
+        const visible = clouds !== null && placement.tier !== 'point'
+        visual.clouds.visible = visible
+        if (visible && clouds !== null) {
+          /*
+           * The shell is lifted to at least 0.4% of the radius.
+           *
+           * Earth's cloud tops are twelve kilometres up on a radius of six
+           * thousand, which is 0.2% and is a shell you cannot see past at the
+           * limb. What sells a cloud deck from orbit is precisely that parallax
+           * — the clouds overhanging the edge of the disc — and the altitude is
+           * not on the list of things a player can check.
+           */
+          const lift = Math.max(
+            clouds.altitude / Math.max(body.trueRadius, 1),
+            0.004,
+          )
+          const shell = placement.scale * (1 + lift)
+          visual.clouds.position.copy(visual.mesh.position)
+          visual.clouds.quaternion.copy(quaternion)
+          visual.clouds.scale.set(shell, shell * body.flattening, shell)
+          visual.clouds.geometry = geometryFor(placement.angularRadius)
+          const material = visual.cloudMaterial
+          material.setTexture(
+            texturesFor(appearance.texture, anisotropy).clouds,
+          )
+          material.sunDirection.value.copy(sun)
+          material.sunColour.value.setRGB(keyColour.r, keyColour.g, keyColour.b)
+          material.opacity.value = clouds.opacity
+          // The deck turns against the surface. Venus laps its own ground every
+          // sixty days; Earth's weather drifts a few degrees a day.
+          material.drift.value =
+            (engine.snapshot?.renderTime ?? 0) / clouds.rotationPeriod -
+            (engine.snapshot?.renderTime ?? 0) / (24 * 3600)
+        }
+      }
+
+      /* --- the rings ------------------------------------------------------ */
+      if (visual.rings !== null && visual.ringMaterial !== null) {
+        const ring = body.rings
+        const visible = ring !== null && placement.tier !== 'point'
+        visual.rings.visible = visible
+        if (visible && ring !== null) {
+          const extent = placement.scale * ring.outerScale
+          visual.rings.position.copy(visual.mesh.position)
+          visual.rings.quaternion.copy(quaternion)
+          visual.rings.scale.setScalar(extent)
+          const material = visual.ringMaterial
+          material.setTexture(texturesFor(ring.texture, anisotropy).ring)
+          material.sunDirection.value.copy(sun)
+          material.sunColour.value.setRGB(keyColour.r, keyColour.g, keyColour.b)
+          material.innerFraction.value = ring.innerScale / ring.outerScale
+          material.centre.value.copy(visual.mesh.position)
+          // In the ring mesh's own units, where its outer edge is 1.
+          material.bodyRadius.value = 1 / ring.outerScale
+          material.opticalDepth.value = ring.opticalDepth
+          // A ring with no map is a procedural giant's: uniform ice, tinted by
+          // the planet it belongs to so it does not read as a foreign object.
+          material.baseColour.value.setRGB(
+            appearance.colour.r,
+            appearance.colour.g,
+            appearance.colour.b,
+          )
+        }
+      }
+
+      /* --- the atmosphere ------------------------------------------------- */
       visual.atmosphere.visible =
         body.hasAtmosphere && placement.tier !== 'point'
       if (visual.atmosphere.visible) {
         const shell = placement.scale * body.atmosphereScale
         visual.atmosphere.position.copy(visual.mesh.position)
         visual.atmosphere.scale.setScalar(shell)
+        visual.atmosphere.geometry = geometryFor(placement.angularRadius)
 
         // The shell's shader needs the same geometry the transform above encodes,
         // in render space, because it integrates along the view ray rather than
@@ -355,60 +686,63 @@ function Bodies({ engine }: { engine: GameEngine }) {
         air.centre.value.copy(visual.mesh.position)
         air.outerRadius.value = shell
         air.innerRadius.value = placement.scale
-        if (keyLight !== null) {
-          air.sunDirection.value
-            .set(keyLight.x, keyLight.y, keyLight.z)
-            .sub(visual.mesh.position)
-            // A body sitting exactly on its star — which is what a star's own
-            // entry would be — leaves this zero-length, and a normalised zero is
-            // NaN across the whole shell.
-            .normalize()
+        const haze = appearance.haze
+        if (haze !== null) {
+          air.zenithColour.value.setRGB(
+            haze.colour.r,
+            haze.colour.g,
+            haze.colour.b,
+          )
+          air.limbColour.value.setRGB(haze.limb.r, haze.limb.g, haze.limb.b)
         }
+        if (keyLight !== null) air.sunDirection.value.copy(sun)
       }
     }
 
-    for (const body of scene.bodies) {
-      draw(body.address, body, bodyColor(body.kind), null)
-    }
+    for (const body of scene.bodies) draw(body.address, body, null)
     for (const star of scene.stars) {
       draw(
         `star:${star.system}`,
         {
+          address: `star:${star.system}`,
+          name: star.name,
+          kind: 'star',
           placement: star.placement,
           orientation: { x: 0, y: 0, z: 0, w: 1 },
           hasAtmosphere: false,
           atmosphereScale: 1,
-          kind: 'star',
+          trueRadius: 1,
+          flattening: 1,
+          rings: null,
+          appearance: STAR_APPEARANCE,
         },
-        new Color(star.color.r, star.color.g, star.color.b),
         star.color,
       )
     }
 
     for (const [key, visual] of visuals) {
-      if (!seen.has(key)) {
-        visual.mesh.visible = false
-        visual.atmosphere.visible = false
-      }
+      if (seen.has(key)) continue
+      visual.mesh.visible = false
+      visual.atmosphere.visible = false
+      if (visual.clouds !== null) visual.clouds.visible = false
+      if (visual.rings !== null) visual.rings.visible = false
     }
   })
 
   return <group ref={group} />
 }
 
-function bodyColor(kind: string): Color {
-  switch (kind) {
-    case 'gas-giant':
-      return new Color('#c9a27a')
-    case 'ice-giant':
-      return new Color('#7fb3d3')
-    case 'ice':
-      return new Color('#cfe4ee')
-    case 'moon':
-      return new Color('#9a9a96')
-    default:
-      return new Color('#8a6f56')
-  }
+/** A star is drawn by `createStarMaterial`; none of this reaches it. */
+const STAR_APPEARANCE: RenderBody['appearance'] = {
+  texture: null,
+  maps: [],
+  relief: 0,
+  geometricAlbedo: 1,
+  roughness: 1,
+  clouds: null,
+  rings: null,
+  haze: null,
+  colour: { r: 1, g: 1, b: 1 },
 }
 
 /**

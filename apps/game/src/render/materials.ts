@@ -29,7 +29,6 @@ import {
   step,
   uniform,
   uv,
-  vec3,
 } from 'three/tsl'
 
 /*
@@ -96,6 +95,10 @@ export function createStarMaterial(): StarMaterial {
 
 export interface AtmosphereMaterial {
   readonly material: MeshBasicNodeMaterial
+  /** Scattering colour looking down through the air. */
+  readonly zenithColour: { value: Color }
+  /** Forward-scattered colour at the terminator: the sunset, from orbit. */
+  readonly limbColour: { value: Color }
   /** Body centre in render space. Written every frame — the planet is orbiting. */
   readonly centre: { value: Vector3 }
   /** Render-space radius of the shell, and of the ground beneath it. */
@@ -141,6 +144,8 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
   const outerRadius = uniform(1)
   const innerRadius = uniform(1)
   const sunDirection = uniform(new Vector3(0, 1, 0))
+  const zenithColour = uniform(new Color(0.28, 0.48, 0.95))
+  const limbColour = uniform(new Color(0.86, 0.45, 0.26))
 
   const rayDirection = normalize(positionWorld.sub(cameraPosition))
   const toCentre = centre.sub(cameraPosition)
@@ -200,13 +205,16 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
   // the entire reason twilight exists.
   const daylight = smoothstep(-0.35, 0.25, sunlit.mul(2).sub(1))
 
-  // Rayleigh blue towards the zenith, a warmer forward-scattered limb near the
-  // terminator. Both are authored constants standing in for the LUT.
-  const scattered = mix(
-    vec3(0.86, 0.45, 0.26),
-    vec3(0.28, 0.48, 0.95),
-    daylight,
-  )
+  /*
+   * Scattering colour, per body, standing in for the LUT.
+   *
+   * Blue at the zenith and warm at the terminator is what Rayleigh scattering
+   * does to a clear atmosphere of small molecules, and it is right for Earth,
+   * Uranus and Neptune for the same physical reason. It is wrong for Titan,
+   * whose haze is tholins and is orange in every direction, and wrong for
+   * Saturn, which wore Earth's blue halo until these became uniforms.
+   */
+  const scattered = mix(limbColour, zenithColour, daylight)
 
   const material = new MeshBasicNodeMaterial()
   material.colorNode = scattered.mul(mix(0.05, 1, daylight))
@@ -214,7 +222,15 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
   material.transparent = true
   material.depthWrite = false
   material.side = BackSide
-  return { material, centre, outerRadius, innerRadius, sunDirection }
+  return {
+    material,
+    centre,
+    outerRadius,
+    innerRadius,
+    sunDirection,
+    zenithColour,
+    limbColour,
+  }
 }
 
 export interface StarfieldMaterial {
@@ -304,10 +320,13 @@ export function createStarfieldMaterial(capacity: number): StarfieldMaterial {
   return { material, positions, colours, prominence, size }
 }
 
-/** A planet, moon or gas giant. No TSL: the standard model is what these want. */
-export function createBodyMaterial(color: Color): MeshStandardNodeMaterial {
-  return new MeshStandardNodeMaterial({ color, roughness: 0.95, metalness: 0 })
-}
+/*
+ * `createBodyMaterial` used to live here: one `MeshStandardNodeMaterial` and a
+ * flat colour per body kind. It is gone. A planet is not a rough dielectric
+ * sphere — it is a photometric surface with measured maps, an ocean that glints,
+ * a cloud deck at its own altitude and, in one case, rings that shadow it. See
+ * `render/planet.ts`.
+ */
 
 /**
  * Streamed terrain.

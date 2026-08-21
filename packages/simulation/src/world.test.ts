@@ -17,6 +17,7 @@ import {
   vec3,
 } from '@inertialref/spatial'
 import {
+  type Body,
   bodyFixedDirection,
   bodyFixedFrameId,
   bodyFrameId,
@@ -52,6 +53,39 @@ function landingTarget(world: World) {
   const first = system.planets[0]
   if (first === undefined) throw new Error('no planets')
   return first
+}
+
+/** First solid body with no atmosphere at all — somewhere to hit hard. */
+function airlessTarget(world: World) {
+  const system = world.system(SOL)
+  if (system === undefined) throw new Error('SOL not loaded')
+  for (const body of walkBodies(system))
+    if (body.kind === 'rocky' && body.atmosphere === null && body.radius > 1e6)
+      return body
+  throw new Error('no airless world')
+}
+
+/**
+ * Distance from the centre to the actual ground under the +X axis.
+ *
+ * Not `body.radius`. The datum is a sea-level convention and the terrain sits
+ * either side of it — on Venus it reaches 6.9 km above, and a ship "hovering
+ * 30 m up" from the datum is nearly seven kilometres underground. These tests
+ * used to spawn against the datum and passed only because the generated planet
+ * they happened to land on had low ground at that longitude; the moment Sol's
+ * bodies became the real ones, both landings began underground.
+ */
+function groundRadius(world: World, body: Body): number {
+  const spin = world.frames.pose(
+    bodyFixedFrameId(body.address),
+    world.clock.time,
+  )
+  const centre = world.frames.pose(
+    bodyFrameId(body.address),
+    world.clock.time,
+  ).position
+  const above = UV.translate(centre, vec3(body.radius, 0, 0))
+  return surfaceRadius(body, bodyFixedDirection(spin, above))
 }
 
 describe('simulation clock', () => {
@@ -341,7 +375,7 @@ describe('flight', () => {
     const ship = world.spawnShip(
       'lander',
       bodyFrameId(planet.address),
-      vec3(planet.radius + 30, 0, 0),
+      vec3(groundRadius(world, planet) + 30, 0, 0),
     )
     world.entities.update(ship.id, {
       state: {
@@ -380,7 +414,7 @@ describe('flight', () => {
     const ship = world.spawnShip(
       'lander',
       bodyFrameId(planet.address),
-      vec3(planet.radius + 30, 0, 0),
+      vec3(groundRadius(world, planet) + 30, 0, 0),
     )
     world.entities.update(ship.id, {
       state: {
@@ -406,14 +440,23 @@ describe('flight', () => {
   })
 
   it('stops a ship that hits the ground fast, and calls it what it is', () => {
-    // No collision handling at all was the original state of this code: a ship
-    // dropped from orbit flew straight through the planet and out the far side.
+    /*
+     * No collision handling at all was the original state of this code: a ship
+     * dropped from orbit flew straight through the planet and out the far side.
+     *
+     * On an **airless** body, deliberately. This used to run on whatever the
+     * first rocky-with-an-atmosphere planet was, and against the real Solar
+     * System that is Venus — where the surface air is 65 kg/m³, denser than any
+     * other gas in the system, and 400 m/s becomes a few metres per second long
+     * before the ground arrives. That is the drag model working, and it is not
+     * what this test is about.
+     */
     const world = solarWorld()
-    const planet = landingTarget(world)
+    const planet = airlessTarget(world)
     const ship = world.spawnShip(
       'doomed',
       bodyFrameId(planet.address),
-      vec3(planet.radius + 5_000, 0, 0),
+      vec3(groundRadius(world, planet) + 5_000, 0, 0),
     )
     world.entities.update(ship.id, {
       state: {

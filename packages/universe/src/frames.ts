@@ -139,7 +139,17 @@ export function parseSurfaceFrameId(id: FrameId): {
   }
 }
 
-/** Orbit evaluator for a body about a primary with gravitational parameter `mu`. */
+/**
+ * Orbit evaluator for a body about a primary with gravitational parameter `mu`.
+ *
+ * `mu` is `G(M + m)`, not `G·M`, and callers pass it that way. The relative
+ * position vector in the two-body problem obeys `r̈ = −G(M+m)·r/|r|³` — both
+ * bodies orbit their barycentre, and the frame graph measures from the primary's
+ * centre. Dropping the secondary's mass is a fine approximation for a planet
+ * around a star and a measurable error for a large moon: the Moon is 1.2% of
+ * Earth, and ignoring it puts its sidereal period at 27.45 days against a
+ * published 27.3217.
+ */
 function orbitEvaluator(
   body: Body,
   primaryMu: number,
@@ -208,7 +218,10 @@ export function installSystemFrames(
         id: frame,
         parent: parentFrame,
         kind: 'body',
-        anchor: { kind: 'dynamic', evaluate: orbitEvaluator(body, primaryMu) },
+        anchor: {
+          kind: 'dynamic',
+          evaluate: orbitEvaluator(body, primaryMu + body.mu),
+        },
       })
       graph.define({
         id: bodyFixedFrameId(body.address),

@@ -20,6 +20,7 @@
     "catalog:fetch": "node apps/ingest/src/main.ts fetch",
     "catalog:report": "node apps/ingest/src/main.ts report",
     "catalog:build": "node apps/ingest/src/main.ts build",
+    "textures:build": "node apps/ingest/src/main.ts textures",
     "deploy:worker": "pnpm build && pnpm --filter @inertialref/server run deploy",
     "check": "pnpm graph && pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
