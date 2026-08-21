@@ -1,0 +1,59 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "inertialrefd",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-20",
+
+  /*
+   * One Worker is the whole front door (docs/hosting.md H-1): it serves the
+   * client bundle, answers `/api/*`, and will route `/ws` to a Durable Object.
+   *
+   * Same origin means no CORS preflight on every API call, no second hostname
+   * for the socket, and no SameSite gymnastics around whatever eventually
+   * identifies a player. It costs nothing, because static asset requests are
+   * free, unlimited, and never invoke the script at all.
+   */
+  "assets": {
+    "directory": "../game/dist",
+    "binding": "ASSETS",
+    // The client is a single page; an unmatched path is index.html, not a 404.
+    "not_found_handling": "single-page-application",
+    /*
+     * The only paths that wake the script. Everything else is served straight
+     * from the asset store.
+     *
+     * `/api` is listed separately because `/api/*` does not match it, and the
+     * SPA fallback above would otherwise answer a bare `/api` with index.html —
+     * a 200 full of HTML is the single most confusing thing an API can return.
+     * `/ws` is listed before it exists for the same reason.
+     */
+    "run_worker_first": ["/api", "/api/*", "/ws"],
+  },
+
+  /*
+   * Which deployment answered, for the health record. It is diagnostic only and
+   * never compared against anything: "am I talking to the build I just shipped"
+   * is a question that otherwise costs a log dive.
+   */
+  "version_metadata": { "binding": "CF_VERSION_METADATA" },
+
+  "observability": { "enabled": true },
+
+  /*
+   * Deliberately absent until the milestone that needs them (docs/hosting.md):
+   *
+   *   durable_objects + migrations  H4 — one PartitionAuthority per partition
+   *                                 key, with hibernating sockets. Note that
+   *                                 `new_sqlite_classes`, not `new_classes`, is
+   *                                 what makes the object SQLite-backed.
+   *   d1_databases                  H2 — accounts, catalogue revisions and
+   *                                 first-discovery claims, which are the
+   *                                 writes needing a galaxy-wide uniqueness
+   *                                 guarantee rather than a per-partition
+   *                                 ordering one.
+   *   r2_buckets                    biome material sets, when they exist.
+   *
+   * Nothing in this file may ever be a credential — it is committed. Secrets go
+   * through `wrangler secret put`, never `vars`.
+   */
+}

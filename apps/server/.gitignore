@@ -1,0 +1,3 @@
+# Wrangler's local state: the workerd bundle cache and the miniflare stores that
+# back D1/DO in `wrangler dev`. Regenerated on demand, never shared.
+.wrangler

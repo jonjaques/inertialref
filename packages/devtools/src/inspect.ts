@@ -10,7 +10,7 @@ import { snapshot } from '@inertialref/simulation'
 import {
   type EntityId,
   formatAddress,
-  partitionForPosition,
+  partitionForFrames,
 } from '@inertialref/universe'
 import type { RenderScene } from '@inertialref/rendering'
 
@@ -105,14 +105,6 @@ export interface RenderInspection {
   readonly terrainCandidates: readonly string[]
 }
 
-/** The system partition an entity's frame sits under, if any. */
-function partitionForFrameChain(chain: readonly string[]): string | null {
-  for (const frame of chain) {
-    if (frame.startsWith('s:')) return frame
-  }
-  return null
-}
-
 export function inspectEntity(
   world: World,
   id: EntityId,
@@ -149,12 +141,8 @@ export function inspectEntity(
     altitude,
     altitudeText: altitude === null ? null : formatDistance(altitude),
     landed: view.landed,
-    // Authority follows the frame, not the address: a ship has no address at
-    // all, but a ship inside Sol belongs to Sol's partition. Falling back to
-    // the galactic cell is only right out in interstellar space.
-    partition:
-      partitionForFrameChain(view.frameChain) ??
-      partitionForPosition(view.position),
+    // Derived by `universe`, not open-coded here — see partitionForFrames.
+    partition: partitionForFrames(world.galaxy, view.frameChain, view.position),
   }
 }
 

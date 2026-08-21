@@ -31,7 +31,7 @@ pnpm here.
 pnpm install
 pnpm dev          # vite dev server for apps/game
 pnpm test         # vitest, node environment only
-pnpm typecheck    # three tsconfig projects — see AGENTS.md for why three
+pnpm typecheck    # four tsconfig projects — see AGENTS.md for why four
 pnpm lint         # oxlint — NOT eslint; oxlint --fix applies autofixes
 pnpm graph        # dependency layering + cycle check
 pnpm build        # typecheck, then vite build
@@ -39,7 +39,20 @@ pnpm check        # graph, lint, typecheck, test, build
 
 pnpm sim --self-test           # headless Node run + the twelve capability checks
 pnpm vitest run <substring>    # a single test file
+
+# The Cloudflare Worker (apps/server). `pnpm dev` proxies /api and /ws to 8787,
+# so without dev:server running the client correctly reports "no server".
+pnpm dev:server                # wrangler dev on 127.0.0.1:8787
+pnpm run deploy:worker         # pnpm build, then wrangler deploy
 ```
+
+**`pnpm run deploy:worker`, not `pnpm deploy:worker`** — `deploy` is a pnpm
+built-in, and the `:worker` suffix keeps the two from being confused. It
+deploys to the `inertialrefd` Worker, live at
+<https://inertialrefd.jaquers.workers.dev>. Regenerate
+`apps/server/worker-configuration.d.ts` with
+`pnpm --filter @inertialref/server run types` after any change to
+`wrangler.jsonc`, and commit it.
 
 `pnpm check` is the gate. Do not report a task complete without it passing.
 

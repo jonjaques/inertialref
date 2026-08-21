@@ -43,6 +43,7 @@ flowchart TB
         WRK["<b>workers</b><br/>tasks · pool · ports"]
         PER["<b>persistence</b><br/>save · migrate · store port"]
         REN["<b>rendering</b><br/>origin · LOD · meshing"]
+        NET["<b>net</b><br/>authority port · local authority"]
     end
     subgraph L4["layer 4"]
         SIM["<b>simulation</b><br/>clock · entities · flight · streaming"]
@@ -62,9 +63,10 @@ flowchart TB
         SHR["<b>shared</b><br/>units · invariants · logging"]
     end
 
-    DEV --> WRK & PER & REN
+    DEV --> WRK & PER & REN & NET
     WRK --> PRO & UNI
     PER --> PRO & SIM
+    NET --> PRO & SIM & UNI
     REN --> SIM & UNI
     SIM --> UNI & PHY
     PRO --> SPA
@@ -101,6 +103,7 @@ it declares a **port** and the host implements it — see
 | `protocol`    | validated wire/save shapes                                    | where bytes come from           |
 | `workers`     | typed tasks, job pool, transport ports                        | `Worker` (the class)            |
 | `persistence` | save capture/restore, migrations                              | IndexedDB (a port)              |
+| `net`         | who owns the simulation this client does not                  | sockets, Cloudflare, transports |
 | `rendering`   | canonical→render bridge, LOD, terrain meshing                 | Three.js                        |
 | `devtools`    | inspection, capability checks, harness, session wiring        | — (it may depend on everything) |
 

@@ -2,9 +2,19 @@ packages:
   - 'apps/*'
   - 'packages/*'
 
-# pnpm >=10 refuses to run install scripts unless the package is listed here.
-# These three ship native binaries and genuinely need their postinstall.
-onlyBuiltDependencies:
-  - '@tailwindcss/oxide'
-  - esbuild
-  - oxlint
+# pnpm refuses to run install scripts unless the package is named here, and
+# pnpm 11 wants the decision spelled out per package rather than as a list.
+# These all ship native binaries and genuinely need their postinstall; workerd is
+# the Workers runtime `wrangler dev` and `wrangler deploy` execute against, and
+# without its postinstall there is no binary to run.
+allowBuilds:
+  '@tailwindcss/oxide': true
+  esbuild: true
+  oxlint: true
+  workerd: true
+
+# wrangler moves fast enough to trip the release-age gate. Recorded rather than
+# waived globally, so the exception is visible and dated with the lockfile.
+minimumReleaseAgeExclude:
+  - miniflare@5.20260820.0-alpha
+  - wrangler@4.125.0

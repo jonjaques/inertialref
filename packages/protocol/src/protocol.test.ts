@@ -23,6 +23,13 @@ import {
 } from './save.ts'
 import { decodeWorkerRequest } from './worker.ts'
 import {
+  decodeServerHealth,
+  HEALTH_PATH,
+  incompatibility,
+  NET_PROTOCOL_VERSION,
+  type ServerHealth,
+} from './net.ts'
+import {
   decodeFrameState,
   decodeUniverseVector,
   encodeFrameState,
@@ -219,5 +226,82 @@ describe('the boundaries actually validate', () => {
     expect(
       decode(decodeWorkerRequest, { ...good, payload: undefined }).ok,
     ).toBe(true)
+  })
+})
+
+describe('the network handshake', () => {
+  const healthy: ServerHealth = {
+    status: 'ok',
+    protocol: NET_PROTOCOL_VERSION,
+    generation: { galaxy: 1, system: 1, terrain: 1 },
+    revision: 'abc1234',
+    colo: 'SJC',
+  }
+  const client = {
+    protocol: NET_PROTOCOL_VERSION,
+    generation: healthy.generation,
+  }
+
+  it('agrees with itself', () => {
+    expect(incompatibility(healthy, client)).toBe(null)
+    expect(HEALTH_PATH.startsWith('/api/')).toBe(true)
+  })
+
+  it('refuses a peer that would derive a different universe', () => {
+    // Not a warning. A client on terrain v2 generates different mountains, so
+    // a replicated position on a mountainside means nothing to it.
+    expect(
+      incompatibility(
+        { ...healthy, generation: { ...healthy.generation, terrain: 2 } },
+        client,
+      ),
+    ).toMatch(/terrain 2≠1/)
+    expect(incompatibility({ ...healthy, protocol: 99 }, client)).toMatch(
+      /protocol 99/,
+    )
+  })
+
+  it('treats an algorithm only one side has heard of as a mismatch', () => {
+    // The tempting default is to ignore an unknown key. It is wrong in both
+    // directions: a generator the server runs and the client does not is a
+    // universe the client cannot derive, and the reverse is the same thing.
+    expect(
+      incompatibility(
+        { ...healthy, generation: { ...healthy.generation, weather: 1 } },
+        client,
+      ),
+    ).toMatch(/weather 1≠absent/)
+    expect(
+      incompatibility(healthy, {
+        ...client,
+        generation: { ...healthy.generation, weather: 1 },
+      }),
+    ).toMatch(/weather absent≠1/)
+  })
+
+  it('decodes a health record rather than trusting a 200', () => {
+    expect(decode(decodeServerHealth, healthy).ok).toBe(true)
+    // Diagnostics may be missing; identity may not.
+    const lean = decode(decodeServerHealth, {
+      status: 'ok',
+      protocol: 1,
+      generation: {},
+    })
+    expect(lean.ok && lean.value.revision).toBe('unknown')
+
+    // A captive portal answers every request with a friendly 200 and an HTML
+    // login page, which is indistinguishable from a healthy server right up
+    // until something reads the body.
+    for (const [label, body] of [
+      ['a login page', '<!doctype html>'],
+      ['no status', { protocol: 1, generation: {} }],
+      ['some other service', { status: 'healthy', protocol: 1 }],
+      [
+        'versions as text',
+        { status: 'ok', protocol: 1, generation: { a: '1' } },
+      ],
+    ] as const) {
+      expect(decode(decodeServerHealth, body).ok, label).toBe(false)
+    }
   })
 })

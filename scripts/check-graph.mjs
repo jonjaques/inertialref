@@ -3,7 +3,7 @@
  * Dependency layering check.
  *
  * TypeScript project references would enforce this, but a referenced project
- * may not disable emit, and declaration-emitting eleven source-only packages to
+ * may not disable emit, and declaration-emitting twelve source-only packages to
  * satisfy `tsc -b` buys nothing. This does the same job in 80 lines, with a
  * better error message, and additionally enforces the *layering* — not just the
  * absence of cycles, but that foundational packages stay foundational.

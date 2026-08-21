@@ -1,6 +1,8 @@
 import type { HarnessStatus } from '@inertialref/devtools'
 import type { GameEngine } from '../engine/GameEngine.ts'
+import type { Connection } from '../net/health.ts'
 import type { OutputPreference, RendererDescription } from '../render/output.ts'
+import { CONNECTION_LABEL, connectionTone } from './connection.ts'
 import { NavPanel } from './NavPanel.tsx'
 import { PerfPanel } from './PerfPanel.tsx'
 import { TelemetryPanel } from './TelemetryPanel.tsx'
@@ -51,6 +53,8 @@ export function HudDock({
   engine,
   status,
   render,
+  connection,
+  onCheckConnection,
   open,
   onOpenChange,
   tab,
@@ -61,6 +65,8 @@ export function HudDock({
   engine: GameEngine
   status: HarnessStatus | null
   render: HudRenderState
+  connection: Connection
+  onCheckConnection: () => void
   open: boolean
   onOpenChange: (open: boolean) => void
   tab: HudTab
@@ -89,6 +95,7 @@ export function HudDock({
             ? 'starting…'
             : `t ${world.tick} · ${world.timeScale}×${world.paused ? ' · paused' : ''} · ${status?.player?.localSpeedText ?? '—'}`}
         </span>
+        <ConnectionPip connection={connection} />
         <span className="shrink-0 text-slate-600">Tab</span>
       </button>
 
@@ -163,13 +170,35 @@ export function HudDock({
               <NavPanel engine={engine} onNotice={onNotice} />
             )}
             {tab === 'telemetry' && (
-              <TelemetryPanel status={status} output={render.output} />
+              <TelemetryPanel
+                status={status}
+                output={render.output}
+                connection={connection}
+                onCheckConnection={onCheckConnection}
+              />
             )}
             {tab === 'perf' && <PerfPanel engine={engine} status={status} />}
           </div>
         </>
       )}
     </aside>
+  )
+}
+
+/**
+ * The dot in the header — the entire network readout when the dock is
+ * collapsed, which is why it carries its explanation in a title rather than a
+ * label. Local, like `Tab` below: it is chrome for this one header.
+ */
+function ConnectionPip({ connection }: { connection: Connection }) {
+  const { state, detail } = connection
+  return (
+    <span
+      className={`shrink-0 ${connectionTone(state)}`}
+      title={`${CONNECTION_LABEL[state]}${detail === null ? '' : ` — ${detail}`}`}
+    >
+      ●
+    </span>
   )
 }
 

@@ -6,16 +6,18 @@
   "packageManager": "pnpm@11.22.0",
   "scripts": {
     "dev": "pnpm --filter @inertialref/game dev",
+    "dev:server": "pnpm --filter @inertialref/server run dev",
     "format": "prettier -w .",
     "format:check": "prettier -c .",
     "build": "pnpm typecheck && pnpm --filter @inertialref/game build",
     "preview": "pnpm --filter @inertialref/game preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc -p tsconfig.json && tsc -p apps/game/tsconfig.json && tsc -p apps/headless/tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json && tsc -p apps/game/tsconfig.json && tsc -p apps/headless/tsconfig.json && tsc -p apps/server/tsconfig.json",
     "lint": "oxlint",
     "graph": "node scripts/check-graph.mjs",
     "sim": "node apps/headless/src/main.ts",
+    "deploy:worker": "pnpm build && pnpm --filter @inertialref/server run deploy",
     "check": "pnpm graph && pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
   "devDependencies": {

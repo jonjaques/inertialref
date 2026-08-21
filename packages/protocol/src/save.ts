@@ -4,10 +4,12 @@ import {
   decodeBoolean,
   decodeInteger,
   decodeNumber,
+  decodeNumberRecord,
   decodeObject,
   decodeOptional,
   decodeEnum,
   decodeString,
+  decodeStringRecord,
   type Decoder,
 } from './codec.ts'
 import {
@@ -109,38 +111,6 @@ export const decodeSaveEntity: Decoder<SaveEntity> = decodeObject({
   ),
   flightAssist: decodeOptional(decodeBoolean, true),
 })
-
-const decodeStringRecord: Decoder<Readonly<Record<string, string>>> = (
-  value,
-  path,
-) => {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return { ok: false, error: `${path}: expected an object` }
-  }
-  const out: Record<string, string> = {}
-  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
-    if (typeof entry !== 'string')
-      return { ok: false, error: `${path}.${key}: expected a string` }
-    out[key] = entry
-  }
-  return ok(out)
-}
-
-const decodeNumberRecord: Decoder<Readonly<Record<string, number>>> = (
-  value,
-  path,
-) => {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return { ok: false, error: `${path}: expected an object` }
-  }
-  const out: Record<string, number> = {}
-  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
-    if (typeof entry !== 'number')
-      return { ok: false, error: `${path}.${key}: expected a number` }
-    out[key] = entry
-  }
-  return ok(out)
-}
 
 export const decodeSaveMutation: Decoder<SaveMutation> = decodeObject({
   address: decodeString,

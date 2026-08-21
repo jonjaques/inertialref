@@ -43,6 +43,7 @@ import {
 } from '@inertialref/persistence'
 import type { RenderScene } from '@inertialref/rendering'
 import type { PoolStats, WorkerPool } from '@inertialref/workers'
+import type { AuthorityPort, AuthorityStatus } from '@inertialref/net'
 import {
   runCapabilityChecks,
   summarizeCapabilities,
@@ -104,6 +105,15 @@ export interface SimulationHost {
   pool(): WorkerPool | null
   /** Replace the running world (used by load). */
   replaceWorld(world: World, player: EntityId | null): void
+  /**
+   * Whoever owns the part of the simulation this client does not.
+   *
+   * Optional because a host may not have one yet, not because being alone is a
+   * missing authority — a solo player has a `LocalAuthority`, which is an
+   * implementation rather than the absence of one. `openSession` always
+   * supplies it.
+   */
+  authority?(): AuthorityPort
 }
 
 /**
@@ -127,6 +137,7 @@ export interface HarnessStatus {
   readonly render: RenderInspection | null
   readonly workers: PoolStats | null
   readonly frame: FrameStats | null
+  readonly authority: AuthorityStatus | null
 }
 
 export interface ScenarioResult {
@@ -175,6 +186,7 @@ export class GameHarness {
       render: scene === null ? null : inspectRender(scene),
       workers: this.#host.pool()?.stats() ?? null,
       frame: this.#host.frameStats?.() ?? null,
+      authority: this.#host.authority?.().status() ?? null,
     }
   }
 
@@ -190,6 +202,14 @@ export class GameHarness {
         ? ''
         : `${player.speedText}${player.altitudeText === null ? '' : ` alt ${player.altitudeText}`}`,
       `systems ${status.world.loadedSystems.length}, frames ${status.world.frames}`,
+      // Headless counterpart of the overlay's authority section, so `pnpm sim`
+      // shows that the port was joined rather than merely constructed.
+      status.authority === null
+        ? ''
+        : `auth ${status.authority.kind} ${status.authority.partition ?? 'none'}` +
+          (status.authority.peers > 0
+            ? ` +${status.authority.peers}`
+            : ' alone'),
     ]
       .filter((part) => part.length > 0)
       .join(' | ')

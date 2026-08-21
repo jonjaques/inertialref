@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { createConsoleSink, logHub } from '@inertialref/shared'
 import App from './App.tsx'
+import { BUILD_ID } from './build.ts'
 import './index.css'
 
 /*
@@ -34,10 +35,17 @@ createRoot(root).render(
  * Once installed there is nothing else to fetch — the universe is generated
  * from a seed and saves live in IndexedDB — so the game is fully playable with
  * no server.
+ *
+ * The build id rides on the URL because `public/sw.js` is copied verbatim and
+ * never compiled, so nothing can be injected into it. Registering a different
+ * URL is what makes the browser install a new worker, and the worker reads the
+ * id back off its own location to name its cache — which is how a deploy stops
+ * inheriting the last one's precached index.html.
  */
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    void navigator.serviceWorker.register('/sw.js').catch((cause: unknown) => {
+    const url = `/sw.js?build=${encodeURIComponent(BUILD_ID)}`
+    void navigator.serviceWorker.register(url).catch((cause: unknown) => {
       console.warn(
         'service worker registration failed; the game still runs online',
         cause,

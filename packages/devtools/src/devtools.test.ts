@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest'
+import { err, ok } from '@inertialref/shared'
 import { createInlineWorker, createTaskRegistry } from '@inertialref/workers'
-import { formatAddress, type EntityId } from '@inertialref/universe'
+import type { AuthorityPort, ClientHello } from '@inertialref/net'
+import {
+  formatAddress,
+  partitionForAddress,
+  type PartitionKey,
+  systemAddress,
+  systemId,
+  type EntityId,
+} from '@inertialref/universe'
 import { Quaternion as Q, Vec, vec3 } from '@inertialref/spatial'
 import { runCapabilityChecks, summarizeCapabilities } from './capabilities.ts'
 import type { GameHarness } from './harness.ts'
@@ -120,6 +129,14 @@ describe('harness', () => {
     const entity = inspection.entities[0]
     expect(entity?.canonical.sector).toHaveLength(3)
     expect(entity?.frameChain[0]).toBe('universe')
+    // Compared against the router, not a literal. The overlay and the thing
+    // that would pick a Durable Object have to agree about who owns a ship, and
+    // until `systemOfFrameId` existed they agreed only because the frame
+    // grammar and the partition grammar spell a system the same way (ADR-0008).
+    // A literal here passes for both the right answer and that coincidence.
+    expect(entity?.partition).toBe(
+      partitionForAddress(systemAddress(session.world.galaxy, systemId('SOL'))),
+    )
     expect(entity?.partition).toBe('s:SOL')
     expect(JSON.stringify(inspection).length).toBeGreaterThan(100)
   })
@@ -131,6 +148,127 @@ describe('harness', () => {
     const result = await ir.scenario('surface')
     expect(result.status.player?.landed).toBe(true)
   }, 20_000)
+})
+
+describe('the authority a session joins', () => {
+  /*
+   * A double, not a mock of `LocalAuthority`.
+   *
+   * The point of these tests is that the session talks to a *port*, so the
+   * thing on the other end has to be something the session has never heard of.
+   * Passing another `LocalAuthority` would prove only that the session can call
+   * the class it already constructs.
+   */
+  function recording() {
+    const joins: { partition: string; hello: ClientHello }[] = []
+    let left = 0
+    let refuse: string | null = null
+    const port: AuthorityPort = {
+      join: (partition, hello) => {
+        joins.push({ partition, hello })
+        return Promise.resolve(
+          refuse === null
+            ? ok({ partition, peers: 3, streaming: true })
+            : err(refuse),
+        )
+      },
+      leave: () => {
+        left += 1
+      },
+      submit: () => {},
+      subscribe: () => () => {},
+      status: () => ({
+        kind: 'remote',
+        state: 'joined',
+        partition: joins[0]?.partition as PartitionKey | null,
+        peers: 3,
+        streaming: true,
+        submitted: 0,
+        detail: null,
+      }),
+    }
+    return {
+      port,
+      joins,
+      leftCount: () => left,
+      refuseWith: (reason: string) => {
+        refuse = reason
+      },
+    }
+  }
+
+  it('joins the partition the player is actually in', () => {
+    const spy = recording()
+    const session = openSession({
+      seed: 'inertialref',
+      workers: null,
+      authority: spy.port,
+    })
+    expect(spy.joins).toHaveLength(1)
+    const join = spy.joins[0]
+    // The same key the overlay shows, from the same derivation — not a second
+    // opinion about which authority owns this ship.
+    expect(join?.partition).toBe(session.harness.status().player?.partition)
+    expect(join?.hello.seed).toBe('inertialref')
+    expect(join?.hello.owns).toEqual([session.player()])
+    session.dispose()
+    expect(spy.leftCount()).toBe(1)
+  })
+
+  it('changes nothing about the simulation', () => {
+    // The milestone's whole claim. An authority is allowed to observe and to
+    // supply what the client cannot derive; it is not allowed to be a second
+    // writer of canonical state, and a divergent hash here would mean it had
+    // become one.
+    const withDefault = openSession({ seed: 'inertialref', workers: null })
+    const withPort = openSession({
+      seed: 'inertialref',
+      workers: null,
+      authority: recording().port,
+    })
+    withDefault.harness.step(600)
+    withPort.harness.step(600)
+    expect(withPort.world.stateHash()).toBe(withDefault.world.stateHash())
+    expect(withPort.harness.status().player?.canonical.text).toBe(
+      withDefault.harness.status().player?.canonical.text,
+    )
+    withDefault.dispose()
+    withPort.dispose()
+  })
+
+  it('flies perfectly well when the authority refuses it', () => {
+    // Offline-first is the requirement, not the fallback: a refused handshake
+    // is a fact on the overlay, and the universe carries on being derivable.
+    const spy = recording()
+    spy.refuseWith('generation mismatch: terrain 1≠99')
+    const session = openSession({
+      seed: 'inertialref',
+      workers: null,
+      authority: spy.port,
+    })
+    session.harness.step(600)
+    expect(session.harness.status().world.tick).toBe(600)
+    expect(session.harness.status().player).not.toBe(null)
+    session.dispose()
+  })
+
+  it('reports a local authority by default, and puts it on the overlay', async () => {
+    const session = openSession({ seed: 'inertialref', workers: null })
+    // The join resolves on a microtask; nothing waits for it, so neither does
+    // the assertion beyond letting it land.
+    await Promise.resolve()
+    const authority = session.harness.status().authority
+    expect(authority?.kind).toBe('local')
+    expect(authority?.state).toBe('joined')
+    expect(authority?.peers).toBe(0)
+    // H-6 again: alone means nothing is streamed, which is what makes an empty
+    // partition cost nothing to run.
+    expect(authority?.streaming).toBe(false)
+    expect(authority?.partition).toBe(
+      session.harness.status().player?.partition,
+    )
+    session.dispose()
+  })
 })
 
 describe('landing through the harness', () => {

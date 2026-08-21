@@ -12,6 +12,7 @@ import {
 } from '@inertialref/spatial'
 import {
   formatAddress,
+  isSystemId,
   parseAddress,
   type SystemId,
   type UniverseAddress,
@@ -38,6 +39,24 @@ import { type BodyFixedDirection, surfaceRadius } from './terrain.ts'
 
 export const systemFrameId = (system: SystemId): FrameId =>
   frameId(`s:${system}`)
+
+/**
+ * Read a system frame id back, or null for any other kind of frame.
+ *
+ * The inverse belongs beside the constructor because the grammar has exactly
+ * one owner. Its absence was a live trap (ADR-0008): the debug overlay derived
+ * an entity's authority partition by scanning the frame chain for an `s:`
+ * prefix itself, which agreed with `partitionForAddress` only because the frame
+ * grammar and the partition-key grammar happen to spell a system the same way.
+ * Renaming either one would have made the overlay and the router disagree about
+ * which authority owns a ship — and the overlay is the tool you would reach for
+ * to diagnose that.
+ */
+export function systemOfFrameId(id: FrameId): SystemId | null {
+  if (!id.startsWith('s:')) return null
+  const rest = id.slice(2)
+  return isSystemId(rest) ? rest : null
+}
 export const bodyFrameId = (address: UniverseAddress): FrameId =>
   frameId(`b:${formatAddress(address)}`)
 export const bodyFixedFrameId = (address: UniverseAddress): FrameId =>

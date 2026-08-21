@@ -1,0 +1,15 @@
+{
+  /* The fourth environment (AGENTS.md).
+     Not the browser and not Node: workerd's globals, plus the `Env` this
+     Worker's own bindings produce. Both come from `worker-configuration.d.ts`,
+     which `pnpm --filter @inertialref/server run types` generates from
+     wrangler.jsonc and which is committed — a binding added to the config and
+     not to the checked-in types is a typecheck that passes locally and fails in
+     CI, or worse, the reverse. */
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    "types": []
+  },
+  "include": ["src", "worker-configuration.d.ts"]
+}

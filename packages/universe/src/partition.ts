@@ -1,6 +1,12 @@
 import type { Brand } from '@inertialref/shared'
+import type { FrameId } from '@inertialref/spatial'
 import { UV, type UniverseVector } from '@inertialref/spatial'
-import type { UniverseAddress } from './address.ts'
+import {
+  type GalaxyId,
+  systemAddress,
+  type UniverseAddress,
+} from './address.ts'
+import { systemOfFrameId } from './frames.ts'
 import { cellOf, cellKey } from './galaxy.ts'
 
 /*
@@ -32,6 +38,34 @@ export function partitionForAddress(address: UniverseAddress): PartitionKey {
 /** Partition covering a point in interstellar space. */
 export function partitionForPosition(position: UniverseVector): PartitionKey {
   return `c:${cellKey(cellOf(position))}` as PartitionKey
+}
+
+/**
+ * The partition owning something standing in a chain of frames.
+ *
+ * Authority follows the *frame*, not the address: a ship has no address at all,
+ * but a ship inside Sol belongs to Sol's partition, and falling back to the
+ * galactic cell is only right out in interstellar space.
+ *
+ * It lives here, with the two grammars it spans, because it previously did not:
+ * the debug overlay open-coded it by scanning the chain for an `s:` prefix and
+ * returning the frame id, which matched `partitionForAddress` only by
+ * coincidence (ADR-0008). Two callers now need the answer — the overlay and the
+ * authority the client joins — and two open-codings of a coincidence is how the
+ * router and the tool you would use to debug the router come to disagree.
+ */
+export function partitionForFrames(
+  galaxy: GalaxyId,
+  frameChain: readonly FrameId[],
+  position: UniverseVector,
+): PartitionKey {
+  for (const frame of frameChain) {
+    const system = systemOfFrameId(frame)
+    if (system !== null) {
+      return partitionForAddress(systemAddress(galaxy, system))
+    }
+  }
+  return partitionForPosition(position)
 }
 
 /** Whether two partitions could ever need to exchange state this tick. */

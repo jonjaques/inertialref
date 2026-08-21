@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { openSession } from '@inertialref/devtools'
 import { HudDock } from './HudDock.tsx'
 import { TargetRow } from './NavPanel.tsx'
+import { type Connection, DISCONNECTED } from '../net/health.ts'
 
 /*
  * A smoke test for the overlay, in Node, with no DOM.
@@ -39,6 +40,8 @@ describe('the dev dock', () => {
         tab: 'telemetry' as const,
         onTabChange: () => {},
         onNotice: () => {},
+        connection: DISCONNECTED,
+        onCheckConnection: () => {},
         render: {
           preference: 'auto' as const,
           output: null,
@@ -91,6 +94,52 @@ describe('the dev dock', () => {
     session.dispose()
   })
 
+  it('reports being unable to reach a server without making it an error', () => {
+    // The offline path is the normal one (docs/design/modes.md), so the overlay
+    // has to state it plainly and the panel has to render it before the first
+    // frame — which is exactly when a player on a plane will be looking.
+    const offline: Connection = {
+      state: 'unreachable',
+      detail: 'Failed to fetch',
+      health: null,
+      checkedAt: null,
+      failures: 3,
+    }
+    const markup = renderToStaticMarkup(
+      createElement(HudDock, {
+        engine: fakeEngine(null),
+        status: null,
+        open: true,
+        onOpenChange: () => {},
+        tab: 'telemetry' as const,
+        onTabChange: () => {},
+        onNotice: () => {},
+        connection: offline,
+        onCheckConnection: () => {},
+        render: {
+          preference: 'auto' as const,
+          output: null,
+          onCyclePreference: () => {},
+        },
+        commands: {
+          togglePause: () => {},
+          warp: () => {},
+          toggleAssist: () => {},
+          killRotation: () => {},
+          save: () => {},
+          load: () => {},
+        },
+      }),
+    )
+    expect(markup).toContain('no server')
+    expect(markup).toContain('Failed to fetch')
+    expect(markup).toContain('3 failed checks')
+    expect(markup).toContain('the game does not need any of this')
+    // The client build is half of "am I running the code I think I am"; the
+    // other half only exists once a server has answered.
+    expect(markup).toContain('client build')
+  })
+
   it('renders the navigation tab without a world to poll yet', () => {
     // The first paint happens before the status poll has fired once. A panel
     // that only renders once it has data is a panel that crashes on load.
@@ -104,6 +153,8 @@ describe('the dev dock', () => {
         tab: 'navigate' as const,
         onTabChange: () => {},
         onNotice: () => {},
+        connection: DISCONNECTED,
+        onCheckConnection: () => {},
         render: {
           preference: 'auto' as const,
           output: null,

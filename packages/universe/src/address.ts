@@ -44,6 +44,16 @@ export function systemId(id: string): SystemId {
 }
 
 /**
+ * Total counterpart to `systemId`, for parsing text that may not be one.
+ *
+ * `systemId` throws, which is right when a malformed id is a programming error
+ * and wrong when the string came from a frame id, a URL or the network and
+ * "not a system" is an ordinary answer.
+ */
+export const isSystemId = (text: string): text is SystemId =>
+  ID_PATTERN.test(text)
+
+/**
  * A cube-sphere surface region: which face, how deep the subdivision, and where
  * on that face's grid. Level n has 2^n cells per side.
  */

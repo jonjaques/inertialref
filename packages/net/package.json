@@ -1,0 +1,21 @@
+{
+  "name": "@inertialref/net",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The authority port: who owns the simulation a client is part of, and the local implementation of it.",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "inertialref": {
+    "layer": 5
+  },
+  "dependencies": {
+    "@inertialref/shared": "workspace:*",
+    "@inertialref/spatial": "workspace:*",
+    "@inertialref/universe": "workspace:*",
+    "@inertialref/protocol": "workspace:*",
+    "@inertialref/simulation": "workspace:*"
+  }
+}

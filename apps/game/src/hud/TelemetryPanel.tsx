@@ -1,7 +1,11 @@
 import type { HarnessStatus } from '@inertialref/devtools'
+import type { AuthorityStatus } from '@inertialref/net'
+import { BUILD_ID } from '../build.ts'
+import { CLIENT_VERSIONS, type Connection } from '../net/health.ts'
 import { describeOutput, type RendererDescription } from '../render/output.ts'
+import { CONNECTION_LABEL, connectionTone, sinceText } from './connection.ts'
 import { CONTROL_HELP } from './useShipControls.ts'
-import { Row, Section } from './widgets.tsx'
+import { Action, Row, Section } from './widgets.tsx'
 
 /*
  * The debug readout.
@@ -25,12 +29,30 @@ import { Row, Section } from './widgets.tsx'
 export function TelemetryPanel({
   status,
   output,
+  connection,
+  onCheckConnection,
 }: {
   status: HarnessStatus | null
   output: RendererDescription | null
+  connection: Connection
+  onCheckConnection: () => void
 }) {
+  // The network section does not wait for the first frame, because the two are
+  // unrelated: a session that never reaches a server still flies, and a session
+  // still building its first frame may already know it cannot reach one.
+  const network = (
+    <>
+      <AuthoritySection authority={status?.authority ?? null} />
+      <NetworkSection connection={connection} onCheck={onCheckConnection} />
+    </>
+  )
   if (status === null)
-    return <div className="text-slate-500">waiting for the first frame…</div>
+    return (
+      <div>
+        <div className="mb-2 text-slate-500">waiting for the first frame…</div>
+        {network}
+      </div>
+    )
   const { world, player, render, workers, frame } = status
 
   return (
@@ -198,6 +220,8 @@ export function TelemetryPanel({
         </Section>
       )}
 
+      {network}
+
       <Section id="tel.controls" title="controls">
         <div className="grid grid-cols-[5.5rem_1fr] gap-x-2">
           {CONTROL_HELP.map(([key, description]) => (
@@ -214,5 +238,123 @@ export function TelemetryPanel({
         </div>
       </Section>
     </div>
+  )
+}
+
+/*
+ * The network readout.
+ *
+ * Six rows that answer one question each, and the two that matter most are the
+ * last pair: which bundle this browser is running, and which deployment
+ * answered. "The fix is live but I still see the bug" is otherwise a guess, and
+ * it is a guess a service worker makes easy to get wrong.
+ *
+ * `generation` is here rather than under `simulation` because it is the thing
+ * the handshake actually compares. Two clients agreeing on a protocol version
+ * and disagreeing on a terrain version derive different mountains, and this is
+ * the row where that becomes visible instead of mysterious.
+ */
+function NetworkSection({
+  connection,
+  onCheck,
+}: {
+  connection: Connection
+  onCheck: () => void
+}) {
+  const { state, detail, health, checkedAt, failures } = connection
+  const generation = Object.entries(health?.generation ?? {})
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([name, version]) => `${name} ${version}`)
+    .join(' · ')
+
+  return (
+    <Section
+      id="tel.network"
+      title="network"
+      trailing={CONNECTION_LABEL[state]}
+    >
+      <div className="flex justify-between gap-3">
+        <span className="shrink-0 text-slate-500">state</span>
+        <span className={`truncate text-right ${connectionTone(state)}`}>
+          {CONNECTION_LABEL[state]}
+          {health !== null && health.colo !== '' ? ` · ${health.colo}` : ''}
+          {failures > 1 ? ` · ${failures} failed checks` : ''}
+        </span>
+      </div>
+      <Row label="detail" value={detail ?? '—'} wrap />
+      <Row
+        label="protocol"
+        value={
+          health === null
+            ? `${CLIENT_VERSIONS.protocol} here, server unknown`
+            : `${health.protocol} server · ${CLIENT_VERSIONS.protocol} here`
+        }
+      />
+      <Row label="generation" value={generation || '—'} wrap />
+      <Row label="client build" value={BUILD_ID} />
+      <Row label="server build" value={health?.revision ?? '—'} />
+      <Row label="checked" value={sinceText(checkedAt)} />
+      <div className="mt-1 flex items-center gap-1">
+        <Action
+          label="check now"
+          title="Probe /api/health immediately"
+          onClick={onCheck}
+        />
+        {/* Said plainly, because the colour of a dot is not a promise. */}
+        <span className="text-slate-600">
+          the game does not need any of this
+        </span>
+      </div>
+    </Section>
+  )
+}
+
+/*
+ * Who owns the simulation this client is part of.
+ *
+ * Separate from `network` because they are different questions with different
+ * answers: you can be online and alone, which is the normal case, and the
+ * costly one this design goes out of its way to avoid paying for (H-6).
+ *
+ * `partition` appears here *and* on the player, deliberately. The player row is
+ * the overlay's own derivation from the frame chain; this one is what the
+ * authority believes. They agree by construction today, and the whole reason
+ * `partitionForFrames` exists is that they once agreed only by coincidence — so
+ * showing both is what makes a future disagreement visible instead of subtle.
+ */
+function AuthoritySection({
+  authority,
+}: {
+  authority: AuthorityStatus | null
+}) {
+  if (authority === null)
+    return (
+      <Section id="tel.authority" title="authority" trailing="none">
+        <div className="text-slate-500">no authority joined</div>
+      </Section>
+    )
+
+  const { kind, state, partition, peers, streaming, submitted, detail } =
+    authority
+  return (
+    <Section id="tel.authority" title="authority" trailing={kind}>
+      <Row label="owner" value={`${kind} · ${state}`} />
+      <Row label="partition" value={partition ?? '—'} />
+      <Row
+        label="peers"
+        value={
+          peers === 0 ? 'alone' : `${peers} other${peers === 1 ? '' : 's'}`
+        }
+      />
+      <Row
+        label="streaming"
+        value={streaming ? 'entities' : 'nothing to send'}
+      />
+      <Row label="intent" value={`${submitted} submitted`} />
+      {detail !== null && <Row label="detail" value={detail} wrap />}
+      <div className="mt-1 text-slate-600">
+        alone is not degraded — it is the mode the universe is designed around
+      </div>
+    </Section>
   )
 }

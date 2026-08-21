@@ -33,6 +33,7 @@ including frame resolution.
 | `protocol`      | 4     | done — validation combinators, wire and save schemas                            |
 | `workers`       | 5     | done — typed tasks, ports, pool, four tasks                                     |
 | `persistence`   | 5     | done — save/restore, migration chain, store port                                |
+| `net`           | 5     | done — authority port, local authority; remote + channel are H4                 |
 | `rendering`     | 5     | done — LOD, depth compression, terrain meshing                                  |
 | `devtools`      | 6     | done — inspection, twelve capability checks, harness, `openSession`             |
 | `apps/game`     | —     | done — React + R3F client on `WebGPURenderer`/TSL, worker pool, IndexedDB saves |
@@ -87,13 +88,15 @@ Full reasoning is in `docs/adr/`. The short version:
 
 ```bash
 pnpm dev         # vite dev server (apps/game)
+pnpm dev:server  # wrangler dev on 8787; `pnpm dev` proxies /api and /ws to it
 pnpm test        # vitest, node environment only
-pnpm typecheck   # three tsconfig projects
+pnpm typecheck   # four tsconfig projects
 pnpm lint        # oxlint
 pnpm graph       # dependency layering + cycle check
 pnpm build
 pnpm check       # all of the above
 pnpm vitest run <substring>   # single test file
+pnpm run deploy:worker        # pnpm build, then wrangler deploy
 ```
 
 ## The architecture pass (19 Aug 2026)
@@ -510,6 +513,116 @@ calls; 66–74 MB heap.
   happened. Colouring the plot on the budget alone marked a comfortable 60 fps as
   over budget permanently. The dashed rule is the budget; the warning fires at
   25 ms, which jitter cannot reach and a missed vsync always does.
+
+## Hosting: the client is on a URL (20 Aug 2026)
+
+`docs/hosting.md` H0 and H1, plus half of H2. Live at
+<https://inertialrefd.jaquers.workers.dev>, served by `apps/server` — one
+Cloudflare Worker holding the static bundle, `/api/health`, and `/ws` reserved
+behind a deliberate 501. No Durable Object, no D1, no socket: everything stood
+up, nothing load-bearing.
+
+- **The whole change is above `packages/`, and that was the point.** Standing up
+  an origin, an API and a versioned handshake required no change to the
+  simulation core at all. The two things that did move below `apps/` were a
+  decoder loop that belonged in the combinators and the H0 fix — the seams held.
+- **H0 first: the debug overlay was computing partition keys itself.**
+  `inspect.ts` scanned an entity's frame chain for an `s:` prefix and returned
+  the frame id, which matched `partitionForAddress` only because the frame
+  grammar and the partition grammar spell a system the same way. The frame
+  grammar's owner now supplies the inverse (`systemOfFrameId`), and the overlay
+  composes it with `partitionForAddress`. The test that guarded this asserted the
+  literal `'s:SOL'` — which passes for both the right answer and the coincidence
+  — so it now compares against the router's own output.
+- **A 200 is not a server.** `/api/health` is decoded, not trusted:
+  `decodeServerHealth` plus `incompatibility()` in `packages/protocol/src/net.ts`.
+  A captive portal answers every request cheerfully with an HTML login page, and
+  status-checking alone cannot tell that from a healthy server. Verified in the
+  browser against the live deployment, along with a version mismatch, a dead
+  server, and the browser's own offline event.
+- **An algorithm one side has never heard of is a mismatch, not a default.** The
+  tempting behaviour — ignore unknown keys in the generation manifest — makes the
+  handshake pass in exactly the case it exists to catch, because a generator the
+  server runs and the client does not is a universe the client cannot derive.
+- **The service worker cached `/api` for the lifetime of the cache.** Fixed in
+  three layers, because the failure is silent, survives reloads and looks exactly
+  like an outage: the worker returns early for `/api` and `/ws`, the Worker sends
+  `no-store`, the client's probe asks for `no-store`. Two adjacent bugs went with
+  it — cache-first pinned the _unhashed_ files in `public/` forever (now
+  stale-while-revalidate; only content-hashed `/assets/*` stays cache-first), and
+  a hand-bumped cache name meant dead chunks accumulated across deploys (now
+  named after the build id, which arrives on the registration URL because
+  `sw.js` is copied verbatim and never compiled).
+- **The service worker is now tested, in Node.** `serviceWorker.test.ts` loads
+  the real file, installs its real handlers against stubbed globals and asks it
+  what it would do. A mirror of the policy would have passed while the policy
+  drifted — the same trap as the terrain-normals test. It asserts the bypass
+  covers exactly the paths `net.ts` declares, which is the one duplication that
+  could not be removed.
+- **`Date.now()` in a Worker is not the time.** It returns the time of the last
+  I/O and does not advance during execution — a Spectre mitigation. The health
+  record deliberately carries no timestamp; a clock read there would be
+  authoritative-looking and wrong.
+- **pnpm 11 wants `allowBuilds`, not `onlyBuiltDependencies`.** `workerd` ships a
+  native binary and its postinstall was being skipped, which fails at
+  `wrangler dev` rather than at install.
+- The bundle grew 2.2 KB gzip (503.9 KB by Vite's reporter). The figure recorded
+  under **Known gaps** and in `docs/design/technical.md` predates this and was
+  taken with an unrecorded instrument; refreshing it wants one deliberate
+  measurement pass, not five edits.
+
+## The authority port (20 Aug 2026)
+
+`docs/hosting.md` H3. `packages/net` (layer 5) holds `AuthorityPort` and
+`LocalAuthority`; `openSession` takes one and defaults to local. **Nothing about
+the simulation changed** — capability check 12 still reports state hash
+`804b2d58` at tick 513, and a session opened with an injected authority produces
+a byte-identical hash to one opened without.
+
+- **The seam is the default, not a branch.** `openSession` has no `if (online)`
+  anywhere: it always joins an authority, and the one it constructs when nobody
+  passes another is a `LocalAuthority` over its own world. That means the
+  single-player path is what the browser client, the headless runner, the
+  capability checks and every test exercise by default — which is the only
+  mechanism that reliably keeps it from rotting into a stub, and the reason it
+  is worth building before there is anything remote to talk to.
+- **`LocalAuthority` is degenerate, not fake, and the tests say so.** The
+  temptation with an implementation that mostly does nothing is to assert that
+  it does nothing, which passes equally well once it has quietly stopped doing
+  the things it should. So the tests assert true statements instead: which
+  partition, refused on what grounds, and that it never emits an `entities`
+  update however much intent it is handed. An authority echoing a client's own
+  ship back at it would fight the local simulation every tick.
+- **`status().partition` is recomputed, never remembered.** A remembered one is
+  right until the first frame transition and quietly wrong afterwards. Flying
+  Sol → Alpha Centauri moves the reported authority from `s:SOL` to
+  `s:HIP71683` with nothing driving it, so ADR-0008's open handoff question is
+  now something you watch on the overlay rather than discover inside a Durable
+  Object.
+- **Refusal is a `Result`, not a rejection.** A version mismatch is an answer;
+  the save loader treats a newer schema the same way and for the same reason.
+  `LocalAuthority` runs the same `incompatibility()` check a remote one will, so
+  the two cannot drift into different rules for the same question, and it
+  additionally refuses a hello carrying a different seed — the seed _is_ the
+  universe, so a replicated position would refer to a planet only one side has.
+- **`incompatibility()` compares two peers, not a server and a client.** It was
+  typed `(ServerHealth, ClientVersions)`, which made the local authority — a
+  server to its own client — read as if it were borrowing the client's type.
+  Now `(server: Versions, client: Versions)`, and the message reads in argument
+  order: `terrain 1≠2` is server 1, client 2.
+- **The port takes `() => World`, not a `World`.** Loading a save replaces the
+  world wholesale; a holder of the reference goes on reporting about the
+  discarded one. `openSession` already learned that (its `world` is a getter for
+  exactly this reason), so the port was built with the same shape rather than
+  relearning it.
+- **`partitionForFrames` moved into `universe`.** Two callers now need "which
+  partition owns this ship" — the overlay and the authority — and two
+  open-codings of it is the bug H0 had just finished fixing. One implementation,
+  in the package that owns both grammars.
+- Not built, deliberately: `remote.ts`, `channel.ts`, and any caller for
+  `submit`. Intent has no recipient until there is a socket, and shipping a
+  transport that transports nothing is how a seam becomes fiction. `submitted`
+  is on the overlay reading `0`, which is the first number worth having at H4.
 
 ## Known gaps
 

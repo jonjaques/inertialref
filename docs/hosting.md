@@ -3,7 +3,15 @@
 How InertialRef gets from a `dist/` directory to a URL, and what has to exist
 behind that URL before the persistent universe is possible.
 
-> This is a **plan**, not a description. Nothing on this page is built yet.
+> **H0, H1 and H3 are built and deployed; H2 is half done. Everything from H4
+> onward is still a plan.** The client is live at
+> <https://inertialrefd.jaquers.workers.dev>, served by `apps/server` — one
+> Worker, the static bundle, `/api/health`, and `/ws` reserved behind a
+> deliberate 501. `packages/net` holds the authority port and the local
+> implementation of it that every solo player runs. There is no Durable Object,
+> no D1 and no socket yet, and the sections below still describe those in the
+> future tense.
+>
 > [ADR-0008](adr/0008-multiplayer-partitions.md) is the decision it implements,
 > [modes](design/modes.md) is what each tier owes the player, and
 > [sustainability](design/sustainability.md#the-hosting-question) is who pays.
@@ -145,15 +153,17 @@ irrelevant — the bundle is an _asset_, not part of the script.
 
 ### H-1 · One Worker serves the client and the API
 
-`apps/server` owns `wrangler.jsonc` and the Worker entry point, and points
-`assets.directory` at `apps/game/dist`. `run_worker_first` sends `/api/*` and
-`/ws` to the script; everything else is served as a static asset without
-invoking it.
+✅ **Built.** `apps/server` owns `wrangler.jsonc` and the Worker entry point,
+and points `assets.directory` at `apps/game/dist`. `run_worker_first` sends
+`/api` and `/ws` to the script; everything else is served as a static asset
+without invoking it.
+
+This is what is deployed, minus the comments:
 
 ```jsonc
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "inertialref",
+  "name": "inertialrefd",
   "main": "src/index.ts",
   "compatibility_date": "2026-08-20",
   "assets": {
@@ -161,25 +171,26 @@ invoking it.
     "binding": "ASSETS",
     // The client is a single page; every unmatched path is index.html, not a 404.
     "not_found_handling": "single-page-application",
-    // Everything else is served straight from the asset store, free and
-    // without waking the script.
-    "run_worker_first": ["/api/*", "/ws"],
+    // `/api` is listed as well as `/api/*` because the glob does not match the
+    // bare path, and the SPA fallback would answer it with index.html.
+    "run_worker_first": ["/api", "/api/*", "/ws"],
   },
-  "durable_objects": {
-    "bindings": [{ "name": "PARTITION", "class_name": "PartitionAuthority" }],
-  },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["PartitionAuthority"] }],
-  "d1_databases": [
-    { "binding": "DB", "database_name": "inertialref", "database_id": "…" },
-  ],
+  "version_metadata": { "binding": "CF_VERSION_METADATA" },
   "observability": { "enabled": true },
 }
 ```
 
-`run_worker_first` needs Wrangler ≥ 4.20.0. `new_sqlite_classes` — not
-`new_classes` — is what makes the object SQLite-backed rather than key-value
-backed; the key-value backend is not available on the Free plan and has no
-reason to be used here.
+`run_worker_first` needs Wrangler ≥ 4.20.0.
+
+The Durable Object and D1 bindings are **not** in the deployed config; they
+arrive with the milestone that uses them, so nothing is bound that nothing
+reads. When the DO does land, `new_sqlite_classes` — not `new_classes` — is
+what makes the object SQLite-backed rather than key-value backed; the key-value
+backend is not available on the Free plan and has no reason to be used here.
+
+`version_metadata` was not in the original sketch and earns its place: the
+health record reports the deployment's version id, so "am I talking to the
+build I just shipped" is a question the client answers instead of a log dive.
 
 ### H-2 · A Durable Object per partition key, with hibernating sockets
 
@@ -267,6 +278,11 @@ is a change of implementation behind the same API, which is why the API should b
 
 ### H-4 · The vendor stays in `apps/`, and a new package holds the port
 
+✅ **The port and the local implementation are built** (H3). `remote.ts` and
+`channel.ts` are not, and deliberately: they have no caller until there is a
+socket, and shipping an implementation of a transport nothing transports over is
+how a seam becomes fiction. What exists is below; what is missing is marked.
+
 `packages/*` may not import a Cloudflare SDK, and `pnpm graph` now genuinely
 enforces it by rejecting **any** third-party runtime dependency below `apps/`.
 Nothing on this page changes that. The pattern is the one
@@ -286,10 +302,10 @@ New package, mirroring the existing layout:
 
 ```
 packages/net/          layer 5 — depends on shared, spatial, universe, simulation, protocol
-  authority.ts         AuthorityPort: join, leave, submitIntent, onState
-  local.ts             LocalAuthority — the single-player case, not a stub
-  remote.ts            RemoteAuthority over a ChannelPort
-  channel.ts           ChannelPort — the host boundary
+  authority.ts       ✅ AuthorityPort, its messages, clientHello, partitionOfEntity
+  local.ts           ✅ LocalAuthority — the single-player case, not a stub
+  remote.ts          ⬜ RemoteAuthority over a ChannelPort
+  channel.ts         ⬜ ChannelPort — the host boundary
 ```
 
 Layer 5 is deliberate and slightly awkward: `net` cannot depend on
@@ -320,6 +336,28 @@ runs in [solo offline](design/modes.md#solo-offline) — **the normal case, not 
 mock**. Offline-first is the requirement, so the local implementation is the one
 that must never be allowed to rot.
 
+The mechanism that keeps it from rotting turned out to be simpler than a
+discipline: `openSession` takes an `AuthorityPort` and defaults to a
+`LocalAuthority` over its own world. There is no flag and no branch anywhere, so
+the local path is what every host — the browser client, the headless runner, the
+capability checks, every test — exercises by default.
+
+Two things about the built version that the sketch did not anticipate, both
+worth keeping:
+
+- **`join` returns a `Result`, and refusal is an answer rather than a failure.**
+  `LocalAuthority` runs the same `incompatibility()` check a remote one will, so
+  the two cannot drift into applying different rules to the same question. It
+  additionally refuses a hello carrying a different seed, because the seed _is_
+  the universe — a position replicated between two of them refers to a planet
+  only one of them has.
+- **`status().partition` is recomputed, never remembered.** A remembered one is
+  correct until the first frame transition and quietly wrong afterwards. Flying
+  from Sol to Alpha Centauri moves the reported authority from `s:SOL` to
+  `s:HIP71683` with nothing driving it, which makes the
+  [handoff question](#open-questions) something you can watch on the overlay a
+  milestone before it has to be answered.
+
 ### H-5 · The wire protocol is versioned, and the handshake refuses a mismatch
 
 [modes](design/modes.md) states it as a design constraint: _all clients in a
@@ -338,6 +376,19 @@ Decoders go in `packages/protocol/src/net.ts`, built from the existing codec
 combinators. The network is a trust boundary, so every inbound message is
 decoded rather than cast — exactly as save files and worker messages already are.
 
+🟡 **Half built.** `net.ts` holds `NET_PROTOCOL_VERSION`, the shared paths, the
+`ServerHealth` record with its decoder, and `incompatibility()` — the rule that
+compares two version manifests and returns a sentence or `null`. The healthcheck
+already refuses on a mismatch, so the rule is exercised in production by every
+client on every probe rather than waiting for a socket to be written against it.
+
+One decision inside it is worth recording, because the tempting default is the
+wrong one: **an algorithm present on one side and absent on the other is a
+mismatch, not a default.** A generator the server runs and the client does not
+is a universe the client cannot derive, and the reverse is the same statement.
+Ignoring unknown keys would make the handshake pass in exactly the case it
+exists to catch.
+
 ---
 
 ## The seams that already exist
@@ -348,46 +399,66 @@ invention:
 | Seam                                                     | Status | Where                                           |
 | -------------------------------------------------------- | ------ | ----------------------------------------------- |
 | Partition keys as opaque strings                         | ✅     | `packages/universe/src/partition.ts`            |
-| Authority follows the frame chain, not the address       | ✅     | `devtools/inspect.ts` (see the caveat below)    |
+| Authority follows the frame chain, not the address       | ✅     | `devtools/inspect.ts` via `systemOfFrameId`     |
 | Storage behind a port, with a memory implementation      | ✅     | `packages/persistence/src/store.ts`             |
 | Host capabilities behind a port, with an in-process fake | ✅     | `packages/workers/src/transport.ts`             |
 | Versioned, validated, decoded-not-cast wire schemas      | ✅     | `packages/protocol`                             |
 | Replication set == save set                              | ✅     | `SaveGame.entities` + `SaveGame.mutations`      |
 | No vendor SDK below `apps/`, mechanically enforced       | ✅     | `scripts/check-graph.mjs`                       |
 | Session assembled in exactly one place                   | ✅     | `packages/devtools/src/session.ts`              |
-| `AuthorityPort` + `LocalAuthority`                       | ⬜     | this plan                                       |
+| A versioned handshake that refuses a mismatch            | ✅     | `packages/protocol/src/net.ts`                  |
+| `AuthorityPort` + `LocalAuthority`                       | ✅     | `packages/net`                                  |
+| A session built around a port, with no `if (online)`     | ✅     | `openSession({ authority })`                    |
 | Input log for prediction and replay                      | ⬜     | [roadmap](roadmap.md#replay-and-reconciliation) |
 
-**One of those is a lie by coincidence and should be fixed first.**
-[ADR-0008](adr/0008-multiplayer-partitions.md) already flags it: `inspect.ts`
-computes the authority key by scanning the frame chain for an `s:` prefix
-_itself_, rather than calling `partitionForAddress`. The two agree only because
-the frame-id grammar and the partition-key grammar happen to be the same string.
-That is one rename away from a bug in which the debug overlay and the router
-disagree about which Durable Object owns a ship — and the overlay is the tool you
-would use to diagnose it. Fix it before it becomes load-bearing.
+**One of those was a lie by coincidence, and H0 fixed it.** `inspect.ts`
+computed the authority key by scanning the frame chain for an `s:` prefix
+_itself_ rather than calling `partitionForAddress`, and the two agreed only
+because the frame-id grammar and the partition-key grammar happen to spell a
+system the same way. That was one rename away from a bug in which the debug
+overlay and the router disagree about which Durable Object owns a ship — with
+the overlay being the tool you would reach for to diagnose it.
+
+The frame grammar's owner now supplies the inverse (`systemOfFrameId` in
+`packages/universe/src/frames.ts`), the overlay composes it with
+`partitionForAddress`, and `partition.test.ts` asserts the two agree rather than
+asserting a literal — because a literal passes for both the right answer and
+the coincidence.
 
 ---
 
 ## What has to be built
 
 ```
-apps/server/                    ⬜ NEW — the only place Cloudflare appears
-  wrangler.jsonc
-  tsconfig.json                 the fourth typecheck project
-  src/index.ts                  fetch handler: assets, /api/*, /ws upgrade
-  src/partition.ts              class PartitionAuthority extends DurableObject
-  src/api/                      discovery, catalogue, sync
-  migrations/                   D1 schema, one file per change
-  worker-configuration.d.ts     generated by `wrangler types`, committed
+apps/server/                    ✅ the only place Cloudflare appears
+  wrangler.jsonc                ✅
+  tsconfig.json                 ✅ the fourth typecheck project
+  src/index.ts                  ✅ fetch handler: /api/health, /ws (501), assets
+  src/routes.ts                 ✅ pure routing, so it is testable in plain Node
+  worker-configuration.d.ts     ✅ generated by `wrangler types`, committed
+  src/partition.ts              ⬜ class PartitionAuthority extends DurableObject
+  src/api/                      ⬜ discovery, catalogue, sync
+  migrations/                   ⬜ D1 schema, one file per change
 
-packages/net/                   ⬜ NEW — layer 5, no vendor import
-packages/protocol/src/net.ts    ⬜ NEW — versioned net messages + decoders
-apps/game/src/net/socket.ts     ⬜ NEW — the only `new WebSocket` in the client
-apps/game/public/sw.js          🟡 EDIT — must stop caching /api (see below)
-packages/devtools/src/session.ts 🟡 EDIT — accept an AuthorityPort, default LocalAuthority
-packages/universe/src/partition.ts ✅ unchanged — this is the point
+packages/protocol/src/net.ts    🟡 paths, NET_PROTOCOL_VERSION, ServerHealth,
+                                   and the compatibility rule — no messages yet
+apps/game/src/net/health.ts     ✅ the only place the client fetches /api
+apps/game/public/sw.js          ✅ /api and /ws bypassed; see below
+apps/game/src/net/socket.ts     ⬜ the only `new WebSocket` in the client
+
+packages/net/                   ✅ layer 5, no vendor import
+  authority.ts                  ✅ the port, its messages, clientHello
+  local.ts                      ✅ LocalAuthority
+  remote.ts · channel.ts        ⬜ H4, when there is something to transport
+packages/devtools/src/session.ts ✅ accepts an AuthorityPort, defaults to local
+packages/universe/src/partition.ts 🟡 gained `partitionForFrames`, now shared
+                                   by the overlay and the authority
 ```
+
+That last line is the only change H1 and H3 together forced below `apps/`, and
+it is a deduplication rather than a feature: the overlay and the authority both
+have to know which partition owns a ship, and two open-codings of the same
+coincidence is precisely what H0 had just finished removing.
 
 `apps/server` is an **app**, so it may depend on `wrangler`,
 `@cloudflare/workers-types` and `cloudflare:workers`. `pnpm graph` reads
@@ -402,29 +473,50 @@ and this one serves. It is also the name a self-hoster would expect, and
 [sustainability](design/sustainability.md#the-hosting-question) commits to the
 authority server being runnable by anyone.
 
+The **deployed Worker** is `inertialrefd`, with the daemon suffix, so the
+running service and the repository are never the same name in a sentence. The
+directory keeps the plain name; only the deployment carries the `d`.
+
 ---
 
 ## Things that will bite
 
 Ordered by how expensive they are to discover late.
 
-### The service worker will cache your API responses forever
+### The service worker will cache your API responses forever ✅ fixed
 
-`apps/game/public/sw.js` is cache-first for **every same-origin GET that is not
-a navigation**. That policy is correct today and is correct for content-hashed
-assets by construction. The moment `/api/discoveries` exists, the first response
-is cached and served for the lifetime of the cache — and because the cache
-survives reloads, this presents as "the API is stuck" with a perfectly healthy
-server.
+`apps/game/public/sw.js` was cache-first for **every same-origin GET that is not
+a navigation**. That policy is correct for content-hashed assets by
+construction, and catastrophic for live state: the first `/api` response would
+be pinned for the lifetime of the cache, and because the cache survives reloads
+it presents as "the API is stuck" with a perfectly healthy server.
 
-Fix it in the same change that adds the first endpoint, not after:
+Fixed in the same change that added the first endpoint, as this page asked.
+There are now three layers, because the failure is silent, durable and
+indistinguishable from an outage: the service worker returns early, the Worker
+sends `cache-control: no-store`, and the client's probe asks for
+`cache: 'no-store'`.
 
-```js
-// /api and /ws are live state, not content-addressed assets. Cache-first below
-// would pin the first response forever, and the cache outlives a reload — which
-// presents as a broken server rather than a broken cache.
-if (url.pathname.startsWith('/api/') || url.pathname === '/ws') return
-```
+Three other things came out of looking at that file properly, all of which would
+have bitten later rather than sooner:
+
+- **Cache-first is wrong for the unhashed files too.** `favicon.svg` and
+  `icons.svg` have no hash in their names, so cache-first meant a change to
+  either could never reach anyone who had loaded the game once. They are
+  stale-while-revalidate now; only `/assets/*` stays cache-first, which is
+  honest because Vite's content hashing is what makes it safe.
+- **A fixed cache name has to be bumped by hand.** It is now
+  `inertialref-${build}`, where the build id arrives on the registration URL —
+  `sw.js` is copied verbatim out of `public/` and never compiled, so the URL is
+  the only channel into it. Activation deletes previous `inertialref-` caches
+  and leaves anything else on the origin alone.
+- **Range requests must not be cached.** A 206 stored whole is served back as
+  the complete resource. Nothing issues one today; the material sets will.
+
+None of that was verifiable by reading. `apps/game/src/net/serviceWorker.test.ts`
+loads the real file, installs its real handlers against stubbed globals and asks
+it what it would do — including that it bypasses exactly the paths `net.ts`
+declares, which is the one duplication that could not be removed.
 
 > An `api.` subdomain would have avoided this for free, since the handler
 > already returns early for cross-origin requests. It was not chosen because
@@ -522,13 +614,17 @@ Two things follow, and neither is work for today:
   arbitration, and the design has already decided the client knows everything
   anyway ([modes](design/modes.md)).
 
-### Three tsconfig projects become four
+### Three tsconfig projects become four ✅ done
 
-`pnpm typecheck` runs three projects, one per real environment, and
-[AGENTS.md](../AGENTS.md) explains why that is deliberate rather than accidental.
-`apps/server` is a fourth environment — `@cloudflare/workers-types` plus the
-generated `worker-configuration.d.ts`, no DOM, no Node. Add the project, add it
-to the `typecheck` script, and update the table in AGENTS.md in the same change.
+`pnpm typecheck` runs four projects now, one per real environment, and
+[AGENTS.md](../AGENTS.md) explains why that is deliberate rather than
+accidental. `apps/server` is the fourth.
+
+One correction to the plan: `@cloudflare/workers-types` is not involved.
+`wrangler types` emits the runtime types _and_ the `Env` interface into a single
+`worker-configuration.d.ts` — 580 KB of it — so the project has `types: []` and
+includes that file. It is committed, which means it is also in `.prettierignore`:
+reformatting generated output produces a diff nobody wrote.
 
 ### Tests run in Node, on purpose, and DO tests cannot
 
@@ -550,10 +646,15 @@ workerd, which is genuinely nicer. It also takes over the client build — and t
 current build is Vite 8 with the Oxc transform, `@rolldown/plugin-babel` running
 the React Compiler preset, and Tailwind, which is tuned and load-bearing.
 
-Start with `vite dev` proxying `/api` and `/ws` to `wrangler dev` on 8787. Revisit
-the plugin once the two-process loop is annoying enough to be worth the build
-risk, and revisit it as a _separate_ change so a build regression has one
-suspect.
+✅ **Wired.** `vite dev` proxies `/api` and `/ws` to `wrangler dev` on 8787
+(`pnpm dev` and `pnpm dev:server`). Revisit the plugin once the two-process loop
+is annoying enough to be worth the build risk, and revisit it as a _separate_
+change so a build regression has one suspect.
+
+A property worth keeping rather than fixing: with `wrangler dev` **not** running,
+the proxy fails and the client reports `no server`. The offline path is
+therefore the default in development, which is the right way round for a game
+whose normal case is solo offline.
 
 ### Cross-origin isolation is a door that is currently open
 
@@ -573,17 +674,44 @@ Each one ends in something demonstrable. The point of the ordering is that
 which is the same discipline `partitionForPosition` already got: build the seam,
 put it on the debug overlay, and look at it for a phase before trusting it.
 
-| #      | Milestone                            | Ends when                                                                                                                                                                   |
-| ------ | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **H0** | Fix the coincidence                  | `inspect.ts` calls `partitionForAddress`; a renamed frame grammar breaks a test rather than production                                                                      |
-| **H1** | The client is on a URL               | `apps/server` exists, serves `apps/game/dist`, SPA fallback works, service worker excludes `/api` and `/ws`, custom domain live, 12/12 capability checks pass in production |
-| **H2** | The API exists and is empty          | `/api/version` returns seed, galaxy and `GENERATION_VERSIONS`; D1 bound with one migration; `wrangler types` output committed; fourth tsconfig project green                |
-| **H3** | The port exists, still offline       | `packages/net` with `AuthorityPort` + `LocalAuthority`; `openSession` takes one and defaults to local; **no behavioural change**, proven by an unchanged `stateHash`        |
-| **H4** | The socket exists, carrying presence | One DO per partition with hibernating sockets; two browser tabs in Sol see each other's ship; closing one drops presence within the timeout; state survives an eviction     |
-| **H5** | The first real mutation              | A `discovered` claim written through the API, atomic in D1, visible to the other tab, and present in a save round trip                                                      |
+| #         | Milestone                            | Ends when                                                                                                                                                                   |
+| --------- | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **H0** ✅ | Fix the coincidence                  | `inspect.ts` calls `partitionForAddress`; a renamed frame grammar breaks a test rather than production                                                                      |
+| **H1** ✅ | The client is on a URL               | `apps/server` exists, serves `apps/game/dist`, SPA fallback works, service worker excludes `/api` and `/ws`, custom domain live, 12/12 capability checks pass in production |
+| **H2** 🟡 | The API exists and is empty          | `/api/version` returns seed, galaxy and `GENERATION_VERSIONS`; D1 bound with one migration; `wrangler types` output committed; fourth tsconfig project green                |
+| **H3** ✅ | The port exists, still offline       | `packages/net` with `AuthorityPort` + `LocalAuthority`; `openSession` takes one and defaults to local; **no behavioural change**, proven by an unchanged `stateHash`        |
+| **H4**    | The socket exists, carrying presence | One DO per partition with hibernating sockets; two browser tabs in Sol see each other's ship; closing one drops presence within the timeout; state survives an eviction     |
+| **H5**    | The first real mutation              | A `discovered` claim written through the API, atomic in D1, visible to the other tab, and present in a save round trip                                                      |
 
 H4 is the milestone the request actually asks for: everything stood up, nothing
 load-bearing.
+
+**Where this actually stands.** H0 and H3 are done. H1 is done apart from the
+custom domain — the client is live on `workers.dev`, the SPA fallback works, and the
+service worker excludes both live paths. H2 is half done from the other end than
+planned: `wrangler types` output is committed and the fourth tsconfig project is
+green, but the endpoint that exists is `/api/health` rather than `/api/version`,
+and there is no D1 yet. Health turned out to be the more useful of the two to
+build first, because it is the one the client has a reason to call on a
+schedule — and it carries `GENERATION_VERSIONS` anyway, so `/api/version` is now
+a rename away rather than a build.
+
+The client shows the result in the telemetry tab under **network**, in five
+states: `checking`, `online`, `offline` (the browser says there is no network),
+`no server` (the request did not complete) and `mismatch` (something answered,
+but not with a health record this build can use). `mismatch` is the one that
+earns its place — it is [H-5](#h-5--the-wire-protocol-is-versioned-and-the-handshake-refuses-a-mismatch)
+arriving early, and it also catches a captive portal, which answers every
+request with a cheerful 200 and is otherwise indistinguishable from a healthy
+server.
+
+H3 added an **authority** section above it, and they are deliberately separate
+questions. You can be `online` and `alone`, which is the normal case and the one
+[H-6](#h-6--an-authority-streams-only-when-it-has-someone-to-replicate-to)
+exists to keep free. `partition` appears there _and_ on the player, which is not
+redundancy: one is the overlay's own derivation from the frame chain and the
+other is what the authority believes, and the whole reason `partitionForFrames`
+exists is that those two once agreed only by coincidence.
 
 ### The smoke test that proves all four components at once
 
@@ -609,22 +737,49 @@ regression is reproducible in CI without a browser.
 
 ## Environments, deployment and secrets
 
-| Concern        | Approach                                                                                                                       |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| Environments   | Wrangler environments: `production` on the custom domain, `staging` on `*.workers.dev`. Separate D1 database per environment.  |
-| Preview        | Workers version preview URLs per deployment — a reviewable URL per pull request without a second environment to maintain.      |
-| CI             | Keep `.github/workflows/check.yml` exactly as it is. Deployment is a **separate** workflow gated on `check` passing.           |
-| Deploy trigger | Push to `main`, plus `workflow_dispatch`. `wrangler deploy` with `CLOUDFLARE_API_TOKEN` as a repository secret.                |
-| Migrations     | D1 migrations applied by the deploy job before the Worker rolls, so the schema is never behind the code.                       |
-| Secrets        | `wrangler secret put`, never `vars`. Nothing in `wrangler.jsonc` may be a credential — it is committed.                        |
-| Rollback       | `wrangler rollback`. DO SQLite migrations are not rolled back by it; write them additively.                                    |
-| Observability  | `observability.enabled` for Workers Logs. The client already has structured logging in `packages/shared` — use the same shape. |
+**Workers Builds** — Cloudflare's own repo-connected CI — is what deploys.
+`main` is production; every other branch produces a **review app**, a preview
+version at its own URL. That removes the API token from GitHub entirely, which
+is why it won out over a deploy workflow in Actions.
 
-The repo has a remote (`git@github.com:jonjaques/inertialref.git`), so Workers
-Builds — Cloudflare's own repo-connected CI — is also an option and would remove
-the API token from GitHub entirely. `pnpm check` would have to run there too, and
-it currently runs in GitHub Actions; keeping the gate where it is and giving
-Cloudflare only the deploy step is the smaller change.
+| Concern        | Approach                                                                                                                                                                                   |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Production     | Push to `main` → `wrangler deploy`. One Worker, `inertialrefd`, on `*.workers.dev` until a custom domain exists.                                                                           |
+| Review apps    | Any other branch → `wrangler versions upload`, which uploads a version and its assets without promoting it. Its own URL, its own origin.                                                   |
+| The gate       | `pnpm check` stays in `.github/workflows/check.yml`. **Cloudflare cannot see a GitHub status check**, so branch protection on `main` is what actually prevents a red merge from deploying. |
+| Build command  | `pnpm build` — typecheck across four projects, then `vite build` into `apps/game/dist`, which is what `assets.directory` points at.                                                        |
+| Node version   | `.node-version`, read by Cloudflare's build image _and_ by the Actions workflow, so the two cannot disagree about the runtime.                                                             |
+| Build identity | `WORKERS_CI_COMMIT_SHA` and `WORKERS_CI_BRANCH` become `__BUILD_ID__`, so a review app's HUD names the branch it was built from.                                                           |
+| Migrations     | D1 migrations run from the build command, before the deploy step, so the schema is never behind the code. Not needed until H2.                                                             |
+| Secrets        | `wrangler secret put`, never `vars`, and **not** Workers Builds' build variables — those exist only during the build. Nothing in `wrangler.jsonc` may be a credential; it is committed.    |
+| Rollback       | `wrangler rollback`, or promote a previous version from the dashboard. DO SQLite migrations are not rolled back by it; write them additively.                                              |
+| Manual deploy  | `pnpm run deploy:worker` still works and is the escape hatch when CI is the thing that is broken.                                                                                          |
+| Observability  | `observability.enabled` for Workers Logs. The client already has structured logging in `packages/shared` — use the same shape.                                                             |
+
+### Review apps stop at H4, and that is worth knowing now
+
+Cloudflare's documentation states plainly that **preview URLs are not generated
+for Workers that implement Durable Objects**. Every milestone up to and
+including H3 is therefore reviewable at a URL; the moment `PartitionAuthority`
+is declared in `wrangler.jsonc`, the review-app model this repository is being
+set up for stops producing them — at exactly the milestone whose whole
+demonstration is _two clients on a URL seeing each other_.
+
+Three ways out, none of them free, none of them decided:
+
+- **A dedicated staging Worker.** A second Wrangler environment with its own DO
+  namespace, deployed from a long-lived branch. Costs a second deploy target,
+  which [H-1](#h-1--one-worker-serves-the-client-and-the-api) argued against for
+  the _client_ — but a staging environment is a different argument from a second
+  origin per request.
+- **Split the socket out.** Keeps preview URLs for the front door and loses the
+  single-origin property that made [H-1](#h-1--one-worker-serves-the-client-and-the-api)
+  worth choosing. Probably wrong.
+- **Accept it**, and review H4 locally with `wrangler dev`, which runs real
+  workerd and real Durable Objects.
+
+Verify the constraint before designing around it — it is the kind of limitation
+Cloudflare removes without announcing. Re-read it when H4 starts.
 
 ---
 

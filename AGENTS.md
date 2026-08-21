@@ -92,15 +92,21 @@ way to guarantee that, and it is the mechanical form of "no hosting vendor's SDK
 below the adapter layer".
 
 There are no TypeScript project references: a referenced project may not disable
-emit, and declaration-emitting eleven source-only packages to satisfy `tsc -b`
-buys nothing. Three independent tsconfig projects type-check the three real
+emit, and declaration-emitting twelve source-only packages to satisfy `tsc -b`
+buys nothing. Four independent tsconfig projects type-check the four real
 environments instead:
 
-| Project                       | Covers           | Environment                                               |
-| ----------------------------- | ---------------- | --------------------------------------------------------- |
-| `tsconfig.json`               | `packages/*/src` | **no DOM lib** — must run in a browser, a worker and Node |
-| `apps/game/tsconfig.json`     | the client       | DOM, WebWorker, JSX                                       |
-| `apps/headless/tsconfig.json` | the Node runner  | Node types                                                |
+| Project                       | Covers           | Environment                                                 |
+| ----------------------------- | ---------------- | ----------------------------------------------------------- |
+| `tsconfig.json`               | `packages/*/src` | **no DOM lib** — must run in a browser, a worker and Node   |
+| `apps/game/tsconfig.json`     | the client       | DOM, WebWorker, JSX                                         |
+| `apps/headless/tsconfig.json` | the Node runner  | Node types                                                  |
+| `apps/server/tsconfig.json`   | the Worker       | workerd globals and `Env`, from `worker-configuration.d.ts` |
+
+The fourth is neither the browser nor Node, and its types are **generated**:
+`pnpm --filter @inertialref/server run types` writes `worker-configuration.d.ts`
+from `wrangler.jsonc`, and that file is committed. Add a binding to the config
+without regenerating and the typecheck passes against a stale `Env`.
 
 If a package needs a host capability, it declares a **port** and the host
 implements it. See `packages/workers/src/transport.ts` and

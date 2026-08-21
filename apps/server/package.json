@@ -1,0 +1,20 @@
+{
+  "name": "@inertialref/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Cloudflare Worker: serves the client bundle, answers /api, and will route /ws to a partition authority.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "versions:upload": "wrangler versions upload",
+    "types": "wrangler types"
+  },
+  "dependencies": {
+    "@inertialref/protocol": "workspace:*",
+    "@inertialref/universe": "workspace:*"
+  },
+  "devDependencies": {
+    "wrangler": "^4.125.0"
+  }
+}

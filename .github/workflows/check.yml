@@ -40,11 +40,12 @@ jobs:
 
       # Node 26 is required: the headless runner executes the TypeScript sources
       # directly through type stripping, which is how `pnpm sim` works with no
-      # build step. Pinned here because the repository has no .nvmrc or `engines`
-      # field yet — if one is added, switch this to `node-version-file`.
+      # build step. Read from `.node-version` rather than pinned here, because
+      # Cloudflare's build image reads the same file — two CI systems agreeing
+      # about the runtime by construction rather than by both being edited.
       - uses: actions/setup-node@v6
         with:
-          node-version: '26'
+          node-version-file: '.node-version'
           cache: pnpm
 
       - name: Install

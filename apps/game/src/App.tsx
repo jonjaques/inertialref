@@ -6,6 +6,11 @@ import { FlightStrip } from './hud/FlightStrip.tsx'
 import { HudDock, type HudCommands, type HudTab } from './hud/HudDock.tsx'
 import { usePersistentState } from './hud/panelState.ts'
 import { useShipControls } from './hud/useShipControls.ts'
+import {
+  type Connection,
+  ConnectionMonitor,
+  DISCONNECTED,
+} from './net/health.ts'
 import { EXTENDED_RANGE_QUERY, watchDynamicRange } from './render/capability.ts'
 import {
   commitToneCurve,
@@ -94,6 +99,16 @@ export default function App() {
     () => window.matchMedia(EXTENDED_RANGE_QUERY).matches,
   )
   const [output, setOutput] = useState<RendererDescription | null>(null)
+  /*
+   * Whether there is a server, and whether it believes in the same universe.
+   *
+   * Nothing waits on it. The simulation is authoritative locally and always has
+   * been — `docs/design/modes.md` makes solo offline the normal case rather
+   * than a degraded one — so this is a readout the HUD shows, in the same sense
+   * that altitude is, and its failure path is a sentence rather than a retry.
+   */
+  const [monitor] = useState(() => new ConnectionMonitor())
+  const [connection, setConnection] = useState<Connection>(DISCONNECTED)
   // The renderer itself, for the one thing that has to happen to it after R3F
   // has finished configuring it. Not state: nothing renders differently for it.
   const renderer = useRef<RendererHandle | null>(null)
@@ -101,6 +116,15 @@ export default function App() {
   // The media query is live: a window can be dragged from an EDR display to one
   // without, and reading it once at startup gets that permanently wrong.
   useEffect(() => watchDynamicRange(setDynamicRangeHigh), [])
+
+  useEffect(() => {
+    const unsubscribe = monitor.subscribe(setConnection)
+    monitor.start()
+    return () => {
+      unsubscribe()
+      monitor.stop()
+    }
+  }, [monitor])
 
   /*
    * Release the renderer when the canvas is torn down.
@@ -256,6 +280,8 @@ export default function App() {
               flash(`hdr ${next}`)
             },
           }}
+          connection={connection}
+          onCheckConnection={monitor.refresh}
           open={dockOpen}
           onOpenChange={setDockOpen}
           tab={tab}

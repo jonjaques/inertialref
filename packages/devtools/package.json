@@ -21,6 +21,7 @@
     "@inertialref/protocol": "workspace:*",
     "@inertialref/workers": "workspace:*",
     "@inertialref/persistence": "workspace:*",
-    "@inertialref/rendering": "workspace:*"
+    "@inertialref/rendering": "workspace:*",
+    "@inertialref/net": "workspace:*"
   }
 }

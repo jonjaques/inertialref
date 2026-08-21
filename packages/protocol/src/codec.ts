@@ -112,6 +112,37 @@ export function decodeOptional<T>(inner: Decoder<T>, fallback: T): Decoder<T> {
     value === undefined ? ok(fallback) : inner(value, path)
 }
 
+/**
+ * A string-keyed map whose keys are not known ahead of time.
+ *
+ * `decodeObject` has to be told its keys, which is right for a message and
+ * wrong for a version manifest: the whole point of `GENERATION_VERSIONS` is
+ * that adding an algorithm adds a key without anyone editing a schema. Two
+ * copies of this loop were open-coded in `save.ts`, and the network needs the
+ * same shape, so it lives with the other combinators now.
+ */
+export function decodeRecord<T>(
+  item: Decoder<T>,
+): Decoder<Readonly<Record<string, T>>> {
+  return (value, path) => {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+      return fail(path, 'an object', value)
+    }
+    const out: Record<string, T> = {}
+    for (const [key, entry] of Object.entries(
+      value as Record<string, unknown>,
+    )) {
+      const decoded = item(entry, path ? `${path}.${key}` : key)
+      if (!decoded.ok) return decoded
+      out[key] = decoded.value
+    }
+    return ok(out)
+  }
+}
+
+export const decodeNumberRecord = decodeRecord(decodeNumber)
+export const decodeStringRecord = decodeRecord(decodeString)
+
 type Shape = Readonly<Record<string, Decoder<unknown>>>
 type Decoded<S extends Shape> = {
   readonly [K in keyof S]: S[K] extends Decoder<infer T> ? T : never

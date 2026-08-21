@@ -219,6 +219,7 @@ packages/
   protocol           versioned, validated wire and save schemas      (4)
   workers            typed tasks, transport ports, job pool          (5)
   persistence        save/load, migrations, store port               (5)
+  net                authority port, local authority                 (5)
   rendering          canonical→render bridge, LOD, terrain meshing   (5)
   devtools           inspection, capability checks, harness          (6)
 docs/                concepts, ADRs, guides, and the design bible

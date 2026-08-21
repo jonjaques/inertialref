@@ -13,6 +13,12 @@ import {
 import { type WorkerFactory, WorkerPool } from '@inertialref/workers'
 import { MemorySaveStore, type SaveStore } from '@inertialref/persistence'
 import {
+  type AuthorityPort,
+  clientHello,
+  LocalAuthority,
+  partitionOfEntity,
+} from '@inertialref/net'
+import {
   GameHarness,
   type PresentationHost,
   type SimulationHost,
@@ -70,6 +76,16 @@ export interface SessionOptions {
    */
   readonly onWorldReplaced?: () => void
   readonly shipName?: string
+  /**
+   * Who owns the part of the simulation this client does not.
+   *
+   * Defaults to a `LocalAuthority` over this session's own world, which is the
+   * single-player case and not a placeholder for one. Passing something else is
+   * how a remote authority arrives — there is deliberately no flag and no
+   * branch, so the local path is the one every host exercises by default and
+   * cannot rot unnoticed.
+   */
+  readonly authority?: AuthorityPort
 }
 
 export interface Session extends SimulationHost {
@@ -78,6 +94,8 @@ export interface Session extends SimulationHost {
   /** The system loaded at open, and the body the ship was placed above. */
   readonly system: StarSystem
   readonly target: Body
+  /** Always present here, unlike on `SimulationHost` — a session always joins one. */
+  authority(): AuthorityPort
   dispose(): void
 }
 
@@ -129,6 +147,20 @@ export function openSession(options: SessionOptions = {}): Session {
 
   const store = options.store ?? new MemorySaveStore()
 
+  /*
+   * Joining the authority.
+   *
+   * Fire-and-forget on purpose. `join` resolves — it does not block the world,
+   * the ship or the first frame — because a session that waited on an authority
+   * would be a session that fails to start when there is no network, and
+   * offline is the normal case rather than the error case. The result is logged
+   * and reflected in `status().authority`; nothing downstream reads it
+   * synchronously.
+   */
+  const authority =
+    options.authority ??
+    new LocalAuthority({ world: () => world, player: () => player })
+
   const host: SimulationHost & Partial<PresentationHost> = {
     get world() {
       return world
@@ -143,10 +175,32 @@ export function openSession(options: SessionOptions = {}): Session {
       player = nextPlayer
       options.onWorldReplaced?.()
     },
+    authority: () => authority,
     ...(options.presentation ?? {}),
   }
 
   const harness = new GameHarness(host)
+
+  const partition = partitionOfEntity(world, player)
+  if (partition !== null) {
+    void authority
+      .join(partition, clientHello(world, player === null ? [] : [player]))
+      .then((result) => {
+        if (result.ok) {
+          log.info('joined an authority', {
+            partition: result.value.partition,
+            peers: result.value.peers,
+            streaming: result.value.streaming,
+          })
+        } else {
+          // Refusal is an answer, not a crash. The world is already running.
+          log.warn('authority refused this client', { reason: result.error })
+        }
+      })
+      .catch((cause: unknown) => {
+        log.warn('authority join failed', { cause: String(cause) })
+      })
+  }
 
   return {
     get world() {
@@ -160,7 +214,9 @@ export function openSession(options: SessionOptions = {}): Session {
     store,
     system,
     target,
+    authority: () => authority,
     dispose: () => {
+      authority.leave()
       pool?.terminate()
       pool = null
     },
