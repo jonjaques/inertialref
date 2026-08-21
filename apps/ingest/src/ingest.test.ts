@@ -20,6 +20,7 @@ import {
   utf8,
 } from '@inertialref/universe'
 import { parseCsv } from './csv.ts'
+import { separationArcsec } from './build.ts'
 import { chooseCommonName } from './naming.ts'
 
 /*
@@ -440,6 +441,46 @@ describe('the CSV reader', () => {
     if (row === undefined) throw new Error('no row')
     expect(table.cell(row, 'b')).toBe('say "hi"')
     expect(table.rows).toHaveLength(1)
+  })
+})
+
+describe('cross-matching by sky position', () => {
+  /*
+   * The last resort in `findHost`, and the one that fails silently.
+   *
+   * When HIP, HD and every spelling of a Gliese number have all missed, the two
+   * archives are compared by where they say the star is. Right ascension wraps
+   * at 0h, so a star a few arcseconds either side of it subtracts to nearly 360
+   * degrees — and a match that should have been made instead becomes a line in
+   * `unmatchedHosts` claiming HYG does not contain a host it contains.
+   */
+  it('measures the short way round the 0h meridian', () => {
+    // The same star, 72 arcseconds apart, straddling the boundary.
+    const west = { ra: 359.99, dec: 0 }
+    const east = { ra: 0.01, dec: 0 }
+    expect(separationArcsec(west, east)).toBeCloseTo(72, 3)
+    // Symmetric, which the modulo has to be and is easy to get wrong.
+    expect(separationArcsec(east, west)).toBeCloseTo(72, 3)
+    // ...and inside the 60-arcsecond tolerance once it is halved.
+    expect(separationArcsec({ ra: 359.995, dec: 0 }, east)).toBeLessThan(60)
+  })
+
+  it('still measures the ordinary case', () => {
+    expect(
+      separationArcsec({ ra: 10, dec: 0 }, { ra: 10.01, dec: 0 }),
+    ).toBeCloseTo(36, 3)
+    // Declination does not wrap — it reflects — so it is a plain difference.
+    expect(
+      separationArcsec({ ra: 10, dec: 40 }, { ra: 10, dec: 40.01 }),
+    ).toBeCloseTo(36, 3)
+  })
+
+  it('narrows longitude towards the poles', () => {
+    // A degree of right ascension is worth cos(dec) of a degree on the sky, so
+    // the same RA offset is a smaller separation at high declination.
+    const equator = separationArcsec({ ra: 10, dec: 0 }, { ra: 10.1, dec: 0 })
+    const polar = separationArcsec({ ra: 10, dec: 60 }, { ra: 10.1, dec: 60 })
+    expect(polar).toBeCloseTo(equator * Math.cos((60 * Math.PI) / 180), 2)
   })
 })
 

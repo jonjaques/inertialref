@@ -396,13 +396,26 @@ function buildHostIndex(
 
 const DEG = Math.PI / 180
 
-/** Angular separation in arcseconds, small-angle. */
-function separationArcsec(
+/**
+ * Angular separation in arcseconds, small-angle.
+ *
+ * The `+ 540) % 360) - 180` is the whole reason this is a function rather than
+ * two lines at the call site. Right ascension wraps at 0h, so two positions of
+ * the *same* star either side of it — 359.99° and 0.01°, which are 72 arcseconds
+ * apart — subtract to 359.98° and come out as 1.3 million arcseconds. The match
+ * is then rejected, the star lands in `unmatchedHosts`, and the report says
+ * "HYG does not contain this host" about a host it contains.
+ *
+ * Small-angle in declination is fine and wrapping there is not: declination is
+ * bounded at ±90° and does not wrap, it reflects.
+ */
+export function separationArcsec(
   a: { ra: number; dec: number },
   b: { ra: number; dec: number },
 ): number {
   const dDec = (a.dec - b.dec) * 3_600
-  const dRa = (a.ra - b.ra) * 3_600 * Math.cos(((a.dec + b.dec) / 2) * DEG)
+  const shortestArc = (((a.ra - b.ra + 540) % 360) - 180) * 3_600
+  const dRa = shortestArc * Math.cos(((a.dec + b.dec) / 2) * DEG)
   return Math.hypot(dRa, dDec)
 }
 
