@@ -107,6 +107,19 @@ export function createRenderer(
     await renderer.init()
 
     /*
+     * Clear to *opaque* black. The default clear alpha is 0, and on the
+     * extended path that zero reaches the `rgba16float` canvas, which Chrome
+     * composites premultiplied — so the alpha channel becomes visible
+     * structure. That is how the lens flare's additive quads (whose preset
+     * blending also adds alpha) drew their own footprints as hard rectangles,
+     * dimmed every star inside them on an EDR display, and, once their alpha
+     * writes were silenced, vanished over empty sky instead: rgb over
+     * alpha-0 pixels is discarded by the compositor. Space is black, not
+     * transparent; nothing behind the canvas was ever meant to show through.
+     */
+    renderer.setClearColor(0x000000, 1)
+
+    /*
      * Take ownership of the draw-call counters.
      *
      * `Info.autoReset` is honoured inside three's *own* `Animation` loop, which

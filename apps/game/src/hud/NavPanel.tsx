@@ -44,6 +44,9 @@ export function NavPanel({
   const [selected, setSelected] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [error, setError] = useState<string | null>(null)
+  // Mirrors `engine.showShip`, which is a plain field on purpose — this state
+  // exists only so the button's label re-renders when it is clicked.
+  const [shipShown, setShipShown] = useState(engine.showShip)
   // Bumped by every action, so the listing refreshes on the spot rather than
   // showing where you used to be until the next poll.
   const [generation, setGeneration] = useState(0)
@@ -221,6 +224,47 @@ export function NavPanel({
               </div>
             </>
           )}
+        </div>
+      </Section>
+
+      <Section
+        id="nav.shots"
+        title="shots"
+        trailing={target?.kind === 'body' ? target.name : 'current body'}
+      >
+        {/*
+         * Camera bookmarks: `ir.shot(name, address?)` with a button per
+         * composition. They act on the selected body when one is selected and
+         * on the body you are at otherwise, so "frame the thing I am looking
+         * at" is one click. The ship toggle lives here because the bookmarks
+         * are why it exists: a debug cone parked dead centre ruins every
+         * composition it appears in.
+         */}
+        <div className="flex flex-wrap gap-1">
+          {engine.harness.shots().map(({ name, description }) => (
+            <Action
+              key={name}
+              label={name}
+              title={description}
+              onClick={() =>
+                run(`shot ${name}`, () => {
+                  engine.harness.shot(
+                    name,
+                    target?.kind === 'body' ? target.address : undefined,
+                  )
+                })
+              }
+            />
+          ))}
+          <span className="mx-1 h-3 w-px bg-slate-800" />
+          <Action
+            label={shipShown ? 'hide ship' : 'show ship'}
+            title="Draw the debug ship and reference props, or keep them out of the frame"
+            onClick={() => {
+              engine.showShip = !engine.showShip
+              setShipShown(engine.showShip)
+            }}
+          />
         </div>
       </Section>
 

@@ -65,6 +65,7 @@ import {
   travelTargets,
   viewingAltitudeKm,
 } from './travel.ts'
+import { findShot, placeShot, SHOTS } from './shots.ts'
 
 /*
  * The scriptable harness.
@@ -409,6 +410,84 @@ export class GameHarness {
     return this.status()
   }
 
+  /**
+   * Frame a named, repeatable composition of a body — a camera bookmark.
+   *
+   * `orbit` places you for flying; this places you for looking, at the
+   * distances and phase angles the reference photographs were taken from. The
+   * ship is left in a circular orbit through the bookmark position so the
+   * composition holds instead of falling, and the nose — which is the camera —
+   * is aimed by the shot itself: the body's centre, the sunward horizon, or
+   * the star's reflection off the surface.
+   *
+   * With no address it re-frames the body whose frame the player is already
+   * in, so `ir.shot('crescent')` after any arrival does what it sounds like.
+   */
+  shot(name = 'full-face', address?: string): HarnessStatus {
+    const shot = findShot(name)
+    // Lenient like `goTo`, because this is typed at a console: `b:2` relative
+    // to the current system is the way anyone actually names a body.
+    const target = resolveDestination(
+      address ?? this.#currentBodyAddress(),
+      this.world.galaxy,
+      currentSystemOf(this.world, this.#host.player()),
+    )
+    if (target.kind !== 'body')
+      throw new Error(`${address ?? ''} names a system; shots frame a body`)
+    const system = this.world.loadSystem(target.system)
+    const body = findBody(
+      system,
+      target.address.kind === 'body' ? target.address.body : [],
+    )
+    if (body === undefined) throw new Error(`No body at ${target.text}`)
+
+    const player = this.#requirePlayer()
+    const frame = bodyFrameId(body.address)
+    const time = this.world.clock.time
+
+    // The sun direction in the body's frame, exactly as `orbit` derives it.
+    const bodyPose = this.world.frames.pose(frame, time)
+    const parent = this.world.frames.get(frame).parent
+    const toStar =
+      parent === null
+        ? vec3(1, 0, 0)
+        : Vec.normalize(
+            Q.rotateInverse(
+              bodyPose.orientation,
+              UV.difference(
+                this.world.frames.pose(parent, time).position,
+                bodyPose.position,
+              ),
+            ),
+          )
+
+    // Clamped inside the sphere of influence for the same reason
+    // `viewingAltitudeKm` is: a "parking orbit" outside the SOI is reframed to
+    // the parent and becomes a departure.
+    const placement = placeShot(
+      shot,
+      body.radius,
+      toStar,
+      body.sphereOfInfluence * 0.85,
+    )
+    const distance = Vec.length(placement.position)
+    this.world.teleport(player, {
+      frame,
+      position: placement.position,
+      orientation: placement.orientation,
+      velocity: Vec.scale(placement.along, circularSpeed(body.mu, distance)),
+      angularVelocity: Vec.ZERO,
+    })
+    this.world.setControl(player, Vec.ZERO, Vec.ZERO)
+    log.info('framed shot', { shot: name, address: target.text, distance })
+    return this.status()
+  }
+
+  /** The camera bookmarks `shot` can frame. */
+  shots(): readonly { name: string; description: string }[] {
+    return SHOTS.map(({ name, description }) => ({ name, description }))
+  }
+
   /** Park the player on the ground at a latitude/longitude, ready to fly. */
   land(address: string, latitude = 0, longitude = 0): HarnessStatus {
     const parsed = parseAddress(address)
@@ -662,6 +741,9 @@ export class GameHarness {
       '  ir.loadSystem(id)             generate a system without travelling to it',
       '  ir.bodies() / ir.systemsNearby(ly)',
       '  ir.orbit(address, altitudeKm) / ir.land(address, lat, lon)',
+      '  ir.shot(name, address?)       frame a camera bookmark: ' +
+        SHOTS.map((s) => s.name).join(', '),
+      '  ir.shots()                    the bookmarks, described',
       '  ir.face(address)              point the nose at something',
       '  ir.goToSystem(id, au) / ir.burnToward(address, throttle)',
       '  ir.save() / ir.load(text)',
@@ -677,6 +759,24 @@ export class GameHarness {
     if (player === null)
       return this.world.loadedSystems()[0]?.position ?? UV.UNIVERSE_ORIGIN
     return this.world.canonicalPositionOf(player)
+  }
+
+  /**
+   * The body whose frame the player is inside, as an address.
+   *
+   * The frame chain, not a stored field, for the same reason
+   * `currentSystemOf` walks it: containment is what makes the player *at* a
+   * body. A surface frame's parent is the body frame, so landing still counts.
+   */
+  #currentBodyAddress(): string {
+    const player = this.#requirePlayer()
+    const entity = this.world.entities.require(player)
+    for (const frame of this.world.frames.chain(entity.state.frame)) {
+      if (frame.startsWith('b:')) return frame.slice(2)
+    }
+    throw new Error(
+      'The player is not at a body — pass an address, e.g. ir.shot("full-face", "b:2")',
+    )
   }
 
   #bodyPosition(address: string): UniverseVector {

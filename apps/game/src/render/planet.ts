@@ -126,6 +126,14 @@ export interface PlanetMaterial {
   readonly nightStrength: { value: number }
   readonly specularStrength: { value: number }
   readonly specularSharpness: { value: number }
+  /** Scattering colour of the air, seen looking down through it. */
+  readonly hazeColour: { value: Color }
+  /** What the low sun turns: the sunset tint the air lends the light. */
+  readonly hazeLimb: { value: Color }
+  /** How much air sits over this surface. 0 disables the whole aerial term. */
+  readonly hazeStrength: { value: number }
+  /** What deep water looks like from orbit; the map's bathymetry is not it. */
+  readonly oceanColour: { value: Color }
   /** Cloud shell height as a fraction of the body's radius. */
   readonly cloudHeight: { value: number }
   readonly cloudShadow: { value: number }
@@ -170,7 +178,14 @@ export function createPlanetMaterial(): PlanetMaterial {
   const terminator = uniform(0.02)
   const nightStrength = uniform(1)
   const specularStrength = uniform(0)
-  const specularSharpness = uniform(900)
+  const specularSharpness = uniform(420)
+  const hazeColour = uniform(new Color(0.28, 0.48, 0.95))
+  const hazeLimb = uniform(new Color(0.92, 0.42, 0.2))
+  const hazeStrength = uniform(0)
+  // Open-ocean reflectance in linear sRGB — a few percent, blue. Measured off
+  // the mid-Pacific in orbital photographs, not off the albedo map, whose
+  // "ocean" is bathymetry data wearing water's colour.
+  const oceanColour = uniform(new Color(0.012, 0.04, 0.13))
   const cloudHeight = uniform(0)
   const cloudShadow = uniform(0)
   const ringInner = uniform(0)
@@ -274,27 +289,92 @@ export function createPlanetMaterial(): PlanetMaterial {
   const lommelSeeliger = mu0.div(mu0.add(mu)).mul(2)
   const photometric = mix(mu0, lommelSeeliger.mul(mu0.sign()), lunarLambert)
 
-  const albedo = albedoMap.rgb.mul(baseColour).mul(albedoScale)
-  const sunlight = sunColour.mul(sunIntensity)
+  /*
+   * The light itself reddens as the sun drops. A surface near the terminator
+   * is lit through hundreds of kilometres of air that has scattered the blue
+   * away, which is why every orbital photograph puts an amber band along the
+   * dawn and dusk lines — the ground there is lit by sunset. Keyed to the
+   * geometric incidence, because it is the sun's altitude that decides the
+   * path length, not the slope of any hill; and scaled by how much air the
+   * body has, because the Moon's terminator is grey to the end.
+   */
+  const lowSun = smoothstep(float(0.35), float(0.02), incidence)
+  const lightTint = mix(vec3(1), hazeLimb, lowSun.mul(hazeStrength).mul(0.85))
+  const sunlight = sunColour.mul(sunIntensity).mul(lightTint)
   const lit = daylight.mul(ringShade).mul(cloudShade)
+
+  /*
+   * Water and land are different materials, not different colours.
+   *
+   * The mask rides in the normal map's alpha. Where it says water, the map's
+   * colour is mostly *bathymetry* — the sea floor, which no photograph from
+   * orbit shows — so the albedo is pulled towards a uniform deep-ocean blue.
+   * Fully replacing it would erase the real shallow-water turquoise on the
+   * banks and reefs, which photographs do show; 0.65 keeps them.
+   */
+  const ocean = normalMap.a
+  const surfaceAlbedo = albedoMap.rgb.mul(baseColour).mul(albedoScale)
+  const albedo = mix(surfaceAlbedo, oceanColour, ocean.mul(0.65))
 
   const diffuse = albedo.mul(photometric).mul(sunlight).mul(lit)
 
   /*
-   * Sun-glint, on water only.
+   * Sun-glint, on water only: the star mirrored in the wave field.
    *
-   * The ocean mask rides in the normal map's alpha, so this costs no extra
-   * sample. The half-vector uses the *geometric* normal rather than the shaded
-   * one: the normal map describes ten-kilometre topography, and the thing that
-   * makes a specular highlight on an ocean is the wave field, which is not in
-   * any map at this resolution.
+   * Three facts carry it. **Fresnel**: water reflects 2% head-on and nearly
+   * everything at grazing incidence, so the glint is modest under a high sun
+   * and becomes a blown white-gold sheet towards the limb and the terminator —
+   * which is exactly where the photographs put it. **Two lobes**: wave slopes
+   * spread the reflection into a bright core inside a wide skirt; a single
+   * tight exponent reads as a chrome ball, and the skirt is most of what the
+   * eye recognises as "sea". **The geometric normal**: the normal map is
+   * ten-kilometre topography, and the wave field is not in any map at this
+   * resolution.
+   *
+   * The gain sets the core near diffuse white under a high sun and lets the
+   * grazing case run well past 1 — that is what the HDR headroom is for, and
+   * the tone curve's shoulder is what keeps it from clipping to a disc.
    */
-  const ocean = normalMap.a
   const half = normalize(light.add(view))
-  const glint = pow(max(dot(geometric, half), float(0)), specularSharpness)
+  const facing = max(dot(view, half), float(0))
+  const fresnel = float(0.02).add(pow(oneMinus(facing), 5).mul(0.98))
+  const lobe = max(dot(geometric, half), float(0))
+  const glint = pow(lobe, specularSharpness)
+    .add(pow(lobe, specularSharpness.div(16)).mul(0.32))
+    .mul(fresnel)
+    .mul(float(60))
     .mul(ocean)
     .mul(specularStrength)
     .mul(lit)
+
+  /*
+   * Aerial perspective: the disc seen through its own air.
+   *
+   * The atmosphere shell only survives the depth test outside the planet's
+   * silhouette, so everything the air does *in front of* the ground has to
+   * happen here. This is the term that turns a map wrapped on a sphere into a
+   * planet photographed through weather: a faint blue lift at nadir growing
+   * into a white-blue wash at the limb, warmed wherever the sun is low. The
+   * airmass is the flat-atmosphere 1/μ approximation from both directions —
+   * light in, view out — which is wrong past ~85° and clamped there, where the
+   * shell's halo takes over anyway.
+   */
+  const airmass = float(1)
+    .div(max(mu, float(0.09)))
+    .add(float(1).div(max(dot(geometric, light), float(0.09))))
+    .mul(0.5)
+  const veil = oneMinus(exp(airmass.mul(-0.15)))
+    .mul(hazeStrength)
+    .mul(smoothstep(float(-0.06), float(0.28), incidence))
+    .mul(ringShade)
+  const veilColour = mix(hazeColour, vec3(1), veil.mul(0.55)).mul(
+    sunColour.mul(sunIntensity).mul(lightTint),
+  )
+
+  const surfaceLight = diffuse.add(sunlight.mul(glint))
+  // 0.68, not higher: at 0.8 the whole disc went milky and the ocean lost
+  // its depth — the photographs keep a saturated blue mid-disc under the veil.
+  const shadedSurface = mix(surfaceLight, veilColour, veil.mul(0.68))
 
   /*
    * Night lights, revealed slightly *before* the terminator.
@@ -308,9 +388,11 @@ export function createPlanetMaterial(): PlanetMaterial {
     .mul(nightStrength)
     // A city under cloud is not visible from orbit.
     .mul(oneMinus(cloudCover.mul(0.85)))
+    // And one under a hundred kilometres of slant air is dimmed by it.
+    .mul(oneMinus(veil.mul(0.6)))
 
   const material = new MeshBasicNodeMaterial()
-  material.colorNode = diffuse.add(sunlight.mul(glint)).add(night)
+  material.colorNode = shadedSurface.add(night)
 
   const handle: PlanetMaterial = {
     material,
@@ -327,6 +409,10 @@ export function createPlanetMaterial(): PlanetMaterial {
     nightStrength,
     specularStrength,
     specularSharpness,
+    hazeColour,
+    hazeLimb,
+    hazeStrength,
+    oceanColour,
     cloudHeight,
     cloudShadow,
     ringInner,
@@ -357,6 +443,8 @@ export interface CloudMaterial {
   readonly drift: { value: number }
   /** Tint for a deck with no map — Titan's, and every procedural world's. */
   readonly baseColour: { value: Color }
+  /** What the low sun turns the deck: the body's sunset colour. */
+  readonly sunsetColour: { value: Color }
   setTexture(map: Texture | null): void
 }
 
@@ -383,6 +471,7 @@ export function createCloudMaterial(): CloudMaterial {
   const opacity = uniform(1)
   const drift = uniform(0)
   const baseColour = uniform(new Color(1, 1, 1))
+  const sunsetColour = uniform(new Color(1, 0.55, 0.28))
 
   const surfaceUv = uv()
   const drifted = vec2(surfaceUv.x.add(drift), surfaceUv.y)
@@ -395,12 +484,27 @@ export function createCloudMaterial(): CloudMaterial {
   // stay in sunlight after the surface below them has not.
   const daylight = smoothstep(float(-0.22), float(0.12), incidence)
 
+  /*
+   * Clouds catch the sunset before anything else does. They are the highest
+   * thing on the planet and stay lit — by reddened, nearly horizontal light —
+   * after the ground under them has gone dark, which is why the amber band in
+   * every orbital dusk photograph is drawn on the weather, not the ground.
+   * The old shading floor of 0.15 is cut to 0.04: it existed to keep night
+   * clouds legible and instead laid a grey film over the whole night side.
+   */
+  const glow = mix(
+    vec3(1),
+    sunsetColour,
+    smoothstep(float(0.3), float(0.0), incidence),
+  )
+
   const material = new MeshBasicNodeMaterial()
   material.colorNode = cover.rgb
     .mul(baseColour)
     .mul(sunColour)
     .mul(sunIntensity)
-    .mul(max(incidence, float(0)).mul(0.85).add(0.15))
+    .mul(glow)
+    .mul(max(incidence, float(0)).mul(0.96).add(0.04))
     .mul(daylight)
   material.opacityNode = cover.a.mul(opacity).mul(daylight)
   material.transparent = true
@@ -414,6 +518,7 @@ export function createCloudMaterial(): CloudMaterial {
     opacity,
     drift,
     baseColour,
+    sunsetColour,
     setTexture(value) {
       map.value = value ?? WHITE
     },

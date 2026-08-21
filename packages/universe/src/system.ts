@@ -232,6 +232,15 @@ export interface HazeLayer {
   readonly colour: LinearRgb
   /** Forward-scattered colour at the terminator — the sunset seen from orbit. */
   readonly limb: LinearRgb
+  /**
+   * Visible optical thickness of the whole column, 0..1, where 1 is
+   * Earth-dense. Not pressure: it is how much the air *shows*. It is what
+   * separates Mars — whose 600 Pa limb stays a translucent butterscotch,
+   * because thin air never scatters its way to white — from Earth and Venus,
+   * whose dense limbs whiten with multiple scattering. Rendering with one
+   * constant here painted Mars with Earth's white halo.
+   */
+  readonly thickness: number
 }
 
 export interface BodyAppearance {
@@ -765,6 +774,10 @@ function proceduralAppearance(
               : Math.min(atmosphere.ceiling, radius * 0.02),
             colour: hue.colour,
             limb: hue.limb,
+            // A giant's limb has no bottom to thin out against; a terrestrial
+            // one shows what its sea-level density can scatter. 1.2 kg/m³ is
+            // Earth's, which is what "1" means everywhere this is read.
+            thickness: giant ? 1 : Math.min(1, atmosphere.surfaceDensity / 1.2),
           },
     colour: KIND_COLOUR[kind] ?? KIND_COLOUR.rocky,
   }

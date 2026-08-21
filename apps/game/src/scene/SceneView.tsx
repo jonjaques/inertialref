@@ -32,7 +32,10 @@ import {
   type PlanetMaterial,
   type RingMaterial,
 } from '../render/planet.ts'
+import { createLensFlare } from '../render/flare.ts'
+import { type FlareOccluder, sunVisibility } from '../render/flareMath.ts'
 import { texturesFor } from '../render/planetTextures.ts'
+import type { PerspectiveCamera } from 'three/webgpu'
 
 /*
  * The React Three Fiber layer.
@@ -85,10 +88,51 @@ export function SceneView({ engine }: { engine: GameEngine }) {
       <Starfield engine={engine} />
       <Bodies engine={engine} />
       <TerrainPatches engine={engine} />
+      <SunFlare engine={engine} />
       <ShipModel engine={engine} />
       <NearFieldProps engine={engine} />
     </>
   )
+}
+
+/**
+ * The key light's lens flare, driven from the same scene description as the
+ * bodies: `stars[0]` is the star that lights the scene, and the occluders are
+ * every drawn body — which is what lets the flare fade *smoothly* behind a
+ * limb instead of popping when a depth sample flips. See `render/flare.ts`.
+ */
+function SunFlare({ engine }: { engine: GameEngine }) {
+  const camera = useThree((state) => state.camera)
+  // No dispose-on-unmount effect, deliberately, and `Starfield` is the
+  // precedent: StrictMode remounts run cleanup against the *memoized*
+  // instance and then mount it again, so a dispose here empties the group
+  // for good — seven quads with nothing left inside them. R3F removes the
+  // primitive from the scene on unmount; the handful of GPU objects live as
+  // long as the renderer, like the starfield's do.
+  const flare = useMemo(createLensFlare, [])
+
+  useFrame(() => {
+    const scene = engine.scene()
+    const star = scene?.stars[0]
+    if (!engine.lensFlare || scene == null || star === undefined) {
+      flare.group.visible = false
+      return
+    }
+    const occluders: FlareOccluder[] = scene.bodies.map((body) => ({
+      position: body.placement.position,
+      radius: body.placement.scale,
+    }))
+    flare.update(
+      camera as PerspectiveCamera,
+      star.placement.position,
+      star.color,
+      star.brightness,
+      star.placement.angularRadius,
+      sunVisibility(scene.camera.position, star.placement.position, occluders),
+    )
+  })
+
+  return <primitive object={flare.group} />
 }
 
 /**
@@ -123,6 +167,17 @@ function CameraRig({ engine }: { engine: GameEngine }) {
   useFrame(() => {
     const scene = engine.scene()
     if (scene === null) return
+
+    // The camera panel's field of view, applied here rather than pushed at
+    // the camera from React: the canvas remounts on an HDR change and R3F
+    // builds a fresh camera, so the engine's value is the durable one and
+    // this is the only place that writes it. Guarded, because
+    // `updateProjectionMatrix` every frame is waste.
+    const perspective = camera as PerspectiveCamera
+    if (perspective.isPerspectiveCamera && perspective.fov !== engine.fov) {
+      perspective.fov = engine.fov
+      perspective.updateProjectionMatrix()
+    }
 
     camera.quaternion.set(
       scene.camera.orientation.x,
@@ -371,7 +426,9 @@ function tuningFor(body: RenderBody): PlanetTuning {
       night: 0,
     }
   return {
-    lunarLambert: air ? 0.45 : 0.92,
+    // Closer to Lambert than it was: the aerial veil now brightens the limb
+    // on top of this, and 0.45 under the veil left the disc reading flat.
+    lunarLambert: air ? 0.3 : 0.92,
     terminator: air ? 0.09 : 0.025,
     /*
      * Normal-map exaggeration, and the honest name for it.
@@ -625,6 +682,30 @@ function Bodies({ engine }: { engine: GameEngine }) {
         planet.lunarLambert.value = tuning.lunarLambert
         planet.terminator.value = tuning.terminator
         planet.reliefScale.value = maps.normal === null ? 0 : tuning.reliefScale
+        /*
+         * The aerial term reads the same authored haze the shell does, so the
+         * air over the ground and the air past the limb cannot disagree about
+         * what colour the sky is. Giants get less: their "surface" already is
+         * cloud-top, and a full-strength veil flattened Jupiter's bands into
+         * fog. The veil is what limb-brightens an atmosphere-bearing disc;
+         * lunar-Lambert would otherwise leave it too flat to read as a sphere.
+         */
+        const airHaze = appearance.haze
+        const giant = body.kind === 'gas-giant' || body.kind === 'ice-giant'
+        planet.hazeStrength.value =
+          airHaze === null ? 0 : giant ? 0.18 : airHaze.thickness
+        if (airHaze !== null) {
+          planet.hazeColour.value.setRGB(
+            airHaze.colour.r,
+            airHaze.colour.g,
+            airHaze.colour.b,
+          )
+          planet.hazeLimb.value.setRGB(
+            airHaze.limb.r,
+            airHaze.limb.g,
+            airHaze.limb.b,
+          )
+        }
         // Sun-glint needs an ocean to land on, and the mask that says where one
         // is rides in the normal map's alpha. No normal map, no ocean, no glint.
         planet.specularStrength.value =
@@ -682,6 +763,15 @@ function Bodies({ engine }: { engine: GameEngine }) {
           else material.baseColour.value.setRGB(1, 1, 1)
           material.sunDirection.value.copy(sun)
           material.sunColour.value.setRGB(keyColour.r, keyColour.g, keyColour.b)
+          // The deck's dusk colour is the body's authored sunset, so clouds
+          // and air agree about what the low sun does here.
+          const deckHaze = appearance.haze
+          if (deckHaze !== null)
+            material.sunsetColour.value.setRGB(
+              deckHaze.limb.r,
+              deckHaze.limb.g,
+              deckHaze.limb.b,
+            )
           material.opacity.value = clouds.opacity
           // The deck turns against the surface, whose quaternion already spins
           // at the body's own period — so the drift is the *difference* of the
@@ -749,6 +839,7 @@ function Bodies({ engine }: { engine: GameEngine }) {
             haze.colour.b,
           )
           air.limbColour.value.setRGB(haze.limb.r, haze.limb.g, haze.limb.b)
+          air.opticalThickness.value = haze.thickness
         }
         if (keyLight !== null) air.sunDirection.value.copy(sun)
       }
@@ -904,6 +995,7 @@ function ShipModel({ engine }: { engine: GameEngine }) {
   useFrame(() => {
     const scene = engine.scene()
     if (scene === null || group.current === null) return
+    group.current.visible = engine.showShip
     const ship = scene.entities.find((entity) => entity.isCamera)
     if (ship === undefined) return
     group.current.position.set(
@@ -949,6 +1041,9 @@ function NearFieldProps({ engine }: { engine: GameEngine }) {
   useFrame(() => {
     const scene = engine.scene()
     if (scene === null || group.current === null) return
+    // The props ride the same toggle as the ship: both are debug hardware, and
+    // a bookmarked composition wants neither in the middle of it.
+    group.current.visible = engine.showShip
     const ship = scene.entities.find((entity) => entity.isCamera)
     if (ship === undefined) return
     group.current.position.set(

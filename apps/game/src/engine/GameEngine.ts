@@ -59,6 +59,14 @@ import { TerrainStreamer, type TerrainState } from './terrainStreamer.ts'
 
 const log = getLogger('game.engine')
 
+/**
+ * The camera's vertical field of view, degrees. One definition: the `<Canvas>`
+ * starts from it, the camera panel's slider resets to it, and `CameraRig`
+ * applies whatever the panel chose — three places that must agree on what
+ * "default" means.
+ */
+export const DEFAULT_FOV = 65
+
 const EMPTY_STAR_FIELD: StarField = {
   positions: [],
   names: [],
@@ -136,6 +144,29 @@ export class GameEngine implements PresentationHost {
 
   origin: RenderOrigin | null = null
   snapshot: WorldSnapshot | null = null
+
+  /*
+   * Whether to draw the debug ship and the metre-scale reference props.
+   *
+   * Presentation only — nothing canonical moves — which is why it lives here
+   * rather than in the harness: the headless runner has no ship to draw. It
+   * exists for the camera bookmarks, where a grey cone parked dead centre of
+   * every composition defeats the point of composing.
+   */
+  showShip = true
+
+  /*
+   * Presentation switches the dock's graphics and camera panels drive.
+   *
+   * Plain fields like `showShip`, and for the same reason: the frame loop
+   * reads them every frame, React persists and edits them, and neither side
+   * needs the other to re-render. `fov` is applied by `CameraRig` rather than
+   * written to the camera here, because the camera belongs to R3F and is
+   * replaced whenever the canvas remounts — a value pushed at a camera object
+   * would be lost with it.
+   */
+  lensFlare = true
+  fov = DEFAULT_FOV
 
   /*
    * The host's renderer, once it has one. `null` under Node, and for as long as

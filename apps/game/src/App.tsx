@@ -2,7 +2,7 @@ import { Canvas } from '@react-three/fiber'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { HarnessStatus } from '@inertialref/devtools'
 import type { StarCatalog } from '@inertialref/universe'
-import { GameEngine } from './engine/GameEngine.ts'
+import { DEFAULT_FOV, GameEngine } from './engine/GameEngine.ts'
 import { FlightStrip } from './hud/FlightStrip.tsx'
 import { HudDock, type HudCommands, type HudTab } from './hud/HudDock.tsx'
 import { usePersistentState } from './hud/panelState.ts'
@@ -97,6 +97,14 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
     'render.hdr',
     'auto',
   )
+  /*
+   * The graphics and camera panels' knobs. Persisted like the HDR override —
+   * a lens flare turned off to chase an artifact should stay off across the
+   * reload that tests the fix — and mirrored onto plain engine fields below,
+   * because the frame loop reads them and must not touch React to do it.
+   */
+  const [lensFlare, setLensFlare] = usePersistentState('render.lensFlare', true)
+  const [fov, setFov] = usePersistentState('camera.fov', DEFAULT_FOV)
   const [dynamicRangeHigh, setDynamicRangeHigh] = useState(
     () => window.matchMedia(EXTENDED_RANGE_QUERY).matches,
   )
@@ -118,6 +126,11 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
   // The media query is live: a window can be dragged from an EDR display to one
   // without, and reading it once at startup gets that permanently wrong.
   useEffect(() => watchDynamicRange(setDynamicRangeHigh), [])
+
+  useEffect(() => {
+    engine.lensFlare = lensFlare
+    engine.fov = fov
+  }, [engine, lensFlare, fov])
 
   useEffect(() => {
     const unsubscribe = monitor.subscribe(setConnection)
@@ -238,7 +251,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
         // A logarithmic depth buffer makes this range workable; a linear one
         // would have no usable precision anywhere in it. The flag itself moved
         // into the factory, because it is a constructor parameter there.
-        camera={{ fov: 65, near: 0.05, far: 1e10 }}
+        camera={{ fov: DEFAULT_FOV, near: 0.05, far: 1e10 }}
         dpr={[1, 2]}
         // R3F configures the renderer *after* the factory resolves and sets its
         // own tone mapping while doing so. This is where ours goes back.
@@ -282,6 +295,8 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
               flash(`hdr ${next}`)
             },
           }}
+          graphics={{ lensFlare, onLensFlare: setLensFlare }}
+          camera={{ fov, onFov: setFov }}
           connection={connection}
           onCheckConnection={monitor.refresh}
           open={dockOpen}

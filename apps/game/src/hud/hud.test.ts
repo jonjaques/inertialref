@@ -2,6 +2,8 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { openSession } from '@inertialref/devtools'
+import { CameraPanel } from './CameraPanel.tsx'
+import { GraphicsPanel } from './GraphicsPanel.tsx'
 import { HudDock } from './HudDock.tsx'
 import { TargetRow } from './NavPanel.tsx'
 import { type Connection, DISCONNECTED } from '../net/health.ts'
@@ -47,6 +49,8 @@ describe('the dev dock', () => {
           output: null,
           onCyclePreference: () => {},
         },
+        graphics: { lensFlare: true, onLensFlare: () => {} },
+        camera: { fov: 65, onFov: () => {} },
         commands: {
           togglePause: () => {},
           warp: () => {},
@@ -121,6 +125,8 @@ describe('the dev dock', () => {
           output: null,
           onCyclePreference: () => {},
         },
+        graphics: { lensFlare: true, onLensFlare: () => {} },
+        camera: { fov: 65, onFov: () => {} },
         commands: {
           togglePause: () => {},
           warp: () => {},
@@ -138,6 +144,25 @@ describe('the dev dock', () => {
     // The client build is half of "am I running the code I think I am"; the
     // other half only exists once a server has answered.
     expect(markup).toContain('client build')
+  })
+
+  it('renders the graphics and camera panels with their controls', () => {
+    // These two tabs are pure controls over engine fields, so the whole test
+    // is that they render and show the state they were given — off means the
+    // toggle says off, and the slider wears the number it will write.
+    const graphics = renderToStaticMarkup(
+      createElement(GraphicsPanel, {
+        graphics: { lensFlare: false, onLensFlare: () => {} },
+      }),
+    )
+    expect(graphics).toContain('lens flare')
+    expect(graphics).toContain('off')
+
+    const camera = renderToStaticMarkup(
+      createElement(CameraPanel, { camera: { fov: 42, onFov: () => {} } }),
+    )
+    expect(camera).toContain('42°')
+    expect(camera).toContain('reset')
   })
 
   it('renders the navigation tab without a world to poll yet', () => {
@@ -160,6 +185,8 @@ describe('the dev dock', () => {
           output: null,
           onCyclePreference: () => {},
         },
+        graphics: { lensFlare: true, onLensFlare: () => {} },
+        camera: { fov: 65, onFov: () => {} },
         commands: {
           togglePause: () => {},
           warp: () => {},

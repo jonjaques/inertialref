@@ -2,7 +2,9 @@ import type { HarnessStatus } from '@inertialref/devtools'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import type { Connection } from '../net/health.ts'
 import type { OutputPreference, RendererDescription } from '../render/output.ts'
+import { CameraPanel, type CameraState } from './CameraPanel.tsx'
 import { CONNECTION_LABEL, connectionTone } from './connection.ts'
+import { GraphicsPanel, type GraphicsState } from './GraphicsPanel.tsx'
 import { NavPanel } from './NavPanel.tsx'
 import { PerfPanel } from './PerfPanel.tsx'
 import { TelemetryPanel } from './TelemetryPanel.tsx'
@@ -23,7 +25,7 @@ import { Action } from './widgets.tsx'
  * teleport at all; this is the scaffolding that lets that be built.
  */
 
-export type HudTab = 'navigate' | 'telemetry' | 'perf'
+export type HudTab = 'navigate' | 'graphics' | 'camera' | 'telemetry' | 'perf'
 
 /**
  * The renderer, as far as the dock is concerned: what was asked for, what came
@@ -53,6 +55,8 @@ export function HudDock({
   engine,
   status,
   render,
+  graphics,
+  camera,
   connection,
   onCheckConnection,
   open,
@@ -65,6 +69,8 @@ export function HudDock({
   engine: GameEngine
   status: HarnessStatus | null
   render: HudRenderState
+  graphics: GraphicsState
+  camera: CameraState
   connection: Connection
   onCheckConnection: () => void
   open: boolean
@@ -154,6 +160,16 @@ export function HudDock({
               onClick={() => onTabChange('navigate')}
             />
             <Tab
+              label="graphics"
+              active={tab === 'graphics'}
+              onClick={() => onTabChange('graphics')}
+            />
+            <Tab
+              label="camera"
+              active={tab === 'camera'}
+              onClick={() => onTabChange('camera')}
+            />
+            <Tab
               label="telemetry"
               active={tab === 'telemetry'}
               onClick={() => onTabChange('telemetry')}
@@ -169,6 +185,8 @@ export function HudDock({
             {tab === 'navigate' && (
               <NavPanel engine={engine} onNotice={onNotice} />
             )}
+            {tab === 'graphics' && <GraphicsPanel graphics={graphics} />}
+            {tab === 'camera' && <CameraPanel camera={camera} />}
             {tab === 'telemetry' && (
               <TelemetryPanel
                 status={status}

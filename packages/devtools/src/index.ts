@@ -1,4 +1,5 @@
 export * from './capabilities.ts'
+export * from './shots.ts'
 export * from './harness.ts'
 export * from './inspect.ts'
 export * from './metrics.ts'

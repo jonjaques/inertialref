@@ -1,16 +1,21 @@
 import {
-  AdditiveBlending,
+  AddEquation,
   BackSide,
   Color,
+  CustomBlending,
   InstancedBufferAttribute,
   MeshBasicNodeMaterial,
   MeshStandardNodeMaterial,
+  OneFactor,
   PointsNodeMaterial,
+  SrcAlphaFactor,
   Vector3,
+  ZeroFactor,
 } from 'three/webgpu'
 import {
   abs,
   cameraPosition,
+  clamp,
   cross,
   dot,
   exp,
@@ -23,12 +28,14 @@ import {
   normalWorld,
   oneMinus,
   positionWorld,
+  pow,
   saturate,
   smoothstep,
   sqrt,
   step,
   uniform,
   uv,
+  vec3,
 } from 'three/tsl'
 
 /*
@@ -106,6 +113,8 @@ export interface AtmosphereMaterial {
   readonly innerRadius: { value: number }
   /** Unit vector from the body towards its star, in render space. */
   readonly sunDirection: { value: Vector3 }
+  /** The haze's authored optical thickness, 0..1 with Earth at 1. */
+  readonly opticalThickness: { value: number }
 }
 
 /**
@@ -146,6 +155,7 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
   const sunDirection = uniform(new Vector3(0, 1, 0))
   const zenithColour = uniform(new Color(0.28, 0.48, 0.95))
   const limbColour = uniform(new Color(0.86, 0.45, 0.26))
+  const opticalThickness = uniform(1)
 
   const rayDirection = normalize(positionWorld.sub(cameraPosition))
   const toCentre = centre.sub(cameraPosition)
@@ -176,6 +186,27 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
   )
   const airDepth = max(far.sub(near), 0)
 
+  /*
+   * Exponential density, from the altitude the ray actually flies at.
+   *
+   * Uniform density was the placeholder's biggest lie: it drew the halo as a
+   * band with a hard outer edge, when a real limb is a gradient that thins by
+   * e-folds all the way to space — that gradient *is* the smoothness of every
+   * orbital photograph. The density is sampled at the segment's closest
+   * approach to the centre, clamped to the segment: for the halo that is the
+   * graze point, and for a camera inside the shell looking up it degrades to
+   * the camera's own altitude, which is the right answer in both places. The
+   * fall-off constant puts ~1% of sea-level density at the authored ceiling,
+   * so the shell ends by vanishing rather than by being cut.
+   */
+  const tClosest = clamp(closest, near, far)
+  const closePoint = cameraPosition.add(rayDirection.mul(tClosest))
+  const thickness = max(outerRadius.sub(innerRadius), 1e-6)
+  const altitude = saturate(
+    length(closePoint.sub(centre)).sub(innerRadius).div(thickness),
+  )
+  const density = exp(altitude.mul(-4.5))
+
   // Normalised against the deepest path the shell admits — grazing it at the
   // planet's edge — so a moon's wisp and a gas giant's envelope read the same,
   // and the render-space scale drops out. It has to: distance compression
@@ -186,7 +217,14 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
     ).mul(2),
     1e-6,
   )
-  const optical = airDepth.div(deepest).mul(2.4)
+  // The 6 calibrates Earth: a grazing ray through sea-level air is opaque.
+  // Everything the colour section does — whitening included — keys off this,
+  // so a thin atmosphere stays translucent *and* stays its own colour: Mars's
+  // butterscotch never has enough depth to scatter its way to white.
+  const optical = airDepth
+    .div(deepest)
+    .mul(density)
+    .mul(opticalThickness.mul(6))
 
   // Beer–Lambert, so the limb saturates smoothly rather than clipping to a hard
   // edge wherever the path runs long.
@@ -198,27 +236,69 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
   // The midpoint degrades correctly at both ends: from orbit it is the graze
   // point, from the ground it is a few kilometres over the player's head.
   const sample = cameraPosition.add(rayDirection.mul(near.add(far).mul(0.5)))
-  const sunlit = saturate(
-    dot(normalize(sample.sub(centre)), normalize(sunDirection)),
-  )
+  // Signed, not saturated: the twilight ring below needs to know how far past
+  // the terminator the air is, and saturating collapsed the whole night side
+  // onto one value.
+  const sunlit = dot(normalize(sample.sub(centre)), normalize(sunDirection))
   // A wide terminator rather than a step: air scatters around the edge, which is
   // the entire reason twilight exists.
-  const daylight = smoothstep(-0.35, 0.25, sunlit.mul(2).sub(1))
+  const daylight = smoothstep(-0.35, 0.25, sunlit)
 
   /*
-   * Scattering colour, per body, standing in for the LUT.
+   * Colour from optical depth, standing in for the LUT with three real
+   * behaviours instead of one asserted blend:
    *
-   * Blue at the zenith and warm at the terminator is what Rayleigh scattering
-   * does to a clear atmosphere of small molecules, and it is right for Earth,
-   * Uranus and Neptune for the same physical reason. It is wrong for Titan,
-   * whose haze is tholins and is orange in every direction, and wrong for
-   * Saturn, which wore Earth's blue halo until these became uniforms.
+   * **Thin air is the zenith colour** — single scattering, which for a clear
+   * atmosphere is Rayleigh blue. **Thick air whitens** — multiple scattering
+   * desaturates, which is why the base of Earth's limb is white-blue in every
+   * photograph and the gradient above it runs white → blue → black. **Dense
+   * air near the terminator warms to the limb colour** — the sunset ring,
+   * confined to where the sun is low (|sunlit| small) *and* the path is thick,
+   * which stacks the ISS dusk gradient in its published order: orange at the
+   * bottom, white above it, blue on top, night above that.
    */
-  const scattered = mix(limbColour, zenithColour, daylight)
+  const whiteness = oneMinus(exp(optical.mul(-0.7)))
+  // 0.55, not more: the whitening must brighten the authored colour, not
+  // replace it. At 0.75 Saturn's cream limb went chalk white.
+  const bright = mix(zenithColour, vec3(1), whiteness.mul(0.55))
+  const twilight = oneMinus(smoothstep(0.0, 0.4, abs(sunlit)))
+  // The sunset hugs the sun's azimuth: away from it the twilight ring cools
+  // back through white to blue, which is how the ISS dusk photographs run —
+  // amber under the sun, steel blue at the frame's edges.
+  const sunward = pow(saturate(dot(rayDirection, normalize(sunDirection))), 6)
+    .mul(0.75)
+    .add(0.25)
+  const scattered = mix(
+    bright,
+    limbColour,
+    twilight.mul(whiteness).mul(sunward).mul(0.95),
+  )
+
+  /*
+   * Forward scattering: the glow around the star seen through the air.
+   *
+   * Aerosols scatter strongly ahead, so air between the camera and the star
+   * brightens far beyond what it sends sideways — the reason a crescent's
+   * atmosphere ring blooms around the sun's position and a sunset limb glows
+   * where the sun sits behind it. A narrow phase-function stand-in, weighted
+   * to the twilight band so the day side does not wear a permanent hot spot.
+   */
+  // Two lobes: a tight one for the glow around the star itself, and a wide
+  // shoulder — real aerosol phase functions keep scattering strongly out to
+  // tens of degrees — which is what stretches the ring around a crescent's
+  // dark limb past the lit tips.
+  const cosSun = saturate(dot(rayDirection, normalize(sunDirection)))
+  const toward = pow(cosSun, 32).add(pow(cosSun, 5).mul(0.35))
+  const glow = limbColour
+    .mul(toward)
+    .mul(whiteness)
+    .mul(twilight.mul(0.75).add(0.25))
 
   const material = new MeshBasicNodeMaterial()
-  material.colorNode = scattered.mul(mix(0.05, 1, daylight))
-  material.opacityNode = alpha.mul(mix(0.18, 1, daylight))
+  material.colorNode = scattered
+    .mul(mix(0.03, 1, daylight))
+    .add(glow.mul(mix(0.1, 1, daylight)))
+  material.opacityNode = alpha.mul(mix(0.12, 1, daylight))
   material.transparent = true
   material.depthWrite = false
   material.side = BackSide
@@ -230,6 +310,7 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
     sunDirection,
     zenithColour,
     limbColour,
+    opticalThickness,
   }
 }
 
@@ -315,8 +396,19 @@ export function createStarfieldMaterial(capacity: number): StarfieldMaterial {
   material.transparent = true
   material.depthWrite = false
   // Overlapping stars in a dense field add rather than occlude, and the Milky
-  // Way's band is that addition and nothing else.
-  material.blending = AdditiveBlending
+  // Way's band is that addition and nothing else. Custom rather than
+  // `AdditiveBlending` for the alpha factors alone: the preset adds alpha
+  // (One, One) too, and twenty thousand sprites stamping alpha into the
+  // extended-range canvas is the same compositing artifact the lens flare
+  // wore as hard rectangles — see `flare.ts` for the full autopsy. The
+  // colour factors here are exactly the preset's.
+  material.blending = CustomBlending
+  material.blendEquation = AddEquation
+  material.blendSrc = SrcAlphaFactor
+  material.blendDst = OneFactor
+  material.blendEquationAlpha = AddEquation
+  material.blendSrcAlpha = ZeroFactor
+  material.blendDstAlpha = OneFactor
   return { material, positions, colours, prominence, size }
 }
 

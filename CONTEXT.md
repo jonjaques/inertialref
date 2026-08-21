@@ -872,6 +872,99 @@ relative to its primary's centre, and the relative orbit obeys `G(M+m)`, not
 is 1.2% of Earth, it is the difference between the published 27.3217-day sidereal
 period and 27.45.
 
+## The camera as an instrument (21 Aug 2026)
+
+The pass that made the render answerable to photographs. Reference frames live
+in `design/inspiration/`; every change below was iterated against them in the
+browser, shot by shot.
+
+**Camera bookmarks** (`packages/devtools/src/shots.ts`, `ir.shot(name,
+address?)`, dock → shots). Seven named compositions — full-face, gibbous, half,
+crescent, glint, sunset, oblique — each placed by phase angle, distance in body
+radii, and an aim (centre, sunward horizon, or the specular point). The debug
+orbit parks one radius up, where a planet fills a 65° view with a magnified 60°
+cap of itself; that is why the continents looked too big. Blue Marble is a
+~4.5-radii shot, and the bookmarks put the ship where the photographs were
+taken. Placement is pure geometry in the body frame, property-tested; the first
+implementation rotated about the pole and got the phase wrong whenever the sun
+left the equatorial plane, which the exact-phase assertion caught. `engine.
+showShip` hides the debug hardware, because a grey cone parked dead centre
+defeats the point of composing.
+
+**Aerial perspective on the surface** (`render/planet.ts`). The atmosphere
+shell only survives the depth test _outside_ the planet's silhouette, so
+everything the air does in front of the ground has to happen in the surface
+material: a blue lift at nadir thickening to a white-blue wash at the limb,
+sunlight reddening near the terminator (keyed to geometric incidence — the
+sun's altitude, not any hill's slope), and night lights dimmed under slant air.
+This is the term that turned the disc from a map on a sphere into something
+photographed through weather.
+
+**Water is a material, not a colour.** The ocean mask (normal-map alpha)
+flattens the albedo 65% towards deep-ocean blue — the map's ocean is
+bathymetry, which no photograph shows — and carries the sun-glint: two Blinn
+lobes (core in a wide skirt, the wave field being in no map) under a Schlick
+Fresnel, so the glint is a modest white spot under a high sun and a blown
+white-gold sheet towards the limb, into the HDR headroom.
+
+**The shell got density and a twilight ring** (`render/materials.ts`). Optical
+depth is now weighted by an exponential of the altitude at the ray's closest
+approach — clamped to the segment, so it degrades to the camera's own altitude
+for a sky viewed from the ground — which replaced the hard-edged halo band with
+a limb that thins by e-folds to space. Colour comes from that depth: thin air
+stays the zenith colour, thick air whitens (multiple scattering), and dense air
+near the terminator warms to the limb colour, concentrated towards the sun's
+azimuth — the ISS dusk stack, orange under white under blue, falling off to
+steel blue along the limb. A two-lobe forward-scatter term stretches the ring
+around a crescent's dark limb.
+
+**`HazeLayer.thickness`** (0..1, Earth = 1) is what keeps one shader honest
+across nine atmospheres: Mars at 0.15 stays a translucent butterscotch that can
+never scatter its way to white, the giants at 0.3–0.45 wear a whisper of limb
+haze rather than Earth's glowing ring, and procedural worlds derive it from
+their generated surface density. Authored per body in `solar/bodies.ts`;
+rendering with one constant painted Mars with Earth's white halo.
+
+**The lens flare** (`render/flare.ts`, `flareMath.ts`). Seven additive quads in
+camera space — PSF glow, streak, three coated-iris ghosts, a sunward ghost, and
+the red aperture ring from the ISS sunset frame — strung on the sun→centre
+axis. Occlusion is analytic against the scene description rather than a depth
+readback, which is what lets the flare fade smoothly and redden as the star
+slides behind a limb; the math is pure and tested in Node. Ghosts fade when
+they overlap the star's own image (a centred sun otherwise wears them as a
+targeting reticle). One trap worth remembering: disposing a `useMemo`'d GPU
+resource in an effect cleanup empties it for good under StrictMode's
+mount–cleanup–remount — `Starfield` was already the precedent for not doing so.
+
+**The alpha rectangles** (21 Aug 2026), because the diagnosis will be wanted
+again. The flare's quads rendered as hard, dim rectangles on an EDR display,
+with the stars inside them dimmed — and every plausible suspect was innocent.
+The radial profiles reach zero before the quad edges; `debug.getShaderAsync`
+proved the compiled WGSL was exactly the authored graph; and the blend factors
+for `AdditiveBlending` are the textbook `(SrcAlpha, One)`. The killer was the
+channel nobody was looking at: the preset _also_ blends alpha `(One, One)`,
+the renderer clears to **alpha 0**, and the `rgba16float` canvas is composited
+premultiplied — so each quad stamped its footprint into the alpha channel, and
+Chrome's compositor turned that stamp into visible brightness structure
+(un-premultiplying by an alpha of 2 is what dimmed the stars). The fix is two
+halves, and both are needed: the clear is opaque black (`createRenderer.ts` —
+space is black, not transparent), and every additive material — flare and
+starfield — uses `CustomBlending` with the preset's colour factors but alpha
+factors `(Zero, One)`, so nothing additive touches dst alpha again. Silencing
+alpha _without_ the opaque clear inverts the failure: additive colour over
+alpha-0 sky is discarded whole by the compositor, which is its own hour of
+confusion.
+
+**Graphics and camera panels** in the dock (21 Aug 2026). `graphics` holds
+render-feature switches — lens flare only, so far — and `camera` holds a field
+of view slider (20–110°, default 65°): the knob that separates the flying
+frame from the photographic one. Both write plain presentation fields on
+`GameEngine` (`lensFlare`, `fov`), persisted like the HDR override;
+`CameraRig` applies the FOV because the R3F camera is rebuilt whenever the
+canvas remounts, and `SunFlare` reads the toggle per frame. Turning a feature
+off to isolate an artifact is how the alpha bug above was pinned to the flare
+rather than the tone curve.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).
@@ -913,8 +1006,9 @@ Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md
 - No n-body perturbation; patched conics only.
 - Terrain has no persistence of modifications yet (the schema anticipates it).
 - Collision is ground contact only — no hull, no other entities.
-- The atmosphere is an analytic uniform-density shell, not scattering — a
-  placeholder for the Bruneton LUTs spike 2 made a requirement.
+- The atmosphere is an analytic shell — exponential density and a twilight
+  ring as of 21 Aug, but still geometry rather than scattering. The Bruneton
+  LUTs spike 2 made a requirement remain the specified replacement.
 - No compute passes, storage buffers or indirect draw yet: the WebGPU migration
   delivered the renderer and the HDR path, not GPU-driven terrain or culling.
 - Cold load to interactive is still unmeasured, and it is the budget most likely
