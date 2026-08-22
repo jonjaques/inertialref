@@ -1,8 +1,8 @@
-import { BookOpen, ExternalLink, TerminalSquare } from 'lucide-react'
+import { BookOpen, TerminalSquare } from 'lucide-react'
 import { BUILD_ID } from '../build.ts'
-import { FOCUS_RING } from '../hud/focus.ts'
 import { StellarSpan } from '../icons/index.tsx'
 import { OverlayPage } from './OverlayPage.tsx'
+import { Reference } from './Reference.tsx'
 
 /*
  * What this is.
@@ -69,7 +69,7 @@ export function AboutPage() {
           />
         </div>
 
-        <p className="pt-1 font-mono text-[10px] text-slate-600">
+        <p className="pt-1 font-mono text-[10px] text-slate-400">
           {/* The build id is the same string the service worker names its cache
               with. When a stale page is the suspect, this is the first thing
               worth reading out. */}
@@ -77,26 +77,5 @@ export function AboutPage() {
         </p>
       </div>
     </OverlayPage>
-  )
-}
-
-function Reference({
-  icon: Icon,
-  label,
-  detail,
-}: {
-  icon: typeof ExternalLink
-  label: string
-  detail: string
-}) {
-  return (
-    <span
-      className={`flex items-center gap-1.5 rounded border border-slate-700/60 px-2 py-1 text-slate-400 ${FOCUS_RING}`}
-      title={detail}
-    >
-      <Icon aria-hidden className="size-3.5 text-sky-400/70" />
-      {label}
-      <span className="text-slate-600">{detail}</span>
-    </span>
   )
 }

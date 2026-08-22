@@ -1,7 +1,8 @@
 'use no memo'
 import { useEffect, useRef, useState } from 'react'
 import type { CinematicTextState, GameEngine } from '../engine/GameEngine.ts'
-import { FOCUS_RING, releaseFocus } from './focus.ts'
+import { CutsceneTransport } from './CutsceneTransport.tsx'
+import { labelStyle, textStyle } from './cutsceneText.ts'
 import { useScrubber } from './useScrubber.ts'
 
 /*
@@ -21,140 +22,8 @@ import { useScrubber } from './useScrubber.ts'
  * at display rate would be all reconcile and no picture.
  */
 
-/** The measured text colour: RGB ≈ (64,138,230); the logo runs deeper. */
-const TEXT_BLUE = 'rgb(64,138,230)'
-const LOGO_BLUE = 'rgb(24,120,215)'
-const ACCENT_GOLD = 'rgb(216,180,90)'
-const GLOW = '0 0 14px rgba(64,138,230,0.45)'
-
 /** How closely the audio element tracks the reference clock, seconds. */
 const AUDIO_TOLERANCE = 0.08
-
-/*
- * Sizes are the reference's measured cap heights divided by this face's own
- * cap-height-to-em ratio.
- *
- * Both halves are measurements. The reference's blue-mask row bands give a
- * name's caps as 0.0750 of the frame height, a label's ascenders 0.0546, the
- * subtitle 0.0639, a main-logo word 0.1546 and the opening card's logotype
- * 0.1056. The divisors come from the faces themselves, through
- * `measureText().actualBoundingBoxAscent`: TNG Credits sets caps at 0.80 em
- * and TNG Title at 0.595. Guessing those two instead — 0.72 and 0.7, the usual
- * rules of thumb — set every credit 19% too large and the logotype 15% too
- * small, and no amount of adjusting the *other* end would have found it. Ask
- * the font.
- *
- * With the sizes right the tracking falls out at zero: a name then measures
- * 0.516 of the frame against the reference's 0.489, and a logo word 0.323
- * against 0.328. The old `0.2em` was compensating for a size two steps wrong.
- */
-const CAP_RATIO = { credits: 0.8, title: 0.595 } as const
-const size = (capFraction: number, face: keyof typeof CAP_RATIO): string =>
-  `${(capFraction * 100) / CAP_RATIO[face]}vh`
-
-/**
- * How far the label's box sits above the name's, in vh.
- *
- * Tuned against the rendered result rather than derived: the reference puts a
- * label's cap centre 0.1056 of the frame height above its name's, and what
- * stands between a CSS margin and a cap centre is two line boxes' worth of two
- * fonts' ascent and descent metrics. Measuring the drawn bands and solving for
- * the margin is one round trip; deriving it is several, and wrong again the
- * moment the face changes.
- */
-const LABEL_GAP = '2.5vh'
-
-function textStyle(text: CinematicTextState): React.CSSProperties {
-  const base: React.CSSProperties = {
-    position: 'absolute',
-    // `left`/`top` are written every frame, not baked here: the main logotype
-    // flies in from off-frame, so position is an animated channel.
-    left: '50%',
-    top: '50%',
-    transform: 'translate(-50%, -50%)',
-    whiteSpace: 'pre',
-    opacity: 0,
-    color: TEXT_BLUE,
-    textShadow: GLOW,
-    fontFamily: "'TNG Credits', ui-sans-serif, sans-serif",
-    fontStyle: 'italic',
-    lineHeight: 1,
-  }
-  switch (text.style) {
-    case 'logo':
-      return {
-        ...base,
-        fontFamily: "'TNG Title', ui-sans-serif, sans-serif",
-        fontStyle: 'normal',
-        fontSize: size(0.1546, 'title'),
-        letterSpacing: '0',
-        color: LOGO_BLUE,
-        textShadow: '0 0 22px rgba(24,120,215,0.5)',
-      }
-    case 'subtitle':
-      return {
-        ...base,
-        fontSize: size(0.0639, 'credits'),
-        letterSpacing: '0.02em',
-      }
-    case 'name':
-      return {
-        ...base,
-        fontSize: size(0.075, 'credits'),
-        letterSpacing: '0',
-      }
-    case 'label':
-      return {
-        ...base,
-        fontSize: size(0.0546, 'credits'),
-        letterSpacing: '0',
-      }
-    case 'card':
-      // The display face, not the credits face: the opening and outro cards
-      // are titles, and the project's own name should be set the way the
-      // main logotype is.
-      return {
-        ...base,
-        fontFamily: "'TNG Title', ui-sans-serif, sans-serif",
-        fontStyle: 'normal',
-        fontSize: size(0.1056, 'title'),
-        letterSpacing: '0.02em',
-        color: LOGO_BLUE,
-        textShadow: '0 0 18px rgba(24,120,215,0.5)',
-      }
-    case 'accent':
-      return {
-        ...base,
-        fontSize: size(0.075, 'credits'),
-        letterSpacing: '0',
-        color: ACCENT_GOLD,
-        textShadow: '0 0 14px rgba(216,180,90,0.4)',
-      }
-  }
-}
-
-/*
- * The label line — 'Starring', 'Executive Producer'.
- *
- * Absolutely positioned inside its name's own box, flush left against it,
- * because that is what the reference does and the name's rendered width is a
- * property of the typeface rather than a number the script can supply: every
- * measured pair has the label's left edge within 0.006 of the name's. Anchor
- * the block on the name and the pair survives a font change; position the
- * label independently and it does not.
- */
-function labelStyle(text: CinematicTextState): React.CSSProperties {
-  return {
-    position: 'absolute',
-    left: 0,
-    bottom: '100%',
-    marginBottom: LABEL_GAP,
-    whiteSpace: 'pre',
-    fontSize: size(0.0546, 'credits'),
-    letterSpacing: '0',
-    color: text.style === 'accent' ? ACCENT_GOLD : TEXT_BLUE,
-  }
-}
 
 export function CutsceneOverlay({
   engine,
@@ -338,64 +207,29 @@ export function CutsceneOverlay({
       {showTransport && (
         <div
           ref={hint}
-          className="absolute right-3 bottom-2 font-mono text-[10px] text-slate-500"
+          className="absolute right-3 bottom-2 font-mono text-[10px] text-slate-400"
           style={{ opacity: 0 }}
         />
       )}
 
-      {/* The transport: the one interactive island in an otherwise
-          pointer-transparent layer. Same verbs as the console — pause,
-          resume, seek, stop — so anything done here is reproducible there. */}
       {showTransport && transport !== null && (
-        <div className="pointer-events-auto absolute bottom-5 left-1/2 flex w-[34rem] max-w-[80vw] -translate-x-1/2 items-center gap-2 rounded-lg border border-slate-700/50 bg-slate-950/70 px-3 py-1.5 font-mono text-[11px] text-slate-300 backdrop-blur">
-          <TransportButton
-            label="⟲"
-            title="Restart"
-            onClick={() => {
-              seek(0)
-            }}
-          />
-          <TransportButton
-            label={transport.paused ? '▶' : '❚❚'}
-            title={transport.paused ? 'Play' : 'Pause'}
-            onClick={() => {
-              if (engine.world.clock.paused) engine.harness.resume()
-              else engine.harness.pause()
-            }}
-          />
-          <TransportButton
-            label="✕"
-            title="Stop and restore the ship (Esc)"
-            onClick={() => engine.harness.stopCutscene()}
-          />
-          <input
-            type="range"
-            min={0}
-            // A one-frame scene would otherwise put `max` below `min`, which
-            // browsers resolve by clamping the value to `min` — a scrubber that
-            // silently refuses to move.
-            max={Math.max(0, transport.duration - 1)}
-            step={1}
-            aria-label="Cutscene frame"
-
-            // While the hand is on the slider the poll stays out of it; the
-            // key prop trick is unnecessary because we only set `value` from
-            // state when not scrubbing.
-            value={Math.floor(transport.frame)}
-            onPointerDown={grab}
-            onChange={(event) => {
-              const frame = Number(event.target.value)
-              if (!seek(frame)) return
-              setTransport((current) =>
-                current === null ? current : { ...current, frame },
-              )
-            }}
-            className={`h-1 min-w-0 flex-1 cursor-pointer accent-sky-400 ${FOCUS_RING}`}
-          />
-          <span className="w-16 shrink-0 text-right tabular-nums text-slate-400">
-            f{Math.floor(transport.frame)}
-          </span>
-        </div>
+        <CutsceneTransport
+          frame={transport.frame}
+          durationFrames={transport.duration}
+          paused={transport.paused}
+          onGrab={grab}
+          onSeek={(frame) => {
+            if (!seek(frame)) return
+            setTransport((current) =>
+              current === null ? current : { ...current, frame },
+            )
+          }}
+          onTogglePlay={() => {
+            if (engine.world.clock.paused) engine.harness.resume()
+            else engine.harness.pause()
+          }}
+          onStop={() => engine.harness.stopCutscene()}
+        />
       )}
       {engine.cutsceneAudio !== null && (
         // Muted autoplay rules do not apply: playback starts from a user
@@ -404,30 +238,5 @@ export function CutsceneOverlay({
         <audio ref={audio} src={engine.cutsceneAudio} preload="auto" />
       )}
     </div>
-  )
-}
-
-function TransportButton({
-  label,
-  title,
-  onClick,
-}: {
-  label: string
-  title: string
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      title={title}
-      aria-label={title}
-      onClick={(event) => {
-        releaseFocus(event)
-        onClick()
-      }}
-      className={`rounded border border-slate-700/60 px-2 py-0.5 hover:bg-slate-800/60 ${FOCUS_RING}`}
-    >
-      {label}
-    </button>
   )
 }

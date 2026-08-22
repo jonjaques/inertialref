@@ -1,8 +1,13 @@
 import { useEffect, useState } from 'react'
 import type { TravelTarget } from '@inertialref/devtools'
+import { Separator } from '@/components/ui/separator'
 import type { GameEngine } from '../engine/GameEngine.ts'
-import { FOCUS_RING, releaseFocus } from './focus.ts'
-import { Action, Section } from './widgets.tsx'
+import { Action } from './Action.tsx'
+import { AddressForm } from './AddressForm.tsx'
+import { type Failure, NavFailure } from './NavFailure.tsx'
+import { Section } from './Section.tsx'
+import { TargetActions } from './TargetActions.tsx'
+import { TargetRow } from './TargetRow.tsx'
 
 /*
  * Going places.
@@ -18,37 +23,17 @@ import { Action, Section } from './widgets.tsx'
  * and galaxy maps in `docs/design/ux.md`, which are diegetic, drawn on the
  * canopy, and constrained by fuel and jump range. None of that applies to a
  * teleport, and pretending otherwise would build the wrong thing twice.
+ *
+ * What is left in this file is the state machine — the survey, the selection,
+ * the one-at-a-time guard and the two report paths. Everything it draws is a
+ * component beside it, because that state machine is the part worth reading
+ * without four hundred lines of buttons around it.
  */
 
 /** How often the listing re-reads distances. A survey is not free; 1 Hz is plenty. */
 const REFRESH_MS = 1_000
 /** Survey radius for the star listing. Holds the nearest half-dozen systems. */
 const SURVEY_LIGHT_YEARS = 8
-
-/**
- * Where `land` puts you when nobody says otherwise.
- *
- * The same site the `surface` scenario uses, so what the button does and what
- * `pnpm sim --scenario surface` does are the same landing, on purpose: a
- * discrepancy between them would be invisible and would waste an afternoon.
- */
-const DEBUG_LANDING_SITE = { latitude: 0.35, longitude: -1.1 }
-
-/**
- * A ceiling on the address field.
- *
- * Not validation — the harness owns what an address means, and duplicating its
- * grammar here is how the two drift apart. It is a bound on what a paste can do
- * to the layout: the field's contents are echoed into the notice at the bottom
- * of the screen, and an unbounded one turns a transient message into a wall.
- */
-const MAX_ADDRESS_LENGTH = 200
-
-/** What went wrong, and which verb it went wrong for. */
-interface Failure {
-  readonly action: string
-  readonly message: string
-}
 
 export function NavPanel({
   engine,
@@ -144,60 +129,17 @@ export function NavPanel({
       })
   }
 
+  const goTo = (): void =>
+    run(`go to ${query}`, () => engine.harness.goTo(query))
+
   return (
     <div>
-      {/*
-       * Above the sections, not inside one.
-       *
-       * This used to live inside `nav.go`, whose open state is remembered — so
-       * a collapsed section swallowed the only report a failed `land`, `burn`
-       * or scenario ever made, and the button read as having done nothing.
-       * Every verb in this panel reports here, and says which verb it was.
-       */}
       {failure !== null && (
-        <div className="mb-2 rounded border border-rose-400/40 bg-slate-950/60 px-2 py-1">
-          <div className="flex items-baseline gap-2">
-            <span className="min-w-0 flex-1 truncate text-rose-300">
-              {failure.action} failed
-            </span>
-            <Action
-              label="dismiss"
-              title="Clear this. The next action that succeeds clears it too."
-              onClick={() => setFailure(null)}
-            />
-          </div>
-          <div className="mt-0.5 max-h-24 overflow-auto break-words text-slate-400">
-            {failure.message}
-          </div>
-        </div>
+        <NavFailure failure={failure} onDismiss={() => setFailure(null)} />
       )}
 
       <Section id="nav.go" title="go to">
-        <form
-          className="flex gap-1"
-          onSubmit={(event) => {
-            event.preventDefault()
-            run(`go to ${query}`, () => engine.harness.goTo(query))
-          }}
-        >
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="SOL · b:2 · g:milky-way/s:HIP71683/b:3.0"
-            spellCheck={false}
-            maxLength={MAX_ADDRESS_LENGTH}
-            autoComplete="off"
-            aria-label="Universe address"
-            className="min-w-0 flex-1 rounded border border-slate-700 bg-slate-900/80 px-1.5 py-0.5 text-[11px] text-slate-200 caret-sky-300 placeholder:text-slate-600 focus:border-sky-500/60 focus:outline-none"
-          />
-          <Action
-            label="go"
-            tone="primary"
-            onClick={() =>
-              run(`go to ${query}`, () => engine.harness.goTo(query))
-            }
-          />
-        </form>
+        <AddressForm query={query} onQuery={setQuery} onSubmit={goTo} />
       </Section>
 
       <Section
@@ -215,7 +157,7 @@ export function NavPanel({
             />
           ))}
           {targets.length === 0 && (
-            <div className="px-2 py-1 text-slate-500">
+            <div className="px-2 py-1 text-slate-400">
               {surveyed
                 ? `no systems within ${SURVEY_LIGHT_YEARS} ly — fly somewhere, or type an address above`
                 : 'surveying…'}
@@ -225,7 +167,7 @@ export function NavPanel({
 
         <div className="mt-1 min-h-[2.75rem] rounded border border-slate-800/80 bg-slate-900/40 px-2 py-1">
           {target === null ? (
-            <span className="text-slate-500">select a destination</span>
+            <span className="text-slate-400">select a destination</span>
           ) : (
             <>
               <div
@@ -233,82 +175,10 @@ export function NavPanel({
                 title={`${target.name} · ${target.address}`}
               >
                 {target.name}{' '}
-                <span className="text-slate-600">{target.address}</span>
+                <span className="text-slate-400">{target.address}</span>
               </div>
               <div className="mt-1 flex flex-wrap gap-1">
-                {target.kind === 'system' ? (
-                  <>
-                    <Action
-                      label="travel"
-                      tone="primary"
-                      title="Orbit this system's star, looking at it"
-                      onClick={() =>
-                        run(`travelling to ${target.name}`, () =>
-                          engine.harness.goTo(target.address),
-                        )
-                      }
-                    />
-                    <Action
-                      label="generate"
-                      disabled={target.loaded}
-                      title="Generate the system and list its bodies without going there"
-                      onClick={() =>
-                        run(`generated ${target.name}`, () => {
-                          engine.harness.loadSystem(target.system)
-                        })
-                      }
-                    />
-                  </>
-                ) : (
-                  <>
-                    <Action
-                      label="orbit"
-                      tone="primary"
-                      title="Circular orbit at an altitude that frames the body"
-                      onClick={() =>
-                        run(`orbiting ${target.name}`, () =>
-                          engine.harness.goTo(target.address),
-                        )
-                      }
-                    />
-                    <Action
-                      label="land"
-                      disabled={!target.landable}
-                      title={
-                        target.landable
-                          ? 'Park on the surface'
-                          : 'Not solid ground'
-                      }
-                      onClick={() =>
-                        run(`landing on ${target.name}`, () =>
-                          engine.harness.land(
-                            target.address,
-                            DEBUG_LANDING_SITE.latitude,
-                            DEBUG_LANDING_SITE.longitude,
-                          ),
-                        )
-                      }
-                    />
-                    <Action
-                      label="face"
-                      title="Point the nose at it without touching the trajectory"
-                      onClick={() =>
-                        run(`facing ${target.name}`, () =>
-                          engine.harness.face(target.address),
-                        )
-                      }
-                    />
-                    <Action
-                      label="burn"
-                      title="Aim at it and light the main drive"
-                      onClick={() =>
-                        run(`burning toward ${target.name}`, () =>
-                          engine.harness.burnToward(target.address),
-                        )
-                      }
-                    />
-                  </>
-                )}
+                <TargetActions engine={engine} target={target} run={run} />
               </div>
             </>
           )}
@@ -328,7 +198,7 @@ export function NavPanel({
          * are why it exists: a debug cone parked dead centre ruins every
          * composition it appears in.
          */}
-        <div className="flex flex-wrap gap-1">
+        <div className="flex flex-wrap items-center gap-1">
           {engine.harness.shots().map(({ name, description }) => (
             <Action
               key={name}
@@ -344,7 +214,10 @@ export function NavPanel({
               }
             />
           ))}
-          <span className="mx-1 h-3 w-px bg-slate-800" />
+          <Separator
+            orientation="vertical"
+            className="mx-1 !h-3 bg-slate-800"
+          />
           <Action
             label={shipShown ? 'hide ship' : 'show ship'}
             title="Draw the debug ship and reference props, or keep them out of the frame"
@@ -423,60 +296,6 @@ export function NavPanel({
         </div>
       </Section>
     </div>
-  )
-}
-
-/**
- * One row of the listing.
- *
- * Exported so the overlay's smoke test can render real targets through it —
- * the panel itself only fills its list from an effect, and effects do not run
- * when the tree is rendered to static markup in Node.
- */
-export function TargetRow({
-  target,
-  selected,
-  onSelect,
-}: {
-  target: TravelTarget
-  selected: boolean
-  onSelect: () => void
-}) {
-  // Depth is 0, 1 or 2 — system, planet, moon — and the indent is what makes the
-  // flat list read as the containment tree the addresses already describe.
-  const indent = ['pl-1', 'pl-4', 'pl-7'][target.depth] ?? 'pl-7'
-  return (
-    <button
-      type="button"
-      onClick={(event) => {
-        releaseFocus(event)
-        onSelect()
-      }}
-      title={`${target.name} · ${target.address}`}
-      aria-pressed={selected}
-      className={`flex w-full items-baseline gap-2 py-[1px] pr-1.5 text-left ${indent} ${FOCUS_RING} ${
-        selected ? 'bg-sky-500/20 text-sky-100' : 'hover:bg-slate-800/60'
-      }`}
-    >
-      <span
-        className={
-          target.kind === 'system'
-            ? 'shrink-0 text-amber-300/80'
-            : 'shrink-0 text-slate-600'
-        }
-      >
-        {target.kind === 'system' ? '★' : target.landable ? '◍' : '·'}
-      </span>
-      <span className="min-w-0 flex-1 truncate">
-        {target.name}
-        <span className="ml-1.5 text-slate-600">{target.detail}</span>
-      </span>
-      <span
-        className={`shrink-0 tabular-nums ${target.loaded ? 'text-slate-400' : 'text-slate-600'}`}
-      >
-        {target.distanceText}
-      </span>
-    </button>
   )
 }
 

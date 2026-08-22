@@ -5,7 +5,8 @@ import type { PerspectiveCamera } from 'three/webgpu'
 import { DEFAULT_FILL } from '@inertialref/devtools'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { CompactDock } from '../dock/CompactDock.tsx'
-import { Dock, DockRail } from '../dock/Dock.tsx'
+import { Dock } from '../dock/Dock.tsx'
+import { DockRail } from '../dock/DockRail.tsx'
 import { DockProvider } from '../dock/DockProvider.tsx'
 import { togglePanel } from '../dock/layout.ts'
 import { useDockLayout } from '../dock/useDockLayout.ts'
@@ -249,7 +250,7 @@ export function PlanetariumMode({
               <DockRail
                 panels={panels}
                 layout={layout}
-                onToggle={(id) => {
+                onToggle={(id: string) => {
                   const definition = panels.find((panel) => panel.id === id)
                   if (definition === undefined) return
                   // Against the previous state rather than the rendered one,

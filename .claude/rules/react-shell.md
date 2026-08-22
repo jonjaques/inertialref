@@ -31,6 +31,15 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", ADR-0011.
   `pointer-events: none` so the scene stays reachable, and `ErrorBoundary`'s `className`
   styles its _fallback_, not a wrapper. Getting this wrong is silent: the hit target at
   every pixel becomes the canvas.
+- **No `mode="wait"` on the overlay routes' `AnimatePresence`, and key it on
+  `overlaySurface(pathname)`, not the pathname.** `mode="wait"` leaves a closed dialog's
+  scrim in the DOM at `opacity: 0` with `pointer-events: auto`, swallowing every click on
+  the mode behind it while the scene keeps rendering. Keying on the pathname makes every
+  settings tab a fresh entrance and stacks two scrims to 91%.
+- **Chrome text bottoms out at `slate-400`.** `slate-500` reaches only 4.24:1 on an opaque
+  `slate-950` panel and 3.2:1 with a star behind it, so no alpha rescues it. The one
+  exception is the connection pip, a non-text indicator held to 3:1. DESIGN.md § Neutral
+  has the measurements.
 - **Never guard a "run once" effect with a ref.** React re-runs effects while refs
   survive, so a latch plus a cleanup means the cleanup wins and the effect never fires
   again. Reconcile against the state's actual owner instead —
@@ -41,6 +50,17 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", ADR-0011.
   about a different viewpoint from the one on screen. **No arm may depend on a later one
   resolving** — only the ship needs a player, and a cutscene sample placed below the
   missing-player return latched `engine.cinematic` for the rest of the session.
+- **One component per file.** `react/no-multi-comp` is an oxlint error. A `.tsx` that
+  exports anything besides components is a file Fast Refresh gives up on, and a full
+  reload here rebuilds the `WebGPURenderer` and loses the camera. Constants and types go
+  in a sibling `.ts` — `hud/controls.ts`, `planetarium/context.ts`, `pages/modes.ts` are
+  the pattern. Exempt: `components/ui/*.tsx`, which shadcn rewrites.
+- **Use the registry control, do not hand-roll a second one.** shadcn/ui is installed and
+  its tokens point at this palette. Two things it cannot know: a _pointer_ click hands
+  focus back to the flight loop (`hud/focus.ts`), and the accent is a material — so
+  `Button`'s `default` variant is wrong for the primary tone. `hud/Action.tsx`,
+  `hud/SwitchRow.tsx` and `hud/TransportButton.tsx` carry both; go through them.
+  `ScrollArea` is deliberately unused — its `display: table` viewport breaks `truncate`.
 - **React Compiler is on. Do not hand-write `useMemo`/`useCallback`.** The exception is a
   component that reads mutable state — an engine or a metrics buffer is a stable reference
   whose _contents_ change every frame, so the compiler renders it once and shows that

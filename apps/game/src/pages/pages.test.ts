@@ -8,6 +8,7 @@ import {
   HOME,
   modeForPath,
   overlayBackground,
+  overlaySurface,
   PROFILE,
   resolvedLocation,
   SETTINGS,
@@ -15,7 +16,7 @@ import {
   SIGN_IN,
   SIGN_UP,
 } from './paths.ts'
-import { OverlayRoutes } from './routes.tsx'
+import { OverlayRoutes } from './OverlayRoutes.tsx'
 
 /*
  * The routed dialogs, in Node, with no DOM — the same bargain `hud/hud.test.ts`
@@ -182,5 +183,51 @@ describe('the location a dialog is drawn over', () => {
       expect(resolvedLocation(odd)).toBe(odd)
       expect(modeForPath(resolvedLocation(odd).pathname)).toBe('cinema')
     }
+  })
+})
+
+/*
+ * The key `AnimatePresence` swaps dialogs on.
+ *
+ * The leak it exists to prevent is not reachable from Node — it needs a real
+ * DOM, a compositor and an exit animation that completes. What *is* reachable
+ * is the arithmetic that decides when a dialog re-enters at all, and that is the
+ * half that regressed twice: once into a leaked pointer-blocking scrim, once
+ * into the scene flashing dark on every settings tab.
+ */
+describe('the surface a dialog belongs to', () => {
+  it('treats every settings section as one surface', () => {
+    // A section change must not be an exit and an entrance. Two scrims
+    // cross-fading stack to 91% and the scene visibly darkens.
+    expect(overlaySurface(SETTINGS)).toBe(
+      overlaySurface(settingsSection('camera')),
+    )
+    expect(overlaySurface(settingsSection('display'))).toBe(
+      overlaySurface(settingsSection('controls')),
+    )
+  })
+
+  it('keeps distinct dialogs distinct, so one replaces the other', () => {
+    const surfaces = [ABOUT, SIGN_IN, PROFILE, SETTINGS].map(overlaySurface)
+    expect(new Set(surfaces).size).toBe(surfaces.length)
+  })
+
+  it('collapses every non-dialog path to the absence of one', () => {
+    // The `null` fallback route's key. A mode is not a surface, and two modes
+    // must not look like two different dialogs closing.
+    for (const path of [
+      HOME,
+      '/play/solo',
+      '/planetarium',
+      '/cinema/tng-intro',
+    ])
+      expect(overlaySurface(path)).toBe('none')
+  })
+
+  it('answers for a path it has never heard of without throwing', () => {
+    // The URL is hand-typed here; `/settings` is a prefix of nothing else.
+    expect(overlaySurface('/nonsense')).toBe('none')
+    expect(overlaySurface('/')).toBe('none')
+    expect(overlaySurface(SETTINGS + '/audio')).toBe(overlaySurface(SETTINGS))
   })
 })

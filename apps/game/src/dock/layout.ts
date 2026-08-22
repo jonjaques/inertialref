@@ -30,6 +30,22 @@ export type DockZone = (typeof DOCK_ZONES)[number]
 /** The zones a drag can drop into. `hidden` is reached by closing, not dragging. */
 export const DROP_ZONES = ['left', 'right', 'bottom'] as const
 
+/**
+ * Whether a zone stacks vertically.
+ *
+ * Here rather than in the React layer because four components need the same
+ * answer — the zone container's flex direction, the drop indicator's axis, the
+ * panel's own width rule and the insertion measurement's axis — and the one
+ * time they disagreed the drop line was drawn horizontally in a row that
+ * inserted left-to-right.
+ *
+ * The bottom bar spans the width and the sidebars stop above it, rather than
+ * the other way round. That is the arrangement every editor converged on for a
+ * reason worth restating: a transport or a timeline is read left to right
+ * across the whole frame, and a catalogue is read top to bottom in a column.
+ */
+export const isColumn = (zone: DockZone): boolean => zone !== 'bottom'
+
 export type DockLayout = {
   readonly [Z in DockZone]: readonly string[]
 }

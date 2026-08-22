@@ -4,11 +4,11 @@ import { AnimatePresence, motion } from 'motion/react'
 import { useLocation } from 'react-router'
 import type { StarCatalog } from '@inertialref/universe'
 import { DEFAULT_FOV, GameEngine } from './engine/GameEngine.ts'
+import type { CameraState, GraphicsState, HudCommands } from './hud/controls.ts'
+import { FOV_MAX, FOV_MIN } from './hud/controls.ts'
 import { CutsceneOverlay } from './hud/CutsceneOverlay.tsx'
 import { ErrorBoundary } from './hud/ErrorBoundary.tsx'
-import type { CameraState } from './hud/CameraPanel.tsx'
-import type { GraphicsState } from './hud/GraphicsPanel.tsx'
-import { HudDock, type HudCommands } from './hud/HudDock.tsx'
+import { HudDock } from './hud/HudDock.tsx'
 import {
   isBoolean,
   numberWithin,
@@ -38,7 +38,8 @@ import {
   type OutputPreference,
   type RendererDescription,
 } from './render/output.ts'
-import { ModeRoutes, OverlayRoutes } from './pages/routes.tsx'
+import { ModeRoutes } from './pages/ModeRoutes.tsx'
+import { OverlayRoutes } from './pages/OverlayRoutes.tsx'
 import { modeForPath, resolvedLocation } from './pages/paths.ts'
 import { ShellBar } from './pages/ShellBar.tsx'
 import { SceneView } from './scene/SceneView.tsx'
@@ -80,10 +81,6 @@ const PANEL_HZ = 8
 
 /** How long a transient notice stays up. */
 const NOTICE_MS = 2_500
-
-/** The camera panel's slider range, restated here because it guards the store. */
-const FOV_MIN = 20
-const FOV_MAX = 110
 
 /** `auto` first, because it is right more often than it is wrong. */
 const HDR_STATES = [
@@ -374,7 +371,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
       engine.world.clock.setPaused(paused)
       flash(paused ? 'paused' : 'running')
     },
-    warp: (direction) => {
+    warp: (direction: number) => {
       const next = nextWarp(engine.world.clock.timeScale, direction)
       engine.world.clock.setTimeScale(next)
       flash(`time warp ${next}×`)
@@ -425,14 +422,14 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    * They are read in two places now — the dock's tabs and the `/settings` page
    * — and `docs/design/ux.md` puts the eventual home in the page rather than
    * the dock. Two inline object literals would be two anti-aliasing switches
-   * that could drift apart, which is the same argument `widgets.tsx` makes
+   * that could drift apart, which is the same argument `hud/Action.tsx` makes
    * about a label's colour, applied to behaviour.
    */
   const graphicsState: GraphicsState = {
     lensFlare,
     onLensFlare: setLensFlare,
     aa,
-    onAa: (level) => {
+    onAa: (level: AaLevel) => {
       // Crossing the MSAA boundary rebuilds the renderer, so say so — the
       // stall would otherwise read as a hang.
       setAa(level)
@@ -692,12 +689,26 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
           {!cinema && notice !== null && (
             <motion.div
               key={notice}
+              /* Announced, not just drawn. This is the only confirmation most
+                 commands give — `hdr extended`, `go to SOL`, `saved` — and it
+                 is gone in 2.5 seconds, so a reader that never hears it gets no
+                 feedback at all. `polite` rather than `assertive`: it is a
+                 receipt for something the user just did, not an interruption. */
+              role="status"
+              aria-live="polite"
               title={notice}
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 4 }}
               transition={{ duration: 0.15 }}
-              className="pointer-events-none absolute bottom-3 left-1/2 z-30 max-w-[min(36rem,calc(100vw-1.5rem))] -translate-x-1/2 truncate rounded bg-sky-500/20 px-3 py-1 font-mono text-xs text-sky-200"
+              /* The accent is the edge, not the ground. `bg-sky-500/20` alone
+                 is 80% scene, so over a sunlit planet the notice composited to
+                 1.3:1 and the thing it was echoing back — often whatever was
+                 just typed into the address field — was unreadable at exactly
+                 the moment it was worth reading. The panel ground carries it;
+                 the accent stays what it is everywhere else in this system, a
+                 material rather than a fill behind text. */
+              className="pointer-events-none absolute bottom-3 left-1/2 z-30 max-w-[min(36rem,calc(100vw-1.5rem))] -translate-x-1/2 truncate rounded border border-sky-500/40 bg-slate-950/85 px-3 py-1 font-mono text-xs text-sky-200 backdrop-blur"
             >
               {notice}
             </motion.div>

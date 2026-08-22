@@ -1,10 +1,13 @@
-import { useMemo, useState } from 'react'
-import type { Series, SeriesStats } from '@inertialref/devtools'
+import { useState } from 'react'
 import type { HarnessStatus } from '@inertialref/devtools'
 import type { GameEngine } from '../engine/GameEngine.ts'
-import { canMeasureGpu, measureGpuFrameMs } from '../render/measure.ts'
-import { FOCUS_RING, releaseFocus } from './focus.ts'
-import { Row, Section } from './widgets.tsx'
+import { measureGpuFrameMs } from '../render/measure.ts'
+import { GpuMeasureButton } from './GpuMeasureButton.tsx'
+import { describeGl, format, fps, gpuLabel } from './perfFormat.ts'
+import { Row } from './Row.tsx'
+import { Section } from './Section.tsx'
+import { SeriesPlot } from './SeriesPlot.tsx'
+import { SeriesStatsRow } from './SeriesStatsRow.tsx'
 
 /*
  * The performance overlay.
@@ -101,13 +104,13 @@ export function PerfPanel({
         title="frame"
         trailing={`${fps(period.mean)} fps`}
       >
-        <Plot
+        <SeriesPlot
           series={metrics.period}
           unit="ms"
           budget={FRAME_BUDGET_MS}
           warnAbove={DROPPED_FRAME_MS}
         />
-        <Stats stats={period} unit="ms" />
+        <SeriesStatsRow stats={period} unit="ms" />
         {/* p95 rather than max, and stated as a frame rate too, because "17.4 ms
             p95" and "57 fps at the 95th percentile" land differently and only
             one of them is the number the budget is written in. */}
@@ -129,11 +132,15 @@ export function PerfPanel({
         {/* Simulation, snapshot, scene build and terrain reconciliation — but
             not the draw, which happens after this returns. Conflating the two is
             how a renderer problem gets diagnosed as a simulation one. */}
-        <Plot series={metrics.engineMs} unit="ms" budget={ENGINE_BUDGET_MS} />
-        <Stats stats={metrics.engineMs.summarise()} unit="ms" />
+        <SeriesPlot
+          series={metrics.engineMs}
+          unit="ms"
+          budget={ENGINE_BUDGET_MS}
+        />
+        <SeriesStatsRow stats={metrics.engineMs.summarise()} unit="ms" />
         <Row label="gpu" value={gpuLabel(engine, metrics.gpuMs, gpuBusy)} />
         <div className="mt-1">
-          <MeasureButton
+          <GpuMeasureButton
             engine={engine}
             busy={gpuBusy}
             onMeasure={measureGpu}
@@ -146,7 +153,7 @@ export function PerfPanel({
         title="simulation"
         trailing={world === null ? '—' : `${world.tick} ticks`}
       >
-        <Plot series={metrics.ticks} unit="" />
+        <SeriesPlot series={metrics.ticks} unit="" />
         {/*
          * Requested against delivered, side by side, which is the whole reason
          * this row exists: the dock offers seven time-warp detents and the
@@ -181,8 +188,12 @@ export function PerfPanel({
         title="render"
         trailing={`${format(metrics.drawCalls.summarise().last)} calls`}
       >
-        <Plot series={metrics.drawCalls} unit="" budget={DRAW_CALL_BUDGET} />
-        <Stats stats={metrics.drawCalls.summarise()} unit="" />
+        <SeriesPlot
+          series={metrics.drawCalls}
+          unit=""
+          budget={DRAW_CALL_BUDGET}
+        />
+        <SeriesStatsRow stats={metrics.drawCalls.summarise()} unit="" />
         <Row
           label="triangles"
           value={format(metrics.triangles.summarise().last)}
@@ -198,7 +209,7 @@ export function PerfPanel({
         title="workers"
         trailing={workers === null ? '—' : `${workers.workers} threads`}
       >
-        <Plot series={metrics.queuedJobs} unit="" />
+        <SeriesPlot series={metrics.queuedJobs} unit="" />
         {workers !== null && (
           <>
             <Row
@@ -229,195 +240,18 @@ export function PerfPanel({
         {heap.count === 0 ? (
           // Not a failure worth hiding: `performance.memory` is Chromium-only and
           // non-standard, and a blank plot with no explanation reads as a bug.
-          <div className="text-slate-500">
+          <div className="text-slate-400">
             performance.memory is Chromium-only
           </div>
         ) : (
           <>
             {/* The budget is 900 MB peak; the plot would be a flat line at the
                 bottom against it, so this one is scaled to its own data. */}
-            <Plot series={metrics.heapMb} unit="MB" />
-            <Stats stats={heap} unit="MB" />
+            <SeriesPlot series={metrics.heapMb} unit="MB" />
+            <SeriesStatsRow stats={heap} unit="MB" />
           </>
         )}
       </Section>
     </div>
   )
-}
-
-function MeasureButton({
-  engine,
-  busy,
-  onMeasure,
-}: {
-  engine: GameEngine
-  busy: boolean
-  onMeasure: () => void
-}) {
-  // Reads `engine.gl`, which arrives after the first render. See `PerfPanel`.
-  'use no memo'
-
-  const gl = engine.gl
-  const ready =
-    gl !== null && engine.view !== null && canMeasureGpu(gl.renderer)
-  return (
-    <button
-      type="button"
-      disabled={!ready || busy}
-      title="Submit 40 frames and time them across a drained queue — the only measurement three's own timestamp does not exaggerate"
-      onClick={(event) => {
-        releaseFocus(event)
-        onMeasure()
-      }}
-      className={`rounded border border-slate-700 bg-slate-800/60 px-1.5 py-0.5 text-[10px] text-slate-300 transition-colors hover:border-sky-500/60 hover:text-sky-200 disabled:cursor-not-allowed disabled:opacity-35 ${FOCUS_RING}`}
-    >
-      {busy ? 'measuring…' : 'measure gpu'}
-    </button>
-  )
-}
-
-/**
- * An ImGui-style history plot.
- *
- * A filled area rather than a line, because at 240 samples across 200 pixels the
- * line is mostly aliasing and the fill still reads as a shape. The budget, where
- * there is one, is a dashed rule — so "over budget" is something you see rather
- * than something you compute.
- *
- * The vertical scale is the window's own maximum, never a fixed one. A plot
- * pinned to the budget looks identical whether the frame time is 2 ms or 6 ms,
- * which is exactly the range where the interesting changes happen.
- */
-function Plot({
-  series,
-  unit,
-  budget,
-  warnAbove,
-}: {
-  series: Series
-  unit: string
-  /** Drawn as a dashed rule. Where the design says this number should sit. */
-  budget?: number
-  /** Colours the plot when p95 exceeds it. Defaults to `budget`; see `DROPPED_FRAME_MS`. */
-  warnAbove?: number
-}) {
-  // The series reference is stable and its contents are not, which is the same
-  // trap `PerfPanel` describes. The `useMemo` below is the other kind — a stable
-  // object, not a memoised computation — and stays.
-  'use no memo'
-
-  // Allocated once per mount and written into every read. The panel re-renders
-  // eight times a second and the buffer is 240 doubles; making a new one each
-  // time is the kind of garbage a performance overlay should be embarrassed by.
-  const buffer = useMemo(() => new Float64Array(series.capacity), [series])
-  const written = series.drain(buffer)
-  const stats = series.summarise()
-
-  const width = 100
-  const height = 26
-  // An empty ground rather than an empty gap: a series with no samples yet — a
-  // paused clock, a metric this browser does not expose — left a 26px hole that
-  // read as a layout bug rather than as a plot waiting for data.
-  if (written === 0)
-    return <div className="my-0.5 h-[26px] rounded-sm bg-slate-900/70" />
-
-  // Headroom above the peak so the tallest sample is not flush with the border,
-  // and never a zero-height range — a flat series would divide by zero.
-  const ceiling = Math.max(
-    stats.max * 1.15,
-    budget === undefined ? 0 : budget * 1.1,
-    1e-9,
-  )
-  const step = written > 1 ? width / (written - 1) : width
-  let path = `M 0 ${height}`
-  for (let i = 0; i < written; i += 1) {
-    const value = buffer[i] ?? 0
-    path += ` L ${(i * step).toFixed(2)} ${(height - (value / ceiling) * height).toFixed(2)}`
-  }
-  path += ` L ${width} ${height} Z`
-
-  const threshold = warnAbove ?? budget
-  const over = threshold !== undefined && stats.p95 > threshold
-  const stroke = over ? '#fbbf24' : '#38bdf8'
-
-  return (
-    <div className="relative my-0.5">
-      <svg
-        viewBox={`0 0 ${width} ${height}`}
-        preserveAspectRatio="none"
-        className="block h-[26px] w-full rounded-sm bg-slate-900/70"
-        role="img"
-        aria-label={`${stats.last.toFixed(2)} ${unit}, ${written} samples`}
-      >
-        <path
-          d={path}
-          fill={stroke}
-          fillOpacity={0.22}
-          stroke={stroke}
-          strokeWidth={0.6}
-          vectorEffect="non-scaling-stroke"
-        />
-        {budget !== undefined && budget < ceiling && (
-          <line
-            x1={0}
-            x2={width}
-            y1={height - (budget / ceiling) * height}
-            y2={height - (budget / ceiling) * height}
-            stroke="#f87171"
-            strokeWidth={0.5}
-            strokeDasharray="2 2"
-            vectorEffect="non-scaling-stroke"
-          />
-        )}
-      </svg>
-      {/* ImGui writes the current value over the plot rather than beside it; it
-          costs no height and the eye is already there. */}
-      <span className="pointer-events-none absolute right-1 top-0 text-[10px] tabular-nums text-slate-400">
-        {format(stats.last)}
-        {unit}
-      </span>
-    </div>
-  )
-}
-
-function Stats({ stats, unit }: { stats: SeriesStats; unit: string }) {
-  const suffix = unit === '' ? '' : ` ${unit}`
-  return (
-    <Row
-      label="min · mean · max"
-      value={`${format(stats.min)} · ${format(stats.mean)} · ${format(stats.max)}${suffix}`}
-    />
-  )
-}
-
-function describeGl(engine: GameEngine): string {
-  const description = engine.gl?.description
-  if (description === undefined) return 'starting…'
-  return description.mode === 'extended'
-    ? `${description.backend} · extended ${description.headroom}×`
-    : `${description.backend} · sRGB`
-}
-
-function gpuLabel(
-  engine: GameEngine,
-  gpuMs: number | null,
-  busy: boolean,
-): string {
-  if (busy) return 'measuring…'
-  if (engine.gl !== null && !canMeasureGpu(engine.gl.renderer))
-    return 'webgpu only'
-  if (gpuMs === null) return 'not measured'
-  return Number.isFinite(gpuMs) ? `${gpuMs.toFixed(2)} ms/frame` : 'unavailable'
-}
-
-/** Three significant figures without exponent noise, for numbers spanning 0.01 to 100,000. */
-function format(value: number): string {
-  if (!Number.isFinite(value)) return '—'
-  if (Math.abs(value) >= 1000) return value.toFixed(0)
-  if (Math.abs(value) >= 10) return value.toFixed(1)
-  return value.toFixed(2)
-}
-
-function fps(periodMs: number): string {
-  return periodMs > 0 ? (1000 / periodMs).toFixed(0) : '—'
 }

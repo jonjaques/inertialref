@@ -152,20 +152,30 @@ status hues that appear a handful of times each.
 
 ### Neutral
 
-- **Panel Graphite 950** (`bg-slate-950/85`, `/75`, `/70`): every floating
-  surface. Always alpha, never solid.
+- **Panel Graphite 950** (`bg-slate-950/85`, `/70`): every floating surface.
+  Always alpha, never solid. `/85` is the working alpha for anything carrying a
+  readout; `/70` is the page scrim, which carries no small text of its own.
 - **Panel Graphite 900** (`bg-slate-900/80`, `/70`, `/40`): the recessed surface
   inside a panel — text inputs, sub-containers, the ground behind a chart.
 - **Panel Graphite 800** (`border-slate-800`, `bg-slate-800/60`): dividers,
   section borders, and the resting fill of a control.
 - **Panel Graphite 700** (`border-slate-700`, `/60`): the hairline that defines a
   panel edge or a control edge.
-- **Panel Graphite 600** (`text-slate-600`): the faintest legible text — an
-  address beside a name, an inline hint, an `off` state.
-- **Panel Graphite 500** (`text-slate-500`): labels. The left column of every
-  readout row.
-- **Panel Graphite 400** (`text-slate-400`): secondary values — a subordinate
-  reading, a stale distance, an axis annotation.
+- **Panel Graphite 600 and 500**: **not text colours.** They were "the faintest
+  legible text" and "labels" until the standing test below was actually
+  measured, and neither is legible: against the Sun filling the frame a 500
+  label on the dock is 3.2:1 and a 600 is 2.0:1. Nor is this tunable — on a
+  _fully opaque_ `slate-950` panel 500 reaches only 4.24:1 and 600 only 2.66:1,
+  so no alpha and no darker ground gets either to 4.5:1. Only a lighter ink
+  does. 500 survives in exactly one place, `hud/connection.ts`, where the pip is
+  a non-text indicator held to 3:1 and where `checking` and `offline` are two
+  greys that must stay apart.
+- **Panel Graphite 400** (`text-slate-400`): **the floor, and now two roles.**
+  Labels — the left column of every readout row — and secondary values: a
+  subordinate reading, a stale distance, an axis annotation. The two no longer
+  differ by grade because there is no grade below this one to differ into; they
+  are separated by position and by case, which is what the Case Rule was
+  already doing.
 - **Panel Graphite 300** (`text-slate-300`): the primary readout value, and the
   dock's base text colour.
 - **Panel Graphite 200** (`text-slate-200`): the flight strip and the app's root
@@ -381,7 +391,7 @@ simulation does not already own.
 ### Inputs / Fields
 
 - **Style:** `slate-900/80` fill, 1px `slate-700` border, `0.25rem` radius, 11px
-  text, `slate-600` placeholder. The placeholder is used to teach syntax rather
+  text, `slate-400` placeholder. The placeholder is used to teach syntax rather
   than to name the field — `SOL · b:2 · g:milky-way/s:HIP71683/b:3.0`.
 - **Focus:** border shifts to `sky-500/60` and the native outline is removed. No
   glow, no ring offset.
@@ -405,20 +415,20 @@ Two nested levels, and no more.
 Tabs, not a nav bar. Five lowercase 10px labels with `0.1em` tracking, separated
 by `0.25rem`, sitting on a `border-b` rail. The active tab carries a `sky-400`
 bottom border and `sky-300` text with `-mb-px` so its underline merges into the
-rail; inactive tabs are `slate-500` and go `slate-300` on hover. No pills, no
+rail; inactive tabs are `slate-400` and go `slate-300` on hover. No pills, no
 background fill, no icons.
 
 ### Section
 
 The dock's repeating structural unit: a full-width collapsible heading with a
-`▾`/`▸` marker in `slate-500`, a `sky-400/80` uppercase title, and an optional
-right-aligned `slate-500` trailing count. Open state persists per section id.
+`▾`/`▸` marker in `slate-400`, a `sky-400/80` uppercase title, and an optional
+right-aligned `slate-400` trailing count. Open state persists per section id.
 This is the one component that defines the dock's rhythm — every panel is a
 stack of them.
 
 ### Row
 
-A label/value pair: `slate-500` label that never shrinks, `slate-300` value that
+A label/value pair: `slate-400` label that never shrinks, `slate-300` value that
 truncates or breaks, `gap-3` between. The whole readout surface of the interface
 is this component repeated.
 
@@ -426,11 +436,17 @@ is this component repeated.
 
 The one piece of chrome that is not the dock, and deliberately so: it is what
 you read _while_ flying, where the dock is what you read when you have stopped
-to look at something. Bottom left, `slate-950/75`, `0.5rem` radius, 12px
+to look at something. Bottom left, `slate-950/85`, `0.5rem` radius, 12px
 monospace — a hair larger than everything else — with four lines in descending
 brightness: ship name in `sky-300`, speed in `slate-200`, frame or altitude in
-`slate-400`, tick and time-scale in `slate-500`. It stays legible with the dock
+`slate-300`, tick and time-scale in `slate-400`. It stays legible with the dock
 collapsed, which is the state the game is actually played in.
+
+The ladder used to run to `slate-500` on a `/75` ground, and both halves of that
+failed the same measurement: 2.4:1 for the bottom line, and 4.51:1 for the line
+above it — clearing the floor by a hundredth. It is the one surface in the
+system where the alpha moved rather than only the ink, which is
+Legibility-Over-Glass working exactly as written.
 
 ### Connection Pip (signature)
 
@@ -533,9 +549,10 @@ addressable, and both Escape and the browser's back button leave it.
   four status hues.
 - **Don't** move `dynamic-range-limit` to `#root` — the canvas is a sibling and
   would be clamped with the chrome.
-- **Don't** use two reds for one idea. Fault is `rose-400`; the perf chart's
-  budget rule currently draws in `#f87171` (red-400), which is existing drift and
-  should converge on rose rather than spread.
+- **Don't** use two reds for one idea. Fault is `rose-400`, everywhere. The perf
+  chart's budget rule drew in `#f87171` (red-400) for a while and has converged;
+  its three plot colours now live in one named `CHART` constant in
+  `hud/PerfPanel.tsx`, which is where a future palette move should find them.
 - **Don't** put anything but the crosshair at screen centre.
 - **Don't** set a proportional face anywhere in the dock or the strip.
 - **Don't** add shadows to create depth. There is one `shadow-xl`, on the dock,

@@ -1,41 +1,18 @@
-import { AnimatePresence } from 'motion/react'
 import { Route, Routes, useLocation } from 'react-router'
 import type { HarnessStatus } from '@inertialref/devtools'
 import type { GameEngine } from '../engine/GameEngine.ts'
-import type { CameraState } from '../hud/CameraPanel.tsx'
-import type { GraphicsState } from '../hud/GraphicsPanel.tsx'
 import { CinemaMode } from '../cinema/CinemaMode.tsx'
 import { FlightMode } from '../flight/FlightMode.tsx'
 import { PlanetariumMode } from '../planetarium/PlanetariumMode.tsx'
-import { AboutPage } from './AboutPage.tsx'
-import {
-  AuthCallbackPage,
-  ProfilePage,
-  SignInPage,
-  SignUpPage,
-} from './AccountPages.tsx'
 import { HomePage } from './HomePage.tsx'
-import {
-  ABOUT,
-  AUTH_CALLBACK,
-  CINEMA,
-  HOME,
-  PLANETARIUM,
-  PROFILE,
-  resolvedLocation,
-  SETTINGS,
-  SIGN_IN,
-  SIGN_UP,
-} from './paths.ts'
-import { SettingsPage } from './SettingsPage.tsx'
+import { CINEMA, HOME, PLANETARIUM, resolvedLocation } from './paths.ts'
 
 /*
- * The route table.
- *
- * Two tables, actually, and the split is the whole design:
+ * The mode route table — one of two, and the split is the whole design:
  *
  *   - **mode routes** decide what owns the camera and what chrome is on screen
- *   - **overlay routes** are dialogs that open *over* a mode without replacing it
+ *   - **overlay routes** are dialogs that open *over* a mode without replacing
+ *     it, and live in `OverlayRoutes.tsx`
  *
  * Everything renders inside `.hud-layer`, which matters twice: pages inherit the
  * standard-range clamp that keeps chrome legible against a star, and the scene
@@ -54,15 +31,6 @@ interface ModeRouteProps {
   readonly status: HarnessStatus | null
   readonly fov: number
   readonly onFov: (fov: number) => void
-}
-
-/**
- * The dialogs need far less than the modes do, and saying so is what keeps the
- * route test able to render them without an engine, a renderer or a canvas.
- */
-interface OverlayRouteProps {
-  readonly graphics: GraphicsState
-  readonly camera: CameraState
 }
 
 /**
@@ -117,38 +85,5 @@ export function ModeRoutes(props: ModeRouteProps) {
        */}
       <Route path="*" element={<HomePage engine={props.engine} />} />
     </Routes>
-  )
-}
-
-/**
- * The dialogs: settings, about, the account pages.
- *
- * `AnimatePresence` keyed on the pathname is what gives one an exit animation —
- * React Router swaps the subtree, and without something holding the outgoing
- * tree mounted there is nothing left to animate out. The `null` fallback route
- * is the "no dialog" state, and it is a real route rather than an absence so
- * that closing one animates instead of cutting.
- */
-export function OverlayRoutes({ graphics, camera }: OverlayRouteProps) {
-  const location = useLocation()
-  return (
-    <AnimatePresence mode="wait">
-      <Routes location={location} key={location.pathname}>
-        <Route
-          path={SETTINGS}
-          element={<SettingsPage graphics={graphics} camera={camera} />}
-        />
-        <Route
-          path={`${SETTINGS}/:section`}
-          element={<SettingsPage graphics={graphics} camera={camera} />}
-        />
-        <Route path={ABOUT} element={<AboutPage />} />
-        <Route path={SIGN_IN} element={<SignInPage />} />
-        <Route path={SIGN_UP} element={<SignUpPage />} />
-        <Route path={PROFILE} element={<ProfilePage />} />
-        <Route path={AUTH_CALLBACK} element={<AuthCallbackPage />} />
-        <Route path="*" element={null} />
-      </Routes>
-    </AnimatePresence>
   )
 }

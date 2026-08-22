@@ -80,19 +80,30 @@ deploys to the `inertialrefd` Worker, live at
   `verbatimModuleSyntax` are all on.** No enums, no parameter properties,
   `import type` for types, and local imports carry their `.ts` extension.
 - **oxlint** runs the `react`, `typescript` and `oxc` plugins. Type-aware rules
-  are off; enabling them needs `oxlint-tsgolint` plus `options.typeAware`. There
-  is one override: `react/only-export-components` is off for
-  `apps/game/src/components/ui/*.tsx`, which shadcn/ui generates.
+  are off; enabling them needs `oxlint-tsgolint` plus `options.typeAware`.
+  **`react/no-multi-comp` is an error**, so one component per file is checked
+  rather than remembered — the remedy is a file named after the component, and a
+  constant or a type it needs goes in a sibling `.ts`. Both that rule and
+  `react/only-export-components` are off for `apps/game/src/components/ui/*.tsx`,
+  which shadcn/ui generates and rewrites.
 - **React DnD 16** (`react-dnd`, `react-dnd-html5-backend`,
   `react-dnd-touch-backend`) drives the dockable panels, and _only_ the gesture:
   what a drop means is pure arithmetic in `apps/game/src/dock/layout.ts` with
   property tests. The backend is chosen once at mount from `(pointer: coarse)`
   because `DndProvider` cannot be handed a different one. ADR-0012.
-- **shadcn/ui is installed and configured** (`apps/game/components.json`, style
-  `new-york`, base `slate`, lucide icons). Add a component with
-  `pnpm dlx shadcn@latest add <name>` **run from `apps/game`**, then
-  `pnpm format` — the registry writes double quotes and semicolons, prettier
-  here does not. Its design tokens live in `src/index.css` and are pointed at
+- **shadcn/ui is installed and is what the overlay is built from** — `Button`,
+  `Collapsible`, `Tabs`, `Slider`, `Switch`, `Toggle`, `ToggleGroup`,
+  `Separator`, `Badge`, `Input`, `Tooltip`. Do not hand-roll a control the
+  registry has; go through `hud/Action.tsx`, `hud/SwitchRow.tsx` or
+  `hud/TransportButton.tsx`, which carry the two things the registry cannot know
+  (`releaseFocus`, and that the accent is never a fill behind text).
+  `ScrollArea` is installed and deliberately unused — its `display: table`
+  viewport breaks the `truncate` every dock readout depends on.
+  `docs/roadmap.md` § "The overlay refactor" is the map.
+  (`apps/game/components.json`, style `new-york`, base `slate`, lucide icons.)
+  Add a component with `pnpm dlx shadcn@latest add <name>` **run from
+  `apps/game`**, then `pnpm format` — the registry writes double quotes and
+  semicolons, prettier here does not. Its design tokens live in `src/index.css` and are pointed at
   the existing slate/sky palette rather than the generator's defaults; do not
   regenerate them with `shadcn init`, which would overwrite that file.
 - **`@/` resolves to `apps/game/src`**, in three places that must agree:

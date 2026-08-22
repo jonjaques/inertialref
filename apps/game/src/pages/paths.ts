@@ -118,6 +118,25 @@ export function isOverlayPath(pathname: string): boolean {
   )
 }
 
+/**
+ * Which dialog *surface* a path belongs to — `AnimatePresence`'s key.
+ *
+ * `/settings/camera` and `/settings/display` are one panel showing different
+ * content, so they share a key and the panel never re-enters between them.
+ * Anything that is not a dialog is the absence of one, which is the state the
+ * `null` fallback route renders.
+ *
+ * Keyed on the full pathname instead — which it was — every settings tab is a
+ * fresh entrance, and because the exiting and entering children render together
+ * two 70% scrims stack to 91%: the scene visibly darkens on every click of a
+ * tab. `routes.tsx` carries the rest of the argument, including why the
+ * `mode="wait"` that used to hide this could not stay.
+ */
+export function overlaySurface(pathname: string): string {
+  if (!isOverlayPath(pathname)) return 'none'
+  return pathname.split('/')[1] ?? 'dialog'
+}
+
 /* ------------------------------------------------------------------------- */
 /* Opening a dialog over a mode                                               */
 /* ------------------------------------------------------------------------- */

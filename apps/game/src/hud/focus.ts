@@ -3,7 +3,7 @@ import type { MouseEvent } from 'react'
 /*
  * Who owns the keyboard, and when.
  *
- * Its own module rather than a corner of `widgets.tsx` because Fast Refresh
+ * Its own module rather than a corner of a component file, because Fast Refresh
  * treats a file that exports both components and plain functions as neither,
  * and every control in the overlay imports this.
  */

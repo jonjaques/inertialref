@@ -1,11 +1,11 @@
 import type { HarnessStatus } from '@inertialref/devtools'
-import type { AuthorityStatus } from '@inertialref/net'
-import { BUILD_ID } from '../build.ts'
-import { CLIENT_VERSIONS, type Connection } from '../net/health.ts'
+import type { Connection } from '../net/health.ts'
 import { describeOutput, type RendererDescription } from '../render/output.ts'
-import { CONNECTION_LABEL, connectionTone, sinceText } from './connection.ts'
+import { AuthoritySection } from './AuthoritySection.tsx'
+import { NetworkSection } from './NetworkSection.tsx'
+import { Row } from './Row.tsx'
+import { Section } from './Section.tsx'
 import { CONTROL_HELP } from './useShipControls.ts'
-import { Action, Row, Section } from './widgets.tsx'
 
 /*
  * The debug readout.
@@ -68,7 +68,7 @@ export function TelemetryPanel({
   if (status === null)
     return (
       <div>
-        <div className="mb-2 text-slate-500">waiting for the first frame…</div>
+        <div className="mb-2 text-slate-400">waiting for the first frame…</div>
         {network}
       </div>
     )
@@ -188,14 +188,14 @@ export function TelemetryPanel({
                 <span className="truncate text-slate-400" title={body.name}>
                   {body.name}
                 </span>
-                <span className="shrink-0 text-slate-500">
+                <span className="shrink-0 text-slate-400">
                   {body.tier}
                   {body.compressed ? '*' : ''} · {body.distanceText}
                 </span>
               </div>
             ))}
             {render.bodies.length > 6 && (
-              <div className="text-slate-600">
+              <div className="text-slate-400">
                 +{render.bodies.length - 6} more · ir.status().render.bodies
               </div>
             )}
@@ -240,7 +240,7 @@ export function TelemetryPanel({
               title={`${event.tick} ${event.kind} · ${event.detail}`}
               className="truncate text-slate-400"
             >
-              <span className="text-slate-600">{event.tick}</span> {event.kind}{' '}
+              <span className="text-slate-400">{event.tick}</span> {event.kind}{' '}
               · {event.detail}
             </div>
           ))}
@@ -253,135 +253,17 @@ export function TelemetryPanel({
         <div className="grid grid-cols-[5.5rem_1fr] gap-x-2">
           {CONTROL_HELP.map(([key, description]) => (
             <div key={key} className="contents">
-              <span className="text-slate-500">{key}</span>
+              <span className="text-slate-400">{key}</span>
               <span className="text-slate-400">{description}</span>
             </div>
           ))}
         </div>
-        <div className="mt-2 text-slate-500">
+        <div className="mt-2 text-slate-400">
           console: <span className="text-sky-300">ir.help()</span> ·{' '}
           <span className="text-sky-300">ir.targets()</span> ·{' '}
           <span className="text-sky-300">ir.goTo(&apos;b:2&apos;)</span>
         </div>
       </Section>
     </div>
-  )
-}
-
-/*
- * The network readout.
- *
- * Six rows that answer one question each, and the two that matter most are the
- * last pair: which bundle this browser is running, and which deployment
- * answered. "The fix is live but I still see the bug" is otherwise a guess, and
- * it is a guess a service worker makes easy to get wrong.
- *
- * `generation` is here rather than under `simulation` because it is the thing
- * the handshake actually compares. Two clients agreeing on a protocol version
- * and disagreeing on a terrain version derive different mountains, and this is
- * the row where that becomes visible instead of mysterious.
- */
-function NetworkSection({
-  connection,
-  onCheck,
-}: {
-  connection: Connection
-  onCheck: () => void
-}) {
-  const { state, detail, health, checkedAt, failures } = connection
-  const generation = Object.entries(health?.generation ?? {})
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([name, version]) => `${name} ${version}`)
-    .join(' · ')
-
-  return (
-    <Section
-      id="tel.network"
-      title="network"
-      trailing={CONNECTION_LABEL[state]}
-    >
-      <div className="flex justify-between gap-3">
-        <span className="shrink-0 text-slate-500">state</span>
-        <span className={`truncate text-right ${connectionTone(state)}`}>
-          {CONNECTION_LABEL[state]}
-          {health !== null && health.colo !== '' ? ` · ${health.colo}` : ''}
-          {failures > 1 ? ` · ${failures} failed checks` : ''}
-        </span>
-      </div>
-      <Row label="detail" value={detail ?? '—'} wrap />
-      <Row
-        label="protocol"
-        value={
-          health === null
-            ? `${CLIENT_VERSIONS.protocol} here, server unknown`
-            : `${health.protocol} server · ${CLIENT_VERSIONS.protocol} here`
-        }
-      />
-      <Row label="generation" value={generation || '—'} wrap />
-      <Row label="client build" value={BUILD_ID} />
-      <Row label="server build" value={health?.revision ?? '—'} />
-      <Row label="checked" value={sinceText(checkedAt)} />
-      <div className="mt-1 flex items-center gap-1">
-        <Action
-          label="check now"
-          title="Probe /api/health immediately"
-          onClick={onCheck}
-        />
-        {/* Said plainly, because the colour of a dot is not a promise. */}
-        <span className="text-slate-600">
-          the game does not need any of this
-        </span>
-      </div>
-    </Section>
-  )
-}
-
-/*
- * Who owns the simulation this client is part of.
- *
- * Separate from `network` because they are different questions with different
- * answers: you can be online and alone, which is the normal case, and the
- * costly one this design goes out of its way to avoid paying for (H-6).
- *
- * `partition` appears here *and* on the player, deliberately. The player row is
- * the overlay's own derivation from the frame chain; this one is what the
- * authority believes. They agree by construction today, and the whole reason
- * `partitionForFrames` exists is that they once agreed only by coincidence — so
- * showing both is what makes a future disagreement visible instead of subtle.
- */
-function AuthoritySection({
-  authority,
-}: {
-  authority: AuthorityStatus | null
-}) {
-  if (authority === null)
-    return (
-      <Section id="tel.authority" title="authority" trailing="none">
-        <div className="text-slate-500">no authority joined</div>
-      </Section>
-    )
-
-  const { kind, state, partition, peers, streaming, submitted, detail } =
-    authority
-  return (
-    <Section id="tel.authority" title="authority" trailing={kind}>
-      <Row label="owner" value={`${kind} · ${state}`} />
-      <Row label="partition" value={partition ?? '—'} />
-      <Row
-        label="peers"
-        value={
-          peers === 0 ? 'alone' : `${peers} other${peers === 1 ? '' : 's'}`
-        }
-      />
-      <Row
-        label="streaming"
-        value={streaming ? 'entities' : 'nothing to send'}
-      />
-      <Row label="intent" value={`${submitted} submitted`} />
-      {detail !== null && <Row label="detail" value={detail} wrap />}
-      <div className="mt-1 text-slate-600">
-        alone is not degraded — it is the mode the universe is designed around
-      </div>
-    </Section>
   )
 }

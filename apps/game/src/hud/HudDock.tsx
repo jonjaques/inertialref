@@ -1,17 +1,23 @@
 import type { HarnessStatus } from '@inertialref/devtools'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import type { Connection } from '../net/health.ts'
-import type { OutputPreference, RendererDescription } from '../render/output.ts'
-import { CameraPanel, type CameraState } from './CameraPanel.tsx'
-import { CONNECTION_LABEL, connectionTone } from './connection.ts'
+import { CameraPanel } from './CameraPanel.tsx'
+import { ConnectionPip } from './ConnectionPip.tsx'
+import type {
+  CameraState,
+  GraphicsState,
+  HudCommands,
+  HudRenderState,
+} from './controls.ts'
+import { DockTransport } from './DockTransport.tsx'
 import { ErrorBoundary } from './ErrorBoundary.tsx'
 import { FOCUS_RING, releaseFocus } from './focus.ts'
-import { GraphicsPanel, type GraphicsState } from './GraphicsPanel.tsx'
+import { GraphicsPanel } from './GraphicsPanel.tsx'
 import { NavPanel } from './NavPanel.tsx'
 import { PerfPanel } from './PerfPanel.tsx'
 import { type HudTab, TABS } from './tabs.ts'
 import { TelemetryPanel } from './TelemetryPanel.tsx'
-import { Action } from './widgets.tsx'
 
 /*
  * The dev dock.
@@ -29,28 +35,20 @@ import { Action } from './widgets.tsx'
  */
 
 /**
- * The renderer, as far as the dock is concerned: what was asked for, what came
- * back, and how to ask for something else.
+ * The tab strip's own classes, which are mostly subtractions.
  *
- * One prop rather than three because they are read together — the whole point of
- * showing the resolved mode next to the preference is that they routinely
- * disagree, and a browser that cannot produce extended range is supposed to say
- * so rather than silently ignore the setting.
+ * The registry's `line` variant is a 36 px pill list with a 2 px underline
+ * five pixels below each trigger. The dock's type scale bottoms out at 10 px
+ * and its rules are hairlines, so what survives is the variant's *mechanism* —
+ * `data-state` driving an `::after` — with the sizes and the accent moved onto
+ * this system's own. Overriding here rather than editing `components/ui`,
+ * which `pnpm dlx shadcn add` rewrites.
  */
-export interface HudRenderState {
-  readonly preference: OutputPreference
-  readonly output: RendererDescription | null
-  readonly onCyclePreference: () => void
-}
+const TAB_LIST =
+  'h-auto w-full justify-start gap-1 rounded-none border-b border-slate-800 bg-transparent p-0 px-2 pt-1'
 
-export interface HudCommands {
-  readonly togglePause: () => void
-  readonly warp: (direction: number) => void
-  readonly toggleAssist: () => void
-  readonly killRotation: () => void
-  readonly save: () => void
-  readonly load: () => void
-}
+const TAB_TRIGGER =
+  'min-h-6 flex-none rounded-none border-0 bg-transparent px-2 py-0.5 text-[10px] font-normal tracking-widest uppercase text-slate-400 shadow-none hover:text-slate-300 data-[state=active]:bg-transparent data-[state=active]:text-sky-300 data-[state=active]:shadow-none after:-bottom-px after:h-px after:bg-sky-400 dark:data-[state=active]:bg-transparent'
 
 export function HudDock({
   engine,
@@ -98,7 +96,7 @@ export function HudDock({
    * off-screen where no scrollbar can reach it.
    */
   return (
-    <aside className="pointer-events-auto absolute right-3 top-3 flex max-h-[calc(100vh-1.5rem)] w-[27rem] max-w-[calc(100vw-1.5rem)] flex-col overflow-hidden rounded-lg border border-slate-700/60 bg-slate-950/85 font-mono text-[11px] leading-relaxed text-slate-300 shadow-xl backdrop-blur">
+    <aside className="pointer-events-auto absolute top-3 right-3 flex max-h-[calc(100vh-1.5rem)] w-[27rem] max-w-[calc(100vw-1.5rem)] flex-col overflow-hidden rounded-lg border border-slate-700/60 bg-slate-950/85 font-mono text-[11px] leading-relaxed text-slate-300 shadow-xl backdrop-blur">
       <button
         type="button"
         aria-expanded={open}
@@ -108,165 +106,95 @@ export function HudDock({
         }}
         className={`flex items-center gap-2 border-b border-slate-800 px-2 py-1 text-left hover:bg-slate-900/60 ${FOCUS_RING}`}
       >
-        <span className="text-slate-500">{open ? '▾' : '▸'}</span>
+        <span className="text-slate-400">{open ? '▾' : '▸'}</span>
         <span className="text-sky-300">InertialRef</span>
-        <span className="ml-auto truncate text-slate-500" title={summary}>
+        <span className="ml-auto truncate text-slate-400" title={summary}>
           {summary}
         </span>
         <ConnectionPip connection={connection} />
-        <span className="shrink-0 text-slate-600">H</span>
+        <span className="shrink-0 text-slate-400">H</span>
       </button>
 
       {open && (
         <>
-          <div className="flex flex-wrap items-center gap-1 border-b border-slate-800 px-2 py-1">
-            <Action
-              label={world?.paused === true ? '▶ run' : '❚❚ pause'}
-              title="Space"
-              onClick={commands.togglePause}
-            />
-            <Action
-              label="−"
-              title="Slower ( [ )"
-              onClick={() => commands.warp(-1)}
-            />
-            <span className="w-12 text-center tabular-nums text-slate-400">
-              {world?.timeScale ?? 1}×
-            </span>
-            <Action
-              label="+"
-              title="Faster ( ] )"
-              onClick={() => commands.warp(1)}
-            />
-            <span className="mx-1 h-3 w-px bg-slate-800" />
-            <Action
-              label="assist"
-              title="Flight assist (Z)"
-              onClick={commands.toggleAssist}
-            />
-            <Action
-              label="stop spin"
-              title="Kill rotation (X)"
-              onClick={commands.killRotation}
-            />
-            <span className="mx-1 h-3 w-px bg-slate-800" />
-            <Action label="save" title="F5" onClick={commands.save} />
-            <Action label="load" title="F9" onClick={commands.load} />
-            <span className="mx-1 h-3 w-px bg-slate-800" />
-            {/* Three states, one button. `docs/design/art.md` requires the
-                override; what it does not require is three radio buttons in an
-                overlay that is already dense. The resolved answer — which is
-                often not the one asked for — is a row in the telemetry tab. */}
-            <Action
-              label={`hdr ${render.preference}`}
-              title="Extended-range output: auto detects, and is wrong for somebody on every browser"
-              tone={render.output?.mode === 'extended' ? 'primary' : 'normal'}
-              onClick={render.onCyclePreference}
-            />
-          </div>
-
-          <div
-            role="tablist"
-            aria-label="Dock panels"
-            className="flex gap-1 border-b border-slate-800 px-2 pt-1"
-          >
-            {TABS.map((name) => (
-              <Tab
-                key={name}
-                label={name}
-                active={tab === name}
-                onClick={() => onTabChange(name)}
-              />
-            ))}
-          </div>
+          <DockTransport world={world} render={render} commands={commands} />
 
           {/*
-           * One boundary per tab, keyed on the tab.
+           * Radix owns the tablist, the roving focus and the `aria-controls`
+           * wiring; what it does not own is which tab is showing, because that
+           * outlives the mount — `App` persists it and validates the stored
+           * name against `TABS`, since a `dock.tab` from before these five
+           * names existed parses cleanly and renders an empty dock.
            *
-           * Keyed because remounting is the reset: leaving a failed tab and
-           * coming back is the recovery a person reaches for first, and it has
-           * to work without a button. Inside the scroll container rather than
-           * around it so the fallback inherits the panel's padding and the
-           * dock's own chrome — header, tabs, the transport controls — is
-           * still there to drive the simulation with while one readout is down.
+           * Native scrolling inside each panel rather than `ScrollArea`,
+           * deliberately: Radix's viewport wraps its content in a
+           * `display: table` box that grows past 100% to fit the widest
+           * line, and every readout in here is `truncate` inside a 27 rem
+           * column. `index.css` already paints the native gutter in this
+           * system's colours for exactly this surface.
            */}
-          <div
-            role="tabpanel"
-            id={`hud-panel-${tab}`}
-            aria-labelledby={`hud-tab-${tab}`}
-            className="min-h-0 flex-1 overflow-auto p-2"
+          <Tabs
+            value={tab}
+            onValueChange={(next) => onTabChange(next as HudTab)}
+            className="flex min-h-0 flex-1 flex-col gap-0"
           >
-            <ErrorBoundary key={tab} what={`the ${tab} panel`}>
-              {tab === 'navigate' && (
-                <NavPanel engine={engine} onNotice={onNotice} />
-              )}
-              {tab === 'graphics' && <GraphicsPanel graphics={graphics} />}
-              {tab === 'camera' && <CameraPanel camera={camera} />}
-              {tab === 'telemetry' && (
-                <TelemetryPanel
-                  status={status}
-                  output={render.output}
-                  connection={connection}
-                  onCheckConnection={onCheckConnection}
-                />
-              )}
-              {tab === 'perf' && <PerfPanel engine={engine} status={status} />}
-            </ErrorBoundary>
-          </div>
+            <TabsList
+              variant="line"
+              aria-label="Dock panels"
+              className={TAB_LIST}
+            >
+              {TABS.map((name) => (
+                <TabsTrigger
+                  key={name}
+                  value={name}
+                  onClick={releaseFocus}
+                  className={`${TAB_TRIGGER} ${FOCUS_RING}`}
+                >
+                  {name}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+
+            {/*
+             * One boundary per tab.
+             *
+             * Radix unmounts the inactive panels, so leaving a failed tab and
+             * coming back remounts the boundary with it — which is the reset a
+             * person reaches for first, and it has to work without a button.
+             * Inside the scroll container rather than around it so the
+             * fallback inherits the panel's padding, and the dock's own chrome
+             * — header, tabs, the transport controls — is still there to drive
+             * the simulation with while one readout is down.
+             */}
+            {TABS.map((name) => (
+              <TabsContent
+                key={name}
+                value={name}
+                className="min-h-0 flex-1 overflow-auto p-2"
+              >
+                <ErrorBoundary what={`the ${name} panel`}>
+                  {name === 'navigate' && (
+                    <NavPanel engine={engine} onNotice={onNotice} />
+                  )}
+                  {name === 'graphics' && <GraphicsPanel graphics={graphics} />}
+                  {name === 'camera' && <CameraPanel camera={camera} />}
+                  {name === 'telemetry' && (
+                    <TelemetryPanel
+                      status={status}
+                      output={render.output}
+                      connection={connection}
+                      onCheckConnection={onCheckConnection}
+                    />
+                  )}
+                  {name === 'perf' && (
+                    <PerfPanel engine={engine} status={status} />
+                  )}
+                </ErrorBoundary>
+              </TabsContent>
+            ))}
+          </Tabs>
         </>
       )}
     </aside>
-  )
-}
-
-/**
- * The dot in the header — the entire network readout when the dock is
- * collapsed, which is why it carries its explanation in a title rather than a
- * label. Local, like `Tab` below: it is chrome for this one header.
- */
-function ConnectionPip({ connection }: { connection: Connection }) {
-  const { state, detail } = connection
-  return (
-    <span
-      role="img"
-      // The glyph carries the whole readout when the dock is collapsed, and a
-      // screen reader announcing "black circle" carries none of it.
-      aria-label={`server ${CONNECTION_LABEL[state]}`}
-      className={`shrink-0 ${connectionTone(state)}`}
-      title={`${CONNECTION_LABEL[state]}${detail === null ? '' : ` — ${detail}`}`}
-    >
-      ●
-    </span>
-  )
-}
-
-function Tab({
-  label,
-  active,
-  onClick,
-}: {
-  label: HudTab
-  active: boolean
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      role="tab"
-      id={`hud-tab-${label}`}
-      aria-selected={active}
-      aria-controls={`hud-panel-${label}`}
-      onClick={(event) => {
-        releaseFocus(event)
-        onClick()
-      }}
-      className={`-mb-px border-b px-2 py-0.5 text-[10px] uppercase tracking-widest ${FOCUS_RING} ${
-        active
-          ? 'border-sky-400 text-sky-300'
-          : 'border-transparent text-slate-500 hover:text-slate-300'
-      }`}
-    >
-      {label}
-    </button>
   )
 }
