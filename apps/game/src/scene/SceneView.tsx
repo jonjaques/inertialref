@@ -1,5 +1,5 @@
 import { useFrame, useThree } from '@react-three/fiber'
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { LIGHT_YEAR } from '@inertialref/shared'
 import { UV, type UniverseVector } from '@inertialref/spatial'
 import {
@@ -14,7 +14,11 @@ import {
   Vector3,
 } from 'three/webgpu'
 import type { RenderBody } from '@inertialref/rendering'
-import { chaseCameraPosition, placeOnStarShell } from '@inertialref/rendering'
+import {
+  chaseCameraPosition,
+  chaseOffsetFor,
+  placeOnStarShell,
+} from '@inertialref/rendering'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import {
   type AtmosphereMaterial,
@@ -37,6 +41,11 @@ import { createLensFlare } from '../render/flare.ts'
 import { type FlareOccluder, sunVisibility } from '../render/flareMath.ts'
 import { texturesFor } from '../render/planetTextures.ts'
 import { proceduralRingStrip } from '../render/proceduralRings.ts'
+import {
+  DEFAULT_SHIP,
+  type LoadedShip,
+  loadShipModel,
+} from '../render/shipModels.ts'
 import type { PerspectiveCamera } from 'three/webgpu'
 
 /*
@@ -200,7 +209,15 @@ function CameraRig({ engine }: { engine: GameEngine }) {
     // were three lines of vector arithmetic here, which is exactly where a rule
     // goes to become untestable: nothing in Node could see that pitching up on
     // the pad put the camera under the crust.
-    const eye = chaseCameraPosition(scene)
+    // The offset scales with the modelled hull once one is mounted; the
+    // hand-tuned 6 m default covers the debug cone. `engine.hull` rather than
+    // anything module-scoped here — see the field's comment in `GameEngine`.
+    const eye = chaseCameraPosition(
+      scene,
+      engine.hull === null
+        ? undefined
+        : chaseOffsetFor(engine.hull.lengthMetres),
+    )
     camera.position.set(eye.x, eye.y, eye.z)
     camera.updateMatrixWorld()
 
@@ -1055,9 +1072,35 @@ const debugMaterials = {
   inch: new MeshStandardNodeMaterial({ color: 0xe06060, roughness: 0.8 }),
 }
 
-/** The debug spacecraft. Primitives on purpose: this proves architecture, not art. */
+/**
+ * The player's ship: a modelled hull once its glTF resolves, the debug cone
+ * until then and whenever loading fails. The cone is the same degradation
+ * story as the star catalogue's Sol fallback — the flight model neither knows
+ * nor cares what the hull looks like.
+ */
 function ShipModel({ engine }: { engine: GameEngine }) {
   const group = useRef<Group>(null)
+  const anisotropy = useThree(
+    (state) => state.gl.capabilities?.getMaxAnisotropy?.() ?? 8,
+  )
+  // Seeded from the engine so a Fast Refresh remount, whose effect may not
+  // re-run, still renders the hull the session already loaded.
+  const [hull, setHull] = useState<LoadedShip | null>(engine.hull)
+
+  useEffect(() => {
+    // The loader caches by id, so StrictMode's double-mount and the canvas
+    // remount on an HDR change reuse the same fetch and the same meshes.
+    let mounted = true
+    void loadShipModel(DEFAULT_SHIP, anisotropy).then((ship) => {
+      if (mounted && ship !== null) {
+        engine.hull = ship
+        setHull(ship)
+      }
+    })
+    return () => {
+      mounted = false
+    }
+  }, [engine, anisotropy])
 
   useFrame(() => {
     const scene = engine.scene()
@@ -1078,19 +1121,27 @@ function ShipModel({ engine }: { engine: GameEngine }) {
     )
   })
 
+  // No dispose on unmount, and Starfield is the precedent: the loader owns the
+  // hull for the life of the renderer, and R3F only detaches the primitive.
   return (
     <group ref={group}>
-      {/* Nose along −Z, matching the forward convention the whole codebase uses. */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} material={debugMaterials.hull}>
-        <coneGeometry args={[1.4, 6, 4]} />
-      </mesh>
-      <mesh position={[0, 0, 1.6]} material={debugMaterials.wing}>
-        <boxGeometry args={[5.2, 0.3, 1.6]} />
-      </mesh>
-      {/* Engine bell, so which way is aft is unambiguous at a glance. */}
-      <mesh position={[0, 0, 3.2]} material={debugMaterials.bell}>
-        <cylinderGeometry args={[0.9, 1.2, 1.2, 12]} />
-      </mesh>
+      {hull !== null ? (
+        <primitive object={hull.group} />
+      ) : (
+        <>
+          {/* Nose along −Z, matching the forward convention the whole codebase uses. */}
+          <mesh rotation={[-Math.PI / 2, 0, 0]} material={debugMaterials.hull}>
+            <coneGeometry args={[1.4, 6, 4]} />
+          </mesh>
+          <mesh position={[0, 0, 1.6]} material={debugMaterials.wing}>
+            <boxGeometry args={[5.2, 0.3, 1.6]} />
+          </mesh>
+          {/* Engine bell, so which way is aft is unambiguous at a glance. */}
+          <mesh position={[0, 0, 3.2]} material={debugMaterials.bell}>
+            <cylinderGeometry args={[0.9, 1.2, 1.2, 12]} />
+          </mesh>
+        </>
+      )}
     </group>
   )
 }
@@ -1104,6 +1155,7 @@ function ShipModel({ engine }: { engine: GameEngine }) {
  */
 function NearFieldProps({ engine }: { engine: GameEngine }) {
   const group = useRef<Group>(null)
+  const rack = useRef<Group>(null)
 
   useFrame(() => {
     const scene = engine.scene()
@@ -1111,6 +1163,13 @@ function NearFieldProps({ engine }: { engine: GameEngine }) {
     // The props ride the same toggle as the ship: both are debug hardware, and
     // a bookmarked composition wants neither in the middle of it.
     group.current.visible = engine.showShip
+    // ±4 m from the origin was beside the debug cone; inside a modelled hull
+    // it is somewhere in the saucer's wiring. Slide the rack out past the
+    // starboard beam so the cubes stay inspectable next to the hull.
+    if (rack.current !== null) {
+      rack.current.position.x =
+        engine.hull === null ? 0 : engine.hull.beamMetres / 2 + 40
+    }
     const ship = scene.entities.find((entity) => entity.isCamera)
     if (ship === undefined) return
     group.current.position.set(
@@ -1128,19 +1187,21 @@ function NearFieldProps({ engine }: { engine: GameEngine }) {
 
   return (
     <group ref={group}>
-      {/* One metre. */}
-      <mesh position={[4, 0, 0]} material={debugMaterials.metre}>
-        <boxGeometry args={[1, 1, 1]} />
-      </mesh>
-      {/* One foot. */}
-      <mesh position={[-4, 0, 0]} material={debugMaterials.foot}>
-        <boxGeometry args={[0.3048, 0.3048, 0.3048]} />
-      </mesh>
-      {/* One inch — the smallest thing the spec asks the coordinate system to
-          resolve, sitting 8 kiloparsecs from the universe origin. */}
-      <mesh position={[-4.7, 0, 0]} material={debugMaterials.inch}>
-        <boxGeometry args={[0.0254, 0.0254, 0.0254]} />
-      </mesh>
+      <group ref={rack}>
+        {/* One metre. */}
+        <mesh position={[4, 0, 0]} material={debugMaterials.metre}>
+          <boxGeometry args={[1, 1, 1]} />
+        </mesh>
+        {/* One foot. */}
+        <mesh position={[-4, 0, 0]} material={debugMaterials.foot}>
+          <boxGeometry args={[0.3048, 0.3048, 0.3048]} />
+        </mesh>
+        {/* One inch — the smallest thing the spec asks the coordinate system to
+            resolve, sitting 8 kiloparsecs from the universe origin. */}
+        <mesh position={[-4.7, 0, 0]} material={debugMaterials.inch}>
+          <boxGeometry args={[0.0254, 0.0254, 0.0254]} />
+        </mesh>
+      </group>
     </group>
   )
 }

@@ -38,6 +38,7 @@ import {
 } from '@inertialref/devtools'
 import { DEFAULT_SLOT, type SaveStore } from '@inertialref/persistence'
 import type { RendererHandle } from '../render/createRenderer.ts'
+import type { LoadedShip } from '../render/shipModels.ts'
 import { createBrowserWorkerPort, poolSize } from './browserWorker.ts'
 import type { Camera, Object3D } from 'three/webgpu'
 import { FrameMetrics, usedHeapMb } from './frameMetrics.ts'
@@ -180,6 +181,21 @@ export class GameEngine implements PresentationHost {
    * and what is inspected cannot disagree.
    */
   gl: RendererHandle | null = null
+
+  /*
+   * The modelled hull the player is flying, once its glTF resolves.
+   *
+   * Three scene components need it every frame — `ShipModel` mounts it,
+   * `CameraRig` scales the chase distance from its length, `NearFieldProps`
+   * steps aside from its beam — and it changes exactly once per session. On
+   * the engine rather than in module state in `SceneView`, because Vite
+   * re-evaluates an edited render module while Fast Refresh preserves the
+   * mounted components' hook state: a module-level copy resets to null mid-
+   * session and the chase camera snaps back to the 6 m framing, inside the
+   * saucer. The engine is the one singleton every HMR generation shares.
+   * Null means the debug cone is standing in.
+   */
+  hull: LoadedShip | null = null
 
   #scene: RenderScene | null = null
   #frameMs = 16

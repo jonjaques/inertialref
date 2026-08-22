@@ -17,9 +17,25 @@ import type { RenderScene } from './scene.ts'
  *
  * A chase view rather than a cockpit, because the point of this milestone is to
  * see the ship, the metre-scale reference objects beside it and the planet in
- * one frame.
+ * one frame. This is the offset for the 6 m debug hull; a modelled hull
+ * derives its own through `chaseOffsetFor`.
  */
 export const CHASE_OFFSET: Vec3 = vec3(0, 2.5, 14)
+
+/**
+ * The chase offset for a hull of a given overall length.
+ *
+ * The framing is a ratio, not a distance: what makes a chase view read is the
+ * hull filling roughly the same fraction of the frame regardless of whether it
+ * is six metres long or six hundred. 1.4 lengths behind and 0.28 above keeps
+ * the whole hull inside the default field of view with sky around it —
+ * slightly tighter than the debug cone's hand-tuned offset, because a big ship
+ * shot from 2.3 lengths reads as a photograph of a model rather than a ship
+ * you are flying.
+ */
+export function chaseOffsetFor(length: Meters): Vec3 {
+  return vec3(0, length * 0.28, length * 1.4)
+}
 
 /**
  * Never let the camera get closer to the ground than this.

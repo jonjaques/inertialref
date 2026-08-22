@@ -79,7 +79,7 @@ change** — they are generators plus representations.
 | Moons of real planets    | ⬜     | `PackedPlanet` needs a moon list; every moon in the game is currently a projection, including Luna              |
 | Catalogue revision diff  | ⬜     | Both versions are recorded — in every save and every manifest — and nothing compares them yet                   |
 | Planetary terrain        | 🟡     | Heightfields only; no biomes or materials                                                                       |
-| Ships                    | 🟡     | One debug spacecraft, no variants or subsystems                                                                 |
+| Ships                    | 🟡     | One modelled hull (a CC-BY Enterprise-D in `data/models/`, debug cone as fallback), no variants or subsystems   |
 | Rings                    | ✅     | Saturn's, with the planet's shadow on them and theirs on the planet; procedural giants get a 1-in-6 chance      |
 | Asteroids / belts        | ⬜     | Wants a _population_ generator: many small bodies from one cell seed, addressed as `o:` objects within a region |
 | Star clusters, nebulae   | ⬜     | Density modulation in the galaxy generator + volumetric rendering                                               |
@@ -243,8 +243,8 @@ so there is still nothing that can fail a pull request for getting slower.
 The overlay earned itself on the first day: it found that the simulation clock
 capped time warp at 7.5× while the UI offered 100,000×.
 
-Also unaddressed: the client bundle is 1.78 MB raw (**501.7 KB gzip / 371.9 KB
-brotli**, measured 2026-08-20), dominated by Three.js, with no code splitting. It
+Also unaddressed: the client bundle is 1.90 MB raw (**541.4 KB gzip / 412.7 KB
+brotli**, measured 2026-08-21), dominated by Three.js, with no code splitting. It
 grew 177 KB gzip
 with the WebGPU migration — the node system and the WebGPU backend — and roughly
 150 KB raw of that is dead weight: React Three Fiber imports `three`, which pulls

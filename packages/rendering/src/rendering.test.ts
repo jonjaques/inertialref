@@ -45,6 +45,7 @@ import {
 import {
   CAMERA_GROUND_CLEARANCE,
   CHASE_OFFSET,
+  chaseOffsetFor,
   chaseCameraPosition,
 } from './camera.ts'
 import { buildPatch, patchPlacement } from './terrainMesh.ts'
@@ -394,6 +395,40 @@ describe('chase camera', () => {
       const eye = chaseCameraPosition(scene)
       // Height of the eye over the ship, along local up, plus the ship's own
       // altitude — which is zero, because it is parked.
+      const height = Vec.dot(
+        Vec.sub(eye, scene.camera.position),
+        scene.camera.up,
+      )
+      expect(
+        `pitch ${pitch}: ${height >= CAMERA_GROUND_CLEARANCE - 1e-9}`,
+      ).toBe(`pitch ${pitch}: true`)
+    }
+  })
+
+  it('keeps a modelled hull in frame at any length', () => {
+    // The framing rule is a ratio, so the angle the hull subtends from the
+    // camera must not depend on how long it is: a 6 m cone and a 642 m
+    // starship should fill the same fraction of the view. The half-angle from
+    // eye to bow is atan((L/2) / |offset|), which the ratio pins for every L.
+    const lengths = [6, 60, 642.5, 5000]
+    const subtended = lengths.map((length) => {
+      const offset = chaseOffsetFor(length)
+      expect(offset.z).toBeGreaterThan(0) // behind, never inside
+      expect(offset.y).toBeGreaterThan(0) // above, so the deck is visible
+      return Math.atan(length / 2 / Vec.length(offset))
+    })
+    for (const angle of subtended) {
+      expect(angle).toBeCloseTo(subtended[0] as number, 9)
+    }
+  })
+
+  it('keeps the camera above the ground behind a full-size hull', () => {
+    // The clearance clamp was tuned against 14 m of lever arm; a modelled
+    // hull hangs the camera ~900 m back, where the same nose-high pitch digs
+    // proportionally deeper. The rule must hold regardless of the arm.
+    for (const pitch of [0, 10, 20, 40, 60, 90, 180, -40]) {
+      const scene = landedScene(pitch)
+      const eye = chaseCameraPosition(scene, chaseOffsetFor(642.5))
       const height = Vec.dot(
         Vec.sub(eye, scene.camera.position),
         scene.camera.up,

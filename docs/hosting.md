@@ -144,7 +144,7 @@ and Cloudflare states plainly that the number of objects is "unlimited (within
 an account or of a given class)". The 500 ceiling would only bind if the design
 grew 500 distinct _kinds_ of authority, which would be a bizarre thing to want.
 
-The bundle is **501.7 KB gzip** measured 2026-08-20, so the 3 MB script limit is
+The bundle is **541.4 KB gzip** measured 2026-08-21, so the 3 MB script limit is
 irrelevant — the bundle is an _asset_, not part of the script.
 
 ---

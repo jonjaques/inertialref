@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "models": [
+    {
+      "id": "enterprise-d",
+      "name": "USS Enterprise NCC-1701-D",
+      "file": "enterprise-d.glb",
+      "lengthMetres": 642.5,
+      "nose": "+z",
+      "author": "LoganRolphh",
+      "source": "https://sketchfab.com/3d-models/star-trek-online-uss-enterprise-d-595123c3348646a4a7e6871ebf0e9fae",
+      "license": "cc-by-4.0"
+    }
+  ],
+  "attribution": [
+    "“Star Trek Online | USS Enterprise D” by LoganRolphh (https://sketchfab.com/LoganRolphh), licensed CC BY 4.0 — https://sketchfab.com/3d-models/star-trek-online-uss-enterprise-d-595123c3348646a4a7e6871ebf0e9fae"
+  ]
+}

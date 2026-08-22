@@ -11,8 +11,9 @@ pnpm install
 pnpm dev          # → http://localhost:5173
 ```
 
-The client opens with a debug spacecraft in a 400 km orbit around the first
-solid world of a procedurally generated Sol, facing the planet.
+The client opens on Earth, three-quarter lit, with the ship — a CC-BY
+USS Enterprise-D hull, or the debug cone while it loads — framed in the
+foreground of a procedurally generated Sol.
 
 ```mermaid
 flowchart LR
