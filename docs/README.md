@@ -71,6 +71,10 @@ whole game in about twenty minutes.
 | [loops](design/loops.md)                                | The micro, macro and meta loops                           |
 | [flight](design/flight.md) · [ships](design/ships.md)   | The Reference Drive, travel regimes, modules, power, heat |
 | [galaxy](design/galaxy.md)                              | Real astronomy, catalogue revisions, the two maps         |
+| [modes](design/modes.md)                                | The five modes, and why they are one build                |
+| [planetarium](design/planetarium.md)                    | Free navigation — the mode with no ship                   |
+| [cinema](design/cinema.md)                              | The scene player, and its URL contract                    |
+| [ux](design/ux.md)                                      | The shell and routes, cockpit, HUD, accessibility         |
 | [exploration](design/exploration.md)                    | Scanning, discovery credit, the data economy              |
 | [onfoot](design/onfoot.md) · [combat](design/combat.md) | The first-person layer, and conflict                      |
 | [art](design/art.md)                                    | The photorealism doctrine and the no-pop-in specification |

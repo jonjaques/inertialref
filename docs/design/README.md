@@ -65,19 +65,21 @@ flowchart LR
 
 ### Content and presentation
 
-| Page                  | What it settles                                                  |
-| --------------------- | ---------------------------------------------------------------- |
-| [content](content.md) | What exists in the galaxy, in what quantity, generated how       |
-| [world](world.md)     | Setting, tone, and the diegetic frame that holds it together     |
-| [ux](ux.md)           | Cockpit, HUD, the two maps, first-time experience, accessibility |
-| [art](art.md)         | The photorealism doctrine and the LOD continuity specification   |
-| [audio](audio.md)     | Music, effects, and the problem of silence                       |
+| Page                  | What it settles                                                 |
+| --------------------- | --------------------------------------------------------------- |
+| [content](content.md) | What exists in the galaxy, in what quantity, generated how      |
+| [world](world.md)     | Setting, tone, and the diegetic frame that holds it together    |
+| [ux](ux.md)           | The shell and routes, cockpit, HUD, the two maps, accessibility |
+| [art](art.md)         | The photorealism doctrine and the LOD continuity specification  |
+| [audio](audio.md)     | Music, effects, and the problem of silence                      |
 
 ### Production
 
 | Page                                | What it settles                                          |
 | ----------------------------------- | -------------------------------------------------------- |
 | [modes](modes.md)                   | Solo offline, solo online, persistent universe           |
+| [planetarium](planetarium.md)       | Free navigation of the galaxy — the mode with no ship    |
+| [cinema](cinema.md)                 | The player for scripted scenes, and its URL contract     |
 | [technical](technical.md)           | WebGPU migration, performance budgets, targets           |
 | [sustainability](sustainability.md) | Open source governance, contribution, funding            |
 | [competitive](competitive.md)       | Star Citizen, Elite Dangerous, No Man's Sky, and the gap |
@@ -114,5 +116,5 @@ in the appendix so nothing hides in a paragraph.
 - [`docs/vision.md`](../vision.md) — the charter this serves
 - [`docs/architecture.md`](../architecture.md) — the system these designs run on
 - [`docs/roadmap.md`](../roadmap.md) — engineering sequence; [production](production.md) is the design-facing view of the same work
-- [`docs/adr/`](../adr/) — the eight decisions everything here assumes
+- [`docs/adr/`](../adr/) — the twelve decisions everything here assumes
 - [`AGENTS.md`](../../AGENTS.md) — how to change any of it

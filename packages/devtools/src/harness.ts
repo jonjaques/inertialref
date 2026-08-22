@@ -69,6 +69,11 @@ import {
 } from './travel.ts'
 import { findShot, placeShot, SHOTS } from './shots.ts'
 import { CutsceneDirector, type CutsceneStatus } from './cutscene.ts'
+import {
+  Observatory,
+  type ObserverPose,
+  type ObserverStatus,
+} from './observatory.ts'
 import { TNG_INTRO } from './cutscenes/tngIntro.ts'
 import type { CinematicSample } from '@inertialref/rendering'
 
@@ -159,10 +164,12 @@ export class GameHarness {
   readonly #host: HarnessHost
   readonly #logSink = new RingBufferSink(256)
   readonly #cutscenes: CutsceneDirector
+  readonly #observatory: Observatory
 
   constructor(host: HarnessHost) {
     this.#host = host
     this.#cutscenes = new CutsceneDirector(host, [TNG_INTRO])
+    this.#observatory = new Observatory(host)
     logHub.addSink(this.#logSink)
   }
 
@@ -847,6 +854,52 @@ export class GameHarness {
     return this.#cutscenes.sample(renderTime)
   }
 
+  /* --------------------------------------------------------------------- */
+  /* The planetarium                                                        */
+  /* --------------------------------------------------------------------- */
+
+  /**
+   * The free camera the planetarium is built on.
+   *
+   * Exposed as the object rather than wrapped verb by verb: a pointer drag is
+   * forty calls a second and going through the harness for each would be a
+   * layer that exists only to be crossed. The convenience verbs below are the
+   * ones worth typing at a console.
+   */
+  get observatory(): Observatory {
+    return this.#observatory
+  }
+
+  /**
+   * Look at something without going there.
+   *
+   * The planetarium's whole verb, and the difference from `goTo` is the point:
+   * `goTo` teleports the *ship*, changing canonical state; this moves only a
+   * camera. `ir.look('s:SOL/b:5')` and `ir.goTo('s:SOL/b:5')` end with Jupiter
+   * filling the frame, and only one of them leaves you in orbit of it.
+   */
+  look(
+    destination: string,
+    options?: { fill?: number; ease?: boolean },
+  ): ObserverStatus {
+    return this.#observatory.focus(destination, options ?? {})
+  }
+
+  /** The observatory's camera, or null when it has no target. */
+  observerStatus(): ObserverStatus | null {
+    return this.#observatory.target === null ? null : this.#observatory.status()
+  }
+
+  /**
+   * The observatory's pose for this frame, for the rendering host.
+   *
+   * `dt` is wall-clock seconds, not simulation time — the fly-to easing is a
+   * presentation filter and has to keep running while the clock is paused.
+   */
+  observerSample(dt: number): ObserverPose | null {
+    return this.#observatory.sample(dt)
+  }
+
   /** Text help, so the console is discoverable without reading this file. */
   help(): string {
     return [
@@ -875,6 +928,8 @@ export class GameHarness {
           .map((c) => c.id)
           .join(', '),
       '  ir.stopCutscene() / ir.seekCutscene(frame) / ir.cutsceneStatus()',
+      '  ir.look(target)               planetarium: move the camera, not the ship',
+      '  ir.observatory                the free camera itself — drag, zoom, setPhase',
       '  ir.logs(n)',
     ].join('\n')
   }

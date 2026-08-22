@@ -80,11 +80,27 @@ function isOverlayControl(event: KeyboardEvent): boolean {
   return target instanceof HTMLElement && target.closest('.hud-layer') !== null
 }
 
+export interface ControlOptions {
+  /**
+   * Whether the flight axes are live.
+   *
+   * Off outside the flight modes, and it has to be: the planetarium binds the
+   * arrow keys to orbiting a camera and `F` to framing a target, and both are
+   * flight axes here. Two window-level handlers claiming the same key is not a
+   * conflict a user can diagnose — the ship simply drifts while they look at
+   * Saturn. The *other* bindings stay live in every mode, because pausing,
+   * warping and saving mean the same thing wherever you are.
+   */
+  readonly axes: boolean
+}
+
 export function useShipControls(
   engine: GameEngine,
   bindings: ControlBindings,
+  options: ControlOptions = { axes: true },
 ): void {
   const held = useRef(new Set<string>())
+  const axes = options.axes
   // The bindings close over React state, so a new object arrives on every
   // render — several times a second while the HUD polls. Reading them through a
   // ref keeps one subscription for the life of the engine instead of tearing
@@ -95,10 +111,15 @@ export function useShipControls(
   })
 
   useEffect(() => {
+    // The set is captured once here rather than read through the ref in the
+    // cleanup: a ref's `.current` at teardown is not necessarily the one this
+    // effect has been filling, and the keys this effect must release are the
+    // ones it collected.
+    const heldKeys = held.current
     const apply = (): void => {
       const translation: [number, number, number] = [0, 0, 0]
       const rotation: [number, number, number] = [0, 0, 0]
-      for (const code of held.current) {
+      for (const code of heldKeys) {
         const binding = AXIS_KEYS[code]
         if (binding === undefined) continue
         const [axis, index, sign] = binding
@@ -110,8 +131,8 @@ export function useShipControls(
 
     const down = (event: KeyboardEvent): void => {
       if (event.repeat || isTyping(event)) return
-      if (event.code in AXIS_KEYS) {
-        held.current.add(event.code)
+      if (axes && event.code in AXIS_KEYS) {
+        heldKeys.add(event.code)
         apply()
         event.preventDefault()
         return
@@ -158,11 +179,11 @@ export function useShipControls(
     }
 
     const up = (event: KeyboardEvent): void => {
-      if (held.current.delete(event.code)) apply()
+      if (heldKeys.delete(event.code)) apply()
     }
     // Releasing focus with keys held would otherwise leave the drive burning.
     const blur = (): void => {
-      held.current.clear()
+      heldKeys.clear()
       apply()
     }
 
@@ -173,8 +194,15 @@ export function useShipControls(
       window.removeEventListener('keydown', down)
       window.removeEventListener('keyup', up)
       window.removeEventListener('blur', blur)
+      // Leaving a mode with keys held would otherwise leave the drive burning
+      // for the rest of the session, with nothing on screen still listening for
+      // the key-up that would stop it.
+      if (heldKeys.size > 0) {
+        heldKeys.clear()
+        engine.setControl([0, 0, 0], [0, 0, 0])
+      }
     }
-  }, [engine])
+  }, [engine, axes])
 }
 
 export const CONTROL_HELP: readonly (readonly [string, string])[] = [

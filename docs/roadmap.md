@@ -63,6 +63,11 @@ a production build. What follows is depth, not foundations.
 | Testing                             | 🟡     | Strong; [replay and fixtures](#automation-gaps) missing                                                        |
 | Performance                         | 🟡     | Designed for, [barely measured](#performance-work)                                                             |
 | Multiplayer                         | ⛔     | Deferred. Seams only — [ADR-0008](adr/0008-multiplayer-partitions.md); the partition key is a live debug field |
+| Application shell and modes         | ✅     | Five modes, routes as the public surface — [ADR-0011](adr/0011-application-shell-and-modes.md)                 |
+| Planetarium                         | ✅     | Free navigation, catalogue, orbit traces, labels, presets — [design](design/planetarium.md)                    |
+| Cinema player                       | ✅     | Transport, timecode and a frame-exact link over the cutscene format — [design](design/cinema.md)               |
+| Dockable panels                     | ✅     | Four zones, property-tested layout algebra — [ADR-0012](adr/0012-dockable-panels.md)                           |
+| Mobile                              | 🟡     | Looking works and is verified; piloting on a touchscreen is not designed                                       |
 
 ---
 

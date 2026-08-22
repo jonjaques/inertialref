@@ -17,7 +17,7 @@ and to this machine, and points at AGENTS.md for everything else.
 | `docs/guides/catalogue.md` | The star catalogue: how it is built, what it stores, and what will bite you.        |
 | `docs/vision.md`           | What the project is for, and the principles behind architectural choices.           |
 | `docs/architecture.md`     | The system in one sitting.                                                          |
-| `docs/adr/`                | The nine foundational decisions, with alternatives and consequences.                |
+| `docs/adr/`                | The twelve foundational decisions, with alternatives and consequences.              |
 | `docs/roadmap.md`          | What is deliberately not built yet, and the seam for each.                          |
 | `CONTEXT.md`               | Build log — what exists, what was decided, which bugs must not return.              |
 | `README.md`                | Overview and the twelve proven capabilities.                                        |
@@ -82,6 +82,11 @@ deploys to the `inertialrefd` Worker, live at
   are off; enabling them needs `oxlint-tsgolint` plus `options.typeAware`. There
   is one override: `react/only-export-components` is off for
   `apps/game/src/components/ui/*.tsx`, which shadcn/ui generates.
+- **React DnD 16** (`react-dnd`, `react-dnd-html5-backend`,
+  `react-dnd-touch-backend`) drives the dockable panels, and _only_ the gesture:
+  what a drop means is pure arithmetic in `apps/game/src/dock/layout.ts` with
+  property tests. The backend is chosen once at mount from `(pointer: coarse)`
+  because `DndProvider` cannot be handed a different one. ADR-0012.
 - **shadcn/ui is installed and configured** (`apps/game/components.json`, style
   `new-york`, base `slate`, lucide icons). Add a component with
   `pnpm dlx shadcn@latest add <name>` **run from `apps/game`**, then

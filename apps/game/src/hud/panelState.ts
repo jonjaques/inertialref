@@ -64,19 +64,42 @@ function read<T>(key: string, fallback: T, accept?: Accept<T>): T {
   }
 }
 
+/**
+ * A preference that outlives a reload.
+ *
+ * The setter takes a value *or* an updater, exactly like `useState`'s, and the
+ * updater form is not a convenience — it is required for correctness anywhere a
+ * value is derived from the one before it. The dock is the worked example: a
+ * single pointer gesture can produce more than one drop, and two `movePanel`
+ * calls composed against the same captured snapshot silently discard the first.
+ * That failure is invisible in code review and presents as a panel that snaps
+ * back to where it was.
+ *
+ * The write happens inside the state updater so the string on disk is derived
+ * from the state React actually committed, rather than from whatever the caller
+ * had in scope. Writing outside it is how the stored value and the rendered one
+ * drift apart — which is a bug that only shows up after a reload, long after
+ * the gesture that caused it.
+ */
 export function usePersistentState<T>(
   key: string,
   initial: T,
   accept?: Accept<T>,
-): [T, (value: T) => void] {
+): [T, (value: T | ((previous: T) => T)) => void] {
   const [value, setValue] = useState<T>(() => read(key, initial, accept))
-  const update = (next: T): void => {
-    setValue(next)
-    try {
-      window.localStorage.setItem(PREFIX + key, JSON.stringify(next))
-    } catch {
-      // See read(): the panel still works, it just forgets.
-    }
+  const update = (next: T | ((previous: T) => T)): void => {
+    setValue((previous) => {
+      const resolved =
+        typeof next === 'function'
+          ? (next as (previous: T) => T)(previous)
+          : next
+      try {
+        window.localStorage.setItem(PREFIX + key, JSON.stringify(resolved))
+      } catch {
+        // See read(): the panel still works, it just forgets.
+      }
+      return resolved
+    })
   }
   return [value, update]
 }

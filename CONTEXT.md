@@ -1659,10 +1659,206 @@ against, not a reason not to have done this.
   `components/ui/*.tsx`. Those files export `buttonVariants` beside `Button`,
   and the rule's remedy is an edit the next `shadcn add` reverts.
 
+## Five modes, a shell, and a mode with no ship (22 Aug 2026)
+
+The client stopped being one screen. It is now a **persistent shell** — the
+`<Canvas>` and `.hud-layer`, owned by `App` forever — with two route tables over
+it: _modes_, which decide who owns the camera, and _dialogs_, which open over a
+mode and leave it running. Five modes exist: the menu, three flight routes, the
+**planetarium** and the **cinema player**.
+[ADR-0011](docs/adr/0011-application-shell-and-modes.md) and
+[ADR-0012](docs/adr/0012-dockable-panels.md) hold the arguments;
+`docs/design/planetarium.md` and `docs/design/cinema.md` are the design pages.
+
+### A whole mode cost a nullable field, because ADR-0010 had already paid
+
+The planetarium's camera is the _second_ producer of a presentation eye. The
+first was the cutscene director, and the seam it needed — `buildScene` taking an
+optional eye override so LOD, apparent star brightness, `up` and flare occlusion
+all follow the camera that is actually on screen — is exactly the seam this
+needed. `GameEngine.#step` gained six lines of precedence:
+
+```
+cutscene ?? observatory ?? the ship
+```
+
+and `CameraRig` gained a `??`. Nothing else in the renderer knows the
+planetarium exists. That is worth recording because it is the payoff of a
+decision made for a different reason a day earlier: **a seam built for one
+consumer is worth building properly, because the second consumer arrives
+sooner than you think.**
+
+### The observatory writes nothing, and the test says so
+
+`packages/devtools/src/observatory.ts` resolves an address, asks the world where
+that is _this tick_, and returns a pose. No teleport, no clock, no entity write.
+The test compares `world.stateHash()` before and after a session of dragging and
+zooming, and that assertion is the design promise rather than a nicety: the
+moment the planetarium can move the ship, the survey game has a free mode that
+plays it for you.
+
+It differs from `CutsceneDirector` in one deliberate way: **its `sample` touches
+the world.** A script resolves its stage once and is pure afterwards because a
+scene must be reproducible frame for frame; the observatory is _following_
+something that moves, and one that resolved Jupiter's position once would orbit
+where Jupiter used to be within a minute of time warp.
+
+### Distance is logarithmic in nineteen decades, or it is a cut
+
+From a kilometre above a moon to a hundred light years. Interpolated linearly, a
+fly-to spends 99.9% of its time in the last decade and reads as a teleport — the
+same trap `screenRoutePosition` documents for a four-decade cinematic approach,
+met again two orders larger. Every zoom is a multiply; every ease is over
+`log(distance)` with `1 - exp(-dt/tau)`, so 30 Hz and 144 Hz agree.
+
+**The zoom-out ceiling is absolute, not a multiple of the target's radius.** The
+radius-relative version put Luna's at 0.003 ly and a star's at 0.3 ly, so "zoom
+out until the neighbouring stars appear" — the single most planetarium-shaped
+gesture there is — worked at a star and refused at a moon, for a reason no user
+could ever infer.
+
+### Orbit traces: two ways to draw a curve that is not there
+
+Affordable at all because ADR-0006 made orbits analytic: a period is 96
+closed-form evaluations rather than 96 integration steps.
+
+1. **A trace is relative to its primary, re-anchored to now.** Sampling a moon's
+   _absolute_ position over one of its months also sweeps the planet through a
+   twelfth of its year, so the trace is an open corkscrew that ends where the
+   moon has never been.
+2. **Each point is placed with the body's own radius.** Render compression keys
+   off an object's radius (`placement.ts`), so a path placed as a radius-zero
+   point is drawn _six times nearer_ than Jupiter is at Jupiter's range — the
+   planet floats visibly off its own orbit. Measured, not guessed.
+
+They are also **contextual**: what is drawn is the subject's siblings and the
+things going round it. Everything at once, in a system seen from inside, is a
+dozen ellipses edge-on — a fan of near-straight lines that says nothing.
+
+### Four things that must not come back
+
+- **A mode without `pointer-events-auto`.** `.hud-layer` is
+  `pointer-events: none` so the scene stays reachable, and `ErrorBoundary`'s
+  `className` styles its _fallback_, not a wrapper — so nothing between a mode
+  and the layer turns them back on. The symptom is silent and total: the hit
+  target at every pixel is the canvas, and the planetarium ignores every drag
+  with nothing in the console. This cost an afternoon.
+- **A ref-guarded "run once" effect.** `opened.current !== id` plus a cleanup
+  that clears the target: React re-runs effects while refs survive, so the
+  cleanup wins and the effect never fires again. The planetarium came up with
+  the camera on nothing. **Reconcile against the state's actual owner** —
+  `observatory.target?.address === wanted` — which is idempotent by
+  construction.
+- **A non-functional setter for derived state.** One pointer gesture can deliver
+  more than one drop, and two `movePanel` calls composed against the same
+  captured snapshot silently discard the first. `usePersistentState` now takes
+  an updater and writes _inside_ it, so the string on disk is derived from the
+  state React committed rather than from whatever the caller had in scope. The
+  rendered layout and the stored one drifted apart before that, which is a bug
+  that only shows after a reload.
+- **A second transport on screen.** The cutscene overlay's scrubber and the
+  cinema player's are two playheads a person can disagree with; the overlay's
+  now rides the debug flag.
+
+### The debug UI is off by default
+
+The dev dock — navigate, telemetry, perf, graphics, camera — is the author's
+instrument, and `docs/design/ux.md` specifies a cockpit that is nothing like it.
+It is now hidden unless `` ` `` (or the shell bar's toggle) asks for it. Its
+keybindings are unchanged when it is on.
+
+### The gesture arithmetic is in Node, because every version of it is wrong once
+
+`planetarium/gestures.ts` and `pick.ts` are pure and tested:
+
+- **Wheel normalisation.** Chrome reports ~100 px per detent and Firefox reports
+  3 lines; a handler that trusts `deltaY` zooms about thirty times faster on one
+  than the other.
+- **Pinch spread is the mean distance from the centroid**, not the gap between
+  touches 0 and 1. The pair version leaps discontinuously the instant a third
+  finger lands or the first lifts.
+- **A drag with no previous sample contributes nothing.** Treating a missing one
+  as the origin swings the camera by the pointer's absolute screen position — a
+  full turn, from one frame.
+- **Picking prefers what the pointer is inside, largest first**, and falls back
+  to proximity. Distance alone lets a three-pixel point source beat the planet
+  filling a third of the frame; size alone lets the largest body swallow every
+  click.
+
+### React DnD is an input device, and that is the whole design
+
+`dock/layout.ts` owns every move and preserves one invariant — _every known
+panel is in exactly one zone, exactly once_ — property-tested over random
+sequences, because the ways to break it are combinations a test author does not
+think to write. `hidden` is a zone rather than an absence, which is what makes
+the invariant expressible.
+
+The backend is chosen **once** at mount from `(pointer: coarse)`: `DndProvider`
+builds its manager from the backend and cannot be handed another, so swapping it
+is a remount of every panel. A user who has just plugged in a mouse can reload; a
+user whose workspace resets because they brushed a trackpad cannot understand
+what happened.
+
+Because the algebra has no dependency on the library, replacing React DnD is
+replacing two hooks in one file.
+
+### Custom icons, drawn to Lucide's own rules
+
+Lucide covers this interface almost completely — `Orbit`, `Telescope`, `Radar`,
+`Clapperboard`, `PanelLeft` — and where it does, using it is the point: a set
+drawn by one hand reads as one instrument. What it lacks is this game's own
+physics, so `apps/game/src/icons/` adds seven through `createLucideIcon`, which
+gives them the same props and the same stroke behaviour: three moon phases, a
+sphere of influence, an interstellar span, a flip-and-burn profile, delta-v and
+an observatory dome. 24 × 24, 2 px stroke, round caps and joins, and **2 px of
+clear space between distinct elements** — the last is the rule that decides
+whether an icon survives being drawn at 16 px.
+
+### Mobile is real for looking, and honest about piloting
+
+The planetarium and the cinema player work on a phone: one finger orbits, two
+pinch, a tap focuses, and the panels become a bottom sheet with a tab strip over
+a full-screen sky. Verified at 500 px wide. Docking is deliberately not offered
+there — "left" and "right" have no meaning on a 390 px screen, so a drag with an
+invisible effect is worse than no drag — and the stored panel _set_ is untouched,
+so rotating a tablet back restores the columns.
+
+Piloting on a touchscreen is not designed and the menu says so rather than
+letting someone find out.
+
+### The URL is the product's surface
+
+`/planetarium?at=g:milky-way/s:SOL/b:5` opens on Jupiter.
+`/cinema/tng-intro?t=1150` opens on that still. Both rewrite the address bar as
+they go — the planetarium on every focus, the player only while paused, because
+a router update twenty-four times a second is not a feature. Frames rather than
+seconds in the cinema link: `t=48.2s` rounds to a different still on a 24 fps
+scene than on a 30 fps one, and the whole point of a shareable frame is that two
+people see the same picture.
+
+`/auth/callback` is reserved now because a redirect URI is registered with an
+identity provider ahead of time and changing it later is a coordinated deploy.
+**No account page renders a credential field that goes nowhere** — people reuse
+passwords, and a form that looks real is one they will type a real one into.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).
 
+- **The planetarium has no bookmarks, filters or measure tool.** The address is
+  already the whole record for a bookmark, so what is missing is a store; the
+  filter fields are the ones `docs/design/galaxy.md` lists for the galaxy map.
+- **The catalogue panel surveys 16 ly and filters in the client.** That is right
+  for a list of a few hundred rows and wrong the moment a search is meant to
+  reach the whole 150 ly sphere — `travelTargets` is a star sweep and cannot be
+  run per keystroke. A name index over the catalogue is the seam.
+- **Mode routes are not covered by a Node test.** Each drives a live engine, and
+  a test that stubbed a renderer, a worker pool and a camera would assert
+  against the stub. `modeForPath`, the link builders, the dock algebra, the
+  gesture arithmetic and the compact dock all are; the boundary is deliberate.
+- **Piloting on a touchscreen is not designed.** The flight modes are
+  desktop-only and the menu says so. The planetarium and the cinema player are
+  the mobile surface.
 - **The interface never says `observed` or `projected`.** PRODUCT.md makes
   stating it a brand commitment and `SystemStub.catalogued` has carried the
   answer all along; `TravelTarget` does not forward it, so the destination list

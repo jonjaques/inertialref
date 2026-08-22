@@ -74,6 +74,43 @@ These are the ones where a violation is a rewrite later rather than a refactor.
   so the component renders once and shows that forever. `'use no memo'` is the
   opt-out, and `apps/game/src/hud/PerfPanel.tsx` is the worked example. This is
   not licence to hand-write `useMemo`; see CLAUDE.md.
+- **Never put the `<Canvas>` inside a route, and never let a mode assume it owns
+  the page.** `App` owns the canvas and `.hud-layer` for the life of the
+  session; every route renders _inside_ that layer as a sibling of the canvas. A
+  router over the whole tree rebuilds a `WebGPURenderer` on every navigation,
+  which is the black-screen class `render/presentationWatchdog.ts` exists to
+  recover from, arriving on purpose several times a minute. ADR-0011.
+- **Never hold the current mode in React state.** It is
+  `modeForPath(location.pathname)`, a pure function in `pages/paths.ts`, so a
+  reload, a back button and a pasted link land in the same place by
+  construction. The same rule covers everything else the URL carries — the
+  planetarium's subject (`?at=`) and the cinema player's frame (`?t=`).
+- **Never add a second producer of the camera.** There is one precedence order,
+  in `GameEngine.#step`: **cutscene, then observatory, then the ship.** Each is a
+  presentation eye handed to `buildScene`. A camera pushed at the Three.js
+  object instead would leave LOD, apparent star brightness, `up` and flare
+  occlusion all being told about a different viewpoint from the one on screen.
+- **Never let the planetarium write canonical state.** The observatory resolves
+  an address, asks the world where that is _this tick_, and returns a pose. No
+  teleport, no clock, no entity write, no save. `observatory.test.ts` compares
+  `world.stateHash()` across a session of flying around, and that test is the
+  design promise, not a nicety — see `docs/design/planetarium.md`.
+- **Never give a mode its chrome without `pointer-events-auto`.** `.hud-layer` is
+  `pointer-events: none` so the scene beneath stays reachable, and
+  `ErrorBoundary`'s `className` styles its _fallback_, not a wrapper — so
+  nothing between a mode and the layer turns them back on. Getting this wrong is
+  silent: the hit target at every pixel is the canvas.
+- **Never guard a "run once" effect with a ref.** React re-runs effects while
+  refs survive, so a latch plus a cleanup means the cleanup wins and the effect
+  never fires again — the planetarium came up with the camera on nothing.
+  Reconcile against the state's actual owner instead
+  (`observatory.target?.address === wanted`), which is idempotent by
+  construction.
+- **Never move a dock panel by splicing an array at a call site.**
+  `dock/layout.ts` owns every move and preserves one invariant: _every known
+  panel is in exactly one zone, exactly once._ Property-tested. Use the
+  **updater** form of the setter — one gesture can deliver two drops, and two
+  moves composed against the same captured snapshot discard the first. ADR-0012.
 - **Never import from `three` in `apps/game`.** It is `three/webgpu` and
   `three/tsl`. Both share `three.core.js`, so `Mesh` is the same class either way
   and nothing breaks loudly — but only `three/webgpu` carries the node system, and
@@ -215,6 +252,12 @@ is there". `goTo` is the only verb that accepts all the forms a human types —
 --goto b:2` is the same navigation from a terminal. `pnpm sim --help` lists the
 flags.
 
+**`ir.look` is the planetarium's whole verb, and the difference from `goTo` is
+the point**: `goTo` teleports the _ship_ and changes canonical state; `look`
+moves only a camera. Both end with Jupiter filling the frame and only one leaves
+you in orbit of it. `ir.observatory` is the camera itself — `drag`, `zoom`,
+`setPhase`, `frameTarget`, `clear`.
+
 The same verbs are on the dev dock, top right in the browser: **navigate** lists
 the destinations with a button per manoeuvre, **telemetry** is the inspection
 overlay, **perf** plots frame time, engine time, ticks per frame, draw calls,
@@ -225,6 +268,39 @@ so anything you can do by clicking is reproducible in a test.
 **Look at the perf tab before optimising anything, and before believing a
 performance claim in a design document.** The first thing it found was that time
 warp had never worked above 5×.
+
+### The modes, and where their code lives
+
+The client is a shell with a route table over it (ADR-0011). Four modes, and
+each answers "who owns the camera" differently:
+
+| Mode          | Path                      | Camera                    | Code                                                   |
+| ------------- | ------------------------- | ------------------------- | ------------------------------------------------------ |
+| `menu`        | `/`, and any unknown path | the observatory, drifting | `pages/HomePage.tsx`                                   |
+| `flight`      | `/play/:mode`             | the ship's chase rule     | `flight/`                                              |
+| `planetarium` | `/planetarium?at=…`       | the observatory           | `planetarium/`, `packages/devtools/src/observatory.ts` |
+| `cinema`      | `/cinema/:scene?t=&play=` | the cutscene director     | `cinema/`                                              |
+
+The split between pure and applied is the same one the cinematic director uses,
+and for the same reason — the arithmetic is testable in Node and the application
+is not:
+
+- **`packages/rendering/src/observer.ts`** — the orbit camera as arithmetic:
+  drag, zoom, log-space easing, framing, phase angles. No world, no addresses.
+- **`packages/devtools/src/observatory.ts`** — the same camera bound to a live
+  world: resolves an address, follows a moving body, produces an eye. Exposed on
+  the harness. One deliberate difference from `CutsceneDirector`: its `sample`
+  _does_ touch the world, because it is following something that moves.
+- **`packages/devtools/src/orbitPaths.ts`** — orbit traces. Two rules the naive
+  version gets wrong: a trace is relative to its primary and re-anchored to now
+  (or a moon's trace is an open corkscrew), and each point is placed with the
+  _body's own radius_ (or render compression draws the curve at a completely
+  different depth from the planet).
+- **`apps/game/src/dock/`** — the panel layout algebra (pure, property-tested)
+  and the React DnD wiring over it. ADR-0012.
+- **`apps/game/src/planetarium/`** — gestures, picking, labels, panels. The
+  gesture and pick arithmetic is in `gestures.ts` and `pick.ts` and is tested;
+  what is in the components is the bookkeeping only a browser has.
 
 ### Scripted scenes (the cutscene director)
 

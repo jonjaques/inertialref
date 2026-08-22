@@ -1,14 +1,11 @@
 import { Canvas } from '@react-three/fiber'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { SlidersHorizontal } from 'lucide-react'
-import { Link } from 'react-router'
+import { useLocation } from 'react-router'
 import type { StarCatalog } from '@inertialref/universe'
-import { Button } from '@/components/ui/button'
 import { DEFAULT_FOV, GameEngine } from './engine/GameEngine.ts'
 import { CutsceneOverlay } from './hud/CutsceneOverlay.tsx'
 import { ErrorBoundary } from './hud/ErrorBoundary.tsx'
-import { FlightStrip } from './hud/FlightStrip.tsx'
 import type { CameraState } from './hud/CameraPanel.tsx'
 import type { GraphicsState } from './hud/GraphicsPanel.tsx'
 import { HudDock, type HudCommands } from './hud/HudDock.tsx'
@@ -41,8 +38,9 @@ import {
   type OutputPreference,
   type RendererDescription,
 } from './render/output.ts'
-import { OverlayRoutes } from './pages/routes.tsx'
-import { SETTINGS } from './pages/paths.ts'
+import { ModeRoutes, OverlayRoutes } from './pages/routes.tsx'
+import { modeForPath } from './pages/paths.ts'
+import { ShellBar } from './pages/ShellBar.tsx'
 import { SceneView } from './scene/SceneView.tsx'
 import {
   engineStore,
@@ -138,6 +136,26 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    */
   const status = useEngine((snapshot) => snapshot.status)
   const cinema = useEngine((snapshot) => snapshot.cinema)
+  /*
+   * Which mode is running, derived from the URL rather than held.
+   *
+   * A reload, a back button and a pasted link all have to land in the same
+   * place, and the only way to guarantee that is for the path to be the source
+   * of truth. `modeForPath` is a pure function for exactly that reason — the
+   * claim is testable in Node without a browser or a router.
+   */
+  const location = useLocation()
+  const mode = modeForPath(location.pathname)
+
+  /*
+   * The debug overlay: off by default, and off is the whole point.
+   *
+   * The dock is the author's instrument — `docs/design/ux.md` specifies a
+   * cockpit where every element has a physical place, and none of this is it —
+   * so a first-time visitor should never meet it. Persisted, because somebody
+   * who turned it on is working, and a reload is part of working.
+   */
+  const [debug, setDebug] = usePersistentState('debug.on', false, isBoolean)
   const [dockOpen, setDockOpen] = usePersistentState(
     'dock.open',
     true,
@@ -417,23 +435,57 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
   }
   const cameraState: CameraState = { fov, onFov: setFov }
 
-  useShipControls(engine, {
-    onToggleAssist: commands.toggleAssist,
-    onKillRotation: commands.killRotation,
-    onPause: commands.togglePause,
-    onWarp: commands.warp,
-    onSave: commands.save,
-    onLoad: commands.load,
-    onToggleHud: () => setDockOpen(!dockOpen),
-    onShowNavigation: () => {
-      setTab('navigate')
-      setDockOpen(true)
+  useShipControls(
+    engine,
+    {
+      onToggleAssist: commands.toggleAssist,
+      onKillRotation: commands.killRotation,
+      onPause: commands.togglePause,
+      onWarp: commands.warp,
+      onSave: commands.save,
+      onLoad: commands.load,
+      onToggleHud: () => setDockOpen(!dockOpen),
+      onShowNavigation: () => {
+        setTab('navigate')
+        setDockOpen(true)
+      },
+      onShowPerformance: () => {
+        setTab('perf')
+        setDockOpen(true)
+      },
     },
-    onShowPerformance: () => {
-      setTab('perf')
-      setDockOpen(true)
-    },
-  })
+    // The flight axes belong to the flight modes. The planetarium binds the
+    // arrows to orbiting a camera and `F` to framing a target, and the cinema
+    // player binds them to stepping frames — two window handlers claiming one
+    // key is not something a player can diagnose.
+    { axes: mode === 'flight' },
+  )
+
+  /*
+   * The debug overlay's own key.
+   *
+   * Backquote, because it is the console key in every game that has one, it is
+   * not a flight axis, and it is not typed into anything here. Bound at the
+   * window like the rest, and declining the keystroke when it was aimed at a
+   * text field is the same courtesy `useShipControls` extends.
+   */
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.code !== 'Backquote' || event.metaKey || event.ctrlKey) return
+      const target = event.target
+      if (
+        target instanceof HTMLElement &&
+        (target.isContentEditable ||
+          target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA')
+      )
+        return
+      event.preventDefault()
+      setDebug(!debug)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [debug, setDebug])
 
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-black text-slate-200">
@@ -494,9 +546,13 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
           what="the cutscene overlay"
           className="pointer-events-auto absolute bottom-5 left-1/2 w-[34rem] max-w-[80vw] -translate-x-1/2 font-mono text-[11px]"
         >
-          <CutsceneOverlay engine={engine} />
+          {/* The scene's own screen-space layer: blackout, titles, audio. Its
+              transport is the *debug* one — the cinema player provides the
+              real controls, and two transports on screen at once would be two
+              playheads a person could disagree with. */}
+          <CutsceneOverlay engine={engine} transport={debug} />
         </ErrorBoundary>
-        {!cinema && (
+        {!cinema && debug && (
           <ErrorBoundary
             what="the dock"
             className="pointer-events-auto absolute right-3 top-3 w-[27rem] max-w-[calc(100vw-1.5rem)] font-mono text-[11px] leading-relaxed"
@@ -533,21 +589,34 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
           </ErrorBoundary>
         )}
         {/*
-         * Three boundaries rather than one around the layer.
+         * The mode: the menu, a flight session, the planetarium, the player.
          *
-         * A single boundary would take the whole overlay down with whichever
-         * piece failed — and the dock is how the simulation is driven, so
-         * losing it to a throw in the flight strip's distance formatter is the
+         * Its own boundary, separate from the dock's and the cutscene layer's.
+         * A single boundary around the whole overlay would take the debug dock
+         * down with whichever mode failed — and the dock is how the simulation
+         * is driven, so losing it to a throw in a planetarium panel is the
          * expensive half of the failure, not the cheap one. The scene is
          * outside all of them: `<Canvas>` is a sibling of `.hud-layer` and
          * nothing in here can reach it.
          */}
-        {!cinema && (
+        {/*
+         * The one exception to "a cutscene hides every other piece of chrome":
+         * the cinema player *is* the chrome for a playing scene, and unmounting
+         * it would stop the scene it is playing — its cleanup calls
+         * `stopCutscene`, so gating it on `!cinema` made pressing play stop the
+         * cutscene a fraction of a second later, with nothing to explain it.
+         */}
+        {(!cinema || mode === 'cinema') && (
           <ErrorBoundary
-            what="the flight strip"
-            className="pointer-events-auto absolute bottom-3 left-3 max-w-[calc(100vw-1.5rem)] font-mono text-[11px]"
+            what={`the ${mode} mode`}
+            className="pointer-events-auto absolute inset-0"
           >
-            <FlightStrip status={status} />
+            <ModeRoutes
+              engine={engine}
+              status={status}
+              fov={fov}
+              onFov={setFov}
+            />
           </ErrorBoundary>
         )}
 
@@ -579,29 +648,15 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
           )}
         </AnimatePresence>
 
-        {/* The way in to the routed pages, top left — the one corner nothing
-            else claims. A `Link` rather than a click handler that navigates,
-            so it is a real anchor: middle-click, copy-link and the back button
-            all behave, and `docs/design/ux.md` wants settings addressable
-            rather than buried in the dock. `asChild` makes the button *be* the
-            anchor rather than wrap one, which is the only way to get shadcn's
-            styling onto a link without nesting interactive elements. */}
-        {!cinema && (
-          <Button
-            asChild
-            variant="ghost"
-            size="icon-sm"
-            className="pointer-events-auto absolute top-3 left-3 border border-slate-700/60 bg-slate-950/85 text-slate-400 backdrop-blur hover:text-sky-200"
-          >
-            <Link to={SETTINGS} aria-label="Settings" title="Settings">
-              <SlidersHorizontal />
-            </Link>
-          </Button>
-        )}
+        {/* Where you are, the way back, and the settings — the one cluster
+            that is on screen in every mode, and the first thing to step out of
+            the frame when a scene plays. The cinema player's own transport
+            carries the way out while one is running. */}
+        {!cinema && <ShellBar mode={mode} debug={debug} onDebug={setDebug} />}
 
-        {/* Pages, over a running simulation. Inside the layer so they inherit
-            the standard-range clamp; a sibling of `<Canvas>`, so navigating
-            cannot remount the renderer. */}
+        {/* Dialogs, over a running simulation and over whatever mode is behind
+            them. Inside the layer so they inherit the standard-range clamp; a
+            sibling of `<Canvas>`, so navigating cannot remount the renderer. */}
         {!cinema && (
           <ErrorBoundary
             what="the page overlay"
@@ -609,12 +664,6 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
           >
             <OverlayRoutes graphics={graphicsState} camera={cameraState} />
           </ErrorBoundary>
-        )}
-
-        {!cinema && (
-          <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-            <div className="h-4 w-4 rounded-full border border-sky-300/40" />
-          </div>
         )}
       </div>
     </div>

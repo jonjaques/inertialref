@@ -155,7 +155,22 @@ function labelStyle(text: CinematicTextState): React.CSSProperties {
   }
 }
 
-export function CutsceneOverlay({ engine }: { engine: GameEngine }) {
+export function CutsceneOverlay({
+  engine,
+  transport: showTransport = false,
+}: {
+  engine: GameEngine
+  /**
+   * Whether to draw the scrubber and the pause button.
+   *
+   * Off by default, because there are now two things that can put a transport
+   * on screen — this and the cinema player — and two playheads a person can
+   * disagree with is worse than none. `apps/game/src/App.tsx` turns it on with
+   * the debug overlay, which is where a scrub-while-flying belongs; the cinema
+   * mode has its own, with a timecode and a shareable link.
+   */
+  transport?: boolean
+}) {
   // Structure state only: which cutscene's text set is mounted. Polled slowly
   // — starting and stopping are human-rate events.
   const [texts, setTexts] = useState<readonly CinematicTextState[] | null>(null)
@@ -311,16 +326,22 @@ export function CutsceneOverlay({ engine }: { engine: GameEngine }) {
           {text.text}
         </div>
       ))}
-      <div
-        ref={hint}
-        className="absolute bottom-2 right-3 font-mono text-[10px] text-slate-500"
-        style={{ opacity: 0 }}
-      />
+      {/* The frame counter and the skip hint ride the debug transport: the
+          cinema player has its own timecode and its own way out, and a second
+          frame number in the corner of every capture is exactly the chrome a
+          scene is supposed to be free of. */}
+      {showTransport && (
+        <div
+          ref={hint}
+          className="absolute right-3 bottom-2 font-mono text-[10px] text-slate-500"
+          style={{ opacity: 0 }}
+        />
+      )}
 
       {/* The transport: the one interactive island in an otherwise
           pointer-transparent layer. Same verbs as the console — pause,
           resume, seek, stop — so anything done here is reproducible there. */}
-      {transport !== null && (
+      {showTransport && transport !== null && (
         <div className="pointer-events-auto absolute bottom-5 left-1/2 flex w-[34rem] max-w-[80vw] -translate-x-1/2 items-center gap-2 rounded-lg border border-slate-700/50 bg-slate-950/70 px-3 py-1.5 font-mono text-[11px] text-slate-300 backdrop-blur">
           <TransportButton
             label="⟲"

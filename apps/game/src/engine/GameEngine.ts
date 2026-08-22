@@ -40,6 +40,8 @@ import {
   type FrameStats,
   type GameHarness,
   openSession,
+  type OrbitPath,
+  orbitPaths,
   type PresentationHost,
   type Session,
 } from '@inertialref/devtools'
@@ -103,6 +105,18 @@ export interface CinematicView {
   }
   readonly texts: readonly CinematicTextState[]
   readonly effects: CinematicEffects
+}
+
+/**
+ * The observatory's eye, converted to render space.
+ *
+ * Narrower than `CinematicView` on purpose: an observer has no script, no
+ * titles, no effects and no hero hull — it is a camera and nothing else, and
+ * giving it the cinematic shape would invite scene code to read fields that
+ * are permanently inert.
+ */
+export interface ObserverView {
+  readonly camera: { readonly position: Vec3; readonly orientation: Quat }
 }
 
 export { NO_EFFECTS }
@@ -240,6 +254,38 @@ export class GameEngine implements PresentationHost {
    */
   cinematic: CinematicView | null = null
 
+  /*
+   * The planetarium's camera, in render space, when the observatory has a
+   * target — the second producer of a presentation eye.
+   *
+   * Structurally identical to `cinematic` and here for the same reasons: the
+   * scene components read it every frame, and module state in an edited render
+   * file resets under Fast Refresh. `null` means the camera belongs to the
+   * ship, which is the flight modes' normal state.
+   *
+   * The precedence in `#step` is cutscene, then observatory, then ship, and it
+   * is that way round because a scripted scene is the one thing that is
+   * allowed to take the camera away from whatever is holding it — that is what
+   * makes `ir.play()` work from inside the planetarium.
+   */
+  observer: ObserverView | null = null
+
+  /*
+   * Whether to trace each body's orbit, and the traces themselves.
+   *
+   * Presentation, like `showShip`, and rebuilt rather than sampled: a trace is
+   * a period of Kepler solves per body — a few milliseconds for a system — and
+   * doing that per frame would be a visible hitch at every time warp. What
+   * makes rebuilding rare enough is that a trace's *shape* is fixed in its
+   * primary's frame; only the anchor moves, and the scene component re-hangs
+   * the curve on the primary's current position for one vector add per point.
+   * See `orbitPaths.ts`, which carries the anchor for exactly this.
+   */
+  showOrbits = false
+  orbits: readonly OrbitPath[] = []
+  #orbitsWorld = -1
+  #orbitsSystems = ''
+
   /**
    * URL of an audio track the cutscene overlay should sync to the playhead.
    *
@@ -341,6 +387,8 @@ export class GameEngine implements PresentationHost {
     this.#starField = EMPTY_STAR_FIELD
     this.#starFieldCentre = null
     this.#starFieldWorld += 1
+    this.orbits = []
+    this.#orbitsSystems = ''
     this.terrain.clear()
     log.info('world replaced, derived state dropped', {
       tick: this.world.clock.tick,
@@ -435,15 +483,44 @@ export class GameEngine implements PresentationHost {
      * around a ship an AU behind the shot would light and sort for nobody.
      */
     const cinematic = this.harness.cutsceneSample(shot.renderTime)
-    const eye = cinematic === null ? camera.position : cinematic.camera.position
+    /*
+     * The observatory's eye, when a cutscene is not already holding the camera.
+     *
+     * `delta` rather than simulation time: the fly-to easing is a presentation
+     * filter, and a planetarium in which pausing the clock also froze a
+     * transition mid-flight would be a bug in every screenshot taken while
+     * paused. The observatory is asked for its lens first so that a field of
+     * view changed in a panel reframes the target rather than merely cropping
+     * it.
+     */
+    this.harness.observatory.setFov(this.fov)
+    const observed =
+      cinematic === null ? this.harness.observerSample(delta) : null
+
+    const eye =
+      cinematic !== null
+        ? cinematic.camera.position
+        : (observed?.position ?? camera.position)
 
     this.origin = originForCamera(this.origin, eye)
     this.#scene = buildScene(
       shot,
       this.origin,
       player,
-      cinematic === null ? undefined : cinematic.camera,
+      cinematic !== null ? cinematic.camera : (observed ?? undefined),
     )
+    this.observer =
+      observed === null || observed === undefined
+        ? null
+        : {
+            camera: {
+              position: toRenderSpace(this.origin, observed.position),
+              orientation: orientationToRenderSpace(
+                this.origin,
+                observed.orientation,
+              ),
+            },
+          }
     this.cinematic =
       cinematic === null
         ? null
@@ -482,6 +559,63 @@ export class GameEngine implements PresentationHost {
     )
 
     this.#maybeSurveyStars(eye)
+    this.#maybeTraceOrbits()
+  }
+
+  /**
+   * Keep the orbit traces in step with what is loaded.
+   *
+   * Rebuilt when the toggle turns on, when a save replaces the world, and when
+   * the set of loaded systems changes — and at no other time. A timer would be
+   * the obvious alternative and would be wrong twice: it rebuilds when nothing
+   * has changed, and it does *not* rebuild at the moment a new system loads,
+   * which is the one moment there is something new to draw.
+   */
+  #maybeTraceOrbits(): void {
+    if (!this.showOrbits) {
+      if (this.orbits.length > 0) this.orbits = []
+      this.#orbitsSystems = ''
+      return
+    }
+    const systems = this.world.loadedSystems()
+    /*
+     * Which traces are worth drawing depends on what is being looked at, so the
+     * focused frame is part of the rebuild key.
+     *
+     * Everything at once is what the first version drew, and in a system viewed
+     * from inside it is a dozen ellipses seen edge-on — a fan of near-straight
+     * lines across the frame that says nothing about anything. A planetarium
+     * shows the *context* of its subject: the orbits of its siblings, and the
+     * orbits of the things going round it. That is two relationships, and both
+     * are one field on the path.
+     */
+    const focus = this.harness.observatory.target?.frame ?? null
+    const key = `${systems.map((system) => system.id).join(',')}|${focus ?? ''}`
+    if (
+      key === this.#orbitsSystems &&
+      this.#orbitsWorld === this.#starFieldWorld
+    )
+      return
+    this.#orbitsSystems = key
+    this.#orbitsWorld = this.#starFieldWorld
+
+    const all = systems.flatMap((system) => orbitPaths(this.world, system))
+    // The frame the subject itself orbits, so its siblings can be recognised.
+    const grandparent =
+      focus !== null && this.world.frames.has(focus)
+        ? this.world.frames.get(focus).parent
+        : null
+    this.orbits =
+      focus === null
+        ? all
+        : all.filter(
+            (path) => path.parent === focus || path.parent === grandparent,
+          )
+    log.info('orbit traces rebuilt', {
+      paths: this.orbits.length,
+      of: all.length,
+      focus: focus ?? 'everything',
+    })
   }
 
   /**
