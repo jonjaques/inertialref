@@ -68,7 +68,7 @@ function NotYet({
 
         {children}
 
-        <p className="flex items-center gap-1.5 text-slate-500">
+        <p className="flex items-center gap-1.5 text-slate-400">
           <CloudOff aria-hidden className="size-3.5" />
           nothing on this page sends anything anywhere
         </p>
@@ -168,13 +168,15 @@ export function AuthCallbackPage() {
   return (
     <OverlayPage title="signing in" subtitle="finishing up">
       {state.error === null ? (
-        <p className="text-slate-400">Returning you to the game…</p>
+        <p role="status" className="text-slate-400">
+          Returning you to the game…
+        </p>
       ) : (
         <div className="flex flex-col gap-2">
           <p className="text-rose-300">Sign-in did not complete.</p>
           {/* The provider's own error code, which is safe to show and is the
               only thing that makes a support question answerable. */}
-          <p className="font-mono text-[10px] text-slate-500">{state.error}</p>
+          <p className="font-mono text-[10px] text-slate-400">{state.error}</p>
           <Link
             to={HOME}
             replace

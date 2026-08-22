@@ -11,9 +11,16 @@ import { projectScene } from './project.ts'
  * The single feature that turns a rendered starfield into a planetarium: a
  * label is the difference between "a bright dot" and "Sirius". Drawn in the DOM
  * rather than as sprites in the scene, for the same reason the cutscene's
- * titles are — real typefaces, subpixel text rendering, and a compositor that
- * has already tone-mapped the frame underneath so a name stays legible in front
- * of a star.
+ * titles are — real typefaces and subpixel text rendering.
+ *
+ * Each name carries its own ground, and that is the whole reason the plate
+ * exists. Tone mapping was doing less than this file used to assume: a name
+ * over the Sun's disc measured 2.07:1, and its fill colour alone — with the
+ * text-shadow discounted — was 1.03:1, which is to say invisible. A dark shadow
+ * under light text only works while the scene is dark, and a label is drawn on
+ * the one thing in the frame guaranteed to be bright. The plate is the system's
+ * own panel material at chip scale, and it is opaque enough to read against a
+ * star without a backdrop-filter, which eighteen of these must not each have.
  *
  * `'use no memo'` and a rAF loop rather than React state, and this is the
  * `hud/PerfPanel.tsx` bargain again: the *set* of labels changes at human rate
@@ -172,19 +179,29 @@ export function SkyLabels({
               className="flex flex-col items-center will-change-transform"
               style={{ transform: 'translate(-50%, -24px)' }}
             >
+              {/* Selection is hue and a hairline, never a glow: the old one was
+                  sky-coloured light on a star, which measured 1.16:1 — a glow
+                  can only add brightness, and the failing case is already
+                  bright. */}
               <span
-                className={`font-mono text-[10px] tracking-[0.18em] whitespace-nowrap uppercase ${
+                /* Bounded, because catalogue names are not. `declutter` spaces
+                   labels 96 px apart and a designation longer than the plate
+                   would quietly overlap the neighbour it was spaced away from. */
+                className={`max-w-[14rem] truncate rounded border px-1 py-px font-mono text-[10px] tracking-[0.18em] whitespace-nowrap uppercase ${
                   selected
-                    ? 'text-sky-200 [text-shadow:0_0_10px_rgba(56,189,248,0.55)]'
-                    : 'text-slate-300/80 [text-shadow:0_1px_3px_rgba(0,0,0,0.9)]'
+                    ? 'border-sky-400/60 bg-slate-950/85 text-sky-200'
+                    : 'border-transparent bg-slate-950/85 text-slate-300'
                 }`}
               >
                 {name}
               </span>
+              {/* The leader crosses the same two grounds the name does, so it
+                  carries its own dark edge rather than one colour that can only
+                  survive on one of them. */}
               <span
                 aria-hidden
-                className={`mt-0.5 h-3 w-px ${
-                  selected ? 'bg-sky-300/80' : 'bg-slate-400/40'
+                className={`mt-0.5 h-3 w-px outline outline-1 outline-slate-950/85 ${
+                  selected ? 'bg-sky-300' : 'bg-slate-300'
                 }`}
               />
             </div>

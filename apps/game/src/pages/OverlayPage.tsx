@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { motion } from 'motion/react'
 import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -61,6 +61,63 @@ export function OverlayPage({
     return () => window.removeEventListener('keydown', onKey)
   }, [close])
 
+  /*
+   * Focus goes in when the dialog opens, and back where it came from when it
+   * leaves.
+   *
+   * Without this the dialog was unreachable in practice. Every control in this
+   * overlay hands focus back to the flight loop, so `document.activeElement` is
+   * `<body>` when the gear is clicked — and the dialog is the last band in
+   * `.hud-layer`, so it was measured at *79 tab stops* behind the rest of the
+   * chrome. "Open settings, then press Tab eighty times" is not a keyboard
+   * path.
+   *
+   * The panel takes focus rather than its first control: a dialog opening with
+   * its close button focused reads to a screen reader as "Close", which is the
+   * one thing the reader did not ask for. `tabIndex={-1}` makes it programmatic
+   * only, so the panel never becomes a tab stop of its own.
+   *
+   * No focus trap, and that is the design rather than an omission. This is a
+   * non-modal dialog over a simulation that keeps running — `aria-modal` is
+   * `false` above for the same reason — so Tab past the last control leaves,
+   * exactly as it would from any other region. What was broken was arriving,
+   * not leaving.
+   *
+   * Restoring only happens if the dialog still had focus, and only to an
+   * element still in the document. Two things make that fiddly enough to be
+   * worth stating:
+   *
+   * The activeElement at cleanup is not reliably `<body>`. React runs a
+   * deletion's destroy function around the same commit that detaches the node,
+   * so focus may still be reported as the panel — checking only for `<body>`
+   * skips the restore about half the time, depending on how the dialog was
+   * closed. Both readings mean the same thing, so both count.
+   *
+   * And a mode can unmount behind an open dialog, so the opener may be gone by
+   * the time we want it back. `focus()` on a detached node silently moves focus
+   * to `<body>` — which is the state this whole effect exists to prevent.
+   */
+  const panel = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    const opener = document.activeElement
+    const node = panel.current
+    node?.focus({ preventScroll: true })
+    return () => {
+      const active = document.activeElement
+      const dialogStillHadIt =
+        active === null ||
+        active === document.body ||
+        node?.contains(active) === true
+      if (
+        dialogStillHadIt &&
+        opener instanceof HTMLElement &&
+        opener !== document.body &&
+        opener.isConnected
+      )
+        opener.focus({ preventScroll: true })
+    }
+  }, [])
+
   return (
     <motion.div
       /*
@@ -91,6 +148,8 @@ export function OverlayPage({
       }}
     >
       <motion.div
+        ref={panel}
+        tabIndex={-1}
         role="dialog"
         aria-modal="false"
         aria-label={title}
@@ -105,14 +164,14 @@ export function OverlayPage({
             {title}
           </h1>
           {subtitle !== undefined && (
-            <span className="min-w-0 truncate text-slate-500" title={subtitle}>
+            <span className="min-w-0 truncate text-slate-400" title={subtitle}>
               {subtitle}
             </span>
           )}
           <Button
             variant="ghost"
             size="icon-xs"
-            className="ml-auto text-slate-500 hover:text-sky-200"
+            className="ml-auto text-slate-400 hover:text-sky-200"
             aria-label="Close (Escape)"
             title="Close (Escape)"
             onClick={close}

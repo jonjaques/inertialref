@@ -1,6 +1,5 @@
-import { BookOpen, ExternalLink, TerminalSquare } from 'lucide-react'
+import { BookOpen, TerminalSquare, type LucideIcon } from 'lucide-react'
 import { BUILD_ID } from '../build.ts'
-import { FOCUS_RING } from '../hud/focus.ts'
 import { StellarSpan } from '../icons/index.tsx'
 import { OverlayPage } from './OverlayPage.tsx'
 
@@ -69,7 +68,7 @@ export function AboutPage() {
           />
         </div>
 
-        <p className="pt-1 font-mono text-[10px] text-slate-600">
+        <p className="pt-1 font-mono text-[10px] text-slate-400">
           {/* The build id is the same string the service worker names its cache
               with. When a stale page is the suspect, this is the first thing
               worth reading out. */}
@@ -80,23 +79,30 @@ export function AboutPage() {
   )
 }
 
+/**
+ * Where to read more — a record, and now shaped like one.
+ *
+ * It used to be a bordered chip carrying `FOCUS_RING`, which was wrong twice: a
+ * `<span>` has no tab stop, so the focus style could never draw, and the chip
+ * was the most clickable-looking thing on a page where none of these three is
+ * reachable by clicking. Two are repository paths and one is a console verb.
+ * So the costume comes off and they read as what they are — the same label and
+ * value pairing the facts above them use.
+ */
 function Reference({
   icon: Icon,
   label,
   detail,
 }: {
-  icon: typeof ExternalLink
+  icon: LucideIcon
   label: string
   detail: string
 }) {
   return (
-    <span
-      className={`flex items-center gap-1.5 rounded border border-slate-700/60 px-2 py-1 text-slate-400 ${FOCUS_RING}`}
-      title={detail}
-    >
+    <span className="flex items-center gap-1.5">
       <Icon aria-hidden className="size-3.5 text-sky-400/70" />
-      {label}
-      <span className="text-slate-600">{detail}</span>
+      <span className="text-slate-300">{label}</span>
+      <span className="text-slate-400">{detail}</span>
     </span>
   )
 }

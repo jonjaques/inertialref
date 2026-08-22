@@ -115,7 +115,7 @@ const STATUS_LABEL: Record<ModeCard['status'], string> = {
 const STATUS_TONE: Record<ModeCard['status'], string> = {
   ready: 'border-sky-500/40 bg-sky-500/10 text-sky-200',
   soon: 'border-amber-500/30 bg-amber-500/10 text-amber-200/90',
-  deferred: 'border-slate-700 bg-slate-800/50 text-slate-500',
+  deferred: 'border-slate-700 bg-slate-800/50 text-slate-400',
 }
 
 export function HomePage({ engine }: { engine: GameEngine }) {
@@ -206,7 +206,7 @@ export function HomePage({ engine }: { engine: GameEngine }) {
           {/* Inside the column rather than pushed to the panel's edge: right
               aligned, this sentence landed on the planet and became the one
               piece of type on the page nobody could read. */}
-          <span className="ml-auto text-slate-600">simulation running</span>
+          <span className="ml-auto text-slate-400">simulation running</span>
         </motion.footer>
       </div>
     </div>
@@ -221,7 +221,7 @@ function ModeLink({ mode }: { mode: ModeCard }) {
       // The surfaces are near-opaque rather than a wash. They sit over a sunlit
       // planet at the brightest end of the frame, and a 50% slate over that is
       // a lighter grey than the type on it.
-      className={`group flex items-center gap-4 rounded-lg border px-4 py-3 backdrop-blur-sm transition-all ${FOCUS_RING} ${
+      className={`group flex items-center gap-4 rounded-lg border px-4 py-3 backdrop-blur-sm transition-colors ${FOCUS_RING} ${
         mode.accent
           ? 'border-sky-500/40 bg-sky-950/70 hover:border-sky-400/70 hover:bg-sky-900/60'
           : 'border-slate-700/60 bg-slate-950/80 hover:border-slate-500 hover:bg-slate-900/85'
@@ -232,26 +232,31 @@ function ModeLink({ mode }: { mode: ModeCard }) {
         className={`size-6 shrink-0 transition-colors ${
           mode.accent
             ? 'text-sky-300'
-            : 'text-slate-500 group-hover:text-sky-300'
+            : 'text-slate-400 group-hover:text-sky-300'
         }`}
         strokeWidth={1.5}
       />
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-2">
           <span className="text-slate-100">{mode.title}</span>
+          {/* `rounded`, not `rounded-full`: the system has two radii and a pill
+              is neither. 10px, not 9px, for the same reason — the type scale
+              bottoms out at 10 and a badge is not the place to add a step. */}
           <span
-            className={`rounded-full border px-1.5 py-px font-mono text-[9px] tracking-widest uppercase ${STATUS_TONE[mode.status]}`}
+            className={`rounded border px-1.5 py-px font-mono text-[10px] tracking-widest uppercase ${STATUS_TONE[mode.status]}`}
           >
             {STATUS_LABEL[mode.status]}
           </span>
         </span>
-        <span className="mt-0.5 block font-mono text-[11px] leading-snug text-slate-500">
+        <span className="mt-0.5 block font-mono text-[11px] leading-snug text-slate-400">
           {mode.blurb}
         </span>
       </span>
       <ArrowRight
         aria-hidden
-        className="size-4 shrink-0 -translate-x-1 text-slate-700 opacity-0 transition-all group-hover:translate-x-0 group-hover:text-sky-300 group-hover:opacity-100"
+        // Named properties rather than `transition-all`, which would also
+        // animate anything a future class touches — including layout.
+        className="size-4 shrink-0 -translate-x-1 text-slate-700 opacity-0 transition-[translate,color,opacity] group-hover:translate-x-0 group-hover:text-sky-300 group-hover:opacity-100"
       />
     </Link>
   )
@@ -269,7 +274,7 @@ function FooterLink({
   return (
     <Link
       to={to}
-      className={`flex items-center gap-1.5 rounded text-slate-500 transition-colors hover:text-sky-200 ${FOCUS_RING}`}
+      className={`flex min-h-6 items-center gap-1.5 rounded text-slate-400 transition-colors hover:text-sky-200 ${FOCUS_RING}`}
     >
       <Icon aria-hidden className="size-3.5" />
       {label}

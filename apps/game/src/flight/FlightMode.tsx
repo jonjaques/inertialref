@@ -84,7 +84,8 @@ export function FlightMode({
 function NotConnected() {
   return (
     <div className="pointer-events-none absolute inset-x-0 top-3 flex justify-center px-3">
-      <p className="pointer-events-auto flex items-center gap-2 rounded-full border border-amber-500/30 bg-slate-950/85 px-3 py-1 font-mono text-[10px] text-amber-200/90 backdrop-blur">
+      {/* A floating surface takes the floating radius; the system has no pill. */}
+      <p className="pointer-events-auto flex items-center gap-2 rounded-lg border border-amber-500/30 bg-slate-950/85 px-3 py-1 font-mono text-[10px] text-amber-200/90 backdrop-blur">
         <CloudOff aria-hidden className="size-3.5" />
         playing offline — discovery credit and sync are designed, not built
       </p>
@@ -97,7 +98,7 @@ function Deferred() {
     <div className="pointer-events-auto absolute inset-0 flex items-center justify-center p-6">
       <div className="w-full max-w-lg rounded-lg border border-slate-700/60 bg-slate-950/85 p-6 backdrop-blur">
         <h1 className="flex items-center gap-2 text-lg text-slate-100">
-          <Users aria-hidden className="size-5 text-slate-500" />
+          <Users aria-hidden className="size-5 text-slate-400" />
           Multiplayer is deferred
         </h1>
         <p className="mt-3 font-mono text-[11px] leading-relaxed text-slate-400">
@@ -106,7 +107,7 @@ function Deferred() {
           every entity, and no hosting vendor’s SDK appears anywhere in the
           engine. See ADR-0008.
         </p>
-        <p className="mt-2 font-mono text-[11px] leading-relaxed text-slate-500">
+        <p className="mt-2 font-mono text-[11px] leading-relaxed text-slate-400">
           With few players a shared galaxy is indistinguishable from solo online
           — so the mode degrades into one that already works, rather than
           failing.

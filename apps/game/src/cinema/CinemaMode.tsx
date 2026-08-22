@@ -83,7 +83,7 @@ function CinemaLibrary({ engine }: { engine: GameEngine }) {
             <h1 className="text-lg tracking-[0.2em] text-slate-100 uppercase">
               Cinema
             </h1>
-            <p className="font-mono text-[11px] text-slate-500">
+            <p className="font-mono text-[11px] text-slate-400">
               scripted scenes, played over the live world — nothing here is a
               video file
             </p>
@@ -100,11 +100,11 @@ function CinemaLibrary({ engine }: { engine: GameEngine }) {
                 <Play className="size-4 shrink-0 text-sky-400" />
                 <span className="min-w-0 flex-1">
                   <span className="block text-slate-100">{entry.id}</span>
-                  <span className="block truncate font-mono text-[11px] text-slate-500">
+                  <span className="block truncate font-mono text-[11px] text-slate-400">
                     {entry.description}
                   </span>
                 </span>
-                <span className="shrink-0 font-mono text-[11px] text-slate-500 tabular-nums">
+                <span className="shrink-0 font-mono text-[11px] text-slate-400 tabular-nums">
                   {/* `secondsText`, not the same arithmetic inlined: rounding
                       the seconds *within* the minute rendered a 119.6 s scene
                       as `1:60`. */}
@@ -114,7 +114,7 @@ function CinemaLibrary({ engine }: { engine: GameEngine }) {
             </li>
           ))}
           {scenes.length === 0 && (
-            <li className="rounded-lg border border-dashed border-slate-700/60 px-4 py-6 text-center font-mono text-[11px] text-slate-500">
+            <li className="rounded-lg border border-dashed border-slate-700/60 px-4 py-6 text-center font-mono text-[11px] text-slate-400">
               no scenes in this build
             </li>
           )}
@@ -337,7 +337,7 @@ function CinemaPlayer({ engine, id }: { engine: GameEngine; id: string }) {
   if (playhead === null) {
     return (
       <div className="pointer-events-auto absolute inset-0 flex flex-col items-center justify-center gap-3">
-        <p className="font-mono text-[11px] tracking-widest text-slate-500 uppercase">
+        <p className="font-mono text-[11px] tracking-widest text-slate-400 uppercase">
           scene ended
         </p>
         <div className="flex gap-2">
@@ -426,12 +426,12 @@ function CinemaPlayer({ engine, id }: { engine: GameEngine; id: string }) {
             <span className="text-sky-200">
               {timecode(playhead.frame, playhead.fps)}
             </span>
-            <span className="text-slate-600">
+            <span className="text-slate-400">
               {' / '}
               {durationText(playhead.durationFrames, playhead.fps)}
             </span>
           </span>
-          <span className="text-slate-600">
+          <span className="text-slate-400">
             {/* Rounded, because 23.976023976023978 is the true rate and it is
                 also fourteen characters of noise in a transport bar. Two
                 decimals distinguishes 23.98 from 24 and 29.97 from 30, which

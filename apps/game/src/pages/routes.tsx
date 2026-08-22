@@ -20,6 +20,7 @@ import {
   AUTH_CALLBACK,
   CINEMA,
   HOME,
+  overlaySurface,
   PLANETARIUM,
   PROFILE,
   resolvedLocation,
@@ -123,17 +124,32 @@ export function ModeRoutes(props: ModeRouteProps) {
 /**
  * The dialogs: settings, about, the account pages.
  *
- * `AnimatePresence` keyed on the pathname is what gives one an exit animation —
- * React Router swaps the subtree, and without something holding the outgoing
- * tree mounted there is nothing left to animate out. The `null` fallback route
- * is the "no dialog" state, and it is a real route rather than an absence so
- * that closing one animates instead of cutting.
+ * `AnimatePresence` is what gives one an exit animation — React Router swaps
+ * the subtree, and without something holding the outgoing tree mounted there is
+ * nothing left to animate out. The `null` fallback route is the "no dialog"
+ * state, and it is a real route rather than an absence so that closing one
+ * animates instead of cutting.
+ *
+ * **Not `mode="wait"`, and not keyed on the pathname.** Both were, and together
+ * they leaked the dialog: on close the scrim animated to `opacity: 0` and then
+ * was never removed, so a full-viewport `pointer-events-auto` layer stayed over
+ * the mode and swallowed every click on it. The scene was still rendering
+ * behind an invisible sheet of glass, which is the worst shape a bug can take —
+ * nothing to see, and nothing works. `mode="wait"` is what stopped the exit
+ * completing; dropping it is what lets the node go.
+ *
+ * The key is the dialog's *surface* rather than its path, because losing
+ * `mode="wait"` means an outgoing and an incoming child render together. Keyed
+ * on the pathname, every settings tab was a key change, and two 70% scrims
+ * cross-fading stack to 91% — a visible flash of the scene going dark on every
+ * click of a tab. Keyed on the surface, a section change is content changing
+ * inside a panel that never re-enters, which is what it looks like anyway.
  */
 export function OverlayRoutes({ graphics, camera }: OverlayRouteProps) {
   const location = useLocation()
   return (
-    <AnimatePresence mode="wait">
-      <Routes location={location} key={location.pathname}>
+    <AnimatePresence>
+      <Routes location={location} key={overlaySurface(location.pathname)}>
         <Route
           path={SETTINGS}
           element={<SettingsPage graphics={graphics} camera={camera} />}

@@ -155,7 +155,14 @@ export function NavPanel({
        * Every verb in this panel reports here, and says which verb it was.
        */}
       {failure !== null && (
-        <div className="mb-2 rounded border border-rose-400/40 bg-slate-950/60 px-2 py-1">
+        <div
+          /* Every verb in this panel reports here, and a failed `land` or
+             `goTo` is the one thing in the dock nobody should have to go
+             looking for. `assertive`, unlike the transient notice: this one
+             means the thing you asked for did not happen. */
+          role="alert"
+          className="mb-2 rounded border border-rose-400/40 bg-slate-950/60 px-2 py-1"
+        >
           <div className="flex items-baseline gap-2">
             <span className="min-w-0 flex-1 truncate text-rose-300">
               {failure.action} failed
@@ -188,7 +195,7 @@ export function NavPanel({
             maxLength={MAX_ADDRESS_LENGTH}
             autoComplete="off"
             aria-label="Universe address"
-            className="min-w-0 flex-1 rounded border border-slate-700 bg-slate-900/80 px-1.5 py-0.5 text-[11px] text-slate-200 caret-sky-300 placeholder:text-slate-600 focus:border-sky-500/60 focus:outline-none"
+            className="min-w-0 flex-1 rounded border border-slate-700 bg-slate-900/80 px-1.5 py-0.5 text-[11px] text-slate-200 caret-sky-300 placeholder:text-slate-400 focus:border-sky-500/60 focus:outline-none"
           />
           <Action
             label="go"
@@ -215,7 +222,7 @@ export function NavPanel({
             />
           ))}
           {targets.length === 0 && (
-            <div className="px-2 py-1 text-slate-500">
+            <div className="px-2 py-1 text-slate-400">
               {surveyed
                 ? `no systems within ${SURVEY_LIGHT_YEARS} ly — fly somewhere, or type an address above`
                 : 'surveying…'}
@@ -225,7 +232,7 @@ export function NavPanel({
 
         <div className="mt-1 min-h-[2.75rem] rounded border border-slate-800/80 bg-slate-900/40 px-2 py-1">
           {target === null ? (
-            <span className="text-slate-500">select a destination</span>
+            <span className="text-slate-400">select a destination</span>
           ) : (
             <>
               <div
@@ -233,7 +240,7 @@ export function NavPanel({
                 title={`${target.name} · ${target.address}`}
               >
                 {target.name}{' '}
-                <span className="text-slate-600">{target.address}</span>
+                <span className="text-slate-400">{target.address}</span>
               </div>
               <div className="mt-1 flex flex-wrap gap-1">
                 {target.kind === 'system' ? (
@@ -454,7 +461,17 @@ export function TargetRow({
       }}
       title={`${target.name} · ${target.address}`}
       aria-pressed={selected}
-      className={`flex w-full items-baseline gap-2 py-[1px] pr-1.5 text-left ${indent} ${FOCUS_RING} ${
+      /*
+       * `min-h-6` rather than the old `py-[1px]`.
+       *
+       * The rows were 19.9 px tall and stacked with no gap, so consecutive
+       * targets sat 19.9 px apart — inside the 24 px circles WCAG 2.2's
+       * spacing exception measures, which is the one way an undersized target
+       * cannot be excused. This is the densest list in the interface and it
+       * costs about four pixels a row; the alternative is the list being the
+       * one place the dock is genuinely hard to hit.
+       */
+      className={`flex min-h-6 w-full items-center gap-2 py-[1px] pr-1.5 text-left ${indent} ${FOCUS_RING} ${
         selected ? 'bg-sky-500/20 text-sky-100' : 'hover:bg-slate-800/60'
       }`}
     >
@@ -462,17 +479,20 @@ export function TargetRow({
         className={
           target.kind === 'system'
             ? 'shrink-0 text-amber-300/80'
-            : 'shrink-0 text-slate-600'
+            : 'shrink-0 text-slate-400'
         }
       >
         {target.kind === 'system' ? '★' : target.landable ? '◍' : '·'}
       </span>
       <span className="min-w-0 flex-1 truncate">
         {target.name}
-        <span className="ml-1.5 text-slate-600">{target.detail}</span>
+        <span className="ml-1.5 text-slate-400">{target.detail}</span>
       </span>
+      {/* Loaded reads as a value, unloaded as a stale one — 300 against 400,
+          which is the grade DESIGN.md already names for "a stale distance".
+          It used to be 400 against 600, and 600 is below the contrast floor. */}
       <span
-        className={`shrink-0 tabular-nums ${target.loaded ? 'text-slate-400' : 'text-slate-600'}`}
+        className={`shrink-0 tabular-nums ${target.loaded ? 'text-slate-300' : 'text-slate-400'}`}
       >
         {target.distanceText}
       </span>

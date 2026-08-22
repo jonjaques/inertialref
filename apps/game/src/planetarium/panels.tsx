@@ -66,7 +66,7 @@ export function CataloguePanel({ engine, target, focus }: PlanetariumContext) {
   return (
     <div className="flex min-h-0 flex-col gap-2">
       <label className="flex items-center gap-1.5 rounded border border-slate-700/60 bg-slate-900/60 px-2 focus-within:border-sky-500/60">
-        <Search aria-hidden className="size-3 shrink-0 text-slate-500" />
+        <Search aria-hidden className="size-3 shrink-0 text-slate-400" />
         <Input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
@@ -74,7 +74,7 @@ export function CataloguePanel({ engine, target, focus }: PlanetariumContext) {
           aria-label="Search the catalogue"
           className="h-7 border-0 bg-transparent px-0 font-mono text-[11px] shadow-none focus-visible:ring-0"
         />
-        <span className="shrink-0 text-[10px] text-slate-600 tabular-nums">
+        <span className="shrink-0 text-[10px] text-slate-400 tabular-nums">
           {rows.length}
         </span>
       </label>
@@ -89,7 +89,7 @@ export function CataloguePanel({ engine, target, focus }: PlanetariumContext) {
           />
         ))}
         {rows.length === 0 && (
-          <li className="px-1 py-2 text-slate-500">
+          <li className="px-1 py-2 text-slate-400">
             nothing within 16 ly matches that
           </li>
         )}
@@ -130,11 +130,11 @@ function CatalogueRow({
             // Loaded means the system is generated and its frames installed —
             // the difference between a star you can look at and one that is
             // still a stub in the catalogue.
-            row.loaded ? 'text-sky-400/80' : 'text-slate-600'
+            row.loaded ? 'text-sky-400/80' : 'text-slate-400'
           }`}
         />
         <span className="min-w-0 flex-1 truncate">{row.name}</span>
-        <span className="shrink-0 text-[10px] text-slate-500 tabular-nums">
+        <span className="shrink-0 text-[10px] text-slate-400 tabular-nums">
           {row.distanceText}
         </span>
       </button>
@@ -151,7 +151,7 @@ export function ObjectPanel({ engine, focus }: PlanetariumContext) {
 
   if (status === null || status.target === null) {
     return (
-      <p className="px-1 py-2 text-slate-500">
+      <p className="px-1 py-2 text-slate-400">
         Nothing selected. Click something in the sky, or pick a row in the
         catalogue.
       </p>
@@ -278,13 +278,15 @@ export function ViewPanel({
           value={fov}
           aria-label="Field of view"
           onChange={(event) => onFov(Number(event.target.value))}
-          className={`h-1 w-full cursor-pointer accent-sky-400 ${FOCUS_RING}`}
+          /* `h-6`, not `h-1`. A one-pixel-tall track is a hairline to look at
+             and a hairline to hit; the thumb still draws at its own size. */
+          className={`h-6 w-full cursor-pointer accent-sky-400 ${FOCUS_RING}`}
         />
       </label>
       {/* A lens choice is a framing choice here, not just a crop: the
           observatory solves its distance against this angle, so narrowing the
           lens pulls the camera back rather than magnifying. */}
-      <p className="text-[10px] text-slate-500">
+      <p className="text-[10px] text-slate-400">
         the camera re-solves its distance, so the subject stays the same size
       </p>
     </div>
@@ -323,7 +325,7 @@ function Toggle({
       {on ? (
         <Eye className="size-3.5 text-sky-400" />
       ) : (
-        <EyeOff className="size-3.5 text-slate-600" />
+        <EyeOff className="size-3.5 text-slate-400" />
       )}
     </button>
   )
@@ -373,7 +375,7 @@ export function TimePanel({ engine }: PlanetariumContext) {
 
       <span className="mx-1 h-4 w-px bg-slate-800" />
 
-      <Gauge aria-hidden className="size-3.5 shrink-0 text-slate-600" />
+      <Gauge aria-hidden className="size-3.5 shrink-0 text-slate-400" />
       <span className="text-slate-400 tabular-nums">{world.timeText}</span>
       {/* What the clock is actually delivering. Below the requested warp when
           the simulation cannot keep up, and saying so is the whole point —
@@ -450,7 +452,7 @@ export function PresetsPanel({ engine, focus }: PlanetariumContext) {
         {status?.target?.kind === 'star' && (
           // A star has no phase: it is the light source. Saying so beats four
           // buttons that appear to do nothing.
-          <p className="mt-1 text-[10px] text-slate-500">
+          <p className="mt-1 text-[10px] text-slate-400">
             a star is the light — phase needs something it shines on
           </p>
         )}

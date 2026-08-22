@@ -62,16 +62,24 @@ export class ErrorBoundary extends Component<
     if (error === null) return this.props.children
     return (
       <div
+        // A piece of chrome vanishing and being replaced by an explanation is a
+        // change nothing else announces — the panel it replaced is simply gone.
+        role="alert"
         className={`rounded border border-rose-400/40 bg-slate-950/80 px-2 py-1.5 ${this.props.className ?? ''}`}
       >
         <div className="text-rose-300">{this.props.what} stopped drawing</div>
-        <div className="mt-1 max-h-24 overflow-auto break-words text-slate-400">
+        {/* The thrown message is the primary reading here, so it takes the
+            value grade and the reassurance below it takes the subordinate one.
+            They were 400 and 600; 600 is below the contrast floor, and letting
+            both settle on 400 would have flattened the one line worth reading
+            into the one line you already know. */}
+        <div className="mt-1 max-h-24 overflow-auto break-words text-slate-300">
           {error.message || 'no message'}
         </div>
         {/* Stacked, not inline. The dock is 27rem and the sentence is the
             width of most of it, so a row put the button beside two wrapped
             lines and top-aligned it against them. */}
-        <div className="mt-1 text-slate-600">
+        <div className="mt-1 text-slate-400">
           the simulation is still running · stack in the console
         </div>
         <div className="mt-1.5">

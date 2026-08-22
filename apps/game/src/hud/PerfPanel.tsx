@@ -3,8 +3,7 @@ import type { Series, SeriesStats } from '@inertialref/devtools'
 import type { HarnessStatus } from '@inertialref/devtools'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { canMeasureGpu, measureGpuFrameMs } from '../render/measure.ts'
-import { FOCUS_RING, releaseFocus } from './focus.ts'
-import { Row, Section } from './widgets.tsx'
+import { Action, Row, Section } from './widgets.tsx'
 
 /*
  * The performance overlay.
@@ -23,6 +22,21 @@ import { Row, Section } from './widgets.tsx'
  * drawn on the plots rather than written next to them, because the useful
  * question is never "what is the budget" but "how close is this to it".
  */
+
+/*
+ * The plot's three colours, as literals because they are SVG paint attributes
+ * chosen per sample rather than classes — but named, so they are findable when
+ * the palette moves, and annotated with the step each one is, which is the form
+ * `index.css` writes every colour in.
+ *
+ * `budget` was `#f87171` (red-400), a second red for an idea that already had
+ * one. Fault in this system is rose, so the budget rule is rose too.
+ */
+const CHART = {
+  nominal: '#38bdf8', // sky-400
+  caution: '#fbbf24', // amber-400
+  budget: '#fb7185', // rose-400
+} as const
 
 /** The frame budget, ms. 60 fps at 1920×1080 is the target machine's job. */
 const FRAME_BUDGET_MS = 16.6
@@ -229,7 +243,7 @@ export function PerfPanel({
         {heap.count === 0 ? (
           // Not a failure worth hiding: `performance.memory` is Chromium-only and
           // non-standard, and a blank plot with no explanation reads as a bug.
-          <div className="text-slate-500">
+          <div className="text-slate-400">
             performance.memory is Chromium-only
           </div>
         ) : (
@@ -260,19 +274,21 @@ function MeasureButton({
   const gl = engine.gl
   const ready =
     gl !== null && engine.view !== null && canMeasureGpu(gl.renderer)
+  /*
+   * `Action`, rather than the hand-rolled button this used to be.
+   *
+   * Its classes were byte-identical to `Action`'s normal tone, which is what
+   * made it invisible drift: nothing looked wrong, and it simply did not
+   * receive the 24 px target minimum when `Action` did. The shared control owns
+   * this pattern, including `releaseFocus` and the disabled treatment.
+   */
   return (
-    <button
-      type="button"
-      disabled={!ready || busy}
+    <Action
+      label={busy ? 'measuring…' : 'measure gpu'}
       title="Submit 40 frames and time them across a drained queue — the only measurement three's own timestamp does not exaggerate"
-      onClick={(event) => {
-        releaseFocus(event)
-        onMeasure()
-      }}
-      className={`rounded border border-slate-700 bg-slate-800/60 px-1.5 py-0.5 text-[10px] text-slate-300 transition-colors hover:border-sky-500/60 hover:text-sky-200 disabled:cursor-not-allowed disabled:opacity-35 ${FOCUS_RING}`}
-    >
-      {busy ? 'measuring…' : 'measure gpu'}
-    </button>
+      disabled={!ready || busy}
+      onClick={onMeasure}
+    />
   )
 }
 
@@ -338,7 +354,7 @@ function Plot({
 
   const threshold = warnAbove ?? budget
   const over = threshold !== undefined && stats.p95 > threshold
-  const stroke = over ? '#fbbf24' : '#38bdf8'
+  const stroke = over ? CHART.caution : CHART.nominal
 
   return (
     <div className="relative my-0.5">
@@ -363,7 +379,7 @@ function Plot({
             x2={width}
             y1={height - (budget / ceiling) * height}
             y2={height - (budget / ceiling) * height}
-            stroke="#f87171"
+            stroke={CHART.budget}
             strokeWidth={0.5}
             strokeDasharray="2 2"
             vectorEffect="non-scaling-stroke"

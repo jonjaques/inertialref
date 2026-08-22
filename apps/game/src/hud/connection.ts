@@ -22,6 +22,18 @@ export const CONNECTION_LABEL: Readonly<Record<ConnectionState, string>> = {
   incompatible: 'mismatch',
 }
 
+/*
+ * The one place slate-500 survives, and it is deliberate.
+ *
+ * Everywhere else the grade went to 400, because slate-500 tops out at 4.24:1
+ * on an opaque slate-950 panel and never reaches the 4.5:1 a readout needs. The
+ * pip is not a readout — it is a single `●`, a non-text indicator, which WCAG
+ * holds to 3:1, and it measures 3.2:1 against the dock with a star behind it.
+ *
+ * Moving it would cost the thing this file exists for: `checking` and `offline`
+ * are two of the five states and both are grey. At 400 they would be the same
+ * grey, and "waiting" and "playing offline" want different reactions.
+ */
 const TONE: Readonly<Record<ConnectionState, string>> = {
   checking: 'text-slate-500',
   online: 'text-emerald-400',

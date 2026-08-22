@@ -71,7 +71,7 @@ export function CompactDock({
                 releaseFocus(event)
                 setOpenId(null)
               }}
-              className={`ml-auto rounded p-1 text-slate-500 ${FOCUS_RING}`}
+              className={`ml-auto rounded p-1 text-slate-400 ${FOCUS_RING}`}
             >
               <ChevronDown className="size-4" />
             </button>

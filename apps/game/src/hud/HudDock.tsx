@@ -108,13 +108,13 @@ export function HudDock({
         }}
         className={`flex items-center gap-2 border-b border-slate-800 px-2 py-1 text-left hover:bg-slate-900/60 ${FOCUS_RING}`}
       >
-        <span className="text-slate-500">{open ? '▾' : '▸'}</span>
+        <span className="text-slate-400">{open ? '▾' : '▸'}</span>
         <span className="text-sky-300">InertialRef</span>
-        <span className="ml-auto truncate text-slate-500" title={summary}>
+        <span className="ml-auto truncate text-slate-400" title={summary}>
           {summary}
         </span>
         <ConnectionPip connection={connection} />
-        <span className="shrink-0 text-slate-600">H</span>
+        <span className="shrink-0 text-slate-400">H</span>
       </button>
 
       {open && (
@@ -260,10 +260,10 @@ function Tab({
         releaseFocus(event)
         onClick()
       }}
-      className={`-mb-px border-b px-2 py-0.5 text-[10px] uppercase tracking-widest ${FOCUS_RING} ${
+      className={`-mb-px inline-flex min-h-6 items-center border-b px-2 py-0.5 text-[10px] uppercase tracking-widest ${FOCUS_RING} ${
         active
           ? 'border-sky-400 text-sky-300'
-          : 'border-transparent text-slate-500 hover:text-slate-300'
+          : 'border-transparent text-slate-400 hover:text-slate-300'
       }`}
     >
       {label}

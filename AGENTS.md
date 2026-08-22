@@ -122,6 +122,15 @@ authority at the moment of the edit, and states the previous rule.
   `ErrorBoundary`'s `className` styles its _fallback_, not a wrapper — so
   nothing between a mode and the layer turns them back on. Getting this wrong is
   silent: the hit target at every pixel is the canvas.
+- **Never give `AnimatePresence` `mode="wait"` over the overlay routes, and key
+  it on the dialog's surface rather than its pathname.** `mode="wait"` stopped
+  the exit completing, so a closed dialog left its scrim in the DOM at
+  `opacity: 0` with `pointer-events: auto` — an invisible full-viewport layer
+  that swallowed every click on the mode behind it. This fails the same silent
+  way as the rule above and is harder to see: the scene is still rendering, so
+  nothing looks wrong. Keying on the pathname instead makes every settings tab a
+  fresh entrance, and two 70% scrims stack to 91%. `overlaySurface` in
+  `pages/paths.ts` is the pure half and is tested.
 - **Never guard a "run once" effect with a ref.** React re-runs effects while
   refs survive, so a latch plus a cleanup means the cleanup wins and the effect
   never fires again — the planetarium came up with the camera on nothing.

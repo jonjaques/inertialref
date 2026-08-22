@@ -38,7 +38,10 @@ export function CameraPanel({ camera }: { camera: CameraState }) {
             step={1}
             value={camera.fov}
             onChange={(event) => camera.onFov(Number(event.target.value))}
-            className={`min-w-0 flex-1 accent-sky-500 ${FOCUS_RING}`}
+            /* `h-6` so the track is a 24 px target. A range input's thumb is
+               sized by the user agent — which SC 2.5.8 exempts — but the track
+               is what a pointer actually lands on, and it was 16. */
+            className={`h-6 min-w-0 flex-1 accent-sky-500 ${FOCUS_RING}`}
             aria-label="Field of view, degrees"
           />
           <span className="w-9 shrink-0 text-right tabular-nums text-slate-300">
@@ -51,7 +54,7 @@ export function CameraPanel({ camera }: { camera: CameraState }) {
             onClick={() => camera.onFov(DEFAULT_FOV)}
           />
         </div>
-        <div className="mt-1 text-slate-600">
+        <div className="mt-1 text-slate-400">
           Narrow reads like a telephoto photograph; wide is for flying. The
           bookmarks in navigate → shots were composed at {DEFAULT_FOV}°.
         </div>

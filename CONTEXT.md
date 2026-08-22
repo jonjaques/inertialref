@@ -209,6 +209,14 @@ again in a neighbouring system.
   at 20 km/s a tick covers 300 m.
 - Moons generated **outside their planet's sphere of influence**, i.e. not
   actually bound to the planet they claimed to orbit.
+- **`AnimatePresence mode="wait"` never completed a dialog's exit**, leaving the
+  scrim in the DOM at `opacity: 0` with `pointer-events: auto` — an invisible
+  full-viewport layer over a running mode that swallowed every click. Nothing to
+  see and nothing works is the worst shape a bug can take; it survived an
+  accessibility audit because the audit opened dialogs and never closed one.
+- **A glow as a selected state on a bright background.** The selected sky label
+  was `sky-200` plus a sky-coloured glow and measured 1.16:1 against a star:
+  light added to light. Selection has to change hue or carry its own ground.
 - Surface frame ids were **not idempotent**: `(-1e-9).toFixed(6)` is
   `"-0.000000"`, which re-parses to `-0`, which formats as `"0.000000"`.
 - The frame's geometry used unrounded angles while its id was rounded, so a
@@ -2103,6 +2111,105 @@ One reported finding was checked and rejected: `.claude/hooks/gate.mjs` reading
 `input.prompt_id` is correct — it is a documented common hook payload field
 (Claude Code ≥ 2.1.196) with a `?? 'noprompt'` fallback for older versions.
 
+## Readable with a star in the frame (22 Aug 2026)
+
+The system's own standing test — "would this still be readable with a star
+filling the frame behind it?" — had never been run. It has now, against pixels
+sampled off the running renderer with the Sun framed to fill the viewport, and
+it answered in two halves.
+
+The panel material is **vindicated**. The solar disc composites to
+`srgb(209,208,206)`, and behind `bg-slate-950/85` with its backdrop blur that
+becomes `srgb(33,36,50)` — so `slate-300`, the primary readout value, holds
+**10.34:1** with a star behind it. Translucency chosen for legibility rather
+than for looks was the right call and the numbers now say so.
+
+The **label ramp was never legible, anywhere**, and no amount of alpha was going
+to fix it. `slate-500` — the left column of every readout row — measures 3.23:1
+on the dock over a star and 2.43:1 on the flight strip. The decisive number is
+that on a **fully opaque** `slate-950` panel it still reaches only **4.24:1**,
+and on pure black 4.41:1; `slate-600` tops out at 2.66:1. There is no ground
+this system would ever use from which either clears 4.5:1, so raising panel
+opacity cannot help and only a lighter ink can.
+
+That closes a design question rather than opening one: **the legible ramp is
+200 / 300 / 400 and nothing below it.** Labels and secondary values now share
+`slate-400` and are separated by position and case instead of brightness, which
+is what the Case Rule was already doing. `slate-500` survives in exactly one
+place, `hud/connection.ts`, where the pip is a non-text indicator held to 3:1
+and where `checking` and `offline` are two greys that must stay distinguishable.
+
+The flight strip is the one surface where the **alpha** moved rather than the
+ink: at `/75` its bottom line was 2.43:1 and the line above it cleared 4.5:1 by
+0.01, so it went to `/85` and its four-line ladder was respaced onto
+sky-300 / 200 / 300 / 400. `docs/design` had already sanctioned exactly this —
+alpha is functional here and loses every argument against contrast.
+
+**The worst offender was not in a panel at all.** Sky labels are drawn directly
+onto the one thing in the frame guaranteed to be bright, and measured **2.07:1**
+(SOL) and 1.59:1 (EARTH) against the disc. Discounting their text-shadow, the
+fill colour alone was **1.03:1**. A _selected_ label was worse — `sky-200` with
+a sky-coloured glow measured **1.16:1**, because a glow can only add brightness
+and the failing case is already bright. They now carry the panel material as a
+plate and select with hue and a hairline: **10.41:1** and **11.62:1** measured
+the same way. A dark shadow under light text only ever worked while the scene
+was dark.
+
+The transient notice had the same shape of bug and was found the same way:
+`bg-sky-500/20` is 80% scene, so over a sunlit planet it composited to
+**1.33:1** — on the element that echoes back whatever was just typed into the
+address field. The accent is the edge now and the panel ground carries it.
+
+## The dialog nobody could tab to, and the scrim that stayed (22 Aug 2026)
+
+Two keyboard findings, one of which turned out to be much worse than the
+accessibility audit that went looking for it.
+
+**Targets.** 73 of 79 interactive targets measured under 24 px. Most passed
+WCAG 2.2's spacing exception on luck of layout, but the destination rows did
+not: 19.9 px tall and directly stacked, so consecutive targets sat 19.9 px
+apart, inside the 24 px circles the exception measures. That is the one way an
+undersized target cannot be excused. Everything is now ≥24 px with zero spacing
+violations, measured across all five dock tabs. `measure gpu` in `PerfPanel`
+turned out to be a hand-rolled copy of `Action` with byte-identical classes,
+which is why it silently did not inherit the fix — invisible drift, and the
+reason it is now the shared component.
+
+**Focus.** Opening a dialog left `document.activeElement` on `<body>` and the
+dialog is the last band in `.hud-layer`, so its first control was measured at
+**79 tab stops** behind the rest of the chrome. The panel now takes focus on
+open rather than its first control — a dialog that opens announcing "Close" is
+announcing the one thing the reader did not ask for — and restores to the opener
+on close. Two things about the restore are not obvious: React runs a deletion's
+destroy around the same commit that detaches the node, so `activeElement` is
+**not** reliably `<body>` at cleanup and checking only for that skips the
+restore about half the time; and a mode can unmount behind an open dialog, so
+the opener is checked with `isConnected` before being focused.
+
+**And the bug none of that was looking for.** Verifying the focus fix turned up
+that closing _any_ routed dialog left the scrim in the DOM at `opacity: 0` with
+`pointer-events: auto` — a full-viewport invisible layer that swallowed every
+click on the mode behind it. The scene kept rendering perfectly behind a sheet
+of glass nobody could see. It reproduced on `HEAD`, so it predates the focus
+work; the audit never found it because the audit never closed a dialog.
+
+The cause was `<AnimatePresence mode="wait">` keyed on the full pathname in
+`OverlayRoutes`. `mode="wait"` stopped the exit from completing, so the node was
+animated out and then orphaned. Dropping it releases the node — but the outgoing
+and incoming children then render together, and keyed on the pathname every
+settings tab became a fresh entrance: **two 70% scrims stack to 91%**, so the
+scene flashed dark on every tab click. The key is therefore the dialog's
+_surface_ rather than its path — `/settings/display` and `/settings/camera` are
+one panel showing different content. `overlaySurface()` is the pure half, in
+`paths.ts`, with four tests; the leak itself needs a DOM and this vitest is
+node-only, so what is tested is the arithmetic that regressed rather than a
+claim that cannot be executed.
+
+Live regions existed nowhere in the client and now exist in three places: the
+transient notice (`status`, polite — it is the only confirmation most commands
+give and it is gone in 2.5 s), the nav panel's failure report and the error
+boundary's fallback (both `alert`).
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).
@@ -2169,8 +2276,12 @@ Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md
 - No compute passes, storage buffers or indirect draw yet: the WebGPU migration
   delivered the renderer and the HDR path, not GPU-driven terrain or culling.
 - Cold load to interactive is still unmeasured, and it is the budget most likely
-  to be missed: the bundle is 622.8 KB gzip with no code splitting, of which
-  67 KB arrived with the UI foundations on 22 Aug.
+  to be missed: the bundle is **663.3 KB gzip — 511.0 KB brotli — in a single
+  chunk** with no code splitting and no `React.lazy` anywhere in `src`, of which
+  67 KB arrived with the UI foundations on 22 Aug. `main.tsx` then awaits a
+  469 KB catalogue before the first render, correctly (it is a generation input)
+  but on top of that. Three of the four modes are not the first viewport and are
+  the obvious thing to split out.
 - Every performance number recorded here is from an Apple M5 in a 1000×760
   window. The target is a 2023-class laptop at 1920×1080 — roughly three times
   the pixels on a much weaker GPU — so these establish that the instrument works,

@@ -322,7 +322,7 @@ function DockPanel({
       >
         <GripVertical
           aria-hidden
-          className="size-3 shrink-0 text-slate-600"
+          className="size-3 shrink-0 text-slate-400"
           strokeWidth={2}
         />
         <Icon aria-hidden className="size-3.5 shrink-0 text-sky-400/80" />
@@ -337,7 +337,7 @@ function DockPanel({
             releaseFocus(event)
             onHide(definition.id)
           }}
-          className={`ml-auto shrink-0 rounded p-0.5 text-slate-600 hover:text-sky-200 ${FOCUS_RING}`}
+          className={`ml-auto shrink-0 rounded p-0.5 text-slate-400 hover:text-sky-200 ${FOCUS_RING}`}
         >
           <X className="size-3" />
         </button>
@@ -389,7 +389,7 @@ export function DockRail({
             className={`rounded p-1.5 transition-colors ${FOCUS_RING} ${
               on
                 ? 'bg-sky-500/15 text-sky-200'
-                : 'text-slate-500 hover:bg-slate-800/60 hover:text-sky-200'
+                : 'text-slate-400 hover:bg-slate-800/60 hover:text-sky-200'
             }`}
           >
             <Icon className="size-4" />

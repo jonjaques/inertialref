@@ -82,10 +82,10 @@ export function SettingsPage({
             state={keep}
             replace
             aria-current={entry.id === active ? 'page' : undefined}
-            className={`flex items-center gap-1.5 rounded px-2 py-1 text-[10px] tracking-widest uppercase transition-colors ${FOCUS_RING} ${
+            className={`flex min-h-6 items-center gap-1.5 rounded px-2 py-1 text-[10px] tracking-widest uppercase transition-colors ${FOCUS_RING} ${
               entry.id === active
                 ? 'bg-sky-500/15 text-sky-200'
-                : 'text-slate-500 hover:text-slate-300'
+                : 'text-slate-400 hover:text-slate-300'
             }`}
           >
             <entry.icon aria-hidden className="size-3.5" />
@@ -131,7 +131,7 @@ function ControlsSection() {
         </dl>
       </div>
 
-      <p className="text-slate-500">
+      <p className="text-slate-400">
         Rebinding is designed and not built — see{' '}
         <span className="text-slate-400">docs/design/ux.md</span>.
       </p>

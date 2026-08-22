@@ -53,7 +53,7 @@ export function ShellBar({
       {mode === 'menu' ? (
         <span
           aria-hidden
-          className="px-1 tracking-[0.3em] text-slate-500 uppercase"
+          className="px-1 tracking-[0.3em] text-slate-400 uppercase"
         >
           ir
         </span>
@@ -62,7 +62,7 @@ export function ShellBar({
           to={HOME}
           aria-label="Back to the menu"
           title="Back to the menu"
-          className={`flex items-center gap-1 rounded px-1 py-0.5 text-slate-400 transition-colors hover:text-sky-200 ${FOCUS_RING}`}
+          className={`flex min-h-6 items-center gap-1 rounded px-1 py-0.5 text-slate-400 transition-colors hover:text-sky-200 ${FOCUS_RING}`}
         >
           <ChevronLeft className="size-3.5" />
           <span className="tracking-[0.3em] uppercase">ir</span>
@@ -92,10 +92,14 @@ export function ShellBar({
           releaseFocus(event)
           onDebug(!debug)
         }}
-        className={`rounded p-1 transition-colors ${FOCUS_RING} ${
+        /* `size-6` — 24 px, the target minimum. A 14 px icon in `p-1` came out
+           at 22 and cleared WCAG only on the spacing exception, which is a
+           thing to rely on when there is no alternative rather than when four
+           pixels are available. */
+        className={`flex size-6 items-center justify-center rounded transition-colors ${FOCUS_RING} ${
           debug
             ? 'bg-sky-500/15 text-sky-200'
-            : 'text-slate-600 hover:text-sky-200'
+            : 'text-slate-400 hover:text-sky-200'
         }`}
       >
         <Bug className="size-3.5" />
@@ -106,7 +110,7 @@ export function ShellBar({
         state={overlayState(location)}
         aria-label="Settings"
         title="Settings"
-        className={`rounded p-1 text-slate-400 transition-colors hover:text-sky-200 ${FOCUS_RING}`}
+        className={`flex size-6 items-center justify-center rounded text-slate-400 transition-colors hover:text-sky-200 ${FOCUS_RING}`}
       >
         <SlidersHorizontal className="size-3.5" />
       </Link>

@@ -69,7 +69,7 @@ function Cycle<T extends string>({
     >
       <span className="flex min-w-0 items-baseline gap-2">
         <span className="shrink-0 text-slate-300">{label}</span>
-        <span className="min-w-0 truncate text-slate-600">{detail}</span>
+        <span className="min-w-0 truncate text-slate-400">{detail}</span>
       </span>
       <span className="shrink-0 text-[10px] uppercase tracking-widest text-sky-300">
         {value}
@@ -103,11 +103,11 @@ function Toggle({
     >
       <span className="flex min-w-0 items-baseline gap-2">
         <span className="shrink-0 text-slate-300">{label}</span>
-        <span className="min-w-0 truncate text-slate-600">{detail}</span>
+        <span className="min-w-0 truncate text-slate-400">{detail}</span>
       </span>
       <span
         className={`shrink-0 text-[10px] uppercase tracking-widest ${
-          on ? 'text-sky-300' : 'text-slate-600'
+          on ? 'text-sky-300' : 'text-slate-400'
         }`}
       >
         {on ? 'on' : 'off'}

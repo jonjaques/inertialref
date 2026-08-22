@@ -692,12 +692,26 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
           {!cinema && notice !== null && (
             <motion.div
               key={notice}
+              /* Announced, not just drawn. This is the only confirmation most
+                 commands give — `hdr extended`, `go to SOL`, `saved` — and it
+                 is gone in 2.5 seconds, so a reader that never hears it gets no
+                 feedback at all. `polite` rather than `assertive`: it is a
+                 receipt for something the user just did, not an interruption. */
+              role="status"
+              aria-live="polite"
               title={notice}
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 4 }}
               transition={{ duration: 0.15 }}
-              className="pointer-events-none absolute bottom-3 left-1/2 z-30 max-w-[min(36rem,calc(100vw-1.5rem))] -translate-x-1/2 truncate rounded bg-sky-500/20 px-3 py-1 font-mono text-xs text-sky-200"
+              /* The accent is the edge, not the ground. `bg-sky-500/20` alone
+                 is 80% scene, so over a sunlit planet the notice composited to
+                 1.3:1 and the thing it was echoing back — often whatever was
+                 just typed into the address field — was unreadable at exactly
+                 the moment it was worth reading. The panel ground carries it;
+                 the accent stays what it is everywhere else in this system, a
+                 material rather than a fill behind text. */
+              className="pointer-events-none absolute bottom-3 left-1/2 z-30 max-w-[min(36rem,calc(100vw-1.5rem))] -translate-x-1/2 truncate rounded border border-sky-500/40 bg-slate-950/85 px-3 py-1 font-mono text-xs text-sky-200 backdrop-blur"
             >
               {notice}
             </motion.div>

@@ -68,7 +68,7 @@ export function TelemetryPanel({
   if (status === null)
     return (
       <div>
-        <div className="mb-2 text-slate-500">waiting for the first frame…</div>
+        <div className="mb-2 text-slate-400">waiting for the first frame…</div>
         {network}
       </div>
     )
@@ -188,14 +188,14 @@ export function TelemetryPanel({
                 <span className="truncate text-slate-400" title={body.name}>
                   {body.name}
                 </span>
-                <span className="shrink-0 text-slate-500">
+                <span className="shrink-0 text-slate-400">
                   {body.tier}
                   {body.compressed ? '*' : ''} · {body.distanceText}
                 </span>
               </div>
             ))}
             {render.bodies.length > 6 && (
-              <div className="text-slate-600">
+              <div className="text-slate-400">
                 +{render.bodies.length - 6} more · ir.status().render.bodies
               </div>
             )}
@@ -240,7 +240,7 @@ export function TelemetryPanel({
               title={`${event.tick} ${event.kind} · ${event.detail}`}
               className="truncate text-slate-400"
             >
-              <span className="text-slate-600">{event.tick}</span> {event.kind}{' '}
+              <span className="text-slate-400">{event.tick}</span> {event.kind}{' '}
               · {event.detail}
             </div>
           ))}
@@ -253,12 +253,12 @@ export function TelemetryPanel({
         <div className="grid grid-cols-[5.5rem_1fr] gap-x-2">
           {CONTROL_HELP.map(([key, description]) => (
             <div key={key} className="contents">
-              <span className="text-slate-500">{key}</span>
+              <span className="text-slate-400">{key}</span>
               <span className="text-slate-400">{description}</span>
             </div>
           ))}
         </div>
-        <div className="mt-2 text-slate-500">
+        <div className="mt-2 text-slate-400">
           console: <span className="text-sky-300">ir.help()</span> ·{' '}
           <span className="text-sky-300">ir.targets()</span> ·{' '}
           <span className="text-sky-300">ir.goTo(&apos;b:2&apos;)</span>
@@ -301,7 +301,7 @@ function NetworkSection({
       trailing={CONNECTION_LABEL[state]}
     >
       <div className="flex justify-between gap-3">
-        <span className="shrink-0 text-slate-500">state</span>
+        <span className="shrink-0 text-slate-400">state</span>
         <span className={`truncate text-right ${connectionTone(state)}`}>
           {CONNECTION_LABEL[state]}
           {health !== null && health.colo !== '' ? ` · ${health.colo}` : ''}
@@ -328,7 +328,7 @@ function NetworkSection({
           onClick={onCheck}
         />
         {/* Said plainly, because the colour of a dot is not a promise. */}
-        <span className="text-slate-600">
+        <span className="text-slate-400">
           the game does not need any of this
         </span>
       </div>
@@ -357,7 +357,7 @@ function AuthoritySection({
   if (authority === null)
     return (
       <Section id="tel.authority" title="authority" trailing="none">
-        <div className="text-slate-500">no authority joined</div>
+        <div className="text-slate-400">no authority joined</div>
       </Section>
     )
 
@@ -379,7 +379,7 @@ function AuthoritySection({
       />
       <Row label="intent" value={`${submitted} submitted`} />
       {detail !== null && <Row label="detail" value={detail} wrap />}
-      <div className="mt-1 text-slate-600">
+      <div className="mt-1 text-slate-400">
         alone is not degraded — it is the mode the universe is designed around
       </div>
     </Section>

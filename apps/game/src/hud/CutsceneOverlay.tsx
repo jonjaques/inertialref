@@ -338,7 +338,7 @@ export function CutsceneOverlay({
       {showTransport && (
         <div
           ref={hint}
-          className="absolute right-3 bottom-2 font-mono text-[10px] text-slate-500"
+          className="absolute right-3 bottom-2 font-mono text-[10px] text-slate-400"
           style={{ opacity: 0 }}
         />
       )}
