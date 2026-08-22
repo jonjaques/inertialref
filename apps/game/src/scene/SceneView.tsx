@@ -32,6 +32,7 @@ import {
   type PlanetMaterial,
   type RingMaterial,
 } from '../render/planet.ts'
+import { scatteringFor } from '../render/atmosphereLuts.ts'
 import { createLensFlare } from '../render/flare.ts'
 import { type FlareOccluder, sunVisibility } from '../render/flareMath.ts'
 import { texturesFor } from '../render/planetTextures.ts'
@@ -897,14 +898,16 @@ function Bodies({ engine }: { engine: GameEngine }) {
         air.flattening.value = body.flattening
         const haze = appearance.haze
         if (haze !== null) {
-          air.zenithColour.value.setRGB(
-            haze.colour.r,
-            haze.colour.g,
-            haze.colour.b,
+          // Baked lazily on the first frame this shell is drawn, cached by
+          // its parameters after that — see `atmosphereLuts.ts`.
+          const scattering = scatteringFor(haze, body.atmosphereScale)
+          air.setScattering(
+            scattering.recipe,
+            scattering.transmittance,
+            scattering.multiScatter,
           )
-          air.limbColour.value.setRGB(haze.limb.r, haze.limb.g, haze.limb.b)
-          air.opticalThickness.value = haze.thickness
         }
+        air.sunColour.value.setRGB(keyColour.r, keyColour.g, keyColour.b)
         if (keyLight !== null) air.sunDirection.value.copy(sun)
       }
     }

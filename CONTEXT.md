@@ -1086,6 +1086,37 @@ ramp rather than repainting the stopped-down photosphere back to white. From
 afar nothing changes: the star stays the reference white the HDR path is
 built on.
 
+**The atmosphere is precomputed scattering now** (21 Aug 2026,
+`packages/rendering/src/atmosphere.ts`, `render/atmosphereLuts.ts`,
+`createAtmosphereMaterial`). The analytic shell's named successor, delivered:
+per-atmosphere transmittance T(r, μ) and Hillaire multiple-scattering
+Ψ(r, μs) tables, baked on the CPU in **planet radii** — the one unit that
+survives distance compression — from coefficients derived off the authored
+`HazeLayer` (the zenith colour _is_ the scattering spectrum; the limb colour
+tints the aerosol; `thickness` scales the column, calibrated so Earth's split
+lands within a few percent of the real (0.046, 0.108, 0.265) optical depths).
+The shader is a 12-sample march — two table reads per sample against spike
+2's measured 256-sample/7.27 ms budget — compositing as L + T·background via
+premultiplied custom blending, so night air genuinely dims the stars behind
+it. Nothing asserts a colour any more: the sunset ring is the table reddening
+low-sun light, twilight is Ψ, Mars keeps butterscotch _and_ its blue dusk
+from its own authored haze, and the first daytime blue sky ever drawn from a
+planet's surface fell out for free. The bake is pure arrays in
+`@inertialref/rendering`, property-tested in Node — monotonicity, horizon
+extinction, sunset reddening, Ψ past the terminator — because the TSL graph
+that consumes it cannot be.
+
+Two traps for whoever touches it next. **TSL statements need a function
+body**: `Loop` and `toVar` accumulators built at material scope compile
+cleanly, log nothing, and render a vacuum — the march must live inside the
+`Fn(() => …)()` that owns its stack, and the first unmistakable symptom was
+a black noon sky over a sunlit ground while every limb still looked vaguely
+atmospheric (the _surface_ material's veil was doing all the work). And
+**ground rays need a forward test**: `step(impact², 1)` alone counts the
+backwards extension of an up-ray as meeting the ground, which zeroes the
+zenith sky from the surface; the `step(0, closest)` beside it is
+load-bearing.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

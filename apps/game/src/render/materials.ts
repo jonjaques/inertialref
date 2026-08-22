@@ -3,25 +3,30 @@ import {
   BackSide,
   Color,
   CustomBlending,
+  DataTexture,
   InstancedBufferAttribute,
   MeshBasicNodeMaterial,
   MeshStandardNodeMaterial,
   OneFactor,
+  OneMinusSrcAlphaFactor,
   PointsNodeMaterial,
+  RGBAFormat,
   SrcAlphaFactor,
+  type Texture,
   Vector3,
   ZeroFactor,
 } from 'three/webgpu'
 import {
   abs,
   cameraPosition,
-  clamp,
   cross,
   dot,
   exp,
   float,
+  Fn,
   instancedBufferAttribute,
   length,
+  Loop,
   max,
   mix,
   mx_fractal_noise_float,
@@ -36,10 +41,14 @@ import {
   smoothstep,
   sqrt,
   step,
+  texture,
   uniform,
   uv,
+  vec2,
   vec3,
+  vec4,
 } from 'three/tsl'
+import type { AtmosphereRecipe } from '@inertialref/rendering'
 
 /*
  * Every material the scene draws, as node graphs.
@@ -151,10 +160,6 @@ export function createStarMaterial(): StarMaterial {
 
 export interface AtmosphereMaterial {
   readonly material: MeshBasicNodeMaterial
-  /** Scattering colour looking down through the air. */
-  readonly zenithColour: { value: Color }
-  /** Forward-scattered colour at the terminator: the sunset, from orbit. */
-  readonly limbColour: { value: Color }
   /** Body centre in render space. Written every frame — the planet is orbiting. */
   readonly centre: { value: Vector3 }
   /** Render-space radius of the shell, and of the ground beneath it. */
@@ -162,13 +167,52 @@ export interface AtmosphereMaterial {
   readonly innerRadius: { value: number }
   /** Unit vector from the body towards its star, in render space. */
   readonly sunDirection: { value: Vector3 }
-  /** The haze's authored optical thickness, 0..1 with Earth at 1. */
-  readonly opticalThickness: { value: number }
+  /** The key light's colour; the sky is scattered starlight. */
+  readonly sunColour: { value: Color }
   /** The body's spin axis in render space; the oblateness is along it. */
   readonly spinAxis: { value: Vector3 }
   /** Polar radius over equatorial, 1 for a sphere. See the stretch note. */
   readonly flattening: { value: number }
+  /**
+   * Point the shell at one body's precomputed scattering: the recipe's
+   * coefficients and the two tables baked from it. Idempotent and cheap, so
+   * the host writes it every frame like every other uniform.
+   */
+  setScattering(
+    recipe: AtmosphereRecipe,
+    transmittance: Texture,
+    multiScatter: Texture,
+  ): void
 }
+
+/** March samples through the shell. See the budget note in the doc comment. */
+const ATMOSPHERE_SAMPLES = 12
+
+/**
+ * Scattered radiance to scene units. The march produces radiance per unit
+ * sun irradiance; the scene's convention absorbs a π into every surface
+ * (albedo·μ *is* the drawn colour), so the sky gets the same treatment plus
+ * a small artistic gain — calibrated against the previous shell's tuned
+ * brightness so every body arrived at the same exposure it left.
+ */
+const ATMOSPHERE_GAIN = 24
+
+/** Aerosol forward-scattering asymmetry. 0.76 is Earth haze; universal here. */
+const MIE_G = 0.76
+
+/*
+ * 1×1 stand-ins so a shell whose tables have not arrived runs the identical
+ * graph: full transmittance and no multiple scattering, with the scattering
+ * coefficients defaulting to zero — a vacuum that draws nothing, rather than
+ * one frame of some other planet's sky.
+ */
+function lutPixel(r: number, g: number, b: number): DataTexture {
+  const map = new DataTexture(new Uint8Array([r, g, b, 255]), 1, 1, RGBAFormat)
+  map.needsUpdate = true
+  return map
+}
+const LUT_WHITE = /*@__PURE__*/ lutPixel(255, 255, 255)
+const LUT_BLACK = /*@__PURE__*/ lutPixel(0, 0, 0)
 
 /**
  * The atmosphere, as the length of air a view ray actually crosses.
@@ -188,29 +232,46 @@ export interface AtmosphereMaterial {
  * the middle of. A symmetric chord — which is what this was first — reports a
  * ground observer's zenith as twice the air that is actually above them.
  *
- * Two square roots, no loop, and that is the point. Spike 2 measured a
- * 256-sample single-scattering raymarch at **7.27 ms on an M5** against a 3.0 ms
- * budget for atmosphere *and* post; a raymarch does not fit here even as the
- * only thing on screen.
+ * **This is the LUT path the placeholder always named.** Spike 2 measured a
+ * 256-sample single-scattering raymarch at **7.27 ms on an M5** against a
+ * 3.0 ms budget for atmosphere *and* post, which is why the first shell was
+ * analytic. What makes a march affordable now is precomputation: 12 samples,
+ * each one exponential-density evaluation plus two table reads — sun
+ * transmittance T(r, μs) and Hillaire's multiple-scattering Ψ(r, μs), baked
+ * per body in `@inertialref/rendering` where the physics is testable in Node.
+ * Twelve samples against the measured 256 is ~0.35 ms of march on the same
+ * hardware, inside the budget with the post untouched.
  *
- * **A placeholder with a named replacement.** Uniform density is wrong — air is
- * exponential in altitude — and a path length is not scattering. The specified
- * answer is Bruneton's precomputed transmittance and multiple-scattering LUTs,
- * which spike 2 promoted from optimisation to requirement and which is M2 work.
- * What this buys meanwhile is a limb that thins towards space, a sky from the
- * ground and a terminator in the right place, all from geometry rather than
- * asserted by a constant.
+ * What the tables buy over the analytic blend is that nothing here asserts a
+ * colour any more: the sunset ring is the transmittance table reddening
+ * low-sun light, twilight is Ψ carrying second-order light past the
+ * terminator, Mars's butterscotch and its blue dusk both fall out of its
+ * authored haze — the same inputs, now interpreted as physics instead of
+ * paint.
+ *
+ * The shell composites as L + T·background — real extinction, not alpha art
+ * — via premultiplied custom blending; the alpha written is the mean
+ * extinction, so the night side's dark air still dims the stars behind it,
+ * which a photograph agrees with.
  */
 export function createAtmosphereMaterial(): AtmosphereMaterial {
   const centre = uniform(new Vector3())
   const outerRadius = uniform(1)
   const innerRadius = uniform(1)
   const sunDirection = uniform(new Vector3(0, 1, 0))
-  const zenithColour = uniform(new Color(0.28, 0.48, 0.95))
-  const limbColour = uniform(new Color(0.86, 0.45, 0.26))
-  const opticalThickness = uniform(1)
+  const sunColour = uniform(new Color(1, 1, 1))
   const spinAxis = uniform(new Vector3(0, 1, 0))
   const flattening = uniform(1)
+
+  // The recipe, as uniforms — coefficients per planet radius, matching the
+  // tables' units exactly; see `atmosphereRecipe` for where they come from.
+  const betaRayleigh = uniform(new Vector3(0, 0, 0))
+  const mieScatter = uniform(new Vector3(0, 0, 0))
+  const mieExtinction = uniform(0)
+  const hRayleigh = uniform(1)
+  const hMie = uniform(1)
+  const transmittanceLut = texture(LUT_WHITE)
+  const multiScatterLut = texture(LUT_BLACK)
 
   /*
    * The intersection maths below assumes spheres, and a giant is not one:
@@ -226,177 +287,174 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
    * a bounded few percent, spent on air over a pole, against a shell that
    * visibly detaches from the planet.
    */
-  const axis = normalize(spinAxis)
-  const stretchGain = float(1)
-    .div(max(flattening, float(1e-3)))
-    .sub(1)
-  // Both relative to the centre already, so `centre` drops out below.
-  const eyeRelative = cameraPosition.sub(centre)
-  const eye = eyeRelative.add(axis.mul(dot(eyeRelative, axis).mul(stretchGain)))
-  const wallRelative = positionWorld.sub(centre)
-  const wall = wallRelative.add(
-    axis.mul(dot(wallRelative, axis).mul(stretchGain)),
-  )
-
-  const rayDirection = normalize(wall.sub(eye))
-  const toCentre = eye.negate()
-
-  // Closest approach along the ray, and the impact parameter squared. `|d × c|`
-  // with d a unit vector gives the perpendicular distance directly and, unlike
-  // solving the quadratic, cannot go imaginary on a grazing ray — which is every
-  // ray that matters here.
-  const closest = dot(toCentre, rayDirection)
-  const impactSquared = max(length(cross(rayDirection, toCentre)).pow(2), 0)
-
-  const halfOuter = sqrt(
-    max(outerRadius.mul(outerRadius).sub(impactSquared), 0),
-  )
-  const halfInner = sqrt(
-    max(innerRadius.mul(innerRadius).sub(impactSquared), 0),
-  )
-
-  // Clamped at 0 so a camera already inside the air starts counting from itself.
-  const near = max(closest.sub(halfOuter), 0)
-  // `step` rather than a branch: 1 when the ray passes inside the planet, and
-  // then the air stops at the ground instead of continuing to the far wall.
-  const meetsGround = step(impactSquared, innerRadius.mul(innerRadius))
-  const far = mix(
-    closest.add(halfOuter),
-    max(closest.sub(halfInner), near),
-    meetsGround,
-  )
-  const airDepth = max(far.sub(near), 0)
-
   /*
-   * Exponential density, from the altitude the ray actually flies at.
-   *
-   * Uniform density was the placeholder's biggest lie: it drew the halo as a
-   * band with a hard outer edge, when a real limb is a gradient that thins by
-   * e-folds all the way to space — that gradient *is* the smoothness of every
-   * orbital photograph. The density is sampled at the segment's closest
-   * approach to the centre, clamped to the segment: for the halo that is the
-   * graze point, and for a camera inside the shell looking up it degrades to
-   * the camera's own altitude, which is the right answer in both places. The
-   * fall-off constant puts ~1% of sea-level density at the authored ceiling,
-   * so the shell ends by vanishing rather than by being cut.
+   * The whole march lives inside one `Fn`, and that is not style. `Loop` and
+   * `toVar` accumulators emit *statements*, and statements only exist inside
+   * a shader function's stack — built at material scope they dangle off the
+   * graph, the loop is never emitted, and the accumulators stay at their
+   * initial zeros. That failure compiles cleanly, logs nothing, and renders
+   * a vacuum: the limb still *looked* atmospheric from orbit because the
+   * surface material's aerial veil was doing all the work, and the first
+   * unmistakable symptom was a black noon sky from the ground.
    */
-  const tClosest = clamp(closest, near, far)
-  const closePoint = eye.add(rayDirection.mul(tClosest))
-  const thickness = max(outerRadius.sub(innerRadius), 1e-6)
-  const altitude = saturate(length(closePoint).sub(innerRadius).div(thickness))
-  // The `(1 − a)` factor takes the density to exactly zero at the ceiling.
-  // The exponential alone leaves e⁻⁴·⁵ ≈ 1% there, which on the HDR canvas
-  // renders the shell's outer edge as a visible cut — a hard hairline ring
-  // around every giant, where a real limb simply runs out of air.
-  const density = exp(altitude.mul(-4.5)).mul(oneMinus(altitude))
+  const sky = Fn(() => {
+    const axis = normalize(spinAxis)
+    const stretchGain = float(1)
+      .div(max(flattening, float(1e-3)))
+      .sub(1)
+    // Both relative to the centre already, so `centre` drops out below.
+    const eyeRelative = cameraPosition.sub(centre)
+    const eye = eyeRelative.add(
+      axis.mul(dot(eyeRelative, axis).mul(stretchGain)),
+    )
+    const wallRelative = positionWorld.sub(centre)
+    const wall = wallRelative.add(
+      axis.mul(dot(wallRelative, axis).mul(stretchGain)),
+    )
 
-  // Normalised against the deepest path the shell admits — grazing it at the
-  // planet's edge — so a moon's wisp and a gas giant's envelope read the same,
-  // and the render-space scale drops out. It has to: distance compression
-  // rescales both radii together every time the LOD tier changes.
-  const deepest = max(
-    sqrt(
-      max(outerRadius.mul(outerRadius).sub(innerRadius.mul(innerRadius)), 0),
-    ).mul(2),
-    1e-6,
-  )
-  // The 6 calibrates Earth: a grazing ray through sea-level air is opaque.
-  // Everything the colour section does — whitening included — keys off this,
-  // so a thin atmosphere stays translucent *and* stays its own colour: Mars's
-  // butterscotch never has enough depth to scatter its way to white.
-  const optical = airDepth
-    .div(deepest)
-    .mul(density)
-    .mul(opticalThickness.mul(6))
+    /*
+     * Planet-radius units from here down: the ground is 1, the shell top is
+     * `top`. This is the one scale that survives distance compression — both
+     * render radii are rescaled together whenever the LOD tier moves — and it
+     * is the unit the tables were baked in, so a LUT coordinate is just an
+     * altitude fraction and a cosine.
+     */
+    const eyeUnits = eye.div(innerRadius)
+    const wallUnits = wall.div(innerRadius)
+    const top = outerRadius.div(innerRadius)
+    const shellHeight = max(top.sub(1), 1e-6)
 
-  // Beer–Lambert, so the limb saturates smoothly rather than clipping to a hard
-  // edge wherever the path runs long.
-  const alpha = oneMinus(exp(optical.negate()))
+    const rayDirection = normalize(wallUnits.sub(eyeUnits))
+    const toCentre = eyeUnits.negate()
 
-  // Day/night from the middle of the air actually crossed, not from the fragment.
-  // The fragment is on the far wall of the shell, a planet-diameter away from
-  // the air being shaded, and using it puts the terminator on the wrong limb.
-  // The midpoint degrades correctly at both ends: from orbit it is the graze
-  // point, from the ground it is a few kilometres over the player's head.
-  const sample = eye.add(rayDirection.mul(near.add(far).mul(0.5)))
-  // Signed, not saturated: the twilight ring below needs to know how far past
-  // the terminator the air is, and saturating collapsed the whole night side
-  // onto one value. The sample is in stretched space and the sun direction is
-  // not; the terminator this misplaces by is bounded by the flattening.
-  const sunlit = dot(normalize(sample), normalize(sunDirection))
-  // A wide terminator rather than a step: air scatters around the edge, which is
-  // the entire reason twilight exists.
-  const daylight = smoothstep(-0.35, 0.25, sunlit)
+    // Closest approach along the ray, and the impact parameter squared.
+    // `|d × c|` with d a unit vector gives the perpendicular distance directly
+    // and, unlike solving the quadratic, cannot go imaginary on a grazing ray
+    // — which is every ray that matters here.
+    const closest = dot(toCentre, rayDirection)
+    const impactSquared = max(length(cross(rayDirection, toCentre)).pow(2), 0)
 
-  /*
-   * Colour from optical depth, standing in for the LUT with three real
-   * behaviours instead of one asserted blend:
-   *
-   * **Thin air is the zenith colour** — single scattering, which for a clear
-   * atmosphere is Rayleigh blue. **Thick air whitens** — multiple scattering
-   * desaturates, which is why the base of Earth's limb is white-blue in every
-   * photograph and the gradient above it runs white → blue → black. **Dense
-   * air near the terminator warms to the limb colour** — the sunset ring,
-   * confined to where the sun is low (|sunlit| small) *and* the path is thick,
-   * which stacks the ISS dusk gradient in its published order: orange at the
-   * bottom, white above it, blue on top, night above that.
-   */
-  const whiteness = oneMinus(exp(optical.mul(-0.7)))
-  // 0.55, not more: the whitening must brighten the authored colour, not
-  // replace it. At 0.75 Saturn's cream limb went chalk white.
-  const bright = mix(zenithColour, vec3(1), whiteness.mul(0.55))
-  const twilight = oneMinus(smoothstep(0.0, 0.4, abs(sunlit)))
-  // The sunset hugs the sun's azimuth: away from it the twilight ring cools
-  // back through white to blue, which is how the ISS dusk photographs run —
-  // amber under the sun, steel blue at the frame's edges.
-  const sunward = pow(saturate(dot(rayDirection, normalize(sunDirection))), 6)
-    .mul(0.75)
-    .add(0.25)
-  const scattered = mix(
-    bright,
-    limbColour,
-    twilight.mul(whiteness).mul(sunward).mul(0.95),
-  )
+    const halfOuter = sqrt(max(top.mul(top).sub(impactSquared), 0))
+    const halfInner = sqrt(max(float(1).sub(impactSquared), 0))
 
-  /*
-   * Forward scattering: the glow around the star seen through the air.
-   *
-   * Aerosols scatter strongly ahead, so air between the camera and the star
-   * brightens far beyond what it sends sideways — the reason a crescent's
-   * atmosphere ring blooms around the sun's position and a sunset limb glows
-   * where the sun sits behind it. A narrow phase-function stand-in, weighted
-   * to the twilight band so the day side does not wear a permanent hot spot.
-   */
-  // Two lobes: a tight one for the glow around the star itself, and a wide
-  // shoulder — real aerosol phase functions keep scattering strongly out to
-  // tens of degrees — which is what stretches the ring around a crescent's
-  // dark limb past the lit tips.
-  const cosSun = saturate(dot(rayDirection, normalize(sunDirection)))
-  const toward = pow(cosSun, 32).add(pow(cosSun, 5).mul(0.35))
-  const glow = limbColour
-    .mul(toward)
-    .mul(whiteness)
-    .mul(twilight.mul(0.75).add(0.25))
+    // Clamped at 0 so a camera already inside the air starts counting from
+    // itself.
+    const near = max(closest.sub(halfOuter), 0)
+    // 1 when the ray passes inside the planet **ahead of the camera** — then
+    // the air stops at the ground instead of continuing to the far wall. The
+    // second step is load-bearing: without it, looking up from the ground
+    // counts as "meets ground" because the backwards extension of the ray
+    // does, and the zenith sky computes zero air.
+    const meetsGround = step(impactSquared, 1).mul(step(float(0), closest))
+    const far = mix(
+      closest.add(halfOuter),
+      max(closest.sub(halfInner), near),
+      meetsGround,
+    )
+
+    /*
+     * The march. Twelve midpoint samples between where the ray enters the air
+     * and where it leaves it (or lands). Per sample: exponential Rayleigh and
+     * aerosol densities — with the `(1 − h)` factor that takes both to exactly
+     * zero at the ceiling, kept identical to the bake so the tables and the
+     * march agree about where the air ends — view transmittance accumulated
+     * in-loop, sun transmittance and Ψ read from the tables at (altitude,
+     * sun-cosine).
+     */
+    const sun = normalize(sunDirection)
+    const nu = dot(rayDirection, sun)
+    const phaseRayleigh = float(3 / (16 * Math.PI)).mul(nu.mul(nu).add(1))
+    const phaseMie = float((1 - MIE_G * MIE_G) / (4 * Math.PI)).div(
+      pow(max(float(1 + MIE_G * MIE_G).sub(nu.mul(2 * MIE_G)), 1e-4), 1.5),
+    )
+
+    const stepLength = max(far.sub(near), 0).div(ATMOSPHERE_SAMPLES)
+    const inscatter = vec3(0).toVar()
+    const opticalDepth = vec3(0).toVar()
+
+    Loop(ATMOSPHERE_SAMPLES, ({ i }) => {
+      const t = near.add(float(i).add(0.5).mul(stepLength))
+      const point = eyeUnits.add(rayDirection.mul(t))
+      const radius = length(point)
+      const height = max(radius.sub(1), 0)
+      const height01 = saturate(height.div(shellHeight))
+      const fade = oneMinus(height01)
+      const densityR = exp(height.div(hRayleigh).negate()).mul(fade)
+      const densityM = exp(height.div(hMie).negate()).mul(fade)
+
+      const extinction = betaRayleigh
+        .mul(densityR)
+        .add(mieExtinction.mul(densityM))
+      const stepTau = extinction.mul(stepLength)
+      // Transmittance to the middle of this step: the half keeps the midpoint
+      // rule honest about its own sample's extinction.
+      const viewT = exp(opticalDepth.add(stepTau.mul(0.5)).negate())
+
+      const muSun = dot(point, sun).div(max(radius, 1e-5))
+      const lutUv = vec2(muSun.add(1).mul(0.5), height01)
+      const sunT = transmittanceLut.sample(lutUv).rgb
+      const psi = multiScatterLut.sample(lutUv).rgb
+
+      const single = betaRayleigh
+        .mul(densityR)
+        .mul(phaseRayleigh)
+        .add(mieScatter.mul(densityM).mul(phaseMie))
+        .mul(sunT)
+      const multiple = psi.mul(
+        betaRayleigh.mul(densityR).add(mieScatter.mul(densityM)),
+      )
+      inscatter.addAssign(viewT.mul(single.add(multiple)).mul(stepLength))
+      opticalDepth.addAssign(stepTau)
+    })
+
+    const radiance = inscatter.mul(sunColour).mul(ATMOSPHERE_GAIN)
+    const survives = exp(opticalDepth.negate())
+    const extinguished = oneMinus(
+      survives.x.add(survives.y).add(survives.z).div(3),
+    )
+    return vec4(radiance, extinguished)
+  })()
 
   const material = new MeshBasicNodeMaterial()
-  material.colorNode = scattered
-    .mul(mix(0.03, 1, daylight))
-    .add(glow.mul(mix(0.1, 1, daylight)))
-  material.opacityNode = alpha.mul(mix(0.12, 1, daylight))
+  material.colorNode = sky.rgb
+  material.opacityNode = sky.a
   material.transparent = true
   material.depthWrite = false
   material.side = BackSide
+  /*
+   * Premultiplied compositing: out = L + T̄·background. The colour node is
+   * radiance, not radiance-divided-by-alpha, so the blend must add it whole
+   * and use alpha only to extinguish what is behind — which is what
+   * (One, OneMinusSrcAlpha) is. Alpha writes are (Zero, One) for the same
+   * reason the starfield's are: additive passes stamping alpha into the
+   * extended-range canvas is the compositor artifact `flare.ts` documents.
+   */
+  material.blending = CustomBlending
+  material.blendEquation = AddEquation
+  material.blendSrc = OneFactor
+  material.blendDst = OneMinusSrcAlphaFactor
+  material.blendEquationAlpha = AddEquation
+  material.blendSrcAlpha = ZeroFactor
+  material.blendDstAlpha = OneFactor
+
   return {
     material,
     centre,
     outerRadius,
     innerRadius,
     sunDirection,
-    zenithColour,
-    limbColour,
-    opticalThickness,
+    sunColour,
     spinAxis,
     flattening,
+    setScattering(recipe, transmittance, multiScatter) {
+      betaRayleigh.value.set(...recipe.betaRayleigh)
+      mieScatter.value.set(...recipe.mieScatter)
+      mieExtinction.value = recipe.mieExtinction
+      hRayleigh.value = recipe.hRayleigh
+      hMie.value = recipe.hMie
+      transmittanceLut.value = transmittance
+      multiScatterLut.value = multiScatter
+    },
   }
 }
 

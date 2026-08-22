@@ -1,3 +1,4 @@
+export * from './atmosphere.ts'
 export * from './camera.ts'
 export * from './lod.ts'
 export * from './placement.ts'
