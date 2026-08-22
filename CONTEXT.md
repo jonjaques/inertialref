@@ -1154,10 +1154,978 @@ first moment a re-measure provably cannot be too early. `setTimeout`, not
 background load must still size its canvas for the frame that draws when
 focused.
 
+## The cinematic director, and a title sequence as a test target (21 Aug 2026)
+
+The engine can now play scripted scenes over the live world — ADR-0010 — and
+the proving scene is a shot-for-shot study of the 1987 television title
+sequence, chosen because a frame-analysed reference exists for it: 2742 frames
+at 24000/1001 fps with measured shot boundaries, title fade windows, an
+alternating 65/67-frame credit grid, and camera-hold constraints, all of which
+are now asserted by tests. `ir.play('tng-intro')`, the dock's cutscene section,
+Esc to skip; a transport bar carries play/pause/restart and a frame scrubber,
+and `ir.seekCutscene(frame)` with the clock paused gives frame-exact stills for
+the numeric verification loop. The boot path is untouched — the whole system is
+one null check when idle.
+
+Shape: pure cinematic arithmetic in `packages/rendering/cinematic.ts` (easings,
+fade envelopes, the 4/7/4 warp-flash shape, Catmull-Rom routes over
+`UniverseVector` beats, one- and two-target composition solvers), the director
+and script in `packages/devtools` (`prepare(world)` resolves the stage against
+live ephemerides once; `sample(frame)` is pure), the application in the host
+(`buildScene` grew an eye override so LOD, star brightness and flare occlusion
+follow the cinematic camera; `CameraRig`/`ShipModel`/warp effects/DOM overlay
+prefer `engine.cinematic` when non-null). Stopping restores the player's
+captured state through the same verbs a save-load uses.
+
+What the recreation taught, at cost:
+
+- **Relative choreography must stay relative.** The hero ship was first
+  authored as absolute world beats anchored to the camera's position at each
+  beat's own frame; the cruise camera covers ~1000 km per frame, the two
+  splines ran through beats tens of thousands of kilometres apart, and they
+  diverged mid-segment by tens of kilometres — the flyby rendered as a dot on
+  the wrong side of the sky. Scene A's ship is now offset beats, interpolated
+  in offset space and added to the camera at sample time.
+- **Never track a hull crossing metres from the lens.** Per-frame look-at
+  through the overhead pass whipped the camera through the vertical and
+  rubber-banded after the receding ship. The pass is authored aim beats that
+  pitch over the top once and freeze in a held stern view — and the ship then
+  recedes along the held view's own axis, so the hold frames it by
+  construction.
+- **Light is staging.** The cruise runs down-sun so the approaching hull is
+  lit full-face and the warp-out is backlit glare; the credits stage looks
+  ~130° off the sun line so the fly-bys catch front light while the sun stays
+  outside both the frame and the flare's edge fade. The first cruise direction
+  was arbitrary and rendered the entire flyby as black-on-black.
+- **The whiteout is a scene change, honestly.** Both the f240 match cut and
+  the first warp flash swap stage under full cover — the same trick the
+  reference plays.
+- **The transit obeys the ephemeris.** The eclipse planet's moons are
+  auditioned by how close their orbit lies to the camera's standoff sphere
+  (Deimos at 6.9 Mars radii beats Phobos at 2.8, whose detour ballooned the
+  eclipsed disc), each candidate's detour is checked for clearance against the
+  planet, and when nothing fits the edit degrades to a plain eclipse.
+
+The blank-boot bug also finally fell. Measured: a wedged boot submits the full
+scene — 16 draw calls, 800k triangles, every frame — while the canvas never
+presents, so `renderer.info` cannot detect it; the watchdog
+(`render/presentationWatchdog.ts`) samples the canvas bitmap itself
+(native-resolution strips, so a lone star still counts as lit) and climbs a
+ladder: replay the measurement, then a _real_ one-pixel layout nudge (a
+synthetic `resize` event never fires a ResizeObserver — which is why the old
+fix lost to a human dragging the window edge) plus a swap-chain reset, and
+finally — the only cure for the deep state, verified live against it — a
+canvas remount via an epoch in `canvasKey`, at most once per load. Checks run
+only while the document is visible; an occluded window legitimately never
+presents.
+
+The TNG fonts: `TNG_Credits.ttf` is a 1994 Macintosh TrueType with only a
+(1,0) MacRoman cmap and no OS/2 table, which Chrome's sanitizer maps to
+nothing; the build's WOFF2 gets a synthesized (3,1) Unicode cmap and OS/2
+(fonttools; script in the session scratchpad, output committed). The reference
+audio is a local MP3 the overlay discovers at `/tng-intro.mp3` and syncs to
+the playhead within 80 ms; the path is gitignored because the track is
+copyrighted music and must never enter the repository — publishing a render of
+the full sequence would raise the same questions, which is why the demo stays
+a demo.
+
+## The title sequence, re-cut against its own frames (21 Aug 2026)
+
+The first pass at `tng-intro` was written against the reference analysis's
+_prose_. This one was written against its 2742 frames, and almost everything
+the prose said about motion turned out to be a paraphrase of something else.
+Every number below was measured — hull bounding boxes tracked frame by frame,
+title masks row-banded, the two logotype words tracked through their throw —
+and the ones that matter are now assertions in `cutscene.test.ts`.
+
+**It is an edit, not a camera move.** The analysis calls f240–f1084 "one
+unbroken 35 s camera move"; its own frames disagree. Jupiter is absent at f370
+and fills the right half at f382. Saturn is gone by f530 and the screen is
+empty until f691. Those are cuts, hidden by an empty starfield, and authoring
+them as one spline is what produced a camera crossing five astronomical units
+between beats and aiming at whatever it was between. `tngIntro.ts` is now a
+shot list — eight shots, each with its own camera placed against its own
+subject — and `CUTS` is the single table both the script and its tests read, so
+a boundary cannot drift out of agreement with the assertion guarding it. Three
+of the eight cameras do not move at all, which is not a simplification: a
+starfield sits on the star shell, so camera _translation_ moves nothing in
+frame, and once the hull is authored camera-relative there is nothing left for
+the camera to do.
+
+**Choreography is authored in the frame.** Ship beats are
+`(frame, screen x, screen y, range)` through `screenOffset`, because that is
+what a tracked bounding box gives you — a centre and a width, and a width _is_
+a range once the hull's length and the lens are known. Beats in this language
+can be read straight off the analysis and diffed against it; the previous ones
+were metres and resembled nothing in it. Range interpolates in **log** space:
+an approach list spans four decades, and a Catmull-Rom over those knots in
+metres overshoots through the camera and out the other side, which is why the
+hull vanished for twenty frames before each warp-out.
+
+What the frames actually show, against what the analysis had said:
+
+- The hull does **not** approach as a dot dead ahead. It enters at the
+  bottom-left _corner_ at f688, climbs across the frame, is barely closing
+  between f760 and f792 (both measure 0.40 of the frame wide), then rushes in,
+  fills the frame at f976 and banks away up-right without ever passing behind
+  the lens.
+- The main title is **not** a fade with a settle. Two words are thrown in from
+  opposite sides at 2.25× size and decelerate onto their marks over 27 frames.
+  The curve is a fit, not a taste: remaining offsets of 0.271 / 0.181 / 0.107
+  at f1140 / f1144 / f1148 give p = 1.93, and that exponent then predicts f1137
+  to a thousandth on all six channels — two positions and a scale, per word.
+  What the analysis recorded as a "small settle over f1154–1162" is the tail of
+  that throw.
+- A **lens spike** bridges into both cards: a vertical anamorphic spindle,
+  24 frames, rising over 11 and dying over 13, anchored where the ship went
+  rather than on the frame's centre. It is new vocabulary
+  (`CinematicEffects.spark`) and it is what the title emerges from.
+- Every credit is centred at x ≈ 0.50. The per-credit centroids in the old
+  analysis drifted left only because they were pixel-weighted and the label
+  line pulled them. A label sits 0.1056 of the frame height above its name and
+  is flush _left_ with it, so it now rides the name's own element — the name's
+  width is a property of the typeface, not a number a script can supply.
+- Wipes one and three are the **same animation** 247 frames apart, to three
+  decimal places; the middle one is its mirror in x. One function, an offset
+  and a flag.
+- Neither warp flash is a whiteout. f1090, the brightest frame in the piece,
+  means 95 of 255 — a mid-blue field with a hot core. Driven at the old 3.5 the
+  wash cleared the tone curve's shoulder on every channel and fifteen frames
+  rendered as a white rectangle.
+
+Two renderer capabilities came out of it, both useful outside a cutscene. The
+flare now draws a **corona** when a body occults the star: visibility is zero
+at totality, which is exactly when the ring is the entire shot, so gating the
+whole group on it left a total eclipse as an unlit disc on an empty starfield.
+And the cinematic camera is a **cleaner lens** — `artifacts` scales the ghost
+chain to 0.05 while a script is playing, because the reference's optics put a
+warm ball beside a planet and nothing else, and three grey iris ghosts marching
+across an empty half-frame read as breakage.
+
+Lessons with teeth:
+
+- **Ask the font.** The overlay divided measured cap heights by guessed
+  cap-height-to-em ratios (0.72, 0.7). `measureText().actualBoundingBoxAscent`
+  says 0.80 and 0.595, which had every credit 19% too large and the logotype
+  15% too small — and once the sizes were right, the tracking that had been
+  compensating for them fell out at zero.
+- **A light's screen position is a product.** With `lookAlong` levelling
+  against the pole, the star lands at `−dot(toStar, forward)·dot(pole, forward)`
+  for anything near the ecliptic, so _both_ terms must carry the right sign.
+  The first cruise had the second one negative, put the key 32° below the axis,
+  and lit the hull's belly through a four-hundred-frame approach in which the
+  reference shows nothing but a brightly lit dorsal.
+- **A shot lookup needs a fallback that is near, not last.** Frames are
+  fractional, so one lands in the sliver between a shot's `to` and the next
+  `from`; falling back to the last shot in the list teleported the camera five
+  AU for a single frame.
+- **The reference is not physically consistent, and that is allowed.** Its
+  opening has broadly lit terrain _and_ the sun in frame beside the planet;
+  those contradict — the star's measured screen position puts it 72° from the
+  disc's centre, which for a camera 1.2 radii up means the whole visible cap
+  is past the terminator. Its key light and its sun sprite were placed
+  independently. Staged against a real ephemeris you get one or the other, so
+  the phase ramps instead: 78° at f125 where the cap is lit and the star is
+  behind the lens, opening to 164° by f239 where the disc is the thin crescent
+  the match cut needs and the star has swung into frame beside it.
+
+## The verification loop, closed (22 Aug 2026)
+
+The reference analysis was built to be diffed against, and now it is. Three
+scripts in `~/Developer/tng-inertial/scripts/` close the loop:
+`capture_render.mjs` drives this engine over the Chrome DevTools Protocol and
+dumps 2742 frames at 1920×1080 in about five minutes, `compare_render.py`
+measures the same three channels in both dumps and ranks the disagreements, and
+`compare_sheets.py` stacks reference over render for the ones that need eyes.
+
+Two things about the capture are worth knowing before anyone rebuilds it.
+**A WebGPU canvas reads back blank**: `drawImage`/`toDataURL` from page script
+returns mean luminance 0.0 on a frame that visibly shows Saturn, because the
+swap-chain texture is invalidated at the end of the task that drew it.
+`Page.captureScreenshot` takes the composited image instead — which also picks
+up the DOM title overlay, so a canvas dump could never have been run through
+`detect_titles.py` anyway. And **a capture must boot the page itself**: a tab
+that has survived a session of hot reloads has a dead renderer, draws its HUD
+happily, and waits forever for an `engine.gl` that is not coming back.
+
+What it found, in one pass, that eyes had not:
+
+- **Every credit was exactly four frames late** — nine of them, plus five on
+  the Roddenberry card. The cause is that the reference's `firstVisibleFrame`
+  is a _threshold crossing_, not a fade start: text at RGB (64,138,230) only
+  clears the analysis's B≥195 floor at 85% opacity. `fadeEnvelope` now leads
+  the measured frame by `THRESHOLD_FRACTION`, and the lag is +1 across the
+  board. On the **rise only** — the same capture showed the trailing edges
+  already on time, and applying it symmetrically left the logotype at 70%
+  opacity nine frames after the reference had lost it.
+- **The flashes were twice as bright as measured**, again: mean 176–186 across
+  the peak against the reference's 81–100, after an earlier correction had
+  already taken them off white. The mean is the number that settles this, and
+  it is cheap to compute and impossible to eyeball.
+- **The close pass was running at 6–14 mean luminance against 40–59**, and the
+  reason was not the framing. The reference lights the hull's dorsal through
+  the approach and its _ventral_ through the close pass; one directional light
+  cannot do both. The cruise is now two shots with the key swung under the ship
+  at f938 — the first frame where the hull is wider than the lens, so the cut
+  is behind a wall of spaceship. Cruise exposure error fell from 11.0 to 4.9
+  and its width error halved.
+- **The nacelle glows were the brightest objects in the frame**, big enough to
+  carry a mean of 86 while the hull under them sat at 11. Capping them at a
+  fifth of that size revealed how dark the hull actually was, which is how the
+  lighting problem got found at all.
+- **The Venus cutaway had to go.** It stood in for the reference's f254–259
+  foreground pass, which cannot be staged on Mars's anti-sun line; the capture
+  measured it at mean 97 against the reference's 7–19 — the reference's body is
+  a dark limb, not a lit cloud deck — and a cutaway loses the eclipse pair that
+  the reference keeps on screen throughout. Seven frames of missing subject
+  reads as a glitch, not a beat.
+
+The titles and credits, meanwhile, came back at Δcx 0.008–0.021 and Δcy
+0.002–0.021 of the frame, first try. Measuring the layout against the font's
+own metrics had already done that work; the loop confirmed it rather than
+correcting it, which is what a regression check is supposed to feel like.
+
+## The overlay, hardened (22 Aug 2026)
+
+The dock was built to be read, not to be survived, and a pass over it for the
+inputs and failures a real session produces found one route to a black screen
+that no watchdog can see, two silent-failure paths, and two arithmetic bugs.
+`pnpm check` is green: 442 tests, 35 files.
+
+### A HUD throw takes the canvas with it
+
+React unmounts the whole tree when a render throws, and in this app the tree
+contains the `<Canvas>`. So a body with no name, a `HarnessStatus` shaped like
+last week's, or a series divided by its own zero length does not produce a
+broken row — it produces a black screen with a healthy console, which is
+exactly the symptom `render/presentationWatchdog.ts` exists to recover from,
+arriving by a route that watchdog cannot observe. Verified by injecting a throw
+into `harness.shots()`: before, the scene went; after, the navigate panel is
+replaced and the tick keeps advancing behind it.
+
+`hud/ErrorBoundary.tsx` is five small boundaries rather than one — per dock tab
+(keyed on the tab, so leaving and returning **is** the reset), and one each
+around the dock, the flight strip and the cutscene layer. One boundary around
+the whole layer would take the dock down with whichever piece failed, and the
+dock is how the simulation is driven. The fallback takes a `className` applied
+to itself only, because the chrome it wraps positions _itself_ and a bare
+fallback lands at the origin of a `pointer-events-none` layer with an
+unclickable retry.
+
+**Error boundaries do not work under `renderToStaticMarkup`.** React's string
+renderer never calls `getDerivedStateFromError`, so `hud.test.ts` can assert the
+boundary's error _normalisation_ and nothing else; recovery is a browser check.
+The same test file also cannot render the perf tab, because `fakeEngine` is a
+harness in a trench coat and `PerfPanel` reads `engine.metrics`.
+
+### Before the first commit there was nothing on screen
+
+`main.tsx` awaits the packed catalogue — a generation input, so the world cannot
+be built without it — and until that resolved `#root` was empty. On a slow link,
+or behind a service worker holding a bundle that no longer parses, that is an
+indefinitely black page indistinguishable from a broken one, shown to the
+audience that forms its impression in about a minute.
+
+`index.html` now carries a boot line at the flight strip's own anchor, which
+**React clears on its first commit** — the disappearance is the handoff, and the
+10 s stall notice keys off exactly that (`document.getElementById('boot')`
+returning null means the app is up). Its recovery unregisters service workers
+before reloading, because a plain reload served by the same worker returns the
+same broken bundle. `main.tsx` adds React 19's `onUncaughtError` plus a
+DOM-built fatal panel appended to `document.body`, never to `#root`: after an
+uncaught error React has unmounted the tree and still owns that container.
+
+### Four things that must not come back
+
+- **The navigation panel's error lived inside a collapsible section.** Every
+  verb in `NavPanel` reported through one `error` state that was rendered inside
+  `Section id="nav.go"` — whose open state is _persisted_. With that section
+  collapsed, a failed `land`, `burn`, `generate` or scenario reported into a
+  closed box and the button read as having done nothing. The banner is now above
+  every section and names which verb failed.
+- **"surveying…" was also the empty state.** Fly past the 8 ly survey radius and
+  the destination list said it was still working, forever. Only one of those two
+  answers has a next step, and it was the one being hidden.
+- **The time-warp buttons were an index step over `WARP_STEPS`.** That only
+  behaves when the clock's time scale is already one of them, and the clock is
+  not only driven from the dock — `ir.warp(3)` from the console, or a save from
+  when the ladder had different rungs, puts it between detents or past the top.
+  From a console-set 200,000×, "slower" answered 1× and "faster" answered 5×.
+  `hud/warp.ts` searches instead of indexing, and `warp.test.ts` checks that the
+  result is always a rung and always moves the way it was asked to.
+- **`usePersistentState` guarded `JSON.parse` and nothing else**, which is the
+  failure that was never going to happen. `localStorage` outlives the code that
+  wrote it: a `dock.tab` of `"nav"` from before the five tab names existed parses
+  cleanly, matches no tab, and renders an empty dock with no active tab and no
+  way back that is not devtools. A `camera.fov` of `NaN` or `5000` reaches the
+  projection matrix. Every caller now passes an `Accept<T>` predicate and an
+  unrecognised value is treated exactly like an absent one.
+
+### The focus contract, which is subtler than it looks
+
+Every control called `event.currentTarget.blur()` for a real reason: flight
+input is a window-level keydown handler, so a clicked button that keeps focus
+swallows Space — the pause key — and turns it into a second click on itself.
+Blurring unconditionally solved that by making the dock untraversable; a
+keyboard user who activated anything was returned to the top of the document.
+
+`hud/focus.ts` blurs only when `event.detail > 0`. A click synthesised from
+Enter or Space on a focused button reports `detail === 0` in every engine, so a
+pointer keeps the old behaviour exactly and a keyboard keeps its place — and a
+focused button swallowing Space is correct there, because Space is what
+activated it. `useShipControls` gained the matching half: `Tab` declines when
+`event.target.closest('.hud-layer')` is non-null, so Tab still collapses the
+dock from the canvas and moves between controls once you are inside it. Same
+shape as `isTyping`, and for the same reason.
+
+All four paths were checked in Chrome: mouse click → focus returns to `BODY`;
+Space after one still pauses; Enter keeps focus on the control; Tab from the
+canvas still collapses the dock. **Do not "simplify" this back to an
+unconditional blur.**
+
+### Smaller, but real
+
+Unbounded joins (`loadedSystems`, `terrainCandidates`) are capped with a stated
+`+N more` rather than silently cut — a list quietly truncated at eight reads as
+a list of eight. Every truncating row, target row and header summary carries its
+value as a `title`, because a value you can neither read nor hover is a value the
+panel is not actually showing. Scenario buttons and `save`/`load` take busy
+guards; ten impatient clicks were ten concurrent scenarios teleporting the same
+ship. `flash()` held one timer instead of orphaning one per call, which is why
+notices raised in bursts used to vanish early. Selection, caret and scrollbars
+are themed from the palette — the dock scrolls internally and on any platform
+without overlay scrollbars that gutter was the one bright rectangle in a
+dark-adapted interface.
+
+### What the colorize pass found before it started
+
+Not built — recorded so the archaeology is not repeated. `SystemStub`
+(`packages/universe/src/galaxy.ts`) already carries `temperature`, a computed
+blackbody `colour`, `catalogued` (which is provenance) and the confirmed
+`planets`. **`TravelTarget` in `packages/devtools/src/travel.ts` carries none of
+it** — the destination list gets a pre-formatted `detail` string and a boolean.
+
+That matters because PRODUCT.md commits that "every body states whether it is
+`observed` or `projected`" and the built list does not, and because the row you
+scan for is the star, whose real colour the canvas is already painting from the
+same measurement. The tension is DESIGN.md's **One Accent Rule**: the proposal
+was a second Named Rule beside it — chrome stays graphite plus one blue plus
+four status hues, and _data_ may carry its own measured colour, scoped to the
+star glyph only so the Scarcity Rule holds at roughly six rows. It needs a
+DESIGN.md amendment and a `TravelTarget` extension, and PRODUCT.md's "no
+information by colour alone" means provenance needs a glyph as well as a grade.
+
+Separately, DESIGN.md already names the perf chart's budget rule at `#f87171`
+(red-400) as drift that should converge on rose rather than spread, and the
+plots encode "over budget" by stroke colour alone.
+
+### One thing the tooling cannot do here
+
+`impeccable`'s mechanical detector runs **degraded** on this machine —
+`htmlparser2`, `css-select`, `css-tree` and `domutils` are unavailable, so it
+falls back to regex, does not evaluate custom properties or computed contrast,
+and its empty result is an undercount rather than a clean bill.
+
+## The UI foundations (22 Aug 2026)
+
+Four libraries landed in `apps/game` at once, because they are one decision:
+the dock is scaffolding, `docs/design/ux.md` specifies a cockpit and a set of
+overlay pages, and every one of those needs the same four things. Nothing below
+`apps/*` gained a dependency — `pnpm graph` still reports zero third-party
+dependencies across the twelve packages, and that is the invariant that matters.
+
+| Added                                    | For                                                             |
+| ---------------------------------------- | --------------------------------------------------------------- |
+| `lucide-react`                           | icons, tree-shaken per import                                   |
+| `radix-ui` + `cva` + `clsx` + `tw-merge` | shadcn/ui's ten base components, vendored into `components/ui/` |
+| `motion`                                 | enter/exit animation for anything conditionally rendered        |
+| `zustand`                                | the engine-to-React subscription seam                           |
+| `react-router`                           | overlay pages on real URLs                                      |
+
+### The store is a snapshot publisher, not a second source of truth
+
+`state/engineStore.ts` holds the most recent `HarnessStatus` and nothing else.
+The rule it is written against is unchanged — canonical state never lives in
+React — and a store that held the world would be that violation wearing a
+library. What it changes is who does the reading: `App` used to hold the whole
+status in `useState` and pass it down, so every panel re-rendered eight times a
+second whether or not anything it displayed had moved. `useStore` is
+`useSyncExternalStore` with a selector, so a panel can subscribe to the tick and
+wake for the tick.
+
+Two things worth writing down:
+
+- **`harness.status()` allocates a fresh object graph every sample.** So
+  `Object.is` on the root is always false and a consumer that selects the whole
+  thing gains nothing; the win is entirely in narrow selectors, and `useShallow`
+  is the answer for a selector that returns two fields. `engineStore.test.ts`
+  pins this property, because if a future sampler starts caching, the advice in
+  `useEngine`'s own docstring silently becomes wrong.
+- **It makes React Compiler safe for these reads.** The compiler assumes what a
+  component derives is a pure function of its inputs, which is false for a
+  component reading mutable engine fields — that is why `PerfPanel` carries
+  `'use no memo'`. A snapshot read through a selector satisfies the assumption.
+  This is an argument for pointing panels at the store, not licence to point
+  them at live engine fields.
+
+The sampler takes a **port** (`EngineSource`), not the engine, which is why its
+test builds no world, no DOM and no renderer.
+
+### `@/` is the one non-relative import, and it is not a style choice
+
+shadcn/ui's registry writes `@/lib/utils` and `@/components/ui/*` into every
+component `pnpm dlx shadcn add` generates. Without the alias, each added
+component is a file to hand-edit before it compiles, and re-adding one to pick
+up an upstream fix reverts the edit. It is configured in **three** files that
+cannot check each other — `apps/game/vite.config.ts`, `apps/game/tsconfig.json`
+and the root `vitest.config.ts` — which is why `pages/pages.test.ts` renders a
+page through it in Node: a disagreement between the three is otherwise a black
+overlay in the browser and nothing else notices. `tsconfig` carries `paths` and
+no `baseUrl`; TypeScript 6 deprecates `baseUrl` outright and errors on it.
+
+### The design tokens are the instrument's, not the generator's
+
+`shadcn init` would have written a light and a dark palette in its own neutral
+hues. Those are not this interface. `index.css` keeps the registry's vocabulary
+— `bg-background`, `border-border`, `ring-ring` — and points every token at the
+slate/sky values already in `hud/`, each line naming the Tailwind step it is.
+One palette; `class="dark"` on `<html>` with a `@custom-variant` keyed to it, so
+the `dark:` utilities inside registry components still resolve without the OS
+preference deciding anything. `--radius` is 0.375rem so that shadcn's
+`rounded-md` lands on the 0.25rem `rounded` every existing control wears.
+
+`tw-animate-css` is imported for a reason worth knowing: the `animate-in` /
+`fade-in-0` / `zoom-in-95` utilities every shadcn overlay references are not
+Tailwind v4 core. Without it those components mount with no transition and
+nothing errors.
+
+### Pages render inside the HUD layer, never above the canvas
+
+`<BrowserRouter>` wraps the tree, but the route table is mounted inside
+`.hud-layer`, which is a **sibling** of `<Canvas>`. A router that owned the view
+would remount the canvas on every navigation and rebuild the `WebGPURenderer`
+with it. Pages therefore also inherit `dynamic-range-limit: standard` for free.
+
+`useTransitions={false}` on the router is deliberate and documented upstream:
+React Router v8 wraps state updates in `startTransition` by default and says to
+opt out for applications built on `useSyncExternalStore`, which this one now is.
+
+The offline path already worked without a change — `public/sw.js` falls a failed
+navigation back to the cached `/index.html`, and the Worker's assets config is
+already `not_found_handling: "single-page-application"`, so `/settings` typed
+cold resolves both online and off.
+
+### `/settings` is a real page, not a demo
+
+It renders the dock's own `GraphicsPanel` and `CameraPanel` — the same
+components, the same props, the same engine fields. `docs/design/ux.md` puts
+settings in an overlay over a running simulation rather than behind a pause, and
+says there is no pause menu at all; the eventual move is out of the dock and
+into this page. Both render today and neither is a copy.
+
+The scrim was measured in front of Earth, not picked. `bg-slate-950/70` with a
+`backdrop-blur-sm` obliterated the planet, which makes the page's own subtitle a
+claim the frame contradicts. Dropping to 55% with no blur went too far the other
+way, and the reason is the interesting half: **on the extended-range path the
+canvas carries a sunlit planet well above diffuse white, so 45% of that is still
+about diffuse white and the scrim barely registers.** A scrim over this scene is
+read against what is behind it, not against a swatch. 70% with no blur is the
+answer.
+
+### Measured cost
+
+`pnpm build`, before and after, same machine:
+
+|     | before                     | after                      | delta             |
+| --- | -------------------------- | -------------------------- | ----------------- |
+| JS  | 1,937.7 KB / 555.6 KB gzip | 2,139.8 KB / 622.8 KB gzip | **+67.2 KB gzip** |
+| CSS | 25.8 KB / 5.9 KB gzip      | 51.4 KB / 9.5 KB gzip      | **+3.6 KB gzip**  |
+
+Roughly 71 KB gzip for all five libraries, against a bundle that is already over
+budget and uncode-split. That is the number to hold the eventual splitting work
+against, not a reason not to have done this.
+
+### Known, and left for the refactor
+
+- **shadcn's overlays portal to `document.body`**, which is outside
+  `.hud-layer` — so a `Tooltip`, `Popover`, `Select` or `Dialog` escapes the
+  standard-range clamp and would wash out against a star. Radix's `Portal`
+  takes a `container`; wiring it is a change to the generated components, which
+  is the refactor turn's job. Nothing uses one yet.
+- **`TooltipContent` ships inverted** (`bg-foreground` / `text-background`),
+  which in this palette is a light chip in a dark-adapted interface — the exact
+  thing the scrollbar rules in `index.css` were written to stop.
+- `.oxlintrc.json` turns `react/only-export-components` off for
+  `components/ui/*.tsx`. Those files export `buttonVariants` beside `Button`,
+  and the rule's remedy is an edit the next `shadcn add` reverts.
+
+## Five modes, a shell, and a mode with no ship (22 Aug 2026)
+
+The client stopped being one screen. It is now a **persistent shell** — the
+`<Canvas>` and `.hud-layer`, owned by `App` forever — with two route tables over
+it: _modes_, which decide who owns the camera, and _dialogs_, which open over a
+mode and leave it running. Five modes exist: the menu, three flight routes, the
+**planetarium** and the **cinema player**.
+[ADR-0011](docs/adr/0011-application-shell-and-modes.md) and
+[ADR-0012](docs/adr/0012-dockable-panels.md) hold the arguments;
+`docs/design/planetarium.md` and `docs/design/cinema.md` are the design pages.
+
+### A whole mode cost a nullable field, because ADR-0010 had already paid
+
+The planetarium's camera is the _second_ producer of a presentation eye. The
+first was the cutscene director, and the seam it needed — `buildScene` taking an
+optional eye override so LOD, apparent star brightness, `up` and flare occlusion
+all follow the camera that is actually on screen — is exactly the seam this
+needed. `GameEngine.#step` gained six lines of precedence:
+
+```
+cutscene ?? observatory ?? the ship
+```
+
+and `CameraRig` gained a `??`. Nothing else in the renderer knows the
+planetarium exists. That is worth recording because it is the payoff of a
+decision made for a different reason a day earlier: **a seam built for one
+consumer is worth building properly, because the second consumer arrives
+sooner than you think.**
+
+### The observatory writes nothing, and the test says so
+
+`packages/devtools/src/observatory.ts` resolves an address, asks the world where
+that is _this tick_, and returns a pose. No teleport, no clock, no entity write.
+The test compares `world.stateHash()` before and after a session of dragging and
+zooming, and that assertion is the design promise rather than a nicety: the
+moment the planetarium can move the ship, the survey game has a free mode that
+plays it for you.
+
+It differs from `CutsceneDirector` in one deliberate way: **its `sample` touches
+the world.** A script resolves its stage once and is pure afterwards because a
+scene must be reproducible frame for frame; the observatory is _following_
+something that moves, and one that resolved Jupiter's position once would orbit
+where Jupiter used to be within a minute of time warp.
+
+### Distance is logarithmic in nineteen decades, or it is a cut
+
+From a kilometre above a moon to a hundred light years. Interpolated linearly, a
+fly-to spends 99.9% of its time in the last decade and reads as a teleport — the
+same trap `screenRoutePosition` documents for a four-decade cinematic approach,
+met again two orders larger. Every zoom is a multiply; every ease is over
+`log(distance)` with `1 - exp(-dt/tau)`, so 30 Hz and 144 Hz agree.
+
+**The zoom-out ceiling is absolute, not a multiple of the target's radius.** The
+radius-relative version put Luna's at 0.003 ly and a star's at 0.3 ly, so "zoom
+out until the neighbouring stars appear" — the single most planetarium-shaped
+gesture there is — worked at a star and refused at a moon, for a reason no user
+could ever infer.
+
+### Orbit traces: two ways to draw a curve that is not there
+
+Affordable at all because ADR-0006 made orbits analytic: a period is 96
+closed-form evaluations rather than 96 integration steps.
+
+1. **A trace is relative to its primary, re-anchored to now.** Sampling a moon's
+   _absolute_ position over one of its months also sweeps the planet through a
+   twelfth of its year, so the trace is an open corkscrew that ends where the
+   moon has never been.
+2. **Each point is placed with the body's own radius.** Render compression keys
+   off an object's radius (`placement.ts`), so a path placed as a radius-zero
+   point is drawn _six times nearer_ than Jupiter is at Jupiter's range — the
+   planet floats visibly off its own orbit. Measured, not guessed.
+
+They are also **contextual**: what is drawn is the subject's siblings and the
+things going round it. Everything at once, in a system seen from inside, is a
+dozen ellipses edge-on — a fan of near-straight lines that says nothing.
+
+### Four things that must not come back
+
+- **A mode without `pointer-events-auto`.** `.hud-layer` is
+  `pointer-events: none` so the scene stays reachable, and `ErrorBoundary`'s
+  `className` styles its _fallback_, not a wrapper — so nothing between a mode
+  and the layer turns them back on. The symptom is silent and total: the hit
+  target at every pixel is the canvas, and the planetarium ignores every drag
+  with nothing in the console. This cost an afternoon.
+- **A ref-guarded "run once" effect.** `opened.current !== id` plus a cleanup
+  that clears the target: React re-runs effects while refs survive, so the
+  cleanup wins and the effect never fires again. The planetarium came up with
+  the camera on nothing. **Reconcile against the state's actual owner** —
+  `observatory.target?.address === wanted` — which is idempotent by
+  construction.
+- **A non-functional setter for derived state.** One pointer gesture can deliver
+  more than one drop, and two `movePanel` calls composed against the same
+  captured snapshot silently discard the first. `usePersistentState` now takes
+  an updater and writes _inside_ it, so the string on disk is derived from the
+  state React committed rather than from whatever the caller had in scope. The
+  rendered layout and the stored one drifted apart before that, which is a bug
+  that only shows after a reload.
+- **A second transport on screen.** The cutscene overlay's scrubber and the
+  cinema player's are two playheads a person can disagree with; the overlay's
+  now rides the debug flag.
+
+### The debug UI is off by default
+
+The dev dock — navigate, telemetry, perf, graphics, camera — is the author's
+instrument, and `docs/design/ux.md` specifies a cockpit that is nothing like it.
+It is now hidden unless `` ` `` (or the shell bar's toggle) asks for it. Its
+keybindings are unchanged when it is on.
+
+### The gesture arithmetic is in Node, because every version of it is wrong once
+
+`planetarium/gestures.ts` and `pick.ts` are pure and tested:
+
+- **Wheel normalisation.** Chrome reports ~100 px per detent and Firefox reports
+  3 lines; a handler that trusts `deltaY` zooms about thirty times faster on one
+  than the other.
+- **Pinch spread is the mean distance from the centroid**, not the gap between
+  touches 0 and 1. The pair version leaps discontinuously the instant a third
+  finger lands or the first lifts.
+- **A drag with no previous sample contributes nothing.** Treating a missing one
+  as the origin swings the camera by the pointer's absolute screen position — a
+  full turn, from one frame.
+- **Picking prefers what the pointer is inside, largest first**, and falls back
+  to proximity. Distance alone lets a three-pixel point source beat the planet
+  filling a third of the frame; size alone lets the largest body swallow every
+  click.
+
+### React DnD is an input device, and that is the whole design
+
+`dock/layout.ts` owns every move and preserves one invariant — _every known
+panel is in exactly one zone, exactly once_ — property-tested over random
+sequences, because the ways to break it are combinations a test author does not
+think to write. `hidden` is a zone rather than an absence, which is what makes
+the invariant expressible.
+
+The backend is chosen **once** at mount from `(pointer: coarse)`: `DndProvider`
+builds its manager from the backend and cannot be handed another, so swapping it
+is a remount of every panel. A user who has just plugged in a mouse can reload; a
+user whose workspace resets because they brushed a trackpad cannot understand
+what happened.
+
+Because the algebra has no dependency on the library, replacing React DnD is
+replacing two hooks in one file.
+
+### Custom icons, drawn to Lucide's own rules
+
+Lucide covers this interface almost completely — `Orbit`, `Telescope`, `Radar`,
+`Clapperboard`, `PanelLeft` — and where it does, using it is the point: a set
+drawn by one hand reads as one instrument. What it lacks is this game's own
+physics, so `apps/game/src/icons/` adds seven through `createLucideIcon`, which
+gives them the same props and the same stroke behaviour: three moon phases, a
+sphere of influence, an interstellar span, a flip-and-burn profile, delta-v and
+an observatory dome. 24 × 24, 2 px stroke, round caps and joins, and **2 px of
+clear space between distinct elements** — the last is the rule that decides
+whether an icon survives being drawn at 16 px.
+
+### Mobile is real for looking, and honest about piloting
+
+The planetarium and the cinema player work on a phone: one finger orbits, two
+pinch, a tap focuses, and the panels become a bottom sheet with a tab strip over
+a full-screen sky. Verified at 500 px wide. Docking is deliberately not offered
+there — "left" and "right" have no meaning on a 390 px screen, so a drag with an
+invisible effect is worse than no drag — and the stored panel _set_ is untouched,
+so rotating a tablet back restores the columns.
+
+Piloting on a touchscreen is not designed and the menu says so rather than
+letting someone find out.
+
+### The URL is the product's surface
+
+`/planetarium?at=g:milky-way/s:SOL/b:5` opens on Jupiter.
+`/cinema/tng-intro?t=1150` opens on that still. Both rewrite the address bar as
+they go — the planetarium on every focus, the player only while paused, because
+a router update twenty-four times a second is not a feature. Frames rather than
+seconds in the cinema link: `t=48.2s` rounds to a different still on a 24 fps
+scene than on a 30 fps one, and the whole point of a shareable frame is that two
+people see the same picture.
+
+`/auth/callback` is reserved now because a redirect URI is registered with an
+identity provider ahead of time and changing it later is a coordinated deploy.
+**No account page renders a credential field that goes nowhere** — people reuse
+passwords, and a form that looks real is one they will type a real one into.
+
+## The invariants got a loader (22 Aug 2026)
+
+`AGENTS.md` holds thirty invariants, each one there because violating it is a
+rewrite rather than a refactor — and **nothing loaded it**. `CLAUDE.md` says
+"read AGENTS.md first", which is a request, not a mechanism; a session that
+never read it operated with none of them. That is the whole reason `.claude/`
+now exists in the repository rather than in a developer's home directory.
+
+### The split, and why not one file
+
+Nine path-scoped rules mirror the invariants into `.claude/rules/`, each with
+`paths:` frontmatter so it enters context only when a matching file does —
+editing `dock/layout.ts` brings the one-panel-one-zone invariant with it, and
+editing the catalogue does not.
+
+The tempting simplification is to move the invariants there and delete the
+duplication. It was rejected twice over. `AGENTS.md` is vendor-neutral and is
+what a human reads, so it stays canonical; and a rule is read on **every** touch
+of its directory, where the thing it competes with for attention is the code.
+So the rules carry only the _imperative_ — the one line that has to be in
+context to prevent the mistake — and point at the section or ADR that says why.
+The imperatives are the stable half, which is what keeps the duplication from
+rotting. The contract for keeping the two in step is in
+[`.claude/rules/README.md`](.claude/rules/README.md), and `AGENTS.md` now names
+it in both directions, because a mirror that has drifted is worse than no
+mirror: it fires with authority at the moment of the edit and states the
+previous rule.
+
+### The definition of done is executed rather than described
+
+A `Stop` hook runs `graph → lint → typecheck → test` — measured 0.19s, 0.19s,
+3.27s and 2.16s on an M5, so about six seconds — and a failure returns as work
+still to do rather than a task reported complete.
+
+`pnpm build` is out of it, and the number that argument was first written around
+was wrong: the note claimed it added 5.3s, when `pnpm build` is
+`typecheck && vite build` and the typecheck is already in the gate. The real
+marginal cost is 1.66s. It stays out on the honest reason instead — bundling
+proves nothing about the source that `typecheck` has not, and the failures it
+does catch alone are resolution and asset ones, which are worth catching at the
+commit. That is what `/ship` runs.
+
+Three properties of the hook mattered more than the checks:
+
+- **It only fires when a source file actually moved this turn**, off a marker
+  the format hook leaves. A `Stop` hook has no other way to know what the turn
+  did, and a turn that answered a question should pay nothing.
+- **It blocks at most three times per prompt.** Exit 2 on `Stop` means "do not
+  stop, here is why" — the feedback loop wanted, and exactly the shape of an
+  infinite loop when the failure is one the agent cannot fix, such as a test
+  that was already red. After the cap it reports and lets go.
+- **It runs in the session's own cwd, not `$CLAUDE_PROJECT_DIR`.** Inside a
+  worktree those differ, and gating the main checkout while an agent edits a
+  worktree tests the wrong tree and passes for the wrong reason.
+
+### What a worktree may carry
+
+`.worktreeinclude` copies gitignored files into new worktrees, and the test for
+belonging is: gitignored, **and not reconstructible from a command**. Almost
+nothing passes it, which is the point — a worktree silently carrying state the
+main checkout has is a worktree that passes tests the branch would fail.
+
+`node_modules/` is the instructive exclusion. pnpm's is a symlink farm into
+`.pnpm`, so copying it dereferences the links into roughly 640 MB per worktree;
+`pnpm install --frozen-lockfile --prefer-offline` rebuilds it from the
+machine-global store in about three seconds. The one real inclusion is the
+cutscene's reference audio, which is copyrighted, must never enter the
+repository, and which no command can fetch — so a worktree doing cutscene work
+would have no way to get it back.
+
+### Cloud sessions need Node 26, and a hook cannot supply it
+
+Cloud images ship Node 20, 21 and 22. This repository runs the TypeScript
+sources directly through type stripping with no build step, so an older runtime
+does not degrade — `pnpm sim`, vitest and the headless runner fail at the first
+import. **A `SessionStart` hook cannot fix it, because a hook cannot change
+`PATH` for the commands that run after it.** So
+[`scripts/cloud-setup.sh`](scripts/cloud-setup.sh) is committed to be pasted
+into the environment's Setup script field, where it runs once as root and is
+snapshotted. It resolves the current v26 patch from `SHASUMS256.txt` rather than
+pinning one that goes stale, and it exits zero on every failure path — a
+non-zero exit there means the session does not start at all, and an image with
+the wrong Node is more useful than no session.
+
+## Twenty-two findings the gate could not see (22 Aug 2026)
+
+A multi-agent review of the `tng` branch — 145 files, 22,273 lines, too large
+for one pass — against a tree where `pnpm check` was green and all 542 tests
+passed. Every finding was a runtime or behavioural defect, which is the useful
+fact about the whole exercise: **the gate proves the code compiles, lints,
+type-checks and satisfies the assertions somebody thought to write. It says
+nothing about the ones nobody did.** Four of these left the session
+unrecoverable without a reload.
+
+The findings themselves are in the commit and in the tests. What is worth
+keeping is the _shape_ of them, because most repeated.
+
+### The same bug, twice, in two files
+
+Two wrappers around one cutscene director — the cinema player and the debug
+overlay — were each a 100 ms poll driving a range input, written out
+independently. Both latched `scrubbing` on `pointerdown` and cleared it only on
+`pointerup` **on the input**, so a drag released anywhere else froze the
+readout for the life of the player; touch never cleared it at all, because a
+cancelled gesture fires `pointercancel` and nothing else. And they disagreed
+about the other half: the player guarded its seek against a scene that had
+already ended, the overlay did not, so the same click was safe in one and threw
+in the other — out of an event handler, where a React error boundary cannot
+see it, which is why the `ErrorBoundary` around the overlay caught nothing and
+the interaction was lost with only a console line. `hud/useScrubber.ts` is both
+rules in one place now: release at the window (`pointerup`, `pointercancel`,
+`blur` — three different ways a gesture ends), and a seek that declines rather
+than throws.
+
+The general form: **two components that poll the same object will grow the same
+bug, and then disagree about it.**
+
+### A readout that could not name a frame
+
+`timecode` derived seconds from the true rate and the frames field from
+`Math.round(fps)`. At 24000/1001 those disagree once a second: frames
+1006→1007→1008 read `0:41:22` → `0:42:23` → `0:42:00`, so the counter ran
+_backwards_ inside a second, twenty-one times over the title sequence. A
+timecode is a _name_ for a frame and a name that occurs twice names nothing —
+which defeats ADR-0010's "two people see the same picture". Both fields come
+from one rate now.
+
+The instructive part is the test. `cinema.test.ts` exercised `fps = 24` and
+`fps = 0` and never the 23.976 the product ships, and the first property test
+written for the fix **passed against the broken implementation**: 21 bad
+transitions in 1500 frames, and a property that samples single frames at random
+almost never lands on one. It only went red once each case swept a _window_ of
+400 consecutive frames. A property test over a sparse defect needs to sample
+runs, not points.
+
+### The background location was a contract two files kept
+
+Opening a dialog over a mode records the mode's location in
+`location.state.background`; `ShellBar` wrote it and `routes.tsx` read it, and
+nothing else in the PR knew it existed. So the shell derived its mode from the
+raw pathname and disagreed with the tree it was drawn over; the settings
+section tabs dropped the state and tore the mode down mid-dialog; and all three
+ways of closing a dialog navigated to `/`, which unmounted the planetarium, ran
+`observatory.clear()` and threw away the `?at=` address — a close button that
+returned the player to the main menu.
+
+Over a running cutscene the first of those compounded into a loop: the gate
+keeping the cinema player mounted is `mode === 'cinema'`, so navigating to a
+dialog unmounted the player, whose cleanup stopped the scene, which republished
+`cinema: false` 125 ms later (`PANEL_HZ = 8`), which mounted it again — a
+mount/unmount flap several times a second that re-teleported the player, with
+the requested dialog never rendering at all.
+
+`resolvedLocation` (pure, in `paths.ts`) and `useOverlay` (the React half) are
+the contract as code rather than as a convention. The invariant in `AGENTS.md`
+now says the raw pathname is the wrong thing to read.
+
+### Layers stacked by accident
+
+Nothing in `apps/game/src` set a `z-index` except a Radix tooltip, so every band
+of `.hud-layer` painted — and hit-tested — in DOM order. That was fine until a
+mode covered the viewport: `PlanetariumMode`'s input surface is
+`absolute inset-0 pointer-events-auto` and is emitted after the dock, so in the
+planetarium every button, tab and drag handle in the dock was unclickable and
+the surface silently took the click. The five bands are now numbered 0/10/20/30/40
+on inert `pointer-events-none` wrappers — inert because `ErrorBoundary`'s
+`className` styles its _fallback_ rather than a wrapper, so there was otherwise
+nothing to hang the index on. Confirmed by A/B in the live DOM:
+`elementFromPoint` on the dock's header returns the planetarium surface with the
+bands stripped and the dock's own span with them.
+
+### Two handlers, one key, no error
+
+`useShipControls` is mounted in every mode and its `axes` option gated only the
+axis branch, so `Space` still reached `onPause` in the cinema player — which
+binds `Space` to its own transport. Both are on `window`, and `preventDefault`
+in one does not stop the other (only `stopImmediatePropagation` would), so one
+press flipped `clock.paused` twice and the documented play/pause control did
+nothing at all. `axes` had the same argument and had been applied; `Space` was
+missed because it is not an axis.
+
+`Tab` was worse, because its guard could never open. It toggled the dock unless
+focus was already inside `.hud-layer` — but on load `document.activeElement` is
+`<body>`, whose `closest` returns null, so the guard was false, the dock
+toggled, and `preventDefault` cancelled the browser's focus move. With no
+`tabIndex` on the canvas there was nothing outside the layer to bootstrap from:
+**focus could never enter the overlay at all**, and every focus ring,
+`role="tab"` and `aria-expanded` in the PR was unreachable by keyboard. There is
+no version that keeps both — Tab is how a browser moves focus and a window-level
+`preventDefault` always wins — so Tab went back to the browser and the collapse
+is `H`. `Space` is now declined when the keystroke is aimed at a control inside
+the layer, which is what makes `hud/focus.ts`'s "a focused button swallowing
+Space is correct: Space is what activated it" true; before the guard the button
+never saw the key.
+
+`F5` and `F9` were reported alongside and deliberately left as they are. No
+control in the overlay responds to either, so declining them would activate
+nothing — it would hand the key back to the browser, and F5 is Reload. Losing
+the session because focus happened to be on a dock button is worse than the
+thing it would fix.
+
+### One frame without a player latched the whole session
+
+`#step` returned early on `player === null`, and the cutscene sample sat below
+that return. A load or an authority hand-off leaving `session.player()` null for
+a single frame meant the director was never sampled again: it kept `#active`,
+`engine.cinematic` kept its last non-null value, `engineStore` published
+`cinema: true` forever, and every piece of chrome unmounted — including the
+control that stops a cutscene. The camera precedence is
+`cutscene ?? observatory ?? ship` and **only the last arm needs a player**; the
+sample moved above the returns and the scene build stayed below them. The
+regression test runs a scene to its end while there is no player, which is
+exactly the frame the old order could not reach.
+
+### Two more of the same family
+
+- **`focus()` never re-clamped distance into the new target's band.** It carried
+  `#state.distance` across a change of target and `approachState` log-lerps it,
+  clamping elevation on the way and never distance — so Luna (settled ~3.2e6 m)
+  to the Sun (band minimum 7.1e8 m) put the eye 695,700 km inside the
+  photosphere for the second the ease took. Nothing surfaced it because
+  `status().altitude` is `Math.max(0, distance - radius)`, so a negative
+  clearance reads as zero. The property — every intermediate state of any ease
+  is legal for the current target — reproduces it at 2.19e6 m against a 7.096e8 m
+  minimum.
+- **`#arrived()` compared raw azimuths while `approachState` converges via
+  `shortestAngle`.** Azimuth accumulates unbounded as you drag, so after two
+  turns the ease settles at a difference near 2π — the same heading, a whole
+  turn apart numerically — which never falls below `ARRIVED_LOG_EPSILON`.
+  `travelling` then stayed true for the rest of the session, which is the exact
+  failure that constant's docstring says it exists to prevent. The same fact
+  about azimuth produced the panel's `-327° az` for a heading of 33°, because
+  JavaScript `%` is a remainder and keeps the sign.
+
+### An impure updater, and why "derived from what React committed" was wrong
+
+`usePersistentState` wrote to `localStorage` _inside_ the state updater, on the
+argument that the string on disk should then be derived from the value React
+actually committed. An updater is called during render, must be pure, and is not
+the commit: StrictMode double-invokes it, and React may discard a rendered value
+whose `setItem` has already landed — persisting a preference nobody chose. It
+also made an FOV slider a synchronous `setItem` per input event. The write is an
+effect on the committed value now, seeded so that an untouched default is never
+written back — turning "never chose" into "chose the current default" would mean
+a later change of default reached nobody.
+
+### The two tests that pinned bugs
+
+Both were caught by reading the tests rather than the code, which is the pass
+worth doing on a branch this size. `planetarium.test.ts` had a case titled
+"picks a moon in front of the planet it is against" that asserted the _planet_ —
+the behaviour is deliberate and documented in the case body, but the title and
+`pick.ts`'s docstring both described the opposite of what the code does, and a
+docstring that claims largest-first "makes clicking a moon against its planet
+work" is an invitation to "fix" the comparison. Both now say what the rule costs
+and point the design question at `docs/design/planetarium.md`. The other is the
+23.976 gap above.
+
+One reported finding was checked and rejected: `.claude/hooks/gate.mjs` reading
+`input.prompt_id` is correct — it is a documented common hook payload field
+(Claude Code ≥ 2.1.196) with a `?? 'noprompt'` fallback for older versions.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).
 
+- **The planetarium has no bookmarks, filters or measure tool.** The address is
+  already the whole record for a bookmark, so what is missing is a store; the
+  filter fields are the ones `docs/design/galaxy.md` lists for the galaxy map.
+- **The catalogue panel surveys 16 ly and filters in the client.** That is right
+  for a list of a few hundred rows and wrong the moment a search is meant to
+  reach the whole 150 ly sphere — `travelTargets` is a star sweep and cannot be
+  run per keystroke. A name index over the catalogue is the seam.
+- **Mode routes are not covered by a Node test.** Each drives a live engine, and
+  a test that stubbed a renderer, a worker pool and a camera would assert
+  against the stub. `modeForPath`, the link builders, the dock algebra, the
+  gesture arithmetic and the compact dock all are; the boundary is deliberate.
+- **Piloting on a touchscreen is not designed.** The flight modes are
+  desktop-only and the menu says so. The planetarium and the cinema player are
+  the mobile surface.
+- **The interface never says `observed` or `projected`.** PRODUCT.md makes
+  stating it a brand commitment and `SystemStub.catalogued` has carried the
+  answer all along; `TravelTarget` does not forward it, so the destination list
+  shows a real star and a generated one identically. See the colorize note in
+  [the hardening pass](#what-the-colorize-pass-found-before-it-started).
 - Binary and multiple-star systems are modelled as single stars (`components`
   in the catalogue records the truth for all 375 of them within 150 ly).
 - Moons outside the Solar System are all projections, which is right — no
@@ -1201,7 +2169,8 @@ Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md
 - No compute passes, storage buffers or indirect draw yet: the WebGPU migration
   delivered the renderer and the HDR path, not GPU-driven terrain or culling.
 - Cold load to interactive is still unmeasured, and it is the budget most likely
-  to be missed: the bundle is 541.4 KB gzip with no code splitting.
+  to be missed: the bundle is 622.8 KB gzip with no code splitting, of which
+  67 KB arrived with the UI foundations on 22 Aug.
 - Every performance number recorded here is from an Apple M5 in a 1000×760
   window. The target is a 2023-class laptop at 1920×1080 — roughly three times
   the pixels on a much weaker GPU — so these establish that the instrument works,

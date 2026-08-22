@@ -3,6 +3,7 @@ import type { Series, SeriesStats } from '@inertialref/devtools'
 import type { HarnessStatus } from '@inertialref/devtools'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { canMeasureGpu, measureGpuFrameMs } from '../render/measure.ts'
+import { FOCUS_RING, releaseFocus } from './focus.ts'
 import { Row, Section } from './widgets.tsx'
 
 /*
@@ -265,10 +266,10 @@ function MeasureButton({
       disabled={!ready || busy}
       title="Submit 40 frames and time them across a drained queue — the only measurement three's own timestamp does not exaggerate"
       onClick={(event) => {
-        event.currentTarget.blur()
+        releaseFocus(event)
         onMeasure()
       }}
-      className="rounded border border-slate-700 bg-slate-800/60 px-1.5 py-0.5 text-[10px] text-slate-300 transition-colors hover:border-sky-500/60 hover:text-sky-200 disabled:cursor-not-allowed disabled:opacity-35"
+      className={`rounded border border-slate-700 bg-slate-800/60 px-1.5 py-0.5 text-[10px] text-slate-300 transition-colors hover:border-sky-500/60 hover:text-sky-200 disabled:cursor-not-allowed disabled:opacity-35 ${FOCUS_RING}`}
     >
       {busy ? 'measuring…' : 'measure gpu'}
     </button>
@@ -314,7 +315,11 @@ function Plot({
 
   const width = 100
   const height = 26
-  if (written === 0) return <div className="h-[26px]" />
+  // An empty ground rather than an empty gap: a series with no samples yet — a
+  // paused clock, a metric this browser does not expose — left a 26px hole that
+  // read as a layout bug rather than as a plot waiting for data.
+  if (written === 0)
+    return <div className="my-0.5 h-[26px] rounded-sm bg-slate-900/70" />
 
   // Headroom above the peak so the tallest sample is not flush with the border,
   // and never a zero-height range — a flat series would divide by zero.

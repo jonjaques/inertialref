@@ -1,5 +1,15 @@
 <!doctype html>
-<html lang="en">
+<!--
+  `class="dark"` rather than a media query.
+
+  Tailwind v4's stock `dark:` variant follows `prefers-color-scheme`, and the
+  components shadcn/ui generates lean on `dark:` for their contrast steps. This
+  interface has exactly one palette — it is a HUD over a starfield and there is
+  no light-mode reading of it — so the class is set once, here, and
+  `src/index.css` redefines the variant to key off it. Without this the whole
+  registry renders in its light values on a machine set to light.
+-->
+<html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -8,7 +18,104 @@
     <title>InertialRef</title>
   </head>
   <body>
-    <div id="root"></div>
+    <!--
+      What is on screen before the first React commit.
+
+      `main.tsx` awaits the packed catalogue — 460 KB, a generation input rather
+      than a decoration, so the world cannot be built without it — and until
+      that resolves there is no canvas, no HUD and nothing in `#root`. On a fast
+      connection that is a flash; on a slow one, or behind a service worker
+      serving a bundle that never parses, it is an indefinitely black page that
+      is indistinguishable from a broken one. The audience that gets sent a link
+      forms its impression in about a minute, and a minute of black is the whole
+      minute.
+
+      React clears the root container on its first commit, so this needs no
+      teardown: its disappearance *is* the handoff, and the stall timer below
+      uses exactly that to know it has happened.
+
+      Styles are inline literals because no stylesheet exists yet — Tailwind
+      arrives with the module this is waiting for. The values are the design
+      system's own tokens (sky-300, slate-500, amber-400, the monospace stack),
+      written out rather than invented; this is not a second palette.
+    -->
+    <div id="root">
+      <div
+        id="boot"
+        style="
+          position: absolute;
+          bottom: 0.75rem;
+          left: 0.75rem;
+          font-family:
+            ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+          font-size: 12px;
+          line-height: 1.3333;
+        "
+      >
+        <div style="color: #7dd3fc">InertialRef</div>
+        <div style="color: #64748b">reading the star catalogue…</div>
+        <div id="boot-stall" hidden style="margin-top: 0.5rem; color: #fbbf24">
+          nothing has arrived in 10 s — the bundle or the catalogue is not
+          loading.
+          <button
+            type="button"
+            id="boot-reload"
+            style="
+              margin-left: 0.25rem;
+              border: 1px solid #334155;
+              border-radius: 0.25rem;
+              background: rgb(30 41 59 / 0.6);
+              padding: 0.125rem 0.375rem;
+              font: inherit;
+              font-size: 10px;
+              color: #cbd5e1;
+              cursor: pointer;
+            "
+          >
+            reload
+          </button>
+        </div>
+      </div>
+    </div>
+    <script>
+      /*
+       * The one failure the page cannot report on its own.
+       *
+       * If the module never executes — a stale service worker holding a bundle
+       * that 404s against a redeployed hash, a parse error on an old browser —
+       * nothing in `main.tsx` runs, so nothing in `main.tsx` can say so. This
+       * lives in the document instead. It is not a spinner: it appears only
+       * once the wait has stopped being plausible, and it names the recovery
+       * rather than the symptom, because the recovery is not "reload" — a
+       * reload served by the same worker returns the same broken bundle.
+       */
+      setTimeout(function () {
+        var boot = document.getElementById('boot-stall')
+        // React cleared the root, which means the app is up. Nothing to say.
+        if (boot === null) return
+        boot.hidden = false
+      }, 10000)
+
+      document
+        .getElementById('boot-reload')
+        .addEventListener('click', function () {
+          var done = function () {
+            location.reload()
+          }
+          if ('serviceWorker' in navigator) {
+            navigator.serviceWorker
+              .getRegistrations()
+              .then(function (all) {
+                return Promise.all(
+                  all.map(function (one) {
+                    return one.unregister()
+                  }),
+                )
+              })
+              .then(done, done)
+          } else done()
+        })
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

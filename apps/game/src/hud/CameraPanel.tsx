@@ -1,4 +1,5 @@
 import { DEFAULT_FOV } from '../engine/GameEngine.ts'
+import { FOCUS_RING } from './focus.ts'
 import { Action, Section } from './widgets.tsx'
 
 /*
@@ -37,7 +38,7 @@ export function CameraPanel({ camera }: { camera: CameraState }) {
             step={1}
             value={camera.fov}
             onChange={(event) => camera.onFov(Number(event.target.value))}
-            className="min-w-0 flex-1 accent-sky-500"
+            className={`min-w-0 flex-1 accent-sky-500 ${FOCUS_RING}`}
             aria-label="Field of view, degrees"
           />
           <span className="w-9 shrink-0 text-right tabular-nums text-slate-300">

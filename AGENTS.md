@@ -16,6 +16,13 @@ the reasoning behind the decisions you are not expected to relitigate.
 
 These are the ones where a violation is a rewrite later rather than a refactor.
 
+Each is mirrored as a path-scoped one-liner in `.claude/rules/`, which loads
+itself when a matching file is opened — this file is canonical, and nothing
+loads it. **Change an invariant here and grep `.claude/rules/` for its
+imperative.** A mirror that has drifted is worse than no mirror: it fires with
+authority at the moment of the edit, and states the previous rule.
+`.claude/rules/README.md` holds the contract.
+
 - **Never put an absolute position in a `Vec3`.** `UniverseVector` is the only
   thing that may claim to be an absolute position. A `Vec3` is a displacement or
   a frame-local coordinate.
@@ -26,7 +33,12 @@ These are the ones where a violation is a rewrite later rather than a refactor.
   not draw from a shared stream. If you can change one object's output by
   generating a different object first, it is wrong.
 - **Never put canonical state in a React component**, and never put gameplay
-  behaviour in a lifecycle callback. Components consume snapshots.
+  behaviour in a lifecycle callback. Components consume snapshots. The snapshot
+  arrives through `apps/game/src/state/engineStore.ts` — a zustand store holding
+  the last `HarnessStatus`, republished at 8 Hz by one sampler. Subscribe to the
+  narrowest slice you need; `useEngine((s) => s.status)` is a fresh object every
+  sample and never bails out of a re-render. A store that held the _world_ would
+  be this rule broken, not followed.
 - **Never construct a `Worker` outside `apps/game/src/engine/browserWorker.ts`.**
   Tasks are typed and versioned; the pool owns dispatch, cancellation and
   instrumentation.
@@ -69,6 +81,58 @@ These are the ones where a violation is a rewrite later rather than a refactor.
   so the component renders once and shows that forever. `'use no memo'` is the
   opt-out, and `apps/game/src/hud/PerfPanel.tsx` is the worked example. This is
   not licence to hand-write `useMemo`; see CLAUDE.md.
+- **Never put the `<Canvas>` inside a route, and never let a mode assume it owns
+  the page.** `App` owns the canvas and `.hud-layer` for the life of the
+  session; every route renders _inside_ that layer as a sibling of the canvas. A
+  router over the whole tree rebuilds a `WebGPURenderer` on every navigation,
+  which is the black-screen class `render/presentationWatchdog.ts` exists to
+  recover from, arriving on purpose several times a minute. ADR-0011.
+- **Never hold the current mode in React state.** It is
+  `modeForPath(resolvedLocation(location).pathname)`, a pure function in
+  `pages/paths.ts`, so a reload, a back button and a pasted link land in the
+  same place by construction. The same rule covers everything else the URL
+  carries — the planetarium's subject (`?at=`) and the cinema player's frame
+  (`?t=`).
+- **Never read the raw pathname when a dialog could be open over a mode.** A
+  dialog records the mode's location in `location.state.background` and
+  `ModeRoutes` renders at _that_; `resolvedLocation` is the one function that
+  resolves it, and everything deciding what is on screen must agree with it.
+  The same state has to be carried by every link that stays inside a dialog and
+  read by every control that closes one — `pages/useOverlay.ts` is that half.
+  Ignored, a dialog's close button returns the player to the main menu and
+  tears down the mode behind it; over a running cutscene it unmounts and
+  remounts the cinema player several times a second.
+- **Never add a second producer of the camera.** There is one precedence order,
+  in `GameEngine.#step`: **cutscene, then observatory, then the ship.** Each is a
+  presentation eye handed to `buildScene`. A camera pushed at the Three.js
+  object instead would leave LOD, apparent star brightness, `up` and flare
+  occlusion all being told about a different viewpoint from the one on screen.
+  **No arm of that order may depend on a later one resolving**, and only the
+  last needs a player: with the cutscene sample below `#step`'s missing-player
+  return, one frame during a load left the director unsampled forever,
+  `engine.cinematic` latched non-null, and every piece of chrome — including
+  the control that stops a cutscene — unmounted for the rest of the session.
+- **Never let the planetarium write canonical state.** The observatory resolves
+  an address, asks the world where that is _this tick_, and returns a pose. No
+  teleport, no clock, no entity write, no save. `observatory.test.ts` compares
+  `world.stateHash()` across a session of flying around, and that test is the
+  design promise, not a nicety — see `docs/design/planetarium.md`.
+- **Never give a mode its chrome without `pointer-events-auto`.** `.hud-layer` is
+  `pointer-events: none` so the scene beneath stays reachable, and
+  `ErrorBoundary`'s `className` styles its _fallback_, not a wrapper — so
+  nothing between a mode and the layer turns them back on. Getting this wrong is
+  silent: the hit target at every pixel is the canvas.
+- **Never guard a "run once" effect with a ref.** React re-runs effects while
+  refs survive, so a latch plus a cleanup means the cleanup wins and the effect
+  never fires again — the planetarium came up with the camera on nothing.
+  Reconcile against the state's actual owner instead
+  (`observatory.target?.address === wanted`), which is idempotent by
+  construction.
+- **Never move a dock panel by splicing an array at a call site.**
+  `dock/layout.ts` owns every move and preserves one invariant: _every known
+  panel is in exactly one zone, exactly once._ Property-tested. Use the
+  **updater** form of the setter — one gesture can deliver two drops, and two
+  moves composed against the same captured snapshot discard the first. ADR-0012.
 - **Never import from `three` in `apps/game`.** It is `three/webgpu` and
   `three/tsl`. Both share `three.core.js`, so `Mesh` is the same class either way
   and nothing breaks loudly — but only `three/webgpu` carries the node system, and
@@ -87,7 +151,12 @@ These are the ones where a violation is a rewrite later rather than a refactor.
 - **Terrain is sampled in body-fixed axes.** Sampling in inertial axes leaves
   the mountains behind as the planet rotates. This was a real bug.
 - **Imports carry their extension** (`./foo.ts`), because
-  `allowImportingTsExtensions` is on and Node runs the sources directly.
+  `allowImportingTsExtensions` is on and Node runs the sources directly. The one
+  exception is `@/` in `apps/game`, which resolves to `apps/game/src` — it
+  exists because shadcn/ui's registry writes `@/lib/utils` into every component
+  it generates, and it is configured in `vite.config.ts`, that app's
+  `tsconfig.json` and the root `vitest.config.ts`. Code written by hand still
+  imports relatively.
 - **No `enum`, no parameter properties, no runtime namespaces** —
   `erasableSyntaxOnly` is on. Use `const` objects plus union types.
 - **`import type` for type-only imports** — `verbatimModuleSyntax` is on.
@@ -190,6 +259,9 @@ ir.face(address) / ir.burnToward(address)
 ir.save() / ir.load(text)
 await ir.selfTest() // the twelve capabilities
 await ir.scenario('surface') // orbit | approach | surface | interstellar
+ir.play('tng-intro') // a scripted scene; Esc skips, the ship comes back
+ir.pause()
+ir.seekCutscene(1150) // frame-exact stills against a reference edit
 ```
 
 **Start with `ir.targets()`.** Every other verb takes an address and none of
@@ -202,16 +274,98 @@ is there". `goTo` is the only verb that accepts all the forms a human types —
 --goto b:2` is the same navigation from a terminal. `pnpm sim --help` lists the
 flags.
 
+**`ir.look` is the planetarium's whole verb, and the difference from `goTo` is
+the point**: `goTo` teleports the _ship_ and changes canonical state; `look`
+moves only a camera. Both end with Jupiter filling the frame and only one leaves
+you in orbit of it. `ir.observatory` is the camera itself — `drag`, `zoom`,
+`setPhase`, `frameTarget`, `clear`.
+
 The same verbs are on the dev dock, top right in the browser: **navigate** lists
 the destinations with a button per manoeuvre, **telemetry** is the inspection
 overlay, **perf** plots frame time, engine time, ticks per frame, draw calls,
-worker queue and heap over a rolling window. `Tab` collapses the whole thing,
+worker queue and heap over a rolling window. `H` collapses the whole thing,
 `G` opens navigation and `P` opens perf. It calls the harness and nothing else,
 so anything you can do by clicking is reproducible in a test.
 
 **Look at the perf tab before optimising anything, and before believing a
 performance claim in a design document.** The first thing it found was that time
 warp had never worked above 5×.
+
+### The modes, and where their code lives
+
+The client is a shell with a route table over it (ADR-0011). Four modes, and
+each answers "who owns the camera" differently:
+
+| Mode          | Path                      | Camera                    | Code                                                   |
+| ------------- | ------------------------- | ------------------------- | ------------------------------------------------------ |
+| `menu`        | `/`, and any unknown path | the observatory, drifting | `pages/HomePage.tsx`                                   |
+| `flight`      | `/play/:mode`             | the ship's chase rule     | `flight/`                                              |
+| `planetarium` | `/planetarium?at=…`       | the observatory           | `planetarium/`, `packages/devtools/src/observatory.ts` |
+| `cinema`      | `/cinema/:scene?t=&play=` | the cutscene director     | `cinema/`                                              |
+
+The split between pure and applied is the same one the cinematic director uses,
+and for the same reason — the arithmetic is testable in Node and the application
+is not:
+
+- **`packages/rendering/src/observer.ts`** — the orbit camera as arithmetic:
+  drag, zoom, log-space easing, framing, phase angles. No world, no addresses.
+- **`packages/devtools/src/observatory.ts`** — the same camera bound to a live
+  world: resolves an address, follows a moving body, produces an eye. Exposed on
+  the harness. One deliberate difference from `CutsceneDirector`: its `sample`
+  _does_ touch the world, because it is following something that moves.
+- **`packages/devtools/src/orbitPaths.ts`** — orbit traces. Two rules the naive
+  version gets wrong: a trace is relative to its primary and re-anchored to now
+  (or a moon's trace is an open corkscrew), and each point is placed with the
+  _body's own radius_ (or render compression draws the curve at a completely
+  different depth from the planet).
+- **`apps/game/src/dock/`** — the panel layout algebra (pure, property-tested)
+  and the React DnD wiring over it. ADR-0012.
+- **`apps/game/src/planetarium/`** — gestures, picking, labels, panels. The
+  gesture and pick arithmetic is in `gestures.ts` and `pick.ts` and is tested;
+  what is in the components is the bookkeeping only a browser has.
+
+### Scripted scenes (the cutscene director)
+
+The engine plays authored scenes over the live world — ADR-0010 is the
+contract, and the trail for anyone extending it runs:
+
+- **Pure arithmetic** in `packages/rendering/src/cinematic.ts` — easings, fade
+  envelopes, camera routes, screen-space routes, composition solvers.
+  Property-tested in Node.
+- **Director and scripts** in `packages/devtools/src/cutscene.ts` and
+  `cutscenes/` — a script's `prepare(world)` resolves the stage once, its
+  `sample(frame)` is pure, and time derives from `renderTime`, never a wall
+  clock. A new scene is a new file exporting a `CutsceneScript`; add it to the
+  registry in `harness.ts`.
+- **A scene is a shot list, not a camera move.** Each shot owns its camera,
+  placed against its own subject; the cuts between them hide in darkness,
+  behind a flash, or under a body filling the frame. Authored as one continuous
+  spline a scene becomes a camera crossing astronomical units between beats and
+  aiming at whatever it is between — which is what the first `tng-intro` was.
+- **Choreograph in the frame.** A hull's beats are
+  `(frame, screen x, screen y, range)` via `screenOffset`, the same terms a
+  tracked bounding box reports, and `screenRoutePosition` interpolates range in
+  log space so a four-decade approach does not overshoot through the lens.
+- **Application** in `apps/game` — `engine.cinematic` (render-space, on the
+  engine singleton for the HMR reason `hull` documents), the warp-effects
+  quads, the DOM title overlay, and the dock's cutscene section.
+- **The proving scene** (`tng-intro`) is timed against a frame-analysed
+  reference edit that lives outside this repository in `~/Developer/tng-inertial`
+  — `analysis/timeline.json` is the measured spec, `data/frames/` the
+  per-frame imagery — and its measured numbers (credit grid, fade windows, the
+  locked camera, the flash envelope) are regression tests in
+  `cutscene.test.ts`. Change those numbers only to make the recreation _more_
+  faithful, and say so.
+- **Hard-won authoring rules** are in CONTEXT.md § "The cinematic director" and
+  § "The title sequence, re-cut against its own frames": camera-relative
+  choreography is offset beats, never absolute beats off a moving camera; never
+  per-frame look-at a hull near the lens; light is staging, and a key's screen
+  position is a _product_ of two dot products that must both carry the right
+  sign; whiteouts are honest scene changes; ask the font for its cap height
+  rather than guessing it. Reread both before authoring a second scene.
+- The reference audio and any full-sequence render carry third-party rights —
+  the audio path is gitignored on purpose, and publishing a render needs a
+  rights check first.
 
 One gotcha when driving a browser: Chrome throttles `requestAnimationFrame` in
 backgrounded tabs, so a freshly reloaded page that is not focused sits at tick 0
@@ -227,3 +381,10 @@ added.
 
 When a defect exposes a missing invariant, add the regression test rather than
 patching the symptom.
+
+Most of that is checked for you rather than remembered: a Stop hook runs
+`graph → lint → typecheck → test` after any turn that touched a source file, and
+a failure returns as work still to do rather than a task reported complete. It
+deliberately stops short of `pnpm build` and of the commit — the full
+`pnpm check` and `pnpm sim --self-test` belong at the point of commit, which is
+what `.claude/skills/ship` runs. `IR_SKIP_GATE=1` disables it.

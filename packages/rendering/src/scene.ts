@@ -128,12 +128,30 @@ export function buildScene(
   snapshot: WorldSnapshot,
   origin: RenderOrigin,
   cameraEntity: EntityId,
+  /**
+   * A presentation-only eye, overriding the camera entity's pose — the
+   * cinematic director's seam. It must come through here rather than being
+   * applied at the Three.js camera, because everything in this scene is
+   * *relative to the eye*: star brightness is apparent brightness, `up` and
+   * `altitude` are asked from the eye's position, and a cinematic camera an AU
+   * from the ship would otherwise light and sort the scene for a viewpoint
+   * nobody is looking from.
+   */
+  eye?: { readonly position: UniverseVector; readonly orientation: Quat },
 ): RenderScene {
-  const camera = snapshot.entities.find((entity) => entity.id === cameraEntity)
+  const entity = snapshot.entities.find((e) => e.id === cameraEntity)
   invariant(
-    camera !== undefined,
+    entity !== undefined,
     `Camera entity ${cameraEntity} is not in the snapshot`,
   )
+  const camera = {
+    position: eye?.position ?? entity.position,
+    orientation: eye?.orientation ?? entity.orientation,
+    // The entity's measured altitude belongs to the entity. A cinematic eye
+    // flies far from any contact test, and `null` is the honest answer — it
+    // also keeps the chase camera's ground-clearance rule out of the shot.
+    altitude: eye === undefined ? entity.altitude : null,
+  }
 
   const bodies: RenderBody[] = []
   for (const body of snapshot.bodies) {

@@ -9,18 +9,19 @@ and to this machine, and points at AGENTS.md for everything else.
 
 ## Orientation
 
-| File                       | What it is                                                                          |
-| -------------------------- | ----------------------------------------------------------------------------------- |
-| `AGENTS.md`                | How to work here: rules, conventions, testing, the harness. Read first.             |
-| `docs/`                    | Explanatory documentation — concepts, diagrams, guides, decision records.           |
-| `docs/design/`             | The game design bible — what the game is, and why each mechanic is shaped that way. |
-| `docs/guides/catalogue.md` | The star catalogue: how it is built, what it stores, and what will bite you.        |
-| `docs/vision.md`           | What the project is for, and the principles behind architectural choices.           |
-| `docs/architecture.md`     | The system in one sitting.                                                          |
-| `docs/adr/`                | The nine foundational decisions, with alternatives and consequences.                |
-| `docs/roadmap.md`          | What is deliberately not built yet, and the seam for each.                          |
-| `CONTEXT.md`               | Build log — what exists, what was decided, which bugs must not return.              |
-| `README.md`                | Overview and the twelve proven capabilities.                                        |
+| File                       | What it is                                                                           |
+| -------------------------- | ------------------------------------------------------------------------------------ |
+| `AGENTS.md`                | How to work here: rules, conventions, testing, the harness. Read first.              |
+| `docs/`                    | Explanatory documentation — concepts, diagrams, guides, decision records.            |
+| `docs/design/`             | The game design bible — what the game is, and why each mechanic is shaped that way.  |
+| `docs/guides/catalogue.md` | The star catalogue: how it is built, what it stores, and what will bite you.         |
+| `docs/vision.md`           | What the project is for, and the principles behind architectural choices.            |
+| `docs/architecture.md`     | The system in one sitting.                                                           |
+| `docs/adr/`                | The twelve foundational decisions, with alternatives and consequences.               |
+| `docs/roadmap.md`          | What is deliberately not built yet, and the seam for each.                           |
+| `CONTEXT.md`               | Build log — what exists, what was decided, which bugs must not return.               |
+| `README.md`                | Overview and the twelve proven capabilities.                                         |
+| `.claude/`                 | The machinery below — rules, skills, agents, hooks. `.claude/rules/README.md` first. |
 
 ## Commands
 
@@ -79,9 +80,76 @@ deploys to the `inertialrefd` Worker, live at
   `verbatimModuleSyntax` are all on.** No enums, no parameter properties,
   `import type` for types, and local imports carry their `.ts` extension.
 - **oxlint** runs the `react`, `typescript` and `oxc` plugins. Type-aware rules
-  are off; enabling them needs `oxlint-tsgolint` plus `options.typeAware`.
+  are off; enabling them needs `oxlint-tsgolint` plus `options.typeAware`. There
+  is one override: `react/only-export-components` is off for
+  `apps/game/src/components/ui/*.tsx`, which shadcn/ui generates.
+- **React DnD 16** (`react-dnd`, `react-dnd-html5-backend`,
+  `react-dnd-touch-backend`) drives the dockable panels, and _only_ the gesture:
+  what a drop means is pure arithmetic in `apps/game/src/dock/layout.ts` with
+  property tests. The backend is chosen once at mount from `(pointer: coarse)`
+  because `DndProvider` cannot be handed a different one. ADR-0012.
+- **shadcn/ui is installed and configured** (`apps/game/components.json`, style
+  `new-york`, base `slate`, lucide icons). Add a component with
+  `pnpm dlx shadcn@latest add <name>` **run from `apps/game`**, then
+  `pnpm format` — the registry writes double quotes and semicolons, prettier
+  here does not. Its design tokens live in `src/index.css` and are pointed at
+  the existing slate/sky palette rather than the generator's defaults; do not
+  regenerate them with `shadcn init`, which would overwrite that file.
+- **`@/` resolves to `apps/game/src`**, in three places that must agree:
+  `apps/game/vite.config.ts`, `apps/game/tsconfig.json` (`paths`, and
+  deliberately no `baseUrl` — TypeScript 6 errors on it) and the root
+  `vitest.config.ts`. It exists for the registry's hard-coded imports; hand
+  written code still imports relatively, with extensions.
 - Node 26, pnpm 11. Node runs the TypeScript sources directly (type stripping),
   which is how `pnpm sim` works with no build step.
+
+## The machinery in `.claude/`
+
+Most of it is automatic. The parts worth knowing:
+
+- **`rules/` load themselves.** Each file carries `paths:` globs and enters context only
+  when a matching file does — so editing `dock/layout.ts` brings the dock's invariant with
+  it. They exist because `AGENTS.md` holds thirty invariants and **nothing loads it**;
+  "read AGENTS.md first" is a request, not a mechanism. `AGENTS.md` stays canonical and
+  carries the reasoning; the rules carry only the imperative. The contract for keeping the
+  two in step is in [`.claude/rules/README.md`](.claude/rules/README.md) — read it before
+  editing either.
+
+- **The Stop hook runs the gate.** After any turn that touched a `.ts`/`.tsx`/`.mjs`/`.json`
+  file, `graph → lint → typecheck → test` runs (~6s) and a failure comes back as something
+  to fix rather than a task reported complete. It blocks at most three times per prompt,
+  then reports and lets go. `pnpm build` is not in it — the full `pnpm check` belongs at
+  commit, which is what `/ship` runs. `IR_SKIP_GATE=1` disables it.
+
+- **Edits are formatted for you.** Prettier runs on every file written. **Do not run
+  `pnpm format` or `pnpm lint` by hand** — you would be re-reading output the hooks
+  suppress.
+
+- **A fresh checkout installs itself.** `SessionStart` runs `pnpm install` when
+  `node_modules` is absent — ~3s, because pnpm hardlinks from the global store. This covers
+  worktrees and cloud sessions. It does **not** fire for subagents: an agent working in a
+  worktree must run `pnpm install --frozen-lockfile --prefer-offline` itself, first.
+
+| Skill          | For                                                        |
+| -------------- | ---------------------------------------------------------- |
+| `/drive`       | driving the game — the harness, and the four browser traps |
+| `/ship`        | full check → commit → PR. Never auto-invoked               |
+| `/parallel`    | fanning work out across worktrees. Never auto-invoked      |
+| `/adr`         | writing an ADR in house style                              |
+| `/context-log` | appending to `CONTEXT.md`                                  |
+
+| Agent                  | For                                                      |
+| ---------------------- | -------------------------------------------------------- |
+| `invariant-auditor`    | auditing a diff against the thirty invariants. Read-only |
+| `property-tester`      | `fast-check` properties for anything mathematical        |
+| `worktree-implementer` | one isolated change, in its own worktree                 |
+| `docs-curator`         | checking the docs still describe the code                |
+
+**Cloud sessions need one manual step.** Cloud images ship Node 20/21/22 and this
+repository needs Node 26 for type stripping. Paste
+[`scripts/cloud-setup.sh`](scripts/cloud-setup.sh) into the environment's **Setup script**
+field at claude.ai/code — once per environment; the result is snapshotted. Until then
+`claude --cloud` starts and fails at the first import.
 
 ## Working style here
 

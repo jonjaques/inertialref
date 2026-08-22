@@ -1,7 +1,29 @@
 # Modes
 
-Solo offline, solo online, and the persistent universe — and the architectural
-reason all three are the same build.
+Solo offline, solo online, the persistent universe — and the architectural
+reason all three are the same build. Plus the two modes that have no ship at
+all.
+
+---
+
+## The five, at a glance
+
+| Mode                                                  | What it is                                 | Status |
+| ----------------------------------------------------- | ------------------------------------------ | ------ |
+| [Solo offline](#solo-offline)                         | The complete game, no network of any kind  | ✅     |
+| [Solo online](#solo-online)                           | The same game, plus other people's records | ⬜     |
+| [Persistent universe](#persistent-universe--deferred) | Other players, present                     | ⛔     |
+| [Planetarium](planetarium.md)                         | Free navigation. No ship, no fuel          | ✅     |
+| [Cinema](cinema.md)                                   | A player for scripted scenes               | ✅     |
+
+The first three are the game and differ only by what a server adds. The last two
+are the same universe with the ship taken away, and they share a build with the
+first three for exactly the reason the first three share one: **the world is
+derived, so there is only ever one of it.** You can leave a ship in orbit, spend
+ten minutes in the planetarium, and come back to the same state hash.
+
+Who owns the camera in each is [ADR-0011](../adr/0011-application-shell-and-modes.md);
+the URL each answers to is in [ux](ux.md#the-routes).
 
 ---
 
@@ -179,8 +201,26 @@ reason to be online.
 
 ---
 
+## The modes with no ship
+
+Both are documented in full on their own pages, and both obey one rule that
+matters here: **neither writes canonical state.** No clock, no ship, no entity,
+no save. That is what lets them share a running world with a flight session
+rather than being a separate application, and it is also what keeps the
+planetarium from becoming a free way to play the survey game — discovery credit
+is earned by _going_ somewhere, and looking at Vega is not going.
+
+| Mode                          | Owns the camera via                                                   | Writes anything?              |
+| ----------------------------- | --------------------------------------------------------------------- | ----------------------------- |
+| [Planetarium](planetarium.md) | The observatory                                                       | No                            |
+| [Cinema](cinema.md)           | The cutscene director ([ADR-0010](../adr/0010-cinematic-director.md)) | No — it captures and restores |
+
+---
+
 ## Related
 
+- [planetarium](planetarium.md) · [cinema](cinema.md) — the two modes with no ship
+- [ADR-0011](../adr/0011-application-shell-and-modes.md) — the shell, the routes, who owns the camera
 - [ADR-0008](../adr/0008-multiplayer-partitions.md) — the partition topology
 - [`docs/roadmap.md`](../roadmap.md#multiplayer) — the engineering gap list
 - [exploration](exploration.md#discovery-credit) — the one thing that differs

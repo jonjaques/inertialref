@@ -1,5 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { MotionConfig } from 'motion/react'
+import { BrowserRouter } from 'react-router'
 import { createConsoleSink, logHub } from '@inertialref/shared'
 import App from './App.tsx'
 import { BUILD_ID } from './build.ts'
@@ -17,8 +19,65 @@ import './index.css'
  */
 logHub.addSink(createConsoleSink(console, 'info'))
 
+/*
+ * The last resort, when there is no React left to draw one.
+ *
+ * A throw at module scope, or a render that fails before any boundary is
+ * mounted, takes `hud/ErrorBoundary.tsx` down with everything else — so the
+ * failure that most needs saying is the one nothing in the tree can say. This
+ * writes into `document.body` rather than `#root` deliberately: after an
+ * uncaught error React has unmounted the tree and still owns that container,
+ * and writing into a container React owns is how a fatal error becomes two.
+ *
+ * Same reason as `index.html` for the inline literals — they are the design
+ * system's tokens, and by this point a stylesheet is not a thing to count on.
+ */
+function reportFatal(cause: unknown): void {
+  const existing = document.getElementById('fatal')
+  if (existing !== null) return
+  const detail = cause instanceof Error ? cause.message : String(cause)
+  console.error('InertialRef failed to start', cause)
+
+  const panel = document.createElement('div')
+  panel.id = 'fatal'
+  panel.setAttribute('role', 'alert')
+  panel.style.cssText = [
+    'position:fixed',
+    'bottom:0.75rem',
+    'left:0.75rem',
+    'max-width:calc(100vw - 1.5rem)',
+    'border:1px solid rgb(251 113 133 / 0.4)',
+    'border-radius:0.5rem',
+    'background:rgb(2 6 23 / 0.85)',
+    'padding:0.5rem 0.75rem',
+    'font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace',
+    'font-size:12px',
+    'line-height:1.3333',
+  ].join(';')
+
+  const heading = document.createElement('div')
+  heading.style.color = '#fda4af'
+  heading.textContent = 'InertialRef did not start'
+  const message = document.createElement('div')
+  message.style.cssText =
+    'margin-top:0.25rem;color:#94a3b8;overflow-wrap:anywhere'
+  // `textContent`, never `innerHTML`: this string came from a thrown error, and
+  // an error message is the last place to start trusting markup.
+  message.textContent = detail
+  const hint = document.createElement('div')
+  hint.style.cssText = 'margin-top:0.25rem;color:#475569'
+  hint.textContent =
+    'full stack in the console · a reload is safe, nothing was saved'
+
+  panel.append(heading, message, hint)
+  document.body.append(panel)
+}
+
 const root = document.getElementById('root')
-if (root === null) throw new Error('#root is missing from index.html')
+if (root === null) {
+  reportFatal(new Error('#root is missing from index.html'))
+  throw new Error('#root is missing from index.html')
+}
 
 /*
  * The catalogue is awaited before the first render.
@@ -30,13 +89,57 @@ if (root === null) throw new Error('#root is missing from index.html')
  * flying. One fetch of a precached 460 KB asset is the cheaper trade, and a
  * failed fetch falls back rather than blocking.
  */
-const catalog = await loadStarCatalog()
-
-createRoot(root).render(
-  <StrictMode>
-    <App catalog={catalog} />
-  </StrictMode>,
-)
+try {
+  const catalog = await loadStarCatalog()
+  createRoot(root, {
+    /*
+     * Errors that reached the top of the tree without a boundary catching them.
+     *
+     * The overlay's boundaries cover the panels, the strip and the cutscene
+     * layer; what they cannot cover is `App` itself, the `<Canvas>` mount, or
+     * anything that throws before they exist. React unmounts the whole tree for
+     * those, which in this app means the canvas goes with it — the same black
+     * screen, arriving before there is any chrome left to explain it.
+     */
+    onUncaughtError: (cause: unknown) => reportFatal(cause),
+  }).render(
+    <StrictMode>
+      {/*
+       * The router wraps the whole tree, but it does not *own* the view: the
+       * routed pages render inside `.hud-layer` (see `pages/routes.tsx`), so
+       * `<Canvas>` is never inside a route and a navigation cannot remount the
+       * renderer.
+       *
+       * `useTransitions={false}` is a deliberate opt-out. React Router v8 wraps
+       * router state updates in `startTransition` by default, and its own
+       * guidance is to turn that off for applications built on
+       * `useSyncExternalStore` — which this one is: `state/engineStore.ts`
+       * republishes an engine snapshot eight times a second and a
+       * `useSyncExternalStore` update cannot be a transition, so every sample
+       * would force a synchronous update through a router mid-transition.
+       * There is nothing to gain here in exchange — no route does data loading
+       * and none of them suspend.
+       */}
+      <BrowserRouter useTransitions={false}>
+        {/*
+         * Reduced motion, honoured globally rather than per animation.
+         * `reducedMotion="user"` drops transform and layout animations for
+         * anyone whose system asks for that, and leaves opacity alone — so a
+         * page still fades in and simply does not travel. It cannot reach the
+         * cutscene director or the scene, which are camera moves in a
+         * simulation rather than interface motion.
+         */}
+        <MotionConfig reducedMotion="user">
+          <App catalog={catalog} />
+        </MotionConfig>
+      </BrowserRouter>
+    </StrictMode>,
+  )
+} catch (cause) {
+  // The synchronous half: a module that failed to evaluate, a catalogue decode
+  // that got past its own fallback, a `createRoot` that refused the container.
+  reportFatal(cause)
+}
 
 /*
  * Offline-first (spec §9).

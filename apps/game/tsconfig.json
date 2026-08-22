@@ -9,7 +9,14 @@
        on any bump, and this app would then stop compiling for reasons that have
        nothing to do with anything it changed. */
     "types": ["node", "vite/client", "@webgpu/types"],
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
+    /* The `@/` alias, matching `resolve.alias` in vite.config.ts — see the
+       comment there for why it exists at all. tsc and Vite resolve imports
+       independently, so both have to be told, and the two must agree.
+
+       No `baseUrl`: TypeScript 6 deprecates it outright, and without one these
+       patterns resolve relative to this file, which is what was wanted. */
+    "paths": { "@/*": ["./src/*"] }
   },
   "include": ["src", "vite.config.ts"]
 }

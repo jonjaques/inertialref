@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { openSession } from '@inertialref/devtools'
 import { CameraPanel } from './CameraPanel.tsx'
+import { ErrorBoundary } from './ErrorBoundary.tsx'
 import { GraphicsPanel } from './GraphicsPanel.tsx'
 import { HudDock } from './HudDock.tsx'
 import { TargetRow } from './NavPanel.tsx'
@@ -20,6 +21,41 @@ import { type Connection, DISCONNECTED } from '../net/health.ts'
  * It says nothing about layout, and cannot: what it asserts is that the thing
  * renders and that the names in it came from the universe.
  */
+
+/** The dock's props, minus the two every test actually varies. */
+function dockProps(harness: unknown) {
+  return {
+    engine: fakeEngine(harness),
+    status: null,
+    open: true,
+    onOpenChange: () => {},
+    tab: 'telemetry' as const,
+    onTabChange: () => {},
+    onNotice: () => {},
+    connection: DISCONNECTED,
+    onCheckConnection: () => {},
+    render: {
+      preference: 'auto' as const,
+      output: null,
+      onCyclePreference: () => {},
+    },
+    graphics: {
+      lensFlare: true,
+      onLensFlare: () => {},
+      aa: '2x' as const,
+      onAa: () => {},
+    },
+    camera: { fov: 65, onFov: () => {} },
+    commands: {
+      togglePause: () => {},
+      warp: () => {},
+      toggleAssist: () => {},
+      killRotation: () => {},
+      save: () => {},
+      load: () => {},
+    },
+  }
+}
 
 function fakeEngine(harness: unknown): never {
   // The dock only reaches the engine to hand it to the panels; the panels only
@@ -223,5 +259,67 @@ describe('the dev dock', () => {
     for (const name of session.harness.scenarios())
       expect(markup).toContain(name)
     session.dispose()
+  })
+  it('marks exactly one tab as the one that is showing', () => {
+    // The tablist is what a screen reader and a keyboard have to navigate, and
+    // `aria-selected` is the only thing distinguishing the active tab from the
+    // four inactive ones — the underline that does it visually is a border.
+    const session = openSession({ seed: 'inertialref', workers: null })
+    const markup = renderToStaticMarkup(
+      // `camera` rather than `perf`: the perf tab reads `engine.metrics`, and
+      // the engine here is a harness in a trench coat. See `fakeEngine`.
+      createElement(HudDock, { ...dockProps(session.harness), tab: 'camera' }),
+    )
+    expect(markup.match(/aria-selected="true"/g)).toHaveLength(1)
+    expect(markup).toContain('id="hud-tab-camera" aria-selected="true"')
+    expect(markup).toContain('role="tablist"')
+    session.dispose()
+  })
+
+  it('leaves every truncated readout recoverable', () => {
+    /*
+     * The dock is 27rem wide and a state hash, a frame chain and a canonical
+     * coordinate are none of them 27rem long, so the rows that carry the
+     * invisible state are exactly the rows that truncate. A value you can
+     * neither read nor hover is a value the panel is not actually showing,
+     * which is the one thing this overlay exists to avoid.
+     */
+    const session = openSession({ seed: 'inertialref', workers: null })
+    const status = session.harness.status()
+    const markup = renderToStaticMarkup(
+      createElement(HudDock, {
+        ...dockProps(session.harness),
+        status,
+        tab: 'telemetry' as const,
+      }),
+    )
+    expect(markup).toContain(`title="${status.world.stateHash}"`)
+    session.dispose()
+  })
+
+  it('gives a destination row its name and address to hover', () => {
+    const session = openSession({ seed: 'inertialref', workers: null })
+    const target = session.harness.targets({ lightYears: 6 })[0]
+    if (target === undefined) throw new Error('the survey found nothing')
+    const markup = renderToStaticMarkup(
+      createElement(TargetRow, { target, selected: false, onSelect: () => {} }),
+    )
+    expect(markup.replaceAll('&#x27;', "'")).toContain(
+      `title="${target.name} · ${target.address}"`,
+    )
+    session.dispose()
+  })
+
+  it('turns a thrown non-Error into something a panel can print', () => {
+    // A boundary's whole value is that it renders instead of the tree, and
+    // `throw 'boom'` is legal JavaScript that would otherwise reach
+    // `error.message` as undefined and render an empty fallback.
+    expect(ErrorBoundary.getDerivedStateFromError('boom').error.message).toBe(
+      'boom',
+    )
+    expect(
+      ErrorBoundary.getDerivedStateFromError(new RangeError('out')).error
+        .message,
+    ).toBe('out')
   })
 })

@@ -1,11 +1,22 @@
 import { Canvas } from '@react-three/fiber'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { HarnessStatus } from '@inertialref/devtools'
+import { AnimatePresence, motion } from 'motion/react'
+import { useLocation } from 'react-router'
 import type { StarCatalog } from '@inertialref/universe'
 import { DEFAULT_FOV, GameEngine } from './engine/GameEngine.ts'
-import { FlightStrip } from './hud/FlightStrip.tsx'
-import { HudDock, type HudCommands, type HudTab } from './hud/HudDock.tsx'
-import { usePersistentState } from './hud/panelState.ts'
+import { CutsceneOverlay } from './hud/CutsceneOverlay.tsx'
+import { ErrorBoundary } from './hud/ErrorBoundary.tsx'
+import type { CameraState } from './hud/CameraPanel.tsx'
+import type { GraphicsState } from './hud/GraphicsPanel.tsx'
+import { HudDock, type HudCommands } from './hud/HudDock.tsx'
+import {
+  isBoolean,
+  numberWithin,
+  oneOf,
+  usePersistentState,
+} from './hud/panelState.ts'
+import { type HudTab, TABS } from './hud/tabs.ts'
+import { nextWarp } from './hud/warp.ts'
 import { useShipControls } from './hud/useShipControls.ts'
 import {
   type Connection,
@@ -13,19 +24,29 @@ import {
   DISCONNECTED,
 } from './net/health.ts'
 import { EXTENDED_RANGE_QUERY, watchDynamicRange } from './render/capability.ts'
+import { watchPresentation } from './render/presentationWatchdog.ts'
 import {
   commitToneCurve,
   createRenderer,
   type RendererHandle,
 } from './render/createRenderer.ts'
 import {
+  AA_LEVELS,
   type AaLevel,
   aaAntialias,
   aaDprFactor,
   type OutputPreference,
   type RendererDescription,
 } from './render/output.ts'
+import { ModeRoutes, OverlayRoutes } from './pages/routes.tsx'
+import { modeForPath, resolvedLocation } from './pages/paths.ts'
+import { ShellBar } from './pages/ShellBar.tsx'
 import { SceneView } from './scene/SceneView.tsx'
+import {
+  engineStore,
+  startEngineSampler,
+  useEngine,
+} from './state/engineStore.ts'
 
 /*
  * The application shell.
@@ -57,11 +78,23 @@ function engineInstance(catalog: StarCatalog): GameEngine {
 /** HUD refresh rate. The simulation runs at 64 Hz; a human reads about 8. */
 const PANEL_HZ = 8
 
-/** Time-warp detents. Powers of ten with a 5 and a 25 where the gaps are worst. */
-const WARP_STEPS = [1, 5, 25, 100, 1_000, 10_000, 100_000]
+/** How long a transient notice stays up. */
+const NOTICE_MS = 2_500
+
+/** The camera panel's slider range, restated here because it guards the store. */
+const FOV_MIN = 20
+const FOV_MAX = 110
 
 /** `auto` first, because it is right more often than it is wrong. */
-const HDR_STATES: readonly OutputPreference[] = ['auto', 'extended', 'standard']
+const HDR_STATES = [
+  'auto',
+  'extended',
+  'standard',
+] as const satisfies readonly OutputPreference[]
+
+/** An unknown throw, as a sentence. Every rejection here reaches a notice. */
+const describe = (cause: unknown): string =>
+  cause instanceof Error ? cause.message : String(cause)
 
 /**
  * Which inputs, changing, mean the renderer has to be built again.
@@ -85,9 +118,70 @@ function rendererKey(
 
 export default function App({ catalog }: { catalog: StarCatalog }) {
   const engine = engineInstance(catalog)
-  const [status, setStatus] = useState<HarnessStatus | null>(null)
-  const [dockOpen, setDockOpen] = usePersistentState('dock.open', true)
-  const [tab, setTab] = usePersistentState<HudTab>('dock.tab', 'navigate')
+  /*
+   * The engine's latest description, and whether a cutscene is playing — both
+   * read from the sampler in `state/engineStore.ts` rather than held here.
+   *
+   * `status` is a fresh object on every sample, so selecting it re-renders this
+   * component at the sample rate exactly as the old `useState` did; the
+   * difference is that a panel can now subscribe to the field it needs instead
+   * of being handed the whole thing. `cinema` is a boolean, so it re-renders
+   * when it flips and not eight times a second.
+   *
+   * Only the *chrome* hangs off `cinema` — the dock, the flight strip, the
+   * crosshair all step out of the frame so a capture is the picture and nothing
+   * else. The scene itself reads `engine.cinematic` directly every frame; this
+   * exists because React needs a re-render to unmount chrome, and 8 Hz is fast
+   * enough for a thing a human just clicked.
+   */
+  const status = useEngine((snapshot) => snapshot.status)
+  const cinema = useEngine((snapshot) => snapshot.cinema)
+  /*
+   * Which mode is running, derived from the URL rather than held.
+   *
+   * A reload, a back button and a pasted link all have to land in the same
+   * place, and the only way to guarantee that is for the path to be the source
+   * of truth. `modeForPath` is a pure function for exactly that reason — the
+   * claim is testable in Node without a browser or a router.
+   *
+   * Against the location `ModeRoutes` resolves, not the raw pathname. With a
+   * dialog open the two differ, and this is the half that decides what chrome
+   * is drawn *and* whether the cinema player stays mounted — so disagreeing
+   * with the tree it is drawn over is not cosmetic. `resolvedLocation` says
+   * what went wrong at length.
+   */
+  const location = useLocation()
+  const mode = modeForPath(resolvedLocation(location).pathname)
+
+  /*
+   * The debug overlay: off by default, and off is the whole point.
+   *
+   * The dock is the author's instrument — `docs/design/ux.md` specifies a
+   * cockpit where every element has a physical place, and none of this is it —
+   * so a first-time visitor should never meet it. Persisted, because somebody
+   * who turned it on is working, and a reload is part of working.
+   */
+  const [debug, setDebug] = usePersistentState('debug.on', false, isBoolean)
+  const [dockOpen, setDockOpen] = usePersistentState(
+    'dock.open',
+    true,
+    isBoolean,
+  )
+  /*
+   * Every restored preference is checked against what this build accepts.
+   *
+   * `localStorage` outlives the code that wrote it. A `dock.tab` of `"nav"` from
+   * before these five names existed parses cleanly, matches no tab, and renders
+   * an empty dock with no active tab and no way back that is not devtools; an
+   * `aa` of `"8x"` from an experiment reaches the renderer's constructor. The
+   * guards turn every one of those into "the default", which is what an absent
+   * value already meant.
+   */
+  const [tab, setTab] = usePersistentState<HudTab>(
+    'dock.tab',
+    'navigate',
+    oneOf(TABS),
+  )
   const [notice, setNotice] = useState<string | null>(null)
   /*
    * The three-state HDR override.
@@ -101,6 +195,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
   const [hdr, setHdr] = usePersistentState<OutputPreference>(
     'render.hdr',
     'auto',
+    oneOf(HDR_STATES),
   )
   /*
    * The graphics and camera panels' knobs. Persisted like the HDR override —
@@ -108,9 +203,24 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    * reload that tests the fix — and mirrored onto plain engine fields below,
    * because the frame loop reads them and must not touch React to do it.
    */
-  const [lensFlare, setLensFlare] = usePersistentState('render.lensFlare', true)
-  const [aa, setAa] = usePersistentState<AaLevel>('render.aa', '2x')
-  const [fov, setFov] = usePersistentState('camera.fov', DEFAULT_FOV)
+  const [lensFlare, setLensFlare] = usePersistentState(
+    'render.lensFlare',
+    true,
+    isBoolean,
+  )
+  const [aa, setAa] = usePersistentState<AaLevel>(
+    'render.aa',
+    '2x',
+    oneOf(AA_LEVELS),
+  )
+  // The same range the camera panel's slider offers. A stored value outside it
+  // is not a field of view somebody nearly asked for; it reaches `engine.fov`
+  // and the projection matrix behind it.
+  const [fov, setFov] = usePersistentState(
+    'camera.fov',
+    DEFAULT_FOV,
+    numberWithin(FOV_MIN, FOV_MAX),
+  )
   const [dynamicRangeHigh, setDynamicRangeHigh] = useState(
     () => window.matchMedia(EXTENDED_RANGE_QUERY).matches,
   )
@@ -128,6 +238,16 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
   // The renderer itself, for the one thing that has to happen to it after R3F
   // has finished configuring it. Not state: nothing renders differently for it.
   const renderer = useRef<RendererHandle | null>(null)
+  /*
+   * Bumped by the presentation watchdog's last rung, and by nothing else. In
+   * the deepest boot wedge — draws submitted every frame, presentation stuck,
+   * immune even to real resizes — the only recovery is a fresh canvas and
+   * renderer, and folding this into `canvasKey` is the sanctioned way to get
+   * one. See `render/presentationWatchdog.ts` for the measurements.
+   */
+  const [canvasEpoch, setCanvasEpoch] = useState(0)
+  /** Guards save and load against each other. See `commands.save`. */
+  const storageBusy = useRef(false)
 
   // The media query is live: a window can be dragged from an EDR display to one
   // without, and reading it once at startup gets that permanently wrong.
@@ -193,7 +313,26 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    */
   // MSAA joins the key because it is a constructor fact; the `2x`↔`4x` step
   // only changes the drawing-buffer scale, which R3F applies live via `dpr`.
-  const canvasKey = `${rendererKey(hdr, dynamicRangeHigh)}:${aaAntialias(aa) ? 'msaa' : 'raw'}`
+  // The watchdog epoch joins it so the last recovery rung can rebuild.
+  const canvasKey = `${rendererKey(hdr, dynamicRangeHigh)}:${aaAntialias(aa) ? 'msaa' : 'raw'}:${canvasEpoch}`
+
+  /*
+   * Verify that boot actually put pixels on screen, and climb the recovery
+   * ladder if it did not. Keyed on `output` because sampling before the
+   * renderer exists proves nothing, and on `canvasEpoch` so a rebuilt canvas
+   * gets its own verification pass — with the remount lever withheld the
+   * second time, or a genuinely black scene would rebuild forever.
+   */
+  useEffect(() => {
+    if (output === null) return
+    const canvas = renderer.current?.renderer.domElement
+    if (canvas === undefined) return
+    const watch = watchPresentation(canvas, {
+      allowRemount: canvasEpoch === 0,
+      remount: () => setCanvasEpoch((epoch) => epoch + 1),
+    })
+    return () => watch.cancel()
+  }, [output, canvasEpoch])
 
   useEffect(() => {
     // Expose the harness for the console and for automated drivers. This is the
@@ -208,17 +347,26 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
       '— harness ready. Try ir.help()',
     )
 
-    const timer = window.setInterval(
-      () => setStatus(engine.harness.status()),
-      1000 / PANEL_HZ,
-    )
-    return () => window.clearInterval(timer)
+    return startEngineSampler(engineStore, engine, PANEL_HZ)
   }, [engine])
 
+  /*
+   * One notice, one timer.
+   *
+   * Each call used to start a timer and forget it, so a notice raised two
+   * seconds after another was cleared by the *first* one's timer a fraction of
+   * a second later — the messages that arrive in bursts (save, then load, then
+   * a warp step) were exactly the ones that flickered past unread. The ref
+   * holds the only live timer, and the effect below cancels it on unmount so a
+   * cutscene starting mid-notice does not set state on a gone component.
+   */
+  const noticeTimer = useRef(0)
   const flash = useCallback((message: string) => {
+    window.clearTimeout(noticeTimer.current)
     setNotice(message)
-    window.setTimeout(() => setNotice(null), 2_500)
+    noticeTimer.current = window.setTimeout(() => setNotice(null), NOTICE_MS)
   }, [])
+  useEffect(() => () => window.clearTimeout(noticeTimer.current), [])
 
   const commands: HudCommands = {
     togglePause: () => {
@@ -227,15 +375,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
       flash(paused ? 'paused' : 'running')
     },
     warp: (direction) => {
-      const current = engine.world.clock.timeScale
-      const index = WARP_STEPS.findIndex((step) => step >= current)
-      const next =
-        WARP_STEPS[
-          Math.min(
-            WARP_STEPS.length - 1,
-            Math.max(0, (index < 0 ? 0 : index) + direction),
-          )
-        ] ?? 1
+      const next = nextWarp(engine.world.clock.timeScale, direction)
       engine.world.clock.setTimeScale(next)
       flash(`time warp ${next}×`)
     },
@@ -245,31 +385,118 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
       engine.killRotation()
       flash('rotation killed')
     },
+    /*
+     * One at a time, and never at the same time as each other.
+     *
+     * Both are one keystroke and one button, and both are asynchronous against
+     * IndexedDB. Two loads interleaved restore two worlds into one; a save
+     * racing a load writes a state that never existed. The guard is a ref
+     * rather than state because nothing renders differently for it — the
+     * operations are milliseconds and a button that flickered disabled would be
+     * worse than one that quietly ignores the second press.
+     */
     save: () => {
-      void engine.save().then((text) => flash(`saved ${text.length} bytes`))
+      if (storageBusy.current) return
+      storageBusy.current = true
+      void engine
+        .save()
+        .then((text) => flash(`saved ${text.length} bytes`))
+        .catch((cause: unknown) => flash(`save failed — ${describe(cause)}`))
+        .finally(() => {
+          storageBusy.current = false
+        })
     },
     load: () => {
-      void engine.load().then((ok) => flash(ok ? 'loaded' : 'nothing to load'))
+      if (storageBusy.current) return
+      storageBusy.current = true
+      void engine
+        .load()
+        .then((ok) => flash(ok ? 'loaded' : 'nothing to load'))
+        .catch((cause: unknown) => flash(`load failed — ${describe(cause)}`))
+        .finally(() => {
+          storageBusy.current = false
+        })
     },
   }
 
-  useShipControls(engine, {
-    onToggleAssist: commands.toggleAssist,
-    onKillRotation: commands.killRotation,
-    onPause: commands.togglePause,
-    onWarp: commands.warp,
-    onSave: commands.save,
-    onLoad: commands.load,
-    onToggleHud: () => setDockOpen(!dockOpen),
-    onShowNavigation: () => {
-      setTab('navigate')
-      setDockOpen(true)
+  /*
+   * The render knobs, as one definition each.
+   *
+   * They are read in two places now — the dock's tabs and the `/settings` page
+   * — and `docs/design/ux.md` puts the eventual home in the page rather than
+   * the dock. Two inline object literals would be two anti-aliasing switches
+   * that could drift apart, which is the same argument `widgets.tsx` makes
+   * about a label's colour, applied to behaviour.
+   */
+  const graphicsState: GraphicsState = {
+    lensFlare,
+    onLensFlare: setLensFlare,
+    aa,
+    onAa: (level) => {
+      // Crossing the MSAA boundary rebuilds the renderer, so say so — the
+      // stall would otherwise read as a hang.
+      setAa(level)
+      flash(`anti-aliasing ${level}`)
     },
-    onShowPerformance: () => {
-      setTab('perf')
-      setDockOpen(true)
+  }
+  const cameraState: CameraState = { fov, onFov: setFov }
+
+  useShipControls(
+    engine,
+    {
+      onToggleAssist: commands.toggleAssist,
+      onKillRotation: commands.killRotation,
+      onPause: commands.togglePause,
+      onWarp: commands.warp,
+      onSave: commands.save,
+      onLoad: commands.load,
+      onToggleHud: () => setDockOpen(!dockOpen),
+      onShowNavigation: () => {
+        setTab('navigate')
+        setDockOpen(true)
+      },
+      onShowPerformance: () => {
+        setTab('perf')
+        setDockOpen(true)
+      },
     },
-  })
+    // The flight axes belong to the flight modes. The planetarium binds the
+    // arrows to orbiting a camera and `F` to framing a target, and the cinema
+    // player binds them to stepping frames — two window handlers claiming one
+    // key is not something a player can diagnose.
+    //
+    // Space is the same argument, and it was missed: the cinema player binds
+    // it to its own transport, so both handlers ran and one press flipped
+    // `clock.paused` twice — the documented play/pause control did nothing at
+    // all, with nothing to see in the console.
+    { axes: mode === 'flight', pause: mode !== 'cinema' },
+  )
+
+  /*
+   * The debug overlay's own key.
+   *
+   * Backquote, because it is the console key in every game that has one, it is
+   * not a flight axis, and it is not typed into anything here. Bound at the
+   * window like the rest, and declining the keystroke when it was aimed at a
+   * text field is the same courtesy `useShipControls` extends.
+   */
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.code !== 'Backquote' || event.metaKey || event.ctrlKey) return
+      const target = event.target
+      if (
+        target instanceof HTMLElement &&
+        (target.isContentEditable ||
+          target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA')
+      )
+        return
+      event.preventDefault()
+      setDebug(!debug)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [debug, setDebug])
 
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-black text-slate-200">
@@ -322,56 +549,184 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
        * holds for every overlay inside it, and it must not be on the root: the
        * canvas is a sibling and would be clamped with it.
        */}
+      {/*
+       * The overlay layer, and the order things are stacked in it.
+       *
+       * Every band below is `position: absolute` in one stacking context, so
+       * with no `z-index` anywhere the paint order — and, worse, the
+       * *hit-testing* order — is DOM order. That was an accident waiting for a
+       * mode that covers the viewport: `PlanetariumMode`'s input surface is
+       * `absolute inset-0 pointer-events-auto` and is emitted after the dock,
+       * so in the planetarium every button, tab and drag handle in the dock
+       * was unclickable and the surface silently took the click.
+       *
+       * So the order is stated, bottom to top, and each band gets an inert
+       * wrapper to state it on — `ErrorBoundary`'s `className` styles its
+       * *fallback* rather than a wrapper, and the chrome inside positions
+       * itself, so there is otherwise nothing here to hang a z-index on. The
+       * wrappers are `pointer-events-none` like the layer itself, so they
+       * change nothing about what is clickable: each piece of chrome turns
+       * events back on for itself, exactly as before.
+       *
+       *   0  the mode           — at its widest a full-viewport input surface
+       *   10 the cutscene layer — blackout and titles: picture, not UI
+       *   20 the dock           — the instrument, over the mode it drives
+       *   30 the shell bar, notices, and the cinema player
+       *   40 dialogs            — over all of it, which is what a dialog is
+       *
+       * The cutscene layer is above the mode because its blackout is part of
+       * the picture. The cinema player is the one mode that has to be read
+       * *through* that blackout — it carries the transport and the way out —
+       * which is why the mode band is lifted to 30 there and nowhere else.
+       *
+       * Radix portals its tooltips to `<body>` at `z-50`, outside this layer
+       * and above all of it, which is what a tooltip should be.
+       */}
       <div className="hud-layer pointer-events-none absolute inset-0">
-        <HudDock
-          engine={engine}
-          status={status}
-          render={{
-            preference: hdr,
-            output,
-            onCyclePreference: () => {
-              const next =
-                HDR_STATES[(HDR_STATES.indexOf(hdr) + 1) % HDR_STATES.length] ??
-                'auto'
-              // The renderer is rebuilt for this, so say what happened —
-              // otherwise the only feedback is a frame the player may not be
-              // able to see the difference in, which is the whole problem.
-              setHdr(next)
-              flash(`hdr ${next}`)
-            },
-          }}
-          graphics={{
-            lensFlare,
-            onLensFlare: setLensFlare,
-            aa,
-            onAa: (level) => {
-              // Crossing the MSAA boundary rebuilds the renderer, so say so —
-              // the stall would otherwise read as a hang.
-              setAa(level)
-              flash(`anti-aliasing ${level}`)
-            },
-          }}
-          camera={{ fov, onFov: setFov }}
-          connection={connection}
-          onCheckConnection={monitor.refresh}
-          open={dockOpen}
-          onOpenChange={setDockOpen}
-          tab={tab}
-          onTabChange={setTab}
-          commands={commands}
-          onNotice={flash}
-        />
-        <FlightStrip status={status} />
-
-        {notice !== null && (
-          <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded bg-sky-500/20 px-3 py-1 font-mono text-xs text-sky-200">
-            {notice}
+        {/* Renders nothing at all when no cutscene is running. While one is,
+            every other piece of chrome below unmounts — Esc skips, and the
+            dock comes straight back. */}
+        <div className="pointer-events-none absolute inset-0 z-10">
+          <ErrorBoundary
+            what="the cutscene overlay"
+            className="pointer-events-auto absolute bottom-5 left-1/2 w-[34rem] max-w-[80vw] -translate-x-1/2 font-mono text-[11px]"
+          >
+            {/* The scene's own screen-space layer: blackout, titles, audio. Its
+                transport is the *debug* one — the cinema player provides the
+                real controls, and two transports on screen at once would be two
+                playheads a person could disagree with, so it is off in the
+                cinema mode however the debug overlay is set. */}
+            <CutsceneOverlay
+              engine={engine}
+              transport={debug && mode !== 'cinema'}
+            />
+          </ErrorBoundary>
+        </div>
+        {!cinema && debug && (
+          <div className="pointer-events-none absolute inset-0 z-20">
+            <ErrorBoundary
+              what="the dock"
+              className="pointer-events-auto absolute right-3 top-3 w-[27rem] max-w-[calc(100vw-1.5rem)] font-mono text-[11px] leading-relaxed"
+            >
+              <HudDock
+                engine={engine}
+                status={status}
+                render={{
+                  preference: hdr,
+                  output,
+                  onCyclePreference: () => {
+                    const next =
+                      HDR_STATES[
+                        (HDR_STATES.indexOf(hdr) + 1) % HDR_STATES.length
+                      ] ?? 'auto'
+                    // The renderer is rebuilt for this, so say what happened —
+                    // otherwise the only feedback is a frame the player may not be
+                    // able to see the difference in, which is the whole problem.
+                    setHdr(next)
+                    flash(`hdr ${next}`)
+                  },
+                }}
+                graphics={graphicsState}
+                camera={cameraState}
+                connection={connection}
+                onCheckConnection={monitor.refresh}
+                open={dockOpen}
+                onOpenChange={setDockOpen}
+                tab={tab}
+                onTabChange={setTab}
+                commands={commands}
+                onNotice={flash}
+              />
+            </ErrorBoundary>
+          </div>
+        )}
+        {/*
+         * The mode: the menu, a flight session, the planetarium, the player.
+         *
+         * Its own boundary, separate from the dock's and the cutscene layer's.
+         * A single boundary around the whole overlay would take the debug dock
+         * down with whichever mode failed — and the dock is how the simulation
+         * is driven, so losing it to a throw in a planetarium panel is the
+         * expensive half of the failure, not the cheap one. The scene is
+         * outside all of them: `<Canvas>` is a sibling of `.hud-layer` and
+         * nothing in here can reach it.
+         */}
+        {/*
+         * The one exception to "a cutscene hides every other piece of chrome":
+         * the cinema player *is* the chrome for a playing scene, and unmounting
+         * it would stop the scene it is playing — its cleanup calls
+         * `stopCutscene`, so gating it on `!cinema` made pressing play stop the
+         * cutscene a fraction of a second later, with nothing to explain it.
+         */}
+        {(!cinema || mode === 'cinema') && (
+          <div
+            className={`pointer-events-none absolute inset-0 ${mode === 'cinema' ? 'z-30' : 'z-0'}`}
+          >
+            <ErrorBoundary
+              what={`the ${mode} mode`}
+              className="pointer-events-auto absolute inset-0"
+            >
+              <ModeRoutes
+                engine={engine}
+                status={status}
+                fov={fov}
+                onFov={setFov}
+              />
+            </ErrorBoundary>
           </div>
         )}
 
-        <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-          <div className="h-4 w-4 rounded-full border border-sky-300/40" />
-        </div>
+        {/* A notice echoes what was asked for, and one of the things that can
+            be asked for is whatever was typed into the address field. Bounded
+            so a paste is a truncated sentence rather than a band across the
+            bottom of the frame.
+
+            `AnimatePresence` is here rather than a CSS transition because the
+            element is conditionally rendered: it can fade *in* under CSS and
+            never fade out, since by the time the notice clears there is no node
+            left to transition. The key is the message, so a second notice
+            arriving while the first is up crossfades rather than swapping text
+            inside a box that never moved. Transform is dropped for anyone who
+            asks for reduced motion; see `MotionConfig` in `main.tsx`. */}
+        <AnimatePresence>
+          {!cinema && notice !== null && (
+            <motion.div
+              key={notice}
+              title={notice}
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 4 }}
+              transition={{ duration: 0.15 }}
+              className="pointer-events-none absolute bottom-3 left-1/2 z-30 max-w-[min(36rem,calc(100vw-1.5rem))] -translate-x-1/2 truncate rounded bg-sky-500/20 px-3 py-1 font-mono text-xs text-sky-200"
+            >
+              {notice}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Where you are, the way back, and the settings — the one cluster
+            that is on screen in every mode, and the first thing to step out of
+            the frame when a scene plays. The cinema player's own transport
+            carries the way out while one is running. */}
+        {!cinema && (
+          <div className="pointer-events-none absolute inset-0 z-30">
+            <ShellBar mode={mode} debug={debug} onDebug={setDebug} />
+          </div>
+        )}
+
+        {/* Dialogs, over a running simulation and over whatever mode is behind
+            them. Inside the layer so they inherit the standard-range clamp; a
+            sibling of `<Canvas>`, so navigating cannot remount the renderer. */}
+        {!cinema && (
+          <div className="pointer-events-none absolute inset-0 z-40">
+            <ErrorBoundary
+              what="the page overlay"
+              className="pointer-events-auto absolute inset-0"
+            >
+              <OverlayRoutes graphics={graphicsState} camera={cameraState} />
+            </ErrorBoundary>
+          </div>
+        )}
       </div>
     </div>
   )

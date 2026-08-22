@@ -9,6 +9,87 @@ The cockpit, the two maps, the visor, and the first hour.
 
 ---
 
+## The application shell
+
+⚠️ **Read this first.** Everything below describes the interfaces _inside a
+flight session_. Around them is a shell — a front door, five modes, and a set of
+dialogs — and the two are shaped by different rules. The cockpit's rule is
+[pillar 4](charter.md#pillar-4--you-are-one-person): every element has a physical
+place. The shell's rule is that it is a _website_, and a website's affordances
+are the browser's.
+
+✅ **Built.** [ADR-0011](../adr/0011-application-shell-and-modes.md) holds the
+engineering argument.
+
+### The routes
+
+**The URL is the product's public surface.** Everything a person might want to
+send someone is addressable, and nothing addressable is reachable only by
+clicking.
+
+| Path                                                 | What                                                                 | Mode          |
+| ---------------------------------------------------- | -------------------------------------------------------------------- | ------------- |
+| `/`                                                  | The menu, over a live scene framed on Earth                          | `menu`        |
+| `/play/solo`                                         | [Solo offline](modes.md#solo-offline)                                | `flight`      |
+| `/play/online`                                       | [Solo online](modes.md#solo-online)                                  | `flight`      |
+| `/play/multiplayer`                                  | [The persistent universe](modes.md#persistent-universe--deferred) ⛔ | `flight`      |
+| `/planetarium?at=…`                                  | [The planetarium](planetarium.md)                                    | `planetarium` |
+| `/cinema`, `/cinema/:id`                             | [The cinema player](cinema.md)                                       | `cinema`      |
+| `/settings/:section?`                                | Display, camera, controls                                            | _a dialog_    |
+| `/about`                                             | What this is                                                         | _a dialog_    |
+| `/sign-in`, `/sign-up`, `/profile`, `/auth/callback` | Accounts ⬜                                                          | _a dialog_    |
+
+A **mode** decides what owns the camera. A **dialog** opens over whichever mode
+is running and leaves it running — which is the same promise this page already
+made about settings, generalised: _the simulation keeps running_.
+
+**The scene is never a loading screen.** The menu is drawn over the real engine,
+framed on Earth and slowly drifting. That is the one claim about this project a
+screenshot cannot fake, and it is worth four lines of camera code to make it the
+first thing anyone sees.
+
+### The account routes are reserved, not pretend
+
+They exist now because two of the three are expensive to add later: a redirect
+URI is registered with an identity provider ahead of time, and a service worker
+precaches a route list. What they must not do is _look_ real. **No page in this
+build renders a credential field that goes nowhere** — people reuse passwords,
+and a form that looks real is one they will type a real one into.
+
+### The debug overlay
+
+The dev dock — navigation, telemetry, performance, graphics, camera — is the
+author's instrument and is **off by default**, toggled by `` ` `` or the shell
+bar. A first-time visitor should never meet it; nothing on this page describes
+it, and the cockpit it will eventually be replaced by is specified below.
+
+### Dockable panels
+
+A tool mode is made of panels, and a panel belongs where the person using it
+wants it. Four zones — left, right, bottom, and closed — and a panel moves
+between them by dragging its header.
+[ADR-0012](../adr/0012-dockable-panels.md) has the mechanism; the design rules
+are three:
+
+- **The middle of the frame is never covered.** Zones, not floating windows: the
+  thing being looked at is the content.
+- **Closing is a move, not a deletion.** A launcher rail is always on screen, so
+  a closed panel always has a way back.
+- **A phone gets the same panels.** The zones stop being read and the set becomes
+  a bottom sheet with a tab strip; the arrangement survives the round trip.
+
+### Mobile
+
+⬜ **Piloting on a touchscreen is not designed.** ✅ **Looking is.**
+
+The [planetarium](planetarium.md#mobile) and the [cinema player](cinema.md) work
+on a phone today: one finger orbits, two pinch, a tap focuses, presets carry the
+framings a keyboard would otherwise reach. Flight modes are desktop-only until
+there is a touch control scheme worth shipping, and the menu says which is
+which rather than letting someone find out.
+
+---
+
 ## The screen inventory
 
 There are seven interfaces in the entire game, and only two of them take over the
@@ -347,6 +428,9 @@ See [art](art.md#hdr).
 ## Related
 
 - [galaxy](galaxy.md) — the two maps, specified
+- [planetarium](planetarium.md) — the mode with no ship, and its panels
+- [cinema](cinema.md) — the scene player
 - [onfoot](onfoot.md#the-suit) — the five gauges
 - [art](art.md) — how all of this is drawn
 - [loops](loops.md#the-first-hour) — the shape this page specifies
+- [ADR-0011](../adr/0011-application-shell-and-modes.md) · [ADR-0012](../adr/0012-dockable-panels.md)

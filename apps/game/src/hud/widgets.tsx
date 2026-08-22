@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
-import { usePersistentState } from './panelState.ts'
+import { FOCUS_RING, releaseFocus } from './focus.ts'
+import { isBoolean, usePersistentState } from './panelState.ts'
 
 /*
  * The three pieces of chrome every panel in the dock is built from.
@@ -21,21 +22,28 @@ export function Section({
   trailing?: string
   children: ReactNode
 }) {
-  const [open, setOpen] = usePersistentState(`section.${id}`, true)
+  const [open, setOpen] = usePersistentState(`section.${id}`, true, isBoolean)
   return (
     <div className="mb-2 last:mb-0">
       <button
         type="button"
+        aria-expanded={open}
         onClick={(event) => {
-          event.currentTarget.blur()
+          releaseFocus(event)
           setOpen(!open)
         }}
-        className="flex w-full items-center gap-1 text-left text-[10px] uppercase tracking-widest text-sky-400/80 hover:text-sky-300"
+        className={`flex w-full items-center gap-1 text-left text-[10px] uppercase tracking-widest text-sky-400/80 hover:text-sky-300 ${FOCUS_RING}`}
       >
-        <span className="w-2 text-slate-500">{open ? '▾' : '▸'}</span>
-        <span>{title}</span>
+        <span className="w-2 shrink-0 text-slate-500">{open ? '▾' : '▸'}</span>
+        <span className="shrink-0">{title}</span>
+        {/* Trailing is the dynamic half — a body name, a system count — so it
+            is the half that shrinks. A long one used to squeeze the title it
+            was annotating out of its own heading. */}
         {trailing !== undefined && (
-          <span className="ml-auto normal-case tracking-normal text-slate-500">
+          <span
+            className="ml-auto min-w-0 truncate normal-case tracking-normal text-slate-500"
+            title={trailing}
+          >
             {trailing}
           </span>
         )}
@@ -58,6 +66,10 @@ export function Row({
     <div className="flex justify-between gap-3">
       <span className="shrink-0 text-slate-500">{label}</span>
       <span
+        // A truncated readout in a panel whose entire purpose is inspectability
+        // is a value you cannot read and cannot recover. The title is the
+        // recovery, and it costs nothing on the rows that do not truncate.
+        title={wrap ? undefined : value}
         className={
           wrap
             ? 'break-all text-right text-slate-300'
@@ -71,12 +83,11 @@ export function Row({
 }
 
 /**
- * A button that gives focus straight back.
+ * A button that gives focus back to the flight loop when a pointer took it.
  *
- * Flight input is a window-level keydown handler, so a button that keeps focus
- * swallows Space — the pause key — and turns it into a second click on itself.
- * Every control in this overlay is fire-and-forget, so there is nothing to lose
- * by refusing focus, and the alternative is remembering this at each call site.
+ * See `releaseFocus`. Every control in this overlay is fire-and-forget, so
+ * there is nothing to lose by refusing pointer focus, and the alternative is
+ * remembering this at each call site.
  */
 export function Action({
   label,
@@ -101,10 +112,10 @@ export function Action({
       title={title ?? label}
       disabled={disabled}
       onClick={(event) => {
-        event.currentTarget.blur()
+        releaseFocus(event)
         onClick()
       }}
-      className={`rounded border px-1.5 py-0.5 text-[10px] transition-colors disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:border-slate-700 disabled:hover:text-slate-300 ${palette}`}
+      className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] whitespace-nowrap transition-colors disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:border-slate-700 disabled:hover:text-slate-300 ${FOCUS_RING} ${palette}`}
     >
       {label}
     </button>

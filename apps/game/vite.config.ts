@@ -1,4 +1,5 @@
 import { execSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 import react, { reactCompilerPreset } from '@vitejs/plugin-react'
 import babel from '@rolldown/plugin-babel'
@@ -51,6 +52,21 @@ const slug = (text: string): string =>
   text.replace(/[^A-Za-z0-9._-]+/g, '-').slice(0, 40)
 
 export default defineConfig({
+  /*
+   * `@/` is the one non-relative import specifier in this repository.
+   *
+   * Everything else here imports by relative path with its extension, and that
+   * stays true for code written by hand. This alias exists because shadcn/ui's
+   * registry emits components that import `@/lib/utils` and `@/components/ui/*`
+   * literally — `pnpm dlx shadcn add <name>` writes those strings into the file
+   * — so without it every added component is a file to hand-edit before it
+   * compiles, and re-adding one to pick up an upstream fix undoes the edit.
+   * `apps/game/tsconfig.json` carries the matching `paths` entry; they have to
+   * agree or the build and the typecheck disagree about the same import.
+   */
+  resolve: {
+    alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
+  },
   plugins: [
     react(),
     // React Compiler handles memoisation, so components here do not hand-write

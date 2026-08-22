@@ -26,6 +26,25 @@ import { Action, Row, Section } from './widgets.tsx'
  * way of the thing it was reporting on.
  */
 
+/**
+ * Join a list without letting it become the panel.
+ *
+ * These rows are unbounded by construction — `loadedSystems` grows with every
+ * system generated in a session and `terrainCandidates` with the streamer's
+ * appetite — and a `wrap` row has no ceiling, so ten minutes of flying turned
+ * the universe section into a paragraph and pushed everything below it out of
+ * reach. The overflow is *stated* rather than dropped: a list silently cut at
+ * eight reads as a list of eight, which is the one thing a debug readout may
+ * not do.
+ */
+const CAPPED_ITEMS = 8
+
+function summarise(items: readonly string[]): string {
+  if (items.length === 0) return '—'
+  if (items.length <= CAPPED_ITEMS) return items.join(', ')
+  return `${items.slice(0, CAPPED_ITEMS).join(', ')} · +${items.length - CAPPED_ITEMS} more`
+}
+
 export function TelemetryPanel({
   status,
   output,
@@ -160,19 +179,26 @@ export function TelemetryPanel({
           <Row label="stars" value={String(render.starCount)} />
           <Row
             label="streaming"
-            value={render.terrainCandidates.join(', ') || '—'}
+            value={summarise(render.terrainCandidates)}
             wrap
           />
           <div className="mt-1 border-t border-slate-800 pt-1">
             {render.bodies.slice(0, 6).map((body) => (
               <div key={body.name} className="flex justify-between gap-2">
-                <span className="truncate text-slate-400">{body.name}</span>
+                <span className="truncate text-slate-400" title={body.name}>
+                  {body.name}
+                </span>
                 <span className="shrink-0 text-slate-500">
                   {body.tier}
                   {body.compressed ? '*' : ''} · {body.distanceText}
                 </span>
               </div>
             ))}
+            {render.bodies.length > 6 && (
+              <div className="text-slate-600">
+                +{render.bodies.length - 6} more · ir.status().render.bodies
+              </div>
+            )}
           </div>
         </Section>
       )}
@@ -184,9 +210,9 @@ export function TelemetryPanel({
       >
         <Row
           label="systems"
-          value={world.loadedSystems
-            .map((s) => `${s.name} (${s.bodies})`)
-            .join(', ')}
+          value={summarise(
+            world.loadedSystems.map((s) => `${s.name} (${s.bodies})`),
+          )}
           wrap
         />
         <Row label="frames" value={String(world.frames)} />
@@ -211,6 +237,7 @@ export function TelemetryPanel({
           {world.events.slice(-5).map((event, index) => (
             <div
               key={`${event.tick}-${index}`}
+              title={`${event.tick} ${event.kind} · ${event.detail}`}
               className="truncate text-slate-400"
             >
               <span className="text-slate-600">{event.tick}</span> {event.kind}{' '}
