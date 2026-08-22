@@ -62,6 +62,24 @@ function isTyping(event: KeyboardEvent): boolean {
   )
 }
 
+/**
+ * Whether the keystroke is aimed at a control in the overlay.
+ *
+ * Only `Tab` asks. It is bound to collapsing the dock *and* it is the browser's
+ * only way between focusable elements, and a window-level `preventDefault` wins
+ * both — so with focus on a dock button, Tab collapsed the panel the button was
+ * in rather than moving to the next one, and there was no key that would.
+ *
+ * Same shape as `isTyping` and for the same reason: the handler declines input
+ * aimed at something else rather than the overlay learning about flight. From
+ * the canvas or the body — which is where focus is during flight, because every
+ * control hands it straight back — nothing has changed.
+ */
+function isOverlayControl(event: KeyboardEvent): boolean {
+  const target = event.target
+  return target instanceof HTMLElement && target.closest('.hud-layer') !== null
+}
+
 export function useShipControls(
   engine: GameEngine,
   bindings: ControlBindings,
@@ -124,6 +142,7 @@ export function useShipControls(
           event.preventDefault()
           break
         case 'Tab':
+          if (isOverlayControl(event)) break
           latest.current.onToggleHud()
           event.preventDefault()
           break
@@ -171,5 +190,5 @@ export const CONTROL_HELP: readonly (readonly [string, string])[] = [
   ['F5 / F9', 'save / load'],
   ['G', 'navigation panel'],
   ['P', 'performance panel'],
-  ['Tab', 'collapse the dock'],
+  ['Tab', 'collapse the dock · within it, moves between controls'],
 ]

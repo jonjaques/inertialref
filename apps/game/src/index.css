@@ -22,6 +22,54 @@ canvas {
 }
 
 /*
+ * The surfaces the browser draws, in the system's own colours.
+ *
+ * Selection, the caret and a scrollbar are chrome nobody in this repository
+ * wrote, and they ship as light-mode blue-on-white over a near-black overlay
+ * unless something says otherwise. The dock scrolls internally, the destination
+ * list scrolls inside that, and on any platform without overlay scrollbars —
+ * which is most of them — that gutter was the one bright rectangle in a
+ * dark-adapted interface.
+ *
+ * Deliberately global rather than scoped to `.hud-layer`: the fatal panel in
+ * `main.tsx` and the boot line in `index.html` are outside it by construction,
+ * and they are exactly the states where a stray light surface would be read as
+ * part of the failure.
+ */
+::selection {
+  /* sky-500/30 — the accent as material, which is the only way it is ever used
+     as a fill in this system. */
+  background: rgb(14 165 233 / 0.3);
+  color: #e0f2fe;
+}
+
+* {
+  scrollbar-width: thin;
+  /* thumb, then track: slate-700 on transparent, so the gutter is the panel. */
+  scrollbar-color: #334155 transparent;
+}
+
+/* WebKit ignores `scrollbar-color`; same two values, its own properties. */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 0.25rem;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  /* sky-500/60 — the same contact colour every control uses on hover. */
+  background: rgb(14 165 233 / 0.6);
+}
+
+/*
  * Everything drawn over the scene, held at standard range.
  *
  * On the extended path the canvas carries values above diffuse white, and the

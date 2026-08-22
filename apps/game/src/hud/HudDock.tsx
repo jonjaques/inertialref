@@ -4,9 +4,12 @@ import type { Connection } from '../net/health.ts'
 import type { OutputPreference, RendererDescription } from '../render/output.ts'
 import { CameraPanel, type CameraState } from './CameraPanel.tsx'
 import { CONNECTION_LABEL, connectionTone } from './connection.ts'
+import { ErrorBoundary } from './ErrorBoundary.tsx'
+import { FOCUS_RING, releaseFocus } from './focus.ts'
 import { GraphicsPanel, type GraphicsState } from './GraphicsPanel.tsx'
 import { NavPanel } from './NavPanel.tsx'
 import { PerfPanel } from './PerfPanel.tsx'
+import { type HudTab, TABS } from './tabs.ts'
 import { TelemetryPanel } from './TelemetryPanel.tsx'
 import { Action } from './widgets.tsx'
 
@@ -24,8 +27,6 @@ import { Action } from './widgets.tsx'
  * where every element has a physical place on the canopy and there is no
  * teleport at all; this is the scaffolding that lets that be built.
  */
-
-export type HudTab = 'navigate' | 'graphics' | 'camera' | 'telemetry' | 'perf'
 
 /**
  * The renderer, as far as the dock is concerned: what was asked for, what came
@@ -81,25 +82,36 @@ export function HudDock({
   onNotice: (message: string) => void
 }) {
   const world = status?.world ?? null
+  // Collapsed, the header is the whole overlay, so this is the readout. It is
+  // computed once because it is also the title that recovers it when the window
+  // is too narrow to show it whole.
+  const summary =
+    world === null
+      ? 'starting…'
+      : `t ${world.tick} · ${world.timeScale}×${world.paused ? ' · paused' : ''} · ${status?.player?.localSpeedText ?? '—'}`
 
+  /*
+   * `max-w` below is an overflow guard, not a breakpoint: the fixed 27rem
+   * column is the design — this is a desktop surface and adding breakpoints
+   * would be a new decision, not a completion of an existing one — but a window
+   * narrower than the dock should crop it rather than push half of it
+   * off-screen where no scrollbar can reach it.
+   */
   return (
-    <aside className="pointer-events-auto absolute right-3 top-3 flex max-h-[calc(100vh-1.5rem)] w-[27rem] flex-col overflow-hidden rounded-lg border border-slate-700/60 bg-slate-950/85 font-mono text-[11px] leading-relaxed text-slate-300 shadow-xl backdrop-blur">
+    <aside className="pointer-events-auto absolute right-3 top-3 flex max-h-[calc(100vh-1.5rem)] w-[27rem] max-w-[calc(100vw-1.5rem)] flex-col overflow-hidden rounded-lg border border-slate-700/60 bg-slate-950/85 font-mono text-[11px] leading-relaxed text-slate-300 shadow-xl backdrop-blur">
       <button
         type="button"
+        aria-expanded={open}
         onClick={(event) => {
-          event.currentTarget.blur()
+          releaseFocus(event)
           onOpenChange(!open)
         }}
-        className="flex items-center gap-2 border-b border-slate-800 px-2 py-1 text-left hover:bg-slate-900/60"
+        className={`flex items-center gap-2 border-b border-slate-800 px-2 py-1 text-left hover:bg-slate-900/60 ${FOCUS_RING}`}
       >
         <span className="text-slate-500">{open ? '▾' : '▸'}</span>
         <span className="text-sky-300">InertialRef</span>
-        {/* Collapsed, the header is the whole overlay, so it carries the two
-            numbers you cannot fly without. */}
-        <span className="ml-auto truncate text-slate-500">
-          {world === null
-            ? 'starting…'
-            : `t ${world.tick} · ${world.timeScale}×${world.paused ? ' · paused' : ''} · ${status?.player?.localSpeedText ?? '—'}`}
+        <span className="ml-auto truncate text-slate-500" title={summary}>
+          {summary}
         </span>
         <ConnectionPip connection={connection} />
         <span className="shrink-0 text-slate-600">Tab</span>
@@ -153,49 +165,53 @@ export function HudDock({
             />
           </div>
 
-          <div className="flex gap-1 border-b border-slate-800 px-2 pt-1">
-            <Tab
-              label="navigate"
-              active={tab === 'navigate'}
-              onClick={() => onTabChange('navigate')}
-            />
-            <Tab
-              label="graphics"
-              active={tab === 'graphics'}
-              onClick={() => onTabChange('graphics')}
-            />
-            <Tab
-              label="camera"
-              active={tab === 'camera'}
-              onClick={() => onTabChange('camera')}
-            />
-            <Tab
-              label="telemetry"
-              active={tab === 'telemetry'}
-              onClick={() => onTabChange('telemetry')}
-            />
-            <Tab
-              label="perf"
-              active={tab === 'perf'}
-              onClick={() => onTabChange('perf')}
-            />
+          <div
+            role="tablist"
+            aria-label="Dock panels"
+            className="flex gap-1 border-b border-slate-800 px-2 pt-1"
+          >
+            {TABS.map((name) => (
+              <Tab
+                key={name}
+                label={name}
+                active={tab === name}
+                onClick={() => onTabChange(name)}
+              />
+            ))}
           </div>
 
-          <div className="min-h-0 flex-1 overflow-auto p-2">
-            {tab === 'navigate' && (
-              <NavPanel engine={engine} onNotice={onNotice} />
-            )}
-            {tab === 'graphics' && <GraphicsPanel graphics={graphics} />}
-            {tab === 'camera' && <CameraPanel camera={camera} />}
-            {tab === 'telemetry' && (
-              <TelemetryPanel
-                status={status}
-                output={render.output}
-                connection={connection}
-                onCheckConnection={onCheckConnection}
-              />
-            )}
-            {tab === 'perf' && <PerfPanel engine={engine} status={status} />}
+          {/*
+           * One boundary per tab, keyed on the tab.
+           *
+           * Keyed because remounting is the reset: leaving a failed tab and
+           * coming back is the recovery a person reaches for first, and it has
+           * to work without a button. Inside the scroll container rather than
+           * around it so the fallback inherits the panel's padding and the
+           * dock's own chrome — header, tabs, the transport controls — is
+           * still there to drive the simulation with while one readout is down.
+           */}
+          <div
+            role="tabpanel"
+            id={`hud-panel-${tab}`}
+            aria-labelledby={`hud-tab-${tab}`}
+            className="min-h-0 flex-1 overflow-auto p-2"
+          >
+            <ErrorBoundary key={tab} what={`the ${tab} panel`}>
+              {tab === 'navigate' && (
+                <NavPanel engine={engine} onNotice={onNotice} />
+              )}
+              {tab === 'graphics' && <GraphicsPanel graphics={graphics} />}
+              {tab === 'camera' && <CameraPanel camera={camera} />}
+              {tab === 'telemetry' && (
+                <TelemetryPanel
+                  status={status}
+                  output={render.output}
+                  connection={connection}
+                  onCheckConnection={onCheckConnection}
+                />
+              )}
+              {tab === 'perf' && <PerfPanel engine={engine} status={status} />}
+            </ErrorBoundary>
           </div>
         </>
       )}
@@ -212,6 +228,10 @@ function ConnectionPip({ connection }: { connection: Connection }) {
   const { state, detail } = connection
   return (
     <span
+      role="img"
+      // The glyph carries the whole readout when the dock is collapsed, and a
+      // screen reader announcing "black circle" carries none of it.
+      aria-label={`server ${CONNECTION_LABEL[state]}`}
       className={`shrink-0 ${connectionTone(state)}`}
       title={`${CONNECTION_LABEL[state]}${detail === null ? '' : ` — ${detail}`}`}
     >
@@ -225,18 +245,22 @@ function Tab({
   active,
   onClick,
 }: {
-  label: string
+  label: HudTab
   active: boolean
   onClick: () => void
 }) {
   return (
     <button
       type="button"
+      role="tab"
+      id={`hud-tab-${label}`}
+      aria-selected={active}
+      aria-controls={`hud-panel-${label}`}
       onClick={(event) => {
-        event.currentTarget.blur()
+        releaseFocus(event)
         onClick()
       }}
-      className={`-mb-px border-b px-2 py-0.5 text-[10px] uppercase tracking-widest ${
+      className={`-mb-px border-b px-2 py-0.5 text-[10px] uppercase tracking-widest ${FOCUS_RING} ${
         active
           ? 'border-sky-400 text-sky-300'
           : 'border-transparent text-slate-500 hover:text-slate-300'

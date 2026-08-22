@@ -4,9 +4,17 @@ import type { HarnessStatus } from '@inertialref/devtools'
 import type { StarCatalog } from '@inertialref/universe'
 import { DEFAULT_FOV, GameEngine } from './engine/GameEngine.ts'
 import { CutsceneOverlay } from './hud/CutsceneOverlay.tsx'
+import { ErrorBoundary } from './hud/ErrorBoundary.tsx'
 import { FlightStrip } from './hud/FlightStrip.tsx'
-import { HudDock, type HudCommands, type HudTab } from './hud/HudDock.tsx'
-import { usePersistentState } from './hud/panelState.ts'
+import { HudDock, type HudCommands } from './hud/HudDock.tsx'
+import {
+  isBoolean,
+  numberWithin,
+  oneOf,
+  usePersistentState,
+} from './hud/panelState.ts'
+import { type HudTab, TABS } from './hud/tabs.ts'
+import { nextWarp } from './hud/warp.ts'
 import { useShipControls } from './hud/useShipControls.ts'
 import {
   type Connection,
@@ -21,6 +29,7 @@ import {
   type RendererHandle,
 } from './render/createRenderer.ts'
 import {
+  AA_LEVELS,
   type AaLevel,
   aaAntialias,
   aaDprFactor,
@@ -59,11 +68,23 @@ function engineInstance(catalog: StarCatalog): GameEngine {
 /** HUD refresh rate. The simulation runs at 64 Hz; a human reads about 8. */
 const PANEL_HZ = 8
 
-/** Time-warp detents. Powers of ten with a 5 and a 25 where the gaps are worst. */
-const WARP_STEPS = [1, 5, 25, 100, 1_000, 10_000, 100_000]
+/** How long a transient notice stays up. */
+const NOTICE_MS = 2_500
+
+/** The camera panel's slider range, restated here because it guards the store. */
+const FOV_MIN = 20
+const FOV_MAX = 110
 
 /** `auto` first, because it is right more often than it is wrong. */
-const HDR_STATES: readonly OutputPreference[] = ['auto', 'extended', 'standard']
+const HDR_STATES = [
+  'auto',
+  'extended',
+  'standard',
+] as const satisfies readonly OutputPreference[]
+
+/** An unknown throw, as a sentence. Every rejection here reaches a notice. */
+const describe = (cause: unknown): string =>
+  cause instanceof Error ? cause.message : String(cause)
 
 /**
  * Which inputs, changing, mean the renderer has to be built again.
@@ -97,8 +118,26 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    * thing a human just clicked.
    */
   const [cinema, setCinema] = useState(false)
-  const [dockOpen, setDockOpen] = usePersistentState('dock.open', true)
-  const [tab, setTab] = usePersistentState<HudTab>('dock.tab', 'navigate')
+  const [dockOpen, setDockOpen] = usePersistentState(
+    'dock.open',
+    true,
+    isBoolean,
+  )
+  /*
+   * Every restored preference is checked against what this build accepts.
+   *
+   * `localStorage` outlives the code that wrote it. A `dock.tab` of `"nav"` from
+   * before these five names existed parses cleanly, matches no tab, and renders
+   * an empty dock with no active tab and no way back that is not devtools; an
+   * `aa` of `"8x"` from an experiment reaches the renderer's constructor. The
+   * guards turn every one of those into "the default", which is what an absent
+   * value already meant.
+   */
+  const [tab, setTab] = usePersistentState<HudTab>(
+    'dock.tab',
+    'navigate',
+    oneOf(TABS),
+  )
   const [notice, setNotice] = useState<string | null>(null)
   /*
    * The three-state HDR override.
@@ -112,6 +151,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
   const [hdr, setHdr] = usePersistentState<OutputPreference>(
     'render.hdr',
     'auto',
+    oneOf(HDR_STATES),
   )
   /*
    * The graphics and camera panels' knobs. Persisted like the HDR override —
@@ -119,9 +159,24 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    * reload that tests the fix — and mirrored onto plain engine fields below,
    * because the frame loop reads them and must not touch React to do it.
    */
-  const [lensFlare, setLensFlare] = usePersistentState('render.lensFlare', true)
-  const [aa, setAa] = usePersistentState<AaLevel>('render.aa', '2x')
-  const [fov, setFov] = usePersistentState('camera.fov', DEFAULT_FOV)
+  const [lensFlare, setLensFlare] = usePersistentState(
+    'render.lensFlare',
+    true,
+    isBoolean,
+  )
+  const [aa, setAa] = usePersistentState<AaLevel>(
+    'render.aa',
+    '2x',
+    oneOf(AA_LEVELS),
+  )
+  // The same range the camera panel's slider offers. A stored value outside it
+  // is not a field of view somebody nearly asked for; it reaches `engine.fov`
+  // and the projection matrix behind it.
+  const [fov, setFov] = usePersistentState(
+    'camera.fov',
+    DEFAULT_FOV,
+    numberWithin(FOV_MIN, FOV_MAX),
+  )
   const [dynamicRangeHigh, setDynamicRangeHigh] = useState(
     () => window.matchMedia(EXTENDED_RANGE_QUERY).matches,
   )
@@ -147,6 +202,8 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    * one. See `render/presentationWatchdog.ts` for the measurements.
    */
   const [canvasEpoch, setCanvasEpoch] = useState(0)
+  /** Guards save and load against each other. See `commands.save`. */
+  const storageBusy = useRef(false)
 
   // The media query is live: a window can be dragged from an EDR display to one
   // without, and reading it once at startup gets that permanently wrong.
@@ -253,10 +310,23 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
     return () => window.clearInterval(timer)
   }, [engine])
 
+  /*
+   * One notice, one timer.
+   *
+   * Each call used to start a timer and forget it, so a notice raised two
+   * seconds after another was cleared by the *first* one's timer a fraction of
+   * a second later — the messages that arrive in bursts (save, then load, then
+   * a warp step) were exactly the ones that flickered past unread. The ref
+   * holds the only live timer, and the effect below cancels it on unmount so a
+   * cutscene starting mid-notice does not set state on a gone component.
+   */
+  const noticeTimer = useRef(0)
   const flash = useCallback((message: string) => {
+    window.clearTimeout(noticeTimer.current)
     setNotice(message)
-    window.setTimeout(() => setNotice(null), 2_500)
+    noticeTimer.current = window.setTimeout(() => setNotice(null), NOTICE_MS)
   }, [])
+  useEffect(() => () => window.clearTimeout(noticeTimer.current), [])
 
   const commands: HudCommands = {
     togglePause: () => {
@@ -265,15 +335,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
       flash(paused ? 'paused' : 'running')
     },
     warp: (direction) => {
-      const current = engine.world.clock.timeScale
-      const index = WARP_STEPS.findIndex((step) => step >= current)
-      const next =
-        WARP_STEPS[
-          Math.min(
-            WARP_STEPS.length - 1,
-            Math.max(0, (index < 0 ? 0 : index) + direction),
-          )
-        ] ?? 1
+      const next = nextWarp(engine.world.clock.timeScale, direction)
       engine.world.clock.setTimeScale(next)
       flash(`time warp ${next}×`)
     },
@@ -283,11 +345,37 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
       engine.killRotation()
       flash('rotation killed')
     },
+    /*
+     * One at a time, and never at the same time as each other.
+     *
+     * Both are one keystroke and one button, and both are asynchronous against
+     * IndexedDB. Two loads interleaved restore two worlds into one; a save
+     * racing a load writes a state that never existed. The guard is a ref
+     * rather than state because nothing renders differently for it — the
+     * operations are milliseconds and a button that flickered disabled would be
+     * worse than one that quietly ignores the second press.
+     */
     save: () => {
-      void engine.save().then((text) => flash(`saved ${text.length} bytes`))
+      if (storageBusy.current) return
+      storageBusy.current = true
+      void engine
+        .save()
+        .then((text) => flash(`saved ${text.length} bytes`))
+        .catch((cause: unknown) => flash(`save failed — ${describe(cause)}`))
+        .finally(() => {
+          storageBusy.current = false
+        })
     },
     load: () => {
-      void engine.load().then((ok) => flash(ok ? 'loaded' : 'nothing to load'))
+      if (storageBusy.current) return
+      storageBusy.current = true
+      void engine
+        .load()
+        .then((ok) => flash(ok ? 'loaded' : 'nothing to load'))
+        .catch((cause: unknown) => flash(`load failed — ${describe(cause)}`))
+        .finally(() => {
+          storageBusy.current = false
+        })
     },
   }
 
@@ -364,52 +452,86 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
         {/* Renders nothing at all when no cutscene is running. While one is,
             every other piece of chrome below unmounts — Esc skips, and the
             dock comes straight back. */}
-        <CutsceneOverlay engine={engine} />
+        <ErrorBoundary
+          what="the cutscene overlay"
+          className="pointer-events-auto absolute bottom-5 left-1/2 w-[34rem] max-w-[80vw] -translate-x-1/2 font-mono text-[11px]"
+        >
+          <CutsceneOverlay engine={engine} />
+        </ErrorBoundary>
         {!cinema && (
-          <HudDock
-            engine={engine}
-            status={status}
-            render={{
-              preference: hdr,
-              output,
-              onCyclePreference: () => {
-                const next =
-                  HDR_STATES[
-                    (HDR_STATES.indexOf(hdr) + 1) % HDR_STATES.length
-                  ] ?? 'auto'
-                // The renderer is rebuilt for this, so say what happened —
-                // otherwise the only feedback is a frame the player may not be
-                // able to see the difference in, which is the whole problem.
-                setHdr(next)
-                flash(`hdr ${next}`)
-              },
-            }}
-            graphics={{
-              lensFlare,
-              onLensFlare: setLensFlare,
-              aa,
-              onAa: (level) => {
-                // Crossing the MSAA boundary rebuilds the renderer, so say so —
-                // the stall would otherwise read as a hang.
-                setAa(level)
-                flash(`anti-aliasing ${level}`)
-              },
-            }}
-            camera={{ fov, onFov: setFov }}
-            connection={connection}
-            onCheckConnection={monitor.refresh}
-            open={dockOpen}
-            onOpenChange={setDockOpen}
-            tab={tab}
-            onTabChange={setTab}
-            commands={commands}
-            onNotice={flash}
-          />
+          <ErrorBoundary
+            what="the dock"
+            className="pointer-events-auto absolute right-3 top-3 w-[27rem] max-w-[calc(100vw-1.5rem)] font-mono text-[11px] leading-relaxed"
+          >
+            <HudDock
+              engine={engine}
+              status={status}
+              render={{
+                preference: hdr,
+                output,
+                onCyclePreference: () => {
+                  const next =
+                    HDR_STATES[
+                      (HDR_STATES.indexOf(hdr) + 1) % HDR_STATES.length
+                    ] ?? 'auto'
+                  // The renderer is rebuilt for this, so say what happened —
+                  // otherwise the only feedback is a frame the player may not be
+                  // able to see the difference in, which is the whole problem.
+                  setHdr(next)
+                  flash(`hdr ${next}`)
+                },
+              }}
+              graphics={{
+                lensFlare,
+                onLensFlare: setLensFlare,
+                aa,
+                onAa: (level) => {
+                  // Crossing the MSAA boundary rebuilds the renderer, so say so —
+                  // the stall would otherwise read as a hang.
+                  setAa(level)
+                  flash(`anti-aliasing ${level}`)
+                },
+              }}
+              camera={{ fov, onFov: setFov }}
+              connection={connection}
+              onCheckConnection={monitor.refresh}
+              open={dockOpen}
+              onOpenChange={setDockOpen}
+              tab={tab}
+              onTabChange={setTab}
+              commands={commands}
+              onNotice={flash}
+            />
+          </ErrorBoundary>
         )}
-        {!cinema && <FlightStrip status={status} />}
+        {/*
+         * Three boundaries rather than one around the layer.
+         *
+         * A single boundary would take the whole overlay down with whichever
+         * piece failed — and the dock is how the simulation is driven, so
+         * losing it to a throw in the flight strip's distance formatter is the
+         * expensive half of the failure, not the cheap one. The scene is
+         * outside all of them: `<Canvas>` is a sibling of `.hud-layer` and
+         * nothing in here can reach it.
+         */}
+        {!cinema && (
+          <ErrorBoundary
+            what="the flight strip"
+            className="pointer-events-auto absolute bottom-3 left-3 max-w-[calc(100vw-1.5rem)] font-mono text-[11px]"
+          >
+            <FlightStrip status={status} />
+          </ErrorBoundary>
+        )}
 
         {!cinema && notice !== null && (
-          <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded bg-sky-500/20 px-3 py-1 font-mono text-xs text-sky-200">
+          /* A notice echoes what was asked for, and one of the things that can
+             be asked for is whatever was typed into the address field. Bounded
+             so a paste is a truncated sentence rather than a band across the
+             bottom of the frame. */
+          <div
+            title={notice}
+            className="pointer-events-none absolute bottom-3 left-1/2 max-w-[min(36rem,calc(100vw-1.5rem))] -translate-x-1/2 truncate rounded bg-sky-500/20 px-3 py-1 font-mono text-xs text-sky-200"
+          >
             {notice}
           </div>
         )}

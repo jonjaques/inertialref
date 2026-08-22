@@ -1,4 +1,5 @@
 import { AA_LEVELS, type AaLevel } from '../render/output.ts'
+import { FOCUS_RING, releaseFocus } from './focus.ts'
 import { Section } from './widgets.tsx'
 
 /*
@@ -60,15 +61,15 @@ function Cycle<T extends string>({
       type="button"
       title={detail}
       onClick={(event) => {
-        event.currentTarget.blur()
+        releaseFocus(event)
         const next = values[(values.indexOf(value) + 1) % values.length]
         if (next !== undefined) onChange(next)
       }}
-      className="flex w-full items-center justify-between gap-2 rounded border border-slate-800/80 bg-slate-900/40 px-2 py-1 text-left hover:border-sky-500/40"
+      className={`flex w-full items-center justify-between gap-2 rounded border border-slate-800/80 bg-slate-900/40 px-2 py-1 text-left hover:border-sky-500/40 ${FOCUS_RING}`}
     >
-      <span className="min-w-0">
-        <span className="text-slate-300">{label}</span>
-        <span className="ml-2 truncate text-slate-600">{detail}</span>
+      <span className="flex min-w-0 items-baseline gap-2">
+        <span className="shrink-0 text-slate-300">{label}</span>
+        <span className="min-w-0 truncate text-slate-600">{detail}</span>
       </span>
       <span className="shrink-0 text-[10px] uppercase tracking-widest text-sky-300">
         {value}
@@ -93,15 +94,16 @@ function Toggle({
     <button
       type="button"
       title={detail}
+      aria-pressed={on}
       onClick={(event) => {
-        event.currentTarget.blur()
+        releaseFocus(event)
         onChange(!on)
       }}
-      className="flex w-full items-center justify-between gap-2 rounded border border-slate-800/80 bg-slate-900/40 px-2 py-1 text-left hover:border-sky-500/40"
+      className={`flex w-full items-center justify-between gap-2 rounded border border-slate-800/80 bg-slate-900/40 px-2 py-1 text-left hover:border-sky-500/40 ${FOCUS_RING}`}
     >
-      <span className="min-w-0">
-        <span className="text-slate-300">{label}</span>
-        <span className="ml-2 truncate text-slate-600">{detail}</span>
+      <span className="flex min-w-0 items-baseline gap-2">
+        <span className="shrink-0 text-slate-300">{label}</span>
+        <span className="min-w-0 truncate text-slate-600">{detail}</span>
       </span>
       <span
         className={`shrink-0 text-[10px] uppercase tracking-widest ${

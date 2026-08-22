@@ -1,6 +1,7 @@
 'use no memo'
 import { useEffect, useRef, useState } from 'react'
 import type { CinematicTextState, GameEngine } from '../engine/GameEngine.ts'
+import { FOCUS_RING, releaseFocus } from './focus.ts'
 
 /*
  * The cutscene's screen-space layer: the blackout, the title cards, the
@@ -342,8 +343,13 @@ export function CutsceneOverlay({ engine }: { engine: GameEngine }) {
           <input
             type="range"
             min={0}
-            max={transport.duration - 1}
+            // A one-frame scene would otherwise put `max` below `min`, which
+            // browsers resolve by clamping the value to `min` — a scrubber that
+            // silently refuses to move.
+            max={Math.max(0, transport.duration - 1)}
             step={1}
+            aria-label="Cutscene frame"
+
             // While the hand is on the slider the poll stays out of it; the
             // key prop trick is unnecessary because we only set `value` from
             // state when not scrubbing.
@@ -361,7 +367,7 @@ export function CutsceneOverlay({ engine }: { engine: GameEngine }) {
                 current === null ? current : { ...current, frame },
               )
             }}
-            className="h-1 min-w-0 flex-1 cursor-pointer accent-sky-400"
+            className={`h-1 min-w-0 flex-1 cursor-pointer accent-sky-400 ${FOCUS_RING}`}
           />
           <span className="w-16 shrink-0 text-right tabular-nums text-slate-400">
             f{Math.floor(transport.frame)}
@@ -391,11 +397,12 @@ function TransportButton({
     <button
       type="button"
       title={title}
+      aria-label={title}
       onClick={(event) => {
-        event.currentTarget.blur()
+        releaseFocus(event)
         onClick()
       }}
-      className="rounded border border-slate-700/60 px-2 py-0.5 hover:bg-slate-800/60"
+      className={`rounded border border-slate-700/60 px-2 py-0.5 hover:bg-slate-800/60 ${FOCUS_RING}`}
     >
       {label}
     </button>

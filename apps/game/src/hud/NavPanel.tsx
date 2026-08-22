@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { TravelTarget } from '@inertialref/devtools'
 import type { GameEngine } from '../engine/GameEngine.ts'
+import { FOCUS_RING, releaseFocus } from './focus.ts'
 import { Action, Section } from './widgets.tsx'
 
 /*
@@ -33,6 +34,22 @@ const SURVEY_LIGHT_YEARS = 8
  */
 const DEBUG_LANDING_SITE = { latitude: 0.35, longitude: -1.1 }
 
+/**
+ * A ceiling on the address field.
+ *
+ * Not validation — the harness owns what an address means, and duplicating its
+ * grammar here is how the two drift apart. It is a bound on what a paste can do
+ * to the layout: the field's contents are echoed into the notice at the bottom
+ * of the screen, and an unbounded one turns a transient message into a wall.
+ */
+const MAX_ADDRESS_LENGTH = 200
+
+/** What went wrong, and which verb it went wrong for. */
+interface Failure {
+  readonly action: string
+  readonly message: string
+}
+
 export function NavPanel({
   engine,
   onNotice,
@@ -43,7 +60,22 @@ export function NavPanel({
   const [targets, setTargets] = useState<readonly TravelTarget[]>([])
   const [selected, setSelected] = useState<string | null>(null)
   const [query, setQuery] = useState('')
-  const [error, setError] = useState<string | null>(null)
+  const [failure, setFailure] = useState<Failure | null>(null)
+  /*
+   * Whether the survey has completed once.
+   *
+   * "surveying…" and "there is nothing here" are different answers and the
+   * panel used to give the first one for both — so flying out past the survey
+   * radius produced a list that looked permanently mid-load. Only one of the
+   * two has a next step, and it is the one that was being hidden.
+   */
+  const [surveyed, setSurveyed] = useState(false)
+  /*
+   * The scenario currently running, if any. The scenarios are seconds long and
+   * their buttons had no busy state at all, so ten impatient clicks were ten
+   * concurrent scenarios racing to teleport the same ship.
+   */
+  const [pending, setPending] = useState<string | null>(null)
   // Mirrors `engine.showShip`, which is a plain field on purpose — this state
   // exists only so the button's label re-renders when it is clicked.
   const [shipShown, setShipShown] = useState(engine.showShip)
@@ -55,8 +87,19 @@ export function NavPanel({
     const read = (): void => {
       try {
         setTargets(engine.harness.targets({ lightYears: SURVEY_LIGHT_YEARS }))
+        setSurveyed(true)
+        // Identical state bails out of the re-render, so this is free on the
+        // ordinary path — every second, forever, with nothing wrong.
+        setFailure((current) =>
+          current?.action === 'the survey' ? null : current,
+        )
       } catch (cause) {
-        setError(message(cause))
+        const detail = message(cause)
+        setFailure((current) =>
+          current !== null && current.message === detail
+            ? current
+            : { action: 'the survey', message: detail },
+        )
       }
     }
     read()
@@ -70,27 +113,65 @@ export function NavPanel({
   const run = (label: string, action: () => void): void => {
     try {
       action()
-      setError(null)
+      setFailure(null)
       onNotice(label)
     } catch (cause) {
-      setError(message(cause))
+      setFailure({ action: label, message: message(cause) })
     }
     setGeneration((n) => n + 1)
   }
 
-  /** The same, for the verbs that finish later: the notice is what they return. */
-  const awaited = (action: () => Promise<string>): void => {
+  /**
+   * The same, for the verbs that finish later: the notice is what they return.
+   *
+   * One at a time. These reach into the same world through the same harness,
+   * and two of them interleaved is not a slower answer, it is a different one.
+   */
+  const awaited = (label: string, action: () => Promise<string>): void => {
+    if (pending !== null) return
+    setPending(label)
     void action()
       .then((detail) => {
-        setError(null)
+        setFailure(null)
         onNotice(detail)
       })
-      .catch((cause: unknown) => setError(message(cause)))
-      .finally(() => setGeneration((n) => n + 1))
+      .catch((cause: unknown) =>
+        setFailure({ action: label, message: message(cause) }),
+      )
+      .finally(() => {
+        setPending(null)
+        setGeneration((n) => n + 1)
+      })
   }
 
   return (
     <div>
+      {/*
+       * Above the sections, not inside one.
+       *
+       * This used to live inside `nav.go`, whose open state is remembered — so
+       * a collapsed section swallowed the only report a failed `land`, `burn`
+       * or scenario ever made, and the button read as having done nothing.
+       * Every verb in this panel reports here, and says which verb it was.
+       */}
+      {failure !== null && (
+        <div className="mb-2 rounded border border-rose-400/40 bg-slate-950/60 px-2 py-1">
+          <div className="flex items-baseline gap-2">
+            <span className="min-w-0 flex-1 truncate text-rose-300">
+              {failure.action} failed
+            </span>
+            <Action
+              label="dismiss"
+              title="Clear this. The next action that succeeds clears it too."
+              onClick={() => setFailure(null)}
+            />
+          </div>
+          <div className="mt-0.5 max-h-24 overflow-auto break-words text-slate-400">
+            {failure.message}
+          </div>
+        </div>
+      )}
+
       <Section id="nav.go" title="go to">
         <form
           className="flex gap-1"
@@ -104,7 +185,10 @@ export function NavPanel({
             onChange={(event) => setQuery(event.target.value)}
             placeholder="SOL · b:2 · g:milky-way/s:HIP71683/b:3.0"
             spellCheck={false}
-            className="min-w-0 flex-1 rounded border border-slate-700 bg-slate-900/80 px-1.5 py-0.5 text-[11px] text-slate-200 placeholder:text-slate-600 focus:border-sky-500/60 focus:outline-none"
+            maxLength={MAX_ADDRESS_LENGTH}
+            autoComplete="off"
+            aria-label="Universe address"
+            className="min-w-0 flex-1 rounded border border-slate-700 bg-slate-900/80 px-1.5 py-0.5 text-[11px] text-slate-200 caret-sky-300 placeholder:text-slate-600 focus:border-sky-500/60 focus:outline-none"
           />
           <Action
             label="go"
@@ -114,9 +198,6 @@ export function NavPanel({
             }
           />
         </form>
-        {error !== null && (
-          <div className="mt-1 break-words text-rose-300">{error}</div>
-        )}
       </Section>
 
       <Section
@@ -134,7 +215,11 @@ export function NavPanel({
             />
           ))}
           {targets.length === 0 && (
-            <div className="px-2 py-1 text-slate-500">surveying…</div>
+            <div className="px-2 py-1 text-slate-500">
+              {surveyed
+                ? `no systems within ${SURVEY_LIGHT_YEARS} ly — fly somewhere, or type an address above`
+                : 'surveying…'}
+            </div>
           )}
         </div>
 
@@ -143,7 +228,10 @@ export function NavPanel({
             <span className="text-slate-500">select a destination</span>
           ) : (
             <>
-              <div className="truncate text-slate-300">
+              <div
+                className="truncate text-slate-300"
+                title={`${target.name} · ${target.address}`}
+              >
                 {target.name}{' '}
                 <span className="text-slate-600">{target.address}</span>
               </div>
@@ -296,14 +384,24 @@ export function NavPanel({
         </div>
       </Section>
 
-      <Section id="nav.scenarios" title="scenarios">
+      <Section
+        id="nav.scenarios"
+        title="scenarios"
+        trailing={pending === null ? undefined : `${pending} running…`}
+      >
         <div className="flex flex-wrap gap-1">
           {engine.harness.scenarios().map((name) => (
             <Action
               key={name}
-              label={name}
+              label={pending === name ? `${name}…` : name}
+              disabled={pending !== null}
+              title={
+                pending === null
+                  ? `Run the ${name} scenario`
+                  : `${pending} is running`
+              }
               onClick={() =>
-                awaited(async () => {
+                awaited(name, async () => {
                   const result = await engine.harness.scenario(name)
                   return result.detail
                 })
@@ -311,10 +409,11 @@ export function NavPanel({
             />
           ))}
           <Action
-            label="self test"
+            label={pending === 'self test' ? 'self test…' : 'self test'}
+            disabled={pending !== null}
             title="The twelve milestone capability checks, against this build"
             onClick={() =>
-              awaited(async () => {
+              awaited('self test', async () => {
                 const report = await engine.harness.selfTest()
                 console.info(report.report)
                 return `${report.passed}/${report.total} capabilities · report in the console`
@@ -350,10 +449,12 @@ export function TargetRow({
     <button
       type="button"
       onClick={(event) => {
-        event.currentTarget.blur()
+        releaseFocus(event)
         onSelect()
       }}
-      className={`flex w-full items-baseline gap-2 py-[1px] pr-1.5 text-left ${indent} ${
+      title={`${target.name} · ${target.address}`}
+      aria-pressed={selected}
+      className={`flex w-full items-baseline gap-2 py-[1px] pr-1.5 text-left ${indent} ${FOCUS_RING} ${
         selected ? 'bg-sky-500/20 text-sky-100' : 'hover:bg-slate-800/60'
       }`}
     >

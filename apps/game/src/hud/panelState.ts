@@ -12,10 +12,50 @@ import { useState } from 'react'
 
 const PREFIX = 'ir.hud.'
 
-function read<T>(key: string, fallback: T): T {
+/**
+ * What a stored value has to prove before it is believed.
+ *
+ * Parsing was never the risk. `localStorage` outlives the code that wrote it,
+ * so the values that survive a rename are the dangerous ones: a `dock.tab` of
+ * `"nav"` from before the tabs were renamed parses perfectly and renders no
+ * panel at all and no active tab, and the only way back is devtools. A stored
+ * `camera.fov` of `NaN` or `5000` reaches `engine.fov` and the projection
+ * matrix behind it. Every caller therefore says what it will accept, and an
+ * unrecognised value is treated exactly like an absent one.
+ */
+export type Accept<T> = (value: unknown) => value is T
+
+export const isBoolean: Accept<boolean> = (value): value is boolean =>
+  typeof value === 'boolean'
+
+/** Membership in a closed set — the tab name, the HDR preference, the AA level. */
+export function oneOf<T extends string>(values: readonly T[]): Accept<T> {
+  return (value): value is T =>
+    typeof value === 'string' && (values as readonly string[]).includes(value)
+}
+
+/**
+ * A finite number inside a range.
+ *
+ * Rejects rather than clamps, deliberately: a stored 5000° field of view is not
+ * a 110° field of view somebody nearly asked for, it is a value from a build
+ * that meant something else, and the default is the honest answer to it.
+ */
+export function numberWithin(min: number, max: number): Accept<number> {
+  return (value): value is number =>
+    typeof value === 'number' &&
+    Number.isFinite(value) &&
+    value >= min &&
+    value <= max
+}
+
+function read<T>(key: string, fallback: T, accept?: Accept<T>): T {
   try {
     const stored = window.localStorage.getItem(PREFIX + key)
-    return stored === null ? fallback : (JSON.parse(stored) as T)
+    if (stored === null) return fallback
+    const parsed: unknown = JSON.parse(stored)
+    if (accept === undefined) return parsed as T
+    return accept(parsed) ? parsed : fallback
   } catch {
     // Private windows, disabled storage and a value written by an older shape
     // of this panel all land here. An overlay that cannot remember which
@@ -27,8 +67,9 @@ function read<T>(key: string, fallback: T): T {
 export function usePersistentState<T>(
   key: string,
   initial: T,
+  accept?: Accept<T>,
 ): [T, (value: T) => void] {
-  const [value, setValue] = useState<T>(() => read(key, initial))
+  const [value, setValue] = useState<T>(() => read(key, initial, accept))
   const update = (next: T): void => {
     setValue(next)
     try {
