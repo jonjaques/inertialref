@@ -269,12 +269,65 @@ recover it. The budget is 900 KB gzip with splitting, so this is inside it.
 
 ---
 
+## The overlay refactor (22 Aug 2026)
+
+The UI foundations landed — `lucide-react`, shadcn/ui, `motion`, `zustand` and
+`react-router` in `apps/game` — and nothing in `hud/` was rewritten onto them
+yet. That was deliberate: the libraries arrived with one real use each so the
+wiring is proven, and the refactor is its own change with its own review.
+[`CONTEXT.md`](../CONTEXT.md) has the reasoning and the measured cost;
+[`DESIGN.md`](../DESIGN.md) has the token mapping.
+
+**The seam is already there.** The components are vendored in
+`apps/game/src/components/ui/`, their tokens point at this system's palette, and
+`state/engineStore.ts` publishes the snapshot the panels are currently handed as
+props.
+
+| Today                                   | Registry equivalent                                    |
+| --------------------------------------- | ------------------------------------------------------ |
+| `hud/widgets.tsx` → `Action`            | `Button` (`variant="ghost"` normal, `default` primary) |
+| `hud/widgets.tsx` → `Section`           | `Collapsible`, kept controlled by `usePersistentState` |
+| `hud/widgets.tsx` → `Row`               | none — it is a readout, not a control. Leave it.       |
+| `HudDock`'s tablist + `hud/tabs.ts`     | `Tabs` / `TabsList` / `TabsTrigger` / `TabsContent`    |
+| `CameraPanel`'s `<input type="range">`  | `Slider`                                               |
+| `GraphicsPanel`'s `Toggle`              | `Switch`                                               |
+| `GraphicsPanel`'s `Cycle`               | none — a cycle-through control has no registry form    |
+| `NavPanel`'s address field              | `Input`                                                |
+| The dock's `w-px bg-slate-800` dividers | `Separator`                                            |
+| The dock body and the destination list  | `ScrollArea`                                           |
+| Every control's `title` attribute       | `Tooltip` — **blocked**, see below                     |
+
+**Three things that will break it if they are not carried across:**
+
+1. **`releaseFocus` is load-bearing.** Every control blurs itself on a _pointer_
+   click and not on a keyboard activation, because flight input is a
+   window-level keydown listener and a focused button swallows Space. shadcn's
+   `Button` knows nothing about this; the `onClick` wrapper in `hud/focus.ts`
+   has to survive the swap. Losing it is a pause key that silently stops
+   working — see [CONTEXT.md](../CONTEXT.md) § "The focus contract, which is
+   subtler than it looks".
+2. **`PerfPanel` carries `'use no memo'`** because it reads mutable engine
+   fields every frame. Moving a panel onto `useEngine` selectors is what makes
+   that opt-out unnecessary — moving it onto shadcn components alone is not.
+3. **Tooltips are blocked on the portal.** Every shadcn overlay portals to
+   `document.body`, which is outside `.hud-layer` and therefore outside
+   `dynamic-range-limit: standard`; a tooltip would wash out against a star.
+   Radix's `Portal` takes a `container`, so the fix is a prop threaded through
+   the generated components — do that first, or keep the `title` attributes.
+
+**Not in scope for it**, and worth restating because the temptation is real:
+this refactors the _dev dock_, which is scaffolding. It does not move it toward
+the cockpit in [ux.md](design/ux.md) — that starts from where an element
+physically sits on a canopy, not from this layout.
+
+---
+
 ## Automation gaps
 
 | Gap                             | Note                                                                                                                                                                                                    |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | ~~No CI configuration~~ ✅      | `.github/workflows/check.yml` runs `pnpm check` and the capability self-test on every pull request                                                                                                      |
-| No formatter                    | oxlint only; no prettier or dprint. Deliberate so far, but a formatter is cheap consistency                                                                                                             |
+| ~~No formatter~~ ✅             | prettier, with `format:check` inside `pnpm check`, so a badly formatted file fails the gate rather than being noticed in review                                                                         |
 | No stored save fixture          | Compatibility testing currently synthesises old saves in-test rather than loading a real one from disk                                                                                                  |
 | No performance regression tests | See above                                                                                                                                                                                               |
 | No visual regression testing    | The seam now exists: the `tng-intro` cutscene (ADR-0010) is frame-seekable against a frame-analysed reference edit, so render → dump → re-measure → diff is a script away. Would still need a GPU in CI |

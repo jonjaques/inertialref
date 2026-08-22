@@ -26,7 +26,12 @@ These are the ones where a violation is a rewrite later rather than a refactor.
   not draw from a shared stream. If you can change one object's output by
   generating a different object first, it is wrong.
 - **Never put canonical state in a React component**, and never put gameplay
-  behaviour in a lifecycle callback. Components consume snapshots.
+  behaviour in a lifecycle callback. Components consume snapshots. The snapshot
+  arrives through `apps/game/src/state/engineStore.ts` — a zustand store holding
+  the last `HarnessStatus`, republished at 8 Hz by one sampler. Subscribe to the
+  narrowest slice you need; `useEngine((s) => s.status)` is a fresh object every
+  sample and never bails out of a re-render. A store that held the _world_ would
+  be this rule broken, not followed.
 - **Never construct a `Worker` outside `apps/game/src/engine/browserWorker.ts`.**
   Tasks are typed and versioned; the pool owns dispatch, cancellation and
   instrumentation.
@@ -87,7 +92,12 @@ These are the ones where a violation is a rewrite later rather than a refactor.
 - **Terrain is sampled in body-fixed axes.** Sampling in inertial axes leaves
   the mountains behind as the planet rotates. This was a real bug.
 - **Imports carry their extension** (`./foo.ts`), because
-  `allowImportingTsExtensions` is on and Node runs the sources directly.
+  `allowImportingTsExtensions` is on and Node runs the sources directly. The one
+  exception is `@/` in `apps/game`, which resolves to `apps/game/src` — it
+  exists because shadcn/ui's registry writes `@/lib/utils` into every component
+  it generates, and it is configured in `vite.config.ts`, that app's
+  `tsconfig.json` and the root `vitest.config.ts`. Code written by hand still
+  imports relatively.
 - **No `enum`, no parameter properties, no runtime namespaces** —
   `erasableSyntaxOnly` is on. Use `const` objects plus union types.
 - **`import type` for type-only imports** — `verbatimModuleSyntax` is on.

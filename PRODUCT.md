@@ -4,8 +4,8 @@
 
 Durable product truth for InertialRef: who it is for, what it is, and what
 future work must preserve. It is not a design document and holds no visual
-decisions — [`docs/design/`](docs/design/) is the game design bible, and a
-`DESIGN.md` (absent today) would own the visual system.
+decisions — [`docs/design/`](docs/design/) is the game design bible, and
+[`DESIGN.md`](DESIGN.md) owns the visual system.
 
 **Two interfaces, deliberately split.** One exists and one is specified. Every
 section below marks which it is talking about, because confusing them is the

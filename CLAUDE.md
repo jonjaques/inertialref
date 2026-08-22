@@ -79,7 +79,21 @@ deploys to the `inertialrefd` Worker, live at
   `verbatimModuleSyntax` are all on.** No enums, no parameter properties,
   `import type` for types, and local imports carry their `.ts` extension.
 - **oxlint** runs the `react`, `typescript` and `oxc` plugins. Type-aware rules
-  are off; enabling them needs `oxlint-tsgolint` plus `options.typeAware`.
+  are off; enabling them needs `oxlint-tsgolint` plus `options.typeAware`. There
+  is one override: `react/only-export-components` is off for
+  `apps/game/src/components/ui/*.tsx`, which shadcn/ui generates.
+- **shadcn/ui is installed and configured** (`apps/game/components.json`, style
+  `new-york`, base `slate`, lucide icons). Add a component with
+  `pnpm dlx shadcn@latest add <name>` **run from `apps/game`**, then
+  `pnpm format` — the registry writes double quotes and semicolons, prettier
+  here does not. Its design tokens live in `src/index.css` and are pointed at
+  the existing slate/sky palette rather than the generator's defaults; do not
+  regenerate them with `shadcn init`, which would overwrite that file.
+- **`@/` resolves to `apps/game/src`**, in three places that must agree:
+  `apps/game/vite.config.ts`, `apps/game/tsconfig.json` (`paths`, and
+  deliberately no `baseUrl` — TypeScript 6 errors on it) and the root
+  `vitest.config.ts`. It exists for the registry's hard-coded imports; hand
+  written code still imports relatively, with extensions.
 - Node 26, pnpm 11. Node runs the TypeScript sources directly (type stripping),
   which is how `pnpm sim` works with no build step.
 

@@ -1526,6 +1526,139 @@ plots encode "over budget" by stroke colour alone.
 falls back to regex, does not evaluate custom properties or computed contrast,
 and its empty result is an undercount rather than a clean bill.
 
+## The UI foundations (22 Aug 2026)
+
+Four libraries landed in `apps/game` at once, because they are one decision:
+the dock is scaffolding, `docs/design/ux.md` specifies a cockpit and a set of
+overlay pages, and every one of those needs the same four things. Nothing below
+`apps/*` gained a dependency — `pnpm graph` still reports zero third-party
+dependencies across the twelve packages, and that is the invariant that matters.
+
+| Added                                    | For                                                             |
+| ---------------------------------------- | --------------------------------------------------------------- |
+| `lucide-react`                           | icons, tree-shaken per import                                   |
+| `radix-ui` + `cva` + `clsx` + `tw-merge` | shadcn/ui's ten base components, vendored into `components/ui/` |
+| `motion`                                 | enter/exit animation for anything conditionally rendered        |
+| `zustand`                                | the engine-to-React subscription seam                           |
+| `react-router`                           | overlay pages on real URLs                                      |
+
+### The store is a snapshot publisher, not a second source of truth
+
+`state/engineStore.ts` holds the most recent `HarnessStatus` and nothing else.
+The rule it is written against is unchanged — canonical state never lives in
+React — and a store that held the world would be that violation wearing a
+library. What it changes is who does the reading: `App` used to hold the whole
+status in `useState` and pass it down, so every panel re-rendered eight times a
+second whether or not anything it displayed had moved. `useStore` is
+`useSyncExternalStore` with a selector, so a panel can subscribe to the tick and
+wake for the tick.
+
+Two things worth writing down:
+
+- **`harness.status()` allocates a fresh object graph every sample.** So
+  `Object.is` on the root is always false and a consumer that selects the whole
+  thing gains nothing; the win is entirely in narrow selectors, and `useShallow`
+  is the answer for a selector that returns two fields. `engineStore.test.ts`
+  pins this property, because if a future sampler starts caching, the advice in
+  `useEngine`'s own docstring silently becomes wrong.
+- **It makes React Compiler safe for these reads.** The compiler assumes what a
+  component derives is a pure function of its inputs, which is false for a
+  component reading mutable engine fields — that is why `PerfPanel` carries
+  `'use no memo'`. A snapshot read through a selector satisfies the assumption.
+  This is an argument for pointing panels at the store, not licence to point
+  them at live engine fields.
+
+The sampler takes a **port** (`EngineSource`), not the engine, which is why its
+test builds no world, no DOM and no renderer.
+
+### `@/` is the one non-relative import, and it is not a style choice
+
+shadcn/ui's registry writes `@/lib/utils` and `@/components/ui/*` into every
+component `pnpm dlx shadcn add` generates. Without the alias, each added
+component is a file to hand-edit before it compiles, and re-adding one to pick
+up an upstream fix reverts the edit. It is configured in **three** files that
+cannot check each other — `apps/game/vite.config.ts`, `apps/game/tsconfig.json`
+and the root `vitest.config.ts` — which is why `pages/pages.test.ts` renders a
+page through it in Node: a disagreement between the three is otherwise a black
+overlay in the browser and nothing else notices. `tsconfig` carries `paths` and
+no `baseUrl`; TypeScript 6 deprecates `baseUrl` outright and errors on it.
+
+### The design tokens are the instrument's, not the generator's
+
+`shadcn init` would have written a light and a dark palette in its own neutral
+hues. Those are not this interface. `index.css` keeps the registry's vocabulary
+— `bg-background`, `border-border`, `ring-ring` — and points every token at the
+slate/sky values already in `hud/`, each line naming the Tailwind step it is.
+One palette; `class="dark"` on `<html>` with a `@custom-variant` keyed to it, so
+the `dark:` utilities inside registry components still resolve without the OS
+preference deciding anything. `--radius` is 0.375rem so that shadcn's
+`rounded-md` lands on the 0.25rem `rounded` every existing control wears.
+
+`tw-animate-css` is imported for a reason worth knowing: the `animate-in` /
+`fade-in-0` / `zoom-in-95` utilities every shadcn overlay references are not
+Tailwind v4 core. Without it those components mount with no transition and
+nothing errors.
+
+### Pages render inside the HUD layer, never above the canvas
+
+`<BrowserRouter>` wraps the tree, but the route table is mounted inside
+`.hud-layer`, which is a **sibling** of `<Canvas>`. A router that owned the view
+would remount the canvas on every navigation and rebuild the `WebGPURenderer`
+with it. Pages therefore also inherit `dynamic-range-limit: standard` for free.
+
+`useTransitions={false}` on the router is deliberate and documented upstream:
+React Router v8 wraps state updates in `startTransition` by default and says to
+opt out for applications built on `useSyncExternalStore`, which this one now is.
+
+The offline path already worked without a change — `public/sw.js` falls a failed
+navigation back to the cached `/index.html`, and the Worker's assets config is
+already `not_found_handling: "single-page-application"`, so `/settings` typed
+cold resolves both online and off.
+
+### `/settings` is a real page, not a demo
+
+It renders the dock's own `GraphicsPanel` and `CameraPanel` — the same
+components, the same props, the same engine fields. `docs/design/ux.md` puts
+settings in an overlay over a running simulation rather than behind a pause, and
+says there is no pause menu at all; the eventual move is out of the dock and
+into this page. Both render today and neither is a copy.
+
+The scrim was measured in front of Earth, not picked. `bg-slate-950/70` with a
+`backdrop-blur-sm` obliterated the planet, which makes the page's own subtitle a
+claim the frame contradicts. Dropping to 55% with no blur went too far the other
+way, and the reason is the interesting half: **on the extended-range path the
+canvas carries a sunlit planet well above diffuse white, so 45% of that is still
+about diffuse white and the scrim barely registers.** A scrim over this scene is
+read against what is behind it, not against a swatch. 70% with no blur is the
+answer.
+
+### Measured cost
+
+`pnpm build`, before and after, same machine:
+
+|     | before                     | after                      | delta             |
+| --- | -------------------------- | -------------------------- | ----------------- |
+| JS  | 1,937.7 KB / 555.6 KB gzip | 2,139.8 KB / 622.8 KB gzip | **+67.2 KB gzip** |
+| CSS | 25.8 KB / 5.9 KB gzip      | 51.4 KB / 9.5 KB gzip      | **+3.6 KB gzip**  |
+
+Roughly 71 KB gzip for all five libraries, against a bundle that is already over
+budget and uncode-split. That is the number to hold the eventual splitting work
+against, not a reason not to have done this.
+
+### Known, and left for the refactor
+
+- **shadcn's overlays portal to `document.body`**, which is outside
+  `.hud-layer` — so a `Tooltip`, `Popover`, `Select` or `Dialog` escapes the
+  standard-range clamp and would wash out against a star. Radix's `Portal`
+  takes a `container`; wiring it is a change to the generated components, which
+  is the refactor turn's job. Nothing uses one yet.
+- **`TooltipContent` ships inverted** (`bg-foreground` / `text-background`),
+  which in this palette is a light chip in a dark-adapted interface — the exact
+  thing the scrollbar rules in `index.css` were written to stop.
+- `.oxlintrc.json` turns `react/only-export-components` off for
+  `components/ui/*.tsx`. Those files export `buttonVariants` beside `Button`,
+  and the rule's remedy is an edit the next `shadcn add` reverts.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).
@@ -1578,7 +1711,8 @@ Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md
 - No compute passes, storage buffers or indirect draw yet: the WebGPU migration
   delivered the renderer and the HDR path, not GPU-driven terrain or culling.
 - Cold load to interactive is still unmeasured, and it is the budget most likely
-  to be missed: the bundle is 541.4 KB gzip with no code splitting.
+  to be missed: the bundle is 622.8 KB gzip with no code splitting, of which
+  67 KB arrived with the UI foundations on 22 Aug.
 - Every performance number recorded here is from an Apple M5 in a 1000×760
   window. The target is a 2023-class laptop at 1920×1080 — roughly three times
   the pixels on a much weaker GPU — so these establish that the instrument works,

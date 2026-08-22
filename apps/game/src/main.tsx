@@ -1,5 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { MotionConfig } from 'motion/react'
+import { BrowserRouter } from 'react-router'
 import { createConsoleSink, logHub } from '@inertialref/shared'
 import App from './App.tsx'
 import { BUILD_ID } from './build.ts'
@@ -102,7 +104,35 @@ try {
     onUncaughtError: (cause: unknown) => reportFatal(cause),
   }).render(
     <StrictMode>
-      <App catalog={catalog} />
+      {/*
+       * The router wraps the whole tree, but it does not *own* the view: the
+       * routed pages render inside `.hud-layer` (see `pages/routes.tsx`), so
+       * `<Canvas>` is never inside a route and a navigation cannot remount the
+       * renderer.
+       *
+       * `useTransitions={false}` is a deliberate opt-out. React Router v8 wraps
+       * router state updates in `startTransition` by default, and its own
+       * guidance is to turn that off for applications built on
+       * `useSyncExternalStore` — which this one is: `state/engineStore.ts`
+       * republishes an engine snapshot eight times a second and a
+       * `useSyncExternalStore` update cannot be a transition, so every sample
+       * would force a synchronous update through a router mid-transition.
+       * There is nothing to gain here in exchange — no route does data loading
+       * and none of them suspend.
+       */}
+      <BrowserRouter useTransitions={false}>
+        {/*
+         * Reduced motion, honoured globally rather than per animation.
+         * `reducedMotion="user"` drops transform and layout animations for
+         * anyone whose system asks for that, and leaves opacity alone — so a
+         * page still fades in and simply does not travel. It cannot reach the
+         * cutscene director or the scene, which are camera moves in a
+         * simulation rather than interface motion.
+         */}
+        <MotionConfig reducedMotion="user">
+          <App catalog={catalog} />
+        </MotionConfig>
+      </BrowserRouter>
     </StrictMode>,
   )
 } catch (cause) {

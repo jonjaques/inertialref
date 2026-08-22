@@ -450,6 +450,64 @@ shot system work, its faces are placeholder, and nothing outside the cutscene
 may reference those values. Its transport bar, by contrast, _is_ system-native:
 `slate-950/70`, `0.5rem` radius, `accent-sky-400` scrubber, 11px mono.
 
+### Registry Components (shadcn/ui) — the second vocabulary
+
+As of 22 Aug 2026 `apps/game/src/components/ui/` holds ten vendored shadcn/ui
+components (button, tabs, slider, switch, separator, scroll-area, collapsible,
+input, badge, tooltip). They exist so the dock's hand-built controls can be
+refactored onto accessible primitives without redesigning anything, and they are
+**not a second design system**. Their token names are pointed at this one, in
+`apps/game/src/index.css`:
+
+| Registry token            | This system                                                      |
+| ------------------------- | ---------------------------------------------------------------- |
+| `--background`            | Panel Graphite 950                                               |
+| `--foreground`            | Panel Graphite 300                                               |
+| `--card` / `--popover`    | Panel Graphite 950 at 85% / 95%                                  |
+| `--primary`               | Instrument Blue 400                                              |
+| `--secondary` / `--muted` | Panel Graphite 800                                               |
+| `--muted-foreground`      | Panel Graphite 500                                               |
+| `--accent`                | Instrument Blue 500 at 15% (as material)                         |
+| `--accent-foreground`     | Instrument Blue 200                                              |
+| `--border`                | Panel Graphite 700 at 60%                                        |
+| `--input`                 | Panel Graphite 700                                               |
+| `--ring`                  | Instrument Blue 400                                              |
+| `--radius`                | 0.375rem, so `rounded-md` resolves to the 0.25rem control radius |
+
+Rules that follow:
+
+- **Never run `shadcn init`.** It rewrites `index.css` with its own light and
+  dark palettes and would take that mapping with it. `shadcn add <name>` is
+  safe and is the supported path.
+- **A registry component's visual defaults are not authority here.** Two are
+  already known to disagree with this system and are open work:
+  `TooltipContent` ships inverted (`bg-foreground` on `text-background` — a
+  light chip in a dark-adapted interface, which is what the scrollbar rules
+  exist to stop), and every overlay component portals to `document.body`, which
+  is **outside `.hud-layer`** and therefore outside the standard-range clamp.
+  Radix's `Portal` takes a `container`; until it is wired, do not ship a
+  tooltip, popover, select or dialog.
+- `--chart-*` and `--sidebar-*` are deliberately absent. Add them in this
+  palette at the moment something needs them, not before.
+
+### Pages (overlay routes)
+
+A routed page is a scrim plus one panel, centred, over a live simulation —
+`docs/design/ux.md` is explicit that settings open as an overlay and that
+nothing stops the world. The panel is the standard panel (`slate-950/85`,
+`0.5rem`, hairline `slate-700/60`) at `34rem` rather than the dock's `27rem`,
+because a page is read rather than scanned.
+
+**The scrim is `slate-950/70` with no backdrop blur, and the number was
+measured in front of Earth rather than picked.** Adding a blur obliterates the
+scene the page claims to be running over. Dropping to 55% without one barely
+registers — on the extended-range path the canvas carries a sunlit planet well
+above diffuse white, so 45% of that is still about diffuse white. **A scrim over
+this scene is read against what is behind it, never against a swatch.**
+
+A page is the one place the crosshair may be covered; it is transient and
+addressable, and both Escape and the browser's back button leave it.
+
 ## Do's and Don'ts
 
 ### Do:
@@ -482,7 +540,14 @@ may reference those values. Its transport bar, by contrast, _is_ system-native:
 - **Don't** set a proportional face anywhere in the dock or the strip.
 - **Don't** add shadows to create depth. There is one `shadow-xl`, on the dock,
   and hairline borders do the rest.
-- **Don't** build icon-only controls. Every control is a word.
+- **Don't** build icon-only controls _in the dock or the flight strip_. Every
+  control on a readout surface is a word — an icon among a hundred labels is a
+  guess. The exception, added 22 Aug 2026 with `lucide-react`, is **navigation
+  chrome**: the settings affordance in the top-left corner and a page's close
+  control, where a word would be a label floating over the scene rather than a
+  row in a panel. Both carry a `title` and an `aria-label` naming the action and
+  its key, which is the same contract every worded control already has. Two
+  icons is the exception; a third is a new decision.
 - **Don't** treat the cutscene overlay's blues and gold as tokens, or derive
   anything from `public/favicon.svg` — the mark is violet
   (`#863bff` / `#7e14ff`), shares no colour with the running interface, and is a

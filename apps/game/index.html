@@ -1,5 +1,15 @@
 <!doctype html>
-<html lang="en">
+<!--
+  `class="dark"` rather than a media query.
+
+  Tailwind v4's stock `dark:` variant follows `prefers-color-scheme`, and the
+  components shadcn/ui generates lean on `dark:` for their contrast steps. This
+  interface has exactly one palette — it is a HUD over a starfield and there is
+  no light-mode reading of it — so the class is set once, here, and
+  `src/index.css` redefines the variant to key off it. Without this the whole
+  registry renders in its light values on a machine set to light.
+-->
+<html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />

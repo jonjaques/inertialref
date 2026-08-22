@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
 
 // Tests live beside the code they cover, and every one of them must be runnable
@@ -12,6 +13,22 @@ export default defineConfig({
    * test about an overlay.
    */
   define: { __BUILD_ID__: JSON.stringify('test') },
+  /*
+   * `apps/game`'s `@/` alias, repeated.
+   *
+   * Tests do not go through that app's Vite config (see `define` above for the
+   * other half of the same problem), and vitest resolves imports itself rather
+   * than through tsconfig `paths`. Without this, the HUD smoke test fails to
+   * resolve the `@/lib/utils` import that shadcn/ui writes into every component
+   * it generates — an error about module resolution, thrown by a test about an
+   * overlay. It is scoped to that app because nothing else in the repository
+   * has an alias; `packages/*` import each other by workspace name.
+   */
+  resolve: {
+    alias: {
+      '@': fileURLToPath(new URL('./apps/game/src', import.meta.url)),
+    },
+  },
   test: {
     environment: 'node',
     include: ['packages/*/src/**/*.test.ts', 'apps/*/src/**/*.test.ts'],

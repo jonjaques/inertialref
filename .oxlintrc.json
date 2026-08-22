@@ -4,5 +4,17 @@
   "rules": {
     "react/rules-of-hooks": "error",
     "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
+  },
+  "overrides": [
+    {
+      // shadcn/ui's registry output. These files are written by
+      // `pnpm dlx shadcn add` and re-written by it whenever one is updated, so
+      // the rule's remedy — move `buttonVariants` into its own module — is an
+      // edit that the next update silently reverts. The cost it warns about is
+      // real and bounded: editing one of these loses Fast Refresh for that
+      // file only, and they are edited approximately never.
+      "files": ["apps/game/src/components/ui/*.tsx"],
+      "rules": { "react/only-export-components": "off" }
+    }
+  ]
 }

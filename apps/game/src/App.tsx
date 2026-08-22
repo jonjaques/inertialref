@@ -1,11 +1,16 @@
 import { Canvas } from '@react-three/fiber'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { HarnessStatus } from '@inertialref/devtools'
+import { AnimatePresence, motion } from 'motion/react'
+import { SlidersHorizontal } from 'lucide-react'
+import { Link } from 'react-router'
 import type { StarCatalog } from '@inertialref/universe'
+import { Button } from '@/components/ui/button'
 import { DEFAULT_FOV, GameEngine } from './engine/GameEngine.ts'
 import { CutsceneOverlay } from './hud/CutsceneOverlay.tsx'
 import { ErrorBoundary } from './hud/ErrorBoundary.tsx'
 import { FlightStrip } from './hud/FlightStrip.tsx'
+import type { CameraState } from './hud/CameraPanel.tsx'
+import type { GraphicsState } from './hud/GraphicsPanel.tsx'
 import { HudDock, type HudCommands } from './hud/HudDock.tsx'
 import {
   isBoolean,
@@ -36,7 +41,14 @@ import {
   type OutputPreference,
   type RendererDescription,
 } from './render/output.ts'
+import { OverlayRoutes } from './pages/routes.tsx'
+import { SETTINGS } from './pages/paths.ts'
 import { SceneView } from './scene/SceneView.tsx'
+import {
+  engineStore,
+  startEngineSampler,
+  useEngine,
+} from './state/engineStore.ts'
 
 /*
  * The application shell.
@@ -108,16 +120,24 @@ function rendererKey(
 
 export default function App({ catalog }: { catalog: StarCatalog }) {
   const engine = engineInstance(catalog)
-  const [status, setStatus] = useState<HarnessStatus | null>(null)
   /*
-   * Whether a cutscene is playing, at panel rate. Only the *chrome* hangs off
-   * this — the dock, the flight strip, the crosshair all step out of the
-   * frame so a capture is the picture and nothing else. The scene itself
-   * reads `engine.cinematic` directly every frame; this state exists because
-   * React needs a re-render to unmount chrome, and 8 Hz is fast enough for a
-   * thing a human just clicked.
+   * The engine's latest description, and whether a cutscene is playing — both
+   * read from the sampler in `state/engineStore.ts` rather than held here.
+   *
+   * `status` is a fresh object on every sample, so selecting it re-renders this
+   * component at the sample rate exactly as the old `useState` did; the
+   * difference is that a panel can now subscribe to the field it needs instead
+   * of being handed the whole thing. `cinema` is a boolean, so it re-renders
+   * when it flips and not eight times a second.
+   *
+   * Only the *chrome* hangs off `cinema` — the dock, the flight strip, the
+   * crosshair all step out of the frame so a capture is the picture and nothing
+   * else. The scene itself reads `engine.cinematic` directly every frame; this
+   * exists because React needs a re-render to unmount chrome, and 8 Hz is fast
+   * enough for a thing a human just clicked.
    */
-  const [cinema, setCinema] = useState(false)
+  const status = useEngine((snapshot) => snapshot.status)
+  const cinema = useEngine((snapshot) => snapshot.cinema)
   const [dockOpen, setDockOpen] = usePersistentState(
     'dock.open',
     true,
@@ -303,11 +323,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
       '— harness ready. Try ir.help()',
     )
 
-    const timer = window.setInterval(() => {
-      setStatus(engine.harness.status())
-      setCinema(engine.cinematic !== null)
-    }, 1000 / PANEL_HZ)
-    return () => window.clearInterval(timer)
+    return startEngineSampler(engineStore, engine, PANEL_HZ)
   }, [engine])
 
   /*
@@ -378,6 +394,28 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
         })
     },
   }
+
+  /*
+   * The render knobs, as one definition each.
+   *
+   * They are read in two places now — the dock's tabs and the `/settings` page
+   * — and `docs/design/ux.md` puts the eventual home in the page rather than
+   * the dock. Two inline object literals would be two anti-aliasing switches
+   * that could drift apart, which is the same argument `widgets.tsx` makes
+   * about a label's colour, applied to behaviour.
+   */
+  const graphicsState: GraphicsState = {
+    lensFlare,
+    onLensFlare: setLensFlare,
+    aa,
+    onAa: (level) => {
+      // Crossing the MSAA boundary rebuilds the renderer, so say so — the
+      // stall would otherwise read as a hang.
+      setAa(level)
+      flash(`anti-aliasing ${level}`)
+    },
+  }
+  const cameraState: CameraState = { fov, onFov: setFov }
 
   useShipControls(engine, {
     onToggleAssist: commands.toggleAssist,
@@ -481,18 +519,8 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
                   flash(`hdr ${next}`)
                 },
               }}
-              graphics={{
-                lensFlare,
-                onLensFlare: setLensFlare,
-                aa,
-                onAa: (level) => {
-                  // Crossing the MSAA boundary rebuilds the renderer, so say so —
-                  // the stall would otherwise read as a hang.
-                  setAa(level)
-                  flash(`anti-aliasing ${level}`)
-                },
-              }}
-              camera={{ fov, onFov: setFov }}
+              graphics={graphicsState}
+              camera={cameraState}
               connection={connection}
               onCheckConnection={monitor.refresh}
               open={dockOpen}
@@ -523,17 +551,64 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
           </ErrorBoundary>
         )}
 
-        {!cinema && notice !== null && (
-          /* A notice echoes what was asked for, and one of the things that can
-             be asked for is whatever was typed into the address field. Bounded
-             so a paste is a truncated sentence rather than a band across the
-             bottom of the frame. */
-          <div
-            title={notice}
-            className="pointer-events-none absolute bottom-3 left-1/2 max-w-[min(36rem,calc(100vw-1.5rem))] -translate-x-1/2 truncate rounded bg-sky-500/20 px-3 py-1 font-mono text-xs text-sky-200"
+        {/* A notice echoes what was asked for, and one of the things that can
+            be asked for is whatever was typed into the address field. Bounded
+            so a paste is a truncated sentence rather than a band across the
+            bottom of the frame.
+
+            `AnimatePresence` is here rather than a CSS transition because the
+            element is conditionally rendered: it can fade *in* under CSS and
+            never fade out, since by the time the notice clears there is no node
+            left to transition. The key is the message, so a second notice
+            arriving while the first is up crossfades rather than swapping text
+            inside a box that never moved. Transform is dropped for anyone who
+            asks for reduced motion; see `MotionConfig` in `main.tsx`. */}
+        <AnimatePresence>
+          {!cinema && notice !== null && (
+            <motion.div
+              key={notice}
+              title={notice}
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 4 }}
+              transition={{ duration: 0.15 }}
+              className="pointer-events-none absolute bottom-3 left-1/2 max-w-[min(36rem,calc(100vw-1.5rem))] -translate-x-1/2 truncate rounded bg-sky-500/20 px-3 py-1 font-mono text-xs text-sky-200"
+            >
+              {notice}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* The way in to the routed pages, top left — the one corner nothing
+            else claims. A `Link` rather than a click handler that navigates,
+            so it is a real anchor: middle-click, copy-link and the back button
+            all behave, and `docs/design/ux.md` wants settings addressable
+            rather than buried in the dock. `asChild` makes the button *be* the
+            anchor rather than wrap one, which is the only way to get shadcn's
+            styling onto a link without nesting interactive elements. */}
+        {!cinema && (
+          <Button
+            asChild
+            variant="ghost"
+            size="icon-sm"
+            className="pointer-events-auto absolute top-3 left-3 border border-slate-700/60 bg-slate-950/85 text-slate-400 backdrop-blur hover:text-sky-200"
           >
-            {notice}
-          </div>
+            <Link to={SETTINGS} aria-label="Settings" title="Settings">
+              <SlidersHorizontal />
+            </Link>
+          </Button>
+        )}
+
+        {/* Pages, over a running simulation. Inside the layer so they inherit
+            the standard-range clamp; a sibling of `<Canvas>`, so navigating
+            cannot remount the renderer. */}
+        {!cinema && (
+          <ErrorBoundary
+            what="the page overlay"
+            className="pointer-events-auto absolute inset-0"
+          >
+            <OverlayRoutes graphics={graphicsState} camera={cameraState} />
+          </ErrorBoundary>
         )}
 
         {!cinema && (

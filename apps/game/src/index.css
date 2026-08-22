@@ -1,4 +1,100 @@
 @import 'tailwindcss';
+/* The `animate-in` / `animate-out` / `fade-*` / `zoom-*` utilities that every
+   shadcn/ui overlay component (dialog, popover, tooltip, select) references in
+   its own className. They are not part of Tailwind v4 core; without this import
+   those components mount and unmount with no transition at all and nothing
+   errors, which is the failure mode that takes an afternoon to find. */
+@import 'tw-animate-css';
+
+/*
+ * shadcn/ui's design tokens, pointed at the instrument.
+ *
+ * The registry's components are written against a fixed vocabulary —
+ * `bg-background`, `border-border`, `text-muted-foreground`, `ring-ring` — and
+ * `shadcn init` would have generated a light and a dark palette in its own
+ * neutral hues. Those are not this interface: `docs/design/art.md` and every
+ * panel in `hud/` are slate surfaces with a single sky accent, and a Button
+ * whose hover is zinc sitting next to an `Action` whose hover is sky is exactly
+ * the "two overlays" drift `widgets.tsx` was written to stop.
+ *
+ * So the vocabulary is kept and the values are the palette already in use. Each
+ * line names the Tailwind step it is, because that is the form the rest of the
+ * codebase writes these colours in and a bare oklch triple is unreadable
+ * against `bg-slate-950/85` in a className three files away.
+ *
+ * One palette, not two. There is no light mode — `color-scheme: dark` is set
+ * below, the page is black, and a HUD composited over a starfield has no
+ * light-mode reading. `.dark` is on `<html>` so the `dark:` utilities inside
+ * registry components still resolve; the custom variant below is what makes
+ * that class, rather than the OS preference, the switch.
+ *
+ * Absent on purpose: `--chart-*` and `--sidebar-*`. `shadcn add chart` and
+ * `shadcn add sidebar` need them and neither is installed. Add them here, in
+ * this palette, at the moment one of them is.
+ */
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* The dock's own radii. `--radius-md`, which shadcn's Button uses, derives as
+     `--radius - 2px` — so 0.375rem here lands on the 0.25rem `rounded` that
+     every control in `hud/` already has. */
+  --radius: 0.375rem;
+
+  --background: oklch(12.9% 0.042 264.695); /* slate-950 */
+  --foreground: oklch(86.9% 0.022 252.894); /* slate-300 */
+  /* The dock's surface, alpha and all: `bg-slate-950/85` behind a backdrop
+     blur. A card token that was opaque would read as a second material. */
+  --card: oklch(12.9% 0.042 264.695 / 0.85); /* slate-950/85 */
+  --card-foreground: oklch(86.9% 0.022 252.894); /* slate-300 */
+  /* Popovers sit over the dock rather than over the scene, so they are denser
+     than the card — otherwise two stacked 85% surfaces show the stars through
+     a menu. */
+  --popover: oklch(12.9% 0.042 264.695 / 0.95); /* slate-950/95 */
+  --popover-foreground: oklch(86.9% 0.022 252.894); /* slate-300 */
+  --primary: oklch(74.6% 0.16 232.661); /* sky-400 */
+  --primary-foreground: oklch(12.9% 0.042 264.695); /* slate-950 */
+  --secondary: oklch(27.9% 0.041 260.031); /* slate-800 */
+  --secondary-foreground: oklch(86.9% 0.022 252.894); /* slate-300 */
+  --muted: oklch(27.9% 0.041 260.031); /* slate-800 */
+  --muted-foreground: oklch(55.4% 0.046 257.417); /* slate-500 */
+  /* `Action`'s primary tone, which is the accent used as material: a sky wash
+     rather than a sky fill. The only place this system fills with the accent. */
+  --accent: oklch(68.5% 0.169 237.323 / 0.15); /* sky-500/15 */
+  --accent-foreground: oklch(90.1% 0.058 230.902); /* sky-200 */
+  --destructive: oklch(70.4% 0.191 22.216); /* red-400 */
+  --destructive-foreground: oklch(12.9% 0.042 264.695); /* slate-950 */
+  --border: oklch(37.2% 0.044 257.287 / 0.6); /* slate-700/60 */
+  --input: oklch(37.2% 0.044 257.287); /* slate-700 */
+  /* The same sky-400 hairline `FOCUS_RING` draws, so a shadcn control and an
+     `Action` show focus identically. See `hud/focus.ts`. */
+  --ring: oklch(74.6% 0.16 232.661); /* sky-400 */
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
 
 /* The game fills the viewport and never scrolls; the HUD is absolutely
    positioned over the canvas. */
