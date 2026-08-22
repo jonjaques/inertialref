@@ -11,12 +11,12 @@ decisions — [`docs/design/`](docs/design/) is the game design bible, and a
 section below marks which it is talking about, because confusing them is the
 single most expensive mistake available here:
 
-| | Built today | Specified, not built |
-| --- | --- | --- |
-| What | The dev dock, the flight strip, the cutscene overlay | The cockpit HUD, the two maps, the ship panel, the almanac, the visor |
-| Where | `apps/game/src/hud/` | [`docs/design/ux.md`](docs/design/ux.md) |
-| For | Authoring and debugging a running simulation | Playing the game |
-| Status | Scaffolding, and it says so in its own source comment | The destination |
+|        | Built today                                           | Specified, not built                                                  |
+| ------ | ----------------------------------------------------- | --------------------------------------------------------------------- |
+| What   | The dev dock, the flight strip, the cutscene overlay  | The cockpit HUD, the two maps, the ship panel, the almanac, the visor |
+| Where  | `apps/game/src/hud/`                                  | [`docs/design/ux.md`](docs/design/ux.md)                              |
+| For    | Authoring and debugging a running simulation          | Playing the game                                                      |
+| Status | Scaffolding, and it says so in its own source comment | The destination                                                       |
 
 ---
 
@@ -164,13 +164,13 @@ enforced by `pnpm graph`, not documented. `pnpm check` is the gate.
 
 **Production constraints that shape every feature.**
 
-| Constraint | Consequence |
-| --- | --- |
+| Constraint                    | Consequence                                                                                                                          |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | One person plus coding agents | Every system must be generated or simulated, never hand-authored at volume. A feature needing 200 hand-made assets is not a feature. |
-| Browser, ~10 W of laptop GPU | Geometric fidelity sits well below the comparables; the budget goes to light transport and HDR output instead. |
-| Non-commercial | No revenue funds servers, so solo must be the complete experience and the persistent universe an addition. |
-| No content pipeline | Ships, stations and interiors are procedurally assembled from parts, not modelled. |
-| Real data, forever changing | Address stability and generation purity are non-negotiable. |
+| Browser, ~10 W of laptop GPU  | Geometric fidelity sits well below the comparables; the budget goes to light transport and HDR output instead.                       |
+| Non-commercial                | No revenue funds servers, so solo must be the complete experience and the persistent universe an addition.                           |
+| No content pipeline           | Ships, stations and interiors are procedurally assembled from parts, not modelled.                                                   |
+| Real data, forever changing   | Address stability and generation purity are non-negotiable.                                                                          |
 
 **Deliberately not built, with the seam named for each** — multiplayer, n-body
 gravity, hull and entity collision, terrain patch stitching, and a content

@@ -2,94 +2,94 @@
 name: InertialRef
 description: A dark-adapted instrument layer, held at standard range over a live simulation of the Milky Way.
 colors:
-  instrument-blue-200: "oklch(90.1% 0.058 230.902)"
-  instrument-blue-300: "oklch(82.8% 0.111 230.318)"
-  instrument-blue-400: "oklch(74.6% 0.16 232.661)"
-  instrument-blue-500: "oklch(68.5% 0.169 237.323)"
-  panel-graphite-200: "oklch(92.9% 0.013 255.508)"
-  panel-graphite-300: "oklch(86.9% 0.022 252.894)"
-  panel-graphite-400: "oklch(70.4% 0.04 256.788)"
-  panel-graphite-500: "oklch(55.4% 0.046 257.417)"
-  panel-graphite-600: "oklch(44.6% 0.043 257.281)"
-  panel-graphite-700: "oklch(37.2% 0.044 257.287)"
-  panel-graphite-800: "oklch(27.9% 0.041 260.031)"
-  panel-graphite-900: "oklch(20.8% 0.042 265.755)"
-  panel-graphite-950: "oklch(12.9% 0.042 264.695)"
-  void-black: "#000000"
-  nominal-green: "oklch(76.5% 0.177 163.223)"
-  caution-amber: "oklch(82.8% 0.189 84.429)"
-  fault-red: "oklch(71.2% 0.194 13.428)"
+  instrument-blue-200: 'oklch(90.1% 0.058 230.902)'
+  instrument-blue-300: 'oklch(82.8% 0.111 230.318)'
+  instrument-blue-400: 'oklch(74.6% 0.16 232.661)'
+  instrument-blue-500: 'oklch(68.5% 0.169 237.323)'
+  panel-graphite-200: 'oklch(92.9% 0.013 255.508)'
+  panel-graphite-300: 'oklch(86.9% 0.022 252.894)'
+  panel-graphite-400: 'oklch(70.4% 0.04 256.788)'
+  panel-graphite-500: 'oklch(55.4% 0.046 257.417)'
+  panel-graphite-600: 'oklch(44.6% 0.043 257.281)'
+  panel-graphite-700: 'oklch(37.2% 0.044 257.287)'
+  panel-graphite-800: 'oklch(27.9% 0.041 260.031)'
+  panel-graphite-900: 'oklch(20.8% 0.042 265.755)'
+  panel-graphite-950: 'oklch(12.9% 0.042 264.695)'
+  void-black: '#000000'
+  nominal-green: 'oklch(76.5% 0.177 163.223)'
+  caution-amber: 'oklch(82.8% 0.189 84.429)'
+  fault-red: 'oklch(71.2% 0.194 13.428)'
 typography:
   readout:
-    fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
-    fontSize: "11px"
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace'
+    fontSize: '11px'
     fontWeight: 400
     lineHeight: 1.625
-    letterSpacing: "normal"
+    letterSpacing: 'normal'
   strip:
-    fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
-    fontSize: "0.75rem"
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace'
+    fontSize: '0.75rem'
     fontWeight: 400
     lineHeight: 1.3333
-    letterSpacing: "normal"
+    letterSpacing: 'normal'
   label:
-    fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
-    fontSize: "10px"
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace'
+    fontSize: '10px'
     fontWeight: 400
     lineHeight: 1.625
-    letterSpacing: "0.1em"
+    letterSpacing: '0.1em'
   control:
-    fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
-    fontSize: "10px"
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace'
+    fontSize: '10px'
     fontWeight: 400
     lineHeight: 1.625
-    letterSpacing: "normal"
+    letterSpacing: 'normal'
 rounded:
-  control: "0.25rem"
-  panel: "0.5rem"
+  control: '0.25rem'
+  panel: '0.5rem'
 spacing:
-  hairline: "0.125rem"
-  tight: "0.25rem"
-  base: "0.5rem"
-  gutter: "0.75rem"
+  hairline: '0.125rem'
+  tight: '0.25rem'
+  base: '0.5rem'
+  gutter: '0.75rem'
 components:
   action:
-    backgroundColor: "{colors.panel-graphite-800}"
-    textColor: "{colors.panel-graphite-300}"
-    typography: "{typography.control}"
-    rounded: "{rounded.control}"
-    padding: "0.125rem 0.375rem"
+    backgroundColor: '{colors.panel-graphite-800}'
+    textColor: '{colors.panel-graphite-300}'
+    typography: '{typography.control}'
+    rounded: '{rounded.control}'
+    padding: '0.125rem 0.375rem'
   action-hover:
-    textColor: "{colors.instrument-blue-200}"
+    textColor: '{colors.instrument-blue-200}'
   action-primary:
-    backgroundColor: "{colors.instrument-blue-500}"
-    textColor: "{colors.instrument-blue-200}"
-    typography: "{typography.control}"
-    rounded: "{rounded.control}"
-    padding: "0.125rem 0.375rem"
+    backgroundColor: '{colors.instrument-blue-500}'
+    textColor: '{colors.instrument-blue-200}'
+    typography: '{typography.control}'
+    rounded: '{rounded.control}'
+    padding: '0.125rem 0.375rem'
   panel:
-    backgroundColor: "{colors.panel-graphite-950}"
-    textColor: "{colors.panel-graphite-300}"
-    typography: "{typography.readout}"
-    rounded: "{rounded.panel}"
-    width: "27rem"
+    backgroundColor: '{colors.panel-graphite-950}'
+    textColor: '{colors.panel-graphite-300}'
+    typography: '{typography.readout}'
+    rounded: '{rounded.panel}'
+    width: '27rem'
   readout-strip:
-    backgroundColor: "{colors.panel-graphite-950}"
-    textColor: "{colors.panel-graphite-200}"
-    typography: "{typography.strip}"
-    rounded: "{rounded.panel}"
-    padding: "0.5rem 0.75rem"
+    backgroundColor: '{colors.panel-graphite-950}'
+    textColor: '{colors.panel-graphite-200}'
+    typography: '{typography.strip}'
+    rounded: '{rounded.panel}'
+    padding: '0.5rem 0.75rem'
   field:
-    backgroundColor: "{colors.panel-graphite-900}"
-    textColor: "{colors.panel-graphite-200}"
-    typography: "{typography.readout}"
-    rounded: "{rounded.control}"
-    padding: "0.125rem 0.375rem"
+    backgroundColor: '{colors.panel-graphite-900}'
+    textColor: '{colors.panel-graphite-200}'
+    typography: '{typography.readout}'
+    rounded: '{rounded.control}'
+    padding: '0.125rem 0.375rem'
   target-row-selected:
-    backgroundColor: "{colors.instrument-blue-500}"
-    textColor: "{colors.instrument-blue-200}"
-    typography: "{typography.readout}"
-    padding: "1px 0.375rem"
+    backgroundColor: '{colors.instrument-blue-500}'
+    textColor: '{colors.instrument-blue-200}'
+    typography: '{typography.readout}'
+    padding: '1px 0.375rem'
 ---
 
 # Design System: InertialRef
@@ -144,7 +144,7 @@ status hues that appear a handful of times each.
   accent — collapsible section headings at 80% opacity, and the underline on the
   active tab. Dimmer than 300 on purpose: headings organise, they don't announce.
 - **Instrument Blue 500** (`border-sky-500/50`, `bg-sky-500/15…/25`,
-  `accent-sky-500`): the accent as *material* rather than ink. Only ever used at
+  `accent-sky-500`): the accent as _material_ rather than ink. Only ever used at
   low alpha — control fills, focus borders, the selected row's wash, native range
   accents. It is never a text colour.
 - **Instrument Blue 200** (`text-sky-200`): contact state. What a control's label
@@ -236,7 +236,7 @@ colour grade and case, not weight.
   the system, and it exists to make a heading readable at a size where case
   differences alone would not.
 - **Control** (400, `10px`, sentence case): button labels. Same size as a label,
-  deliberately *not* uppercase — a control is a verb, a heading is a category,
+  deliberately _not_ uppercase — a control is a verb, a heading is a category,
   and case is what separates them.
 
 ### Named Rules
@@ -306,7 +306,7 @@ of contrast. If a measurement ever showed the readouts failing against a bright
 scene, raising the alpha would be the correct fix and would cost the system
 nothing it values.
 
-The one piece of depth machinery that is *not* negotiable is the range clamp.
+The one piece of depth machinery that is _not_ negotiable is the range clamp.
 Every overlay lives inside `.hud-layer`, which sets `dynamic-range-limit:
 standard`. On the extended-range output path the canvas carries values above
 diffuse white, and a `backdrop-filter` samples what is behind it — so without
@@ -425,7 +425,7 @@ is this component repeated.
 ### Flight Strip (signature)
 
 The one piece of chrome that is not the dock, and deliberately so: it is what
-you read *while* flying, where the dock is what you read when you have stopped
+you read _while_ flying, where the dock is what you read when you have stopped
 to look at something. Bottom left, `slate-950/75`, `0.5rem` radius, 12px
 monospace — a hair larger than everything else — with four lines in descending
 brightness: ship name in `sky-300`, speed in `slate-200`, frame or altitude in
@@ -447,7 +447,7 @@ palette and typefaces — two display faces (`TNG Title`, `TNG Credits`, both
 `rgb(24,120,215)` and `rgb(216,180,90)`, with soft text glows. **None of it is
 part of this system.** It is a demonstration that the cinematic director and
 shot system work, its faces are placeholder, and nothing outside the cutscene
-may reference those values. Its transport bar, by contrast, *is* system-native:
+may reference those values. Its transport bar, by contrast, _is_ system-native:
 `slate-950/70`, `0.5rem` radius, `accent-sky-400` scrubber, 11px mono.
 
 ## Do's and Don'ts
