@@ -16,6 +16,13 @@ the reasoning behind the decisions you are not expected to relitigate.
 
 These are the ones where a violation is a rewrite later rather than a refactor.
 
+Each is mirrored as a path-scoped one-liner in `.claude/rules/`, which loads
+itself when a matching file is opened — this file is canonical, and nothing
+loads it. **Change an invariant here and grep `.claude/rules/` for its
+imperative.** A mirror that has drifted is worse than no mirror: it fires with
+authority at the moment of the edit, and states the previous rule.
+`.claude/rules/README.md` holds the contract.
+
 - **Never put an absolute position in a `Vec3`.** `UniverseVector` is the only
   thing that may claim to be an absolute position. A `Vec3` is a displacement or
   a frame-local coordinate.
@@ -359,3 +366,10 @@ added.
 
 When a defect exposes a missing invariant, add the regression test rather than
 patching the symptom.
+
+Most of that is checked for you rather than remembered: a Stop hook runs
+`graph → lint → typecheck → test` after any turn that touched a source file, and
+a failure returns as work still to do rather than a task reported complete. It
+deliberately stops short of `pnpm build` and of the commit — the full
+`pnpm check` and `pnpm sim --self-test` belong at the point of commit, which is
+what `.claude/skills/ship` runs. `IR_SKIP_GATE=1` disables it.

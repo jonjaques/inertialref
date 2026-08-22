@@ -1,0 +1,29 @@
+# Gitignored files copied into every worktree Claude Code creates — `--worktree`, a
+# subagent with `isolation: worktree`, and parallel sessions in the desktop app.
+# .gitignore syntax; only files that match *and* are gitignored are copied.
+#
+# The test for belonging here is: gitignored, and **not reconstructible from a command**.
+# Almost nothing passes it, which is the point — a worktree that silently carries state
+# the main checkout has is a worktree that passes tests the branch would fail.
+
+# The cutscene's reference audio track. A local copy of copyrighted music that must never
+# enter the repository, and that no command can fetch — so a worktree doing cutscene work
+# has no way to get it back. `CutsceneOverlay` discovers it at this path when present and
+# plays without it when not, so its absence is silent rather than a failure.
+apps/game/public/tng-intro.*
+
+# Local vite / wrangler environment overrides, if any exist.
+.env
+.env.local
+*.local
+
+# Deliberately NOT here:
+#
+#   node_modules/  — pnpm's is a symlink farm into .pnpm; copying dereferences the links
+#                    into ~640 MB per worktree. `pnpm install --frozen-lockfile
+#                    --prefer-offline` rebuilds it from the machine-global store in ~3s,
+#                    which .claude/hooks/session-start.sh does automatically for a session
+#                    and every worktree subagent is told to run first.
+#   .data/         — 34 MB of raw HYG downloads that exist only to produce
+#                    data/catalog (committed). `pnpm catalog:fetch` re-downloads them.
+#   apps/server/.wrangler/ — local Worker state; a fresh one is correct.

@@ -29,6 +29,20 @@ dist-ssr
 coverage
 .vitest
 
+# Claude Code. `.claude/settings.json`, `rules/`, `skills/`, `agents/` and `hooks/` are
+# committed on purpose — they are the project's configuration, not a developer's. These
+# four are not:
+#
+#   worktrees/          parallel checkouts; git already tracks them as worktrees, and a
+#                       committed one would be a repository inside a repository
+#   settings.local.json personal overrides, including permission approvals Claude writes
+#   .cache/             the Stop gate's per-session markers
+#   agent-memory-local/ subagent memory scoped `local` rather than `project`
+.claude/worktrees/
+.claude/settings.local.json
+.claude/.cache/
+.claude/agent-memory-local/
+
 # Raw catalogue downloads. 34 MB of HYG to produce a 460 KB asset, and the asset
 # is what the game needs — `pnpm catalog:fetch` re-downloads them, and
 # `data/catalog/manifest.json` records the digest of exactly what was used.

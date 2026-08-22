@@ -1841,6 +1841,90 @@ identity provider ahead of time and changing it later is a coordinated deploy.
 **No account page renders a credential field that goes nowhere** — people reuse
 passwords, and a form that looks real is one they will type a real one into.
 
+## The invariants got a loader (22 Aug 2026)
+
+`AGENTS.md` holds thirty invariants, each one there because violating it is a
+rewrite rather than a refactor — and **nothing loaded it**. `CLAUDE.md` says
+"read AGENTS.md first", which is a request, not a mechanism; a session that
+never read it operated with none of them. That is the whole reason `.claude/`
+now exists in the repository rather than in a developer's home directory.
+
+### The split, and why not one file
+
+Nine path-scoped rules mirror the invariants into `.claude/rules/`, each with
+`paths:` frontmatter so it enters context only when a matching file does —
+editing `dock/layout.ts` brings the one-panel-one-zone invariant with it, and
+editing the catalogue does not.
+
+The tempting simplification is to move the invariants there and delete the
+duplication. It was rejected twice over. `AGENTS.md` is vendor-neutral and is
+what a human reads, so it stays canonical; and a rule is read on **every** touch
+of its directory, where the thing it competes with for attention is the code.
+So the rules carry only the _imperative_ — the one line that has to be in
+context to prevent the mistake — and point at the section or ADR that says why.
+The imperatives are the stable half, which is what keeps the duplication from
+rotting. The contract for keeping the two in step is in
+[`.claude/rules/README.md`](.claude/rules/README.md), and `AGENTS.md` now names
+it in both directions, because a mirror that has drifted is worse than no
+mirror: it fires with authority at the moment of the edit and states the
+previous rule.
+
+### The definition of done is executed rather than described
+
+A `Stop` hook runs `graph → lint → typecheck → test` — measured 0.19s, 0.19s,
+3.27s and 2.16s on an M5, so about six seconds — and a failure returns as work
+still to do rather than a task reported complete.
+
+`pnpm build` is out of it, and the number that argument was first written around
+was wrong: the note claimed it added 5.3s, when `pnpm build` is
+`typecheck && vite build` and the typecheck is already in the gate. The real
+marginal cost is 1.66s. It stays out on the honest reason instead — bundling
+proves nothing about the source that `typecheck` has not, and the failures it
+does catch alone are resolution and asset ones, which are worth catching at the
+commit. That is what `/ship` runs.
+
+Three properties of the hook mattered more than the checks:
+
+- **It only fires when a source file actually moved this turn**, off a marker
+  the format hook leaves. A `Stop` hook has no other way to know what the turn
+  did, and a turn that answered a question should pay nothing.
+- **It blocks at most three times per prompt.** Exit 2 on `Stop` means "do not
+  stop, here is why" — the feedback loop wanted, and exactly the shape of an
+  infinite loop when the failure is one the agent cannot fix, such as a test
+  that was already red. After the cap it reports and lets go.
+- **It runs in the session's own cwd, not `$CLAUDE_PROJECT_DIR`.** Inside a
+  worktree those differ, and gating the main checkout while an agent edits a
+  worktree tests the wrong tree and passes for the wrong reason.
+
+### What a worktree may carry
+
+`.worktreeinclude` copies gitignored files into new worktrees, and the test for
+belonging is: gitignored, **and not reconstructible from a command**. Almost
+nothing passes it, which is the point — a worktree silently carrying state the
+main checkout has is a worktree that passes tests the branch would fail.
+
+`node_modules/` is the instructive exclusion. pnpm's is a symlink farm into
+`.pnpm`, so copying it dereferences the links into roughly 640 MB per worktree;
+`pnpm install --frozen-lockfile --prefer-offline` rebuilds it from the
+machine-global store in about three seconds. The one real inclusion is the
+cutscene's reference audio, which is copyrighted, must never enter the
+repository, and which no command can fetch — so a worktree doing cutscene work
+would have no way to get it back.
+
+### Cloud sessions need Node 26, and a hook cannot supply it
+
+Cloud images ship Node 20, 21 and 22. This repository runs the TypeScript
+sources directly through type stripping with no build step, so an older runtime
+does not degrade — `pnpm sim`, vitest and the headless runner fail at the first
+import. **A `SessionStart` hook cannot fix it, because a hook cannot change
+`PATH` for the commands that run after it.** So
+[`scripts/cloud-setup.sh`](scripts/cloud-setup.sh) is committed to be pasted
+into the environment's Setup script field, where it runs once as root and is
+snapshotted. It resolves the current v26 patch from `SHASUMS256.txt` rather than
+pinning one that goes stale, and it exits zero on every failure path — a
+non-zero exit there means the session does not start at all, and an image with
+the wrong Node is more useful than no session.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).
