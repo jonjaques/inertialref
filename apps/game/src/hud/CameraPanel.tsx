@@ -1,6 +1,8 @@
 import { DEFAULT_FOV } from '../engine/GameEngine.ts'
-import { FOCUS_RING } from './focus.ts'
-import { Action, Section } from './widgets.tsx'
+import { Action } from './Action.tsx'
+import type { CameraState } from './controls.ts'
+import { FovSlider } from './FovSlider.tsx'
+import { Section } from './Section.tsx'
 
 /*
  * The camera, as an adjustable instrument.
@@ -13,15 +15,6 @@ import { Action, Section } from './widgets.tsx'
  * survives the canvas remounting under an HDR change.
  */
 
-export interface CameraState {
-  readonly fov: number
-  readonly onFov: (fov: number) => void
-}
-
-/** The slider's range. 20° is a telephoto; past 110° everything fisheyes. */
-const FOV_MIN = 20
-const FOV_MAX = 110
-
 export function CameraPanel({ camera }: { camera: CameraState }) {
   return (
     <div>
@@ -31,20 +24,8 @@ export function CameraPanel({ camera }: { camera: CameraState }) {
         trailing={`${camera.fov}°`}
       >
         <div className="flex items-center gap-2">
-          <input
-            type="range"
-            min={FOV_MIN}
-            max={FOV_MAX}
-            step={1}
-            value={camera.fov}
-            onChange={(event) => camera.onFov(Number(event.target.value))}
-            /* `h-6` so the track is a 24 px target. A range input's thumb is
-               sized by the user agent — which SC 2.5.8 exempts — but the track
-               is what a pointer actually lands on, and it was 16. */
-            className={`h-6 min-w-0 flex-1 accent-sky-500 ${FOCUS_RING}`}
-            aria-label="Field of view, degrees"
-          />
-          <span className="w-9 shrink-0 text-right tabular-nums text-slate-300">
+          <FovSlider fov={camera.fov} onFov={camera.onFov} />
+          <span className="w-9 shrink-0 text-right text-slate-300 tabular-nums">
             {camera.fov}°
           </span>
           <Action

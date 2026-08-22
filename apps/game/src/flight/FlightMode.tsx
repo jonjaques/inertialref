@@ -1,12 +1,11 @@
 import { useEffect } from 'react'
-import { Link, useParams } from 'react-router'
-import { CloudOff, Users } from 'lucide-react'
+import { useParams } from 'react-router'
 import type { HarnessStatus } from '@inertialref/devtools'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { ErrorBoundary } from '../hud/ErrorBoundary.tsx'
 import { FlightStrip } from '../hud/FlightStrip.tsx'
-import { FOCUS_RING } from '../hud/focus.ts'
-import { HOME, PLANETARIUM, PLAY_SOLO } from '../pages/paths.ts'
+import { DeferredMultiplayer } from './DeferredMultiplayer.tsx'
+import { NotConnected } from './NotConnected.tsx'
 
 /*
  * Flying.
@@ -51,7 +50,7 @@ export function FlightMode({
     engine.showOrbits = false
   }, [engine])
 
-  if (play === 'multiplayer') return <Deferred />
+  if (play === 'multiplayer') return <DeferredMultiplayer />
 
   return (
     <>
@@ -71,68 +70,5 @@ export function FlightMode({
 
       {play === 'online' && <NotConnected />}
     </>
-  )
-}
-
-/**
- * Solo online, honestly.
- *
- * The mode runs — it is the same complete game — and what is missing is the
- * half that needs a server: shared discovery credit, sync and commissions. It
- * says so once, at the top, rather than pretending or refusing to load.
- */
-function NotConnected() {
-  return (
-    <div className="pointer-events-none absolute inset-x-0 top-3 flex justify-center px-3">
-      {/* A floating surface takes the floating radius; the system has no pill. */}
-      <p className="pointer-events-auto flex items-center gap-2 rounded-lg border border-amber-500/30 bg-slate-950/85 px-3 py-1 font-mono text-[10px] text-amber-200/90 backdrop-blur">
-        <CloudOff aria-hidden className="size-3.5" />
-        playing offline — discovery credit and sync are designed, not built
-      </p>
-    </div>
-  )
-}
-
-function Deferred() {
-  return (
-    <div className="pointer-events-auto absolute inset-0 flex items-center justify-center p-6">
-      <div className="w-full max-w-lg rounded-lg border border-slate-700/60 bg-slate-950/85 p-6 backdrop-blur">
-        <h1 className="flex items-center gap-2 text-lg text-slate-100">
-          <Users aria-hidden className="size-5 text-slate-400" />
-          Multiplayer is deferred
-        </h1>
-        <p className="mt-3 font-mono text-[11px] leading-relaxed text-slate-400">
-          Deliberately, and the seams are the reason it can wait: a star system
-          is the unit of authority, partition keys are already a live field on
-          every entity, and no hosting vendor’s SDK appears anywhere in the
-          engine. See ADR-0008.
-        </p>
-        <p className="mt-2 font-mono text-[11px] leading-relaxed text-slate-400">
-          With few players a shared galaxy is indistinguishable from solo online
-          — so the mode degrades into one that already works, rather than
-          failing.
-        </p>
-        <div className="mt-4 flex flex-wrap gap-2 font-mono text-[11px]">
-          <Link
-            to={PLAY_SOLO}
-            className={`rounded border border-sky-500/50 bg-sky-500/15 px-3 py-1.5 text-sky-200 hover:bg-sky-500/25 ${FOCUS_RING}`}
-          >
-            play solo instead
-          </Link>
-          <Link
-            to={PLANETARIUM}
-            className={`rounded border border-slate-700 px-3 py-1.5 text-slate-300 hover:border-sky-500/60 ${FOCUS_RING}`}
-          >
-            open the planetarium
-          </Link>
-          <Link
-            to={HOME}
-            className={`rounded border border-slate-700 px-3 py-1.5 text-slate-400 hover:border-slate-500 ${FOCUS_RING}`}
-          >
-            back
-          </Link>
-        </div>
-      </div>
-    </div>
   )
 }

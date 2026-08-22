@@ -142,6 +142,28 @@ authority at the moment of the edit, and states the previous rule.
   panel is in exactly one zone, exactly once._ Property-tested. Use the
   **updater** form of the setter — one gesture can deliver two drops, and two
   moves composed against the same captured snapshot discard the first. ADR-0012.
+- **Never put two components in one file.** `react/no-multi-comp` is an oxlint
+  error, so this is checked rather than asked for, and the remedy is always the
+  same: a file named after the component. The cost it prevents is not tidiness —
+  Vite's Fast Refresh gives up on a file that exports anything besides
+  components, and in this app a full reload rebuilds the `WebGPURenderer` and
+  loses the camera, which is the most expensive thing an edit loop can do. It is
+  also what let `SceneView.tsx` reach 1,390 lines and eleven components. Where a
+  component needs a constant or a type as well, that goes in a sibling `.ts`;
+  `hud/controls.ts`, `hud/tabs.ts`, `planetarium/context.ts`,
+  `planetarium/presets.ts`, `pages/modes.ts` and `scene/debugMaterials.ts` are
+  all that pattern. The one exemption is `apps/game/src/components/ui/*.tsx`: a
+  Radix wrapper set communicates through a context declared in its own module
+  and is useless split, and those files are rewritten by `pnpm dlx shadcn add`.
+- **Never hand-roll a control the registry already has.** shadcn/ui is installed
+  and its tokens point at this palette; a second button with its own hover
+  colour is the "two overlays" drift `hud/Action.tsx` exists to stop. Two things
+  the registry cannot know and every wrapper here has to carry: a _pointer_
+  click hands focus back to the flight loop (`hud/focus.ts`), and the accent is
+  a material and never a fill behind text — so `Button`'s `default` variant is
+  wrong for the primary tone and `outline` plus the `sky-500/15` wash is right.
+  `docs/roadmap.md` § "The overlay refactor" records what each control became,
+  and the two registry components deliberately not used.
 - **Never import from `three` in `apps/game`.** It is `three/webgpu` and
   `three/tsl`. Both share `three.core.js`, so `Mesh` is the same class either way
   and nothing breaks loudly — but only `three/webgpu` carries the node system, and

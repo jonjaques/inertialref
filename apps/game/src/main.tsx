@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { MotionConfig } from 'motion/react'
 import { BrowserRouter } from 'react-router'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { createConsoleSink, logHub } from '@inertialref/shared'
 import App from './App.tsx'
 import { BUILD_ID } from './build.ts'
@@ -106,7 +107,7 @@ try {
     <StrictMode>
       {/*
        * The router wraps the whole tree, but it does not *own* the view: the
-       * routed pages render inside `.hud-layer` (see `pages/routes.tsx`), so
+       * routed pages render inside `.hud-layer` (see `pages/ModeRoutes.tsx`), so
        * `<Canvas>` is never inside a route and a navigation cannot remount the
        * renderer.
        *
@@ -130,7 +131,35 @@ try {
          * simulation rather than interface motion.
          */}
         <MotionConfig reducedMotion="user">
-          <App catalog={catalog} />
+          {/*
+           * One tooltip provider for the whole tree.
+           *
+           * Radix requires an ancestor provider and it is what shares the
+           * "one is already open, skip the delay" timer between them — per
+           * tooltip, every hover would wait the full delay again, which on a
+           * transport bar of five icon-only buttons is the behaviour that
+           * makes people give up on tooltips.
+           *
+           * `delayDuration={0}` is the registry's default and is kept: every
+           * tooltip in this interface is on an icon-only control where the
+           * hint *is* the label, and a label that arrives in 700 ms has
+           * already lost to the pointer moving on.
+           *
+           * The content portals to `<body>` at `z-50`, outside `.hud-layer`
+           * and therefore outside `dynamic-range-limit: standard`.
+           * `docs/roadmap.md` had this down as the thing blocking tooltips, and
+           * it is not: the clamp exists because the dock and the flight strip
+           * are `backdrop-filter` surfaces, and a backdrop filter *samples what
+           * is behind it* — which on the extended path includes a star's disc
+           * above diffuse white. `TooltipContent` is an opaque `bg-foreground`
+           * box with no backdrop filter, so there is nothing for it to sample
+           * and nothing to wash out. Give one a translucent ground and the
+           * clamp becomes load-bearing again; at that point Radix's `Portal`
+           * takes a `container` and `.hud-layer` is it.
+           */}
+          <TooltipProvider>
+            <App catalog={catalog} />
+          </TooltipProvider>
         </MotionConfig>
       </BrowserRouter>
     </StrictMode>,

@@ -274,56 +274,87 @@ recover it. The budget is 900 KB gzip with splitting, so this is inside it.
 
 ---
 
-## The overlay refactor (22 Aug 2026)
+## The overlay refactor — landed (22 Aug 2026)
 
-The UI foundations landed — `lucide-react`, shadcn/ui, `motion`, `zustand` and
-`react-router` in `apps/game` — and nothing in `hud/` was rewritten onto them
-yet. That was deliberate: the libraries arrived with one real use each so the
-wiring is proven, and the refactor is its own change with its own review.
-[`CONTEXT.md`](../CONTEXT.md) has the reasoning and the measured cost;
-[`DESIGN.md`](../DESIGN.md) has the token mapping.
+The UI foundations arrived first — `lucide-react`, shadcn/ui, `motion`, `zustand`
+and `react-router` in `apps/game` — with one real use each, so the wiring was
+proven before anything was rewritten onto them. The rewrite is now done.
+[`CONTEXT.md`](../CONTEXT.md) has the build log entry; [`DESIGN.md`](../DESIGN.md)
+has the token mapping.
 
-**The seam is already there.** The components are vendored in
-`apps/game/src/components/ui/`, their tokens point at this system's palette, and
-`state/engineStore.ts` publishes the snapshot the panels are currently handed as
-props.
+**What the hand-rolled controls became.**
 
-| Today                                   | Registry equivalent                                    |
-| --------------------------------------- | ------------------------------------------------------ |
-| `hud/widgets.tsx` → `Action`            | `Button` (`variant="ghost"` normal, `default` primary) |
-| `hud/widgets.tsx` → `Section`           | `Collapsible`, kept controlled by `usePersistentState` |
-| `hud/widgets.tsx` → `Row`               | none — it is a readout, not a control. Leave it.       |
-| `HudDock`'s tablist + `hud/tabs.ts`     | `Tabs` / `TabsList` / `TabsTrigger` / `TabsContent`    |
-| `CameraPanel`'s `<input type="range">`  | `Slider`                                               |
-| `GraphicsPanel`'s `Toggle`              | `Switch`                                               |
-| `GraphicsPanel`'s `Cycle`               | none — a cycle-through control has no registry form    |
-| `NavPanel`'s address field              | `Input`                                                |
-| The dock's `w-px bg-slate-800` dividers | `Separator`                                            |
-| The dock body and the destination list  | `ScrollArea`                                           |
-| Every control's `title` attribute       | `Tooltip` — **blocked**, see below                     |
+| Was                                     | Is                                                        |
+| --------------------------------------- | --------------------------------------------------------- |
+| `hud/widgets.tsx` → `Action`            | `hud/Action.tsx`, a `Button` preset — see the note below  |
+| `hud/widgets.tsx` → `Section`           | `Collapsible`, still controlled by `usePersistentState`   |
+| `hud/widgets.tsx` → `Row`               | `hud/Row.tsx`, unchanged — it is a readout, not a control |
+| `HudDock`'s hand-rolled tablist         | `Tabs` / `TabsList` / `TabsTrigger` / `TabsContent`       |
+| `CameraPanel`'s `<input type="range">`  | `Slider`, via the shared `hud/FovSlider.tsx`              |
+| Both transports' `<input type="range">` | `Slider`, via the shared `hud/FrameScrubber.tsx`          |
+| `GraphicsPanel`'s and `ViewPanel`'s two | one `hud/SwitchRow.tsx` over `Switch`                     |
+| different `Toggle`s                     |                                                           |
+| `GraphicsPanel`'s `Cycle`               | `ToggleGroup` — see "one correction" below                |
+| `ShellBar`'s `<button role="switch">`   | `Toggle`                                                  |
+| `NavPanel`'s address field              | `Input`, via `hud/AddressForm.tsx`                        |
+| The `w-px bg-slate-800` dividers        | `Separator`                                               |
+| The status chips                        | `Badge`                                                   |
+| Icon-only controls' `title` attribute   | `Tooltip` — the rest keep `title`; see below              |
 
-**Three things that will break it if they are not carried across:**
+**One correction to the plan.** It listed the anti-aliasing `Cycle` as having
+"no registry form", which was true of a cycle-through _control_ and false of the
+problem: the set is `off · 2× · 4×` and it is closed and small, so it is a radio
+group. `ToggleGroup` is that, it puts all three on screen at once, and it reaches
+a specific level in one press instead of up to three.
 
-1. **`releaseFocus` is load-bearing.** Every control blurs itself on a _pointer_
-   click and not on a keyboard activation, because flight input is a
-   window-level keydown listener and a focused button swallows Space. shadcn's
-   `Button` knows nothing about this; the `onClick` wrapper in `hud/focus.ts`
-   has to survive the swap. Losing it is a pause key that silently stops
-   working — see [CONTEXT.md](../CONTEXT.md) § "The focus contract, which is
-   subtler than it looks".
-2. **`PerfPanel` carries `'use no memo'`** because it reads mutable engine
-   fields every frame. Moving a panel onto `useEngine` selectors is what makes
-   that opt-out unnecessary — moving it onto shadcn components alone is not.
-3. **Tooltips are blocked on the portal.** Every shadcn overlay portals to
-   `document.body`, which is outside `.hud-layer` and therefore outside
-   `dynamic-range-limit: standard`; a tooltip would wash out against a star.
-   Radix's `Portal` takes a `container`, so the fix is a prop threaded through
-   the generated components — do that first, or keep the `title` attributes.
+**Two things it deliberately did not do.**
 
-**Not in scope for it**, and worth restating because the temptation is real:
-this refactors the _dev dock_, which is scaffolding. It does not move it toward
-the cockpit in [ux.md](design/ux.md) — that starts from where an element
-physically sits on a canopy, not from this layout.
+- **`ScrollArea` is not used, and should not be.** Radix's viewport wraps its
+  content in a `display: table` box that grows past 100% to fit the widest line —
+  and every readout in the dock is `truncate` inside a 27 rem column, so the
+  ellipsis would simply stop happening. `index.css` already paints the native
+  gutter in this system's colours for exactly this surface. The row in the old
+  plan was wrong.
+- **`OverlayPage` keeps its hand-rolled dialog.** Radix's `Dialog` with
+  `modal={false}` is genuinely the shape this wants, and the ~60 lines it would
+  replace are the ones carrying the focus-restore rules, the scrim's
+  drag-release exception and the `AnimatePresence` keying — each written against
+  a bug that shipped. That swap is worth doing and it is worth doing _on its
+  own_, with those cases as its acceptance criteria.
+
+**Tooltips were listed as blocked on the portal. They are not.** The reasoning
+was that shadcn overlays portal to `document.body`, outside `.hud-layer` and so
+outside `dynamic-range-limit: standard`, and would wash out against a star. The
+clamp exists because the dock and the flight strip are `backdrop-filter`
+surfaces and a backdrop filter _samples what is behind it_; `TooltipContent` is
+an opaque `bg-foreground` box with no backdrop filter, so it has nothing to
+sample. They are used only where the control is icon-only and the hint is
+therefore the label — the dock rail, the panel close buttons, the transports,
+the shell bar. Everywhere a control has readable text the `title` stays, because
+there it is doing a different job: recovering a value that truncated. Give a
+tooltip a translucent ground and the clamp is load-bearing again, at which point
+Radix's `Portal` takes a `container`.
+
+**The three carry-across risks all held.**
+
+1. **`releaseFocus` is load-bearing** — every control blurs itself on a
+   _pointer_ click and not on a keyboard activation, because flight input is a
+   window-level keydown listener. It is now inside `hud/Action.tsx`,
+   `hud/SwitchRow.tsx` and `hud/TransportButton.tsx` rather than at sixty call
+   sites, which is the shape that stops it being forgotten. See
+   [CONTEXT.md](../CONTEXT.md) § "The focus contract, which is subtler than it
+   looks".
+2. **`PerfPanel` still carries `'use no memo'`**, and so do the pieces split out
+   of it. Moving a panel onto `useEngine` selectors is what would make that
+   opt-out unnecessary; moving it onto shadcn components alone does not.
+3. **The accent is still never a fill behind text.** `Button`'s `default`
+   variant is a solid `bg-primary` plate, which `index.css` rules out; the
+   primary tone is `outline` plus the `sky-500/15` wash, in one place.
+
+**Still not in scope**, and worth restating because the temptation is real: this
+refactored the _dev dock_, which is scaffolding. It does not move it toward the
+cockpit in [ux.md](design/ux.md) — that starts from where an element physically
+sits on a canopy, not from this layout.
 
 ---
 

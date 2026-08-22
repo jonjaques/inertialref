@@ -1,6 +1,9 @@
-import { AA_LEVELS, type AaLevel } from '../render/output.ts'
-import { FOCUS_RING, releaseFocus } from './focus.ts'
-import { Section } from './widgets.tsx'
+import { Sparkles } from 'lucide-react'
+import { AA_LEVELS } from '../render/output.ts'
+import type { GraphicsState } from './controls.ts'
+import { AaToggleGroup } from './AaToggleGroup.tsx'
+import { Section } from './Section.tsx'
+import { SwitchRow } from './SwitchRow.tsx'
 
 /*
  * Render-feature switches.
@@ -13,105 +16,41 @@ import { Section } from './widgets.tsx'
  * them, and nothing here re-renders per frame.
  */
 
-export interface GraphicsState {
-  readonly lensFlare: boolean
-  readonly onLensFlare: (on: boolean) => void
-  readonly aa: AaLevel
-  readonly onAa: (level: AaLevel) => void
-}
-
 export function GraphicsPanel({ graphics }: { graphics: GraphicsState }) {
   return (
     <div>
       <Section id="graphics.features" title="features">
-        <Toggle
+        <SwitchRow
+          bordered
+          icon={Sparkles}
           label="lens flare"
           detail="ghosts, streak and glow when the star is in frame"
           on={graphics.lensFlare}
           onChange={graphics.onLensFlare}
         />
-        <Cycle
-          label="anti-aliasing"
-          detail="2× is hardware msaa; 4× adds a 2×2 supersampled buffer"
-          value={graphics.aa}
-          values={AA_LEVELS}
-          onChange={graphics.onAa}
-        />
+        <div className="mt-1 flex items-center justify-between gap-2 rounded border border-slate-800/80 bg-slate-900/40 px-2 py-1">
+          <span className="flex min-w-0 items-baseline gap-2">
+            <span className="shrink-0 text-slate-300">anti-aliasing</span>
+            <span className="min-w-0 truncate text-slate-400">
+              2× is hardware msaa; 4× adds a 2×2 supersampled buffer
+            </span>
+          </span>
+          {/*
+           * Three named levels, so all three are on screen at once.
+           *
+           * This was one button that cycled — press it and the label changes —
+           * which is the control you reach for when the set is unbounded. The
+           * set is `off · 2× · 4×`, and a radio group says what the options
+           * are, which one is current and how to reach a specific one in a
+           * single press. It is also the shape a screen reader can report.
+           */}
+          <AaToggleGroup
+            value={graphics.aa}
+            values={AA_LEVELS}
+            onChange={graphics.onAa}
+          />
+        </div>
       </Section>
     </div>
-  )
-}
-
-/** A labelled row that steps through a fixed set of values on click. */
-function Cycle<T extends string>({
-  label,
-  detail,
-  value,
-  values,
-  onChange,
-}: {
-  label: string
-  detail: string
-  value: T
-  values: readonly T[]
-  onChange: (next: T) => void
-}) {
-  return (
-    <button
-      type="button"
-      title={detail}
-      onClick={(event) => {
-        releaseFocus(event)
-        const next = values[(values.indexOf(value) + 1) % values.length]
-        if (next !== undefined) onChange(next)
-      }}
-      className={`flex w-full items-center justify-between gap-2 rounded border border-slate-800/80 bg-slate-900/40 px-2 py-1 text-left hover:border-sky-500/40 ${FOCUS_RING}`}
-    >
-      <span className="flex min-w-0 items-baseline gap-2">
-        <span className="shrink-0 text-slate-300">{label}</span>
-        <span className="min-w-0 truncate text-slate-400">{detail}</span>
-      </span>
-      <span className="shrink-0 text-[10px] uppercase tracking-widest text-sky-300">
-        {value}
-      </span>
-    </button>
-  )
-}
-
-/** A labelled on/off row. Local until a second panel needs one. */
-function Toggle({
-  label,
-  detail,
-  on,
-  onChange,
-}: {
-  label: string
-  detail: string
-  on: boolean
-  onChange: (on: boolean) => void
-}) {
-  return (
-    <button
-      type="button"
-      title={detail}
-      aria-pressed={on}
-      onClick={(event) => {
-        releaseFocus(event)
-        onChange(!on)
-      }}
-      className={`flex w-full items-center justify-between gap-2 rounded border border-slate-800/80 bg-slate-900/40 px-2 py-1 text-left hover:border-sky-500/40 ${FOCUS_RING}`}
-    >
-      <span className="flex min-w-0 items-baseline gap-2">
-        <span className="shrink-0 text-slate-300">{label}</span>
-        <span className="min-w-0 truncate text-slate-400">{detail}</span>
-      </span>
-      <span
-        className={`shrink-0 text-[10px] uppercase tracking-widest ${
-          on ? 'text-sky-300' : 'text-slate-400'
-        }`}
-      >
-        {on ? 'on' : 'off'}
-      </span>
-    </button>
   )
 }

@@ -4,11 +4,11 @@ import { AnimatePresence, motion } from 'motion/react'
 import { useLocation } from 'react-router'
 import type { StarCatalog } from '@inertialref/universe'
 import { DEFAULT_FOV, GameEngine } from './engine/GameEngine.ts'
+import type { CameraState, GraphicsState, HudCommands } from './hud/controls.ts'
+import { FOV_MAX, FOV_MIN } from './hud/controls.ts'
 import { CutsceneOverlay } from './hud/CutsceneOverlay.tsx'
 import { ErrorBoundary } from './hud/ErrorBoundary.tsx'
-import type { CameraState } from './hud/CameraPanel.tsx'
-import type { GraphicsState } from './hud/GraphicsPanel.tsx'
-import { HudDock, type HudCommands } from './hud/HudDock.tsx'
+import { HudDock } from './hud/HudDock.tsx'
 import {
   isBoolean,
   numberWithin,
@@ -38,7 +38,8 @@ import {
   type OutputPreference,
   type RendererDescription,
 } from './render/output.ts'
-import { ModeRoutes, OverlayRoutes } from './pages/routes.tsx'
+import { ModeRoutes } from './pages/ModeRoutes.tsx'
+import { OverlayRoutes } from './pages/OverlayRoutes.tsx'
 import { modeForPath, resolvedLocation } from './pages/paths.ts'
 import { ShellBar } from './pages/ShellBar.tsx'
 import { SceneView } from './scene/SceneView.tsx'
@@ -80,10 +81,6 @@ const PANEL_HZ = 8
 
 /** How long a transient notice stays up. */
 const NOTICE_MS = 2_500
-
-/** The camera panel's slider range, restated here because it guards the store. */
-const FOV_MIN = 20
-const FOV_MAX = 110
 
 /** `auto` first, because it is right more often than it is wrong. */
 const HDR_STATES = [
@@ -374,7 +371,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
       engine.world.clock.setPaused(paused)
       flash(paused ? 'paused' : 'running')
     },
-    warp: (direction) => {
+    warp: (direction: number) => {
       const next = nextWarp(engine.world.clock.timeScale, direction)
       engine.world.clock.setTimeScale(next)
       flash(`time warp ${next}×`)
@@ -425,14 +422,14 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    * They are read in two places now — the dock's tabs and the `/settings` page
    * — and `docs/design/ux.md` puts the eventual home in the page rather than
    * the dock. Two inline object literals would be two anti-aliasing switches
-   * that could drift apart, which is the same argument `widgets.tsx` makes
+   * that could drift apart, which is the same argument `hud/Action.tsx` makes
    * about a label's colour, applied to behaviour.
    */
   const graphicsState: GraphicsState = {
     lensFlare,
     onLensFlare: setLensFlare,
     aa,
-    onAa: (level) => {
+    onAa: (level: AaLevel) => {
       // Crossing the MSAA boundary rebuilds the renderer, so say so — the
       // stall would otherwise read as a hang.
       setAa(level)

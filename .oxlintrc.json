@@ -3,7 +3,24 @@
   "plugins": ["react", "typescript", "oxc"],
   "rules": {
     "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
+    "react/only-export-components": ["warn", { "allowConstantExport": true }],
+    // One component per file, enforced rather than asked for.
+    //
+    // An error rather than a warning because the failure it prevents is not a
+    // style one. A file holding five components is a file Fast Refresh has to
+    // give up on the moment one of them also exports a constant or a type — and
+    // in this app a full reload rebuilds the `WebGPURenderer` and loses the
+    // camera, which is the most expensive edit-loop cost there is. It is also
+    // what let `SceneView.tsx` reach 1,390 lines and eleven components, where
+    // the drop indicator and the starfield shared a module for no reason beyond
+    // both being drawn.
+    //
+    // The remedy is always the same and always mechanical: move it to a file
+    // named after it. Where a component needs a constant or a type as well,
+    // that goes in a sibling `.ts` — `hud/controls.ts`, `hud/tabs.ts`,
+    // `planetarium/context.ts`, `planetarium/presets.ts`, `pages/modes.ts`,
+    // `scene/debugMaterials.ts` are all that pattern.
+    "react/no-multi-comp": "error"
   },
   "overrides": [
     {
@@ -13,8 +30,18 @@
       // edit that the next update silently reverts. The cost it warns about is
       // real and bounded: editing one of these loses Fast Refresh for that
       // file only, and they are edited approximately never.
+      //
+      // `no-multi-comp` is off here for the same reason and one more: a Radix
+      // wrapper set is a *primitive*, not five components that happen to share
+      // a file. `Tabs`, `TabsList`, `TabsTrigger` and `TabsContent` are useless
+      // apart — they communicate through a context declared in that module —
+      // and splitting them would make our tree disagree with every line of
+      // shadcn's documentation for no benefit.
       "files": ["apps/game/src/components/ui/*.tsx"],
-      "rules": { "react/only-export-components": "off" }
+      "rules": {
+        "react/only-export-components": "off",
+        "react/no-multi-comp": "off"
+      }
     }
   ]
 }

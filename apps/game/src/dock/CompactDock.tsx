@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { FOCUS_RING, releaseFocus } from '../hud/focus.ts'
 import type { DockLayout } from './layout.ts'
 import { DROP_ZONES } from './layout.ts'
@@ -20,6 +21,9 @@ import type { DockPanelDefinition } from './panels.ts'
  * desktop and opened on a phone keeps its panel *set* — the zones simply stop
  * being read. Rotating a tablet back to landscape restores the columns exactly
  * as they were, because nothing was thrown away to draw this.
+ *
+ * No tooltips on this one, unlike the desktop rail: the tabs carry their names
+ * as text, and a hover hint is a thing a finger cannot ask for.
  */
 
 /** How much of the screen the open sheet takes. Under half, so the sky wins. */
@@ -64,17 +68,21 @@ export function CompactDock({
             <h2 className="truncate text-[11px] tracking-widest text-sky-300 uppercase">
               {open.title}
             </h2>
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="icon"
               aria-label={`Close ${open.title}`}
               onClick={(event) => {
                 releaseFocus(event)
                 setOpenId(null)
               }}
-              className={`ml-auto rounded p-1 text-slate-400 ${FOCUS_RING}`}
+              // 44 px, the platform minimum for a thumb — the same rule the
+              // tab strip below follows, applied to the control that is
+              // hardest to hit because it is in a corner.
+              className={`ml-auto size-11 rounded text-slate-400 hover:bg-transparent hover:text-sky-200 ${FOCUS_RING}`}
             >
               <ChevronDown className="size-4" />
-            </button>
+            </Button>
           </header>
           <div className="min-h-0 flex-1 overflow-auto px-3 py-2">
             {open.render()}
@@ -99,9 +107,9 @@ export function CompactDock({
           const Icon = panel.icon
           const active = panel.id === openId
           return (
-            <button
+            <Button
               key={panel.id}
-              type="button"
+              variant="ghost"
               aria-pressed={active}
               onClick={(event) => {
                 releaseFocus(event)
@@ -109,16 +117,16 @@ export function CompactDock({
               }}
               // 44 px of height, which is the platform minimum for a target a
               // thumb has to hit while the other hand is holding the device.
-              className={`flex min-h-11 shrink-0 items-center gap-1.5 rounded px-3 font-mono text-[11px] transition-colors ${FOCUS_RING} ${
+              className={`min-h-11 shrink-0 gap-1.5 rounded px-3 font-mono text-[11px] font-normal ${FOCUS_RING} ${
                 active
-                  ? 'bg-sky-500/15 text-sky-200'
-                  : 'text-slate-400 active:bg-slate-800/60'
+                  ? 'bg-sky-500/15 text-sky-200 hover:bg-sky-500/25 hover:text-sky-100'
+                  : 'text-slate-400 hover:bg-transparent active:bg-slate-800/60'
               }`}
             >
               <Icon className="size-4" />
               <span className="tracking-widest uppercase">{panel.title}</span>
               {active && <ChevronUp className="size-3 opacity-60" />}
-            </button>
+            </Button>
           )
         })}
       </nav>

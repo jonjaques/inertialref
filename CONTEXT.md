@@ -2210,6 +2210,91 @@ transient notice (`status`, polite — it is the only confirmation most commands
 give and it is gone in 2.5 s), the nav panel's failure report and the error
 boundary's fallback (both `alert`).
 
+## One component per file, and the registry underneath (22 Aug 2026)
+
+The overlay was hand-rolled on top of a component library that had been
+installed and used once. This is the rewrite `docs/roadmap.md` planned, plus the
+lint rule that stops it happening again.
+
+**The rule first, because it is what makes this stick.** oxlint implements
+`react/no-multi-comp`, and turning it on found **57 violations** across
+`apps/game`. It is now an error. The remedy is mechanical — a file named after
+the component — and the reason it is worth enforcing is not tidiness: Vite's
+Fast Refresh gives up on a `.tsx` that exports anything besides components, and
+a full reload in this app rebuilds the `WebGPURenderer` and loses the camera.
+That is the most expensive thing an edit loop can do here, and it was being paid
+silently. `SceneView.tsx` was 1,390 lines and eleven components; the drop
+indicator and the starfield shared a module on no stronger grounds than both
+being drawn.
+
+The exemption is `components/ui/*.tsx`. A Radix wrapper set communicates through
+a context declared in its own module and is useless split, and `pnpm dlx shadcn
+add` rewrites those files anyway — the same argument the `only-export-components`
+override already made there.
+
+Where a component needed a constant or a type as well, that went to a sibling
+`.ts`: `hud/controls.ts`, `hud/perfFormat.ts`, `hud/cutsceneText.ts`,
+`planetarium/presets.ts`, `pages/modes.ts`, `scene/debugMaterials.ts`. Two of
+those closed real duplication — the field-of-view range was written out in three
+places (`App`, `CameraPanel`, the planetarium's view panel) and is now
+`FOV_MIN`/`FOV_MAX` in one, and `isColumn` moved into `dock/layout.ts`, which is
+the tested module, because four components were each deriving the dock's axis.
+
+**Then the controls.** `docs/roadmap.md` has the full table of what became what.
+Three of its rows were wrong and are now corrected there:
+
+- The anti-aliasing `Cycle` was listed as having no registry form. That is true
+  of a cycle-through control and false of the problem: `off · 2× · 4×` is a
+  closed set of three, which is a radio group. `ToggleGroup` renders it as
+  `role="radiogroup"`, puts all three on screen, and reaches a specific level in
+  one press instead of up to three.
+- `ScrollArea` was listed for the dock body and the destination list. It must
+  not be used there: Radix's viewport wraps content in a `display: table` box
+  that grows past 100% to fit the widest line, and every readout in the dock is
+  `truncate` inside a 27 rem column — the ellipsis would simply stop happening.
+  `index.css` already paints the native gutter in this system's colours.
+- Tooltips were listed as **blocked** because shadcn overlays portal outside
+  `.hud-layer` and so outside `dynamic-range-limit: standard`. They are not
+  blocked. The clamp exists because the dock and the flight strip are
+  `backdrop-filter` surfaces and a backdrop filter samples what is behind it —
+  which on the extended path includes a star's disc above diffuse white.
+  `TooltipContent` is an opaque `bg-foreground` box with no backdrop filter, so
+  it has nothing to sample. They are used only where a control is icon-only and
+  the hint is therefore the label; everywhere text is visible the `title` stays,
+  because there it is recovering a value that truncated, which is a different
+  job.
+
+**Two deliberate abstentions.** `Button`'s `default` variant is a solid
+`bg-primary` plate and is wrong for the primary tone — `index.css` is explicit
+that the accent is a material and never a fill behind text, which is why
+`--accent` is `sky-500/15`. So `hud/Action.tsx` is `outline` plus that wash, in
+one place rather than at sixty call sites. And `OverlayPage` keeps its
+hand-rolled dialog: Radix's `Dialog` with `modal={false}` is genuinely the shape
+it wants, and the sixty lines it would replace are the ones carrying the
+focus-restore rules, the scrim's drag-release exception and the
+`AnimatePresence` keying — every one of them written against a bug that shipped,
+and three of them recorded in the entry above this one. That swap deserves those
+cases as its acceptance criteria rather than a refactor's coat-tails.
+
+**A test that could not fail.** `expect(graphics).toContain('off')` was asserting
+that the lens-flare toggle read "off". The toggle stopped printing the word when
+it became a `Switch` — and the assertion kept passing, because `off` is also one
+of the three anti-aliasing levels a few nodes away. It now names the control:
+`role="switch" aria-checked="false"`, and the anti-aliasing group by
+`role="radio"`. Verified by reintroducing the state it guards against and
+watching it go red, per the testing rule. The dock's tablist assertion moved the
+same way — it named `id="hud-tab-camera"`, which Radix now owns and generates
+per mount, so it asserts the contract instead: one selected tab, it is the one
+asked for, and exactly one of five panels is not `hidden`.
+
+**Verified in the browser**, not only in Node: all four modes, all five dock
+tabs, the five planetarium panels, the settings dialog's three sections, and the
+cinema player seeked to frame 1150. The two things most likely to have broken
+silently both hold — a switch toggled in the view panel still writes through to
+the scene (labels and orbit traces appeared), and a dialog opened over the
+planetarium still closes back to `/planetarium?at=…` with the mode mounted, the
+camera where it was, and no scrim left behind.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

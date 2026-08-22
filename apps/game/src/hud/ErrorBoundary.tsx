@@ -1,5 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
-import { Action } from './widgets.tsx'
+import { Action } from './Action.tsx'
 
 /*
  * A wall between one readout's throw and the canvas.
