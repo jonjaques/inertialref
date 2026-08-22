@@ -22,6 +22,26 @@ export interface FlareOccluder {
   readonly radius: number
 }
 
+/**
+ * The body actually in front of the star, when one is.
+ *
+ * A star does not stop existing when a planet crosses it: its corona and the
+ * light bent around the limb outline the occluder, which is the whole picture
+ * of an eclipse and the one thing the visibility ramp alone cannot say. The
+ * flare needs the occluder's *own* position and size to draw that ring, so the
+ * visibility test — which already has both in hand — hands them back.
+ */
+export interface FlareEclipse {
+  /** The occluder's centre, render space. */
+  readonly position: FlareVector
+  /** Its drawn radius, render space. */
+  readonly radius: number
+  /** Its distance from the camera, render space. */
+  readonly distance: number
+  /** How deep the eclipse is: 0 at first contact, 1 at full occultation. */
+  readonly depth: number
+}
+
 export interface FlareVisibility {
   /**
    * How much of the flare survives, 0..1. Zero behind a body, one in the
@@ -36,6 +56,8 @@ export interface FlareVisibility {
    * whatever colour that body reddens light to.
    */
   readonly graze: number
+  /** The body in front of the star, deepest first; null in the clear. */
+  readonly eclipse: FlareEclipse | null
 }
 
 /** Below this the flare is fully eclipsed; above the outer edge, untouched. */
@@ -65,10 +87,11 @@ export function sunVisibility(
   const dy = sun.y - camera.y
   const dz = sun.z - camera.z
   const span = Math.hypot(dx, dy, dz)
-  if (span === 0) return { visibility: 1, graze: 0 }
+  if (span === 0) return { visibility: 1, graze: 0, eclipse: null }
 
   let visibility = 1
   let graze = 0
+  let eclipse: FlareEclipse | null = null
   for (const body of occluders) {
     if (body.radius <= 0) continue
     const ox = body.position.x - camera.x
@@ -89,9 +112,18 @@ export function sunVisibility(
     // eclipse's problem.
     if (along > 0) {
       graze = Math.max(graze, 1 - smooth(1, GRAZE_OUTER, ratio))
+      const depth = 1 - smooth(ECLIPSE_INNER, ECLIPSE_OUTER, ratio)
+      if (depth > 0 && (eclipse === null || depth > eclipse.depth)) {
+        eclipse = {
+          position: body.position,
+          radius: body.radius,
+          distance: Math.hypot(ox, oy, oz),
+          depth,
+        }
+      }
     }
   }
-  return { visibility, graze }
+  return { visibility, graze, eclipse }
 }
 
 /**

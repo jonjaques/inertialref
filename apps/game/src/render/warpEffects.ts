@@ -22,6 +22,7 @@ import {
   smoothstep,
   uniform,
   uv,
+  vec2,
   vec3,
 } from 'three/tsl'
 import type { CinematicView } from '../engine/GameEngine.ts'
@@ -61,7 +62,7 @@ const NACELLES: readonly [number, number, number][] = [
   [0.115, 0.03, 0.24],
 ]
 
-type WarpKind = 'wash' | 'glow' | 'streak'
+type WarpKind = 'wash' | 'glow' | 'streak' | 'spark'
 
 interface WarpElement {
   readonly mesh: Mesh
@@ -85,11 +86,12 @@ function warpMaterial(kind: WarpKind): WarpElement {
       // blue-rimmed, not a flat card. The quad is oversized, so the profile
       // must reach zero well inside the UV square or the edge shows.
       profile = exp(r.mul(-2.2)).add(exp(r.mul(-0.9)).mul(0.35))
-      colour = mix(
-        vec3(0.45, 0.65, 1.6),
-        vec3(1.15, 1.2, 1.35),
-        exp(r.mul(-1.5)),
-      )
+      // Deep blue at the edges, white only in the core. The reference's flash
+      // is *blue* — measured around (40, 90, 200) across most of the frame
+      // with a white centre over the nacelles — and a wash whose edges start
+      // near white has nowhere to go but a blank page once the tone curve's
+      // shoulder gets hold of it.
+      colour = mix(vec3(0.05, 0.22, 1.5), vec3(0.9, 1.0, 1.5), exp(r.mul(-2.6)))
       break
     }
     case 'glow': {
@@ -117,6 +119,34 @@ function warpMaterial(kind: WarpKind): WarpElement {
         vec3(1.3, 1.35, 1.5),
         exp(along.mul(-6)),
       )
+      break
+    }
+    case 'spark': {
+      /*
+       * The anamorphic spike a warp point leaves behind: a vertical needle
+       * inside a soft upright halo, with a short cross-bar where the two
+       * meet. This is the shape the reference's lens actually produces twice
+       * — measured at 0.22 of the frame wide and 0.85 tall at peak — and it
+       * is the bridge into both the main title and the end cards, so it is a
+       * shape rather than a bloom: a round glow there reads as a star, not as
+       * something that just left at warp.
+       */
+      const nx = abs(centred.x)
+      const ny = abs(centred.y)
+      const needle = exp(nx.mul(-26)).mul(
+        pow(oneMinus(smoothstep(float(0), float(1), ny)), 1.6),
+      )
+      const bar = exp(ny.mul(-30)).mul(
+        pow(oneMinus(smoothstep(float(0), float(0.42), nx)), 2),
+      )
+      const halo = exp(
+        length(vec2(centred.x.mul(2.6), centred.y.mul(1.05))).mul(-3.1),
+      )
+      profile = needle
+        .add(bar.mul(0.55))
+        .add(halo.mul(0.4))
+        .mul(oneMinus(smoothstep(float(0.85), float(1), length(centred))))
+      colour = mix(vec3(0.7, 0.85, 1.5), vec3(1.2, 1.2, 1.25), needle)
       break
     }
   }
@@ -159,7 +189,8 @@ export function createWarpEffects(hullLength: () => number): WarpEffects {
   const glows = [warpMaterial('glow'), warpMaterial('glow')]
   const streaks = [warpMaterial('streak'), warpMaterial('streak')]
   const smear = warpMaterial('streak')
-  for (const element of [wash, ...glows, ...streaks, smear])
+  const spark = warpMaterial('spark')
+  for (const element of [wash, ...glows, ...streaks, smear, spark])
     group.add(element.mesh)
 
   // Streak quads pivot about their origin end: shift the unit quad so u=0
@@ -199,6 +230,7 @@ export function createWarpEffects(hullLength: () => number): WarpEffects {
         effects.flash > 0.002 ||
         effects.streaks > 0.002 ||
         effects.nacelleGlow > 0.002 ||
+        effects.spark.drive > 0.002 ||
         view.ship.visible
       if (!anything) {
         group.visible = false
@@ -245,9 +277,15 @@ export function createWarpEffects(hullLength: () => number): WarpEffects {
         : { x: 0, y: 0 }
       place(wash.mesh, washAnchor.x, washAnchor.y)
       wash.mesh.scale.set(frameHeight * 4.4, frameHeight * 4.4, 1)
-      // 3.5, not higher: the peak must flood the frame while the edges keep
-      // their blue — the measured flash is blue-rimmed, never a flat card.
-      wash.intensity.value = effects.flash * 3.5
+      /*
+       * 0.8, not 3.5. The reference's flash is not a whiteout at all: f1090,
+       * its brightest frame, means 95 of 255 across the whole picture — a
+       * mid-blue field with a hot core, not a blown one. Driven at 3.5 every
+       * channel cleared the tone curve's shoulder together and fifteen frames
+       * of the piece rendered as a white rectangle; the number that matters is
+       * the mean, and it is measurable.
+       */
+      wash.intensity.value = effects.flash * 0.8
       wash.tint.value.setRGB(1, 1, 1)
 
       // Nacelle anchors, projected from hull axes.
@@ -314,6 +352,25 @@ export function createWarpEffects(hullLength: () => number): WarpEffects {
         streak.tint.value.setRGB(1, 1, 1)
       })
 
+      /*
+       * The spark: screen-anchored, not hull-anchored. It outlives the ship
+       * that made it — the reference's first spike peaks eighteen frames after
+       * the hull has shrunk past tracking — so it takes its position from the
+       * script rather than from a projection, and the anchor is normalised
+       * (origin top-left) because that is how the reference was measured.
+       */
+      const { drive, x: sparkX, y: sparkY } = effects.spark
+      place(spark.mesh, sparkX * 2 - 1, 1 - sparkY * 2)
+      // 1.3×: the profile dies before the UV edge, so the quad has to be
+      // bigger than the light it carries or the square shows.
+      spark.mesh.scale.set(
+        frameHeight * aspect * 0.2 * 1.3,
+        frameHeight * 0.74 * 1.3,
+        1,
+      )
+      spark.intensity.value = drive * 1.9
+      spark.tint.value.setRGB(1, 1, 1)
+
       // The smear: apparent-velocity blur for the hull. Anchored on last
       // frame's position, stretched to this frame's — light where the hull
       // was, which is what a long exposure records.
@@ -346,7 +403,7 @@ export function createWarpEffects(hullLength: () => number): WarpEffects {
       }
     },
     dispose() {
-      for (const element of [wash, ...glows, ...streaks, smear]) {
+      for (const element of [wash, ...glows, ...streaks, smear, spark]) {
         element.mesh.removeFromParent()
         const material = element.mesh.material
         if (!Array.isArray(material)) material.dispose()

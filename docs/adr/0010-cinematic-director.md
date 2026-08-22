@@ -28,10 +28,19 @@ headless runner.
 
 A cutscene is **presentation borrowed from a running world, returned intact**:
 
+- **A scene is a shot list.** Each shot carries its own camera, aim and hull
+  choreography, all local to it, and `sample` picks the shot the frame belongs
+  to. Cuts are the vocabulary, not an accident: the frame ranges live in one
+  table that the script and its tests both read, and every boundary has to be
+  covered by darkness, a flash, a body filling the frame, or a matched
+  composition. This replaced a single spline through the whole piece, which is
+  what makes a camera cross five astronomical units between beats and drift
+  through long stretches aimed at nothing.
 - **Pure arithmetic in `packages/rendering`** (`cinematic.ts`): easings, fade
-  envelopes, the measured warp-flash shape, Catmull-Rom routes over
-  `UniverseVector` beats, slerped aim routes, and the one- and two-target
-  framing solvers. All testable in Node; the title-timing and camera-hold
+  envelopes, the measured warp-flash and lens-spike shapes, Catmull-Rom routes
+  over `UniverseVector` beats, screen-space routes with range interpolated in
+  log space, slerped aim routes, and the one- and two-target framing solvers.
+  All testable in Node; the title-timing, hull-track and camera-hold
   measurements are asserted by tests.
 - **The director and scripts in `packages/devtools`** (`cutscene.ts`,
   `cutscenes/`): `prepare(world)` resolves the stage once against live

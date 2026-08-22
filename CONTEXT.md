@@ -1229,6 +1229,106 @@ copyrighted music and must never enter the repository — publishing a render of
 the full sequence would raise the same questions, which is why the demo stays
 a demo.
 
+## The title sequence, re-cut against its own frames (21 Aug 2026)
+
+The first pass at `tng-intro` was written against the reference analysis's
+_prose_. This one was written against its 2742 frames, and almost everything
+the prose said about motion turned out to be a paraphrase of something else.
+Every number below was measured — hull bounding boxes tracked frame by frame,
+title masks row-banded, the two logotype words tracked through their throw —
+and the ones that matter are now assertions in `cutscene.test.ts`.
+
+**It is an edit, not a camera move.** The analysis calls f240–f1084 "one
+unbroken 35 s camera move"; its own frames disagree. Jupiter is absent at f370
+and fills the right half at f382. Saturn is gone by f530 and the screen is
+empty until f691. Those are cuts, hidden by an empty starfield, and authoring
+them as one spline is what produced a camera crossing five astronomical units
+between beats and aiming at whatever it was between. `tngIntro.ts` is now a
+shot list — eight shots, each with its own camera placed against its own
+subject — and `CUTS` is the single table both the script and its tests read, so
+a boundary cannot drift out of agreement with the assertion guarding it. Three
+of the eight cameras do not move at all, which is not a simplification: a
+starfield sits on the star shell, so camera _translation_ moves nothing in
+frame, and once the hull is authored camera-relative there is nothing left for
+the camera to do.
+
+**Choreography is authored in the frame.** Ship beats are
+`(frame, screen x, screen y, range)` through `screenOffset`, because that is
+what a tracked bounding box gives you — a centre and a width, and a width _is_
+a range once the hull's length and the lens are known. Beats in this language
+can be read straight off the analysis and diffed against it; the previous ones
+were metres and resembled nothing in it. Range interpolates in **log** space:
+an approach list spans four decades, and a Catmull-Rom over those knots in
+metres overshoots through the camera and out the other side, which is why the
+hull vanished for twenty frames before each warp-out.
+
+What the frames actually show, against what the analysis had said:
+
+- The hull does **not** approach as a dot dead ahead. It enters at the
+  bottom-left _corner_ at f688, climbs across the frame, is barely closing
+  between f760 and f792 (both measure 0.40 of the frame wide), then rushes in,
+  fills the frame at f976 and banks away up-right without ever passing behind
+  the lens.
+- The main title is **not** a fade with a settle. Two words are thrown in from
+  opposite sides at 2.25× size and decelerate onto their marks over 27 frames.
+  The curve is a fit, not a taste: remaining offsets of 0.271 / 0.181 / 0.107
+  at f1140 / f1144 / f1148 give p = 1.93, and that exponent then predicts f1137
+  to a thousandth on all six channels — two positions and a scale, per word.
+  What the analysis recorded as a "small settle over f1154–1162" is the tail of
+  that throw.
+- A **lens spike** bridges into both cards: a vertical anamorphic spindle,
+  24 frames, rising over 11 and dying over 13, anchored where the ship went
+  rather than on the frame's centre. It is new vocabulary
+  (`CinematicEffects.spark`) and it is what the title emerges from.
+- Every credit is centred at x ≈ 0.50. The per-credit centroids in the old
+  analysis drifted left only because they were pixel-weighted and the label
+  line pulled them. A label sits 0.1056 of the frame height above its name and
+  is flush _left_ with it, so it now rides the name's own element — the name's
+  width is a property of the typeface, not a number a script can supply.
+- Wipes one and three are the **same animation** 247 frames apart, to three
+  decimal places; the middle one is its mirror in x. One function, an offset
+  and a flag.
+- Neither warp flash is a whiteout. f1090, the brightest frame in the piece,
+  means 95 of 255 — a mid-blue field with a hot core. Driven at the old 3.5 the
+  wash cleared the tone curve's shoulder on every channel and fifteen frames
+  rendered as a white rectangle.
+
+Two renderer capabilities came out of it, both useful outside a cutscene. The
+flare now draws a **corona** when a body occults the star: visibility is zero
+at totality, which is exactly when the ring is the entire shot, so gating the
+whole group on it left a total eclipse as an unlit disc on an empty starfield.
+And the cinematic camera is a **cleaner lens** — `artifacts` scales the ghost
+chain to 0.05 while a script is playing, because the reference's optics put a
+warm ball beside a planet and nothing else, and three grey iris ghosts marching
+across an empty half-frame read as breakage.
+
+Lessons with teeth:
+
+- **Ask the font.** The overlay divided measured cap heights by guessed
+  cap-height-to-em ratios (0.72, 0.7). `measureText().actualBoundingBoxAscent`
+  says 0.80 and 0.595, which had every credit 19% too large and the logotype
+  15% too small — and once the sizes were right, the tracking that had been
+  compensating for them fell out at zero.
+- **A light's screen position is a product.** With `lookAlong` levelling
+  against the pole, the star lands at `−dot(toStar, forward)·dot(pole, forward)`
+  for anything near the ecliptic, so _both_ terms must carry the right sign.
+  The first cruise had the second one negative, put the key 32° below the axis,
+  and lit the hull's belly through a four-hundred-frame approach in which the
+  reference shows nothing but a brightly lit dorsal.
+- **A shot lookup needs a fallback that is near, not last.** Frames are
+  fractional, so one lands in the sliver between a shot's `to` and the next
+  `from`; falling back to the last shot in the list teleported the camera five
+  AU for a single frame.
+- **The reference is not physically consistent, and that is allowed.** Its
+  opening has broadly lit terrain _and_ the sun in frame beside the planet;
+  those contradict — the star's measured screen position puts it 72° from the
+  disc's centre, which for a camera 1.2 radii up means the whole visible cap
+  is past the terminator. Its key light and its sun sprite were placed
+  independently. Staged against a real ephemeris you get one or the other, so
+  the phase ramps instead: 78° at f125 where the cap is lit and the star is
+  behind the lens, opening to 164° by f239 where the disc is the thin crescent
+  the match cut needs and the star has swung into frame beside it.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

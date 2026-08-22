@@ -171,6 +171,12 @@ function SunFlare({ engine }: { engine: GameEngine }) {
       star.brightness * (1 - filling * 0.85),
       star.placement.angularRadius,
       sunVisibility(scene.camera.position, star.placement.position, occluders),
+      // The cinematic camera is a cleaner lens than the flight one; see the
+      // `artifacts` note in `flare.ts`. 0.05 rather than 0 so a scripted shot
+      // still has a lens, just not one that argues with the composition: at
+      // 0.12 the iris ghosts were still three visible grey discs marching
+      // across an empty half-frame beside Jupiter.
+      engine.cinematic === null ? 1 : 0.05,
     )
   })
 

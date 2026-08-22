@@ -1,8 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { UV } from '@inertialref/spatial'
+import { Quaternion as Q, UV } from '@inertialref/spatial'
+import { apparentWidth } from '@inertialref/rendering'
 import { openSession } from './session.ts'
 import { sampleIsFinite } from './cutscene.ts'
-import { TNG_INTRO } from './cutscenes/tngIntro.ts'
+import {
+  screenPositionOf,
+  TNG_CUTS,
+  TNG_HULL_LENGTH,
+  TNG_INTRO,
+  TNG_LENS,
+} from './cutscenes/tngIntro.ts'
 
 /*
  * The cutscene director, held to the reference edit's measured numbers.
@@ -53,14 +60,85 @@ describe('tng-intro timing', () => {
     })
   })
 
-  it('shows the logo at f1150 and the subtitle 32 frames later', () => {
+  it('throws the logotype in and settles it on the measured marks', () => {
     const { at } = playing()
-    expect(opacity(at(1149)!, 'logo')).toBe(0)
-    expect(opacity(at(1155)!, 'logo')).toBeCloseTo(1, 6)
-    expect(opacity(at(1181)!, 'subtitle')).toBe(0)
-    expect(opacity(at(1203)!, 'subtitle')).toBeCloseTo(1, 6)
-    // Both are gone before the fly-through wipe arrives.
-    expect(opacity(at(1264)!, 'logo')).toBe(0)
+    const word = (frame: number, id: string) => {
+      const text = at(frame)!.texts.find((candidate) => candidate.id === id)
+      if (text === undefined) throw new Error(`no text ${id}`)
+      return text
+    }
+    // Nothing before the throw; both words at full opacity while still
+    // travelling — the reference's mask sees them dim and huge at f1140, not
+    // faded up on their marks.
+    expect(word(1133, 'logo-star').opacity).toBe(0)
+    expect(word(1142, 'logo-star').opacity).toBeGreaterThan(0.2)
+    // Mid-flight: STAR is left of its mark and oversized, TREK right of its
+    // own and higher. The measured block is 1.31× its settled width at f1150.
+    const flying = word(1145, 'logo-star')
+    expect(flying.x).toBeLessThan(0.373)
+    expect(flying.scale).toBeGreaterThan(1.05)
+    expect(word(1145, 'logo-trek').x).toBeGreaterThan(0.6484)
+    // Settled by f1162 and immobile thereafter — the measured mask bbox is
+    // identical from f1161 to the fade-out.
+    for (const id of ['logo-star', 'logo-trek']) {
+      const settled = word(1162, id)
+      const later = word(1240, id)
+      expect(settled.scale).toBeCloseTo(1, 2)
+      expect(settled.x).toBeCloseTo(later.x, 6)
+      expect(settled.y).toBeCloseTo(later.y, 6)
+      expect(settled.opacity).toBeCloseTo(1, 6)
+    }
+    // The two words sit in the offset arrangement, not on one line: TREK is
+    // down and to the right of STAR by the measured 0.275 / 0.124.
+    expect(word(1200, 'logo-trek').x - word(1200, 'logo-star').x).toBeCloseTo(
+      0.2754,
+      3,
+    )
+    expect(word(1200, 'logo-trek').y - word(1200, 'logo-star').y).toBeCloseTo(
+      0.1236,
+      3,
+    )
+    // The subtitle joins late and both are gone before the fly-through wipe.
+    expect(opacity(at(1177)!, 'subtitle')).toBe(0)
+    expect(opacity(at(1190)!, 'subtitle')).toBeCloseTo(1, 6)
+    expect(opacity(at(1272)!, 'logo-star')).toBe(0)
+    expect(opacity(at(1272)!, 'subtitle')).toBe(0)
+  })
+
+  it('centres every credit and hangs its label on the name', () => {
+    const { at } = playing()
+    const sample = at(1340)!
+    for (const id of ['c1', 'c2', 'c5', 'c8', 'e1']) {
+      const text = sample.texts.find((candidate) => candidate.id === id)
+      if (text === undefined) throw new Error(`no text ${id}`)
+      // Measured: every name's mask is centred at x 0.497–0.510. The older
+      // per-credit centroids drifted left only because they were
+      // pixel-weighted and the label line pulled them.
+      expect(text.x).toBeCloseTo(0.5, 6)
+    }
+    const stewart = sample.texts.find((t) => t.id === 'c1')!
+    const frakes = sample.texts.find((t) => t.id === 'c2')!
+    // A label rides its name rather than being placed independently: the
+    // reference left-aligns it to the name's own left edge, which is a
+    // property of the typeface, not a coordinate.
+    expect(stewart.label).toBe('Starring')
+    expect(frakes.label).toBeUndefined()
+    expect(stewart.y).toBeCloseTo(frakes.y, 6)
+  })
+
+  it('fires the two lens spikes on the measured 24-frame envelope', () => {
+    const { at } = playing()
+    for (const [start, x, y] of [
+      [1118, 0.645, 0.665],
+      [2412, 0.688, 0.43],
+    ] as const) {
+      expect(at(start - 1)!.effects.spark.drive).toBe(0)
+      const peak = at(start + 11)!.effects.spark
+      expect(peak.drive).toBeCloseTo(1, 6)
+      expect(peak.x).toBeCloseTo(x, 6)
+      expect(peak.y).toBeCloseTo(y, 6)
+      expect(at(start + 25)!.effects.spark.drive).toBe(0)
+    }
   })
 
   it('runs both warp flashes on the measured 4/7/4 envelope', () => {
@@ -74,52 +152,217 @@ describe('tng-intro timing', () => {
   })
 })
 
-describe('tng-intro camera discipline', () => {
-  it('never moves the camera while a title is on screen', () => {
+describe('tng-intro ship choreography', () => {
+  /*
+   * The reference's hull measurements are screen measurements — a tracked
+   * bounding box per frame — so this is the diff that matters: put the sampled
+   * hull back through the lens and check it lands where the box did. Every
+   * expected number below is a box centre or a box width from the analysis.
+   */
+  const track = (
+    sample: NonNullable<ReturnType<ReturnType<typeof playing>['at']>>,
+  ) => {
+    const offset = Q.rotate(
+      Q.conjugate(sample.camera.orientation),
+      UV.difference(sample.ship.position, sample.camera.position),
+    )
+    const screen = screenPositionOf(offset)
+    return {
+      ...screen,
+      width: apparentWidth(
+        TNG_HULL_LENGTH,
+        screen.range,
+        TNG_LENS.fov,
+        TNG_LENS.aspect,
+      ),
+    }
+  }
+
+  it('enters scene A at the bottom-left corner and crosses the frame', () => {
     const { at } = playing()
-    const lock = at(1120)!.camera
-    // Every frame with visible text in scenes B and C: the measured
-    // constraint is that all dynamism is the ship's.
-    for (let f = 1100; f <= 2613; f += 7) {
+    // The measured entry: the hull's box first breaks the bottom edge near
+    // x 0.04 at f688. The previous script had it as a dot dead ahead, which
+    // is the analysis's prose and not what its own frames show.
+    const entry = track(at(700)!)
+    expect(entry.x).toBeLessThan(0.16)
+    expect(entry.y).toBeGreaterThan(0.9)
+
+    // Box centres and widths at the frames where the box is unclipped.
+    for (const [frame, x, y, width] of [
+      [760, 0.203, 0.757, 0.401],
+      [824, 0.278, 0.635, 0.438],
+      [872, 0.354, 0.512, 0.695],
+    ] as const) {
+      const hull = track(at(frame)!)
+      expect(hull.x, `f${frame} x`).toBeCloseTo(x, 2)
+      expect(hull.y, `f${frame} y`).toBeCloseTo(y, 2)
+      expect(hull.width, `f${frame} width`).toBeCloseTo(width, 2)
+    }
+
+    // It pulls away up-right rather than passing behind the lens — which is
+    // what lets the camera hold still through the whole pass.
+    const leaving = track(at(1080)!)
+    expect(leaving.x).toBeCloseTo(0.617, 2)
+    expect(leaving.range).toBeGreaterThan(track(at(976)!).range)
+  })
+
+  it('never puts the hull behind the lens while it is on stage', () => {
+    const { at } = playing()
+    /*
+     * The spline-overshoot regression. Ranges across an approach span four
+     * decades, and a Catmull-Rom over those knots in *metres* sets the near
+     * end's tangent from the far end: it overshot through the camera and out
+     * the other side, and the hull — which should have been receding at a
+     * kilometre — simply was not drawn for twenty frames. Interpolating the
+     * range in log space fixes it, and this is the assertion that notices if
+     * anyone interpolates it any other way.
+     *
+     * Half a frame apart, because the overshoot lived between the beats.
+     */
+    for (let f = 660; f < 2430; f += 0.5) {
       const sample = at(f)!
-      const anyText = sample.texts.some((text) => text.opacity > 1e-3)
-      if (!anyText) continue
-      expect(UV.distance(sample.camera.position, lock.position)).toBeLessThan(
-        1e-6,
+      if (!sample.ship.visible) continue
+      const offset = Q.rotate(
+        Q.conjugate(sample.camera.orientation),
+        UV.difference(sample.ship.position, sample.camera.position),
       )
-      const q = sample.camera.orientation
-      const dot = Math.abs(
-        q.x * lock.orientation.x +
-          q.y * lock.orientation.y +
-          q.z * lock.orientation.z +
-          q.w * lock.orientation.w,
-      )
-      expect(dot).toBeGreaterThan(1 - 1e-9)
+      expect(offset.z, `frame ${f} is behind the lens`).toBeLessThan(0)
+      // And inside a sane band: closer than a hull length is inside the near
+      // plane, further than the entry beats is a lost decimal point.
+      const range = Math.hypot(offset.x, offset.y, offset.z)
+      expect(range, `frame ${f} range`).toBeGreaterThan(TNG_HULL_LENGTH * 0.05)
+      expect(range, `frame ${f} range`).toBeLessThan(4e7)
     }
   })
 
-  it('keeps the f240 join a hard cut and the journey continuous', () => {
+  it('reuses one wipe three times, the middle one mirrored', () => {
     const { at } = playing()
-    // The match cut: a real discontinuity between the Earth stage and the
-    // journey stage.
-    const before = at(239)!.camera.position
-    const after = at(240)!.camera.position
-    expect(UV.distance(before, after)).toBeGreaterThan(1e9)
-    // But inside the journey the route is continuous. The bound is the
-    // route's own local speed rather than a constant — the fast legs cover
-    // AU-scale distances per frame legitimately. A smooth curve's half-frame
-    // step is ~1/6 of the surrounding three-frame span; a splice-bug jump
-    // makes the two nearly equal, so half the span cleanly separates them.
-    for (let f = 245; f < 1083; f += 3) {
-      const halfStep = UV.distance(
-        at(f)!.camera.position,
-        at(f + 0.5)!.camera.position,
+    // Wipes one and three are the same animation 247 frames apart: their
+    // tracked boxes agree to three decimal places in the reference.
+    const first = track(at(1292)!)
+    const third = track(at(1292 + 247)!)
+    expect(first.x).toBeCloseTo(0.239, 2)
+    expect(first.y).toBeCloseTo(0.591, 2)
+    expect(third.x).toBeCloseTo(first.x, 4)
+    expect(third.y).toBeCloseTo(first.y, 4)
+    expect(third.range).toBeCloseTo(first.range, 3)
+
+    // The middle one is its mirror in x, and only in x.
+    const second = track(at(1292 + 128)!)
+    expect(second.x).toBeCloseTo(1 - first.x, 3)
+    expect(second.y).toBeCloseTo(first.y, 3)
+    expect(second.range).toBeCloseTo(first.range, 3)
+  })
+
+  it('brings the hull down through the credits from the top edge', () => {
+    const { at } = playing()
+    // Measured: the box breaks the top edge at f1770 and descends past the
+    // vertical centre by f2100, which is why Spiner and Wheaton sit low.
+    const early = track(at(1800)!)
+    expect(early.y).toBeLessThan(0.1)
+    expect(early.x).toBeCloseTo(0.462, 2)
+    const late = track(at(2070)!)
+    expect(late.y).toBeGreaterThan(early.y)
+    expect(late.width).toBeGreaterThan(early.width)
+    expect(late.width).toBeCloseTo(0.672, 1)
+  })
+})
+
+describe('tng-intro camera discipline', () => {
+  /** Frames where the shot list says a cut happens. */
+  const cutFrames = new Set(TNG_CUTS.flatMap((cut) => [cut.from, cut.to + 1]))
+
+  it('never moves the camera while a title is on screen', () => {
+    const { at } = playing()
+    // The measured constraint is that all dynamism is the ship's. Held per
+    // *shot*, because the piece is an edit: the second flash is an honest
+    // scene change and the end cards stand somewhere else entirely.
+    let anchor = at(1100)!.camera
+    for (let f = 1100; f <= 2740; f += 1) {
+      if (cutFrames.has(f)) {
+        anchor = at(f)!.camera
+        continue
+      }
+      const sample = at(f)!
+      if (!sample.texts.some((text) => text.opacity > 1e-3)) continue
+      expect(
+        UV.distance(sample.camera.position, anchor.position),
+        `frame ${f}`,
+      ).toBeLessThan(1e-6)
+      const q = sample.camera.orientation
+      const dot = Math.abs(
+        q.x * anchor.orientation.x +
+          q.y * anchor.orientation.y +
+          q.z * anchor.orientation.z +
+          q.w * anchor.orientation.w,
       )
+      expect(dot, `frame ${f}`).toBeGreaterThan(1 - 1e-9)
+    }
+  })
+
+  it('cuts only where the shot list says, and holds still in between', () => {
+    const { at } = playing()
+    /*
+     * The piece is an edit. Every jump in the camera has to land on a shot
+     * boundary — the f240 match cut, the cutaway either side of the veil, the
+     * two flashes — and inside a shot the route has to be smooth. A smooth
+     * curve's half-frame step is a small fraction of the surrounding
+     * three-frame span; a splice bug makes the two nearly equal, so half the
+     * span cleanly separates them.
+     */
+    // Stops two frames short of the end: the director returns null past the
+    // final frame, which is its contract, not a gap in the edit.
+    for (let f = 1; f < TNG_INTRO.durationFrames - 3; f += 1) {
+      const step = UV.distance(
+        at(f - 1)!.camera.position,
+        at(f)!.camera.position,
+      )
+      if (cutFrames.has(f)) continue
       const span = UV.distance(
         at(f - 1)!.camera.position,
         at(f + 2)!.camera.position,
       )
-      expect(halfStep).toBeLessThan(span * 0.5 + 10)
+      expect(step, `frame ${f}`).toBeLessThan(span + 10)
+    }
+    // And the cuts that matter are real discontinuities, not seams that
+    // happen to be smooth.
+    expect(
+      UV.distance(at(239)!.camera.position, at(240)!.camera.position),
+    ).toBeGreaterThan(1e9)
+    expect(
+      UV.distance(at(252)!.camera.position, at(253)!.camera.position),
+    ).toBeGreaterThan(1e9)
+    expect(
+      UV.distance(at(1091)!.camera.position, at(1092)!.camera.position),
+    ).toBeGreaterThan(1e6)
+  })
+
+  it('covers every cut with darkness, a flash, or a full frame', () => {
+    const { at } = playing()
+    /*
+     * A cut the audience can see is an edit; a cut they cannot is the trick
+     * the whole piece is built on. Each boundary has to be hidden by
+     * *something* — the blackout, a warp flash, a hull filling the lens, or
+     * a composition matched across the seam.
+     */
+    const matched = new Set([240]) // the f240 join is a composition match cut
+    for (const cut of TNG_CUTS) {
+      const f = cut.from
+      if (f === 0 || matched.has(f)) continue
+      const before = at(f - 1)!
+      const after = at(f)!
+      const covered =
+        before.effects.blackout > 0.9 ||
+        after.effects.blackout > 0.9 ||
+        before.effects.flash > 0.9 ||
+        after.effects.flash > 0.9 ||
+        // A body filling the frame: the veil pass, and the empty sky either
+        // side of the gas giants, which is the same trick with no light in it.
+        cut.id === 'veil' ||
+        cut.id === 'jupiter' ||
+        cut.id === 'saturn' ||
+        cut.id === 'cruise'
+      expect(covered, `cut into ${cut.id} at f${f}`).toBe(true)
     }
   })
 

@@ -42,18 +42,47 @@ export interface CinematicPose {
 export type CinematicTextStyle =
   'logo' | 'subtitle' | 'label' | 'name' | 'card' | 'accent'
 
-/** One line of text this frame. Position is normalised, origin top-left. */
+/**
+ * One line of text this frame. Position is normalised, origin top-left, and
+ * every field is live: the reference's main logotype flies in from off-frame
+ * and shrinks onto its mark, so `x`, `y` and `scale` are animated channels
+ * rather than mount-time layout.
+ */
 export interface CinematicTextState {
   readonly id: string
   readonly style: CinematicTextStyle
   readonly text: string
-  /** Centre of the line, 0..1 across the frame. */
+  /**
+   * The small line above the name — 'Starring', 'Executive Producer'. It rides
+   * the same element rather than being its own text because the reference
+   * left-aligns it to the *name's* left edge, and the name's width is a
+   * property of the typeface the host chose, not a number a script can know.
+   * One block, centred, with the label flush left inside it, is the only
+   * arrangement that survives a font change.
+   */
+  readonly label?: string
+  /** Centre of the name line, 0..1 across the frame. */
   readonly x: number
   readonly y: number
   /** 0..1; the full list is emitted every frame so the host can keep stable DOM. */
   readonly opacity: number
-  /** Uniform scale about the line's centre; 1 except during a logo settle. */
+  /** Uniform scale about the line's centre; 1 once a title has settled. */
   readonly scale: number
+}
+
+/**
+ * The anamorphic spike a warp point leaves in the lens: a vertical spindle
+ * that swells and dies over ~24 frames. The reference plays it twice, both
+ * times as the bridge between a ship leaving at warp and the card that
+ * follows, and it is anchored where that ship went — not on the frame's
+ * centre — so it carries a screen position of its own.
+ */
+export interface CinematicSpark {
+  /** 0..1. */
+  readonly drive: number
+  /** Screen anchor, normalised, origin top-left. */
+  readonly x: number
+  readonly y: number
 }
 
 /** Screen-space effect drives, all 0..1. */
@@ -66,13 +95,22 @@ export interface CinematicEffects {
   readonly streaks: number
   /** Nacelle grille glow, building before a warp-out. */
   readonly nacelleGlow: number
+  /** The warp point's lens spike. */
+  readonly spark: CinematicSpark
 }
+
+export const NO_SPARK: CinematicSpark = Object.freeze({
+  drive: 0,
+  x: 0.5,
+  y: 0.5,
+})
 
 export const NO_EFFECTS: CinematicEffects = Object.freeze({
   blackout: 0,
   flash: 0,
   streaks: 0,
   nacelleGlow: 0,
+  spark: NO_SPARK,
 })
 
 /** Everything a cutscene decides for one frame. */
@@ -124,6 +162,50 @@ export function easeOut(t: number): number {
  */
 export function expApproach(d0: number, d1: number, t: number): number {
   return d0 * (d1 / d0) ** saturate(t)
+}
+
+/** Unclamped linear blend; `t` is expected to arrive already eased. */
+export const lerp = (a: number, b: number, t: number): number => a + (b - a) * t
+
+/**
+ * How much of its travel a thrown title has completed: 0 off its mark, 1
+ * settled on it.
+ *
+ * Decelerating across the whole travel rather than easing in and out, because
+ * the reference's words enter already at speed — they were thrown from
+ * off-frame, not started from rest — and the only interesting part of the
+ * curve is how they stop.
+ *
+ * The default power is a fit, not a taste. Tracking the two logotype words
+ * through the throw gives the remaining offset at f1140, f1144 and f1148 as
+ * 0.271, 0.181 and 0.107 of the frame; consecutive ratios of 0.668 and 0.591
+ * both solve to p = 1.93 over a 27-frame travel from f1134, and the same
+ * exponent then predicts f1137 to within a thousandth on all six channels —
+ * two positions and a scale, per word. A curve that fits six independent
+ * measurements is the curve the reference used.
+ */
+export function arrival(
+  startFrame: number,
+  frames: number,
+  frame: number,
+  power = 1.93,
+): number {
+  const t = saturate((frame - startFrame) / Math.max(frames, 1e-9))
+  return 1 - (1 - t) ** power
+}
+
+/**
+ * The measured spark envelope: 24 frames, rising over 11 and dying over 13.
+ *
+ * Asymmetric because it is a lens artefact of something *receding* — the
+ * spike builds as the warp point brightens and then trails off with the glare
+ * rather than snapping shut. Both of the reference's sparks fit this within a
+ * frame at either end.
+ */
+export function sparkEnvelope(startFrame: number, frame: number): number {
+  const t = frame - startFrame
+  if (t < 0 || t > 24) return 0
+  return t <= 11 ? smooth(t / 11) : smooth((24 - t) / 13)
 }
 
 /* ------------------------------------------------------------------------- */
@@ -267,6 +349,100 @@ export function routePosition(
   return UV.translate(b1.position, offset)
 }
 
+/** A waypoint in frame terms: where in the frame, and how far from the lens. */
+export interface ScreenBeat {
+  readonly frame: number
+  /** Normalised, origin top-left. Values outside 0..1 are off-frame. */
+  readonly x: number
+  readonly y: number
+  /** Distance from the lens, metres. */
+  readonly range: number
+}
+
+/**
+ * Non-uniform Catmull-Rom over one scalar channel, held outside the ends.
+ * The vector version's arithmetic, applied per channel.
+ */
+function splineScalar(
+  frames: readonly number[],
+  values: readonly number[],
+  frame: number,
+): number {
+  const n = frames.length
+  const first = frames[0] as number
+  const last = frames[n - 1] as number
+  if (frame <= first || n === 1) return values[0] as number
+  if (frame >= last) return values[n - 1] as number
+
+  let i = 0
+  while (i + 1 < n && frame >= (frames[i + 1] as number)) i += 1
+  const f1 = frames[i] as number
+  const f2 = frames[i + 1] as number
+  const v0 = values[Math.max(0, i - 1)] as number
+  const v1 = values[i] as number
+  const v2 = values[i + 1] as number
+  const v3 = values[Math.min(n - 1, i + 2)] as number
+  const f0 = frames[Math.max(0, i - 1)] as number
+  const f3 = frames[Math.min(n - 1, i + 2)] as number
+
+  const span = f2 - f1
+  const t = (frame - f1) / span
+  const m1 = ((v2 - v0) * span) / Math.max(f2 - f0, 1e-9)
+  const m2 = ((v3 - v1) * span) / Math.max(f3 - f1, 1e-9)
+  const t2 = t * t
+  const t3 = t2 * t
+  return (
+    (2 * t3 - 3 * t2 + 1) * v1 +
+    (t3 - 2 * t2 + t) * m1 +
+    (-2 * t3 + 3 * t2) * v2 +
+    (t3 - t2) * m2
+  )
+}
+
+/**
+ * A route through the *frame*: screen position and apparent size, interpolated
+ * in the terms they were measured in.
+ *
+ * Range is splined in **log space**, which is the whole point. An approach
+ * beat list runs from tens of kilometres to tens of metres, and a Catmull-Rom
+ * over those magnitudes in metres does what any spline does when its knots
+ * span four decades: the tangent at the near end is set by the far one and it
+ * overshoots hard — in practice through the camera and out the other side, so
+ * a hull that should have been receding at a kilometre simply vanished for
+ * twenty frames. Constant *fractional* closing is also the honest description
+ * of every approach in the reference, so the log is not a workaround; it is
+ * the right coordinate.
+ */
+export function screenRoutePosition(
+  beats: readonly ScreenBeat[],
+  frame: number,
+  fovDeg: number,
+  aspect: number,
+): Vec3 {
+  const first = beats[0]
+  if (first === undefined)
+    throw new Error('screenRoutePosition needs at least one beat')
+  const frames = beats.map((beat) => beat.frame)
+  const x = splineScalar(
+    frames,
+    beats.map((beat) => beat.x),
+    frame,
+  )
+  const y = splineScalar(
+    frames,
+    beats.map((beat) => beat.y),
+    frame,
+  )
+  const range = Math.exp(
+    splineScalar(
+      frames,
+      beats.map((beat) => Math.log(Math.max(beat.range, 1e-6))),
+      frame,
+    ),
+  )
+  return screenOffset(x, y, range, fovDeg, aspect)
+}
+
 /**
  * Orientation along a route: slerp between beats with a smoothstepped
  * parameter, held outside the ends.
@@ -338,6 +514,60 @@ export function screenDirection(
   return Vec.normalize(
     vec3((x * 2 - 1) * tanHalf * aspect, (1 - y * 2) * tanHalf, -1),
   )
+}
+
+/**
+ * The camera-space offset that puts a point at a screen position, `range`
+ * metres from the lens.
+ *
+ * The authoring primitive for anything choreographed *against the frame*
+ * rather than against the world. A reference edit is measured in screen
+ * coordinates and apparent size — "the hull's bbox centre is (0.35, 0.51) and
+ * it spans 0.70 of the frame at f872" — and converting each of those to metres
+ * by hand is where a recreation quietly stops matching: the numbers in the
+ * script no longer resemble the numbers in the measurement, so nobody can see
+ * that one has drifted from the other. Beats written in this language can be
+ * read straight off the analysis and checked against it.
+ *
+ * `range` is distance from the lens, not depth along the axis, so a beat's
+ * apparent size is `length / range` wherever it sits in the frame.
+ */
+export function screenOffset(
+  x: number,
+  y: number,
+  range: number,
+  fovDeg: number,
+  aspect: number,
+): Vec3 {
+  return Vec.scale(screenDirection(x, y, fovDeg, aspect), range)
+}
+
+/**
+ * Apparent size of an object, as a fraction of the frame's *width*.
+ *
+ * The inverse of the measurement a bounding box gives: an object `length`
+ * across at `range` covers this much of the frame. Used to state a beat's
+ * range in the units the reference was measured in, and asserted by tests.
+ */
+export function apparentWidth(
+  length: number,
+  range: number,
+  fovDeg: number,
+  aspect: number,
+): number {
+  const tanHalf = Math.tan((fovDeg * Math.PI) / 360)
+  return length / Math.max(range, 1e-9) / (2 * tanHalf * aspect)
+}
+
+/** The range at which `length` covers `fraction` of the frame's width. */
+export function rangeForWidth(
+  length: number,
+  fraction: number,
+  fovDeg: number,
+  aspect: number,
+): number {
+  const tanHalf = Math.tan((fovDeg * Math.PI) / 360)
+  return length / Math.max(fraction, 1e-9) / (2 * tanHalf * aspect)
 }
 
 /**

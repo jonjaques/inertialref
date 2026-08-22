@@ -222,12 +222,22 @@ The engine plays authored scenes over the live world — ADR-0010 is the
 contract, and the trail for anyone extending it runs:
 
 - **Pure arithmetic** in `packages/rendering/src/cinematic.ts` — easings, fade
-  envelopes, camera routes, composition solvers. Property-tested in Node.
+  envelopes, camera routes, screen-space routes, composition solvers.
+  Property-tested in Node.
 - **Director and scripts** in `packages/devtools/src/cutscene.ts` and
   `cutscenes/` — a script's `prepare(world)` resolves the stage once, its
   `sample(frame)` is pure, and time derives from `renderTime`, never a wall
   clock. A new scene is a new file exporting a `CutsceneScript`; add it to the
   registry in `harness.ts`.
+- **A scene is a shot list, not a camera move.** Each shot owns its camera,
+  placed against its own subject; the cuts between them hide in darkness,
+  behind a flash, or under a body filling the frame. Authored as one continuous
+  spline a scene becomes a camera crossing astronomical units between beats and
+  aiming at whatever it is between — which is what the first `tng-intro` was.
+- **Choreograph in the frame.** A hull's beats are
+  `(frame, screen x, screen y, range)` via `screenOffset`, the same terms a
+  tracked bounding box reports, and `screenRoutePosition` interpolates range in
+  log space so a four-decade approach does not overshoot through the lens.
 - **Application** in `apps/game` — `engine.cinematic` (render-space, on the
   engine singleton for the HMR reason `hull` documents), the warp-effects
   quads, the DOM title overlay, and the dock's cutscene section.
@@ -238,11 +248,13 @@ contract, and the trail for anyone extending it runs:
   locked camera, the flash envelope) are regression tests in
   `cutscene.test.ts`. Change those numbers only to make the recreation _more_
   faithful, and say so.
-- **Hard-won authoring rules** are in CONTEXT.md § "The cinematic director":
-  camera-relative choreography is offset beats, never absolute beats off a
-  moving camera; never per-frame look-at a hull near the lens; light is
-  staging; whiteouts are honest scene changes. Reread that section before
-  authoring a second scene.
+- **Hard-won authoring rules** are in CONTEXT.md § "The cinematic director" and
+  § "The title sequence, re-cut against its own frames": camera-relative
+  choreography is offset beats, never absolute beats off a moving camera; never
+  per-frame look-at a hull near the lens; light is staging, and a key's screen
+  position is a _product_ of two dot products that must both carry the right
+  sign; whiteouts are honest scene changes; ask the font for its cap height
+  rather than guessing it. Reread both before authoring a second scene.
 - The reference audio and any full-sequence render carry third-party rights —
   the audio path is gitignored on purpose, and publishing a render needs a
   rights check first.

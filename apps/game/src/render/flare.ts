@@ -53,13 +53,20 @@ import { edgeFade, type FlareVisibility, ghostPosition } from './flareMath.ts'
 /** How far in front of the camera the quads sit. Arbitrary; depth is ignored. */
 const PLANE = 20
 
+/**
+ * Where the occluder's limb sits in the corona quad's UV circle: the quad is
+ * `CORONA_SPAN`× the disc's diameter, so the limb is at `1/CORONA_SPAN`.
+ */
+const CORONA_SPAN = 1.9
+const CORONA_LIMB = 1 / CORONA_SPAN
+
 /** 0 on the star's image, 1 once a ghost is clear of its glare. */
 function smoothFade(distance: number): number {
   const t = Math.min(1, Math.max(0, (distance - 0.08) / (0.3 - 0.08)))
   return t * t * (3 - 2 * t)
 }
 
-type ElementKind = 'glow' | 'streak' | 'disc' | 'ring'
+type ElementKind = 'glow' | 'streak' | 'disc' | 'ring' | 'corona'
 
 interface ElementSpec {
   readonly kind: ElementKind
@@ -165,6 +172,28 @@ function elementMaterial(kind: ElementKind): {
       )
       break
     }
+    case 'corona': {
+      /*
+       * The star's own light around an occulting limb.
+       *
+       * Not a ghost: this one is anchored on the *body*, sized to its disc,
+       * and it is the only thing on screen during a total eclipse — the
+       * occluder's night side is by definition unlit, so without it the
+       * signature shot of any transit is a hole. The quad is 1.9× the disc, so
+       * the limb sits at r = 0.526 and everything inside it stays dark, which
+       * is what makes the silhouette read.
+       */
+      const outside = r.sub(CORONA_LIMB).max(0)
+      profile = smoothstep(
+        float(CORONA_LIMB - 0.035),
+        float(CORONA_LIMB + 0.006),
+        r,
+      )
+        .mul(exp(outside.mul(-11)).add(exp(outside.mul(-3.4)).mul(0.42)))
+        .mul(oneMinus(smoothstep(float(0.82), float(1), r)))
+      colour = tint
+      break
+    }
   }
 
   const material = new MeshBasicNodeMaterial()
@@ -207,6 +236,15 @@ export interface LensFlare {
     /** Angular radius of the disc, radians — a close star blooms wider. */
     angularRadius: number,
     occlusion: FlareVisibility,
+    /**
+     * How much of the artefact stack the lens is showing, 0..1. The flight
+     * camera is 1 — the whole point of `art.md` § the lens is that it admits
+     * it is a camera. The cinematic camera is a *different* camera and runs
+     * near 0: the reference edit's optics put a clean warm ball beside a
+     * planet with no ghost chain marching across the frame, and a scripted
+     * shot composed around that reads as broken with one.
+     */
+    artifacts: number,
   ): void
   dispose(): void
 }
@@ -228,25 +266,48 @@ export function createLensFlare(): LensFlare {
     return { spec, mesh, tint, intensity }
   })
 
+  const coronaParts = elementMaterial('corona')
+  const corona = new Mesh(quad, coronaParts.material)
+  corona.frustumCulled = false
+  corona.renderOrder = 10
+  group.add(corona)
+
   const projected = new Vector3()
   const view = new Vector3()
+  const occluderNdc = new Vector3()
 
   return {
     group,
-    update(camera, sunWorld, starColour, brightness, angularRadius, occlusion) {
+    update(
+      camera,
+      sunWorld,
+      starColour,
+      brightness,
+      angularRadius,
+      occlusion,
+      artifacts,
+    ) {
       // Behind test in view space; NDC alone cannot tell front from back.
       view
         .set(sunWorld.x, sunWorld.y, sunWorld.z)
         .applyMatrix4(camera.matrixWorldInverse)
-      if (view.z >= 0) {
-        group.visible = false
-        return
-      }
+      const behind = view.z >= 0
 
       projected.set(sunWorld.x, sunWorld.y, sunWorld.z).project(camera)
-      const fade = edgeFade(projected.x, projected.y)
+      const fade = behind ? 0 : edgeFade(projected.x, projected.y)
       const strength = occlusion.visibility * fade * (0.35 + 0.65 * brightness)
-      if (strength < 0.003) {
+
+      /*
+       * The corona survives the test that hides everything else. Visibility is
+       * *zero* at totality, which is precisely when the ring is the shot —
+       * gating the whole group on `strength` is what used to leave a total
+       * eclipse as an unlit disc on an empty starfield.
+       */
+      const eclipse = behind ? null : occlusion.eclipse
+      const coronaStrength =
+        eclipse === null ? 0 : eclipse.depth * fade * (0.35 + 0.65 * brightness)
+
+      if (strength < 0.003 && coronaStrength < 0.003) {
         group.visible = false
         return
       }
@@ -262,6 +323,40 @@ export function createLensFlare(): LensFlare {
       // tracks the disc so a close pass reads as approaching a *sun*, not a
       // lamp.
       const bloom = 1 + Math.min(3, angularRadius * 30)
+
+      if (eclipse === null || coronaStrength < 0.003) {
+        coronaParts.intensity.value = 0
+      } else {
+        occluderNdc
+          .set(eclipse.position.x, eclipse.position.y, eclipse.position.z)
+          .project(camera)
+        corona.position.set(
+          occluderNdc.x * tanHalf * aspect * PLANE,
+          occluderNdc.y * tanHalf * PLANE,
+          -PLANE,
+        )
+        // Sized to the occluder's own disc, so the ring lands on its limb
+        // wherever the body is and however big it looks.
+        const discRadius =
+          Math.atan(eclipse.radius / Math.max(eclipse.distance, 1e-6)) * PLANE
+        const span = discRadius * 2 * CORONA_SPAN
+        corona.scale.set(span, span, 1)
+        coronaParts.intensity.value = coronaStrength * 1.9
+        /*
+         * A corona is the star's light bent past a limb, so it carries the
+         * star's colour warmed the way a grazing sight line always is — and
+         * warmed hard. Measured off the reference's totality, the ring runs
+         * about (230, 150, 20): the green channel at two-thirds and the blue
+         * nearly gone. Anything gentler tone-maps to cream, because the ring
+         * is bright enough to sit on the curve's shoulder where saturation
+         * goes to die.
+         */
+        coronaParts.tint.value.setRGB(
+          starColour.r * 1.3,
+          starColour.g * 0.58,
+          starColour.b * 0.14,
+        )
+      }
 
       for (const element of elements) {
         const { spec } = element
@@ -303,13 +398,18 @@ export function createLensFlare(): LensFlare {
           : smoothFade(
               Math.hypot((at.x - projected.x) * aspect, at.y - projected.y),
             )
-        element.intensity.value = spec.gain * strength * nearSun
+        // The core glow is the star; everything else is the lens talking, and
+        // `artifacts` is how loudly this lens is allowed to talk. The streak
+        // counts as artefact even though it sits on the core — a blade across
+        // the frame is the single most obviously *photographic* element here.
+        const lens = spec.kind === 'glow' ? 1 : artifacts
+        element.intensity.value = spec.gain * strength * nearSun * lens
       }
     },
     dispose() {
-      for (const element of elements) {
-        element.mesh.removeFromParent()
-        const material = element.mesh.material
+      for (const element of [...elements.map((e) => e.mesh), corona]) {
+        element.removeFromParent()
+        const material = element.material
         if (!Array.isArray(material)) material.dispose()
       }
       quad.dispose()
