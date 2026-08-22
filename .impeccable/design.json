@@ -1,0 +1,454 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-22T00:00:00.000Z",
+  "title": "Design System: InertialRef",
+  "extensions": {
+    "colorMeta": {
+      "instrument-blue-300": {
+        "role": "primary",
+        "displayName": "Instrument Blue 300",
+        "canonical": "oklch(82.8% 0.111 230.318)",
+        "tonalRamp": [
+          "oklch(29.3% 0.066 243.157)",
+          "oklch(39.1% 0.09 240.876)",
+          "oklch(44.3% 0.11 240.79)",
+          "oklch(50% 0.134 242.749)",
+          "oklch(58.8% 0.158 241.966)",
+          "oklch(68.5% 0.169 237.323)",
+          "oklch(74.6% 0.16 232.661)",
+          "oklch(82.8% 0.111 230.318)"
+        ]
+      },
+      "instrument-blue-400": {
+        "role": "primary",
+        "displayName": "Instrument Blue 400",
+        "canonical": "oklch(74.6% 0.16 232.661)",
+        "tonalRamp": [
+          "oklch(29.3% 0.066 243.157)",
+          "oklch(39.1% 0.09 240.876)",
+          "oklch(44.3% 0.11 240.79)",
+          "oklch(50% 0.134 242.749)",
+          "oklch(58.8% 0.158 241.966)",
+          "oklch(68.5% 0.169 237.323)",
+          "oklch(74.6% 0.16 232.661)",
+          "oklch(82.8% 0.111 230.318)"
+        ]
+      },
+      "instrument-blue-500": {
+        "role": "primary",
+        "displayName": "Instrument Blue 500",
+        "canonical": "oklch(68.5% 0.169 237.323)",
+        "tonalRamp": [
+          "oklch(29.3% 0.066 243.157)",
+          "oklch(39.1% 0.09 240.876)",
+          "oklch(44.3% 0.11 240.79)",
+          "oklch(50% 0.134 242.749)",
+          "oklch(58.8% 0.158 241.966)",
+          "oklch(68.5% 0.169 237.323)",
+          "oklch(74.6% 0.16 232.661)",
+          "oklch(82.8% 0.111 230.318)"
+        ]
+      },
+      "instrument-blue-200": {
+        "role": "primary",
+        "displayName": "Instrument Blue 200",
+        "canonical": "oklch(90.1% 0.058 230.902)",
+        "tonalRamp": [
+          "oklch(29.3% 0.066 243.157)",
+          "oklch(39.1% 0.09 240.876)",
+          "oklch(44.3% 0.11 240.79)",
+          "oklch(50% 0.134 242.749)",
+          "oklch(58.8% 0.158 241.966)",
+          "oklch(68.5% 0.169 237.323)",
+          "oklch(74.6% 0.16 232.661)",
+          "oklch(90.1% 0.058 230.902)"
+        ]
+      },
+      "panel-graphite-950": {
+        "role": "neutral",
+        "displayName": "Panel Graphite 950",
+        "canonical": "oklch(12.9% 0.042 264.695)",
+        "tonalRamp": [
+          "oklch(12.9% 0.042 264.695)",
+          "oklch(20.8% 0.042 265.755)",
+          "oklch(27.9% 0.041 260.031)",
+          "oklch(37.2% 0.044 257.287)",
+          "oklch(44.6% 0.043 257.281)",
+          "oklch(55.4% 0.046 257.417)",
+          "oklch(70.4% 0.04 256.788)",
+          "oklch(86.9% 0.022 252.894)"
+        ]
+      },
+      "panel-graphite-900": {
+        "role": "neutral",
+        "displayName": "Panel Graphite 900",
+        "canonical": "oklch(20.8% 0.042 265.755)",
+        "tonalRamp": [
+          "oklch(12.9% 0.042 264.695)",
+          "oklch(20.8% 0.042 265.755)",
+          "oklch(27.9% 0.041 260.031)",
+          "oklch(37.2% 0.044 257.287)",
+          "oklch(44.6% 0.043 257.281)",
+          "oklch(55.4% 0.046 257.417)",
+          "oklch(70.4% 0.04 256.788)",
+          "oklch(86.9% 0.022 252.894)"
+        ]
+      },
+      "panel-graphite-800": {
+        "role": "neutral",
+        "displayName": "Panel Graphite 800",
+        "canonical": "oklch(27.9% 0.041 260.031)",
+        "tonalRamp": [
+          "oklch(12.9% 0.042 264.695)",
+          "oklch(20.8% 0.042 265.755)",
+          "oklch(27.9% 0.041 260.031)",
+          "oklch(37.2% 0.044 257.287)",
+          "oklch(44.6% 0.043 257.281)",
+          "oklch(55.4% 0.046 257.417)",
+          "oklch(70.4% 0.04 256.788)",
+          "oklch(86.9% 0.022 252.894)"
+        ]
+      },
+      "panel-graphite-700": {
+        "role": "neutral",
+        "displayName": "Panel Graphite 700",
+        "canonical": "oklch(37.2% 0.044 257.287)",
+        "tonalRamp": [
+          "oklch(12.9% 0.042 264.695)",
+          "oklch(20.8% 0.042 265.755)",
+          "oklch(27.9% 0.041 260.031)",
+          "oklch(37.2% 0.044 257.287)",
+          "oklch(44.6% 0.043 257.281)",
+          "oklch(55.4% 0.046 257.417)",
+          "oklch(70.4% 0.04 256.788)",
+          "oklch(86.9% 0.022 252.894)"
+        ]
+      },
+      "panel-graphite-600": {
+        "role": "neutral",
+        "displayName": "Panel Graphite 600",
+        "canonical": "oklch(44.6% 0.043 257.281)",
+        "tonalRamp": [
+          "oklch(12.9% 0.042 264.695)",
+          "oklch(20.8% 0.042 265.755)",
+          "oklch(27.9% 0.041 260.031)",
+          "oklch(37.2% 0.044 257.287)",
+          "oklch(44.6% 0.043 257.281)",
+          "oklch(55.4% 0.046 257.417)",
+          "oklch(70.4% 0.04 256.788)",
+          "oklch(86.9% 0.022 252.894)"
+        ]
+      },
+      "panel-graphite-500": {
+        "role": "neutral",
+        "displayName": "Panel Graphite 500",
+        "canonical": "oklch(55.4% 0.046 257.417)",
+        "tonalRamp": [
+          "oklch(12.9% 0.042 264.695)",
+          "oklch(20.8% 0.042 265.755)",
+          "oklch(27.9% 0.041 260.031)",
+          "oklch(37.2% 0.044 257.287)",
+          "oklch(44.6% 0.043 257.281)",
+          "oklch(55.4% 0.046 257.417)",
+          "oklch(70.4% 0.04 256.788)",
+          "oklch(86.9% 0.022 252.894)"
+        ]
+      },
+      "panel-graphite-400": {
+        "role": "neutral",
+        "displayName": "Panel Graphite 400",
+        "canonical": "oklch(70.4% 0.04 256.788)",
+        "tonalRamp": [
+          "oklch(12.9% 0.042 264.695)",
+          "oklch(20.8% 0.042 265.755)",
+          "oklch(27.9% 0.041 260.031)",
+          "oklch(37.2% 0.044 257.287)",
+          "oklch(44.6% 0.043 257.281)",
+          "oklch(55.4% 0.046 257.417)",
+          "oklch(70.4% 0.04 256.788)",
+          "oklch(86.9% 0.022 252.894)"
+        ]
+      },
+      "panel-graphite-300": {
+        "role": "neutral",
+        "displayName": "Panel Graphite 300",
+        "canonical": "oklch(86.9% 0.022 252.894)",
+        "tonalRamp": [
+          "oklch(12.9% 0.042 264.695)",
+          "oklch(20.8% 0.042 265.755)",
+          "oklch(27.9% 0.041 260.031)",
+          "oklch(37.2% 0.044 257.287)",
+          "oklch(44.6% 0.043 257.281)",
+          "oklch(55.4% 0.046 257.417)",
+          "oklch(70.4% 0.04 256.788)",
+          "oklch(86.9% 0.022 252.894)"
+        ]
+      },
+      "panel-graphite-200": {
+        "role": "neutral",
+        "displayName": "Panel Graphite 200",
+        "canonical": "oklch(92.9% 0.013 255.508)",
+        "tonalRamp": [
+          "oklch(12.9% 0.042 264.695)",
+          "oklch(20.8% 0.042 265.755)",
+          "oklch(27.9% 0.041 260.031)",
+          "oklch(37.2% 0.044 257.287)",
+          "oklch(44.6% 0.043 257.281)",
+          "oklch(55.4% 0.046 257.417)",
+          "oklch(70.4% 0.04 256.788)",
+          "oklch(92.9% 0.013 255.508)"
+        ]
+      },
+      "void-black": {
+        "role": "neutral",
+        "displayName": "Void Black",
+        "canonical": "#000000"
+      },
+      "nominal-green": {
+        "role": "tertiary",
+        "displayName": "Nominal Green",
+        "canonical": "oklch(76.5% 0.177 163.223)",
+        "tonalRamp": [
+          "oklch(26.2% 0.051 172.552)",
+          "oklch(37.8% 0.077 168.94)",
+          "oklch(43.2% 0.095 166.913)",
+          "oklch(50.8% 0.118 165.612)",
+          "oklch(59.6% 0.145 163.225)",
+          "oklch(69.6% 0.17 162.48)",
+          "oklch(76.5% 0.177 163.223)",
+          "oklch(84.5% 0.143 164.978)"
+        ]
+      },
+      "caution-amber": {
+        "role": "tertiary",
+        "displayName": "Caution Amber",
+        "canonical": "oklch(82.8% 0.189 84.429)",
+        "tonalRamp": [
+          "oklch(27.9% 0.077 45.635)",
+          "oklch(41.4% 0.112 45.904)",
+          "oklch(47.3% 0.137 46.201)",
+          "oklch(55.5% 0.163 48.998)",
+          "oklch(66.6% 0.179 58.318)",
+          "oklch(76.9% 0.188 70.08)",
+          "oklch(82.8% 0.189 84.429)",
+          "oklch(87.9% 0.169 91.605)"
+        ]
+      },
+      "fault-red": {
+        "role": "tertiary",
+        "displayName": "Fault Red",
+        "canonical": "oklch(71.2% 0.194 13.428)",
+        "tonalRamp": [
+          "oklch(27.1% 0.105 12.094)",
+          "oklch(41% 0.159 10.272)",
+          "oklch(45.5% 0.188 13.697)",
+          "oklch(51.4% 0.222 16.935)",
+          "oklch(58.6% 0.253 17.585)",
+          "oklch(64.5% 0.246 16.439)",
+          "oklch(71.2% 0.194 13.428)",
+          "oklch(81% 0.117 11.638)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "strip": {
+        "displayName": "Strip",
+        "purpose": "The flight readout, bottom left. The largest type in the system, because it is what you read while flying rather than while stopped."
+      },
+      "readout": {
+        "displayName": "Readout",
+        "purpose": "The default inside every panel: row values, target names, error prose. Leading is deliberately loose for the size, because at 11px in a dense grid leading is what makes rows scannable."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Section headings and tab names. Uppercase plus 0.1em tracking is the system's only typographic decoration, and it exists to make a heading readable at a size where case alone would not."
+      },
+      "control": {
+        "displayName": "Control",
+        "purpose": "Button labels. Same size as a label and deliberately not uppercase: a control is a verb, a heading is a category, and case is what separates them."
+      }
+    },
+    "shadows": [
+      {
+        "name": "panel-lift",
+        "value": "0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)",
+        "purpose": "The dock only, and the single elevation step in the entire system. Separates the tallest surface from the scene behind it; everything inside a panel is flat."
+      }
+    ],
+    "motion": [
+      {
+        "name": "state-colors",
+        "value": "color 150ms cubic-bezier(0.4, 0, 0.2, 1), background-color 150ms cubic-bezier(0.4, 0, 0.2, 1), border-color 150ms cubic-bezier(0.4, 0, 0.2, 1)",
+        "purpose": "The only transition in the interface. Controls change colour on hover and nothing moves, scales or lifts."
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Action",
+      "kind": "button",
+      "refersTo": "action",
+      "description": "The default control. Acts, then hands focus straight back to the flight loop.",
+      "html": "<button class=\"ds-action\" type=\"button\" title=\"Flight assist (Z)\">assist</button>",
+      "css": ".ds-action { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 10px; line-height: 1.625; color: oklch(86.9% 0.022 252.894); background: oklch(27.9% 0.041 260.031 / 0.6); border: 1px solid oklch(37.2% 0.044 257.287); border-radius: 0.25rem; padding: 0.125rem 0.375rem; cursor: pointer; transition: color 150ms cubic-bezier(0.4,0,0.2,1), background-color 150ms cubic-bezier(0.4,0,0.2,1), border-color 150ms cubic-bezier(0.4,0,0.2,1); } .ds-action:hover { border-color: oklch(68.5% 0.169 237.323 / 0.6); color: oklch(90.1% 0.058 230.902); } .ds-action:focus-visible { outline: 1px solid oklch(68.5% 0.169 237.323); outline-offset: 1px; } .ds-action:disabled { opacity: 0.35; cursor: not-allowed; border-color: oklch(37.2% 0.044 257.287); color: oklch(86.9% 0.022 252.894); }"
+    },
+    {
+      "name": "Action (primary)",
+      "kind": "button",
+      "refersTo": "action-primary",
+      "description": "Reserved for the one obvious verb in a group: go, travel, orbit.",
+      "html": "<button class=\"ds-action-primary\" type=\"button\" title=\"Orbit this system's star, looking at it\">travel</button>",
+      "css": ".ds-action-primary { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 10px; line-height: 1.625; color: oklch(90.1% 0.058 230.902); background: oklch(68.5% 0.169 237.323 / 0.15); border: 1px solid oklch(68.5% 0.169 237.323 / 0.5); border-radius: 0.25rem; padding: 0.125rem 0.375rem; cursor: pointer; transition: color 150ms cubic-bezier(0.4,0,0.2,1), background-color 150ms cubic-bezier(0.4,0,0.2,1), border-color 150ms cubic-bezier(0.4,0,0.2,1); } .ds-action-primary:hover { background: oklch(68.5% 0.169 237.323 / 0.25); border-color: oklch(74.6% 0.16 232.661); } .ds-action-primary:focus-visible { outline: 1px solid oklch(74.6% 0.16 232.661); outline-offset: 1px; }"
+    },
+    {
+      "name": "Panel",
+      "kind": "card",
+      "refersTo": "panel",
+      "description": "The floating surface every readout lives on. Translucent and blurred so 11px text survives over a moving starfield.",
+      "html": "<div class=\"ds-panel\"><div class=\"ds-panel-header\"><span class=\"ds-panel-mark\">InertialRef</span><span class=\"ds-panel-meta\">t 4096 · 1× · 812 m/s</span></div><div class=\"ds-panel-body\">panel content</div></div>",
+      "css": ".ds-panel { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 11px; line-height: 1.625; color: oklch(86.9% 0.022 252.894); width: 27rem; max-width: 100%; background: oklch(12.9% 0.042 264.695 / 0.85); backdrop-filter: blur(8px); border: 1px solid oklch(37.2% 0.044 257.287 / 0.6); border-radius: 0.5rem; box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1); overflow: hidden; } .ds-panel-header { display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0.5rem; border-bottom: 1px solid oklch(27.9% 0.041 260.031); } .ds-panel-mark { color: oklch(82.8% 0.111 230.318); } .ds-panel-meta { margin-left: auto; color: oklch(55.4% 0.046 257.417); font-variant-numeric: tabular-nums; } .ds-panel-body { padding: 0.5rem; }"
+    },
+    {
+      "name": "Tab",
+      "kind": "nav",
+      "refersTo": "tab",
+      "description": "Five lowercase tracked labels on a rail. The active tab's underline merges into the rail.",
+      "html": "<nav class=\"ds-tabs\"><button class=\"ds-tab ds-tab--active\" type=\"button\">navigate</button><button class=\"ds-tab\" type=\"button\">telemetry</button><button class=\"ds-tab\" type=\"button\">perf</button></nav>",
+      "css": ".ds-tabs { display: flex; gap: 0.25rem; padding: 0.25rem 0.5rem 0; border-bottom: 1px solid oklch(27.9% 0.041 260.031); } .ds-tab { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 10px; line-height: 1.625; text-transform: uppercase; letter-spacing: 0.1em; color: oklch(55.4% 0.046 257.417); background: none; border: 0; border-bottom: 1px solid transparent; margin-bottom: -1px; padding: 0 0.5rem 0.125rem; cursor: pointer; transition: color 150ms cubic-bezier(0.4,0,0.2,1); } .ds-tab:hover { color: oklch(86.9% 0.022 252.894); } .ds-tab--active { color: oklch(82.8% 0.111 230.318); border-bottom-color: oklch(74.6% 0.16 232.661); }"
+    },
+    {
+      "name": "Section",
+      "kind": "custom",
+      "refersTo": "section",
+      "description": "The dock's repeating structural unit: a collapsible heading with a marker, a tracked uppercase title, and an optional trailing count.",
+      "html": "<div class=\"ds-section\"><button class=\"ds-section-head\" type=\"button\"><span class=\"ds-section-mark\">▾</span><span>destinations</span><span class=\"ds-section-trail\">7</span></button><div class=\"ds-section-body\">section content</div></div>",
+      "css": ".ds-section { margin-bottom: 0.5rem; } .ds-section-head { display: flex; width: 100%; align-items: center; gap: 0.25rem; text-align: left; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 10px; line-height: 1.625; text-transform: uppercase; letter-spacing: 0.1em; color: oklch(74.6% 0.16 232.661 / 0.8); background: none; border: 0; padding: 0; cursor: pointer; transition: color 150ms cubic-bezier(0.4,0,0.2,1); } .ds-section-head:hover { color: oklch(82.8% 0.111 230.318); } .ds-section-mark { width: 0.5rem; color: oklch(55.4% 0.046 257.417); } .ds-section-trail { margin-left: auto; text-transform: none; letter-spacing: normal; color: oklch(55.4% 0.046 257.417); } .ds-section-body { margin-top: 0.25rem; }"
+    },
+    {
+      "name": "Row",
+      "kind": "custom",
+      "refersTo": "row",
+      "description": "A label/value pair. The entire readout surface of the interface is this repeated.",
+      "html": "<div class=\"ds-row\"><span class=\"ds-row-label\">altitude</span><span class=\"ds-row-value\">412.8 km</span></div>",
+      "css": ".ds-row { display: flex; justify-content: space-between; gap: 0.75rem; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 11px; line-height: 1.625; } .ds-row-label { flex-shrink: 0; color: oklch(55.4% 0.046 257.417); } .ds-row-value { text-align: right; color: oklch(86.9% 0.022 252.894); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }"
+    },
+    {
+      "name": "Field",
+      "kind": "input",
+      "refersTo": "field",
+      "description": "Address entry. The placeholder teaches the syntax rather than naming the field.",
+      "html": "<input class=\"ds-field\" type=\"text\" spellcheck=\"false\" placeholder=\"SOL · b:2 · g:milky-way/s:HIP71683/b:3.0\" />",
+      "css": ".ds-field { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 11px; line-height: 1.625; width: 100%; min-width: 0; color: oklch(92.9% 0.013 255.508); background: oklch(20.8% 0.042 265.755 / 0.8); border: 1px solid oklch(37.2% 0.044 257.287); border-radius: 0.25rem; padding: 0.125rem 0.375rem; } .ds-field::placeholder { color: oklch(44.6% 0.043 257.281); } .ds-field:focus { border-color: oklch(68.5% 0.169 237.323 / 0.6); outline: none; }"
+    },
+    {
+      "name": "Target row",
+      "kind": "custom",
+      "refersTo": "target-row-selected",
+      "description": "One destination in the survey list. Indent encodes the containment tree the addresses already describe; the glyph encodes kind and landability.",
+      "html": "<div class=\"ds-targets\"><button class=\"ds-target ds-target--selected\" type=\"button\"><span class=\"ds-target-glyph ds-target-glyph--system\">★</span><span class=\"ds-target-name\">Alpha Centauri<span class=\"ds-target-detail\">G2V · 3 bodies</span></span><span class=\"ds-target-dist\">4.37 ly</span></button><button class=\"ds-target ds-target--child\" type=\"button\"><span class=\"ds-target-glyph\">◍</span><span class=\"ds-target-name\">b:2<span class=\"ds-target-detail\">rocky · landable</span></span><span class=\"ds-target-dist\">1.4 AU</span></button></div>",
+      "css": ".ds-targets { border: 1px solid oklch(27.9% 0.041 260.031 / 0.8); border-radius: 0.25rem; overflow: hidden; } .ds-target { display: flex; width: 100%; align-items: baseline; gap: 0.5rem; text-align: left; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 11px; line-height: 1.625; color: oklch(86.9% 0.022 252.894); background: none; border: 0; padding: 1px 0.375rem 1px 0.25rem; cursor: pointer; } .ds-target--child { padding-left: 1rem; } .ds-target:hover { background: oklch(27.9% 0.041 260.031 / 0.6); } .ds-target--selected { background: oklch(68.5% 0.169 237.323 / 0.2); color: oklch(90.1% 0.058 230.902); } .ds-target-glyph { flex-shrink: 0; color: oklch(44.6% 0.043 257.281); } .ds-target-glyph--system { color: oklch(87.9% 0.169 91.605 / 0.8); } .ds-target-name { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ds-target-detail { margin-left: 0.375rem; color: oklch(44.6% 0.043 257.281); } .ds-target-dist { flex-shrink: 0; font-variant-numeric: tabular-nums; color: oklch(70.4% 0.04 256.788); }"
+    },
+    {
+      "name": "Flight strip",
+      "kind": "custom",
+      "refersTo": "readout-strip",
+      "description": "What you read while flying, as opposed to the dock, which is what you read when you have stopped to look at something. Four lines in descending brightness.",
+      "html": "<div class=\"ds-strip\"><div class=\"ds-strip-name\">Reference</div><div>812 m/s relative to frame</div><div class=\"ds-strip-sub\">alt 412.8 km</div><div class=\"ds-strip-meta\">tick 4096 · 1×</div></div>",
+      "css": ".ds-strip { display: inline-block; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.75rem; line-height: 1.3333; color: oklch(92.9% 0.013 255.508); background: oklch(12.9% 0.042 264.695 / 0.75); backdrop-filter: blur(8px); border: 1px solid oklch(37.2% 0.044 257.287 / 0.6); border-radius: 0.5rem; padding: 0.5rem 0.75rem; font-variant-numeric: tabular-nums; } .ds-strip-name { color: oklch(82.8% 0.111 230.318); } .ds-strip-sub { color: oklch(70.4% 0.04 256.788); } .ds-strip-meta { color: oklch(55.4% 0.046 257.417); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Dark-Adapted Instrument",
+    "overview": "This is an observatory console at night. The subject is outside the window — a real starfield rendered from real astronomy — and the interface is the panel of readouts beside it, built so that reading it never costs you the sky. Nothing on screen is brighter than it needs to be, type sits at the smallest size that stays legible rather than the largest that fits, and colour is spent only where state changes meaning. The standing test is the one the product already sets for itself: would this still be readable with a star filling the frame behind it?\n\nThe system is deliberately narrow. One typeface, one accent family, one neutral family, two corner radii, four status colours. That narrowness is not minimalism as a style — it is what lets an 11px readout hold its own against a dynamic-range image that can reach twice diffuse white. The interface earns its place by being complete and quiet at the same time: every number the simulation knows is reachable, and none of it competes with the thing being simulated.\n\nDepth is functional, not expressive. Panels are translucent and blurred because that is how small text stays readable over a moving scene, not because layered glass is a look worth having; if contrast ever demanded an opaque panel, the opaque panel wins. There are no confirmed anti-references — the system is defined by what it commits to, not by what it refuses.",
+    "keyCharacteristics": [
+      "Monospace everywhere, 10–12px, tabular figures on anything that changes",
+      "Near-black translucent panels anchored to screen corners; the centre stays empty",
+      "One accent (Instrument Blue) doing every job that isn't status",
+      "Status colour as readout, never as alarm",
+      "Hairline borders instead of shadows; a single elevation step in the whole system",
+      "All chrome unmounts entirely while a cutscene plays"
+    ],
+    "rules": [
+      {
+        "name": "The Instrument Speaks, It Does Not Shout",
+        "body": "Status colour is a readout in the same sense that altitude is. Being offline is a supported way to play, so the offline pip is text-slate-400 and not amber — the four ways of not being online get four different colours because they want four different reactions, not because any of them is an error.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Accent Rule",
+        "body": "Instrument Blue is the only non-status hue in the system. A new colour family is a design change, not a detail; if something needs to stand out and isn't status, it earns it with weight, position or the accent — never with a new hue.",
+        "section": "colors"
+      },
+      {
+        "name": "The Scarcity Rule",
+        "body": "No status colour may appear in more than a few places at once. If a screen shows amber in five locations, amber has stopped meaning anything and the problem is the screen, not the palette.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Face Rule",
+        "body": "Everything is the monospace stack. A proportional face appearing anywhere in the dock or the strip is a defect, not a variation.",
+        "section": "typography"
+      },
+      {
+        "name": "The Tabular Rule",
+        "body": "Any number that updates carries tabular-nums. Distances, tick counts, frame times, percentages. A number that jitters horizontally while you read it is unreadable at 10px.",
+        "section": "typography"
+      },
+      {
+        "name": "The Case Rule",
+        "body": "Uppercase with 0.1em tracking is reserved for structural labels — sections and tabs. Values, controls and prose are sentence case. Two registers, no third.",
+        "section": "typography"
+      },
+      {
+        "name": "The Corner Rule",
+        "body": "Chrome anchors to corners and edges at a 0.75rem inset. Nothing floats in the middle distance, and nothing but the crosshair enters the centre.",
+        "section": "layout"
+      },
+      {
+        "name": "The Cinema Rule",
+        "body": "While a cutscene is running, every piece of chrome unmounts — dock, strip, notice, crosshair — so a capture is the picture and nothing else. Any new overlay must participate in that unmount, not merely fade.",
+        "section": "layout"
+      },
+      {
+        "name": "The Legibility-Over-Glass Rule",
+        "body": "Alpha and blur are functional. They lose every argument against contrast, and no value in this system is preserved for the sake of the frosted look.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Standard-Range Rule",
+        "body": "Every overlay is a descendant of .hud-layer. dynamic-range-limit inherits, which is why it is one declaration on a wrapper rather than one per overlay — and why it must never move to #root, where it would clamp the canvas along with the chrome.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Two Radii Rule",
+        "body": "0.25rem for anything you interact with, 0.5rem for anything that floats. A third radius is a new shape language.",
+        "section": "shapes"
+      },
+      {
+        "name": "The Hairline Rule",
+        "body": "Structure is drawn with 1px borders, not with fills or shadows. If two regions need separating, they get a line.",
+        "section": "shapes"
+      }
+    ],
+    "dos": [
+      "Do keep every new overlay inside .hud-layer. It is the only thing holding the interface at standard range over an extended-range canvas.",
+      "Do use tabular-nums on any figure that updates in place.",
+      "Do give every control a title that names both the action and its keyboard equivalent, and pair every clickable action with a harness verb — a panel that can reach somewhere ir.* and the headless runner cannot breaks the guarantee that anything demonstrated in the browser can be replayed in a test.",
+      "Do call blur() in click handlers. Focus belongs to the flight loop.",
+      "Do express hierarchy with the graphite grade — 200 brightest through 600 faintest — before reaching for size or weight.",
+      "Do keep disabled controls visible at 35% opacity. Their presence is information.",
+      "Do anchor new chrome to a corner at the 0.75rem inset, and unmount it while a cutscene runs."
+    ],
+    "donts": [
+      "Don't introduce a second accent or neutral family. One blue, one graphite, four status hues.",
+      "Don't move dynamic-range-limit to #root — the canvas is a sibling and would be clamped with the chrome.",
+      "Don't use two reds for one idea. Fault is rose-400; the perf chart's budget rule currently draws in #f87171 (red-400), which is existing drift and should converge on rose rather than spread.",
+      "Don't put anything but the crosshair at screen centre.",
+      "Don't set a proportional face anywhere in the dock or the strip.",
+      "Don't add shadows to create depth. There is one shadow-xl, on the dock, and hairline borders do the rest.",
+      "Don't build icon-only controls. Every control is a word.",
+      "Don't treat the cutscene overlay's blues and gold as tokens, or derive anything from public/favicon.svg — the mark is violet (#863bff / #7e14ff), shares no colour with the running interface, and is a placeholder awaiting replacement in this system's own palette.",
+      "Don't polish the dev dock toward the cockpit specified in docs/design/ux.md. It is scaffolding on purpose; the cockpit starts from the question of where an element physically sits, not from this layout."
+    ]
+  }
+}
