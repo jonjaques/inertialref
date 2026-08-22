@@ -278,14 +278,16 @@ export function createWarpEffects(hullLength: () => number): WarpEffects {
       place(wash.mesh, washAnchor.x, washAnchor.y)
       wash.mesh.scale.set(frameHeight * 4.4, frameHeight * 4.4, 1)
       /*
-       * 0.8, not 3.5. The reference's flash is not a whiteout at all: f1090,
+       * 0.38, not 3.5. The reference's flash is not a whiteout at all: f1090,
        * its brightest frame, means 95 of 255 across the whole picture — a
        * mid-blue field with a hot core, not a blown one. Driven at 3.5 every
        * channel cleared the tone curve's shoulder together and fifteen frames
-       * of the piece rendered as a white rectangle; the number that matters is
-       * the mean, and it is measurable.
+       * of the piece rendered as a white rectangle. 0.8 was still twice too
+       * hot: a captured render meant 176–186 across the peak against the
+       * reference's 81–100, which is the whole reason to measure the mean
+       * rather than look at it.
        */
-      wash.intensity.value = effects.flash * 0.8
+      wash.intensity.value = effects.flash * 0.38
       wash.tint.value.setRGB(1, 1, 1)
 
       // Nacelle anchors, projected from hull axes.
@@ -334,13 +336,20 @@ export function createWarpEffects(hullLength: () => number): WarpEffects {
         place(glow.mesh, anchor.x, anchor.y)
         // The grille glow grows with apparent hull size but is clamped: at
         // occlusion range an unclamped glow would be the whole frame.
+        /*
+         * A grille, not a lamp. The clamp used to allow a glow half the frame
+         * high, and at close range the two of them were the brightest objects
+         * in the picture — two white balls in front of a hull the reference
+         * renders as lit plating with a slim bright bar along each nacelle.
+         * Capped at a fifth of that and started smaller.
+         */
         const apparent = Math.min(
-          1.4,
+          0.42,
           (L * 0.6) / Math.max(distanceTo(camera, ship.position), 1),
         )
-        const size = frameHeight * (0.05 + apparent * 0.35)
+        const size = frameHeight * (0.025 + apparent * 0.16)
         glow.mesh.scale.set(size, size, 1)
-        glow.intensity.value = visible ? effects.nacelleGlow * 2.4 : 0
+        glow.intensity.value = visible ? effects.nacelleGlow * 1.5 : 0
         glow.tint.value.setRGB(0.5, 0.75, 1.7)
 
         place(streak.mesh, anchor.x, anchor.y)

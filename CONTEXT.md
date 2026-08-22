@@ -1329,6 +1329,62 @@ Lessons with teeth:
   behind the lens, opening to 164° by f239 where the disc is the thin crescent
   the match cut needs and the star has swung into frame beside it.
 
+## The verification loop, closed (22 Aug 2026)
+
+The reference analysis was built to be diffed against, and now it is. Three
+scripts in `~/Developer/tng-inertial/scripts/` close the loop:
+`capture_render.mjs` drives this engine over the Chrome DevTools Protocol and
+dumps 2742 frames at 1920×1080 in about five minutes, `compare_render.py`
+measures the same three channels in both dumps and ranks the disagreements, and
+`compare_sheets.py` stacks reference over render for the ones that need eyes.
+
+Two things about the capture are worth knowing before anyone rebuilds it.
+**A WebGPU canvas reads back blank**: `drawImage`/`toDataURL` from page script
+returns mean luminance 0.0 on a frame that visibly shows Saturn, because the
+swap-chain texture is invalidated at the end of the task that drew it.
+`Page.captureScreenshot` takes the composited image instead — which also picks
+up the DOM title overlay, so a canvas dump could never have been run through
+`detect_titles.py` anyway. And **a capture must boot the page itself**: a tab
+that has survived a session of hot reloads has a dead renderer, draws its HUD
+happily, and waits forever for an `engine.gl` that is not coming back.
+
+What it found, in one pass, that eyes had not:
+
+- **Every credit was exactly four frames late** — nine of them, plus five on
+  the Roddenberry card. The cause is that the reference's `firstVisibleFrame`
+  is a _threshold crossing_, not a fade start: text at RGB (64,138,230) only
+  clears the analysis's B≥195 floor at 85% opacity. `fadeEnvelope` now leads
+  the measured frame by `THRESHOLD_FRACTION`, and the lag is +1 across the
+  board. On the **rise only** — the same capture showed the trailing edges
+  already on time, and applying it symmetrically left the logotype at 70%
+  opacity nine frames after the reference had lost it.
+- **The flashes were twice as bright as measured**, again: mean 176–186 across
+  the peak against the reference's 81–100, after an earlier correction had
+  already taken them off white. The mean is the number that settles this, and
+  it is cheap to compute and impossible to eyeball.
+- **The close pass was running at 6–14 mean luminance against 40–59**, and the
+  reason was not the framing. The reference lights the hull's dorsal through
+  the approach and its _ventral_ through the close pass; one directional light
+  cannot do both. The cruise is now two shots with the key swung under the ship
+  at f938 — the first frame where the hull is wider than the lens, so the cut
+  is behind a wall of spaceship. Cruise exposure error fell from 11.0 to 4.9
+  and its width error halved.
+- **The nacelle glows were the brightest objects in the frame**, big enough to
+  carry a mean of 86 while the hull under them sat at 11. Capping them at a
+  fifth of that size revealed how dark the hull actually was, which is how the
+  lighting problem got found at all.
+- **The Venus cutaway had to go.** It stood in for the reference's f254–259
+  foreground pass, which cannot be staged on Mars's anti-sun line; the capture
+  measured it at mean 97 against the reference's 7–19 — the reference's body is
+  a dark limb, not a lit cloud deck — and a cutaway loses the eclipse pair that
+  the reference keeps on screen throughout. Seven frames of missing subject
+  reads as a glitch, not a beat.
+
+The titles and credits, meanwhile, came back at Δcx 0.008–0.021 and Δcy
+0.002–0.021 of the frame, first try. Measuring the layout against the font's
+own metrics had already done that work; the loop confirmed it rather than
+correcting it, which is what a regression check is supposed to feel like.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

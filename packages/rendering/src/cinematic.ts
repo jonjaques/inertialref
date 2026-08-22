@@ -225,19 +225,46 @@ export interface FadeWindow {
 }
 
 /**
+ * How far into its rise a fade has to be before a threshold mask can see it.
+ *
+ * The reference's `firstVisibleFrame` is not when a title starts appearing —
+ * it is when at least 800 pixels of it cross a B>=195 colour floor. Text at
+ * RGB (64,138,230) over black only clears that floor near full opacity, so a
+ * fade that *starts* on the measured frame crosses the threshold several
+ * frames late: a captured render measured exactly +4 on all nine cast credits
+ * and +5 on the Roddenberry card.
+ *
+ * The value is fitted to that lag rather than derived from the colour maths,
+ * because the mask counts *pixels* and anti-aliased edges leave the band well
+ * before the glyph interiors do. 0.72 of the rise — `smooth(0.72) = 0.809` —
+ * brings every credit to +1, which is as close as an integer frame allows.
+ */
+const THRESHOLD_FRACTION = 0.72
+
+/**
  * Opacity at `frame` for a fade-hold-fade window.
  *
  * Ramps are smoothstepped rather than linear because the measured pixel-count
  * ramps are S-shaped — a linear dissolve reads as mechanical against the
- * reference. The window degenerates gracefully: a title whose fade-out starts
- * on its last visible frame simply drops over one frame.
+ * reference.
+ *
+ * The correction is applied to the **rise only**, and that asymmetry is
+ * evidence rather than convenience. A captured render put every credit's
+ * threshold crossing exactly four frames late and none of them early on the
+ * way out, so the leading edge needed `THRESHOLD_FRACTION` and the trailing
+ * edge was already right. Applying it symmetrically instead left the main
+ * logotype at 70% opacity nine frames after the reference had lost it.
+ *
+ * The window degenerates gracefully: a title whose fade-out starts on its last
+ * visible frame simply drops over one frame.
  */
 export function fadeEnvelope(window: FadeWindow, frame: number): number {
-  if (frame < window.firstVisible || frame > window.lastVisible + 1) return 0
   const rise = Math.max(window.fullOpacity - window.firstVisible, 1e-9)
   const fall = Math.max(window.lastVisible + 1 - window.fadeOutStart, 1e-9)
+  const start = window.firstVisible - rise * THRESHOLD_FRACTION
+  if (frame < start || frame > window.lastVisible + 1) return 0
   return Math.min(
-    smooth((frame - window.firstVisible) / rise),
+    smooth((frame - start) / rise),
     smooth((window.lastVisible + 1 - frame) / fall),
   )
 }

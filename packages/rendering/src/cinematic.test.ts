@@ -84,7 +84,18 @@ describe('fadeEnvelope', () => {
   }
 
   it('is 0 outside, 1 through the hold, and continuous', () => {
-    expect(fadeEnvelope(window, 1325)).toBe(0)
+    /*
+     * `firstVisible` is a threshold crossing, not a fade start: the reference
+     * calls a title visible once its mask clears a colour floor the text only
+     * reaches near full opacity. So the ramp *begins* before it — measured
+     * against a captured render, treating the two as the same put every credit
+     * four frames late — and the assertion is that the envelope is already
+     * four-fifths up on the measured frame, and dark before the ramp.
+     */
+    expect(fadeEnvelope(window, 1321)).toBe(0)
+    expect(fadeEnvelope(window, 1326)).toBeCloseTo(0.809, 3)
+    // The trailing edge keeps the measured frame exactly: the same capture
+    // found the fades late going in and on time coming out.
     expect(fadeEnvelope(window, 1400)).toBe(0)
     expect(fadeEnvelope(window, 1332)).toBeCloseTo(1, 6)
     expect(fadeEnvelope(window, 1392)).toBeCloseTo(1, 6)
@@ -92,7 +103,7 @@ describe('fadeEnvelope', () => {
     // bound is the fade's own slope — a 6-frame smoothstep never moves faster
     // than 1.5/6 per frame.
     fc.assert(
-      fc.property(fc.double({ min: 1320, max: 1404, noNaN: true }), (f) => {
+      fc.property(fc.double({ min: 1316, max: 1404, noNaN: true }), (f) => {
         const step = 0.01
         const delta = Math.abs(
           fadeEnvelope(window, f + step) - fadeEnvelope(window, f),

@@ -54,8 +54,16 @@ describe('tng-intro timing', () => {
     const ids = ['c4', 'c5', 'c6', 'c7', 'c8', 'c9']
     grid.forEach((start, i) => {
       const id = ids[i] as string
-      // Dark just before the threshold crossing, full once the fade lands.
-      expect(opacity(at(start - 1)!, id)).toBe(0)
+      /*
+       * The grid frames are *threshold crossings*, not fade starts: the
+       * reference calls a title visible once 800 px of it clear a B>=195
+       * floor, which text at RGB (64,138,230) only does at 85% opacity. So
+       * the assertion is that the fade is 85% up on the measured frame — not
+       * that it begins there. Captured against a render, treating the two as
+       * the same put every credit exactly four frames late.
+       */
+      expect(opacity(at(start)!, id)).toBeGreaterThan(0.8)
+      expect(opacity(at(start - 6)!, id)).toBe(0)
       expect(opacity(at(start + 5)!, id)).toBeCloseTo(1, 6)
     })
   })
@@ -70,7 +78,7 @@ describe('tng-intro timing', () => {
     // Nothing before the throw; both words at full opacity while still
     // travelling — the reference's mask sees them dim and huge at f1140, not
     // faded up on their marks.
-    expect(word(1133, 'logo-star').opacity).toBe(0)
+    expect(word(1124, 'logo-star').opacity).toBe(0)
     expect(word(1142, 'logo-star').opacity).toBeGreaterThan(0.2)
     // Mid-flight: STAR is left of its mark and oversized, TREK right of its
     // own and higher. The measured block is 1.31× its settled width at f1150.
@@ -99,7 +107,12 @@ describe('tng-intro timing', () => {
       3,
     )
     // The subtitle joins late and both are gone before the fly-through wipe.
-    expect(opacity(at(1177)!, 'subtitle')).toBe(0)
+    // f1178 is its threshold crossing, so it is 85% up there and dark eight
+    // frames before — the same fade-start-versus-crossing distinction the
+    // credit grid makes. The trailing edge keeps the measured frame exactly:
+    // a capture found the fades late on the way in and on time on the way out.
+    expect(opacity(at(1170)!, 'subtitle')).toBe(0)
+    expect(opacity(at(1178)!, 'subtitle')).toBeGreaterThan(0.8)
     expect(opacity(at(1190)!, 'subtitle')).toBeCloseTo(1, 6)
     expect(opacity(at(1272)!, 'logo-star')).toBe(0)
     expect(opacity(at(1272)!, 'subtitle')).toBe(0)
@@ -330,9 +343,6 @@ describe('tng-intro camera discipline', () => {
       UV.distance(at(239)!.camera.position, at(240)!.camera.position),
     ).toBeGreaterThan(1e9)
     expect(
-      UV.distance(at(252)!.camera.position, at(253)!.camera.position),
-    ).toBeGreaterThan(1e9)
-    expect(
       UV.distance(at(1091)!.camera.position, at(1092)!.camera.position),
     ).toBeGreaterThan(1e6)
   })
@@ -351,14 +361,35 @@ describe('tng-intro camera discipline', () => {
       if (f === 0 || matched.has(f)) continue
       const before = at(f - 1)!
       const after = at(f)!
+      /*
+       * The hull covering the lens is a cover in its own right, and it is
+       * checked rather than asserted: the relight at f985 is only invisible
+       * because the ship is wider than the frame across the seam.
+       */
+      const hullCovers = [before, after].every((sample) => {
+        if (!sample.ship.visible) return false
+        const offset = Q.rotate(
+          Q.conjugate(sample.camera.orientation),
+          UV.difference(sample.ship.position, sample.camera.position),
+        )
+        const { range } = screenPositionOf(offset)
+        return (
+          apparentWidth(
+            TNG_HULL_LENGTH,
+            range,
+            TNG_LENS.fov,
+            TNG_LENS.aspect,
+          ) >= 1
+        )
+      })
       const covered =
         before.effects.blackout > 0.9 ||
         after.effects.blackout > 0.9 ||
         before.effects.flash > 0.9 ||
         after.effects.flash > 0.9 ||
-        // A body filling the frame: the veil pass, and the empty sky either
-        // side of the gas giants, which is the same trick with no light in it.
-        cut.id === 'veil' ||
+        hullCovers ||
+        // Empty sky on both sides: the same trick with no light in it, and
+        // the reason no shot detector can find these three.
         cut.id === 'jupiter' ||
         cut.id === 'saturn' ||
         cut.id === 'cruise'

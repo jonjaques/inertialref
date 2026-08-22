@@ -435,11 +435,39 @@ const SHIP_CRUISE: readonly ScreenBeat[] = [
   { frame: 856, x: 0.321, y: 0.568, range: atWidth(0.568) },
   { frame: 872, x: 0.354, y: 0.512, range: atWidth(0.695) },
   { frame: 896, x: 0.4, y: 0.43, range: atWidth(0.95) },
-  { frame: 928, x: 0.46, y: 0.38, range: atWidth(1.35) },
-  { frame: 976, x: 0.53, y: 0.5, range: atWidth(2.1) },
-  { frame: 1010, x: 0.56, y: 0.52, range: atWidth(1.3) },
-  { frame: 1045, x: 0.59, y: 0.45, range: atWidth(0.78) },
-  { frame: 1080, x: 0.617, y: 0.397, range: atWidth(0.5) },
+  /*
+   * The close pass runs far tighter than the first authoring guessed. Captured
+   * against the reference, f1005–1020 had the hull filling the frame there
+   * (measured width 1.000, mean luminance 40–45) against a render showing the
+   * whole ship at half that size and a mean of 11–14. The reference is *inside
+   * the ship's envelope* through this stretch — hull plating and window rows,
+   * not a silhouette — so the ranges close by roughly two thirds.
+   */
+  /*
+   * The hull rides LOW through the close pass, and that is a measurement
+   * before it is a lighting decision: the reference's box centre is at y 0.60
+   * at f944, 0.62 at f960 and 0.64 through f990–1000 before rising again. The
+   * first authoring had it near the frame's centre, and the two facts turn out
+   * to be one fact — a hull below the centre shows the camera its dorsal,
+   * which is the surface an overhead key lights. Riding it high showed the
+   * belly instead, and the render's mean luminance collapsed from the
+   * reference's 50–58 to 15–20 across the best hundred frames in the piece.
+   *
+   * Screen position barely tips the view angle once the hull is this close,
+   * which is worth knowing before reaching for it: at 145 metres from a
+   * 642-metre ship the camera is inside the envelope, and a mark 14 metres
+   * under the axis leaves it a tenth of a radian off the saucer's own plane —
+   * edge-on, seeing neither surface. Measured in the browser,
+   * `camOnDorsalSide` read −0.097 while the key sat a healthy 0.80 normal to
+   * the dorsal. Which face the camera sees here is settled by the *cut*, not
+   * by the framing; see `cruise-close`.
+   */
+  { frame: 928, x: 0.45, y: 0.55, range: atWidth(1.5) },
+  { frame: 960, x: 0.47, y: 0.62, range: atWidth(1.9) },
+  { frame: 990, x: 0.44, y: 0.64, range: atWidth(2.1) },
+  { frame: 1015, x: 0.46, y: 0.58, range: atWidth(1.8) },
+  { frame: 1045, x: 0.54, y: 0.46, range: atWidth(1.2) },
+  { frame: 1080, x: 0.617, y: 0.42, range: atWidth(0.62) },
   // The warp-out: hurled down its own axis under the flash.
   { frame: 1092, x: 0.63, y: 0.39, range: atWidth(0.02) },
   { frame: 1108, x: 0.64, y: 0.39, range: atWidth(0.004) },
@@ -539,9 +567,11 @@ interface FacingBeat {
 const FACING_CRUISE: readonly FacingBeat[] = [
   { frame: 676, forward: vec3(0.26, 0.02, 0.96) },
   { frame: 900, forward: vec3(0.16, -0.04, 0.98) },
-  { frame: 960, forward: vec3(-0.1, -0.45, 0.88), bankDeg: -8 },
-  { frame: 1000, forward: vec3(-0.45, -0.55, 0.15), bankDeg: -22 },
-  { frame: 1035, forward: vec3(-0.62, -0.25, -0.74), bankDeg: -14 },
+  // Nose-up through the low stretch: the hull sits below the frame's centre
+  // and pitching it down would tip the dorsal away from the lens again.
+  { frame: 960, forward: vec3(-0.1, 0.18, 0.98), bankDeg: -8 },
+  { frame: 1000, forward: vec3(-0.45, 0.1, 0.88), bankDeg: -18 },
+  { frame: 1035, forward: vec3(-0.62, -0.15, -0.77), bankDeg: -14 },
   { frame: 1120, forward: vec3(-0.6, -0.14, -0.79) },
 ]
 
@@ -575,7 +605,7 @@ const SHIP_WINDOWS: readonly (readonly [number, number])[] = [
   [1286, 1323],
   [1414, 1451],
   [1534, 1570],
-  [1758, 2414],
+  [1758, 2422],
 ]
 
 /* ------------------------------------------------------------------------- */
@@ -611,18 +641,17 @@ interface Stage {
  * tests, so a boundary cannot drift out of agreement with the assertion that
  * checks it.
  *
- * Contiguous except for `veil`, which sits inside `eclipse` and plays over it.
- * Where each cut hides: f240 is the composition-matched match cut, f253 and
- * f261 are covered by a body filling the frame, f357/f413/f532 land in empty
- * starfield, and f1092 and f2393 sit at full flash.
+ * Contiguous. Where each cut hides: f240 is the composition-matched match cut,
+ * f357/f413/f532 land in empty starfield, and f1092 and f2393 sit at full
+ * flash.
  */
 const CUTS = {
   earth: [0, 239],
   eclipse: [240, 356],
-  veil: [253, 260],
   jupiter: [357, 412],
   saturn: [413, 531],
-  cruise: [532, 1091],
+  cruise: [532, 937],
+  'cruise-close': [938, 1091],
   titles: [1092, 2392],
   'end-cards': [2393, DURATION],
 } as const satisfies Record<string, readonly [number, number]>
@@ -660,7 +689,6 @@ function buildStage(world: World): Stage {
   const mars = require('Mars')
   const jupiter = require('Jupiter')
   const saturn = require('Saturn')
-  const veilBody = byName('Venus') ?? byName('Titan') ?? earth
 
   /** A standoff in the body's own frame: distance in radii, phase, elevation. */
   const shot = (
@@ -717,9 +745,12 @@ function buildStage(world: World): Stage {
    */
   const earthPos = positionOf(earth)
   const earthShot: Shot = (() => {
-    const e125 = at(earth, earthPos, 1.22, 78, 4)
-    const e165 = at(earth, earthPos, 1.45, 92, 5)
-    const e195 = at(earth, earthPos, 2.2, 118, 6)
+    // Measured widths at f140 and f160: 0.97 and 0.93 of the frame against
+    // 0.67 and 0.54 in the first capture — the opening stood a third too far
+    // off its planet the whole way down.
+    const e125 = at(earth, earthPos, 1.1, 78, 4)
+    const e165 = at(earth, earthPos, 1.24, 92, 5)
+    const e195 = at(earth, earthPos, 1.9, 118, 6)
     const e220 = at(earth, earthPos, 3.2, 142, 6)
     const e239 = at(earth, earthPos, 4.3, 164.3, 6)
     const aimAt = (from: UniverseVector, x: number, y: number): Quat =>
@@ -869,69 +900,25 @@ function buildStage(world: World): Stage {
     }
   })()
 
-  /* -------------------- Shot: the veil pass, f253–260 -------------------- */
-
   /*
-   * The reference cuts a huge pale cloud-limb across the frame from the
-   * bottom-right at f254, filling the right half by f257 and gone by f260 —
-   * six frames of foreground world whipping past while the eclipse plays on
-   * behind it. Its own `content_val` calls it fast motion rather than a cut,
-   * so in the reference it is a body the camera genuinely passes.
+   * The reference's f254–259 foreground pass is deliberately NOT reproduced.
    *
-   * It cannot be one here, and the arithmetic says so plainly. Staged on real
-   * ephemerides the eclipse camera sits on Mars's anti-sun line at 14,600 to
-   * 71,000 km; the only bodies within reach are Phobos and Deimos, 11 km and
+   * It cuts a huge body across the frame from the bottom right while the
+   * eclipse plays on behind it, and it cannot be staged here — twice over.
+   * The geometry: the eclipse camera sits on Mars's anti-sun line at 14,600 to
+   * 71,000 km, the only bodies in reach are Phobos and Deimos at 11 km and
    * 6 km across, and a camera close enough to either for it to cover half the
-   * frame is twenty thousand kilometres off the eclipse line — which is the
-   * shot, not a detour from it. Deimos at the *nearest* the eclipse line ever
-   * allows spans 0.003 of the frame. There is no version of this that is both
-   * the reference's picture and this system's geometry.
+   * frame is twenty thousand kilometres off the line that *is* the shot.
    *
-   * So it is a cutaway: six frames over Venus's cloud limb, which is what the
-   * reference's foreground body actually looks like — pale, hazy, banded, lit
-   * hard from one side — cut in and out under the frames where a body already
-   * fills the picture. The eclipse loses its background for a quarter of a
-   * second and gets the beat back.
+   * A seven-frame cutaway to Venus's limb was tried in its place, and the
+   * capture loop is what killed it: the reference's body means 7–19 across the
+   * frame — a dark, barely-lit limb — while Venus at a lit phase came out at
+   * 97, and the reference keeps the eclipse pair on screen throughout while a
+   * cutaway by definition cannot. A cut that loses the subject for a third of
+   * a second reads as a glitch, not a beat. The eclipse now runs f240–356
+   * unbroken, which is also what the reference's own `content_val` says it is:
+   * a five-frame motion hump, not a cut.
    */
-  const veilShot: Shot = (() => {
-    const bodyPos = positionOf(veilBody)
-    // 1.16 radii: close enough that the limb is a shallow arc rather than a
-    // disc, which is the reference's read exactly. Phase 62° keeps the cloud
-    // deck lit hard from frame left with the terminator outside the shot.
-    const centre = at(veilBody, bodyPos, 1.16, 62, 5)
-    // Perpendicular to the sight line and to the pole: the body sweeps across
-    // the frame rather than looming and receding.
-    const outward = Vec.normalize(UV.difference(centre, bodyPos))
-    const across = (() => {
-      const raw = Vec.cross(POLE, outward)
-      return Vec.length(raw) > 1e-6
-        ? Vec.normalize(raw)
-        : Vec.normalize(Vec.cross(vec3(1, 0, 0), outward))
-    })()
-    const travel = veilBody.radius * 0.62
-    const step = (k: number): UniverseVector =>
-      UV.translate(centre, Vec.scale(across, k * travel))
-    // Aimed off the body so its limb runs across the lower right and the sky
-    // owns the upper left, where the reference keeps its eclipse.
-    const aim = frameTarget(
-      centre,
-      { at: bodyPos, x: 1.45, y: 1.5 },
-      FOV,
-      ASPECT,
-      POLE,
-    )
-    return {
-      id: 'veil',
-      from: CUTS.veil[0],
-      to: CUTS.veil[1],
-      camera: [
-        { frame: 252, position: step(-1.35) },
-        { frame: 257, position: step(0) },
-        { frame: 262, position: step(1.35) },
-      ],
-      aim: [{ frame: 252, orientation: aim }],
-    }
-  })()
 
   /* ------------------- Shot: the gas giants, f357–531 -------------------- */
 
@@ -987,7 +974,10 @@ function buildStage(world: World): Stage {
     // Same correction as Jupiter, one stop gentler: the reference's terminator
     // runs down x≈0.60 at f432 with the lit half to its left, which is a
     // camera near quadrature rather than over the day side.
-    const s413 = at(saturn, saturnPos, 5.2, 74, -12)
+    // Measured at f423: the reference has Saturn 0.664 of the frame wide and
+    // means 91 there, against 0.356 and 33 in the first capture — the approach
+    // was arriving half a second late. 3.4 radii rather than 5.2 at the cut.
+    const s413 = at(saturn, saturnPos, 3.4, 74, -12)
     const s432 = at(saturn, saturnPos, 1.9, 88, -30)
     const s460 = at(saturn, saturnPos, 2.6, 100, -26)
     const s500 = at(saturn, saturnPos, 6.5, 116, -30)
@@ -1033,7 +1023,31 @@ function buildStage(world: World): Stage {
    * terms put it up and to the left, which is where the reference's key
    * plainly is. The saucer's port rim is the brightest thing in f820.
    */
-  const cruiseShot: Shot = (() => {
+  /**
+   * The cruise camera, twice: once keyed over the top and once from below.
+   *
+   * The reference lights the hull's *dorsal* through the approach — f820's
+   * brightest object is the saucer's top surface — and its *ventral* through
+   * the close pass, where f960 and f990 are a lit underside with the deflector
+   * ring and the rim's window rows. One directional light cannot do both, and
+   * a captured render is what forced the issue: keyed overhead throughout, the
+   * close pass meant 6–14 against the reference's 40–59, and no amount of
+   * reframing moved it, because the problem was never the framing.
+   *
+   * So it relights, which is what the reference must itself have done. The cut
+   * sits at f938 — the first frame where the hull is wider than the lens, and
+   * the frame by which the reference has already swung its key under the
+   * ship — the same place this piece hides every other cut. Camera position and hull choreography are
+   * identical across it; only the key swings from 0.9 poleward to 0.9 the
+   * other way, and the starfield that rotates with it is behind a wall of
+   * spaceship.
+   */
+  const cruiseShot = (
+    id: string,
+    from: number,
+    to: number,
+    poleSign: number,
+  ): Shot => {
     // Well outside Saturn's system, on the far side from the Sun: nothing in
     // frame but stars, which is what the reference's cruise is.
     const anchor = at(saturn, saturnPos, 900, 150, 20)
@@ -1048,39 +1062,34 @@ function buildStage(world: World): Stage {
      * Where the star lands in the frame is `dot(toStar, up)`, and with
      * `lookAlong` levelling against the pole that works out to
      * `−dot(toStar, forward) · dot(pole, forward)` for anything near the
-     * ecliptic — a product, so *both* terms have to carry the right sign. The
-     * first version of this had the second one negative: the camera looked
-     * down-sun and slightly *downward*, which put the key 32° below the axis
-     * and lit the hull's belly through a four-hundred-frame approach in which
-     * the reference shows nothing but its brightly lit dorsal.
+     * ecliptic — a product, so *both* terms have to carry the right sign. An
+     * early version had the second one negative by accident: the camera looked
+     * down-sun and slightly downward, which put the key 32° below the axis and
+     * lit the hull's belly through a four-hundred-frame approach in which the
+     * reference shows nothing but its brightly lit dorsal.
      *
      * The bound is `dot(pole, forward)` itself, so the key goes as high as the
-     * camera is willing to look up. It has to go nearly all the way: the hull
-     * crosses the frame almost edge-on to its own saucer, so the dorsal
-     * surface — the one the reference has brightest in every frame of the
-     * approach — is seen at a grazing angle and only reads as lit if the light
-     * is close to normal to it. 0.90 poleward puts the star 60° above the view
-     * axis, well outside a 45° field, and 0.87 of full illumination on a level
-     * hull's top. At 0.58 it was 0.41, and the whole pass rendered charcoal.
+     * camera is willing to look up — or as low. 0.9 puts the star 60° off the
+     * view axis, well outside a 45° field, and 0.87 of full illumination on a
+     * level hull's facing surface.
      */
     const poleward = Vec.normalize(Vec.cross(toStar, side))
     const forward = Vec.normalize(
       Vec.add(
-        Vec.add(Vec.scale(toStar, -0.42), Vec.scale(poleward, 0.9)),
-        Vec.scale(side, -0.12),
+        Vec.add(Vec.scale(toStar, -0.42), Vec.scale(poleward, 0.9 * poleSign)),
+        Vec.scale(side, -0.12 * poleSign),
       ),
     )
-    const aim = lookAlong(forward, POLE)
     return {
-      id: 'cruise',
-      from: CUTS.cruise[0],
-      to: CUTS.cruise[1],
-      camera: [{ frame: 532, position: anchor }],
-      aim: [{ frame: 532, orientation: aim }],
+      id,
+      from,
+      to,
+      camera: [{ frame: from, position: anchor }],
+      aim: [{ frame: from, orientation: lookAlong(forward, POLE) }],
       ship: SHIP_CRUISE,
       facing: facingBeats(FACING_CRUISE),
     }
-  })()
+  }
 
   /* ------------------- Shot: the titles, f1092–2396 ---------------------- */
 
@@ -1205,10 +1214,15 @@ function buildStage(world: World): Stage {
     shots: [
       earthShot,
       eclipseShot,
-      veilShot,
       jupiterShot,
       saturnShot,
-      cruiseShot,
+      cruiseShot('cruise', CUTS.cruise[0], CUTS.cruise[1], 1),
+      cruiseShot(
+        'cruise-close',
+        CUTS['cruise-close'][0],
+        CUTS['cruise-close'][1],
+        -1,
+      ),
       titlesShot,
       endShot,
     ],
@@ -1301,10 +1315,19 @@ function effectsAt(frame: number): CinematicEffects {
     streaks,
     0.5 * smooth((frame - 2332) / 50) * (frame < 2382 ? 1 : 0),
   )
-  // The residual streak carrying the hull out of each flash.
+  /*
+   * The residual streak carrying the hull out of each flash, and it has to
+   * outlast the flash by a good margin: measured, the reference still means
+   * 10.3 at f1100 and 8.4 at f2400, where the first capture had 1.7 and 0.1.
+   * The frames after a warp-out are not empty — the ship is still leaving.
+   */
   streaks = Math.max(
     streaks,
-    0.8 * (1 - smooth((frame - 1100) / 16)) * (frame >= 1096 ? 1 : 0),
+    0.8 * (1 - smooth((frame - 1100) / 26)) * (frame >= 1096 ? 1 : 0),
+  )
+  streaks = Math.max(
+    streaks,
+    0.8 * (1 - smooth((frame - 2396) / 26)) * (frame >= 2392 ? 1 : 0),
   )
   for (const occlusion of WIPE_OCCLUSIONS)
     streaks = Math.max(streaks, 0.85 * wipeStreak(occlusion, frame))
