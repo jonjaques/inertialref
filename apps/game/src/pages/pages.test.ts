@@ -16,7 +16,7 @@ import {
   SIGN_IN,
   SIGN_UP,
 } from './paths.ts'
-import { OverlayRoutes } from './routes.tsx'
+import { OverlayRoutes } from './OverlayRoutes.tsx'
 
 /*
  * The routed dialogs, in Node, with no DOM — the same bargain `hud/hud.test.ts`

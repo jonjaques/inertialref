@@ -1,9 +1,18 @@
 import { Link, useLocation } from 'react-router'
 import { motion } from 'motion/react'
 import { Bug, ChevronLeft, SlidersHorizontal } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Separator } from '@/components/ui/separator'
+import { Toggle } from '@/components/ui/toggle'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import { FOCUS_RING, releaseFocus } from '../hud/focus.ts'
 import type { AppMode } from './paths.ts'
 import { HOME, overlayState, SETTINGS } from './paths.ts'
-import { FOCUS_RING, releaseFocus } from '../hud/focus.ts'
 
 /*
  * The one piece of chrome that is on screen in every mode.
@@ -70,50 +79,77 @@ export function ShellBar({
       )}
 
       {label.length > 0 && (
-        <span className="rounded bg-slate-800/70 px-1.5 py-px text-[10px] tracking-widest text-sky-300/80 uppercase">
+        // `rounded`, not the registry's pill: this system has two radii and a
+        // pill is neither. See `ModeLink` for the same override.
+        <Badge
+          variant="secondary"
+          className="rounded bg-slate-800/70 px-1.5 py-px font-mono text-[10px] font-normal tracking-widest text-sky-300/80 uppercase"
+        >
           {label}
-        </span>
+        </Badge>
       )}
 
-      <span className="mx-0.5 h-3.5 w-px bg-slate-800" />
+      <Separator
+        orientation="vertical"
+        className="mx-0.5 !h-3.5 bg-slate-800"
+      />
 
       {/*
-       * The debug toggle lives here rather than only on a key, because a
+       * The debug overlay lives here rather than only on a key, because a
        * keyboard shortcut nobody has been told about is a feature that does not
        * exist. It is off by default and it says its own binding in the tooltip.
+       *
+       * `Toggle`, not `Switch`, and the difference is the whole reason this bar
+       * exists in the corner nothing else claims. A switch is a 32 px track in
+       * solid `--primary`, which beside two 14 px glyphs is the loudest thing
+       * on a bar whose entire brief is three controls and no more. A toggle is
+       * an icon button that stays pressed — same `aria-pressed` semantics the
+       * hand-rolled `<button role="switch">` was reaching for, at the size the
+       * rest of the bar is drawn at.
        */}
-      <button
-        type="button"
-        role="switch"
-        aria-checked={debug}
-        aria-label="Debug overlay"
-        title="Debug overlay ( ` )"
-        onClick={(event) => {
-          releaseFocus(event)
-          onDebug(!debug)
-        }}
-        /* `size-6` — 24 px, the target minimum. A 14 px icon in `p-1` came out
-           at 22 and cleared WCAG only on the spacing exception, which is a
-           thing to rely on when there is no alternative rather than when four
-           pixels are available. */
-        className={`flex size-6 items-center justify-center rounded transition-colors ${FOCUS_RING} ${
-          debug
-            ? 'bg-sky-500/15 text-sky-200'
-            : 'text-slate-400 hover:text-sky-200'
-        }`}
-      >
-        <Bug className="size-3.5" />
-      </button>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Toggle
+            size="sm"
+            pressed={debug}
+            onPressedChange={onDebug}
+            onClick={releaseFocus}
+            aria-label="Debug overlay"
+            className={`size-6 min-w-6 rounded p-0 ${FOCUS_RING} ${
+              debug
+                ? 'bg-sky-500/15 text-sky-200 hover:bg-sky-500/25 hover:text-sky-100'
+                : 'bg-transparent text-slate-400 hover:bg-transparent hover:text-sky-200'
+            }`}
+          >
+            <Bug className="size-3.5" />
+          </Toggle>
+        </TooltipTrigger>
+        <TooltipContent className="font-mono text-[10px]">
+          Debug overlay ( ` )
+        </TooltipContent>
+      </Tooltip>
 
-      <Link
-        to={SETTINGS}
-        state={overlayState(location)}
-        aria-label="Settings"
-        title="Settings"
-        className={`flex size-6 items-center justify-center rounded text-slate-400 transition-colors hover:text-sky-200 ${FOCUS_RING}`}
-      >
-        <SlidersHorizontal className="size-3.5" />
-      </Link>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            asChild
+            variant="ghost"
+            size="icon-xs"
+            className={`text-slate-400 hover:bg-transparent hover:text-sky-200 ${FOCUS_RING}`}
+          >
+            <Link
+              to={SETTINGS}
+              state={overlayState(location)}
+              aria-label="Settings"
+            >
+              <SlidersHorizontal />
+            </Link>
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent className="font-mono text-[10px]">
+          Settings
+        </TooltipContent>
+      </Tooltip>
     </motion.div>
   )
 }

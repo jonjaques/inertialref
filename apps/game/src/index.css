@@ -15,7 +15,7 @@
  * neutral hues. Those are not this interface: `docs/design/art.md` and every
  * panel in `hud/` are slate surfaces with a single sky accent, and a Button
  * whose hover is zinc sitting next to an `Action` whose hover is sky is exactly
- * the "two overlays" drift `widgets.tsx` was written to stop.
+ * the "two overlays" drift `hud/Action.tsx` was written to stop.
  *
  * So the vocabulary is kept and the values are the palette already in use. Each
  * line names the Tailwind step it is, because that is the form the rest of the

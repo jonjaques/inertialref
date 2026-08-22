@@ -1,30 +1,11 @@
 import { useEffect } from 'react'
-import { Link } from 'react-router'
 import { motion } from 'motion/react'
-import {
-  ArrowRight,
-  Clapperboard,
-  Info,
-  LogIn,
-  Rocket,
-  SlidersHorizontal,
-  Users,
-  Wifi,
-  type LucideIcon,
-} from 'lucide-react'
+import { Info, LogIn, SlidersHorizontal } from 'lucide-react'
 import type { GameEngine } from '../engine/GameEngine.ts'
-import { FOCUS_RING } from '../hud/focus.ts'
-import { Observatory } from '../icons/index.tsx'
-import {
-  ABOUT,
-  PLANETARIUM,
-  PLAY_MULTIPLAYER,
-  PLAY_ONLINE,
-  PLAY_SOLO,
-  SETTINGS,
-  SIGN_IN,
-  CINEMA,
-} from './paths.ts'
+import { FooterLink } from './FooterLink.tsx'
+import { ModeLink } from './ModeLink.tsx'
+import { MODES } from './modes.ts'
+import { ABOUT, SETTINGS, SIGN_IN } from './paths.ts'
 
 /*
  * The front door.
@@ -44,79 +25,6 @@ import {
 
 /** Degrees per second the menu's camera drifts. A turn in about nine minutes. */
 const DRIFT_PIXELS_PER_FRAME = -0.04
-
-interface ModeCard {
-  readonly to: string
-  readonly title: string
-  readonly blurb: string
-  readonly icon: LucideIcon
-  readonly status: 'ready' | 'soon' | 'deferred'
-  readonly accent?: boolean
-}
-
-/*
- * The five modes, in the order they are worth trying.
- *
- * The planetarium leads, which is a real decision rather than an accident of
- * this being the newest thing: it is the mode that needs no explanation, works
- * on a phone, and shows the one thing that makes this project unusual — a real
- * sky, derived rather than downloaded. Flight is the game; this is the door.
- *
- * The statuses are the design bible's own legend (`docs/design/README.md`), in
- * words rather than glyphs, because a menu that quietly links to something
- * unbuilt is worse than one that says so.
- */
-const MODES: readonly ModeCard[] = [
-  {
-    to: PLANETARIUM,
-    title: 'Planetarium',
-    blurb: 'Fly the catalogue. No ship, no fuel, nowhere you cannot go.',
-    icon: Observatory,
-    status: 'ready',
-    accent: true,
-  },
-  {
-    to: PLAY_SOLO,
-    title: 'Solo',
-    blurb: 'The whole game, offline. Nothing to download, nothing to ask for.',
-    icon: Rocket,
-    status: 'ready',
-  },
-  {
-    to: CINEMA,
-    title: 'Cinema',
-    blurb: 'Scripted scenes over the live world, frame by frame.',
-    icon: Clapperboard,
-    status: 'ready',
-  },
-  {
-    to: PLAY_ONLINE,
-    title: 'Solo online',
-    blurb:
-      'The same game, connected: discovery credit, and sync across devices.',
-    icon: Wifi,
-    status: 'soon',
-  },
-  {
-    to: PLAY_MULTIPLAYER,
-    title: 'Multiplayer',
-    blurb: 'One shared, persistent galaxy. Deliberately deferred.',
-    icon: Users,
-    status: 'deferred',
-  },
-]
-
-const STATUS_LABEL: Record<ModeCard['status'], string> = {
-  ready: 'playable',
-  soon: 'designed',
-  deferred: 'deferred',
-}
-
-const STATUS_TONE: Record<ModeCard['status'], string> = {
-  ready: 'border-sky-500/40 bg-sky-500/10 text-sky-200',
-  soon: 'border-amber-500/30 bg-amber-500/10 text-amber-200/90',
-  deferred: 'border-slate-700 bg-slate-800/50 text-slate-400',
-}
 
 export function HomePage({ engine }: { engine: GameEngine }) {
   /*
@@ -210,74 +118,5 @@ export function HomePage({ engine }: { engine: GameEngine }) {
         </motion.footer>
       </div>
     </div>
-  )
-}
-
-function ModeLink({ mode }: { mode: ModeCard }) {
-  const Icon = mode.icon
-  return (
-    <Link
-      to={mode.to}
-      // The surfaces are near-opaque rather than a wash. They sit over a sunlit
-      // planet at the brightest end of the frame, and a 50% slate over that is
-      // a lighter grey than the type on it.
-      className={`group flex items-center gap-4 rounded-lg border px-4 py-3 backdrop-blur-sm transition-colors ${FOCUS_RING} ${
-        mode.accent
-          ? 'border-sky-500/40 bg-sky-950/70 hover:border-sky-400/70 hover:bg-sky-900/60'
-          : 'border-slate-700/60 bg-slate-950/80 hover:border-slate-500 hover:bg-slate-900/85'
-      }`}
-    >
-      <Icon
-        aria-hidden
-        className={`size-6 shrink-0 transition-colors ${
-          mode.accent
-            ? 'text-sky-300'
-            : 'text-slate-400 group-hover:text-sky-300'
-        }`}
-        strokeWidth={1.5}
-      />
-      <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-2">
-          <span className="text-slate-100">{mode.title}</span>
-          {/* `rounded`, not `rounded-full`: the system has two radii and a pill
-              is neither. 10px, not 9px, for the same reason — the type scale
-              bottoms out at 10 and a badge is not the place to add a step. */}
-          <span
-            className={`rounded border px-1.5 py-px font-mono text-[10px] tracking-widest uppercase ${STATUS_TONE[mode.status]}`}
-          >
-            {STATUS_LABEL[mode.status]}
-          </span>
-        </span>
-        <span className="mt-0.5 block font-mono text-[11px] leading-snug text-slate-400">
-          {mode.blurb}
-        </span>
-      </span>
-      <ArrowRight
-        aria-hidden
-        // Named properties rather than `transition-all`, which would also
-        // animate anything a future class touches — including layout.
-        className="size-4 shrink-0 -translate-x-1 text-slate-700 opacity-0 transition-[translate,color,opacity] group-hover:translate-x-0 group-hover:text-sky-300 group-hover:opacity-100"
-      />
-    </Link>
-  )
-}
-
-function FooterLink({
-  to,
-  icon: Icon,
-  label,
-}: {
-  to: string
-  icon: LucideIcon
-  label: string
-}) {
-  return (
-    <Link
-      to={to}
-      className={`flex min-h-6 items-center gap-1.5 rounded text-slate-400 transition-colors hover:text-sky-200 ${FOCUS_RING}`}
-    >
-      <Icon aria-hidden className="size-3.5" />
-      {label}
-    </Link>
   )
 }

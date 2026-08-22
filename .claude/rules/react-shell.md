@@ -50,6 +50,17 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", ADR-0011.
   about a different viewpoint from the one on screen. **No arm may depend on a later one
   resolving** — only the ship needs a player, and a cutscene sample placed below the
   missing-player return latched `engine.cinematic` for the rest of the session.
+- **One component per file.** `react/no-multi-comp` is an oxlint error. A `.tsx` that
+  exports anything besides components is a file Fast Refresh gives up on, and a full
+  reload here rebuilds the `WebGPURenderer` and loses the camera. Constants and types go
+  in a sibling `.ts` — `hud/controls.ts`, `planetarium/context.ts`, `pages/modes.ts` are
+  the pattern. Exempt: `components/ui/*.tsx`, which shadcn rewrites.
+- **Use the registry control, do not hand-roll a second one.** shadcn/ui is installed and
+  its tokens point at this palette. Two things it cannot know: a _pointer_ click hands
+  focus back to the flight loop (`hud/focus.ts`), and the accent is a material — so
+  `Button`'s `default` variant is wrong for the primary tone. `hud/Action.tsx`,
+  `hud/SwitchRow.tsx` and `hud/TransportButton.tsx` carry both; go through them.
+  `ScrollArea` is deliberately unused — its `display: table` viewport breaks `truncate`.
 - **React Compiler is on. Do not hand-write `useMemo`/`useCallback`.** The exception is a
   component that reads mutable state — an engine or a metrics buffer is a stable reference
   whose _contents_ change every frame, so the compiler renders it once and shows that

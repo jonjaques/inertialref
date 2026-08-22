@@ -2,13 +2,11 @@ import { Crosshair, Eye, Sparkles, Sun } from 'lucide-react'
 import type { DockPanelDefinition } from '../dock/panels.ts'
 import { StellarSpan } from '../icons/index.tsx'
 import type { PlanetariumContext } from './context.ts'
-import {
-  CataloguePanel,
-  ObjectPanel,
-  PresetsPanel,
-  TimePanel,
-  ViewPanel,
-} from './panels.tsx'
+import { CataloguePanel } from './CataloguePanel.tsx'
+import { ObjectPanel } from './ObjectPanel.tsx'
+import { PresetsPanel } from './PresetsPanel.tsx'
+import { TimePanel } from './TimePanel.tsx'
+import { ViewPanel } from './ViewPanel.tsx'
 
 /**
  * The panels the planetarium offers, with the zone each one belongs in.
