@@ -49,7 +49,12 @@ describe('the dev dock', () => {
           output: null,
           onCyclePreference: () => {},
         },
-        graphics: { lensFlare: true, onLensFlare: () => {} },
+        graphics: {
+          lensFlare: true,
+          onLensFlare: () => {},
+          aa: '2x' as const,
+          onAa: () => {},
+        },
         camera: { fov: 65, onFov: () => {} },
         commands: {
           togglePause: () => {},
@@ -125,7 +130,12 @@ describe('the dev dock', () => {
           output: null,
           onCyclePreference: () => {},
         },
-        graphics: { lensFlare: true, onLensFlare: () => {} },
+        graphics: {
+          lensFlare: true,
+          onLensFlare: () => {},
+          aa: '2x' as const,
+          onAa: () => {},
+        },
         camera: { fov: 65, onFov: () => {} },
         commands: {
           togglePause: () => {},
@@ -152,7 +162,12 @@ describe('the dev dock', () => {
     // toggle says off, and the slider wears the number it will write.
     const graphics = renderToStaticMarkup(
       createElement(GraphicsPanel, {
-        graphics: { lensFlare: false, onLensFlare: () => {} },
+        graphics: {
+          lensFlare: false,
+          onLensFlare: () => {},
+          aa: '2x' as const,
+          onAa: () => {},
+        },
       }),
     )
     expect(graphics).toContain('lens flare')
@@ -185,7 +200,12 @@ describe('the dev dock', () => {
           output: null,
           onCyclePreference: () => {},
         },
-        graphics: { lensFlare: true, onLensFlare: () => {} },
+        graphics: {
+          lensFlare: true,
+          onLensFlare: () => {},
+          aa: '2x' as const,
+          onAa: () => {},
+        },
         camera: { fov: 65, onFov: () => {} },
         commands: {
           togglePause: () => {},

@@ -1117,6 +1117,43 @@ backwards extension of an up-ray as meeting the ground, which zeroes the
 zenith sky from the surface; the `step(0, closest)` beside it is
 load-bearing.
 
+## A real hull, and the canvas that would not present (21 Aug 2026)
+
+The debug cone is now the fallback rather than the ship. `data/models/` holds
+glTF hulls with a manifest naming each one's file, true length and nose axis —
+built as a registry because one ship was never going to stay one ship — and
+`apps/game/src/render/shipModels.ts` loads, recentres, yaws nose-to−Z and
+scales each to true metres (the Enterprise-D is 642.5 m; render space is
+1 unit = 1 m and stays that way). The asset is “Star Trek Online | USS
+Enterprise D” by LoganRolphh, CC BY 4.0, ~50k triangles with PBR maps and
+emissive windows; provenance rides in the glTF's own `asset.extras` and in
+`data/models/LICENSE.md`. Two rules fell out of it:
+
+- **GLTFLoader is the one sanctioned crossing of the never-import-`three`
+  rule**, and only because nothing it builds reaches the renderer: every
+  classic material is rebuilt as a `MeshStandardNodeMaterial`, carrying maps,
+  factors and `KHR_materials_emissive_strength` across. The shared classes —
+  `Mesh`, `BufferGeometry`, `Texture` — are `three.core.js` either way, so
+  identity holds.
+- **The chase camera is a ratio, not a distance.** `chaseOffsetFor(length)`
+  keeps any hull subtending the same angle; the hand-tuned 14 m offset remains
+  as the debug-cone fallback. The metre/foot/inch props slide out past the
+  active hull's beam, because ±4 m from the origin is now inside the saucer.
+
+The same session killed the black-open bug for real. The earlier fix replayed
+the canvas measurement on `visibilitychange`, which cured the hidden-reload
+path and missed the other one: **the mount-time kick races
+`createRenderer`'s async device probe and `init()`, and a measurement kicked
+before R3F has a backend is lost with nothing scheduled to replay it** — a
+focused fresh load could come up 300×150 and black until a manual window
+resize. Two changes, both in `App.tsx`: the mount kick is unconditional
+(dispatching `resize` sizes the canvas even in a hidden document — verified
+live), and the renderer-ready callback kicks again one macrotask later, the
+first moment a re-measure provably cannot be too early. `setTimeout`, not
+`requestAnimationFrame`, because rAF never fires in a hidden tab and a
+background load must still size its canvas for the frame that draws when
+focused.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).
@@ -1164,7 +1201,7 @@ Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md
 - No compute passes, storage buffers or indirect draw yet: the WebGPU migration
   delivered the renderer and the HDR path, not GPU-driven terrain or culling.
 - Cold load to interactive is still unmeasured, and it is the budget most likely
-  to be missed: the bundle is 501.7 KB gzip with no code splitting.
+  to be missed: the bundle is 541.4 KB gzip with no code splitting.
 - Every performance number recorded here is from an Apple M5 in a 1000×760
   window. The target is a 2023-class laptop at 1920×1080 — roughly three times
   the pixels on a much weaker GPU — so these establish that the instrument works,

@@ -18,7 +18,13 @@ import {
   createRenderer,
   type RendererHandle,
 } from './render/createRenderer.ts'
-import type { OutputPreference, RendererDescription } from './render/output.ts'
+import {
+  type AaLevel,
+  aaAntialias,
+  aaDprFactor,
+  type OutputPreference,
+  type RendererDescription,
+} from './render/output.ts'
 import { SceneView } from './scene/SceneView.tsx'
 
 /*
@@ -103,6 +109,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    * because the frame loop reads them and must not touch React to do it.
    */
   const [lensFlare, setLensFlare] = usePersistentState('render.lensFlare', true)
+  const [aa, setAa] = usePersistentState<AaLevel>('render.aa', '2x')
   const [fov, setFov] = usePersistentState('camera.fov', DEFAULT_FOV)
   const [dynamicRangeHigh, setDynamicRangeHigh] = useState(
     () => window.matchMedia(EXTENDED_RANGE_QUERY).matches,
@@ -127,7 +134,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
   useEffect(() => watchDynamicRange(setDynamicRangeHigh), [])
 
   /*
-   * Replay the canvas measurement when the document becomes visible.
+   * Replay the canvas measurement whenever it could have been lost.
    *
    * R3F sizes its canvas from a ResizeObserver, and Chrome does not deliver
    * the *initial* observation to a hidden document — which is what this page
@@ -136,15 +143,23 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    * the canvas sits at the default 300×150 with no renderer behind it, a
    * black screen with a healthy HUD that only a manual window resize could
    * revive. The measurement hook also listens to window `resize`, so a
-   * synthetic one on return to visibility is exactly the kick it is waiting
-   * for; when the measurement already landed, re-measuring the same size is a
-   * no-op. Verified live: dispatching `resize` on the stuck page took the
-   * canvas from 300×150 to full size and built the renderer.
+   * synthetic one is exactly the kick it is waiting for; when the measurement
+   * already landed, re-measuring the same size is a no-op. Verified live:
+   * dispatching `resize` on the stuck page took the canvas from 300×150 to
+   * full size — even while the document was still hidden, which is why the
+   * kick is unconditional rather than gated on visibility.
+   *
+   * This mount-time kick is not sufficient on its own: a *focused* fresh load
+   * could still come up black until a manual resize, because the mount kick
+   * races the async renderer build — `createRenderer` awaits a device probe
+   * and `renderer.init()`, and a measurement kicked before R3F has a backend
+   * to hand it to is lost with nothing scheduled to replay it. The second
+   * kick, in the renderer-ready callback below, closes that hole at the one
+   * moment it provably cannot be too early.
    */
   useEffect(() => {
     const kick = (): void => {
-      if (document.visibilityState === 'visible')
-        window.dispatchEvent(new Event('resize'))
+      window.dispatchEvent(new Event('resize'))
     }
     kick()
     document.addEventListener('visibilitychange', kick)
@@ -176,7 +191,9 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    * releases the previous build before starting the next, which covers the
    * one real replacement path (the HDR preference remounting the canvas).
    */
-  const canvasKey = rendererKey(hdr, dynamicRangeHigh)
+  // MSAA joins the key because it is a constructor fact; the `2x`↔`4x` step
+  // only changes the drawing-buffer scale, which R3F applies live via `dpr`.
+  const canvasKey = `${rendererKey(hdr, dynamicRangeHigh)}:${aaAntialias(aa) ? 'msaa' : 'raw'}`
 
   useEffect(() => {
     // Expose the harness for the console and for automated drivers. This is the
@@ -262,16 +279,25 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
         // what the browser can output, builds a `WebGPURenderer` around the
         // answer and awaits `init()`; R3F awaits the promise, so nothing draws
         // against a half-built backend. See `render/createRenderer.ts`.
-        gl={createRenderer(hdr, (handle) => {
+        gl={createRenderer(hdr, aaAntialias(aa), (handle) => {
           renderer.current = handle
           engine.gl = handle
           setOutput(handle.description)
+          // The second half of the measurement-replay above: the backend now
+          // exists, so a re-measure cannot be lost. A macrotask rather than
+          // requestAnimationFrame, because rAF does not fire in a hidden tab
+          // and a background load must still size its canvas for the frame
+          // that draws the moment the tab is focused.
+          window.setTimeout(() => window.dispatchEvent(new Event('resize')), 0)
         })}
         // A logarithmic depth buffer makes this range workable; a linear one
         // would have no usable precision anywhere in it. The flag itself moved
         // into the factory, because it is a constructor parameter there.
         camera={{ fov: DEFAULT_FOV, near: 0.05, far: 1e10 }}
-        dpr={[1, 2]}
+        // The device ratio capped at 2, times the supersampling factor. A
+        // number rather than a range because `4x` must *raise* the buffer
+        // above the device ratio, which a clamp can only lower.
+        dpr={Math.min(window.devicePixelRatio, 2) * aaDprFactor(aa)}
         // R3F configures the renderer *after* the factory resolves and sets its
         // own tone mapping while doing so. This is where ours goes back.
         onCreated={(state) => {
@@ -314,7 +340,17 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
               flash(`hdr ${next}`)
             },
           }}
-          graphics={{ lensFlare, onLensFlare: setLensFlare }}
+          graphics={{
+            lensFlare,
+            onLensFlare: setLensFlare,
+            aa,
+            onAa: (level) => {
+              // Crossing the MSAA boundary rebuilds the renderer, so say so —
+              // the stall would otherwise read as a hang.
+              setAa(level)
+              flash(`anti-aliasing ${level}`)
+            },
+          }}
           camera={{ fov, onFov: setFov }}
           connection={connection}
           onCheckConnection={monitor.refresh}

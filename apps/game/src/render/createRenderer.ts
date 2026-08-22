@@ -96,6 +96,7 @@ let live: RendererHandle | null = null
 interface PendingBuild {
   readonly canvas: EventTarget
   readonly preference: OutputPreference
+  readonly antialias: boolean
   readonly promise: Promise<WebGPURenderer>
 }
 
@@ -104,13 +105,15 @@ let current: PendingBuild | null = null
 
 export function createRenderer(
   preference: OutputPreference,
+  antialias: boolean,
   onReady: (handle: RendererHandle) => void,
 ): (props: CanvasProps) => Promise<WebGPURenderer> {
   return ({ canvas }) => {
     if (
       current !== null &&
       current.canvas === canvas &&
-      current.preference === preference
+      current.preference === preference &&
+      current.antialias === antialias
     ) {
       // The StrictMode re-invocation. Same renderer — but this mount's
       // `onReady` still has to fire, because it closes over this render's
@@ -123,7 +126,7 @@ export function createRenderer(
     }
 
     const build = building.then(() =>
-      buildRenderer(canvas, preference, onReady),
+      buildRenderer(canvas, preference, antialias, onReady),
     )
     // Failures propagate to R3F through `build`; neither the queue nor the
     // memo may hold one, or every later attempt inherits a stale rejection.
@@ -131,7 +134,12 @@ export function createRenderer(
       () => undefined,
       () => undefined,
     )
-    const entry: PendingBuild = { canvas, preference, promise: build }
+    const entry: PendingBuild = {
+      canvas,
+      preference,
+      antialias,
+      promise: build,
+    }
     current = entry
     build.catch(() => {
       if (current === entry) current = null
@@ -143,6 +151,7 @@ export function createRenderer(
 async function buildRenderer(
   canvas: CanvasProps['canvas'],
   preference: OutputPreference,
+  antialias: boolean,
   onReady: (handle: RendererHandle) => void,
 ): Promise<WebGPURenderer> {
   // Before anything else. Two renderers on one canvas is a killed tab.
@@ -155,7 +164,10 @@ async function buildRenderer(
 
   const renderer = new WebGPURenderer({
     canvas: surface,
-    antialias: true,
+    // MSAA is a constructor fact like `outputType`: on WebGPU it is samples 4
+    // or nothing (the spec allows no 2×), and changing it remounts the canvas
+    // through the same `<Canvas key>` the HDR preference uses.
+    antialias,
     // Twenty orders of magnitude of depth in one scene. A linear buffer
     // z-fights everywhere in that range and this costs one fragment shader
     // instruction. Reversed-Z is complementary and is a separate change.
@@ -218,6 +230,7 @@ async function buildRenderer(
     output: mode,
     headroom,
     preference,
+    antialias,
     dynamicRangeHigh: capability.dynamicRangeHigh,
     extendedCanvas: capability.extendedCanvas,
   })

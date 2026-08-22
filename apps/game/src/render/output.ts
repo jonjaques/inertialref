@@ -78,6 +78,27 @@ export function headroomFor(mode: OutputMode): number {
   return mode === 'extended' ? EXTENDED_HEADROOM : 1
 }
 
+/**
+ * The anti-aliasing detents the graphics panel offers.
+ *
+ * Three quality steps, not three sample counts, because WebGPU only supports
+ * MSAA of 1 or 4 — a literal 2× does not exist on the backend this renderer
+ * is for. So: `off` is a raw buffer, `2x` is hardware MSAA (the default, and
+ * exactly what the renderer always did), and `4x` keeps MSAA and doubles the
+ * drawing-buffer resolution on each axis — supersampling, which is what
+ * catches the shader aliasing MSAA cannot (emissive windows shimmering on a
+ * distant hull), at four times the pixels.
+ */
+export type AaLevel = 'off' | '2x' | '4x'
+
+export const AA_LEVELS: readonly AaLevel[] = ['off', '2x', '4x']
+
+/** Whether the canvas is built with MSAA. A constructor fact, like HDR. */
+export const aaAntialias = (level: AaLevel): boolean => level !== 'off'
+
+/** Multiplier on the device pixel ratio for the drawing buffer. */
+export const aaDprFactor = (level: AaLevel): number => (level === '4x' ? 2 : 1)
+
 /** What the renderer ended up as, for the HUD and for `ir.status()`. */
 export interface RendererDescription {
   readonly backend: 'webgpu' | 'webgl'
