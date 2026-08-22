@@ -1,10 +1,5 @@
-import {
-  Quaternion as Q,
-  type Quat,
-  Vec,
-  type Vec3,
-  vec3,
-} from '@inertialref/spatial'
+import { type Quat, Vec, type Vec3, vec3 } from '@inertialref/spatial'
+import { lookAlong } from '@inertialref/rendering'
 
 /*
  * Camera bookmarks: named, repeatable compositions of a body.
@@ -254,23 +249,10 @@ function aimPoint(
   )
 }
 
-/**
- * The orientation whose −Z is `forward` and whose +Y leans towards `upHint`.
- *
- * `Q.fromUnitVectors` alone leaves the roll wherever the shortest arc dropped
- * it, which for a composition is the one degree of freedom that matters most —
- * a tilted horizon reads as an error before anything else in the frame does.
+/*
+ * `lookAlong` moved to `@inertialref/rendering`'s cinematic module — the
+ * scripted-scene evaluator needs it and the layering only allows the import in
+ * that direction. Re-exported here because it is part of this module's public
+ * face and every existing caller reads naturally at this address.
  */
-export function lookAlong(forward: Vec3, upHint: Vec3): Quat {
-  const back = Vec.negate(Vec.normalize(forward))
-  let right = Vec.cross(upHint, back)
-  // Aiming straight along the hint (a nadir shot) leaves no horizon to level;
-  // any perpendicular is as level as any other.
-  if (Vec.length(right) < 1e-6) {
-    const fallback = Math.abs(back.y) < 0.9 ? vec3(0, 1, 0) : vec3(1, 0, 0)
-    right = Vec.cross(fallback, back)
-  }
-  const x = Vec.normalize(right)
-  const y = Vec.cross(back, x)
-  return Q.fromBasis(x, y, back)
-}
+export { lookAlong }

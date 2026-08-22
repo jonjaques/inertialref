@@ -1,9 +1,13 @@
 import { getLogger, LIGHT_YEAR, type Seconds } from '@inertialref/shared'
 import { formatSeed } from '@inertialref/procedural'
 import {
+  orientationToRenderSpace,
+  type Quat,
   type RenderOrigin,
+  toRenderSpace,
   UV,
   type UniverseVector,
+  type Vec3,
   vec3,
 } from '@inertialref/spatial'
 import {
@@ -21,6 +25,9 @@ import {
 } from '@inertialref/universe'
 import {
   buildScene,
+  type CinematicEffects,
+  type CinematicTextState,
+  NO_EFFECTS,
   originForCamera,
   type RenderScene,
 } from '@inertialref/rendering'
@@ -77,6 +84,29 @@ const EMPTY_STAR_FIELD: StarField = {
 
 /** How far the player must move before the starfield is surveyed again. */
 const STARFIELD_HYSTERESIS = 8 * LIGHT_YEAR
+
+/**
+ * A cutscene frame, converted to render space for the scene components.
+ *
+ * `texts` and `effects` pass through untouched — they are screen-space — and
+ * `NO_EFFECTS` is re-exported beside this so the effects layer has a stable
+ * "dormant" value to compare against rather than allocating one per frame.
+ */
+export interface CinematicView {
+  readonly frame: number
+  readonly fov: number
+  readonly camera: { readonly position: Vec3; readonly orientation: Quat }
+  readonly ship: {
+    readonly position: Vec3
+    readonly orientation: Quat
+    readonly visible: boolean
+  }
+  readonly texts: readonly CinematicTextState[]
+  readonly effects: CinematicEffects
+}
+
+export { NO_EFFECTS }
+export type { CinematicEffects, CinematicTextState }
 
 export interface StarField {
   readonly positions: readonly UniverseVector[]
@@ -196,6 +226,29 @@ export class GameEngine implements PresentationHost {
    * Null means the debug cone is standing in.
    */
   hull: LoadedShip | null = null
+
+  /*
+   * The frame's cinematic state, in render space, when a cutscene is playing.
+   *
+   * The director (in devtools) speaks universe coordinates; this is its output
+   * converted through the frame's origin, ready for the scene components to
+   * copy onto objects. On the engine rather than in any module for the same
+   * reason `hull` is: `CameraRig`, `ShipModel`, the effects layer and the DOM
+   * overlay all read it every frame, and module state in an edited render file
+   * silently resets under Fast Refresh. `null` means no cutscene — the whole
+   * system dormant, which is the normal state of the game.
+   */
+  cinematic: CinematicView | null = null
+
+  /**
+   * URL of an audio track the cutscene overlay should sync to the playhead.
+   *
+   * The reference edit is timed against a piece of music this repository does
+   * not carry. Set from the console (`engine.cutsceneAudio = '/tng-intro.m4a'`
+   * after dropping a local file into `apps/game/public/`) and the overlay
+   * keeps the element within a lip-sync tolerance of the reference clock.
+   */
+  cutsceneAudio: string | null = null
 
   #scene: RenderScene | null = null
   #frameMs = 16
@@ -373,8 +426,48 @@ export class GameEngine implements PresentationHost {
     const camera = shot.entities.find((entity) => entity.id === player)
     if (camera === undefined) return
 
-    this.origin = originForCamera(this.origin, camera.position)
-    this.#scene = buildScene(shot, this.origin, player)
+    /*
+     * The cutscene director's per-frame ask, against `renderTime` so a paused
+     * or stepped clock gives frame-exact stills. Everything downstream — the
+     * origin, the scene build, terrain, the star survey — follows the
+     * *cinematic* eye when there is one: the origin must stay within its
+     * rebase window of wherever the camera actually is, and a scene built
+     * around a ship an AU behind the shot would light and sort for nobody.
+     */
+    const cinematic = this.harness.cutsceneSample(shot.renderTime)
+    const eye = cinematic === null ? camera.position : cinematic.camera.position
+
+    this.origin = originForCamera(this.origin, eye)
+    this.#scene = buildScene(
+      shot,
+      this.origin,
+      player,
+      cinematic === null ? undefined : cinematic.camera,
+    )
+    this.cinematic =
+      cinematic === null
+        ? null
+        : {
+            frame: cinematic.frame,
+            fov: cinematic.fov,
+            camera: {
+              position: toRenderSpace(this.origin, cinematic.camera.position),
+              orientation: orientationToRenderSpace(
+                this.origin,
+                cinematic.camera.orientation,
+              ),
+            },
+            ship: {
+              position: toRenderSpace(this.origin, cinematic.ship.position),
+              orientation: orientationToRenderSpace(
+                this.origin,
+                cinematic.ship.orientation,
+              ),
+              visible: cinematic.ship.visible,
+            },
+            texts: cinematic.texts,
+            effects: cinematic.effects,
+          }
 
     const surfaceBody = this.#scene.terrainCandidates[0] ?? null
     // `shot.renderTime`, not the clock: the snapshot presents the world one tick
@@ -383,12 +476,12 @@ export class GameEngine implements PresentationHost {
     this.terrain.update(
       this.world,
       shot.renderTime,
-      camera.position,
+      eye,
       this.origin,
       surfaceBody?.address ?? null,
     )
 
-    this.#maybeSurveyStars(camera.position)
+    this.#maybeSurveyStars(eye)
   }
 
   /**

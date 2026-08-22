@@ -39,3 +39,23 @@ canvas {
 .hud-layer {
   dynamic-range-limit: standard;
 }
+
+/*
+ * The cutscene overlay's typefaces, from `design/fonts` (converted to WOFF2 —
+ * `woff2_compress`, Homebrew). Two faces because the reference uses two: a
+ * display face for the main logotype and an italic face for every credit line.
+ * `font-display: block` rather than `swap`, deliberately — the first title
+ * appears mid-scene, so there is time to load, and a system-font flash inside
+ * a title sequence is worse than a beat of blank.
+ */
+@font-face {
+  font-family: 'TNG Title';
+  src: url('./assets/fonts/TNG_Title.woff2') format('woff2');
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'TNG Credits';
+  src: url('./assets/fonts/TNG_Credits.woff2') format('woff2');
+  font-display: block;
+}

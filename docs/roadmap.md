@@ -271,13 +271,13 @@ recover it. The budget is 900 KB gzip with splitting, so this is inside it.
 
 ## Automation gaps
 
-| Gap                             | Note                                                                                                   |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| ~~No CI configuration~~ ✅      | `.github/workflows/check.yml` runs `pnpm check` and the capability self-test on every pull request     |
-| No formatter                    | oxlint only; no prettier or dprint. Deliberate so far, but a formatter is cheap consistency            |
-| No stored save fixture          | Compatibility testing currently synthesises old saves in-test rather than loading a real one from disk |
-| No performance regression tests | See above                                                                                              |
-| No visual regression testing    | Would need a GPU in CI; the harness's structured output covers more than screenshots would             |
+| Gap                             | Note                                                                                                                                                                                                    |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ~~No CI configuration~~ ✅      | `.github/workflows/check.yml` runs `pnpm check` and the capability self-test on every pull request                                                                                                      |
+| No formatter                    | oxlint only; no prettier or dprint. Deliberate so far, but a formatter is cheap consistency                                                                                                             |
+| No stored save fixture          | Compatibility testing currently synthesises old saves in-test rather than loading a real one from disk                                                                                                  |
+| No performance regression tests | See above                                                                                                                                                                                               |
+| No visual regression testing    | The seam now exists: the `tng-intro` cutscene (ADR-0010) is frame-seekable against a frame-analysed reference edit, so render → dump → re-measure → diff is a script away. Would still need a GPU in CI |
 
 ---
 

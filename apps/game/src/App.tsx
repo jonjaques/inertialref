@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { HarnessStatus } from '@inertialref/devtools'
 import type { StarCatalog } from '@inertialref/universe'
 import { DEFAULT_FOV, GameEngine } from './engine/GameEngine.ts'
+import { CutsceneOverlay } from './hud/CutsceneOverlay.tsx'
 import { FlightStrip } from './hud/FlightStrip.tsx'
 import { HudDock, type HudCommands, type HudTab } from './hud/HudDock.tsx'
 import { usePersistentState } from './hud/panelState.ts'
@@ -13,6 +14,7 @@ import {
   DISCONNECTED,
 } from './net/health.ts'
 import { EXTENDED_RANGE_QUERY, watchDynamicRange } from './render/capability.ts'
+import { watchPresentation } from './render/presentationWatchdog.ts'
 import {
   commitToneCurve,
   createRenderer,
@@ -86,6 +88,15 @@ function rendererKey(
 export default function App({ catalog }: { catalog: StarCatalog }) {
   const engine = engineInstance(catalog)
   const [status, setStatus] = useState<HarnessStatus | null>(null)
+  /*
+   * Whether a cutscene is playing, at panel rate. Only the *chrome* hangs off
+   * this — the dock, the flight strip, the crosshair all step out of the
+   * frame so a capture is the picture and nothing else. The scene itself
+   * reads `engine.cinematic` directly every frame; this state exists because
+   * React needs a re-render to unmount chrome, and 8 Hz is fast enough for a
+   * thing a human just clicked.
+   */
+  const [cinema, setCinema] = useState(false)
   const [dockOpen, setDockOpen] = usePersistentState('dock.open', true)
   const [tab, setTab] = usePersistentState<HudTab>('dock.tab', 'navigate')
   const [notice, setNotice] = useState<string | null>(null)
@@ -128,6 +139,14 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
   // The renderer itself, for the one thing that has to happen to it after R3F
   // has finished configuring it. Not state: nothing renders differently for it.
   const renderer = useRef<RendererHandle | null>(null)
+  /*
+   * Bumped by the presentation watchdog's last rung, and by nothing else. In
+   * the deepest boot wedge — draws submitted every frame, presentation stuck,
+   * immune even to real resizes — the only recovery is a fresh canvas and
+   * renderer, and folding this into `canvasKey` is the sanctioned way to get
+   * one. See `render/presentationWatchdog.ts` for the measurements.
+   */
+  const [canvasEpoch, setCanvasEpoch] = useState(0)
 
   // The media query is live: a window can be dragged from an EDR display to one
   // without, and reading it once at startup gets that permanently wrong.
@@ -193,7 +212,26 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    */
   // MSAA joins the key because it is a constructor fact; the `2x`↔`4x` step
   // only changes the drawing-buffer scale, which R3F applies live via `dpr`.
-  const canvasKey = `${rendererKey(hdr, dynamicRangeHigh)}:${aaAntialias(aa) ? 'msaa' : 'raw'}`
+  // The watchdog epoch joins it so the last recovery rung can rebuild.
+  const canvasKey = `${rendererKey(hdr, dynamicRangeHigh)}:${aaAntialias(aa) ? 'msaa' : 'raw'}:${canvasEpoch}`
+
+  /*
+   * Verify that boot actually put pixels on screen, and climb the recovery
+   * ladder if it did not. Keyed on `output` because sampling before the
+   * renderer exists proves nothing, and on `canvasEpoch` so a rebuilt canvas
+   * gets its own verification pass — with the remount lever withheld the
+   * second time, or a genuinely black scene would rebuild forever.
+   */
+  useEffect(() => {
+    if (output === null) return
+    const canvas = renderer.current?.renderer.domElement
+    if (canvas === undefined) return
+    const watch = watchPresentation(canvas, {
+      allowRemount: canvasEpoch === 0,
+      remount: () => setCanvasEpoch((epoch) => epoch + 1),
+    })
+    return () => watch.cancel()
+  }, [output, canvasEpoch])
 
   useEffect(() => {
     // Expose the harness for the console and for automated drivers. This is the
@@ -208,10 +246,10 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
       '— harness ready. Try ir.help()',
     )
 
-    const timer = window.setInterval(
-      () => setStatus(engine.harness.status()),
-      1000 / PANEL_HZ,
-    )
+    const timer = window.setInterval(() => {
+      setStatus(engine.harness.status())
+      setCinema(engine.cinematic !== null)
+    }, 1000 / PANEL_HZ)
     return () => window.clearInterval(timer)
   }, [engine])
 
@@ -323,55 +361,64 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
        * canvas is a sibling and would be clamped with it.
        */}
       <div className="hud-layer pointer-events-none absolute inset-0">
-        <HudDock
-          engine={engine}
-          status={status}
-          render={{
-            preference: hdr,
-            output,
-            onCyclePreference: () => {
-              const next =
-                HDR_STATES[(HDR_STATES.indexOf(hdr) + 1) % HDR_STATES.length] ??
-                'auto'
-              // The renderer is rebuilt for this, so say what happened —
-              // otherwise the only feedback is a frame the player may not be
-              // able to see the difference in, which is the whole problem.
-              setHdr(next)
-              flash(`hdr ${next}`)
-            },
-          }}
-          graphics={{
-            lensFlare,
-            onLensFlare: setLensFlare,
-            aa,
-            onAa: (level) => {
-              // Crossing the MSAA boundary rebuilds the renderer, so say so —
-              // the stall would otherwise read as a hang.
-              setAa(level)
-              flash(`anti-aliasing ${level}`)
-            },
-          }}
-          camera={{ fov, onFov: setFov }}
-          connection={connection}
-          onCheckConnection={monitor.refresh}
-          open={dockOpen}
-          onOpenChange={setDockOpen}
-          tab={tab}
-          onTabChange={setTab}
-          commands={commands}
-          onNotice={flash}
-        />
-        <FlightStrip status={status} />
+        {/* Renders nothing at all when no cutscene is running. While one is,
+            every other piece of chrome below unmounts — Esc skips, and the
+            dock comes straight back. */}
+        <CutsceneOverlay engine={engine} />
+        {!cinema && (
+          <HudDock
+            engine={engine}
+            status={status}
+            render={{
+              preference: hdr,
+              output,
+              onCyclePreference: () => {
+                const next =
+                  HDR_STATES[
+                    (HDR_STATES.indexOf(hdr) + 1) % HDR_STATES.length
+                  ] ?? 'auto'
+                // The renderer is rebuilt for this, so say what happened —
+                // otherwise the only feedback is a frame the player may not be
+                // able to see the difference in, which is the whole problem.
+                setHdr(next)
+                flash(`hdr ${next}`)
+              },
+            }}
+            graphics={{
+              lensFlare,
+              onLensFlare: setLensFlare,
+              aa,
+              onAa: (level) => {
+                // Crossing the MSAA boundary rebuilds the renderer, so say so —
+                // the stall would otherwise read as a hang.
+                setAa(level)
+                flash(`anti-aliasing ${level}`)
+              },
+            }}
+            camera={{ fov, onFov: setFov }}
+            connection={connection}
+            onCheckConnection={monitor.refresh}
+            open={dockOpen}
+            onOpenChange={setDockOpen}
+            tab={tab}
+            onTabChange={setTab}
+            commands={commands}
+            onNotice={flash}
+          />
+        )}
+        {!cinema && <FlightStrip status={status} />}
 
-        {notice !== null && (
+        {!cinema && notice !== null && (
           <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded bg-sky-500/20 px-3 py-1 font-mono text-xs text-sky-200">
             {notice}
           </div>
         )}
 
-        <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-          <div className="h-4 w-4 rounded-full border border-sky-300/40" />
-        </div>
+        {!cinema && (
+          <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+            <div className="h-4 w-4 rounded-full border border-sky-300/40" />
+          </div>
+        )}
       </div>
     </div>
   )

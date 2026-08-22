@@ -190,6 +190,9 @@ ir.face(address) / ir.burnToward(address)
 ir.save() / ir.load(text)
 await ir.selfTest() // the twelve capabilities
 await ir.scenario('surface') // orbit | approach | surface | interstellar
+ir.play('tng-intro') // a scripted scene; Esc skips, the ship comes back
+ir.pause()
+ir.seekCutscene(1150) // frame-exact stills against a reference edit
 ```
 
 **Start with `ir.targets()`.** Every other verb takes an address and none of
@@ -212,6 +215,37 @@ so anything you can do by clicking is reproducible in a test.
 **Look at the perf tab before optimising anything, and before believing a
 performance claim in a design document.** The first thing it found was that time
 warp had never worked above 5×.
+
+### Scripted scenes (the cutscene director)
+
+The engine plays authored scenes over the live world — ADR-0010 is the
+contract, and the trail for anyone extending it runs:
+
+- **Pure arithmetic** in `packages/rendering/src/cinematic.ts` — easings, fade
+  envelopes, camera routes, composition solvers. Property-tested in Node.
+- **Director and scripts** in `packages/devtools/src/cutscene.ts` and
+  `cutscenes/` — a script's `prepare(world)` resolves the stage once, its
+  `sample(frame)` is pure, and time derives from `renderTime`, never a wall
+  clock. A new scene is a new file exporting a `CutsceneScript`; add it to the
+  registry in `harness.ts`.
+- **Application** in `apps/game` — `engine.cinematic` (render-space, on the
+  engine singleton for the HMR reason `hull` documents), the warp-effects
+  quads, the DOM title overlay, and the dock's cutscene section.
+- **The proving scene** (`tng-intro`) is timed against a frame-analysed
+  reference edit that lives outside this repository in `~/Developer/tng-inertial`
+  — `analysis/timeline.json` is the measured spec, `data/frames/` the
+  per-frame imagery — and its measured numbers (credit grid, fade windows, the
+  locked camera, the flash envelope) are regression tests in
+  `cutscene.test.ts`. Change those numbers only to make the recreation _more_
+  faithful, and say so.
+- **Hard-won authoring rules** are in CONTEXT.md § "The cinematic director":
+  camera-relative choreography is offset beats, never absolute beats off a
+  moving camera; never per-frame look-at a hull near the lens; light is
+  staging; whiteouts are honest scene changes. Reread that section before
+  authoring a second scene.
+- The reference audio and any full-sequence render carry third-party rights —
+  the audio path is gitignored on purpose, and publishing a render needs a
+  rights check first.
 
 One gotcha when driving a browser: Chrome throttles `requestAnimationFrame` in
 backgrounded tabs, so a freshly reloaded page that is not focused sits at tick 0

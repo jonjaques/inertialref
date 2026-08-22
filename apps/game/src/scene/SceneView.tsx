@@ -38,6 +38,7 @@ import {
 } from '../render/planet.ts'
 import { scatteringFor } from '../render/atmosphereLuts.ts'
 import { createLensFlare } from '../render/flare.ts'
+import { createWarpEffects } from '../render/warpEffects.ts'
 import { type FlareOccluder, sunVisibility } from '../render/flareMath.ts'
 import { texturesFor } from '../render/planetTextures.ts'
 import { proceduralRingStrip } from '../render/proceduralRings.ts'
@@ -102,8 +103,29 @@ export function SceneView({ engine }: { engine: GameEngine }) {
       <SunFlare engine={engine} />
       <ShipModel engine={engine} />
       <NearFieldProps engine={engine} />
+      <WarpFx engine={engine} />
     </>
   )
+}
+
+/**
+ * The cutscene's warp streaks, nacelle glow, flash wash and motion smear —
+ * dormant (one visibility check per frame) unless a cutscene is playing.
+ * Camera-space quads on the flare's pattern; see `render/warpEffects.ts`.
+ */
+function WarpFx({ engine }: { engine: GameEngine }) {
+  const camera = useThree((state) => state.camera)
+  // Same memo-without-dispose shape as SunFlare, same StrictMode reason.
+  const fx = useMemo(
+    () => createWarpEffects(() => engine.hull?.lengthMetres ?? 6),
+    [engine],
+  )
+
+  useFrame(() => {
+    fx.update(camera as PerspectiveCamera, engine.cinematic)
+  })
+
+  return <primitive object={fx.group} />
 }
 
 /**
@@ -188,14 +210,22 @@ function CameraRig({ engine }: { engine: GameEngine }) {
     const scene = engine.scene()
     if (scene === null) return
 
+    // The cutscene owns the whole pose when one is playing: its camera is the
+    // scene's eye already (`buildScene` was handed the same pose), so the
+    // chase offset must not be applied on top — the director frames shots,
+    // not chase views. The flight FOV yields to the script's lens the same
+    // way, and both come back the moment `cinematic` returns to null.
+    const cinematic = engine.cinematic
+
     // The camera panel's field of view, applied here rather than pushed at
     // the camera from React: the canvas remounts on an HDR change and R3F
     // builds a fresh camera, so the engine's value is the durable one and
     // this is the only place that writes it. Guarded, because
     // `updateProjectionMatrix` every frame is waste.
+    const fov = cinematic === null ? engine.fov : cinematic.fov
     const perspective = camera as PerspectiveCamera
-    if (perspective.isPerspectiveCamera && perspective.fov !== engine.fov) {
-      perspective.fov = engine.fov
+    if (perspective.isPerspectiveCamera && perspective.fov !== fov) {
+      perspective.fov = fov
       perspective.updateProjectionMatrix()
     }
 
@@ -212,12 +242,15 @@ function CameraRig({ engine }: { engine: GameEngine }) {
     // The offset scales with the modelled hull once one is mounted; the
     // hand-tuned 6 m default covers the debug cone. `engine.hull` rather than
     // anything module-scoped here — see the field's comment in `GameEngine`.
-    const eye = chaseCameraPosition(
-      scene,
-      engine.hull === null
-        ? undefined
-        : chaseOffsetFor(engine.hull.lengthMetres),
-    )
+    const eye =
+      cinematic === null
+        ? chaseCameraPosition(
+            scene,
+            engine.hull === null
+              ? undefined
+              : chaseOffsetFor(engine.hull.lengthMetres),
+          )
+        : cinematic.camera.position
     camera.position.set(eye.x, eye.y, eye.z)
     camera.updateMatrixWorld()
 
@@ -1105,6 +1138,28 @@ function ShipModel({ engine }: { engine: GameEngine }) {
   useFrame(() => {
     const scene = engine.scene()
     if (scene === null || group.current === null) return
+
+    // A playing cutscene borrows the hull as its hero prop: the director says
+    // where it is and whether it is on stage at all, and the entity underneath
+    // — still simulating, chase-framed, wherever the player left it — is not
+    // drawn until the scene hands everything back.
+    const cinematic = engine.cinematic
+    if (cinematic !== null) {
+      group.current.visible = cinematic.ship.visible
+      group.current.position.set(
+        cinematic.ship.position.x,
+        cinematic.ship.position.y,
+        cinematic.ship.position.z,
+      )
+      group.current.quaternion.set(
+        cinematic.ship.orientation.x,
+        cinematic.ship.orientation.y,
+        cinematic.ship.orientation.z,
+        cinematic.ship.orientation.w,
+      )
+      return
+    }
+
     group.current.visible = engine.showShip
     const ship = scene.entities.find((entity) => entity.isCamera)
     if (ship === undefined) return
@@ -1161,8 +1216,9 @@ function NearFieldProps({ engine }: { engine: GameEngine }) {
     const scene = engine.scene()
     if (scene === null || group.current === null) return
     // The props ride the same toggle as the ship: both are debug hardware, and
-    // a bookmarked composition wants neither in the middle of it.
-    group.current.visible = engine.showShip
+    // a bookmarked composition wants neither in the middle of it. A cutscene
+    // wants them even less — a metre cube beside a 642 m hero hull is a gag.
+    group.current.visible = engine.showShip && engine.cinematic === null
     // ±4 m from the origin was beside the debug cone; inside a modelled hull
     // it is somewhere in the saucer's wiring. Slide the rack out past the
     // starboard beam so the cubes stay inspectable next to the hull.

@@ -268,6 +268,34 @@ export function NavPanel({
         </div>
       </Section>
 
+      <Section id="nav.cutscenes" title="cutscenes">
+        {/*
+         * Scripted scenes: `ir.play(id)` with a button per script, and a stop
+         * that is safe to press at any time. The game never plays one on its
+         * own — this section and the console are the only ways in — and Esc
+         * skips a running scene, restoring the ship where it was.
+         */}
+        <div className="flex flex-wrap gap-1">
+          {engine.harness.cutscenes().map(({ id, description, seconds }) => (
+            <Action
+              key={id}
+              label={`▶ ${id}`}
+              title={`${description} — ${Math.round(seconds)} s. Esc skips.`}
+              onClick={() =>
+                run(`playing ${id}`, () => engine.harness.play(id))
+              }
+            />
+          ))}
+          <Action
+            label="stop"
+            title="Stop the running cutscene and restore the ship"
+            onClick={() =>
+              run('cutscene stopped', () => engine.harness.stopCutscene())
+            }
+          />
+        </div>
+      </Section>
+
       <Section id="nav.scenarios" title="scenarios">
         <div className="flex flex-wrap gap-1">
           {engine.harness.scenarios().map((name) => (

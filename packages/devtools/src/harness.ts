@@ -68,6 +68,9 @@ import {
   viewingAltitudeKm,
 } from './travel.ts'
 import { findShot, placeShot, SHOTS } from './shots.ts'
+import { CutsceneDirector, type CutsceneStatus } from './cutscene.ts'
+import { TNG_INTRO } from './cutscenes/tngIntro.ts'
+import type { CinematicSample } from '@inertialref/rendering'
 
 /*
  * The scriptable harness.
@@ -155,9 +158,11 @@ const log = getLogger('devtools.harness')
 export class GameHarness {
   readonly #host: HarnessHost
   readonly #logSink = new RingBufferSink(256)
+  readonly #cutscenes: CutsceneDirector
 
   constructor(host: HarnessHost) {
     this.#host = host
+    this.#cutscenes = new CutsceneDirector(host, [TNG_INTRO])
     logHub.addSink(this.#logSink)
   }
 
@@ -796,6 +801,52 @@ export class GameHarness {
     return ['orbit', 'approach', 'surface', 'interstellar']
   }
 
+  /* --------------------------------------------------------------------- */
+  /* Cutscenes                                                              */
+  /* --------------------------------------------------------------------- */
+
+  /**
+   * Play a scripted scene. Presentation only: the camera and the hero hull
+   * follow the script while the world keeps ticking, and stopping — or the
+   * script ending — restores the player's captured state, clock settings
+   * included. The game boots exactly as it always did; this runs only when
+   * asked to, from the dock's cutscene section or here.
+   */
+  play(id = 'tng-intro'): CutsceneStatus {
+    return this.#cutscenes.play(id)
+  }
+
+  /** Stop the running cutscene and restore the player. Safe when idle. */
+  stopCutscene(): void {
+    this.#cutscenes.stop()
+  }
+
+  /**
+   * Jump the playhead to a reference frame. Pause first for a frame-exact
+   * still — that pairing is the verification pipeline's capture loop.
+   */
+  seekCutscene(frame: number): CutsceneStatus {
+    return this.#cutscenes.seek(frame)
+  }
+
+  /** The scripted scenes `play` accepts, described. */
+  cutscenes(): readonly { id: string; description: string; seconds: number }[] {
+    return this.#cutscenes.list()
+  }
+
+  /** The running cutscene's playhead, or null when idle. */
+  cutsceneStatus(): CutsceneStatus | null {
+    return this.#cutscenes.status()
+  }
+
+  /**
+   * The frame's cinematic state, for the rendering host. Called once per
+   * rendered frame with the snapshot's `renderTime`; null when idle.
+   */
+  cutsceneSample(renderTime: number): CinematicSample | null {
+    return this.#cutscenes.sample(renderTime)
+  }
+
   /** Text help, so the console is discoverable without reading this file. */
   help(): string {
     return [
@@ -819,6 +870,11 @@ export class GameHarness {
       '  ir.save() / ir.load(text)',
       '  await ir.selfTest()           the twelve milestone capabilities',
       '  await ir.scenario(name)       ' + this.scenarios().join(', '),
+      '  ir.play(id?)                  run a scripted scene: ' +
+        this.cutscenes()
+          .map((c) => c.id)
+          .join(', '),
+      '  ir.stopCutscene() / ir.seekCutscene(frame) / ir.cutsceneStatus()',
       '  ir.logs(n)',
     ].join('\n')
   }

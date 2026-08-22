@@ -1,4 +1,6 @@
 export * from './capabilities.ts'
+export * from './cutscene.ts'
+export * from './cutscenes/tngIntro.ts'
 export * from './shots.ts'
 export * from './harness.ts'
 export * from './inspect.ts'

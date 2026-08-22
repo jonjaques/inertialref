@@ -1154,6 +1154,81 @@ first moment a re-measure provably cannot be too early. `setTimeout`, not
 background load must still size its canvas for the frame that draws when
 focused.
 
+## The cinematic director, and a title sequence as a test target (21 Aug 2026)
+
+The engine can now play scripted scenes over the live world — ADR-0010 — and
+the proving scene is a shot-for-shot study of the 1987 television title
+sequence, chosen because a frame-analysed reference exists for it: 2742 frames
+at 24000/1001 fps with measured shot boundaries, title fade windows, an
+alternating 65/67-frame credit grid, and camera-hold constraints, all of which
+are now asserted by tests. `ir.play('tng-intro')`, the dock's cutscene section,
+Esc to skip; a transport bar carries play/pause/restart and a frame scrubber,
+and `ir.seekCutscene(frame)` with the clock paused gives frame-exact stills for
+the numeric verification loop. The boot path is untouched — the whole system is
+one null check when idle.
+
+Shape: pure cinematic arithmetic in `packages/rendering/cinematic.ts` (easings,
+fade envelopes, the 4/7/4 warp-flash shape, Catmull-Rom routes over
+`UniverseVector` beats, one- and two-target composition solvers), the director
+and script in `packages/devtools` (`prepare(world)` resolves the stage against
+live ephemerides once; `sample(frame)` is pure), the application in the host
+(`buildScene` grew an eye override so LOD, star brightness and flare occlusion
+follow the cinematic camera; `CameraRig`/`ShipModel`/warp effects/DOM overlay
+prefer `engine.cinematic` when non-null). Stopping restores the player's
+captured state through the same verbs a save-load uses.
+
+What the recreation taught, at cost:
+
+- **Relative choreography must stay relative.** The hero ship was first
+  authored as absolute world beats anchored to the camera's position at each
+  beat's own frame; the cruise camera covers ~1000 km per frame, the two
+  splines ran through beats tens of thousands of kilometres apart, and they
+  diverged mid-segment by tens of kilometres — the flyby rendered as a dot on
+  the wrong side of the sky. Scene A's ship is now offset beats, interpolated
+  in offset space and added to the camera at sample time.
+- **Never track a hull crossing metres from the lens.** Per-frame look-at
+  through the overhead pass whipped the camera through the vertical and
+  rubber-banded after the receding ship. The pass is authored aim beats that
+  pitch over the top once and freeze in a held stern view — and the ship then
+  recedes along the held view's own axis, so the hold frames it by
+  construction.
+- **Light is staging.** The cruise runs down-sun so the approaching hull is
+  lit full-face and the warp-out is backlit glare; the credits stage looks
+  ~130° off the sun line so the fly-bys catch front light while the sun stays
+  outside both the frame and the flare's edge fade. The first cruise direction
+  was arbitrary and rendered the entire flyby as black-on-black.
+- **The whiteout is a scene change, honestly.** Both the f240 match cut and
+  the first warp flash swap stage under full cover — the same trick the
+  reference plays.
+- **The transit obeys the ephemeris.** The eclipse planet's moons are
+  auditioned by how close their orbit lies to the camera's standoff sphere
+  (Deimos at 6.9 Mars radii beats Phobos at 2.8, whose detour ballooned the
+  eclipsed disc), each candidate's detour is checked for clearance against the
+  planet, and when nothing fits the edit degrades to a plain eclipse.
+
+The blank-boot bug also finally fell. Measured: a wedged boot submits the full
+scene — 16 draw calls, 800k triangles, every frame — while the canvas never
+presents, so `renderer.info` cannot detect it; the watchdog
+(`render/presentationWatchdog.ts`) samples the canvas bitmap itself
+(native-resolution strips, so a lone star still counts as lit) and climbs a
+ladder: replay the measurement, then a _real_ one-pixel layout nudge (a
+synthetic `resize` event never fires a ResizeObserver — which is why the old
+fix lost to a human dragging the window edge) plus a swap-chain reset, and
+finally — the only cure for the deep state, verified live against it — a
+canvas remount via an epoch in `canvasKey`, at most once per load. Checks run
+only while the document is visible; an occluded window legitimately never
+presents.
+
+The TNG fonts: `TNG_Credits.ttf` is a 1994 Macintosh TrueType with only a
+(1,0) MacRoman cmap and no OS/2 table, which Chrome's sanitizer maps to
+nothing; the build's WOFF2 gets a synthesized (3,1) Unicode cmap and OS/2
+(fonttools; script in the session scratchpad, output committed). The reference
+audio is a local MP3 the overlay discovers at `/tng-intro.mp3` and syncs to
+the playhead within 80 ms; the path is gitignored because the track is
+copyrighted music and must never enter the repository — publishing a render of
+the full sequence would raise the same questions, which is why the demo stays
+a demo.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).
