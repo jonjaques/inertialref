@@ -1385,10 +1385,156 @@ The titles and credits, meanwhile, came back at Δcx 0.008–0.021 and Δcy
 own metrics had already done that work; the loop confirmed it rather than
 correcting it, which is what a regression check is supposed to feel like.
 
+## The overlay, hardened (22 Aug 2026)
+
+The dock was built to be read, not to be survived, and a pass over it for the
+inputs and failures a real session produces found one route to a black screen
+that no watchdog can see, two silent-failure paths, and two arithmetic bugs.
+`pnpm check` is green: 442 tests, 35 files.
+
+### A HUD throw takes the canvas with it
+
+React unmounts the whole tree when a render throws, and in this app the tree
+contains the `<Canvas>`. So a body with no name, a `HarnessStatus` shaped like
+last week's, or a series divided by its own zero length does not produce a
+broken row — it produces a black screen with a healthy console, which is
+exactly the symptom `render/presentationWatchdog.ts` exists to recover from,
+arriving by a route that watchdog cannot observe. Verified by injecting a throw
+into `harness.shots()`: before, the scene went; after, the navigate panel is
+replaced and the tick keeps advancing behind it.
+
+`hud/ErrorBoundary.tsx` is five small boundaries rather than one — per dock tab
+(keyed on the tab, so leaving and returning **is** the reset), and one each
+around the dock, the flight strip and the cutscene layer. One boundary around
+the whole layer would take the dock down with whichever piece failed, and the
+dock is how the simulation is driven. The fallback takes a `className` applied
+to itself only, because the chrome it wraps positions _itself_ and a bare
+fallback lands at the origin of a `pointer-events-none` layer with an
+unclickable retry.
+
+**Error boundaries do not work under `renderToStaticMarkup`.** React's string
+renderer never calls `getDerivedStateFromError`, so `hud.test.ts` can assert the
+boundary's error _normalisation_ and nothing else; recovery is a browser check.
+The same test file also cannot render the perf tab, because `fakeEngine` is a
+harness in a trench coat and `PerfPanel` reads `engine.metrics`.
+
+### Before the first commit there was nothing on screen
+
+`main.tsx` awaits the packed catalogue — a generation input, so the world cannot
+be built without it — and until that resolved `#root` was empty. On a slow link,
+or behind a service worker holding a bundle that no longer parses, that is an
+indefinitely black page indistinguishable from a broken one, shown to the
+audience that forms its impression in about a minute.
+
+`index.html` now carries a boot line at the flight strip's own anchor, which
+**React clears on its first commit** — the disappearance is the handoff, and the
+10 s stall notice keys off exactly that (`document.getElementById('boot')`
+returning null means the app is up). Its recovery unregisters service workers
+before reloading, because a plain reload served by the same worker returns the
+same broken bundle. `main.tsx` adds React 19's `onUncaughtError` plus a
+DOM-built fatal panel appended to `document.body`, never to `#root`: after an
+uncaught error React has unmounted the tree and still owns that container.
+
+### Four things that must not come back
+
+- **The navigation panel's error lived inside a collapsible section.** Every
+  verb in `NavPanel` reported through one `error` state that was rendered inside
+  `Section id="nav.go"` — whose open state is _persisted_. With that section
+  collapsed, a failed `land`, `burn`, `generate` or scenario reported into a
+  closed box and the button read as having done nothing. The banner is now above
+  every section and names which verb failed.
+- **"surveying…" was also the empty state.** Fly past the 8 ly survey radius and
+  the destination list said it was still working, forever. Only one of those two
+  answers has a next step, and it was the one being hidden.
+- **The time-warp buttons were an index step over `WARP_STEPS`.** That only
+  behaves when the clock's time scale is already one of them, and the clock is
+  not only driven from the dock — `ir.warp(3)` from the console, or a save from
+  when the ladder had different rungs, puts it between detents or past the top.
+  From a console-set 200,000×, "slower" answered 1× and "faster" answered 5×.
+  `hud/warp.ts` searches instead of indexing, and `warp.test.ts` checks that the
+  result is always a rung and always moves the way it was asked to.
+- **`usePersistentState` guarded `JSON.parse` and nothing else**, which is the
+  failure that was never going to happen. `localStorage` outlives the code that
+  wrote it: a `dock.tab` of `"nav"` from before the five tab names existed parses
+  cleanly, matches no tab, and renders an empty dock with no active tab and no
+  way back that is not devtools. A `camera.fov` of `NaN` or `5000` reaches the
+  projection matrix. Every caller now passes an `Accept<T>` predicate and an
+  unrecognised value is treated exactly like an absent one.
+
+### The focus contract, which is subtler than it looks
+
+Every control called `event.currentTarget.blur()` for a real reason: flight
+input is a window-level keydown handler, so a clicked button that keeps focus
+swallows Space — the pause key — and turns it into a second click on itself.
+Blurring unconditionally solved that by making the dock untraversable; a
+keyboard user who activated anything was returned to the top of the document.
+
+`hud/focus.ts` blurs only when `event.detail > 0`. A click synthesised from
+Enter or Space on a focused button reports `detail === 0` in every engine, so a
+pointer keeps the old behaviour exactly and a keyboard keeps its place — and a
+focused button swallowing Space is correct there, because Space is what
+activated it. `useShipControls` gained the matching half: `Tab` declines when
+`event.target.closest('.hud-layer')` is non-null, so Tab still collapses the
+dock from the canvas and moves between controls once you are inside it. Same
+shape as `isTyping`, and for the same reason.
+
+All four paths were checked in Chrome: mouse click → focus returns to `BODY`;
+Space after one still pauses; Enter keeps focus on the control; Tab from the
+canvas still collapses the dock. **Do not "simplify" this back to an
+unconditional blur.**
+
+### Smaller, but real
+
+Unbounded joins (`loadedSystems`, `terrainCandidates`) are capped with a stated
+`+N more` rather than silently cut — a list quietly truncated at eight reads as
+a list of eight. Every truncating row, target row and header summary carries its
+value as a `title`, because a value you can neither read nor hover is a value the
+panel is not actually showing. Scenario buttons and `save`/`load` take busy
+guards; ten impatient clicks were ten concurrent scenarios teleporting the same
+ship. `flash()` held one timer instead of orphaning one per call, which is why
+notices raised in bursts used to vanish early. Selection, caret and scrollbars
+are themed from the palette — the dock scrolls internally and on any platform
+without overlay scrollbars that gutter was the one bright rectangle in a
+dark-adapted interface.
+
+### What the colorize pass found before it started
+
+Not built — recorded so the archaeology is not repeated. `SystemStub`
+(`packages/universe/src/galaxy.ts`) already carries `temperature`, a computed
+blackbody `colour`, `catalogued` (which is provenance) and the confirmed
+`planets`. **`TravelTarget` in `packages/devtools/src/travel.ts` carries none of
+it** — the destination list gets a pre-formatted `detail` string and a boolean.
+
+That matters because PRODUCT.md commits that "every body states whether it is
+`observed` or `projected`" and the built list does not, and because the row you
+scan for is the star, whose real colour the canvas is already painting from the
+same measurement. The tension is DESIGN.md's **One Accent Rule**: the proposal
+was a second Named Rule beside it — chrome stays graphite plus one blue plus
+four status hues, and _data_ may carry its own measured colour, scoped to the
+star glyph only so the Scarcity Rule holds at roughly six rows. It needs a
+DESIGN.md amendment and a `TravelTarget` extension, and PRODUCT.md's "no
+information by colour alone" means provenance needs a glyph as well as a grade.
+
+Separately, DESIGN.md already names the perf chart's budget rule at `#f87171`
+(red-400) as drift that should converge on rose rather than spread, and the
+plots encode "over budget" by stroke colour alone.
+
+### One thing the tooling cannot do here
+
+`impeccable`'s mechanical detector runs **degraded** on this machine —
+`htmlparser2`, `css-select`, `css-tree` and `domutils` are unavailable, so it
+falls back to regex, does not evaluate custom properties or computed contrast,
+and its empty result is an undercount rather than a clean bill.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).
 
+- **The interface never says `observed` or `projected`.** PRODUCT.md makes
+  stating it a brand commitment and `SystemStub.catalogued` has carried the
+  answer all along; `TravelTarget` does not forward it, so the destination list
+  shows a real star and a generated one identically. See the colorize note in
+  [the hardening pass](#what-the-colorize-pass-found-before-it-started).
 - Binary and multiple-star systems are modelled as single stars (`components`
   in the catalogue records the truth for all 375 of them within 150 ly).
 - Moons outside the Solar System are all projections, which is right — no
