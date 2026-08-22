@@ -12,6 +12,7 @@ import { CONTROL_HELP } from '../hud/useShipControls.ts'
 import { FOCUS_RING } from '../hud/focus.ts'
 import { OverlayPage } from './OverlayPage.tsx'
 import { settingsSection } from './paths.ts'
+import { useOverlay } from './useOverlay.ts'
 
 /*
  * Settings, as a page with sections.
@@ -53,6 +54,16 @@ export function SettingsPage({
   camera: CameraState
 }) {
   const { section } = useParams<{ section?: string }>()
+  /*
+   * Every link that stays inside the dialog has to carry the background on.
+   *
+   * A section tab is a route, so clicking one is a navigation — and without
+   * the state it clears `location.state`, `ModeRoutes` re-resolves at
+   * `/settings/camera`, matches nothing, falls through to the menu and tears
+   * down the mode behind the open dialog. `ShellBar`'s own gear link passed
+   * the state; these did not.
+   */
+  const { keep } = useOverlay()
   // An unknown section falls back rather than 404s: the URL is hand-typed, and
   // `/settings/audio` from a future build should open settings, not nothing.
   const active: SectionId =
@@ -68,6 +79,7 @@ export function SettingsPage({
           <Link
             key={entry.id}
             to={settingsSection(entry.id)}
+            state={keep}
             replace
             aria-current={entry.id === active ? 'page' : undefined}
             className={`flex items-center gap-1.5 rounded px-2 py-1 text-[10px] tracking-widest uppercase transition-colors ${FOCUS_RING} ${

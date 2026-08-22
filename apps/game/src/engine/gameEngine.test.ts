@@ -264,6 +264,35 @@ describe('the game engine, headless', () => {
     game.dispose()
   }, 30_000)
 
+  it('keeps sampling the cutscene through a frame with no player', () => {
+    /*
+     * The camera precedence in `#step` is cutscene, then observatory, then the
+     * ship — and only the last of those needs a player. The cutscene sample
+     * used to sit *below* the two early returns for a missing player, so one
+     * frame during a load or an authority hand-off stopped the director being
+     * asked at all: it kept `#active`, `engine.cinematic` kept its last
+     * non-null value, `engineStore` published `cinema: true` for the rest of
+     * the session, and every piece of chrome unmounted — the stop control
+     * with it. The scene here runs to its end while there is no player, which
+     * is precisely the frame the old code could not reach.
+     */
+    const game = engine()
+    game.frame(1 / 60)
+    const status = game.harness.play('tng-intro')
+    game.frame(1 / 60)
+    expect(game.cinematic).not.toBeNull()
+    game.harness.seekCutscene(status.durationFrames - 1)
+
+    // The world is not replaced — only the player goes, which is what an
+    // authority hand-off between two frames looks like.
+    game.session.replaceWorld(game.world, null)
+    for (let i = 0; i < 12; i += 1) game.frame(1 / 60)
+
+    expect(game.harness.cutsceneStatus()).toBeNull()
+    expect(game.cinematic).toBeNull()
+    game.dispose()
+  })
+
   it('reads the world through the session rather than a captured reference', async () => {
     const game = engine()
     game.frame(1 / 60)

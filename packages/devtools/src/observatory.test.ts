@@ -1,5 +1,6 @@
+import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { AU } from '@inertialref/shared'
+import { AU, type Meters } from '@inertialref/shared'
 import { TEST_CATALOG } from '@inertialref/universe'
 import {
   type FrameId,
@@ -103,17 +104,83 @@ describe('the observatory', () => {
   it('eases a fly-to instead of cutting', () => {
     const { harness: ir } = harness()
     ir.look('s:SOL/b:2')
-    const near = ir.observatory.state.distance
     ir.look('s:SOL/b:5')
     // The desired distance jumped; the actual one has not arrived yet.
     expect(ir.observerStatus()?.travelling).toBe(true)
-    expect(ir.observatory.state.distance).toBeCloseTo(near, 6)
+    const status = ir.observerStatus()
+    expect(status?.state.distance).toBeLessThan(status?.desired.distance ?? 0)
+    // Earth's framing is *inside* Jupiter, so the ease does not start there —
+    // see `focus`. It starts at the nearest distance Jupiter's own band allows.
+    expect(status?.state.distance).toBe(ir.observatory.bounds().min)
     // Fifteen seconds. `TRAVEL_TAU` is 0.55 s and the gap here is Earth's
     // framing to Jupiter's — about four e-folds of distance — so the ease is
     // still visibly running at four seconds. That is the intended feel; the
     // test just has to outlast it.
     for (let i = 0; i < 900; i += 1) ir.observerSample(1 / 60)
     expect(ir.observerStatus()?.travelling).toBe(false)
+  })
+
+  it('stops reporting a move once it has stopped moving, however far round', () => {
+    /*
+     * `#arrived` compared raw azimuths while `approachState` converges via
+     * `shortestAngle`. Azimuth accumulates as you drag, so after a couple of
+     * turns the ease settles at a *difference* of 2π — the same heading, a
+     * whole turn apart numerically — which never falls below
+     * `ARRIVED_LOG_EPSILON`. `travelling` then stayed true for the rest of the
+     * session, which is the exact failure that constant's docstring says it
+     * exists to prevent: a panel flickering "moving" at a camera that is
+     * perfectly still.
+     */
+    const { harness: ir } = harness()
+    ir.look('s:SOL/b:2', { ease: false })
+    // Three turns of the hand, which is a normal amount of looking around.
+    for (let i = 0; i < 60; i += 1) ir.observatory.drag(200, 0)
+    expect(Math.abs(ir.observatory.state.azimuth)).toBeGreaterThan(4 * Math.PI)
+
+    // A preset, whose azimuth comes back in (−π, π] however far the drag went.
+    ir.observatory.setPhase(150, 10)
+    for (let i = 0; i < 900; i += 1) ir.observerSample(1 / 60)
+    expect(ir.observerStatus()?.travelling).toBe(false)
+  })
+
+  it('never passes through the target on the way to it', () => {
+    /*
+     * The property, and the bug it was written for: `focus` carried the old
+     * target's distance across unchanged and `approachState` clamps only
+     * elevation, so a fly-to from a small body to a large one spent the whole
+     * transition *inside* the thing it was flying to. Luna to the Sun put the
+     * eye 695,700 km under the photosphere for a second, and `status()` said
+     * `altitude: 0` throughout because it is `Math.max(0, distance - radius)`.
+     *
+     * Every intermediate state, for every ordered pair of targets — not the
+     * endpoints, which were always legal. The bodies differ by four orders of
+     * radius in both directions, which is what makes the pair ordering matter.
+     */
+    const targets = ['s:SOL', 's:SOL/b:2', 's:SOL/b:2.0', 's:SOL/b:5']
+    fc.assert(
+      fc.property(
+        fc.constantFrom(...targets),
+        fc.constantFrom(...targets),
+        // Any starting distance the band permits, including a hand-dragged one
+        // that never came from `framingDistance`.
+        fc.double({ min: 1e3, max: 1e12, noNaN: true }),
+        (from, to, distance) => {
+          const { harness: ir } = harness()
+          ir.look(from, { ease: false })
+          ir.observatory.setDistance(distance as Meters, false)
+          ir.look(to)
+          for (let i = 0; i < 300; i += 1) {
+            ir.observerSample(1 / 60)
+            const { min, max } = ir.observatory.bounds()
+            expect(ir.observatory.state.distance).toBeGreaterThanOrEqual(min)
+            expect(ir.observatory.state.distance).toBeLessThanOrEqual(max)
+          }
+        },
+      ),
+      // One session per case and a live world behind it; the interesting axis
+      // is the pair of targets, and there are sixteen of those.
+      { numRuns: 40 },
+    )
   })
 
   it('accepts everything the console accepts, and refuses what it should', () => {

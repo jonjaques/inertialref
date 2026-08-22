@@ -33,8 +33,13 @@ export const FOCUS_RING =
  * and has to tab back in, which across five tabs of collapsible sections is not
  * navigation. `detail` is the click count, and a click synthesised from Enter
  * or Space on a focused button reports 0 in every engine — so a pointer keeps
- * the old behaviour exactly and a keyboard keeps its place. A focused button
- * swallowing Space is correct there anyway: Space is what activated it.
+ * the old behaviour exactly and a keyboard keeps its place.
+ *
+ * Keeping its place is only worth anything because `useShipControls` declines
+ * Space when the keystroke is aimed at a control inside `.hud-layer`. Without
+ * that guard the window handler's `preventDefault` cancels the activation on
+ * keydown — before the click event exists — so a focused button did not
+ * "swallow Space" at all: it never saw it, and the simulation paused instead.
  */
 export function releaseFocus(event: MouseEvent<HTMLElement>): void {
   if (event.detail > 0) event.currentTarget.blur()

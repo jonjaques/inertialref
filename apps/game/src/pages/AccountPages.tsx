@@ -4,6 +4,7 @@ import { CloudOff, LogIn, UserRound, UserRoundPlus } from 'lucide-react'
 import { FOCUS_RING } from '../hud/focus.ts'
 import { OverlayPage } from './OverlayPage.tsx'
 import { HOME, PROFILE, SIGN_IN, SIGN_UP } from './paths.ts'
+import { useOverlay } from './useOverlay.ts'
 
 /*
  * The account routes: reserved, wired, and honest about being unbuilt.
@@ -77,12 +78,16 @@ function NotYet({
 }
 
 export function SignInPage() {
+  // The cross-link stays inside the dialog, so it carries the mode behind it —
+  // see `useOverlay`. Without the state it takes the mode down with it.
+  const { keep } = useOverlay()
   return (
     <NotYet title="sign in" icon={LogIn}>
       <p className="text-slate-400">
         No account?{' '}
         <Link
           to={SIGN_UP}
+          state={keep}
           replace
           className={`text-sky-300 underline-offset-2 hover:underline ${FOCUS_RING}`}
         >
@@ -95,12 +100,14 @@ export function SignInPage() {
 }
 
 export function SignUpPage() {
+  const { keep } = useOverlay()
   return (
     <NotYet title="sign up" icon={UserRoundPlus}>
       <p className="text-slate-400">
         Already have one?{' '}
         <Link
           to={SIGN_IN}
+          state={keep}
           replace
           className={`text-sky-300 underline-offset-2 hover:underline ${FOCUS_RING}`}
         >

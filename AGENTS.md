@@ -88,15 +88,30 @@ authority at the moment of the edit, and states the previous rule.
   which is the black-screen class `render/presentationWatchdog.ts` exists to
   recover from, arriving on purpose several times a minute. ADR-0011.
 - **Never hold the current mode in React state.** It is
-  `modeForPath(location.pathname)`, a pure function in `pages/paths.ts`, so a
-  reload, a back button and a pasted link land in the same place by
-  construction. The same rule covers everything else the URL carries — the
-  planetarium's subject (`?at=`) and the cinema player's frame (`?t=`).
+  `modeForPath(resolvedLocation(location).pathname)`, a pure function in
+  `pages/paths.ts`, so a reload, a back button and a pasted link land in the
+  same place by construction. The same rule covers everything else the URL
+  carries — the planetarium's subject (`?at=`) and the cinema player's frame
+  (`?t=`).
+- **Never read the raw pathname when a dialog could be open over a mode.** A
+  dialog records the mode's location in `location.state.background` and
+  `ModeRoutes` renders at _that_; `resolvedLocation` is the one function that
+  resolves it, and everything deciding what is on screen must agree with it.
+  The same state has to be carried by every link that stays inside a dialog and
+  read by every control that closes one — `pages/useOverlay.ts` is that half.
+  Ignored, a dialog's close button returns the player to the main menu and
+  tears down the mode behind it; over a running cutscene it unmounts and
+  remounts the cinema player several times a second.
 - **Never add a second producer of the camera.** There is one precedence order,
   in `GameEngine.#step`: **cutscene, then observatory, then the ship.** Each is a
   presentation eye handed to `buildScene`. A camera pushed at the Three.js
   object instead would leave LOD, apparent star brightness, `up` and flare
   occlusion all being told about a different viewpoint from the one on screen.
+  **No arm of that order may depend on a later one resolving**, and only the
+  last needs a player: with the cutscene sample below `#step`'s missing-player
+  return, one frame during a load left the director unsampled forever,
+  `engine.cinematic` latched non-null, and every piece of chrome — including
+  the control that stops a cutscene — unmounted for the rest of the session.
 - **Never let the planetarium write canonical state.** The observatory resolves
   an address, asks the world where that is _this tick_, and returns a pose. No
   teleport, no clock, no entity write, no save. `observatory.test.ts` compares
@@ -268,7 +283,7 @@ you in orbit of it. `ir.observatory` is the camera itself — `drag`, `zoom`,
 The same verbs are on the dev dock, top right in the browser: **navigate** lists
 the destinations with a button per manoeuvre, **telemetry** is the inspection
 overlay, **perf** plots frame time, engine time, ticks per frame, draw calls,
-worker queue and heap over a rolling window. `Tab` collapses the whole thing,
+worker queue and heap over a rolling window. `H` collapses the whole thing,
 `G` opens navigation and `P` opens perf. It calls the harness and nothing else,
 so anything you can do by clicking is reproducible in a test.
 

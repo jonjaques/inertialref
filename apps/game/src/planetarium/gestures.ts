@@ -180,6 +180,7 @@ export function keyAction(event: {
     return null
   // Shift is a magnitude modifier rather than a different action: fine control
   // near a surface and coarse control between stars are the same two gestures.
+  // It applies to the arrows and not to the zoom keys — see `'+'` below.
   const step = event.shiftKey === true ? KEY_STEP_PIXELS * 4 : KEY_STEP_PIXELS
   switch (event.key) {
     case 'ArrowLeft':
@@ -190,12 +191,22 @@ export function keyAction(event: {
       return { kind: 'orbit', dx: 0, dy: -step }
     case 'ArrowDown':
       return { kind: 'orbit', dx: 0, dy: step }
+    /*
+     * One notch each way, and `shiftKey` deliberately unread.
+     *
+     * `+` *is* Shift-`=` on every layout this ships to, so the modifier is set
+     * whenever the key is `+` and clear whenever it is `=` — it carries no
+     * information here. Read as a magnitude modifier it made the two keys the
+     * help text names, `+` and `−`, differ by a factor of four: pressing one
+     * and then the other did not return the camera to where it started, which
+     * is the one thing a zoom pair has to do.
+     */
     case '+':
     case '=':
-      return { kind: 'zoom', notches: event.shiftKey === true ? -4 : -1 }
+      return { kind: 'zoom', notches: -1 }
     case '-':
     case '_':
-      return { kind: 'zoom', notches: event.shiftKey === true ? 4 : 1 }
+      return { kind: 'zoom', notches: 1 }
     case 'f':
     case 'F':
       return { kind: 'frame' }

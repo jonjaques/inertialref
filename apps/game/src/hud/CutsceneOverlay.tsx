@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CinematicTextState, GameEngine } from '../engine/GameEngine.ts'
 import { FOCUS_RING, releaseFocus } from './focus.ts'
+import { useScrubber } from './useScrubber.ts'
 
 /*
  * The cutscene's screen-space layer: the blackout, the title cards, the
@@ -184,7 +185,9 @@ export function CutsceneOverlay({
     duration: number
     paused: boolean
   } | null>(null)
-  const scrubbing = useRef(false)
+  // The drag latch and the guarded seek, shared with the cinema player's
+  // transport — see `useScrubber.ts` for what each of them is for.
+  const { held: scrubbing, grab, seek } = useScrubber(engine)
   const blackout = useRef<HTMLDivElement>(null)
   const hint = useRef<HTMLDivElement>(null)
   const audio = useRef<HTMLAudioElement>(null)
@@ -211,7 +214,9 @@ export function CutsceneOverlay({
       }
     }, 100)
     return () => window.clearInterval(structure)
-  }, [engine])
+    // A ref, so it never changes identity — listed for the same reason the
+    // cinema player's poll lists it.
+  }, [engine, scrubbing])
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
@@ -346,7 +351,9 @@ export function CutsceneOverlay({
           <TransportButton
             label="⟲"
             title="Restart"
-            onClick={() => engine.harness.seekCutscene(0)}
+            onClick={() => {
+              seek(0)
+            }}
           />
           <TransportButton
             label={transport.paused ? '▶' : '❚❚'}
@@ -375,15 +382,10 @@ export function CutsceneOverlay({
             // key prop trick is unnecessary because we only set `value` from
             // state when not scrubbing.
             value={Math.floor(transport.frame)}
-            onPointerDown={() => {
-              scrubbing.current = true
-            }}
-            onPointerUp={() => {
-              scrubbing.current = false
-            }}
+            onPointerDown={grab}
             onChange={(event) => {
               const frame = Number(event.target.value)
-              engine.harness.seekCutscene(frame)
+              if (!seek(frame)) return
               setTransport((current) =>
                 current === null ? current : { ...current, frame },
               )

@@ -1925,6 +1925,184 @@ pinning one that goes stale, and it exits zero on every failure path — a
 non-zero exit there means the session does not start at all, and an image with
 the wrong Node is more useful than no session.
 
+## Twenty-two findings the gate could not see (22 Aug 2026)
+
+A multi-agent review of the `tng` branch — 145 files, 22,273 lines, too large
+for one pass — against a tree where `pnpm check` was green and all 542 tests
+passed. Every finding was a runtime or behavioural defect, which is the useful
+fact about the whole exercise: **the gate proves the code compiles, lints,
+type-checks and satisfies the assertions somebody thought to write. It says
+nothing about the ones nobody did.** Four of these left the session
+unrecoverable without a reload.
+
+The findings themselves are in the commit and in the tests. What is worth
+keeping is the _shape_ of them, because most repeated.
+
+### The same bug, twice, in two files
+
+Two wrappers around one cutscene director — the cinema player and the debug
+overlay — were each a 100 ms poll driving a range input, written out
+independently. Both latched `scrubbing` on `pointerdown` and cleared it only on
+`pointerup` **on the input**, so a drag released anywhere else froze the
+readout for the life of the player; touch never cleared it at all, because a
+cancelled gesture fires `pointercancel` and nothing else. And they disagreed
+about the other half: the player guarded its seek against a scene that had
+already ended, the overlay did not, so the same click was safe in one and threw
+in the other — out of an event handler, where a React error boundary cannot
+see it, which is why the `ErrorBoundary` around the overlay caught nothing and
+the interaction was lost with only a console line. `hud/useScrubber.ts` is both
+rules in one place now: release at the window (`pointerup`, `pointercancel`,
+`blur` — three different ways a gesture ends), and a seek that declines rather
+than throws.
+
+The general form: **two components that poll the same object will grow the same
+bug, and then disagree about it.**
+
+### A readout that could not name a frame
+
+`timecode` derived seconds from the true rate and the frames field from
+`Math.round(fps)`. At 24000/1001 those disagree once a second: frames
+1006→1007→1008 read `0:41:22` → `0:42:23` → `0:42:00`, so the counter ran
+_backwards_ inside a second, twenty-one times over the title sequence. A
+timecode is a _name_ for a frame and a name that occurs twice names nothing —
+which defeats ADR-0010's "two people see the same picture". Both fields come
+from one rate now.
+
+The instructive part is the test. `cinema.test.ts` exercised `fps = 24` and
+`fps = 0` and never the 23.976 the product ships, and the first property test
+written for the fix **passed against the broken implementation**: 21 bad
+transitions in 1500 frames, and a property that samples single frames at random
+almost never lands on one. It only went red once each case swept a _window_ of
+400 consecutive frames. A property test over a sparse defect needs to sample
+runs, not points.
+
+### The background location was a contract two files kept
+
+Opening a dialog over a mode records the mode's location in
+`location.state.background`; `ShellBar` wrote it and `routes.tsx` read it, and
+nothing else in the PR knew it existed. So the shell derived its mode from the
+raw pathname and disagreed with the tree it was drawn over; the settings
+section tabs dropped the state and tore the mode down mid-dialog; and all three
+ways of closing a dialog navigated to `/`, which unmounted the planetarium, ran
+`observatory.clear()` and threw away the `?at=` address — a close button that
+returned the player to the main menu.
+
+Over a running cutscene the first of those compounded into a loop: the gate
+keeping the cinema player mounted is `mode === 'cinema'`, so navigating to a
+dialog unmounted the player, whose cleanup stopped the scene, which republished
+`cinema: false` 125 ms later (`PANEL_HZ = 8`), which mounted it again — a
+mount/unmount flap several times a second that re-teleported the player, with
+the requested dialog never rendering at all.
+
+`resolvedLocation` (pure, in `paths.ts`) and `useOverlay` (the React half) are
+the contract as code rather than as a convention. The invariant in `AGENTS.md`
+now says the raw pathname is the wrong thing to read.
+
+### Layers stacked by accident
+
+Nothing in `apps/game/src` set a `z-index` except a Radix tooltip, so every band
+of `.hud-layer` painted — and hit-tested — in DOM order. That was fine until a
+mode covered the viewport: `PlanetariumMode`'s input surface is
+`absolute inset-0 pointer-events-auto` and is emitted after the dock, so in the
+planetarium every button, tab and drag handle in the dock was unclickable and
+the surface silently took the click. The five bands are now numbered 0/10/20/30/40
+on inert `pointer-events-none` wrappers — inert because `ErrorBoundary`'s
+`className` styles its _fallback_ rather than a wrapper, so there was otherwise
+nothing to hang the index on. Confirmed by A/B in the live DOM:
+`elementFromPoint` on the dock's header returns the planetarium surface with the
+bands stripped and the dock's own span with them.
+
+### Two handlers, one key, no error
+
+`useShipControls` is mounted in every mode and its `axes` option gated only the
+axis branch, so `Space` still reached `onPause` in the cinema player — which
+binds `Space` to its own transport. Both are on `window`, and `preventDefault`
+in one does not stop the other (only `stopImmediatePropagation` would), so one
+press flipped `clock.paused` twice and the documented play/pause control did
+nothing at all. `axes` had the same argument and had been applied; `Space` was
+missed because it is not an axis.
+
+`Tab` was worse, because its guard could never open. It toggled the dock unless
+focus was already inside `.hud-layer` — but on load `document.activeElement` is
+`<body>`, whose `closest` returns null, so the guard was false, the dock
+toggled, and `preventDefault` cancelled the browser's focus move. With no
+`tabIndex` on the canvas there was nothing outside the layer to bootstrap from:
+**focus could never enter the overlay at all**, and every focus ring,
+`role="tab"` and `aria-expanded` in the PR was unreachable by keyboard. There is
+no version that keeps both — Tab is how a browser moves focus and a window-level
+`preventDefault` always wins — so Tab went back to the browser and the collapse
+is `H`. `Space` is now declined when the keystroke is aimed at a control inside
+the layer, which is what makes `hud/focus.ts`'s "a focused button swallowing
+Space is correct: Space is what activated it" true; before the guard the button
+never saw the key.
+
+`F5` and `F9` were reported alongside and deliberately left as they are. No
+control in the overlay responds to either, so declining them would activate
+nothing — it would hand the key back to the browser, and F5 is Reload. Losing
+the session because focus happened to be on a dock button is worse than the
+thing it would fix.
+
+### One frame without a player latched the whole session
+
+`#step` returned early on `player === null`, and the cutscene sample sat below
+that return. A load or an authority hand-off leaving `session.player()` null for
+a single frame meant the director was never sampled again: it kept `#active`,
+`engine.cinematic` kept its last non-null value, `engineStore` published
+`cinema: true` forever, and every piece of chrome unmounted — including the
+control that stops a cutscene. The camera precedence is
+`cutscene ?? observatory ?? ship` and **only the last arm needs a player**; the
+sample moved above the returns and the scene build stayed below them. The
+regression test runs a scene to its end while there is no player, which is
+exactly the frame the old order could not reach.
+
+### Two more of the same family
+
+- **`focus()` never re-clamped distance into the new target's band.** It carried
+  `#state.distance` across a change of target and `approachState` log-lerps it,
+  clamping elevation on the way and never distance — so Luna (settled ~3.2e6 m)
+  to the Sun (band minimum 7.1e8 m) put the eye 695,700 km inside the
+  photosphere for the second the ease took. Nothing surfaced it because
+  `status().altitude` is `Math.max(0, distance - radius)`, so a negative
+  clearance reads as zero. The property — every intermediate state of any ease
+  is legal for the current target — reproduces it at 2.19e6 m against a 7.096e8 m
+  minimum.
+- **`#arrived()` compared raw azimuths while `approachState` converges via
+  `shortestAngle`.** Azimuth accumulates unbounded as you drag, so after two
+  turns the ease settles at a difference near 2π — the same heading, a whole
+  turn apart numerically — which never falls below `ARRIVED_LOG_EPSILON`.
+  `travelling` then stayed true for the rest of the session, which is the exact
+  failure that constant's docstring says it exists to prevent. The same fact
+  about azimuth produced the panel's `-327° az` for a heading of 33°, because
+  JavaScript `%` is a remainder and keeps the sign.
+
+### An impure updater, and why "derived from what React committed" was wrong
+
+`usePersistentState` wrote to `localStorage` _inside_ the state updater, on the
+argument that the string on disk should then be derived from the value React
+actually committed. An updater is called during render, must be pure, and is not
+the commit: StrictMode double-invokes it, and React may discard a rendered value
+whose `setItem` has already landed — persisting a preference nobody chose. It
+also made an FOV slider a synchronous `setItem` per input event. The write is an
+effect on the committed value now, seeded so that an untouched default is never
+written back — turning "never chose" into "chose the current default" would mean
+a later change of default reached nobody.
+
+### The two tests that pinned bugs
+
+Both were caught by reading the tests rather than the code, which is the pass
+worth doing on a branch this size. `planetarium.test.ts` had a case titled
+"picks a moon in front of the planet it is against" that asserted the _planet_ —
+the behaviour is deliberate and documented in the case body, but the title and
+`pick.ts`'s docstring both described the opposite of what the code does, and a
+docstring that claims largest-first "makes clicking a moon against its planet
+work" is an invitation to "fix" the comparison. Both now say what the rule costs
+and point the design question at `docs/design/planetarium.md`. The other is the
+23.976 gap above.
+
+One reported finding was checked and rejected: `.claude/hooks/gate.mjs` reading
+`input.prompt_id` is correct — it is a documented common hook payload field
+(Claude Code ≥ 2.1.196) with a `?? 'noprompt'` fallback for older versions.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

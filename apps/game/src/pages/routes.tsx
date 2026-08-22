@@ -20,9 +20,9 @@ import {
   AUTH_CALLBACK,
   CINEMA,
   HOME,
-  type OverlayLocationState,
   PLANETARIUM,
   PROFILE,
+  resolvedLocation,
   SETTINGS,
   SIGN_IN,
   SIGN_UP,
@@ -81,9 +81,9 @@ interface OverlayRouteProps {
  * components fighting over the observatory for the length of the transition.
  */
 export function ModeRoutes(props: ModeRouteProps) {
-  const location = useLocation()
-  const state = location.state as OverlayLocationState | null
-  const at = state?.background ?? location
+  // The same resolution the shell derives its mode from — one function, so the
+  // two cannot answer differently about what is on screen.
+  const at = resolvedLocation(useLocation())
 
   return (
     <Routes location={at}>

@@ -203,6 +203,15 @@ export function createWarpEffects(hullLength: () => number): WarpEffects {
   let lastShipX = 0
   let lastShipY = 0
   let hadShip = false
+  /*
+   * The streak angle, held across a frame the projection cannot answer for.
+   *
+   * The comment where this is used has always claimed the hold; nothing
+   * implemented it. `Vector3.project` on a point behind the lens returns a
+   * mirrored NDC rather than an error, so the frames where the nose crosses
+   * the camera plane flipped the streaks through a half turn and back.
+   */
+  let streakAngle = 0
 
   /** Project a render-space point; returns false when it is behind the lens. */
   const toScreen = (
@@ -307,9 +316,11 @@ export function createWarpEffects(hullLength: () => number): WarpEffects {
         )
       }
 
-      // The ship's forward, on screen: the streaks lie along it. When the
-      // projection degenerates (ship dead ahead) the streak angle holds from
-      // the previous frame, which is invisible over one frame.
+      // The ship's forward, on screen: the streaks lie along it. When either
+      // end of that line is behind the lens the projection is a mirror rather
+      // than an answer, so the angle holds from the previous frame — which is
+      // invisible over the frame or two the crossing takes, where a half-turn
+      // flip is not.
       const forwardWorld = rotate([0, 0, -L])
       const nose = toScreen(
         camera,
@@ -317,10 +328,9 @@ export function createWarpEffects(hullLength: () => number): WarpEffects {
         ship.position.y + forwardWorld.y,
         ship.position.z + forwardWorld.z,
       )
-      const streakAngle = screenAngle(
-        shipScreen.x - nose.x,
-        shipScreen.y - nose.y,
-      )
+      if (nose.ok && shipScreen.ok) {
+        streakAngle = screenAngle(shipScreen.x - nose.x, shipScreen.y - nose.y)
+      }
 
       NACELLES.forEach((offset, i) => {
         const glow = glows[i] as WarpElement

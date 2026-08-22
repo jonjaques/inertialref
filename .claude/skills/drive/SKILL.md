@@ -77,7 +77,7 @@ page that is not focused sits at tick 0 until it is focused. That is the browser
 ## The dev dock
 
 Top right in the browser, and it calls the harness and nothing else — so anything you can
-do by clicking is reproducible in a test. `Tab` collapses it, `G` opens navigation, `P`
+do by clicking is reproducible in a test. `H` collapses it, `G` opens navigation, `P`
 opens perf. **Look at the perf tab before optimising anything**, and before believing a
 performance claim in a design document: the first thing it found was that time warp had
 never worked above 5×.

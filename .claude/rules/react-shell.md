@@ -18,9 +18,15 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", ADR-0011.
   renders _inside_ that layer, as a sibling of the canvas. A router over the whole tree
   rebuilds the `WebGPURenderer` on every navigation — the black-screen class
   `render/presentationWatchdog.ts` exists to recover from, arriving on purpose.
-- **The current mode is never React state.** It is `modeForPath(location.pathname)`, a
-  pure function in `pages/paths.ts`, so a reload, a back button and a pasted link land in
-  the same place by construction. Same for everything else the URL carries — `?at=`, `?t=`.
+- **The current mode is never React state.** It is
+  `modeForPath(resolvedLocation(location).pathname)`, a pure function in `pages/paths.ts`,
+  so a reload, a back button and a pasted link land in the same place by construction.
+  Same for everything else the URL carries — `?at=`, `?t=`.
+- **Never read the raw pathname while a dialog can be open over a mode.** The dialog
+  records the mode's location in `location.state.background`; `ModeRoutes` renders at
+  _that_, `resolvedLocation` resolves it, and `pages/useOverlay.ts` is what every
+  intra-dialog link and every close control uses. Ignored, closing a dialog returns to the
+  menu and tears the mode down — and over a cutscene it remounts the player on a loop.
 - **Every mode's chrome needs `pointer-events-auto`.** `.hud-layer` is
   `pointer-events: none` so the scene stays reachable, and `ErrorBoundary`'s `className`
   styles its _fallback_, not a wrapper. Getting this wrong is silent: the hit target at
@@ -32,7 +38,9 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", ADR-0011.
 - **One producer of the camera**, in `GameEngine.#step`: cutscene, then observatory, then
   the ship. Each is a presentation eye handed to `buildScene`. Pushing a camera at the
   Three.js object instead leaves LOD, star brightness, `up` and flare occlusion all told
-  about a different viewpoint from the one on screen.
+  about a different viewpoint from the one on screen. **No arm may depend on a later one
+  resolving** — only the ship needs a player, and a cutscene sample placed below the
+  missing-player return latched `engine.cinematic` for the rest of the session.
 - **React Compiler is on. Do not hand-write `useMemo`/`useCallback`.** The exception is a
   component that reads mutable state — an engine or a metrics buffer is a stable reference
   whose _contents_ change every frame, so the compiler renders it once and shows that

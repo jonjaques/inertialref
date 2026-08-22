@@ -151,7 +151,7 @@ export function watchPresentation(
       if (attempts > 0) {
         log.info('presentation recovered', { attempts })
       }
-      document.removeEventListener('visibilitychange', onVisible)
+      standDown()
       return
     }
 
@@ -170,15 +170,32 @@ export function watchPresentation(
         'canvas never presented despite nudges; rebuilding the renderer',
         { attempts },
       )
+      // This instance is finished either way: the remount replaces the canvas
+      // and the effect that owns this watch starts a fresh one for it.
+      standDown()
       options.remount()
       return
     } else {
-      // Either the scene is legitimately black everywhere sampled, or the
-      // GPU process is beyond what a page can repair. Say so and stand down.
+      /*
+       * Either the scene is legitimately black everywhere sampled, or the GPU
+       * process is beyond what a page can repair. Say so and stand down — and
+       * *stand down* means the listener too. Only the success path used to
+       * detach it, so after giving up every subsequent tab switch re-armed the
+       * ladder: four `getImageData` readbacks and a swap-chain reset on every
+       * visibility change, for the rest of the session, on a page that had
+       * already concluded there was nothing left to try.
+       */
       log.warn('presentation watchdog giving up; reload if the scene is black')
+      standDown()
       return
     }
     timer = window.setTimeout(check, RETRY_MS)
+  }
+
+  /** Stop watching: this instance has nothing left to do, either way. */
+  const standDown = (): void => {
+    window.clearTimeout(timer)
+    document.removeEventListener('visibilitychange', onVisible)
   }
 
   const onVisible = (): void => {
@@ -193,8 +210,7 @@ export function watchPresentation(
   return {
     cancel() {
       cancelled = true
-      window.clearTimeout(timer)
-      document.removeEventListener('visibilitychange', onVisible)
+      standDown()
     },
   }
 }

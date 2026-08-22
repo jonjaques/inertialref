@@ -65,15 +65,24 @@ function isTyping(event: KeyboardEvent): boolean {
 /**
  * Whether the keystroke is aimed at a control in the overlay.
  *
- * Only `Tab` asks. It is bound to collapsing the dock *and* it is the browser's
- * only way between focusable elements, and a window-level `preventDefault` wins
- * both — so with focus on a dock button, Tab collapsed the panel the button was
- * in rather than moving to the next one, and there was no key that would.
+ * Only `Space` asks, and it is the one key that has to: it is the pause key
+ * *and* it is how a keyboard activates a focused button, and a window-level
+ * `preventDefault` on keydown cancels the activation before the click event
+ * that would have carried it ever exists. So with focus on any dock, shell-bar
+ * or settings button, pressing Space paused the simulation and the button did
+ * nothing — silently, because there is no error in cancelling an event.
+ * `hud/focus.ts` depends on this guard: it deliberately keeps focus after a
+ * keyboard activation, which is only navigable if Space still activates.
  *
  * Same shape as `isTyping` and for the same reason: the handler declines input
  * aimed at something else rather than the overlay learning about flight. From
  * the canvas or the body — which is where focus is during flight, because every
- * control hands it straight back — nothing has changed.
+ * control hands it straight back on a *pointer* click — nothing has changed.
+ *
+ * `F5` and `F9` deliberately do not ask. No control in the overlay responds to
+ * either, so declining them would not activate anything; it would hand the key
+ * back to the browser, and F5 is Reload. Losing the session because focus
+ * happened to be on a dock button is worse than the thing that would fix.
  */
 function isOverlayControl(event: KeyboardEvent): boolean {
   const target = event.target
@@ -88,19 +97,33 @@ export interface ControlOptions {
    * arrow keys to orbiting a camera and `F` to framing a target, and both are
    * flight axes here. Two window-level handlers claiming the same key is not a
    * conflict a user can diagnose — the ship simply drifts while they look at
-   * Saturn. The *other* bindings stay live in every mode, because pausing,
-   * warping and saving mean the same thing wherever you are.
+   * Saturn.
    */
   readonly axes: boolean
+  /**
+   * Whether `Space` pauses the simulation here.
+   *
+   * Off in the cinema mode, and for the same reason `axes` exists — except
+   * that this one is invisible rather than merely confusing. The player binds
+   * Space to its own transport, both handlers are on `window`, and neither
+   * `preventDefault` stops the other (only `stopImmediatePropagation` would):
+   * one press flipped `clock.paused` twice and nothing moved. A dead transport
+   * control with no error anywhere.
+   *
+   * The rest of the bindings stay live in every mode, because warping, saving
+   * and loading mean the same thing wherever you are.
+   */
+  readonly pause: boolean
 }
 
 export function useShipControls(
   engine: GameEngine,
   bindings: ControlBindings,
-  options: ControlOptions = { axes: true },
+  options: ControlOptions = { axes: true, pause: true },
 ): void {
   const held = useRef(new Set<string>())
   const axes = options.axes
+  const pause = options.pause
   // The bindings close over React state, so a new object arrives on every
   // render — several times a second while the HUD polls. Reading them through a
   // ref keeps one subscription for the life of the engine instead of tearing
@@ -145,6 +168,9 @@ export function useShipControls(
           latest.current.onKillRotation()
           break
         case 'Space':
+          // The focused control's activation wins, and the mode's own
+          // transport wins — see `isOverlayControl` and `ControlOptions.pause`.
+          if (!pause || isOverlayControl(event)) break
           latest.current.onPause()
           event.preventDefault()
           break
@@ -162,10 +188,26 @@ export function useShipControls(
           latest.current.onLoad()
           event.preventDefault()
           break
-        case 'Tab':
-          if (isOverlayControl(event)) break
+        /*
+         * `H`, not `Tab`.
+         *
+         * Tab was the binding, guarded by "unless focus is already in the
+         * overlay" — and that guard could never open. On load
+         * `document.activeElement` is `<body>`, whose `closest('.hud-layer')`
+         * is null, so the guard was false, the dock toggled and
+         * `preventDefault` cancelled the browser's focus move. Every
+         * subsequent Tab did the same, and with no `tabIndex` on the canvas
+         * there was no focusable element outside the layer to bootstrap from:
+         * focus could never enter the overlay at all, and every focus ring,
+         * `role="tab"` and `aria-expanded` in it was unreachable by keyboard.
+         *
+         * There is no version of this that keeps both. Tab is how a browser
+         * moves focus and a window-level `preventDefault` always wins, so a
+         * mode that binds it owns focus navigation whether it means to or not.
+         * Tab goes back to the browser; the collapse gets a letter.
+         */
+        case 'KeyH':
           latest.current.onToggleHud()
-          event.preventDefault()
           break
         case 'KeyG':
           latest.current.onShowNavigation()
@@ -202,7 +244,7 @@ export function useShipControls(
         engine.setControl([0, 0, 0], [0, 0, 0])
       }
     }
-  }, [engine, axes])
+  }, [engine, axes, pause])
 }
 
 export const CONTROL_HELP: readonly (readonly [string, string])[] = [
@@ -218,5 +260,6 @@ export const CONTROL_HELP: readonly (readonly [string, string])[] = [
   ['F5 / F9', 'save / load'],
   ['G', 'navigation panel'],
   ['P', 'performance panel'],
-  ['Tab', 'collapse the dock · within it, moves between controls'],
+  ['H', 'collapse the dock'],
+  ['Tab', 'move between the controls on screen'],
 ]

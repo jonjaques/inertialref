@@ -1,9 +1,8 @@
 import { useEffect, type ReactNode } from 'react'
-import { useNavigate } from 'react-router'
 import { motion } from 'motion/react'
 import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { HOME } from './paths.ts'
+import { useOverlay } from './useOverlay.ts'
 
 /*
  * The frame every routed page is drawn in.
@@ -30,7 +29,18 @@ export function OverlayPage({
   subtitle?: string
   children: ReactNode
 }) {
-  const navigate = useNavigate()
+  /*
+   * Closing goes back to the mode this dialog was opened over, not to the
+   * menu.
+   *
+   * All three ways out — Escape, the scrim, the X — used to `navigate(HOME)`,
+   * which is the one destination that is wrong whenever there is a background:
+   * `/planetarium?at=s:SOL/b:5` unmounted, its cleanup ran
+   * `observatory.clear()`, and the address in the URL was gone. The state that
+   * says what to go back to was already being recorded by `ShellBar` and read
+   * by `routes.tsx`; this file simply never asked for it. See `useOverlay`.
+   */
+  const { close } = useOverlay()
 
   /*
    * Escape closes. Bound at the window rather than on the panel because focus
@@ -42,14 +52,14 @@ export function OverlayPage({
    * while a cutscene is running, along with the rest of the chrome.
    */
   useEffect(() => {
-    const close = (event: KeyboardEvent): void => {
+    const onKey = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape') return
       event.preventDefault()
-      void navigate(HOME)
+      close()
     }
-    window.addEventListener('keydown', close)
-    return () => window.removeEventListener('keydown', close)
-  }, [navigate])
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [close])
 
   return (
     <motion.div
@@ -77,7 +87,7 @@ export function OverlayPage({
       // clicked — a drag that started inside the panel and released out here
       // reports the panel as its target and must not close the page.
       onClick={(event) => {
-        if (event.target === event.currentTarget) void navigate(HOME)
+        if (event.target === event.currentTarget) close()
       }}
     >
       <motion.div
@@ -105,7 +115,7 @@ export function OverlayPage({
             className="ml-auto text-slate-500 hover:text-sky-200"
             aria-label="Close (Escape)"
             title="Close (Escape)"
-            onClick={() => void navigate(HOME)}
+            onClick={close}
           >
             <X />
           </Button>

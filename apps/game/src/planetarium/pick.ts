@@ -44,8 +44,18 @@ export const PICK_SLOP = 24
  *
  * So: **anything the pointer is genuinely inside wins, largest first; only when
  * the pointer is inside nothing does proximity decide.** That is the rule every
- * map interface converged on, and it is the one that makes clicking a moon
- * against its planet work.
+ * map interface converged on, and it is what makes clicking a planet work at
+ * all.
+ *
+ * Say what it costs, because the obvious reading of "largest first" is the
+ * wrong way round: a moon *inside its planet's disc* is not reachable by
+ * clicking it — the pointer is inside both and the planet is larger. A moon is
+ * picked by being nearer, which is the case when it sits outside the disc
+ * (inside neither, so proximity decides) or when its own disc is the only one
+ * the pointer is in. For one drawn over its planet, the object panel's list of
+ * satellites is the way to reach it. Whether that is the right trade is a
+ * design question — `docs/design/planetarium.md` — and not something to change
+ * here by adjusting a comparison.
  */
 export function pick(
   candidates: readonly PickCandidate[],

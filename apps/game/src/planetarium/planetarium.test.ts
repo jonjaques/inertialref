@@ -162,6 +162,25 @@ describe('the keyboard', () => {
     expect(outward?.kind === 'zoom' && outward.notches).toBeGreaterThan(0)
   })
 
+  it('zooms by the same amount in both directions', () => {
+    /*
+     * `+` is Shift-`=`, so a `shiftKey` read as a magnitude modifier is always
+     * set for it and never set for `−`: the two keys the help text names
+     * differed by a factor of four, and pressing one then the other did not
+     * return the camera to where it started. The event carries the shift a
+     * `+` needed to be typed at all — it is not a second gesture.
+     */
+    const inward = keyAction({ key: '+', shiftKey: true })
+    const outward = keyAction({ key: '-' })
+    expect(inward?.kind === 'zoom' && inward.notches).toBe(
+      outward?.kind === 'zoom' ? -outward.notches : Number.NaN,
+    )
+    // ...and the unshifted glyphs mean exactly the same thing as the shifted
+    // ones, because on some layouts they are how the key is reached at all.
+    expect(keyAction({ key: '=' })).toEqual(inward)
+    expect(keyAction({ key: '_', shiftKey: true })).toEqual(outward)
+  })
+
   it('treats shift as a magnitude, not a different action', () => {
     const slow = keyAction({ key: 'ArrowRight' })
     const fast = keyAction({ key: 'ArrowRight', shiftKey: true })
@@ -197,10 +216,12 @@ describe('picking', () => {
     expect(pick([speck, planet], { x: 402, y: 301 })?.address).toBe('b:5')
   })
 
-  it('picks a moon in front of the planet it is against', () => {
-    // The other half of the same rule: a pointer inside both takes the larger,
-    // so a moon has to be picked by being *nearer*, not by being on top. It is
-    // outside the moon's few pixels but well inside its slop.
+  it('takes the planet, not the moon, when the pointer is inside both', () => {
+    // The other half of the same rule, and the cost of it: a pointer inside
+    // both takes the *larger*, so a moon has to be picked by being nearer
+    // rather than by being on top. Here the pointer is outside the moon's few
+    // pixels but well inside its slop — and still inside the planet's disc,
+    // which is why the planet wins.
     const planet = candidate({ address: 'b:5', x: 400, y: 300, radius: 300 })
     const moon = candidate({ address: 'b:5.1', x: 470, y: 260, radius: 4 })
     expect(pick([planet, moon], { x: 471, y: 261 })?.address).toBe('b:5')

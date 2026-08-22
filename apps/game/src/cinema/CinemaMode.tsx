@@ -15,12 +15,14 @@ import {
 } from 'lucide-react'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { FOCUS_RING, releaseFocus } from '../hud/focus.ts'
+import { useScrubber } from '../hud/useScrubber.ts'
 import { CINEMA, cinemaLink, cinemaScene, QUERY } from '../pages/paths.ts'
 import {
   durationText,
   parseAutoplay,
   parseFrame,
   secondStep,
+  secondsText,
   timecode,
 } from './timecode.ts'
 
@@ -103,8 +105,10 @@ function CinemaLibrary({ engine }: { engine: GameEngine }) {
                   </span>
                 </span>
                 <span className="shrink-0 font-mono text-[11px] text-slate-500 tabular-nums">
-                  {Math.floor(entry.seconds / 60)}:
-                  {String(Math.round(entry.seconds % 60)).padStart(2, '0')}
+                  {/* `secondsText`, not the same arithmetic inlined: rounding
+                      the seconds *within* the minute rendered a 119.6 s scene
+                      as `1:60`. */}
+                  {secondsText(entry.seconds)}
                 </span>
               </Link>
             </li>
@@ -130,7 +134,9 @@ function CinemaPlayer({ engine, id }: { engine: GameEngine; id: string }) {
   const [playhead, setPlayhead] = useState<Playhead | null>(null)
   const [failed, setFailed] = useState<string | null>(null)
   const [idle, setIdle] = useState(false)
-  const scrubbing = useRef(false)
+  // The drag latch and the guarded seek, shared with the debug transport in
+  // `hud/CutsceneOverlay.tsx` — see `hud/useScrubber.ts` for what each is for.
+  const { held: scrubbing, grab, seek: seekFrame } = useScrubber(engine)
 
   /*
    * Start the scene, once per id.
@@ -212,7 +218,10 @@ function CinemaPlayer({ engine, id }: { engine: GameEngine; id: string }) {
       })
     }, 100)
     return () => window.clearInterval(poll)
-  }, [engine])
+    // `scrubbing` is a ref and never changes identity; it is named so the
+    // dependency list can be read as the complete list of what this closes
+    // over rather than as an omission somebody has to re-derive.
+  }, [engine, scrubbing])
 
   /*
    * Write the parked frame back into the URL.
@@ -266,14 +275,12 @@ function CinemaPlayer({ engine, id }: { engine: GameEngine; id: string }) {
 
   const seek = useCallback(
     (frame: number) => {
-      const status = engine.harness.cutsceneStatus()
-      if (status === null) return
-      engine.harness.seekCutscene(frame)
+      if (!seekFrame(frame)) return
       setPlayhead((current) =>
         current === null ? current : { ...current, frame },
       )
     },
-    [engine],
+    [seekFrame],
   )
 
   const toggle = useCallback(() => {
@@ -380,12 +387,7 @@ function CinemaPlayer({ engine, id }: { engine: GameEngine; id: string }) {
           step={1}
           value={Math.floor(playhead.frame)}
           aria-label="Frame"
-          onPointerDown={() => {
-            scrubbing.current = true
-          }}
-          onPointerUp={() => {
-            scrubbing.current = false
-          }}
+          onPointerDown={grab}
           onChange={(event) => seek(Number(event.target.value))}
           className={`h-1 w-full cursor-pointer accent-sky-400 ${FOCUS_RING}`}
         />

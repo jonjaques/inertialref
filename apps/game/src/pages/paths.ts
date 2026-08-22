@@ -143,6 +143,41 @@ export const overlayState = (location: Location): OverlayLocationState => ({
   background: location,
 })
 
+/**
+ * The mode's location behind a dialog, or `null` when there is none.
+ *
+ * A cold load of `/settings` has no background: the tab was opened at that
+ * address and there is no session behind it.
+ */
+export function overlayBackground(location: Location): Location | null {
+  const state = location.state as OverlayLocationState | null
+  return state?.background ?? null
+}
+
+/**
+ * The location the shell actually resolves against.
+ *
+ * **Everything that asks "which mode is running" must ask this, not
+ * `location.pathname`.** `ModeRoutes` renders at the background location, so
+ * with a dialog open the raw pathname is the *dialog's* — and a shell that
+ * derived its mode from it disagreed with the tree it was drawn over. From
+ * `/planetarium`, opening `/settings` computed `menu` while `PlanetariumMode`
+ * was still mounted, so the shell bar dropped its badge and rendered the way
+ * back as an inert span. Over a running cutscene it was worse than cosmetic:
+ * the gate that keeps the cinema player mounted is `mode === 'cinema'`, so
+ * navigating to a dialog unmounted the player, whose cleanup stopped the
+ * scene, which republished `cinema: false` an eighth of a second later, which
+ * mounted it again — a remount flap several times a second that re-teleported
+ * the player, with the requested dialog never rendering at all.
+ *
+ * Still a pure function of the URL, so the invariant holds: the mode is never
+ * held in React state. Reading the background *is* reading the URL — React
+ * Router carries it in the history entry.
+ */
+export function resolvedLocation(location: Location): Location {
+  return overlayBackground(location) ?? location
+}
+
 /* ------------------------------------------------------------------------- */
 /* Search parameters                                                          */
 /* ------------------------------------------------------------------------- */

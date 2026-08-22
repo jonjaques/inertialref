@@ -33,6 +33,7 @@ import {
   framingDistance,
   type ObserverState,
   observerPose,
+  shortestAngle,
   zoomFactorForNotches,
 } from '@inertialref/rendering'
 import { currentSystemOf, resolveDestination } from './travel.ts'
@@ -202,6 +203,24 @@ export class Observatory {
       elevation: this.#state.elevation,
       distance,
     }
+    /*
+     * And the ease starts from a distance the *new* target permits.
+     *
+     * `approachState` interpolates distance in log space and clamps only
+     * elevation on the way, so every intermediate frame is whatever the old
+     * target's band allowed. Settled 3.2e6 m from Luna and then clicking the
+     * Sun put the eye 695,700 km inside the photosphere for the second the
+     * transition took, and nothing surfaced it: `status().altitude` is
+     * `Math.max(0, distance - radius)`, so a negative clearance reads as zero.
+     *
+     * Clamped here, at the moment of re-target, rather than inside
+     * `approachState` — that is shared with zoom, where clamping the
+     * *interpolant* would change the easing curve rather than its endpoints.
+     */
+    this.#state = {
+      ...this.#state,
+      distance: clampDistance(this.#state.distance, target.radius),
+    }
     if (options.ease === false || previous === null) this.#state = this.#desired
 
     log.info('observatory focused', {
@@ -346,7 +365,14 @@ export class Observatory {
     return (
       Math.abs(Math.log(a.distance) - Math.log(b.distance)) <
         ARRIVED_LOG_EPSILON &&
-      Math.abs(a.azimuth - b.azimuth) < ARRIVED_LOG_EPSILON &&
+      // `shortestAngle`, because that is the way `approachState` converges.
+      // Against the raw difference, an azimuth more than half a turn from the
+      // desired one settles at a difference near 2π that never falls below the
+      // epsilon — so `travelling` stays true for the rest of the session,
+      // which is the exact failure this constant's docstring exists to
+      // prevent. Azimuth accumulates as you drag; two headings naming the same
+      // direction can be many turns apart numerically.
+      Math.abs(shortestAngle(a.azimuth, b.azimuth)) < ARRIVED_LOG_EPSILON &&
       Math.abs(a.elevation - b.elevation) < ARRIVED_LOG_EPSILON
     )
   }

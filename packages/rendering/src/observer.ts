@@ -267,6 +267,24 @@ export function shortestAngle(from: number, to: number): number {
 }
 
 /**
+ * An azimuth as a compass bearing: whole degrees in [0, 360).
+ *
+ * A readout, and it is here rather than in the panel that draws it because the
+ * thing it has to get right is a property of `azimuth` itself. Azimuth is
+ * unbounded and signed — `applyDrag` subtracts and never wraps, exactly as
+ * `shortestAngle` above describes — and JavaScript's `%` is a remainder rather
+ * than a modulo, so it keeps the sign. `Math.round(deg) % 360` therefore
+ * printed `-23° az` for a rightward drag from the opening state, and `-327°`
+ * for a heading of 33°: a bearing swinging between −359 and 359 rather than
+ * reading like a compass.
+ */
+export function compassDegrees(radians: number): number {
+  if (!Number.isFinite(radians)) return 0
+  const degrees = Math.round((radians * 180) / Math.PI)
+  return ((degrees % 360) + 360) % 360
+}
+
+/**
  * Where the camera should be to see a body the way the light falls on it.
  *
  * Given the direction from the target to its star, this returns the azimuth and

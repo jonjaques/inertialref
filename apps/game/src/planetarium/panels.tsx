@@ -15,6 +15,7 @@ import {
   Telescope,
 } from 'lucide-react'
 import { AU, formatDistance, LIGHT_YEAR } from '@inertialref/shared'
+import { compassDegrees } from '@inertialref/rendering'
 import type { TravelTarget } from '@inertialref/devtools'
 import { DEFAULT_FILL } from '@inertialref/devtools'
 import { Input } from '@/components/ui/input'
@@ -178,7 +179,11 @@ export function ObjectPanel({ engine, focus }: PlanetariumContext) {
         />
         <Row
           label="phase"
-          value={`${Math.round((status.state.azimuth * 180) / Math.PI) % 360}° az · ${Math.round(
+          // `compassDegrees`, not `% 360`: azimuth accumulates unbounded as
+          // you drag and `%` keeps the sign, so the readout showed `-327° az`
+          // for a heading of 33°. Elevation is clamped to ±90° and needs none
+          // of this.
+          value={`${compassDegrees(status.state.azimuth)}° az · ${Math.round(
             (status.state.elevation * 180) / Math.PI,
           )}° el`}
         />

@@ -114,7 +114,7 @@ export function HudDock({
           {summary}
         </span>
         <ConnectionPip connection={connection} />
-        <span className="shrink-0 text-slate-600">Tab</span>
+        <span className="shrink-0 text-slate-600">H</span>
       </button>
 
       {open && (

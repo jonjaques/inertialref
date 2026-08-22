@@ -10,12 +10,25 @@
  * picture.
  */
 
-/** A frame count as SMPTE-style `m:ss:ff` — minutes, seconds, frames. */
+/**
+ * A frame count as SMPTE-style `m:ss:ff` — minutes, seconds, frames.
+ *
+ * **Both fields come from one rate.** The frames field used to wrap on
+ * `Math.round(fps)` while the seconds field ticked on the true rate, and at
+ * 24000/1001 those two disagree once a second: frames 1006→1007→1008 read
+ * `0:41:22` → `0:42:23` → `0:42:00`, so the frame counter ran *backwards*
+ * inside a second — 21 times over the title sequence. A still identified by a
+ * timecode that occurs twice cannot be found again, which is the one thing this
+ * module exists to make possible. Deriving the remainder from the same `fps`
+ * the seconds came from makes the pair monotonic by construction; it also
+ * disposes of `Math.round(fps)`, which is 0 for any rate under 0.5 and turned
+ * the readout into `0:00:NaN`.
+ */
 export function timecode(frame: number, fps: number): string {
   if (!Number.isFinite(frame) || !Number.isFinite(fps) || fps <= 0) return '—'
   const whole = Math.max(0, Math.floor(frame))
   const seconds = Math.floor(whole / fps)
-  const frames = whole % Math.round(fps)
+  const frames = Math.floor(whole - seconds * fps)
   const minutes = Math.floor(seconds / 60)
   return `${minutes}:${pad(seconds % 60)}:${pad(frames)}`
 }
@@ -25,8 +38,23 @@ const pad = (value: number): string => String(value).padStart(2, '0')
 /** A duration in whole seconds, for a scene listing. */
 export function durationText(frames: number, fps: number): string {
   if (!Number.isFinite(frames) || !Number.isFinite(fps) || fps <= 0) return '—'
-  const seconds = Math.round(frames / fps)
-  return `${Math.floor(seconds / 60)}:${pad(seconds % 60)}`
+  return secondsText(frames / fps)
+}
+
+/**
+ * A duration in seconds as `m:ss`.
+ *
+ * Rounded once, before the split — which is the whole content of this
+ * function, and why it is one rather than two lines at each call site. The
+ * library listing did the arithmetic inline as
+ * `Math.floor(s / 60)`:`Math.round(s % 60)`, so a 119.6 s scene took the floor
+ * of the minutes and rounded the remainder up past its own modulus and
+ * rendered `1:60`.
+ */
+export function secondsText(seconds: number): string {
+  if (!Number.isFinite(seconds)) return '—'
+  const whole = Math.max(0, Math.round(seconds))
+  return `${Math.floor(whole / 60)}:${pad(whole % 60)}`
 }
 
 /**

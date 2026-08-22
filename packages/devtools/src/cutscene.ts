@@ -198,6 +198,21 @@ export class CutsceneDirector {
   seek(frame: number): CutsceneStatus {
     const active = this.#active
     if (active === null) throw new Error('No cutscene is playing')
+    /*
+     * Non-finite input is declined rather than clamped, the way
+     * `Observatory.setFov` declines a field of view it cannot use.
+     * `Math.max(0, Math.min(NaN, n))` is `NaN`, which lands in `epoch` — and
+     * `epoch` is never recomputed, so every subsequent frame is `NaN`, the
+     * `frame >= durationFrames` end test is false forever, and the scene
+     * renders black with no way out but a reload. A seek comes from a range
+     * input, a URL parameter and a console line; all three can produce one.
+     */
+    if (!Number.isFinite(frame)) {
+      log.warn('ignoring a seek to a frame that is not a number', {
+        id: active.script.id,
+      })
+      return this.status() as CutsceneStatus
+    }
     const clamped = Math.max(
       0,
       Math.min(frame, active.script.durationFrames - 1),

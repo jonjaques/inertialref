@@ -7,6 +7,7 @@ import {
   type DockLayout,
   type DockZone,
   DROP_ZONES,
+  dropIndex,
   insertionIndex,
   movePanel,
 } from './layout.ts'
@@ -62,7 +63,19 @@ export function Dock({ panels, layout, onLayout, rail }: DockProps) {
    */
   const move = useCallback(
     (id: string, zone: DockZone, index: number) => {
-      onLayout((current) => movePanel(current, id, zone, index))
+      /*
+       * `index` is measured against the panels on screen, which still include
+       * the one being dragged — `dropIndex` is the translation into the index
+       * `movePanel` reads, and without it a downward drag inside one zone
+       * landed a slot past the line the drop indicator had just drawn.
+       *
+       * Inside the updater, so it is computed against the same state the move
+       * is applied to. Against the captured `layout` it would be right for the
+       * first drop of a gesture and wrong for a second.
+       */
+      onLayout((current) =>
+        movePanel(current, id, zone, dropIndex(current, id, zone, index)),
+      )
     },
     [onLayout],
   )

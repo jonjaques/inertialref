@@ -39,7 +39,7 @@ import {
   type RendererDescription,
 } from './render/output.ts'
 import { ModeRoutes, OverlayRoutes } from './pages/routes.tsx'
-import { modeForPath } from './pages/paths.ts'
+import { modeForPath, resolvedLocation } from './pages/paths.ts'
 import { ShellBar } from './pages/ShellBar.tsx'
 import { SceneView } from './scene/SceneView.tsx'
 import {
@@ -143,9 +143,15 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    * place, and the only way to guarantee that is for the path to be the source
    * of truth. `modeForPath` is a pure function for exactly that reason — the
    * claim is testable in Node without a browser or a router.
+   *
+   * Against the location `ModeRoutes` resolves, not the raw pathname. With a
+   * dialog open the two differ, and this is the half that decides what chrome
+   * is drawn *and* whether the cinema player stays mounted — so disagreeing
+   * with the tree it is drawn over is not cosmetic. `resolvedLocation` says
+   * what went wrong at length.
    */
   const location = useLocation()
-  const mode = modeForPath(location.pathname)
+  const mode = modeForPath(resolvedLocation(location).pathname)
 
   /*
    * The debug overlay: off by default, and off is the whole point.
@@ -458,7 +464,12 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
     // arrows to orbiting a camera and `F` to framing a target, and the cinema
     // player binds them to stepping frames — two window handlers claiming one
     // key is not something a player can diagnose.
-    { axes: mode === 'flight' },
+    //
+    // Space is the same argument, and it was missed: the cinema player binds
+    // it to its own transport, so both handlers ran and one press flipped
+    // `clock.paused` twice — the documented play/pause control did nothing at
+    // all, with nothing to see in the console.
+    { axes: mode === 'flight', pause: mode !== 'cinema' },
   )
 
   /*
@@ -538,55 +549,96 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
        * holds for every overlay inside it, and it must not be on the root: the
        * canvas is a sibling and would be clamped with it.
        */}
+      {/*
+       * The overlay layer, and the order things are stacked in it.
+       *
+       * Every band below is `position: absolute` in one stacking context, so
+       * with no `z-index` anywhere the paint order — and, worse, the
+       * *hit-testing* order — is DOM order. That was an accident waiting for a
+       * mode that covers the viewport: `PlanetariumMode`'s input surface is
+       * `absolute inset-0 pointer-events-auto` and is emitted after the dock,
+       * so in the planetarium every button, tab and drag handle in the dock
+       * was unclickable and the surface silently took the click.
+       *
+       * So the order is stated, bottom to top, and each band gets an inert
+       * wrapper to state it on — `ErrorBoundary`'s `className` styles its
+       * *fallback* rather than a wrapper, and the chrome inside positions
+       * itself, so there is otherwise nothing here to hang a z-index on. The
+       * wrappers are `pointer-events-none` like the layer itself, so they
+       * change nothing about what is clickable: each piece of chrome turns
+       * events back on for itself, exactly as before.
+       *
+       *   0  the mode           — at its widest a full-viewport input surface
+       *   10 the cutscene layer — blackout and titles: picture, not UI
+       *   20 the dock           — the instrument, over the mode it drives
+       *   30 the shell bar, notices, and the cinema player
+       *   40 dialogs            — over all of it, which is what a dialog is
+       *
+       * The cutscene layer is above the mode because its blackout is part of
+       * the picture. The cinema player is the one mode that has to be read
+       * *through* that blackout — it carries the transport and the way out —
+       * which is why the mode band is lifted to 30 there and nowhere else.
+       *
+       * Radix portals its tooltips to `<body>` at `z-50`, outside this layer
+       * and above all of it, which is what a tooltip should be.
+       */}
       <div className="hud-layer pointer-events-none absolute inset-0">
         {/* Renders nothing at all when no cutscene is running. While one is,
             every other piece of chrome below unmounts — Esc skips, and the
             dock comes straight back. */}
-        <ErrorBoundary
-          what="the cutscene overlay"
-          className="pointer-events-auto absolute bottom-5 left-1/2 w-[34rem] max-w-[80vw] -translate-x-1/2 font-mono text-[11px]"
-        >
-          {/* The scene's own screen-space layer: blackout, titles, audio. Its
-              transport is the *debug* one — the cinema player provides the
-              real controls, and two transports on screen at once would be two
-              playheads a person could disagree with. */}
-          <CutsceneOverlay engine={engine} transport={debug} />
-        </ErrorBoundary>
-        {!cinema && debug && (
+        <div className="pointer-events-none absolute inset-0 z-10">
           <ErrorBoundary
-            what="the dock"
-            className="pointer-events-auto absolute right-3 top-3 w-[27rem] max-w-[calc(100vw-1.5rem)] font-mono text-[11px] leading-relaxed"
+            what="the cutscene overlay"
+            className="pointer-events-auto absolute bottom-5 left-1/2 w-[34rem] max-w-[80vw] -translate-x-1/2 font-mono text-[11px]"
           >
-            <HudDock
+            {/* The scene's own screen-space layer: blackout, titles, audio. Its
+                transport is the *debug* one — the cinema player provides the
+                real controls, and two transports on screen at once would be two
+                playheads a person could disagree with, so it is off in the
+                cinema mode however the debug overlay is set. */}
+            <CutsceneOverlay
               engine={engine}
-              status={status}
-              render={{
-                preference: hdr,
-                output,
-                onCyclePreference: () => {
-                  const next =
-                    HDR_STATES[
-                      (HDR_STATES.indexOf(hdr) + 1) % HDR_STATES.length
-                    ] ?? 'auto'
-                  // The renderer is rebuilt for this, so say what happened —
-                  // otherwise the only feedback is a frame the player may not be
-                  // able to see the difference in, which is the whole problem.
-                  setHdr(next)
-                  flash(`hdr ${next}`)
-                },
-              }}
-              graphics={graphicsState}
-              camera={cameraState}
-              connection={connection}
-              onCheckConnection={monitor.refresh}
-              open={dockOpen}
-              onOpenChange={setDockOpen}
-              tab={tab}
-              onTabChange={setTab}
-              commands={commands}
-              onNotice={flash}
+              transport={debug && mode !== 'cinema'}
             />
           </ErrorBoundary>
+        </div>
+        {!cinema && debug && (
+          <div className="pointer-events-none absolute inset-0 z-20">
+            <ErrorBoundary
+              what="the dock"
+              className="pointer-events-auto absolute right-3 top-3 w-[27rem] max-w-[calc(100vw-1.5rem)] font-mono text-[11px] leading-relaxed"
+            >
+              <HudDock
+                engine={engine}
+                status={status}
+                render={{
+                  preference: hdr,
+                  output,
+                  onCyclePreference: () => {
+                    const next =
+                      HDR_STATES[
+                        (HDR_STATES.indexOf(hdr) + 1) % HDR_STATES.length
+                      ] ?? 'auto'
+                    // The renderer is rebuilt for this, so say what happened —
+                    // otherwise the only feedback is a frame the player may not be
+                    // able to see the difference in, which is the whole problem.
+                    setHdr(next)
+                    flash(`hdr ${next}`)
+                  },
+                }}
+                graphics={graphicsState}
+                camera={cameraState}
+                connection={connection}
+                onCheckConnection={monitor.refresh}
+                open={dockOpen}
+                onOpenChange={setDockOpen}
+                tab={tab}
+                onTabChange={setTab}
+                commands={commands}
+                onNotice={flash}
+              />
+            </ErrorBoundary>
+          </div>
         )}
         {/*
          * The mode: the menu, a flight session, the planetarium, the player.
@@ -607,17 +659,21 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
          * cutscene a fraction of a second later, with nothing to explain it.
          */}
         {(!cinema || mode === 'cinema') && (
-          <ErrorBoundary
-            what={`the ${mode} mode`}
-            className="pointer-events-auto absolute inset-0"
+          <div
+            className={`pointer-events-none absolute inset-0 ${mode === 'cinema' ? 'z-30' : 'z-0'}`}
           >
-            <ModeRoutes
-              engine={engine}
-              status={status}
-              fov={fov}
-              onFov={setFov}
-            />
-          </ErrorBoundary>
+            <ErrorBoundary
+              what={`the ${mode} mode`}
+              className="pointer-events-auto absolute inset-0"
+            >
+              <ModeRoutes
+                engine={engine}
+                status={status}
+                fov={fov}
+                onFov={setFov}
+              />
+            </ErrorBoundary>
+          </div>
         )}
 
         {/* A notice echoes what was asked for, and one of the things that can
@@ -641,7 +697,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 4 }}
               transition={{ duration: 0.15 }}
-              className="pointer-events-none absolute bottom-3 left-1/2 max-w-[min(36rem,calc(100vw-1.5rem))] -translate-x-1/2 truncate rounded bg-sky-500/20 px-3 py-1 font-mono text-xs text-sky-200"
+              className="pointer-events-none absolute bottom-3 left-1/2 z-30 max-w-[min(36rem,calc(100vw-1.5rem))] -translate-x-1/2 truncate rounded bg-sky-500/20 px-3 py-1 font-mono text-xs text-sky-200"
             >
               {notice}
             </motion.div>
@@ -652,18 +708,24 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
             that is on screen in every mode, and the first thing to step out of
             the frame when a scene plays. The cinema player's own transport
             carries the way out while one is running. */}
-        {!cinema && <ShellBar mode={mode} debug={debug} onDebug={setDebug} />}
+        {!cinema && (
+          <div className="pointer-events-none absolute inset-0 z-30">
+            <ShellBar mode={mode} debug={debug} onDebug={setDebug} />
+          </div>
+        )}
 
         {/* Dialogs, over a running simulation and over whatever mode is behind
             them. Inside the layer so they inherit the standard-range clamp; a
             sibling of `<Canvas>`, so navigating cannot remount the renderer. */}
         {!cinema && (
-          <ErrorBoundary
-            what="the page overlay"
-            className="pointer-events-auto absolute inset-0"
-          >
-            <OverlayRoutes graphics={graphicsState} camera={cameraState} />
-          </ErrorBoundary>
+          <div className="pointer-events-none absolute inset-0 z-40">
+            <ErrorBoundary
+              what="the page overlay"
+              className="pointer-events-auto absolute inset-0"
+            >
+              <OverlayRoutes graphics={graphicsState} camera={cameraState} />
+            </ErrorBoundary>
+          </div>
         )}
       </div>
     </div>

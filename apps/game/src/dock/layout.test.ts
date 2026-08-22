@@ -5,6 +5,7 @@ import {
   type DockZone,
   DOCK_ZONES,
   defaultLayout,
+  dropIndex,
   EMPTY_LAYOUT,
   hidePanel,
   insertionIndex,
@@ -132,6 +133,90 @@ describe('moving a panel', () => {
     const zone = zoneOf(layout, 'object') as DockZone
     const index = layout[zone].indexOf('object')
     expect(movePanel(layout, 'object', zone, index)).toEqual(layout)
+  })
+})
+
+describe('a drop, against the panels that were on screen', () => {
+  /*
+   * The seam between the two lists. `insertionIndex` measures against the DOM,
+   * which still holds the dragged panel at 40% opacity so the stack does not
+   * reflow mid-gesture; `movePanel` reads its index against the list with the
+   * panel already removed. Getting the translation wrong is invisible in review
+   * and reads, in the hand, as the dock ignoring where you aimed.
+   */
+  const four: DockLayout = { ...EMPTY_LAYOUT, right: ['a', 'b', 'c', 'd'] }
+  const drop = (panel: string, zone: DockZone, index: number): DockLayout =>
+    movePanel(four, panel, zone, dropIndex(four, panel, zone, index))
+
+  it('lands the panel where the indicator was drawn', () => {
+    // Grab `a`, hover between `b` and `c`: the line is drawn at index 2 of the
+    // four on screen, and `a` belongs between them. Splicing at 2 of the three
+    // that remain put it after `c`.
+    expect(drop('a', 'right', 2).right).toEqual(['b', 'a', 'c', 'd'])
+    // Upward was always right: removing an element after the insertion point
+    // does not shift it.
+    expect(drop('c', 'right', 1).right).toEqual(['a', 'c', 'b', 'd'])
+    // A different zone measures a list that never contained the panel.
+    expect(drop('a', 'left', 0).left).toEqual(['a'])
+  })
+
+  it('is the identity for a drop on the panel’s own line', () => {
+    // The two lines either side of a panel both mean "leave it alone", and a
+    // gesture that ends where it started must not renumber the stack.
+    expect(drop('b', 'right', 1).right).toEqual(['a', 'b', 'c', 'd'])
+    expect(drop('b', 'right', 2).right).toEqual(['a', 'b', 'c', 'd'])
+  })
+
+  it('puts every panel where the line was, from any zone and any slot', () => {
+    /*
+     * The property: after the drop, the panel is at the position the indicator
+     * displayed — which is the index it was given, counted among the panels
+     * that were on screen, minus the ones the dragged panel itself was ahead
+     * of. Stated against the *rendered* list rather than against `movePanel`,
+     * so it is a claim about what the user saw.
+     */
+    fc.assert(
+      fc.property(
+        fc.constantFrom(...IDS),
+        fc.constantFrom('left', 'right', 'bottom'),
+        fc.array(anyMove, { maxLength: 12 }),
+        fc.integer({ min: 0, max: 6 }),
+        (panel, zone, moves, index) => {
+          let layout = defaultLayout(PANELS)
+          for (const move of moves)
+            layout = movePanel(layout, move.panel, move.zone, move.index)
+
+          const to = zone as DockZone
+          // What the zone showed while the drag was in flight, dragged panel
+          // included — the list `indexAt` measured and the DropLine was drawn
+          // against.
+          const onScreen = [...layout[to]]
+          const at = Math.min(index, onScreen.length)
+
+          const next = movePanel(
+            layout,
+            panel,
+            to,
+            dropIndex(layout, panel, to, at),
+          )
+          expectIntact(next)
+
+          /*
+           * Where the line was, derived from what it *meant* rather than from
+           * the arithmetic under test: the indicator is drawn immediately
+           * before `onScreen[at]`, so the panel belongs immediately before the
+           * first panel at or after that slot which is not itself. Counting
+           * from the far end is what keeps this independent — restating
+           * `dropIndex`'s ±1 here would be a test of nothing.
+           */
+          const others = onScreen.filter((id) => id !== panel)
+          const below = onScreen.slice(at).filter((id) => id !== panel)
+          expect(next[to].indexOf(panel)).toBe(others.length - below.length)
+          // ...and everything else kept its order.
+          expect(next[to].filter((id) => id !== panel)).toEqual(others)
+        },
+      ),
+    )
   })
 })
 

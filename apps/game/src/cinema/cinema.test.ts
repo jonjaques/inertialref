@@ -1,3 +1,4 @@
+import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
 import {
   cinemaLink,
@@ -11,6 +12,7 @@ import {
   parseAutoplay,
   parseFrame,
   secondStep,
+  secondsText,
   timecode,
 } from './timecode.ts'
 
@@ -41,6 +43,70 @@ describe('timecode', () => {
 
   it('rounds a duration to whole seconds for a listing', () => {
     expect(durationText(24 * 95, 24)).toBe('1:35')
+    // Rounded once, before the split. The library listing rounded the seconds
+    // *within* the minute and rendered a 119.6 s scene as `1:60`.
+    expect(secondsText(119.6)).toBe('2:00')
+    expect(secondsText(59.4)).toBe('0:59')
+    expect(secondsText(0)).toBe('0:00')
+  })
+
+  it('counts on the rate the scene is actually authored at', () => {
+    /*
+     * 24000/1001, which is what `TNG_INTRO` runs at and what nothing in this
+     * file exercised until the readout was found running backwards. The
+     * seconds field ticks between 1006 and 1007 — 23.976 × 42 = 1006.99 — so a
+     * frames field wrapping on 24 restarted the second at 23 and then dropped
+     * to 0 on the *next* frame.
+     */
+    const fps = 24_000 / 1001
+    expect(timecode(1_006, fps)).toBe('0:41:22')
+    expect(timecode(1_007, fps)).toBe('0:42:00')
+    expect(timecode(1_008, fps)).toBe('0:42:01')
+  })
+
+  it('never goes backwards, at any rate a scene is cut on', () => {
+    /*
+     * The property the example above is one instance of, and the reason this is
+     * a property rather than three more examples: a timecode is a *name* for a
+     * frame, and a name that occurs twice in a sequence names nothing. Both
+     * halves matter — monotonic, so two people comparing stills agree on which
+     * came first, and `frames < ceil(fps)` so the field is a position within
+     * its second rather than a counter that has run past it.
+     */
+    fc.assert(
+      fc.property(
+        fc.constantFrom(24_000 / 1001, 24, 25, 30_000 / 1001, 30, 60),
+        fc.integer({ min: 0, max: 5_000 }),
+        (fps, from) => {
+          const fields = (at: number): [number, number, number] =>
+            timecode(at, fps).split(':').map(Number) as [number, number, number]
+          /*
+           * A *window* of consecutive frames rather than one sampled frame.
+           * The defect was 21 bad transitions in 1500 frames, and a property
+           * that picks single frames at random almost never lands on one — it
+           * passed against the broken implementation, which is the trap this
+           * whole file's header is about. A run of 400 crosses sixteen second
+           * boundaries, and every second boundary is where the two rates
+           * disagree.
+           */
+          let previous = fields(from)
+          for (let frame = from + 1; frame <= from + 400; frame += 1) {
+            const here = fields(frame)
+            expect(here[2]).toBeLessThan(Math.ceil(fps))
+            expect(here[1]).toBeLessThan(60)
+            // Field by field rather than as one number: a frames field is not
+            // base 60, and folding it into one would smuggle in the assumption
+            // this is meant to be checking.
+            const first = here.findIndex((value, i) => value !== previous[i])
+            if (first >= 0)
+              expect(here[first] as number).toBeGreaterThan(
+                previous[first] as number,
+              )
+            previous = here
+          }
+        },
+      ),
+    )
   })
 })
 

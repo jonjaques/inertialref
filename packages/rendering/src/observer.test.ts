@@ -20,6 +20,7 @@ import {
   type ObserverState,
   observerOffset,
   observerPose,
+  compassDegrees,
   shortestAngle,
   zoomFactorForNotches,
 } from './observer.ts'
@@ -237,6 +238,34 @@ describe('easing', () => {
           // whole number of turns.
           const residue = (from + delta - to) / (Math.PI * 2)
           expect(Math.abs(residue - Math.round(residue))).toBeLessThan(1e-9)
+        },
+      ),
+    )
+  })
+
+  it('reads as a compass bearing however far the drag accumulated', () => {
+    /*
+     * The readout half of the same fact. `%` in JavaScript is a remainder and
+     * keeps the sign, so the panel's `Math.round(deg) % 360` showed `-23° az`
+     * after a rightward drag from the opening state and `-327°` for a heading
+     * of 33° — a bearing that swings between −359 and 359.
+     */
+    expect(compassDegrees(0)).toBe(0)
+    expect(compassDegrees(-Math.PI / 2)).toBe(270)
+    expect(compassDegrees(-6 * Math.PI - Math.PI)).toBe(180)
+    fc.assert(
+      fc.property(
+        fc.double({ min: -100, max: 100, noNaN: true }),
+        (azimuth) => {
+          const bearing = compassDegrees(azimuth)
+          expect(bearing).toBeGreaterThanOrEqual(0)
+          expect(bearing).toBeLessThan(360)
+          expect(Number.isInteger(bearing)).toBe(true)
+          // It still names the direction it was given, to within the rounding.
+          const residue = (azimuth * 180) / Math.PI - bearing
+          expect(
+            Math.abs(residue / 360 - Math.round(residue / 360)),
+          ).toBeLessThan(0.5 / 360 + 1e-9)
         },
       ),
     )

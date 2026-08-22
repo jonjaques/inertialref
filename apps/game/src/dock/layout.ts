@@ -80,6 +80,34 @@ export function movePanel(
   return stripped
 }
 
+/**
+ * The `movePanel` index for a drop measured against the panels *on screen*.
+ *
+ * Two different lists, and they differ by exactly one element. The dragged
+ * panel is deliberately left in the DOM at 40% opacity so the stack does not
+ * reflow mid-gesture — see `Dock.tsx` — so `insertionIndex` counts against a
+ * list that still contains it, while `movePanel` reads its index against the
+ * list with it already removed. Dragging *downwards* inside one zone, those
+ * two disagree: in `[A,B,C,D]`, grabbing A and hovering between B and C draws
+ * the line at index 2 and lands the panel at `[B,C,A,D]` — one slot past the
+ * indicator. Upward drags were always right, because removing an element after
+ * the insertion point does not shift it.
+ *
+ * Here rather than at the call site because it is arithmetic over a layout,
+ * which is what this module is for, and because "where the indicator said" is
+ * a property a test can state. `movePanel`'s own "one further down" semantics
+ * are deliberate and unchanged; this is the translation into them.
+ */
+export function dropIndex(
+  layout: DockLayout,
+  panel: string,
+  zone: DockZone,
+  index: number,
+): number {
+  const from = layout[zone].indexOf(panel)
+  return from >= 0 && from < index ? index - 1 : index
+}
+
 /** Close a panel: a move to `hidden`, so it can be reopened where it lands. */
 export const hidePanel = (layout: DockLayout, panel: string): DockLayout =>
   movePanel(layout, panel, 'hidden')

@@ -466,13 +466,8 @@ export class GameEngine implements PresentationHost {
   #step(delta: Seconds): void {
     this.#ticksLastFrame = this.world.advance(delta)
 
-    const player = this.session.player()
-    if (player === null) return
-
     const shot = snapshot(this.world)
     this.snapshot = shot
-    const camera = shot.entities.find((entity) => entity.id === player)
-    if (camera === undefined) return
 
     /*
      * The cutscene director's per-frame ask, against `renderTime` so a paused
@@ -481,6 +476,16 @@ export class GameEngine implements PresentationHost {
      * *cinematic* eye when there is one: the origin must stay within its
      * rebase window of wherever the camera actually is, and a scene built
      * around a ship an AU behind the shot would light and sort for nobody.
+     *
+     * **Above the missing-player returns below, and it has to be.** A cutscene
+     * owns the camera precisely when the ship does not matter, so the cutscene
+     * arm of the precedence order must not depend on the ship arm resolving.
+     * With the sample underneath them, a single frame during a load or an
+     * authority hand-off — `session.player()` null for one frame — meant the
+     * director was never asked again: it kept `#active`, `this.cinematic` kept
+     * its last non-null value for the rest of the session, `engineStore`
+     * published `cinema: true` forever, and every piece of chrome unmounted,
+     * including the control that stops it.
      */
     const cinematic = this.harness.cutsceneSample(shot.renderTime)
     /*
@@ -497,18 +502,26 @@ export class GameEngine implements PresentationHost {
     const observed =
       cinematic === null ? this.harness.observerSample(delta) : null
 
+    // The one precedence order, unchanged: cutscene, then observatory, then
+    // the ship. Only the *last* of the three needs a player.
+    const player = this.session.player()
+    const camera =
+      player === null
+        ? undefined
+        : shot.entities.find((entity) => entity.id === player)
+
     const eye =
-      cinematic !== null
-        ? cinematic.camera.position
-        : (observed?.position ?? camera.position)
+      cinematic?.camera.position ?? observed?.position ?? camera?.position
+    if (eye === undefined) {
+      // Nothing owns the camera this frame. Publishing the two presentation
+      // eyes as null anyway is the point: a stale one held across a frame is
+      // what latched the chrome off.
+      this.cinematic = null
+      this.observer = null
+      return
+    }
 
     this.origin = originForCamera(this.origin, eye)
-    this.#scene = buildScene(
-      shot,
-      this.origin,
-      player,
-      cinematic !== null ? cinematic.camera : (observed ?? undefined),
-    )
     this.observer =
       observed === null || observed === undefined
         ? null
@@ -545,6 +558,24 @@ export class GameEngine implements PresentationHost {
             texts: cinematic.texts,
             effects: cinematic.effects,
           }
+
+    /*
+     * Everything above is camera; everything below needs the ship.
+     *
+     * `buildScene` is built *around* the player's entity, and terrain, the
+     * star survey and the orbit traces all hang off the scene it produces —
+     * so a frame without one leaves them as they were and takes the next
+     * frame's. That was always the behaviour; what changed is that the two
+     * presentation eyes are published before it rather than after.
+     */
+    if (player === null || camera === undefined) return
+
+    this.#scene = buildScene(
+      shot,
+      this.origin,
+      player,
+      cinematic !== null ? cinematic.camera : (observed ?? undefined),
+    )
 
     const surfaceBody = this.#scene.terrainCandidates[0] ?? null
     // `shot.renderTime`, not the clock: the snapshot presents the world one tick
