@@ -5,6 +5,7 @@ import {
   createRenderOrigin,
   Quaternion as Q,
   rebase,
+  REBASE_THRESHOLD,
   toRenderSpace,
   universeVector,
   UV,
@@ -51,6 +52,16 @@ import {
 import { buildPatch, patchPlacement } from './terrainMesh.ts'
 
 const ORIGIN = createRenderOrigin(UV.fromMeters(4.2 * LIGHT_YEAR, 0, 0))
+
+/*
+ * An eye sitting exactly on the render origin.
+ *
+ * Most placement cases are about the compression curve itself rather than about
+ * parallax, so the two points coincide and the arithmetic is the simplest it
+ * can be. The cases where they *do not* coincide are the two that carry the
+ * moon-jitter regression, and they build their own eye.
+ */
+const AT_ORIGIN = Vec.ZERO
 
 describe('LOD selection', () => {
   it('chooses representation by angular size, not distance', () => {
@@ -135,7 +146,7 @@ describe('render placement', () => {
     // the streamed patches on it — are right in front of the camera.
     const radius = 2.864e6
     const centre = UV.translate(ORIGIN.position, vec3(radius + 400e3, 0, 0))
-    const planet = placeAt(ORIGIN, centre, radius)
+    const planet = placeAt(ORIGIN, centre, radius, AT_ORIGIN)
     expect(planet.compressed).toBe(false)
     // The rendered near surface sits exactly at the true altitude.
     expect(Vec.length(planet.position) - planet.scale).toBeCloseTo(400e3, 3)
@@ -143,7 +154,7 @@ describe('render placement', () => {
 
   it('leaves the near field completely alone', () => {
     const near = UV.translate(ORIGIN.position, vec3(1_000, 0, 0))
-    const placement = placeAt(ORIGIN, near, 5)
+    const placement = placeAt(ORIGIN, near, 5, AT_ORIGIN)
     expect(placement.compressed).toBe(false)
     expect(placement.position.x).toBeCloseTo(1_000, 6)
     expect(placement.scale).toBe(5)
@@ -157,7 +168,7 @@ describe('render placement', () => {
         fc.double({ min: 1e3, max: 1e9, noNaN: true }),
         (distance, radius) => {
           const position = UV.translate(ORIGIN.position, vec3(distance, 0, 0))
-          const placement = placeAt(ORIGIN, position, radius)
+          const placement = placeAt(ORIGIN, position, radius, AT_ORIGIN)
           const trueAngle = radius / distance
           const renderedAngle = placement.scale / Vec.length(placement.position)
           // Relative, not absolute: these angles span ten orders of magnitude
@@ -217,9 +228,82 @@ describe('render placement', () => {
     expect(slope).toBeCloseTo(1, 5)
   })
 
+  it('draws a compressed body in its true direction from the eye (property)', () => {
+    /*
+     * The property that stopped Phobos and Deimos vibrating.
+     *
+     * Compression is radial, so the point it is measured from is the one place
+     * in the image that stays honest — and the render origin is *not* that
+     * point. It is a power-of-two grid point up to `REBASE_THRESHOLD` from the
+     * camera, and it snaps as the camera drifts. Compressing about it gave
+     * every far object a parallax error of `eyeOffset · (1/compressed −
+     * 1/true)`, which sawtooths at the rebase cadence: for Mars from 25,000 km
+     * that is a thousandth of its width, and for its two moons it was 0.8× and
+     * 1.6× their own angular radius, every rebase.
+     *
+     * Stated as an angle from the eye rather than as a coordinate, because the
+     * coordinate is deliberately a lie — only the direction and the subtended
+     * angle are claims this system makes.
+     */
+    fc.assert(
+      fc.property(
+        fc.double({ min: 1e7, max: 1e14, noNaN: true }),
+        fc.double({ min: 10, max: 1e8, noNaN: true }),
+        fc.double({
+          min: -REBASE_THRESHOLD,
+          max: REBASE_THRESHOLD,
+          noNaN: true,
+        }),
+        (distance, radius, eyeOffset) => {
+          const eye = vec3(0, eyeOffset, 0)
+          const position = UV.translate(
+            ORIGIN.position,
+            vec3(distance, eyeOffset, 0),
+          )
+          const placement = placeAt(ORIGIN, position, radius, eye)
+          const drawn = Vec.sub(placement.position, eye)
+          // The eye and the body share a y, so the true bearing is dead ahead;
+          // any deviation is the parallax error this test exists to exclude.
+          const bearing = Math.abs(Math.atan2(drawn.y, drawn.x))
+          expect(bearing).toBeLessThan(1e-9)
+          // ...and the angle it subtends is still the one it really subtends.
+          const trueAngle = radius / distance
+          const renderedAngle = placement.scale / Vec.length(drawn)
+          expect(Math.abs(renderedAngle / trueAngle - 1)).toBeLessThan(1e-9)
+        },
+      ),
+    )
+  })
+
+  it('is unmoved by a rebase of the origin under it', () => {
+    /*
+     * A rebase is a rigid translation of render space and must stay one. It
+     * did not: the origin moved and the compression moved with it, so a body
+     * jumped relative to the camera at every crossing of the threshold — which
+     * is what "vibrating" looked like from inside the game.
+     */
+    const camera = UV.translate(ORIGIN.position, vec3(0, 0, 3_500))
+    const moon = UV.translate(ORIGIN.position, vec3(2.4e7, 0, 0))
+    const radius = 11_267
+
+    const before = placeAt(ORIGIN, moon, radius, toRenderSpace(ORIGIN, camera))
+    const rebased = rebase(ORIGIN, camera)
+    expect(rebased.generation).toBe(ORIGIN.generation + 1)
+    const after = placeAt(rebased, moon, radius, toRenderSpace(rebased, camera))
+
+    // Measured from the camera, which is the only observer there is. Same
+    // direction, same size, same distance — the origin is bookkeeping.
+    const a = Vec.sub(before.position, toRenderSpace(ORIGIN, camera))
+    const b = Vec.sub(after.position, toRenderSpace(rebased, camera))
+    expect(b.x).toBeCloseTo(a.x, 6)
+    expect(b.y).toBeCloseTo(a.y, 6)
+    expect(b.z).toBeCloseTo(a.z, 6)
+    expect(after.scale).toBeCloseTo(before.scale, 6)
+  })
+
   it('brings a star four light-years away inside float32 comfort', () => {
     const star = UV.translate(ORIGIN.position, vec3(4 * LIGHT_YEAR, 0, 0))
-    const placement = placeAt(ORIGIN, star, 6.957e8)
+    const placement = placeAt(ORIGIN, star, 6.957e8, AT_ORIGIN)
     expect(placement.distance / LIGHT_YEAR).toBeCloseTo(4, 3)
     // Rendered under a billion meters out instead of 4e16 — inside what a
     // logarithmic depth buffer handles comfortably. The star's own radius
@@ -336,8 +420,17 @@ describe('scene', () => {
 
   it('culls what would be smaller than a pixel', () => {
     const { shot, ship } = sceneFixture()
-    const farAway = createRenderOrigin(UV.fromMeters(0, 0, 0))
-    const scene = buildScene(shot, farAway, ship.id)
+    const galacticCentre = UV.fromMeters(0, 0, 0)
+    // The *eye* is what culls, not the origin. Moving only the origin used to
+    // read as "viewed from the galactic center" and no longer does: placement
+    // measures from the eye, so an origin parked 26,000 light years away with
+    // the ship still at Sol now describes a camera at Sol, which sees planets.
+    const scene = buildScene(
+      shot,
+      createRenderOrigin(galacticCentre),
+      ship.id,
+      { position: galacticCentre, orientation: Q.IDENTITY },
+    )
     // From the galactic center, Sol's planets are far below one pixel.
     expect(scene.bodies).toHaveLength(0)
   })
@@ -634,8 +727,8 @@ describe('terrain mesh', () => {
     // in the uncompressed near field. That is what makes meter-scale objects
     // exact four light-years from anywhere.
     const origin = createRenderOrigin(a)
-    const pa = placeAt(origin, a, 1)
-    const pb = placeAt(origin, b, 1)
+    const pa = placeAt(origin, a, 1, AT_ORIGIN)
+    const pb = placeAt(origin, b, 1, AT_ORIGIN)
     expect(pa.compressed).toBe(false)
     expect(
       Vec.distance(Vec.toFloat32(pa.position), Vec.toFloat32(pb.position)),
@@ -645,7 +738,7 @@ describe('terrain mesh', () => {
     // compressed, and the meter between them shrinks. Compression is a property
     // of the far field, and the far field is not where gameplay happens.
     const distant = createRenderOrigin(centre)
-    expect(placeAt(distant, a, 1).compressed).toBe(true)
+    expect(placeAt(distant, a, 1, AT_ORIGIN).compressed).toBe(true)
     expect(AU).toBeGreaterThan(0)
   })
 })

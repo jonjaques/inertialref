@@ -42,6 +42,25 @@ beyond the near limit, so it was compressed, while its streamed terrain patches
 400 km away were in the uncompressed near field — the datum sphere and the
 ground it represents ended up 30 km apart and no terrain was visible at all.
 
+Compression is radial **about the eye**, not about the origin, and the two are
+not the same point. The origin is mechanism 1's snapped grid point: it lags the
+camera by up to 4096 m and then jumps. Compressing about it leaves every far
+object with a parallax error of `eyeOffset · (1/compressed − 1/true)` that
+sawtooths at the rebase cadence, so the object slides against the sky as the
+camera moves and snaps back when the origin catches up. The error is a fixed
+angle regardless of what is being drawn, so what decides whether it shows is how
+big the object is on screen: Mars from 25,000 km absorbs it a thousand times
+over, and Phobos — 11 km of radius from the same place — moved by 0.8× its own
+angular radius, Deimos by 1.6×. Both appeared to vibrate in their orbits while
+everything around them held still. `placeAt` therefore takes the eye in render
+space, and `rendering.test.ts` states the property as an angle: the drawn
+direction from the eye is the true direction from the eye, at any separation.
+
+The two mechanisms are then genuinely independent, which is the deeper reason
+for it. A rebase is a rigid translation of render space and nothing else; with
+compression measured from the origin it was also a distortion, so mechanism 1
+could not be reasoned about without mechanism 2.
+
 ## Alternatives considered
 
 - **A single far shell** (all distant objects at one radius). Simpler, but it
@@ -59,7 +78,12 @@ ground it represents ended up 30 km apart and no terrain was visible at all.
   threshold itself — measured: two points 1 m apart at 8.18 kpc render 1.000 m
   apart after rounding to float32.
 - Depth is not metric for far objects. Nothing may measure distance in render
-  space; `placement.distance` carries the true value for anything that needs it.
+  space; `placement.distance` carries the true value for anything that needs it
+  — measured from the eye, which is also what selects the LOD tier and the
+  angular radius.
+- Anything that places geometry in the compressed shell has to be given the same
+  eye the scene was built with, or it drifts against the bodies around it. The
+  orbit traces are the one such caller outside `buildScene`.
 - The mapping is non-decreasing everywhere but only _strictly_ increasing while
   the separation survives double precision. Past ~1e17 m two objects a hundred
   meters apart compress to the same depth. They are also the same pixel.

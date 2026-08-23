@@ -17,6 +17,7 @@ import {
   ELEVATION_LIMIT,
   framingDistance,
   MAX_OBSERVER_DISTANCE,
+  MIN_DISTANCE_RADII,
   type ObserverState,
   observerOffset,
   observerPose,
@@ -24,6 +25,7 @@ import {
   shortestAngle,
   zoomFactorForNotches,
 } from './observer.ts'
+import { walkSolarBodies } from '@inertialref/universe'
 
 /*
  * The planetarium camera, as arithmetic.
@@ -121,6 +123,31 @@ describe('zoom', () => {
     const far = clampDistance(1e30, 0)
     expect(near).toBeGreaterThan(0)
     expect(far).toBe(MAX_OBSERVER_DISTANCE)
+  })
+
+  it('stops outside the thickest atmosphere anything has', () => {
+    /*
+     * The floor is a clearance from the *drawn* body, not from the datum.
+     *
+     * At the old 1.02 radii the camera could sit inside the haze shell — Titan
+     * draws its at 1.078 radii, Venus and Earth at ~1.016 — where the shell
+     * covers the whole viewport, every pixel marches the full chord because the
+     * ray's near end clamps to zero, and the picture is the inside of a ball of
+     * fog. A phone runs out of fragment budget there first, which is how it was
+     * found. Stated over every atmosphere the model carries rather than over
+     * Titan alone, so vendoring a thicker one fails here rather than in the
+     * renderer.
+     */
+    const inside: string[] = []
+    for (const body of walkSolarBodies()) {
+      if (body.haze === null) continue
+      const shellTop = (body.radius + body.haze.height) / body.radius
+      // A tenth of the clearance as margin, so a body that merely grazes the
+      // floor reads as a failure rather than as a pass by two decimal places.
+      if (shellTop > MIN_DISTANCE_RADII * 0.9)
+        inside.push(`${body.name} at ${shellTop.toFixed(3)} radii`)
+    }
+    expect(inside).toEqual([])
   })
 
   it('lets a moon retreat as far as a star can', () => {

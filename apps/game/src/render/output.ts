@@ -115,6 +115,39 @@ export const aaAntialias = (level: AaLevel): boolean => level !== 'off'
 /** Multiplier on the device pixel ratio for the drawing buffer. */
 export const aaDprFactor = (level: AaLevel): number => (level === '4x' ? 2 : 1)
 
+/**
+ * The ceiling on the device pixel ratio, by what kind of machine this is.
+ *
+ * A desktop or laptop gets 2 — the value this has always used, and enough for
+ * every Retina display anyone runs a browser on. A handheld gets 1.5, and the
+ * reason is that this scene is *fragment*-bound in exactly the place it is most
+ * likely to be looked at.
+ *
+ * Close to a planet the picture is three stacked, alpha-blended, full-screen
+ * shells: the surface shader with its albedo, normal, night, cloud-shadow and
+ * ring-shadow terms; a cloud deck over it; and the atmosphere, which marches
+ * twelve samples with two table reads each. A tile-based mobile GPU cannot
+ * discard any of that early — blending defeats hidden-surface removal — so the
+ * cost is the full three passes over every pixel of the display. At `dpr: 2` an
+ * iPhone is shading about 1.3 million of them; at 1.5 it is shading 750,000,
+ * which is the difference between a frame and most of two.
+ *
+ * `(pointer: coarse)` rather than a user-agent string or a width: it is a
+ * question about the input hardware, which is the closest thing the platform
+ * exposes to "is this a phone", and it is the same query `dock/viewport.ts`
+ * already asks to choose a drag backend. A tablet with a keyboard reports fine
+ * and gets the desktop ceiling, which is the right answer for an iPad Pro.
+ *
+ * Measured on a laptop and reasoned about for the handheld — an on-device
+ * profile is what would turn 1.5 into a number rather than a judgement, and
+ * `render/measure.ts` is the tool for it.
+ */
+export const DPR_CEILING = { fine: 2, coarse: 1.5 } as const
+
+export function dprCeiling(coarsePointer: boolean): number {
+  return coarsePointer ? DPR_CEILING.coarse : DPR_CEILING.fine
+}
+
 /** What the renderer ended up as, for the HUD and for `ir.status()`. */
 export interface RendererDescription {
   readonly backend: 'webgpu' | 'webgl'

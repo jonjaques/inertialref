@@ -206,10 +206,15 @@ export function PlanetariumMode({
        * wrapper — so nothing between here and the layer turns them back on.
        * Without it the hit target at every pixel is the canvas, and the camera
        * silently ignores every drag.
+       *
+       * `hud-bleed` because the sky it drags runs under the notch: `.hud-layer`
+       * holds its children clear of the safe areas so the *chrome* is readable,
+       * and a drag that starts in the 44 px a landscape iPhone keeps at each
+       * side is still a drag.
        */}
       <div
         ref={surface}
-        className="pointer-events-auto absolute inset-0 touch-none"
+        className="hud-bleed pointer-events-auto absolute touch-none select-none"
         style={{ cursor: 'grab' }}
         aria-hidden
       />

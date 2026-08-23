@@ -35,7 +35,7 @@ import type { Workspace } from './useWorkspace.ts'
  */
 
 /** The pane's width. One panel wide — a pane is a column, not a workspace. */
-const PANE_WIDTH = 'w-[19rem] max-w-[calc(100vw-4rem)]'
+const PANE_WIDTH = 'w-[19rem] max-w-[calc(100%-4rem)]'
 
 export function DockPane({
   zone,

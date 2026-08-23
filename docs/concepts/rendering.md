@@ -136,6 +136,37 @@ Keying off the **surface** distance fixes it and is also what makes the
 transition continuous — at the boundary the factor is exactly 1, so a planet
 neither pops nor changes its apparent rate of approach as you arrive.
 
+### The bug that made the small moons vibrate
+
+Compression is radial, so the point it is measured **from** is the one place in
+the image that stays honest. That point is the **eye**, and for a long time it
+was the render origin instead — which is a different point. The origin is the
+snapped grid point above: it lags the camera by up to 4096 m and then jumps a
+whole grid step to catch up.
+
+```mermaid
+flowchart TB
+    OFF["eye sits up to 4096 m from the origin,<br/>sawtoothing as the camera drives the rebase"]
+    ERR["parallax error ≈ eyeOffset · (1/compressed − 1/true)<br/><i>a fixed angle, whatever is being drawn</i>"]
+    BIG["Mars, 25,000 km away<br/>0.0003× its angular radius<br/><b>invisible</b>"]
+    SMALL["Phobos, 11 km of radius, same place<br/>0.8× its angular radius — Deimos 1.6×<br/><b>vibrating in its orbit</b>"]
+    OFF --> ERR --> BIG
+    ERR --> SMALL
+    style SMALL fill:#7f1d1d,stroke:#450a0a,color:#fff
+    style BIG fill:#065f46,stroke:#064e3b,color:#fff
+```
+
+The error is scale-free in meters, so what decides whether anyone sees it is how
+big the object is on screen — which is why it was reported as a fact about the
+two smallest bodies in the Solar System model rather than as a fact about the
+whole scene. `placeAt` therefore takes the eye in render space, `buildScene`
+computes it once, and the property is stated as an angle: the drawn direction
+from the eye is the true direction from the eye, at any separation.
+
+It also restores the independence of the two mechanisms. A rebase is a rigid
+translation of render space and nothing else; measured from the origin,
+compression made it a distortion as well.
+
 ---
 
 ## Level of detail

@@ -154,13 +154,24 @@ export function buildScene(
     altitude: eye === undefined ? entity.altitude : null,
   }
 
+  /*
+   * The eye in render space, computed once and handed to every `placeAt`.
+   *
+   * Render compression is radial about whatever point it is given, and the
+   * render origin is a snapped grid point up to `REBASE_THRESHOLD` from the
+   * camera — so compressing about the origin gives every distant object a
+   * parallax error that sawtooths as the origin rebases. `placeAt` carries the
+   * full account; the short version is that it made Phobos and Deimos vibrate.
+   */
+  const eyeRender = toRenderSpace(origin, camera.position)
+
   const bodies: RenderBody[] = []
   for (const body of snapshot.bodies) {
     // `datum.ts` owns why the sphere is sunk and by how much. It is a
     // function rather than a subtraction here because the boot preloader has
     // to predict this exact number to prebake against it.
     const sphereRadius = sunkSphereRadius(body.radius, body.relief)
-    const placement = placeAt(origin, body.position, sphereRadius)
+    const placement = placeAt(origin, body.position, sphereRadius, eyeRender)
     if (placement.angularRadius < CULL_ANGLE) continue
     // Ring radii are authored in meters from the body's center and leave as
     // multiples of the drawn sphere, which is not the body's radius.
@@ -204,7 +215,7 @@ export function buildScene(
 
   let brightest = 0
   const rawStars = snapshot.stars.map((star) => {
-    const placement = placeAt(origin, star.position, star.radius)
+    const placement = placeAt(origin, star.position, star.radius, eyeRender)
     // Inverse-square apparent brightness; normalized below so the scene always
     // has something at full intensity whatever the player is looking at.
     const apparent =
@@ -250,7 +261,7 @@ export function buildScene(
   return {
     origin,
     camera: {
-      position: toRenderSpace(origin, camera.position),
+      position: eyeRender,
       orientation: orientationToRenderSpace(origin, camera.orientation),
       universePosition: camera.position,
       // From the *snapshot's* body positions, not the placed ones: placement

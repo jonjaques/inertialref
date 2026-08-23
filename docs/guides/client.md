@@ -19,6 +19,36 @@ styles its fallback, not a wrapper — nothing between a mode and the layer
 turns pointer events back on. Getting this wrong is silent: the hit target at
 every pixel is the canvas.
 
+### The four edges the operating system keeps
+
+The document is `100dvh`, `overflow: hidden`, and cannot scroll: the viewport
+meta carries `viewport-fit=cover` so the canvas runs to the physical edges of
+the display, `maximum-scale=1` so the browser's pinch does not race the
+planetarium's, and `interactive-widget=resizes-content` so a soft keyboard does
+not push a fixed layout off screen. `100vh` is not the visible height on iOS
+Safari — it is the height the page would have with the toolbars hidden — so
+nothing in the interface is sized in `vh` or `vw`.
+
+`viewport-fit=cover` hands the insets back as `env(safe-area-inset-*)`, which
+`index.css` names once as `--safe-top/right/bottom/left` and spends in exactly
+one place: as padding on `.hud-layer`. An absolutely positioned element resolves
+`inset-0` against its ancestor's _padding_ box, so every readout, panel, dialog
+and menu in the interface is already clear of the notch and the home indicator,
+including one written later that never heard of any of this. Percentages inside
+the layer therefore mean "of the safe area", which is what the `calc(100% − …)`
+width caps are.
+
+Surfaces that are _picture_ rather than chrome opt back out with `hud-bleed`: a
+cutscene's blackout, a dialog's scrim, the boot cover, and the transparent
+surface a mode listens for drags on. Each would otherwise stop at the safe area
+and show a band of live scene above the notch, or refuse a drag that started in
+the 44 px a landscape phone keeps at each side. `hud-bleed` offsets back out and
+pads back in, so its own children stay inside the safe area — and because it
+sets all four offsets it must not be paired with `inset-0`. The bottom nav bar
+on a phone is the fifth case and takes `hud-bleed-bottom`, which bleeds the
+ground without the padding, because the padding has to land on the row that
+draws it.
+
 Canonical state does not live in React. Components consume snapshots from
 `apps/game/src/state/engineStore.ts` — a zustand store holding the world
 status, the planetarium's observer, the presentation switches and the cutscene

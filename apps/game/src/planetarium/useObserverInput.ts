@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import {
   centroid,
-  delta,
+  GESTURE_START,
+  type GesturePhase,
+  gestureStep,
   keyAction,
-  pinchFactor,
   type Point,
   spread,
   wheelNotches,
@@ -71,28 +72,43 @@ export function useObserverInput(
      * rather than by decrementing something.
      */
     const down = new Map<number, Point>()
-    let previousCentre: Point | null = null
-    let previousSpread = 0
+    let phase: GesturePhase = GESTURE_START
     let travelled = 0
     let pressedAt: Point | null = null
 
-    const local = (event: PointerEvent): Point => {
-      const rect = node.getBoundingClientRect()
-      return { x: event.clientX - rect.left, y: event.clientY - rect.top }
-    }
+    /*
+     * The surface's rectangle, read when a gesture starts and not again.
+     *
+     * `getBoundingClientRect` forces the browser to flush layout, and this used
+     * to run inside `local()` on every `pointermove` — which on a phone is once
+     * per finger per frame, so a two-finger pinch at 120 Hz cost 240 synchronous
+     * layouts a second on top of a scene that was already the reason the pinch
+     * felt bad. The surface is stretched to the viewport and the viewport cannot
+     * scroll, so it cannot move under a gesture in progress; re-reading it was
+     * paying for a change that cannot happen.
+     */
+    let rect = node.getBoundingClientRect()
+
+    const local = (event: PointerEvent): Point => ({
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+    })
 
     const onPointerDown = (event: PointerEvent): void => {
       // Only the primary button orbits. The secondary one is the context menu
       // and the middle one is the browser's autoscroll; claiming either would
       // be taking a platform gesture to do something a drag already does.
       if (event.pointerType === 'mouse' && event.button !== 0) return
+      // Re-measured only when a gesture begins from nothing: a rotation or a
+      // browser-chrome change between gestures does move the surface.
+      if (down.size === 0) rect = node.getBoundingClientRect()
       node.setPointerCapture(event.pointerId)
       down.set(event.pointerId, local(event))
-      previousCentre = centroid([...down.values()])
-      previousSpread = spread([...down.values()])
+      const points = [...down.values()]
+      phase = { centre: centroid(points), spread: spread(points) }
       if (down.size === 1) {
         travelled = 0
-        pressedAt = previousCentre
+        pressedAt = phase.centre
       } else {
         // A second finger landing means this is not a click any more, and the
         // centroid has just jumped to the midpoint — so the next move must not
@@ -104,19 +120,15 @@ export function useObserverInput(
     const onPointerMove = (event: PointerEvent): void => {
       if (!down.has(event.pointerId)) return
       down.set(event.pointerId, local(event))
-      const points = [...down.values()]
-      const centre = centroid(points)
-      const currentSpread = spread(points)
-
-      const moved = delta(previousCentre, centre)
-      travelled += Math.hypot(moved.x, moved.y)
-      if (moved.x !== 0 || moved.y !== 0) observatory.drag(moved.x, moved.y)
-      if (points.length >= 2) {
-        observatory.zoom(pinchFactor(previousSpread, currentSpread))
-      }
-
-      previousCentre = centre
-      previousSpread = currentSpread
+      // Which of the two the camera gets is `gestureStep`'s decision, tested in
+      // Node beside the rest of the gesture arithmetic. What is here is the
+      // bookkeeping only a browser has.
+      const step = gestureStep(phase, [...down.values()])
+      travelled += step.travelled
+      if (step.orbit.x !== 0 || step.orbit.y !== 0)
+        observatory.drag(step.orbit.x, step.orbit.y)
+      if (step.zoom !== 1) observatory.zoom(step.zoom)
+      phase = step
     }
 
     const release = (event: PointerEvent): void => {
@@ -136,16 +148,14 @@ export function useObserverInput(
         ) {
           latest.current.onPick(pressedAt)
         }
-        previousCentre = null
-        previousSpread = 0
+        phase = GESTURE_START
         pressedAt = null
         return
       }
       // A finger lifted from a multi-touch gesture: the centroid and spread
       // both jump, and re-seeding them is what stops the camera lurching.
       const points = [...down.values()]
-      previousCentre = centroid(points)
-      previousSpread = spread(points)
+      phase = { centre: centroid(points), spread: spread(points) }
       pressedAt = null
     }
 

@@ -30,7 +30,7 @@ export function CutsceneTransport({
   onStop: () => void
 }) {
   return (
-    <div className="pointer-events-auto absolute bottom-5 left-1/2 flex w-[34rem] max-w-[80vw] -translate-x-1/2 items-center gap-2 rounded-lg border border-slate-700/50 bg-slate-950/70 px-3 py-1.5 type-readout text-slate-300 backdrop-blur">
+    <div className="pointer-events-auto absolute bottom-5 left-1/2 flex w-[34rem] max-w-[80%] -translate-x-1/2 items-center gap-2 rounded-lg border border-slate-700/50 bg-slate-950/70 px-3 py-1.5 type-readout text-slate-300 backdrop-blur">
       <TransportButton
         label="Restart"
         icon={RotateCcw}

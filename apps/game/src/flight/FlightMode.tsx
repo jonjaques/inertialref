@@ -69,7 +69,7 @@ export function FlightMode({
     <>
       <ErrorBoundary
         what="the flight strip"
-        className="type-readout pointer-events-auto absolute bottom-3 left-3 max-w-[calc(100vw-1.5rem)]"
+        className="type-readout pointer-events-auto absolute bottom-3 left-3 max-w-[calc(100%-1.5rem)]"
       >
         <FlightStrip status={status} />
       </ErrorBoundary>

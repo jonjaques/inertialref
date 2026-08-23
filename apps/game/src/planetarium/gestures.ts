@@ -144,6 +144,68 @@ export function delta(previous: Point | null, current: Point | null): Point {
 }
 
 /* ------------------------------------------------------------------------- */
+/* One step of a gesture                                                      */
+/* ------------------------------------------------------------------------- */
+
+/** What the live pointers were doing last time this was asked. */
+export interface GesturePhase {
+  /** The previous centroid, or null at the start of a gesture. */
+  readonly centre: Point | null
+  /** The previous spread. Zero at the start, and with fewer than two pointers. */
+  readonly spread: number
+}
+
+export const GESTURE_START: GesturePhase = { centre: null, spread: 0 }
+
+/** What one move of the live pointers does to the camera. */
+export interface GestureStep extends GesturePhase {
+  /** Pixels of orbit. Always zero while more than one pointer is down. */
+  readonly orbit: Point
+  /** Multiplier on distance. Always 1 with fewer than two pointers. */
+  readonly zoom: number
+  /** Pixels the centroid moved, for the caller's click-versus-drag decision. */
+  readonly travelled: number
+}
+
+/**
+ * One finger orbits. Two or more zoom, and *only* zoom.
+ *
+ * The exclusion is the part worth stating. The centroid used to drive the orbit
+ * whatever the finger count was, which is right for a symmetric pinch — both
+ * fingers moving apart equally leaves the centroid where it was — and wrong for
+ * the pinch people actually make, which anchors one finger and moves the other.
+ * That moves the centroid by half the pinch travel, so a 200 px pinch also swung
+ * the camera through half a radian at `DRAG_RADIANS_PER_PIXEL`: the zoom you
+ * asked for arrived with a spin you did not.
+ *
+ * Nothing is lost by dropping it. This camera orbits a target it cannot pan
+ * away from, so a two-finger drag never meant anything a one-finger drag did
+ * not already mean — unlike a map, where two-finger pan and pinch are genuinely
+ * different gestures.
+ *
+ * `travelled` is reported for any finger count, because the caller's click test
+ * needs a distance and the answer "you moved" is true however many fingers did
+ * it.
+ */
+export function gestureStep(
+  previous: GesturePhase,
+  points: readonly Point[],
+): GestureStep {
+  const centre = centroid(points)
+  const currentSpread = spread(points)
+  const moved = delta(previous.centre, centre)
+  const travelled = Math.hypot(moved.x, moved.y)
+  const pinching = points.length >= 2
+  return {
+    orbit: pinching ? { x: 0, y: 0 } : moved,
+    zoom: pinching ? pinchFactor(previous.spread, currentSpread) : 1,
+    centre,
+    spread: currentSpread,
+    travelled,
+  }
+}
+
+/* ------------------------------------------------------------------------- */
 /* Keys                                                                       */
 /* ------------------------------------------------------------------------- */
 

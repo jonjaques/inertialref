@@ -74,7 +74,7 @@ export function DockPanel({
        * requirement: a stack you can see the shape of. The panel's own body
        * scrolls, which is what every readout in here was already built to do.
        */
-      className="max-h-[60vh]"
+      className="max-h-[60dvh]"
     >
       {definition.render()}
     </PanelChrome>

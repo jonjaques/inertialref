@@ -2927,6 +2927,126 @@ both. The un-superscripted Bayer forms go into the search index and stay out of
 the exact map. Gacrux, at 88.6 ly, is findable by name; under the old
 survey-and-filter arrangement it was not merely hard to find but unexpressible.
 
+## Five phone-shaped bugs, and the one that was not (23 Aug 2026)
+
+Reported from an iPhone, mostly. Four of the five are about a viewport that is
+not a desktop's; the first is about arithmetic, and it was reported as a fact
+about two moons.
+
+**Phobos and Deimos vibrated in their orbits, and nothing else did.** The
+compression in `placeAt` is radial, so the point it is measured _from_ is the
+one place in the image that stays honest — and that point was the render origin,
+which is not the eye. The origin is ADR-0003's snapped grid point: it lags the
+camera by up to `REBASE_THRESHOLD` and then jumps a whole 1024 m step to catch
+up. Measuring compression from there gives every compressed body a parallax
+error of `eyeOffset · (1/compressed − 1/true)`, and because the offset sawtooths
+as the camera drives the rebase, so does the error.
+
+The error is a fixed _angle_ whatever is being drawn, so what decided whether
+anyone saw it was how big the object was on screen. Measured live, with the eye
+2,045 m off the origin: Earth filling the frame was displaced by 0.0002× its own
+angular radius; Mars, a point at 0.8 AU, by 0.57×; Mercury by 5.0×. From a
+camera 25,000 km off Mars the two moons came out at 0.86× and 1.60× their own
+radii, which is a body oscillating through more than its own width — and Mars
+itself, in the same frame, by a millionth of its. Nothing about the bug was
+about small bodies; everything about _noticing_ it was.
+
+`placeAt` takes the eye in render space now, `buildScene` computes it once from
+the same presentation eye the origin was maintained from, and the near-field
+branch still returns the origin-relative offset unchanged so the datum sphere
+and `terrainMesh.patchPlacement` cannot part company. The property is stated as
+an angle rather than a coordinate, because the coordinate is deliberately a lie:
+the drawn direction from the eye is the true direction from the eye, at any
+separation. A second test says a rebase is a rigid translation and nothing else,
+which is the deeper repair — the two mechanisms in ADR-0003 were not independent
+while compression was measured from the origin, and could not be reasoned about
+separately.
+
+The eye had to become a _required_ argument rather than a defaulted one. A
+default of `Vec.ZERO` is exactly the bug, silently, at whatever call site
+forgets — and one call site outside `buildScene` does place geometry in the
+compressed shell: the orbit traces, which have to be given the same eye or the
+curve parts from the planet on it.
+
+**The canvas stopped short of the screen on an installed PWA.** `viewport-fit`
+was never set, so iOS insets the document by the safe areas and paints the
+letterbox in the body's own color: black bands above and below a black sky, on
+the one device where the app is full-screen. `viewport-fit=cover` fixes that and
+creates the second half of the problem, which is that the insets then have to be
+respected by hand.
+
+They are spent in exactly one place. `index.css` names the four as
+`--safe-*` and puts them on `.hud-layer` as **padding** — and because an
+absolutely positioned element resolves `inset-0` against its ancestor's padding
+box, every readout, panel, dialog and menu in the interface is clear of the
+notch and the home indicator without being told, including one written next
+year. Surfaces that are _picture_ rather than chrome opt back out with
+`hud-bleed`, which offsets out and pads back in so its own children stay inside:
+the cutscene blackout, the dialog scrim, the boot cover, and the transparent
+surface a mode listens for drags on — that last one because a drag starting in
+the 44 px a landscape phone keeps at each side is still a drag. The phone's nav
+bar is the fifth case and takes `hud-bleed-bottom`, which bleeds the ground
+without the padding, because the padding has to land on the row that draws it.
+
+**Nothing is sized in `vh` or `vw` any more.** On iOS Safari `100vh` is the
+height the page would have with the toolbars _hidden_, so a shell sized in it
+runs a toolbar's worth of itself underneath the browser chrome — which is where
+the bottom nav was ending up. The document is `100dvh` and `overflow: hidden` on
+`html` and `body` both; inside `.hud-layer` a percentage now means "of the safe
+area", which is what the `calc(100% − …)` caps became. `maximum-scale=1` because
+this is a simulator with its own pinch gesture and the browser's own was racing
+it, and `interactive-widget=resizes-content` so a soft keyboard cannot push a
+fixed, unscrollable layout off screen.
+
+**The pinch also spun the camera.** `useObserverInput` drove the orbit from the
+centroid whatever the finger count was, which is right for a symmetric pinch —
+both fingers moving apart equally leaves the centroid still — and wrong for the
+pinch a thumb and forefinger actually make, which anchors one finger and moves
+the other. That moves the centroid by half the travel, so a 200 px pinch also
+swung the camera through half a radian at `DRAG_RADIANS_PER_PIXEL`. One finger
+orbits; two or more zoom, and only zoom. Nothing is lost: this camera orbits a
+target it cannot pan away from, so a two-finger drag never meant anything a
+one-finger drag did not.
+
+The decision moved into `gestures.ts` as `gestureStep`, beside the rest of the
+gesture arithmetic, because that is the half that can be tested in Node — the
+hook keeps only the bookkeeping a browser has. It also stopped calling
+`getBoundingClientRect` on every `pointermove`: that forces a layout flush, once
+per finger per frame, which on a phone at 120 Hz was 240 synchronous layouts a
+second on top of the scene that was already the reason the gesture felt bad. The
+surface cannot move under a gesture in a viewport that cannot scroll.
+
+**The planetarium could fly inside a planet's atmosphere.**
+`MIN_DISTANCE_RADII` was 1.02 — two percent of a radius of clearance, which for
+Titan's 1.078-radius haze shell is _inside_ it, and for Venus and Earth is level
+with theirs. That is the worst place this camera can be: the shell covers the
+whole viewport, the march's near end clamps to zero so every pixel integrates
+the full chord, and the picture is the inside of a ball of fog. A phone runs out
+of fragment budget there first, which is how it was reported. It is 1.5 radii
+now — a clearance from the air, from the altitude the terrain streamer starts
+asking for patches at (about 1.011 radii), and from the framing below which the
+planetarium is showing _less_ the closer it gets. The test states it over every
+atmosphere in the model rather than over Titan alone, so vendoring a thicker one
+fails there rather than in the renderer.
+
+**The phone's bottom bar named the wrong thing.** The toggle that opens the
+sheet took the open panel's title, so pressing a button marked _Panels_ left a
+button marked _Catalog_ where it had been: a toggle whose label is the state it
+produced rather than the thing it toggles, and no label anywhere for the way
+back. It says "Panels" in both states now, with the chevron, the accent ground
+and `aria-expanded` carrying open-versus-shut — which panel is open is answered
+where the panel is. The sheet also grew the grabber every other sheet on the
+platform has, and reopening returns to the panel that was last being read rather
+than to `available[0]`, remembered for the mount and not persisted.
+
+**What is guessed rather than measured.** The drawing buffer's pixel-ratio
+ceiling is 1.5 on a coarse pointer against 2 elsewhere, and the argument for it
+is sound — close to a planet the picture is three stacked, alpha-blended,
+full-screen shells, blending defeats a tile-based GPU's hidden-surface removal,
+and the atmosphere marches twelve samples with two table reads each — but the
+number is a judgement, not a profile. `render/measure.ts` on the device is what
+would turn it into one.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).
@@ -2992,6 +3112,10 @@ Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md
   469 KB catalog before the first render, correctly (it is a generation input)
   but on top of that. Three of the four modes are not the first viewport and are
   the obvious thing to split out.
+- **No performance number in this file was measured on a handheld.** The
+  pixel-ratio ceiling for a coarse pointer is reasoned about rather than
+  profiled; so is the claim that the near-planet frame is fragment-bound on a
+  tile-based GPU. `render/measure.ts` on the device is what settles both.
 - Every performance number recorded here is from an Apple M5 in a 1000×760
   window. The target is a 2023-class laptop at 1920×1080 — roughly three times
   the pixels on a much weaker GPU — so these establish that the instrument works,

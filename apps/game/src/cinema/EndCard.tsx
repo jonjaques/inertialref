@@ -46,7 +46,7 @@ export function EndCard({
        * settings dialog is read *instead* of the scene, and this is read
        * *beside* it.
        */}
-      <div className="pointer-events-auto flex max-w-[min(26rem,calc(100vw-3rem))] flex-col items-center gap-3 rounded-lg border border-slate-700/60 bg-slate-950/85 px-6 py-5 text-center shadow-2xl shadow-black/60 backdrop-blur">
+      <div className="pointer-events-auto flex max-w-[min(26rem,calc(100%-3rem))] flex-col items-center gap-3 rounded-lg border border-slate-700/60 bg-slate-950/85 px-6 py-5 text-center shadow-2xl shadow-black/60 backdrop-blur">
         <div>
           <p className="type-title text-slate-100">{title}</p>
           <p className="type-micro mt-1 text-slate-400">{detail}</p>

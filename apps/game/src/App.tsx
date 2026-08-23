@@ -16,6 +16,7 @@ import { BootOverlay } from './hud/BootOverlay.tsx'
 import { CutsceneOverlay } from './hud/CutsceneOverlay.tsx'
 import { ErrorBoundary } from './hud/ErrorBoundary.tsx'
 import { isTyping } from './hud/focus.ts'
+import { useCoarsePointer } from './hud/viewport.ts'
 import {
   isBoolean,
   numberWithin,
@@ -43,6 +44,7 @@ import {
   type AaLevel,
   aaAntialias,
   aaDprFactor,
+  dprCeiling,
   OUTPUT_PREFERENCES,
   type OutputPreference,
   type RendererDescription,
@@ -291,6 +293,13 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
   const canvasKey = `${rendererKey(hdr, dynamicRangeHigh)}:${aaAntialias(aa) ? 'msaa' : 'raw'}:${canvasEpoch}`
 
   /*
+   * Which ceiling the drawing buffer gets. Deliberately *not* in the key above:
+   * the pixel ratio is a live prop, so a tablet that gains a trackpad rescales
+   * the buffer rather than rebuilding the renderer around it.
+   */
+  const coarse = useCoarsePointer()
+
+  /*
    * Verify that boot actually put pixels on screen.
    *
    * Keyed on `output` because sampling before the renderer exists proves
@@ -512,7 +521,18 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
   }, [debug, setDebug])
 
   return (
-    <div className="relative h-screen w-screen overflow-hidden bg-black text-slate-200">
+    /*
+     * `h-full w-full`, not `h-screen w-screen`.
+     *
+     * `h-screen` is `100vh`, which on iOS Safari is the height the page would
+     * have if the toolbars were hidden — so the bottom of this shell, and the
+     * nav bar pinned to it, sat underneath the browser chrome. `w-screen` is
+     * `100vw`, which on a desktop includes the scrollbar gutter and so is
+     * reliably a few pixels wider than the content box. Both are now the
+     * document's own size, which `index.css` sets to `100dvh` and locks against
+     * scrolling in one place.
+     */
+    <div className="relative h-full w-full overflow-hidden bg-black text-slate-200">
       {/* Renders nothing; keeps the tab, the canonical link and the analytics
           page view in step with the address bar. Inside the shell rather than
           in `main.tsx` because it needs the router's location. */}
@@ -534,10 +554,16 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
         // would have no usable precision anywhere in it. The flag itself moved
         // into the factory, because it is a constructor parameter there.
         camera={{ fov: DEFAULT_FOV, near: 0.05, far: 1e10 }}
-        // The device ratio capped at 2, times the supersampling factor. A
-        // number rather than a range because `4x` must *raise* the buffer
-        // above the device ratio, which a clamp can only lower.
-        dpr={Math.min(window.devicePixelRatio, 2) * aaDprFactor(aa)}
+        // The device ratio capped by what kind of machine this is, times the
+        // supersampling factor. A number rather than a range because `4x` must
+        // *raise* the buffer above the device ratio, which a clamp can only
+        // lower. `dprCeiling` is where the handheld figure and its argument
+        // live; the short version is that this scene is fragment-bound close to
+        // a planet and a phone is shading the whole display three times over.
+        dpr={
+          Math.min(window.devicePixelRatio, dprCeiling(coarse)) *
+          aaDprFactor(aa)
+        }
         // R3F configures the renderer *after* the factory resolves and sets its
         // own tone mapping while doing so. This is where ours goes back.
         onCreated={(state) => {
@@ -614,7 +640,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
         <div className="pointer-events-none absolute inset-0 z-10">
           <ErrorBoundary
             what="the cutscene overlay"
-            className="type-readout pointer-events-auto absolute bottom-5 left-1/2 w-[34rem] max-w-[80vw] -translate-x-1/2"
+            className="type-readout pointer-events-auto absolute bottom-5 left-1/2 w-[34rem] max-w-[80%] -translate-x-1/2"
           >
             {/* The scene's own screen-space layer: blackout, titles, audio. Its
                 transport is the *debug* one — the cinema player provides the
@@ -710,7 +736,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
                  the moment it was worth reading. The panel ground carries it;
                  the accent stays what it is everywhere else in this system, a
                  material rather than a fill behind text. */
-              className="type-readout pointer-events-none absolute bottom-16 left-1/2 z-30 max-w-[min(36rem,calc(100vw-1.5rem))] -translate-x-1/2 truncate rounded border border-sky-500/40 bg-slate-950/85 px-3 py-1 text-sky-200 backdrop-blur"
+              className="type-readout pointer-events-none absolute bottom-16 left-1/2 z-30 max-w-[min(36rem,calc(100%-1.5rem))] -translate-x-1/2 truncate rounded border border-sky-500/40 bg-slate-950/85 px-3 py-1 text-sky-200 backdrop-blur"
             >
               {notice}
             </motion.div>

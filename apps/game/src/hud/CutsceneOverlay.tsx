@@ -199,10 +199,16 @@ export function CutsceneOverlay({
   return (
     <div className="pointer-events-none absolute inset-0">
       {/* The blackout sits over the scene and under the text: the opening
-          card and the outro both put type over black. */}
+          card and the outro both put type over black.
+
+          `hud-bleed` because it is picture rather than chrome. `.hud-layer`
+          holds its children clear of the safe areas, which is right for
+          everything that has to be read and wrong for this: a blackout that
+          stopped at the notch would show a band of live scene above a title
+          card. */}
       <div
         ref={blackout}
-        className="absolute inset-0 bg-black"
+        className="hud-bleed absolute bg-black"
         style={{ opacity: 0 }}
       />
       {texts.map((text) => (
