@@ -3240,6 +3240,44 @@ both fail if the bug returns. The new test adds what neither could see: it runs
 sixty frames so alpha wraps four times, because a single sample cannot detect a
 sawtooth no matter which instant it asks about.
 
+## The title sequence measured again, and the ship flies straight lines (23 Aug 2026)
+
+Planning the next fidelity pass over `tng-intro` produced three findings worth
+more than the plan itself ([`TNG-PLAN.md`](TNG-PLAN.md)).
+
+**The committed diff is the current diff.** The shot names in
+`analysis/render-diff.csv` predate the last re-cut (`veil`, `eclipse-in/out`),
+which made it look stale — so a fresh 2742-frame capture was taken
+(`~/Developer/tng-inertial/.data/render2`) and re-diffed. Every per-shot number
+came back identical. The names are just `compare_render.py`'s own reporting
+buckets, which were never updated; the render had not changed since the last
+loop. Verifying that cost six minutes and turned an assumption into a baseline.
+
+**The reference ship flies straight lines and throttles.** Fitting 3D lines to
+the measured screen tracks (positions recovered through the script's own lens
+math): the cruise approach f676–896 is straight to 109 m over a 4.0 km path
+(2.7%, a sixth of a hull length), the credit descent f1775–2100 to 134 m over
+6.9 km (2.0%), and the wipe approach f1288–1316 to 19 m over 35.9 km — 0.05%,
+a line to measurement precision. A _constant-velocity_ fit was tried first and
+rejected by the reference's own numbers: f760 and f792 both measure w ≈ 0.40
+(the hull holds range) before it rushes in, so speed varies while direction
+does not. Only the skim f2180–2380 is genuinely curved (5.5% residual,
+non-monotone advance). The staging consequence is in the plan: straight
+`linePath` plus an advance profile, orientation derived from the line, authored
+bank only where the reference maneuvers.
+
+**The subject channel conflates lighting with geometry.** The single largest
+defect in the current render is not choreography: the hull fails to register as
+a bright mass for ~215 frames of the credit descent (f1770–1984) and at the
+wipe entries, while the reference keeps a lit, readable ship at w 0.06. Until
+that is fixed, subject-width errors in those bands measure the _lit region_,
+not the hull — the close-pass band's dw −0.19 and the late descent's dw −0.43
+are part geometry, part key. Fix the light first, then trust the channel. The
+same capture pinned the warp-outs as a staging difference, not an intensity
+one: at f2397 the reference still shows the hull at w 0.68 mid-streak; the
+render has hurled it to a dot and drawn a lens line where a stretching ship
+should be.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).
