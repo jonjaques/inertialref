@@ -86,9 +86,11 @@ deploys to the `inertialrefd` Worker, live at
   constant or a type it needs goes in a sibling `.ts`. Both that rule and
   `react/only-export-components` are off for `apps/game/src/components/ui/*.tsx`,
   which shadcn/ui generates and rewrites.
-- **The three typefaces are self-hosted from `@fontsource`** — Instrument Serif
-  (display), Instrument Sans Variable (structure and prose), Martian Mono
-  Variable (every reading). Imported in `src/index.css`, which also defines the
+- **The three typefaces are self-hosted from `@fontsource`** — Archivo Variable
+  (the condensed display voice), Instrument Sans Variable (structure and
+  prose), Martian Mono Variable (every reading). There is deliberately no serif
+  in the system — Instrument Serif was tried and rejected; CONTEXT.md has the
+  entry. Imported in `src/index.css`, which also defines the
   nine `type-*` utilities the whole interface is set in. **Do not write a size,
   a weight and a tracking at a call site**; reach for a named step. A Google
   Fonts `<link>` would break offline, which is the base case here.

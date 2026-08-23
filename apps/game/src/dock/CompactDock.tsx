@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router'
 import { ChevronDown, ChevronUp, Rows3, SlidersHorizontal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
+import { ErrorBoundary } from '../hud/ErrorBoundary.tsx'
 import { FOCUS_RING, releaseFocus } from '../hud/focus.ts'
 import { Logomark } from '../icons/Logomark.tsx'
 import { HOME, overlayState, SETTINGS } from '../pages/paths.ts'
@@ -114,7 +115,12 @@ export function CompactDock({
             ))}
           </div>
           <div className="min-h-0 flex-1 overflow-auto px-3 py-2">
-            {open.render()}
+            {/* The same wall `PanelChrome` puts around a body: a throw costs
+                the sheet's body, not the nav bar that can close it. Keyed so
+                switching panels resets a tripped boundary. */}
+            <ErrorBoundary key={open.id} what={`the ${open.title} panel`}>
+              {open.render()}
+            </ErrorBoundary>
           </div>
         </section>
       )}

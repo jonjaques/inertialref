@@ -192,6 +192,35 @@ export const togglePanel = (
     : hidePanel(layout, panel)
 
 /**
+ * The full-zone index for a slot measured among the panels *on screen*.
+ *
+ * The two lists are not the same, and not only by the dragged panel:
+ * a guarded group's panels are suppressed at render time while staying
+ * resident in their zones — that is `visiblePanels`' contract, and the whole
+ * point of suppression is that the arrangement survives the disclosure. So an
+ * insertion index counted against the rendered stack cannot be spliced into
+ * `layout[zone]` directly; with a suppressed panel above the drop point the
+ * drop landed one slot above the line the indicator had just drawn, and some
+ * same-pane drags were silent no-ops.
+ *
+ * The translation anchors on the *panel* rather than the number: inserting at
+ * visible slot `n` means inserting before the nth rendered panel, wherever
+ * that panel actually sits in the full list. Past the end — or with an anchor
+ * the layout no longer holds, which a composed gesture can produce — it
+ * appends, which is `movePanel`'s own out-of-range behaviour.
+ */
+export function slotIndex(
+  zoneList: readonly string[],
+  visible: readonly string[],
+  visibleIndex: number,
+): number {
+  const anchor = visible[visibleIndex]
+  if (anchor === undefined) return zoneList.length
+  const at = zoneList.indexOf(anchor)
+  return at >= 0 ? at : zoneList.length
+}
+
+/**
  * Reconcile a stored layout with the panels this build actually has.
  *
  * `localStorage` outlives the code that wrote it, which `hud/panelState.ts`

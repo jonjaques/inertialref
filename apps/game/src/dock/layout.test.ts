@@ -13,6 +13,7 @@ import {
   movePanel,
   normalizeLayout,
   showPanel,
+  slotIndex,
   togglePanel,
   zoneOf,
 } from './layout.ts'
@@ -214,6 +215,81 @@ describe('a drop, against the panels that were on screen', () => {
           expect(next[to].indexOf(panel)).toBe(others.length - below.length)
           // ...and everything else kept its order.
           expect(next[to].filter((id) => id !== panel)).toEqual(others)
+        },
+      ),
+    )
+  })
+})
+
+describe('a drop measured among the rendered panels only', () => {
+  /*
+   * The other seam: a guarded group's panels are suppressed at render time
+   * while staying resident in their zones, so the list the indicator was drawn
+   * against can be *shorter* than `layout[zone]` — not only by the dragged
+   * panel. `slotIndex` anchors the translation on the panel at the slot rather
+   * than the number, which makes a suppressed resident as invisible to the
+   * arithmetic as it is to the eye.
+   */
+  it('lands where the line was drawn, past a suppressed resident', () => {
+    // `telemetry` is a suppressed dev panel; the eye sees only catalogue and
+    // time. Dropping catalogue below time drew the line after time — spliced
+    // by the visible number alone, this composed to a silent no-op.
+    const layout: DockLayout = {
+      ...EMPTY_LAYOUT,
+      left: ['telemetry', 'catalogue', 'time'],
+    }
+    const visible = ['catalogue', 'time']
+    const at = slotIndex(layout.left, visible, 2)
+    expect(
+      movePanel(
+        layout,
+        'catalogue',
+        'left',
+        dropIndex(layout, 'catalogue', 'left', at),
+      ).left,
+    ).toEqual(['telemetry', 'time', 'catalogue'])
+  })
+
+  it('inserts before the anchor, wherever it sits in the full list', () => {
+    const layout: DockLayout = {
+      ...EMPTY_LAYOUT,
+      left: ['telemetry', 'catalogue', 'time'],
+      right: ['object'],
+    }
+    // The line between catalogue and time is visible slot 1; its anchor is
+    // `time`, at full index 2.
+    const at = slotIndex(layout.left, ['catalogue', 'time'], 1)
+    expect(at).toBe(2)
+    expect(
+      movePanel(
+        layout,
+        'object',
+        'left',
+        dropIndex(layout, 'object', 'left', at),
+      ).left,
+    ).toEqual(['telemetry', 'catalogue', 'object', 'time'])
+  })
+
+  it('appends for a slot past the end, or an anchor the layout lost', () => {
+    expect(slotIndex(['a', 'b'], ['a', 'b'], 2)).toBe(2)
+    // An anchor the zone no longer holds — a composed gesture can produce one
+    // — appends rather than guessing, which is `movePanel`'s own out-of-range
+    // behaviour.
+    expect(slotIndex(['a', 'b'], ['ghost'], 0)).toBe(2)
+  })
+
+  it('is the identity translation when nothing is suppressed', () => {
+    // With every resident rendered, the anchor's index is the slot itself —
+    // so the drop property above keeps holding through this path unchanged.
+    fc.assert(
+      fc.property(
+        fc.array(fc.string(), { maxLength: 6 }),
+        fc.integer({ min: 0, max: 8 }),
+        (list, index) => {
+          const zone = [...new Set(list)]
+          expect(slotIndex(zone, zone, index)).toBe(
+            Math.min(index, zone.length),
+          )
         },
       ),
     )

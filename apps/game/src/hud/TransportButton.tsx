@@ -22,9 +22,10 @@ import { FOCUS_RING, releaseFocus } from './focus.ts'
  * everywhere a control has readable text, `title` stays — it is doing a
  * different job there, which is recovering a value that truncated.
  *
- * Radix portals the content to `<body>` at `z-50`, outside `.hud-layer` and
- * above all of it, which is what a tooltip should be. `aria-label` is on the
- * button regardless: a tooltip is not an accessible name.
+ * The content portals *into* `.hud-layer` at `z-50` — above every band in it,
+ * and inside the standard-range clamp, which a translucent chip needs; see
+ * `components/ui/tooltip.tsx`. `aria-label` is on the button regardless: a
+ * tooltip is not an accessible name.
  */
 export function TransportButton({
   label,

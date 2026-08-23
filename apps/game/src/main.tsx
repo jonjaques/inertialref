@@ -140,22 +140,15 @@ try {
            * transport bar of five icon-only buttons is the behaviour that
            * makes people give up on tooltips.
            *
-           * `delayDuration={0}` is the registry's default and is kept: every
-           * tooltip in this interface is on an icon-only control where the
-           * hint *is* the label, and a label that arrives in 700 ms has
-           * already lost to the pointer moving on.
-           *
-           * The content portals to `<body>` at `z-50`, outside `.hud-layer`
-           * and therefore outside `dynamic-range-limit: standard`.
-           * `docs/roadmap.md` had this down as the thing blocking tooltips, and
-           * it is not: the clamp exists because the dock and the flight strip
-           * are `backdrop-filter` surfaces, and a backdrop filter *samples what
-           * is behind it* — which on the extended path includes a star's disc
-           * above diffuse white. `TooltipContent` is an opaque `bg-foreground`
-           * box with no backdrop filter, so there is nothing for it to sample
-           * and nothing to wash out. Give one a translucent ground and the
-           * clamp becomes load-bearing again; at that point Radix's `Portal`
-           * takes a `container` and `.hud-layer` is it.
+           * The delay and the container both live in the wrapper now — 350 ms
+           * (a hint, not a popover trailing the pointer), and a portal *into*
+           * `.hud-layer`. The chip grew the panel material — translucent, with
+           * a backdrop filter — and a backdrop filter samples what is behind
+           * it, which on the extended path includes a star's disc above
+           * diffuse white; that is exactly the case `dynamic-range-limit:
+           * standard` exists for, so the content has to render inside the
+           * clamped layer. `components/ui/tooltip.tsx` carries both decisions
+           * and the reasoning.
            */}
           <TooltipProvider>
             <App catalog={catalog} />

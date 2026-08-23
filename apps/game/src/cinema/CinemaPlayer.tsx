@@ -13,7 +13,7 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { GameEngine } from '../engine/GameEngine.ts'
-import { FOCUS_RING } from '../hud/focus.ts'
+import { FOCUS_RING, isOverlayControl, isTyping } from '../hud/focus.ts'
 import { FrameScrubber } from '../hud/FrameScrubber.tsx'
 import { TransportButton } from '../hud/TransportButton.tsx'
 import { useScrubber } from '../hud/useScrubber.ts'
@@ -171,12 +171,24 @@ export function CinemaPlayer({
          * Read through a ref rather than the state, because the effect must not
          * depend on the playhead — it polls it — and a stale closure here is
          * the difference between "the scene ended" and "no scene was open".
+         *
+         * Only a playhead that was *near the end* means the scene ran out.
+         * `stopCutscene` — the console, the Navigate panel's Stop, now one
+         * disclosure away inside this mode — goes null through the exact same
+         * reading, and reopening then undid the stop within 100 ms. Half a
+         * second of frames is the discriminator because it is the poll gap
+         * with room for the director stepping several frames per sample; a
+         * scene stopped by hand more than that from its end stays stopped.
          */
         const previous = seen.current
         if (previous !== null) {
           seen.current = null
-          setEnded(true)
-          open(Math.max(0, previous.durationFrames - 2), false)
+          if (previous.frame >= previous.durationFrames - previous.fps / 2) {
+            setEnded(true)
+            open(Math.max(0, previous.durationFrames - 2), false)
+          } else {
+            setPlayhead(null)
+          }
         }
         return
       }
@@ -229,6 +241,10 @@ export function CinemaPlayer({
   const seek = useCallback(
     (frame: number) => {
       if (!seekFrame(frame)) return
+      // Using the transport is how someone stops reading the end card, so a
+      // seek dismisses it — without this the card sat over a scene that was
+      // visibly somewhere else.
+      setEnded(false)
       setPlayhead((current) =>
         current === null ? current : { ...current, frame },
       )
@@ -237,6 +253,9 @@ export function CinemaPlayer({
   )
 
   const toggle = useCallback(() => {
+    // Same dismissal as `seek`: pressing play on an ended scene is watching
+    // it again, not reading a card about how it went.
+    setEnded(false)
     if (engine.world.clock.paused) engine.harness.resume()
     else engine.harness.pause()
   }, [engine])
@@ -253,6 +272,18 @@ export function CinemaPlayer({
   /* Space plays and pauses, the arrows step. What a player's keys always are. */
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
+      /*
+       * The same two refusals every window-level listener here makes, and
+       * this one went without them for as long as no text field could exist
+       * beside the player. The workspace changed that: the Navigate panel's
+       * address input is one disclosure away, and typing a space into it
+       * toggled the scene while `preventDefault` ate the character. The
+       * overlay guard is the Space-on-a-focused-button rule from
+       * `useShipControls`, plus the arrows — Radix gives a focused slider and
+       * a toggle group arrow keys of their own, and two handlers stepping on
+       * one keystroke seeks twice.
+       */
+      if (isTyping(event) || isOverlayControl(event)) return
       const status = engine.harness.cutsceneStatus()
       if (status === null) return
       const step = event.shiftKey ? secondStep(status.fps) : 1
@@ -294,15 +325,16 @@ export function CinemaPlayer({
 
   /*
    * A scene with no picture at all — the player opened and the director never
-   * produced a frame. The end of a scene no longer reaches this branch: the
-   * poll reopens the final frame, so what is on screen is the last shot, and
-   * the card below is drawn *over* it.
+   * produced a frame, or something outside the player stopped the scene
+   * mid-run and the stop was respected. The natural end of a scene no longer
+   * reaches this branch: the poll reopens the final frame, so what is on
+   * screen is the last shot, and the End of Scene card is drawn *over* it.
    */
   if (playhead === null) {
     return (
       <EndCard
-        title="Nothing to Play"
-        detail="the scene opened but produced no frames"
+        title="Nothing Playing"
+        detail="the scene stopped before its end, or never produced a frame"
         onReplay={replay}
       />
     )
@@ -321,8 +353,13 @@ export function CinemaPlayer({
         />
       )}
       <div
+        /* `invisible`, not opacity alone — the same fix `CinemaMode` applies
+           to its own bar: opacity leaves a fully transparent transport still
+           taking hits, so a tap at the bottom of a playing scene landed on an
+           invisible Pause or the way out. Visibility also removes it from the
+           tab order while it is gone. */
         className={`pointer-events-none absolute inset-x-0 bottom-14 transition-opacity duration-300 ${
-          idle ? 'opacity-0' : 'opacity-100'
+          idle ? 'invisible opacity-0' : 'visible opacity-100'
         }`}
       >
         <div className="pointer-events-auto mx-auto flex w-[min(56rem,calc(100vw-1.5rem))] flex-col gap-2 rounded-lg border border-slate-700/60 bg-slate-950/80 px-3 py-2 backdrop-blur">

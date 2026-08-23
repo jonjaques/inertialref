@@ -68,7 +68,10 @@ export function CataloguePanel({ engine, target, focus }: PlanetariumContext) {
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Name or address"
           aria-label="Search the catalogue"
-          className="type-readout h-7 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0 dark:bg-transparent"
+          // `md:type-readout` beside the bare step: the Input base carries
+          // `md:text-sm`, which only merges against an equally modified class.
+          // `lib/utils.ts` has the whole story.
+          className="type-readout md:type-readout h-7 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0 dark:bg-transparent"
         />
         <span className="type-micro shrink-0 text-slate-400">
           {rows.length}

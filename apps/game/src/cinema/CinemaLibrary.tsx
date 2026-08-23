@@ -20,8 +20,13 @@ export function CinemaLibrary({ engine }: { engine: GameEngine }) {
     // that is very often a sunlit planet. `docs/design/ux.md` measured 70% in
     // front of Earth as the point where a page reads without obliterating what
     // it is over; the same number, for the same reason.
-    <div className="pointer-events-auto absolute inset-0 flex items-center justify-center overflow-y-auto bg-slate-950/70 p-6">
-      <div className="w-full max-w-2xl">
+    // Centred by the child's `m-auto`, not by `items-center`/`justify-center`
+    // on the scroller: auto margins collapse when the column outgrows the
+    // frame, where flex centering overflows it symmetrically — and the half
+    // above the scroll origin, the heading first, is unreachable by any
+    // scroll.
+    <div className="pointer-events-auto absolute inset-0 flex overflow-y-auto bg-slate-950/70 p-6">
+      <div className="m-auto w-full max-w-2xl">
         <header className="mb-7 border-b border-slate-800 pb-4">
           {/* The display face, at the size a place gets. `Cinema` is a mode —
               the same kind of noun the front door sets in it, and the same one

@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactNode, Ref } from 'react'
 import { ChevronDown, ChevronRight, Pin, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { ErrorBoundary } from '../hud/ErrorBoundary.tsx'
 import { FOCUS_RING, releaseFocus } from '../hud/focus.ts'
 import type { DockPanelDefinition } from './panels.ts'
 
@@ -182,7 +183,19 @@ export function PanelChrome({
       </header>
 
       {!collapsed && (
-        <div className="min-h-0 flex-1 overflow-auto p-2">{children}</div>
+        <div className="min-h-0 flex-1 overflow-auto p-2">
+          {/*
+           * The boundary is here, in the one chrome both arrangements share,
+           * so a throw in a body costs the body and not the mode. Without it
+           * the throw unwinds to `App`'s mode-level boundary and takes the
+           * panes, the menu — including the close control for the very panel
+           * that failed — and, in the cinema, the playing scene down with it;
+           * and since the panel is persisted open, the remount re-throws.
+           */}
+          <ErrorBoundary what={`the ${definition.title} panel`}>
+            {children}
+          </ErrorBoundary>
+        </div>
       )}
     </section>
   )

@@ -87,8 +87,15 @@ export function placeFloat(
  * React DnD reports a difference from where the gesture started, not an
  * absolute pointer position, which is the right signal: the panel should follow
  * the hand from wherever it was grabbed rather than snapping its corner to the
- * cursor. An unplaced panel is treated as being at `from`, so the first drag of
- * a freshly floated panel moves it from where it was drawn.
+ * cursor.
+ *
+ * The base is `from` — where the panel was *drawn* — and deliberately not the
+ * stored coordinate. The two disagree exactly when the store is stale: a
+ * position written on a wide display and read back on a narrow one is clamped
+ * for rendering but kept raw in the map, and a delta applied to the raw point
+ * re-clamps to where the panel already is — a drag that visibly does nothing
+ * until it has eaten the whole stale offset. `from` also answers for a panel
+ * with no stored coordinate at all, which is rendering at its cascade point.
  */
 export function nudgeFloat(
   positions: FloatPositions,
@@ -98,11 +105,10 @@ export function nudgeFloat(
   size: FloatSize,
   viewport: FloatSize,
 ): FloatPositions {
-  const base = positions[panel] ?? from
   return placeFloat(
     positions,
     panel,
-    { x: base.x + delta.x, y: base.y + delta.y },
+    { x: from.x + delta.x, y: from.y + delta.y },
     size,
     viewport,
   )

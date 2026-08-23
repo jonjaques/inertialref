@@ -7,7 +7,7 @@ import { PANE_ZONES } from './layout.ts'
 import type { DevWorkspace, WorkspacePanels } from './workspace.ts'
 import { DEV_GROUP, groupsFor, visiblePanels } from './workspace.ts'
 import { allPanels } from './panels.ts'
-import { useWorkspace } from './useWorkspace.ts'
+import { isOpen, useWorkspace } from './useWorkspace.ts'
 import { useWorkspaceKeys } from './useWorkspaceKeys.ts'
 import { useCompact } from '../hud/viewport.ts'
 
@@ -61,22 +61,31 @@ export function Workspace({
    * controls is what is *rendered*, which is `visiblePanels` below.
    */
   const workspace = useWorkspace(id, allPanels(groups))
-  /*
-   * `H` hides both panes; `G` and `P` open a panel by name.
-   *
-   * `onShow` discloses the instruments first, because both named panels are
-   * inside that group — a shortcut that quietly did nothing because a
-   * disclosure was closed is worse than no shortcut at all.
-   */
-  useWorkspaceKeys(workspace, {
-    onShow: (panel) => {
-      if (dev.panels.some((definition) => definition.id === panel))
-        dev.onOpenChange(true)
-      workspace.toggle(panel)
-    },
-  })
   const visible = visiblePanels(groups, dev.open)
   const byId = new Map(visible.map((panel) => [panel.id, panel]))
+  /*
+   * `H` hides both panes; `G` and `P` toggle a panel by name.
+   *
+   * The decision is made against what is *rendered*, not the layout census: a
+   * dev panel can be open in its pane and still suppressed by the closed
+   * disclosure, and hiding it then is an invisible press that also discards
+   * the slot the suppression was preserving. So a panel that is not on screen
+   * — hidden, or merely suppressed — is disclosed and *shown*, which keeps an
+   * arranged slot where `toggle` would have appended; only a visibly open one
+   * is hidden. A shortcut that quietly did nothing because a disclosure was
+   * closed is worse than no shortcut at all.
+   */
+  useWorkspaceKeys(workspace, {
+    onToggle: (panel) => {
+      if (byId.has(panel) && isOpen(workspace.layout, panel)) {
+        workspace.hide(panel)
+        return
+      }
+      if (dev.panels.some((definition) => definition.id === panel))
+        dev.onOpenChange(true)
+      workspace.show(panel)
+    },
+  })
   const inZone = (zone: 'left' | 'right' | 'float') =>
     workspace.layout[zone]
       .map((panelId) => byId.get(panelId))

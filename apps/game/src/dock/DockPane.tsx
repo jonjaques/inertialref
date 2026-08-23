@@ -2,7 +2,7 @@
 import { useCallback, useRef, useState } from 'react'
 import { useDrop } from 'react-dnd'
 import { DropLine } from './DropLine.tsx'
-import { dropIndex, insertionIndex, type PaneZone } from './layout.ts'
+import { insertionIndex, type PaneZone } from './layout.ts'
 import { PaneHandle } from './PaneHandle.tsx'
 import { PanelSlot } from './PanelSlot.tsx'
 import {
@@ -90,16 +90,13 @@ export function DockPane({
         setIndicator(null)
         const index = indexAt(monitor.getClientOffset())
         /*
-         * `index` is measured against the panels on screen, which still include
-         * the one being dragged — `dropIndex` is the translation into the index
-         * `movePanel` reads, and without it a downward drag inside one pane
-         * landed a slot past the line the drop indicator had just drawn.
+         * `index` is measured against the panels on screen — which still
+         * include the dragged one, and *exclude* any panel a closed disclosure
+         * is suppressing. `workspace.drop` owns both translations into the
+         * index `movePanel` reads, and runs them inside the updater so a
+         * gesture that delivers two drops composes rather than clobbers.
          */
-        workspace.move(
-          item.id,
-          zone,
-          dropIndex(workspace.layout, item.id, zone, index),
-        )
+        workspace.drop(item.id, zone, ids, index)
         // Returned so `FloatField`, which is the outer target, can see that the
         // release was already claimed and leave the panel alone.
         return { docked: true }
@@ -161,7 +158,7 @@ export function DockPane({
       >
         {empty ? (
           <p className="type-label rounded-lg border border-dashed border-sky-500/40 bg-sky-500/5 px-3 py-6 text-center text-sky-300/70">
-            drop here
+            Drop Here
           </p>
         ) : (
           <>

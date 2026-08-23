@@ -48,7 +48,7 @@ export function ViewPanel({
 
       <div className="mt-1 flex flex-col gap-1">
         <span className="type-label flex items-center justify-between text-sky-400/80">
-          field of view
+          Field of View
           <span className="text-slate-400 tabular-nums">{fov}°</span>
         </span>
         <FovSlider fov={fov} onFov={onFov} />

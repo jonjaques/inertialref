@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
+import { isTyping } from '../hud/focus.ts'
 import { PANE_ZONES } from './layout.ts'
-import { isOpen, type Workspace } from './useWorkspace.ts'
+import type { Workspace } from './useWorkspace.ts'
 
 /*
  * The three keys that are about what is on screen rather than about the ship.
@@ -18,32 +19,22 @@ import { isOpen, type Workspace } from './useWorkspace.ts'
 
 export interface WorkspaceKeyOptions {
   /**
-   * Open a panel by id, disclosing whatever group it is in.
+   * Show a panel by id, or put a showing one away.
    *
-   * `G` and `P` name the author's instruments, which are behind a disclosure,
-   * so "show the perf panel" has to be able to press that disclosure too — a
-   * shortcut that silently did nothing because a group was closed is worse
-   * than no shortcut.
+   * The whole decision belongs to the caller, not this hook, because "is this
+   * panel actually on screen" is more than the layout census: a dev panel can
+   * be open in its pane and still suppressed by a closed disclosure, and a
+   * hook that consulted `isOpen` alone answered that case by hiding a panel
+   * nobody could see — a first press that did nothing visible and quietly
+   * discarded the arranged slot the suppression exists to preserve.
    */
-  readonly onShow: (panel: string) => void
+  readonly onToggle: (panel: string) => void
 }
 
 /** Panel id per key code. Two, and both are the ones an author reaches for. */
 const SHORTCUTS: Readonly<Record<string, string>> = {
   KeyG: 'navigate',
   KeyP: 'perf',
-}
-
-/** Whether the keystroke belongs to something being typed into. */
-function isTyping(event: KeyboardEvent): boolean {
-  const target = event.target
-  if (!(target instanceof HTMLElement)) return false
-  return (
-    target.isContentEditable ||
-    target.tagName === 'INPUT' ||
-    target.tagName === 'TEXTAREA' ||
-    target.tagName === 'SELECT'
-  )
 }
 
 export function useWorkspaceKeys(
@@ -82,10 +73,7 @@ export function useWorkspaceKeys(
 
       const panel = SHORTCUTS[event.code]
       if (panel === undefined) return
-      // A second press closes it again, which is what every other way of
-      // reaching a panel does — the menu glyph, the panel's own close button.
-      if (isOpen(current.layout, panel)) current.hide(panel)
-      else handlers.onShow(panel)
+      handlers.onToggle(panel)
     }
 
     window.addEventListener('keydown', down)

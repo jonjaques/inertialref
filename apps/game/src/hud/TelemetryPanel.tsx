@@ -155,7 +155,10 @@ export function TelemetryPanel({
             value={String(output.capability.dynamicRangeHigh)}
           />
           <Row
-            label="Rgba16float Canvas"
+            // `rgba16float` stays verbatim like `navigator.gpu` above — it is
+            // the literal GPUTextureFormat token, and title-casing it makes a
+            // string that matches nothing in any WebGPU document.
+            label="rgba16float Canvas"
             value={output.capability.extendedCanvas ? 'configured' : 'refused'}
           />
         </Section>

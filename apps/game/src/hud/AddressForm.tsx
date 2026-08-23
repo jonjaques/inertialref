@@ -47,7 +47,11 @@ export function AddressForm({
         // 24 px tall on the dock's own ground, not the registry's 36 px
         // `bg-input/30` field. The ring is `--ring`, which `index.css` already
         // points at the same sky-400 hairline `FOCUS_RING` draws.
-        className="type-readout h-7 min-w-0 flex-1 rounded border-slate-700 bg-slate-900/80 px-1.5 py-0.5 text-slate-200 shadow-none caret-sky-300 placeholder:text-slate-400 dark:bg-slate-900/80"
+        // `md:type-readout` beside the bare step: the Input base carries
+        // `md:text-sm`, and a modified class only merges against an equally
+        // modified one — without the twin the field is 14px on desktop.
+        // `lib/utils.ts` has the whole story.
+        className="type-readout md:type-readout h-7 min-w-0 flex-1 rounded border-slate-700 bg-slate-900/80 px-1.5 py-0.5 text-slate-200 shadow-none caret-sky-300 placeholder:text-slate-400 dark:bg-slate-900/80"
       />
       <Action label="Go" tone="primary" onClick={onSubmit} />
     </form>

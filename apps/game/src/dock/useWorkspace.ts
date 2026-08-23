@@ -2,12 +2,15 @@ import { useEffect, useState } from 'react'
 import {
   type DockLayout,
   type DockZone,
+  dropIndex,
   EMPTY_LAYOUT,
   isDockLayout,
+  isPane,
   movePanel,
   normalizeLayout,
   type PaneZone,
   PANE_ZONES,
+  slotIndex,
   togglePanel,
   zoneOf,
 } from './layout.ts'
@@ -82,12 +85,35 @@ export interface Workspace {
   readonly viewport: FloatSize
   /** Whether a panel is showing its header alone. */
   readonly isCollapsed: (panel: string) => boolean
-  /** Drag one panel into a pane, at a slot. */
-  readonly move: (panel: string, zone: DockZone, index: number) => void
+  /**
+   * A drop into a pane, at a slot measured against the panels *on screen*.
+   *
+   * Takes the rendered ids rather than a pre-translated index because the
+   * translation has to happen against the layout the move is applied to —
+   * inside the updater — or a gesture that delivers two drops composes the
+   * second against a snapshot the first already changed. `slotIndex` is the
+   * pure half; this is where it meets the state.
+   */
+  readonly drop: (
+    panel: string,
+    zone: PaneZone,
+    visible: readonly string[],
+    visibleIndex: number,
+  ) => void
   /** Close a panel. It goes to `hidden`, and the menu is how it comes back. */
   readonly hide: (panel: string) => void
   /** Open a closed panel where its definition says, or close an open one. */
   readonly toggle: (panel: string) => void
+  /**
+   * Make a panel visible where it already belongs, and nothing else.
+   *
+   * Idempotent where `toggle` is not: a panel that is already open keeps its
+   * zone and its slot — the case is a suppressed dev panel being asked for by
+   * shortcut, where the arrangement the suppression preserved must survive
+   * the reveal. Both verbs open the pane they land in; a panel shown into a
+   * pane that stays slid away is a lit toggle with nothing behind it.
+   */
+  readonly show: (panel: string) => void
   /** Pull a panel out of its pane, at a point, or put it back where it belongs. */
   readonly float: (panel: string, at?: FloatPoint, size?: FloatSize) => void
   readonly dock: (panel: string) => void
@@ -144,7 +170,16 @@ export function useWorkspace(
    */
   const [viewport, setViewport] = useState(viewportSize)
   useEffect(() => {
-    const onResize = (): void => setViewport(viewportSize())
+    // The bail is on the values, not the object: `viewportSize` returns a
+    // fresh literal every call and React compares with `Object.is`, so
+    // without this every resize event re-rendered the whole workspace.
+    const onResize = (): void =>
+      setViewport((previous) => {
+        const next = viewportSize()
+        return next.width === previous.width && next.height === previous.height
+          ? previous
+          : next
+      })
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
   }, [])
@@ -174,6 +209,22 @@ export function useWorkspace(
   const zoneFor = (panel: string): DockZone =>
     panels.find((definition) => definition.id === panel)?.zone ?? 'right'
 
+  /*
+   * Opening a panel opens the pane it lands in.
+   *
+   * A pane slides away rather than unmounting, so a panel moved into a closed
+   * one is rendered into a translated-off, `inert` column: the menu glyph
+   * lights, `isOpen` says true, and nothing appears — a toggle that reads as
+   * broken. The write is skipped when the pane is already open, so the common
+   * case changes nothing.
+   */
+  const ensurePane = (zone: DockZone): void => {
+    if (!isPane(zone)) return
+    setPanes((previous) =>
+      previous[zone] ? previous : { ...previous, [zone]: true },
+    )
+  }
+
   return {
     layout,
     floats,
@@ -181,8 +232,22 @@ export function useWorkspace(
     viewport,
     isCollapsed: (panel) => collapsed.includes(panel),
 
-    move: (panel, zone, index) => {
-      update((current) => movePanel(current, panel, zone, index))
+    drop: (panel, zone, visible, visibleIndex) => {
+      /*
+       * Both translations run against `current`, inside the updater. The old
+       * dock learned this the hard way: an index derived from the captured
+       * layout is right for the first drop of a gesture and wrong for a
+       * second, and the touch backend can deliver both.
+       */
+      update((current) => {
+        const at = slotIndex(current[zone], visible, visibleIndex)
+        return movePanel(
+          current,
+          panel,
+          zone,
+          dropIndex(current, panel, zone, at),
+        )
+      })
     },
 
     hide: (panel) => {
@@ -190,7 +255,21 @@ export function useWorkspace(
     },
 
     toggle: (panel) => {
+      // Read before the move: opening is "was not open", and the pane-ensure
+      // below keys off it. The move itself still composes in the updater.
+      const opening = !isOpen(layout, panel)
       update((current) => togglePanel(current, panel, zoneFor(panel)))
+      if (opening) ensurePane(zoneFor(panel))
+    },
+
+    show: (panel) => {
+      const zone = zoneOf(layout, panel)
+      const open = zone !== null && zone !== 'hidden'
+      if (!open) update((current) => movePanel(current, panel, zoneFor(panel)))
+      // An already-open panel keeps its zone — which may not be the one its
+      // definition names, if a hand moved it — so the pane that must open is
+      // the one it is actually in.
+      ensurePane(open ? zone : zoneFor(panel))
     },
 
     float: (panel, at, size) => {
@@ -201,13 +280,21 @@ export function useWorkspace(
        * cascade point for one frame and then jump when this landed — which
        * reads as the gesture having gone wrong. Writing the point first means
        * the first frame it is floating is the frame it is in the right place.
+       *
+       * With no point from the gesture, the remembered spot wins over the
+       * cascade — that is what the map is *for*, and `cascade`'s own contract
+       * says it answers only for a panel with no remembered spot. The cascade
+       * index counts the panels actually floating rather than the stored map,
+       * which keeps entries for panels long since docked so their spots
+       * survive; counted, they marched every fresh float down-screen and,
+       * modulo the six rungs, could land two live panels on the same point.
        */
       const box = size ?? ASSUMED_PANEL
       setFloats((previous) =>
         placeFloat(
           previous,
           panel,
-          at ?? cascade(Object.keys(previous).length, viewport),
+          at ?? previous[panel] ?? cascade(layout.float.length, viewport),
           box,
           viewport,
         ),

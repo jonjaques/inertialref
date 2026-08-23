@@ -39,11 +39,16 @@ export function useTransportIdle(active: boolean): boolean {
       window.clearTimeout(timer)
       timer = window.setTimeout(() => setIdle(true), IDLE_MS)
     }
+    // `pointerdown` as well as move: a stationary touch tap produces no
+    // pointermove and a phone has no keys, so without it the faded chrome —
+    // the mode's only way out — could never be summoned back on touch.
     window.addEventListener('pointermove', wake)
+    window.addEventListener('pointerdown', wake)
     window.addEventListener('keydown', wake)
     return () => {
       window.clearTimeout(timer)
       window.removeEventListener('pointermove', wake)
+      window.removeEventListener('pointerdown', wake)
       window.removeEventListener('keydown', wake)
     }
   }, [active])

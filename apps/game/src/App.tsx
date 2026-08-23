@@ -13,6 +13,7 @@ import type {
 import { FOV_MAX, FOV_MIN } from './hud/controls.ts'
 import { CutsceneOverlay } from './hud/CutsceneOverlay.tsx'
 import { ErrorBoundary } from './hud/ErrorBoundary.tsx'
+import { isTyping } from './hud/focus.ts'
 import {
   isBoolean,
   numberWithin,
@@ -497,14 +498,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       if (event.code !== 'Backquote' || event.metaKey || event.ctrlKey) return
-      const target = event.target
-      if (
-        target instanceof HTMLElement &&
-        (target.isContentEditable ||
-          target.tagName === 'INPUT' ||
-          target.tagName === 'TEXTAREA')
-      )
-        return
+      if (isTyping(event)) return
       event.preventDefault()
       setDebug(!debug)
     }
@@ -599,8 +593,11 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
        * *through* that blackout — it carries the transport and the way out —
        * which is why the mode band is lifted to 30 there and nowhere else.
        *
-       * Radix portals its tooltips to `<body>` at `z-50`, outside this layer
-       * and above all of it, which is what a tooltip should be.
+       * The tooltip wrapper portals its content *into* this layer at `z-50`
+       * — above every band here, and inside the standard-range clamp, which
+       * is the point: a chip portalled to `<body>` sat outside the clamp and
+       * composited over a star at twice diffuse white. See
+       * `components/ui/tooltip.tsx`.
        */}
       <div className="hud-layer pointer-events-none absolute inset-0">
         {/* Renders nothing at all when no cutscene is running. While one is,
@@ -676,8 +673,14 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
             arriving while the first is up crossfades rather than swapping text
             inside a box that never moved. Transform is dropped for anyone who
             asks for reduced motion; see `MotionConfig` in `main.tsx`. */}
+        {/* The cinema exception again, and for the same reason as the dialog
+            band below: the player's workspace carries the save, warp and HDR
+            controls, and this notice is the only confirmation any of them
+            gives — visually and to a screen reader. Suppressed there, the
+            commands ran silently. In every other mode a cutscene still takes
+            the notice out of the picture. */}
         <AnimatePresence>
-          {!cinema && notice !== null && (
+          {(!cinema || mode === 'cinema') && notice !== null && (
             <motion.div
               key={notice}
               /* Announced, not just drawn. This is the only confirmation most
@@ -708,8 +711,16 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
 
         {/* Dialogs, over a running simulation and over whatever mode is behind
             them. Inside the layer so they inherit the standard-range clamp; a
-            sibling of `<Canvas>`, so navigating cannot remount the renderer. */}
-        {!cinema && (
+            sibling of `<Canvas>`, so navigating cannot remount the renderer.
+
+            The cinema mode is the same exception it is for the mode band
+            above: its workspace carries the settings link, so a scene being
+            open must not unmount the dialog that link opens — gated on
+            `!cinema` alone, settings from the player changed the URL and drew
+            nothing, and a second press wrapped the dead `/settings` as the new
+            background and killed the scene. Elsewhere a cutscene still clears
+            the frame. */}
+        {(!cinema || mode === 'cinema') && (
           <div className="pointer-events-none absolute inset-0 z-40">
             <ErrorBoundary
               what="the page overlay"
