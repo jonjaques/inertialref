@@ -3240,6 +3240,61 @@ both fail if the bug returns. The new test adds what neither could see: it runs
 sixty frames so alpha wraps four times, because a single sample cannot detect a
 sawtooth no matter which instant it asks about.
 
+## The Cloud Agent that was supposed to rebuild from #15 did not (23 Aug 2026)
+
+The test plan on #15 was: after merge, start a new Cloud Agent so it rebuilds
+from the Dockerfile rather than from the previous snapshot, then confirm `pnpm
+dev` is in tmux and `data/models/enterprise-d.glb` is a real GLB.
+
+This agent is that follow-up. It booted from snapshot
+`bld-20260823-8f2a6585-8181-4c0a-9ead-01cf98aad959` (`gitSetup: reuse`,
+`warmFork: warm_fork`). That snapshot predates the merge. The first recurring
+build after merge, `bld-20260823-6c5f7e0b-edef-414f-8924-32d1ecfaf161`, is
+`SKIPPED`. So the new Dockerfile is on `main` and this pod is still the old
+image.
+
+Measured on this pod:
+
+| Probe                          | Result                             |
+| ------------------------------ | ---------------------------------- |
+| `git-lfs`                      | not installed                      |
+| `tmux`                         | not installed                      |
+| `LANG` / locale                | empty / POSIX                      |
+| `data/models/enterprise-d.glb` | 133-byte LFS pointer, `ASCII text` |
+| Game and Worker terminal       | not running                        |
+
+Node 26.7 and pnpm 11.22 are present — those were already on the image #15
+amended. The three things #15 added are the three things still missing. A new
+agent is not a rebuild when Cursor reuses a snapshot; the next green Build of
+this environment is what would actually pick up the Dockerfile.
+
+## The share card was a cyan marble (23 Aug 2026)
+
+`scripts/brand/og.mjs` drew a sky-gradient disk with no surface. At 300 px —
+the size a chat client actually shows — that disk is a glow, not a world, and
+it does not look like the front door, which is Earth.
+
+The card is still a drawing. A screenshot of `b:2` would be the honest picture
+and the wrong artifact: it would move with the camera and it would need a GPU
+in the build. Continents, clouds and a terminator that share one mask are how
+a drawing reads as a world without becoming a second renderer.
+
+Two things that look obvious and are wrong:
+
+- **Darker land on the same hue is maria.** Sky-900 continents on a sky-700
+  ocean read as craters. Land is slate-400, and it is painted _after_ the
+  day-side wash, because the wash on top of land turns continents back into
+  more cyan.
+- **The anamorphic streak was behind the type panel.** The front door is
+  composed around that blade of light; under an opaque panel it is a decoration
+  on the planet. It is drawn after the type now, in the gap between the mark
+  and the title.
+
+`pnpm brand --check` still does not pixel-diff the PNG — sharp is not
+byte-stable across versions. `og.test.mjs` holds the SVG: 1200×630, the same
+markup twice, a seeded starfield of unequal dots, and the ids that would vanish
+if a rewrite dropped the planet, the terminator mask or the streak.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

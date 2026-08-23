@@ -18,6 +18,12 @@
  * the same reason: a bare triple is unreadable next to the palette it belongs
  * to. The type steps are quoted from `index.css` too, axis by axis, so a change
  * to the display voice is one number here.
+ *
+ * The planet is Earth in the brand's sky/slate register, not a cyan marble.
+ * A screenshot of `b:2` would be the honest picture and the wrong artifact:
+ * it would move with the camera and it would need a GPU. Continents, clouds
+ * and a terminator that shares one mask are how a drawing reads as a world
+ * at 300 px without becoming a second renderer.
  */
 import { SITE } from '../../apps/game/src/site.ts'
 import { readMark, fit, measure } from './mark.mjs'
@@ -41,14 +47,15 @@ const GUTTER = 80
 /*
  * The star, and the planet it lights.
  *
- * The planet's center is off the bottom-right corner so only its limb is in
- * frame — a full disk centered in the right third reads as a stock globe, where
- * an arc leaving the frame reads as being near something. The star sits above
- * and outside it, which is what puts the terminator across the visible limb
- * instead of flattening it.
+ * The planet's center sits just below the bottom edge so the visible face is a
+ * northern hemisphere, not a stock globe parked in the right third. The star
+ * sits above the limb, which is what puts the terminator across the visible
+ * face instead of flattening it. Numbers chosen so more of the disk survives a
+ * 300 px preview than the earlier limb-only crop — a cyan sliver there read as
+ * a glow, not as a world.
  */
-const STAR = { x: 1094, y: 148, r: 15 }
-const PLANET = { x: 1130, y: 720, r: 470 }
+const STAR = { x: 1076, y: 152, r: 16 }
+const PLANET = { x: 1116, y: 678, r: 488 }
 
 /**
  * The sub-stellar point, in the planet gradient's own coordinates.
@@ -68,14 +75,15 @@ const SUBSTELLAR = {
  * The one number on this card that is a picture rather than a fact. At 0.5 the
  * gradient ends exactly on the limb, which is the honest reading — and the
  * star is nearly edge-on here, so the honest reading is a two-pixel crescent
- * and a black ball. Stretching the scale to 0.72 keeps the terminator running
- * the right way across the visible face and gives it something to run across.
- * The card is a drawing of the front door, not a render of it.
+ * and a black ball. 0.70 keeps the terminator running the right way across the
+ * visible face and leaves enough day side that a chat preview still reads as a
+ * lit world rather than as a dark circle with a cyan rim.
  */
-const LIT_SPREAD = 0.62
+const LIT_SPREAD = 0.7
 
 /*
- * A hundred and forty stars, from a fixed seed.
+ * A hundred and forty stars, from a fixed seed, plus a handful of brighter
+ * ones with diffraction spikes in the open sky.
  *
  * Hand-placing them would be forty lines of magic numbers; `Math.random()`
  * would make the card different on every build and turn `pnpm brand --check`
@@ -89,6 +97,7 @@ const LIT_SPREAD = 0.62
  */
 const STAR_SEED = 0x9e3779b9
 const STAR_COUNT = 140
+const BRIGHT_COUNT = 7
 
 function scatter() {
   let state = STAR_SEED
@@ -111,10 +120,72 @@ function scatter() {
       `    <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${radius.toFixed(2)}" fill="#e0f2fe" opacity="${opacity.toFixed(3)}" />`,
     )
   }
+  for (let index = 0; index < BRIGHT_COUNT; index += 1) {
+    const x = 560 + next() * 620
+    const y = 24 + next() * 280
+    const dx = x - PLANET.x
+    const dy = y - PLANET.y
+    if (dx * dx + dy * dy < PLANET.r * PLANET.r) continue
+    const spike = 7 + next() * 8
+    const opacity = 0.45 + next() * 0.35
+    stars.push(
+      `    <g opacity="${opacity.toFixed(3)}" fill="#e0f2fe" stroke="#e0f2fe">
+      <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="1.4" />
+      <path d="M ${x.toFixed(1)} ${(y - spike).toFixed(1)} L ${x.toFixed(1)} ${(y + spike).toFixed(1)}" stroke-width="0.7" />
+      <path d="M ${(x - spike * 1.6).toFixed(1)} ${y.toFixed(1)} L ${(x + spike * 1.6).toFixed(1)} ${y.toFixed(1)}" stroke-width="0.9" />
+    </g>`,
+    )
+  }
   return stars.join('\n')
 }
 
 const STARFIELD = scatter()
+
+/*
+ * Continents, in planet-local coordinates, origin at the disk center, y down.
+ *
+ * The visible crop is the top of the disk, so these are a northern-hemisphere
+ * reading of Earth — Americas on the left, Europe and Africa toward the
+ * terminator — simplified until they read at 300 px. A NASA coastline at this
+ * size is noise; four blobs with the right relative positions are a planet.
+ * Land is slate-400 on a sky-700 ocean, and it is painted *after* the day-side
+ * wash. Darker fill of the same hue reads as maria; the wash on top of land
+ * turns continents into more cyan, which is how the first pass became a
+ * cratered moon at 300 px.
+ */
+const LAND = [
+  // North America: Alaska, a Hudson bite, the Gulf, a Mexico taper.
+  'M -305 -255 C -355 -235 -350 -155 -300 -95 C -270 -55 -230 -35 -195 -55 C -175 -15 -160 20 -175 58 C -205 28 -220 -8 -200 -52 C -145 -28 -95 -75 -82 -140 C -68 -205 -95 -295 -165 -338 C -225 -365 -280 -310 -305 -255 Z',
+  // Alaska, as its own mass so the west coast does not read as a bump.
+  'M -330 -275 C -375 -255 -368 -210 -325 -205 C -295 -215 -300 -265 -330 -275 Z',
+  // Greenland
+  'M -100 -410 C -132 -370 -95 -325 -52 -348 C -28 -378 -58 -430 -100 -410 Z',
+  // Europe, with a Scandinavian lift
+  'M 8 -268 C -18 -240 2 -188 58 -198 C 78 -228 52 -270 28 -285 C 18 -300 12 -282 8 -268 Z',
+  // British Isles
+  'M -8 -282 C -22 -268 -4 -252 14 -264 C 8 -278 -2 -290 -8 -282 Z',
+  // North Africa, just in frame at the bottom of the crop
+  'M 22 -148 C -8 -88 48 -28 118 -62 C 128 -112 82 -172 22 -148 Z',
+]
+
+const CLOUDS = [
+  { x: -200, y: -225, rx: 88, ry: 16, a: -16, o: 0.14 },
+  { x: 48, y: -210, rx: 72, ry: 14, a: -10, o: 0.12 },
+]
+
+function surface() {
+  const land = LAND.map((d) => `      <path d="${d}" />`).join('\n')
+  const clouds = CLOUDS.map(
+    ({ x, y, rx, ry, a, o }) =>
+      `      <ellipse cx="${x}" cy="${y}" rx="${rx}" ry="${ry}" transform="rotate(${a} ${x} ${y})" opacity="${o}" />`,
+  ).join('\n')
+  return `    <g id="land" fill="#94a3b8" transform="translate(${PLANET.x} ${PLANET.y})">
+${land}
+    </g>
+    <g id="clouds" fill="#e0f2fe" transform="translate(${PLANET.x} ${PLANET.y})">
+${clouds}
+    </g>`
+}
 
 /** A text path, placed by its baseline. */
 const place = (run, x, y, fill) =>
@@ -198,36 +269,46 @@ export async function composeOgCard() {
     wght: 400,
   })
 
+  const fx = SUBSTELLAR.x.toFixed(3)
+  const fy = SUBSTELLAR.y.toFixed(3)
+
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${OG_WIDTH}" height="${OG_HEIGHT}" viewBox="0 0 ${OG_WIDTH} ${OG_HEIGHT}">
   <defs>
-    <!-- The lit hemisphere. The gradient's end circle is the planet's own
-         circle and its focal point is the sub-stellar point, so an offset is
-         distance from where the star is overhead. That is what makes the
-         falloff a terminator rather than a vignette: a radial fill centered on
-         the disk lights the middle and darkens the rim, which is the one thing
-         a lit sphere never does. -->
-    <radialGradient id="planet" cx="0.5" cy="0.5" r="${LIT_SPREAD}" fx="${SUBSTELLAR.x.toFixed(3)}" fy="${SUBSTELLAR.y.toFixed(3)}">
-      <stop offset="0%" stop-color="#bae6fd" stop-opacity="1" />
-      <stop offset="10%" stop-color="#7dd3fc" stop-opacity="1" />
-      <stop offset="24%" stop-color="#38bdf8" stop-opacity="1" />
-      <stop offset="38%" stop-color="#0ea5e9" stop-opacity="1" />
-      <stop offset="52%" stop-color="#0369a1" stop-opacity="1" />
-      <stop offset="66%" stop-color="#075985" stop-opacity="1" />
-      <stop offset="79%" stop-color="#0c2b45" stop-opacity="1" />
-      <stop offset="91%" stop-color="#050d1c" stop-opacity="1" />
-      <stop offset="100%" stop-color="${SLATE_950}" stop-opacity="1" />
+    <!-- Day-side illumination, as a mask. White is lit; black is night. Ocean,
+         land and cloud share this so the terminator is one edge, not three. -->
+    <radialGradient id="daylight" cx="0.5" cy="0.5" r="${LIT_SPREAD}" fx="${fx}" fy="${fy}">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="42%" stop-color="#d4d4d8" />
+      <stop offset="62%" stop-color="#71717a" />
+      <stop offset="82%" stop-color="#27272a" />
+      <stop offset="100%" stop-color="#000000" />
+    </radialGradient>
+    <mask id="day" maskUnits="userSpaceOnUse">
+      <circle cx="${PLANET.x}" cy="${PLANET.y}" r="${PLANET.r}" fill="url(#daylight)" />
+    </mask>
+    <clipPath id="disk">
+      <circle cx="${PLANET.x}" cy="${PLANET.y}" r="${PLANET.r}" />
+    </clipPath>
+    <!-- Kept so a card that still names the planet fill does not silently
+         become a flat disk if a later pass drops the mask. The ocean uses this
+         as a wash on top of the base, not as the only colour. -->
+    <radialGradient id="planet" cx="0.5" cy="0.5" r="${LIT_SPREAD}" fx="${fx}" fy="${fy}">
+      <stop offset="0%" stop-color="#bae6fd" stop-opacity="0.55" />
+      <stop offset="28%" stop-color="#38bdf8" stop-opacity="0.22" />
+      <stop offset="58%" stop-color="#0369a1" stop-opacity="0.08" />
+      <stop offset="100%" stop-color="${SLATE_950}" stop-opacity="0" />
     </radialGradient>
     <!-- Atmosphere: a stroke on the limb, brightest where the star is and gone
          by the terminator. Filled behind the disk instead it is a halo all the
          way round, which reads as a glow effect rather than as air. -->
     <linearGradient id="rim" x1="0.1" y1="0.95" x2="0.7" y2="0">
       <stop offset="0%" stop-color="#38bdf8" stop-opacity="0" />
-      <stop offset="45%" stop-color="#7dd3fc" stop-opacity="0.18" />
-      <stop offset="100%" stop-color="#e0f2fe" stop-opacity="0.85" />
+      <stop offset="40%" stop-color="#7dd3fc" stop-opacity="0.22" />
+      <stop offset="100%" stop-color="#e0f2fe" stop-opacity="0.95" />
     </linearGradient>
     <radialGradient id="glow">
-      <stop offset="0%" stop-color="#e0f2fe" stop-opacity="0.9" />
-      <stop offset="35%" stop-color="#7dd3fc" stop-opacity="0.28" />
+      <stop offset="0%" stop-color="#e0f2fe" stop-opacity="0.95" />
+      <stop offset="30%" stop-color="#7dd3fc" stop-opacity="0.4" />
       <stop offset="100%" stop-color="#7dd3fc" stop-opacity="0" />
     </radialGradient>
     <!-- The anamorphic streak. A blade, not a halo: it is the artifact the
@@ -235,10 +316,22 @@ export async function composeOgCard() {
          type instead of leaving the left third flat. -->
     <linearGradient id="streak" x1="0" y1="0" x2="1" y2="0">
       <stop offset="0%" stop-color="#7dd3fc" stop-opacity="0" />
-      <stop offset="38%" stop-color="#bae6fd" stop-opacity="0.30" />
-      <stop offset="50%" stop-color="#f0f9ff" stop-opacity="0.55" />
-      <stop offset="62%" stop-color="#bae6fd" stop-opacity="0.30" />
+      <stop offset="32%" stop-color="#bae6fd" stop-opacity="0.38" />
+      <stop offset="50%" stop-color="#f0f9ff" stop-opacity="0.82" />
+      <stop offset="68%" stop-color="#bae6fd" stop-opacity="0.38" />
       <stop offset="100%" stop-color="#7dd3fc" stop-opacity="0" />
+    </linearGradient>
+    <linearGradient id="core" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0" />
+      <stop offset="42%" stop-color="#ffffff" stop-opacity="0" />
+      <stop offset="50%" stop-color="#ffffff" stop-opacity="0.9" />
+      <stop offset="58%" stop-color="#ffffff" stop-opacity="0" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+    </linearGradient>
+    <linearGradient id="spike" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0" />
+      <stop offset="50%" stop-color="#ffffff" stop-opacity="0.35" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
     </linearGradient>
     <linearGradient id="blade" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0%" stop-color="#ffffff" stop-opacity="0" />
@@ -246,7 +339,7 @@ export async function composeOgCard() {
       <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
     </linearGradient>
     <mask id="bladeMask">
-      <rect x="0" y="${STAR.y - 60}" width="${OG_WIDTH}" height="120" fill="url(#blade)" />
+      <rect x="0" y="${STAR.y - 80}" width="${OG_WIDTH}" height="160" fill="url(#blade)" />
     </mask>
     <!-- The poster's dark side. It has to be solid *past* the type column and
          only then fade, or the last words of a line dissolve into the planet —
@@ -266,19 +359,23 @@ export async function composeOgCard() {
 
   <rect width="${OG_WIDTH}" height="${OG_HEIGHT}" fill="${SLATE_950}" />
 
+  <ellipse cx="780" cy="220" rx="740" ry="64" fill="#1e293b" opacity="0.45" transform="rotate(-20 780 220)" />
+
   <g>
 ${STARFIELD}
   </g>
 
-  <g>
-    <circle cx="${PLANET.x}" cy="${PLANET.y}" r="${PLANET.r}" fill="url(#planet)" />
-    <circle cx="${PLANET.x}" cy="${PLANET.y}" r="${PLANET.r + 3}" fill="none" stroke="url(#rim)" stroke-width="9" filter="url(#soft)" opacity="0.85" />
-    <circle cx="${PLANET.x}" cy="${PLANET.y}" r="${PLANET.r + 1}" fill="none" stroke="url(#rim)" stroke-width="2.5" />
+  <g id="world">
+    <circle cx="${PLANET.x}" cy="${PLANET.y}" r="${PLANET.r}" fill="#020617" />
+    <g clip-path="url(#disk)" mask="url(#day)">
+      <circle cx="${PLANET.x}" cy="${PLANET.y}" r="${PLANET.r}" fill="#0369a1" />
+      <circle cx="${PLANET.x}" cy="${PLANET.y}" r="${PLANET.r}" fill="url(#planet)" />
+${surface()}
+      <ellipse cx="${PLANET.x - 70}" cy="${PLANET.y - 300}" rx="56" ry="28" fill="#f0f9ff" opacity="0.18" />
+    </g>
+    <circle cx="${PLANET.x}" cy="${PLANET.y}" r="${PLANET.r + 4}" fill="none" stroke="url(#rim)" stroke-width="11" filter="url(#soft)" opacity="0.9" />
+    <circle cx="${PLANET.x}" cy="${PLANET.y}" r="${PLANET.r + 1}" fill="none" stroke="url(#rim)" stroke-width="2.8" />
   </g>
-
-  <circle cx="${STAR.x}" cy="${STAR.y}" r="${STAR.r * 8}" fill="url(#glow)" />
-  <rect x="0" y="${STAR.y - 60}" width="${OG_WIDTH}" height="120" fill="url(#streak)" mask="url(#bladeMask)" />
-  <circle cx="${STAR.x}" cy="${STAR.y}" r="${STAR.r}" fill="#f0f9ff" />
 
   <rect width="${OG_WIDTH * 0.78}" height="${OG_HEIGHT}" fill="url(#panel)" />
 
@@ -304,6 +401,15 @@ ${spec
   .join('\n')}
 
   ${place(host, GUTTER, 556, SLATE_500)}
+
+  <!-- Streak after the type so it actually crosses the column, the way the
+       front door's anamorphic blade does. The title sits below it; the mark
+       sits above it. -->
+  <circle cx="${STAR.x}" cy="${STAR.y}" r="${STAR.r * 10}" fill="url(#glow)" />
+  <rect x="${STAR.x - 7}" y="${STAR.y - 90}" width="14" height="180" fill="url(#spike)" />
+  <rect x="0" y="${STAR.y - 80}" width="${OG_WIDTH}" height="160" fill="url(#streak)" mask="url(#bladeMask)" />
+  <rect x="0" y="${STAR.y - 1.5}" width="${OG_WIDTH}" height="3" fill="url(#core)" />
+  <circle cx="${STAR.x}" cy="${STAR.y}" r="${STAR.r}" fill="#f0f9ff" />
 </svg>
 `
 }
