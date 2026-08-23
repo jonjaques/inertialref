@@ -325,6 +325,27 @@ again in a neighboring system.
   existing invalidation test failed on scheduling alone. The survey now carries
   the world generation it was asked about and a result from a gone world is
   dropped.
+- **StrictMode registered every boot producer twice** (23 Aug 2026), and the
+  second `track('building bodies')` returned a ticket the component never held
+  and could therefore never finish. Boot sat at `building bodies 62/62` with the
+  cover up, forever. Not findable in Node — the tests drove `createWarmup`
+  directly, where nothing is double-invoked — and found on the first boot in
+  Chrome. The census is idempotent by label now: two producers with the same
+  label are the same work.
+- **A warm-up deadline counted down against an occluded window** (23 Aug 2026).
+  Chrome suspends `requestAnimationFrame` entirely for one, so a frame-driven
+  producer there has not stalled — it has not been given a single frame — and
+  the eight-second timeout abandoned the build-ahead for exactly the load with
+  the most time to spare, then logged a stall that had not happened. It counts
+  only while the document is visible, which is the rule the presentation
+  watchdog next to it already followed.
+- **`α Cen` resolved to nothing** (23 Aug 2026), though `designations.ts` says
+  in as many words that it should — it is the form that gets pasted out of
+  Wikipedia. Only `α¹ Cen` was indexed, because dropping the superscript keys
+  `ζ¹ Reticuli` and `ζ² Reticuli`, two unrelated systems, to one string. The
+  fix is not to relax that rule: it is a constraint on an _exact_ lookup, and a
+  search box handed an ambiguous name should offer both stars. Splitting `find`
+  from `search` is what made the two answerable separately.
 
 ## The five spikes, measured (19 Aug 2026)
 
@@ -2697,6 +2718,215 @@ _gray_, _artifact_, _toward_. Identifiers, panel ids (`catalogue`), JSON keys
 alone for a later programmatic rename. [`docs/STYLE.md`](docs/STYLE.md)
 already stated the policy; this pass applies it to the rest of the tree.
 
+## Twelve shallow modules, deepened (23 Aug 2026)
+
+[`REVIEW.md`](REVIEW.md) is the plan; this is what implementing it found. The
+thread through all twelve is the same: a module was shallow because its
+interface was `Env`, or a component, or a convention nobody owned — so the
+behavior behind it could only be reached by running the whole application, and
+every bug in it shipped.
+
+**The Worker's media path had four fix commits and no test file.** Not for want
+of trying: `media()` took `env: Env`, a whole workerd binding object, so nothing
+could call it from Node. `serveMedia.ts` takes a `MediaStores` structural type
+instead — three methods, restated rather than imported from the generated
+workerd types, which is what lets a fake satisfy it. Seven tests, each a shipped
+bug: the SPA fallback answering HTML with a 200, `env.ASSETS` ignoring `Range`,
+the 304 with no body, the plain GET that must not be a 206, the 416 that needs a
+second `head()` to name a length, that same `head()` failing too, and the HEAD
+rule — which is now written once instead of on both the 200 and the 206 branch.
+
+**The datum sphere was typed twice and agreed by luck.** `buildScene` computed
+`max(radius * 0.9, radius - relief)` and the boot preloader computed
+`max(radius * 0.9, radius - surface.maxElevation)`, and the two matched only
+because `snapshot.ts` assigns one from the other — a three-hop identity nothing
+asserted, whose failure mode is a silent full cache miss at boot. It is
+`packages/rendering/src/datum.ts` now, called by both, and the guard is a
+`fast-check` property rather than a test that built a `GameEngine` to compare
+two six-line formulas. The property reaches the case the engine test could not:
+relief above a tenth of the radius, where the clamp bites — no body in Sol comes
+near it, so the clamp was typed twice and exercised never.
+
+**One verdict on "is this the same universe?"** Two manifests — the generation
+versions and the catalog version string — met in three places under three
+disciplines: a comparator that had never heard of the catalog, a string
+interpolation on a save's _failure_ path, and a caller that received both and
+discarded them. `versionDrift` in `packages/protocol` is the one function all
+three read. The handshake sends the catalog now; the save loader returns the
+drift on **success**, which is the case that had nowhere to be reported — a save
+whose catalog moved usually loads, and the only symptom is that a star is a few
+light years from where it was. The Worker states its catalog version from
+`data/catalog/manifest.json`, and `apps/headless/src/catalog.test.ts` holds that
+manifest to the packed file beside it, because they are now read by different
+things. `docs/roadmap.md`'s open square closes.
+
+**`TravelTarget` dropped `catalogued`,** so a real star and an invented one
+rendered identically — against a PRODUCT.md commitment — while `loaded`, a
+streaming fact about this session, sat in the slot the epistemic fact belonged
+in. One field forward, mapped to the domain word (`observed` / `projected`) at
+the projection rather than carrying the storage boolean.
+
+**`pnpm brand --check` never opened `index.html`,** which is the one artifact a
+scraper parses and the only one nothing derives. `scripts/brand/checkHead.mjs`
+is a check rather than a generator — generating the head was argued and
+declined, and `build.mjs` records why it fights `pnpm format`. It holds the
+title, the canonical, `theme-color`, `og:image` and the descriptions to
+`src/site.ts`, holds every absolute URL to an allow-list of hosts, and holds
+`sw.js`'s `PRECACHE` to files something actually ships. **Strip the comments
+before extracting anything**: the head's own commentary quotes the tags it
+explains, so the first `<title>` in the file is inside a comment, and the first
+version of the checker read four hundred words of prose as the page title. The
+tag _count_ is asserted too, because a regex extractor that stops seeing a tag
+reports it as correct.
+
+### The boot pair, and two bugs only the browser had
+
+`warmup.ts` owns the compile-ahead recipe — make visible, `compileAsync`, put
+the visibility back, swallow the rejection — which was written out three times
+in the scene components, each making its own `as unknown as WebGPURenderer`
+cast, each re-explaining in prose the measured fact that the backend builds
+shader source per material _instance_. `rg 'as unknown as WebGPURenderer'
+apps/game/src` now finds nothing. The second layer is the census: producers
+register, and the progress total is the sum of what registered rather than the
+running step's own count. Live, the status line reads `baking atmospheres
+28/62` and then `building bodies 46/62` — 62 being every producer, and
+`building bodies` being the per-instance drain that used to be invisible while
+the line said "compiling the sky…".
+
+Two things the Node tests could not have found, both found on the first boot:
+
+- **StrictMode registers everything twice**, so `useState(() => trackAtMount(…))`
+  returned a _second_ ticket the component never held and could never finish.
+  Boot sat at `building bodies 62/62` with the cover up, forever. `register` and
+  `track` are idempotent by label now — two producers with the same label are
+  the same work, so the label is the identity.
+- **The deadline burned against an occluded window.** Chrome suspends
+  `requestAnimationFrame` entirely for one, so a frame-driven producer there is
+  not stalled — it has not been given a single frame — and timing it out
+  abandons the build-ahead for exactly the load with the most time to spare. The
+  deadline only counts while `document.visibilityState === 'visible'`, which is
+  the rule the presentation watchdog already followed.
+
+`firstLight.ts` took the boot gate out of `App.tsx` — four `useState`s, five
+effects, and a backend split that `presentationWatchdog.ts` documented and then
+handed to its caller to enforce. "Provably presented" means a pixel probe on
+WebGPU and two visible animation frames on WebGL, because `drawImage` of a WebGL
+canvas without `preserveDrawingBuffer` may legally read back black; a module
+that states an invariant it does not own is one edit from being untrue
+elsewhere, which is how Firefox came to sit at "first light…" indefinitely. It
+is a `PresentedSignal` with two adapters chosen by backend, inside the module.
+`hasLitPixels` is exported and tested directly for the first time — including
+the case its own comment warns about, a single lit pixel in a strip of empty
+sky, which a downscaled thumbnail would average to black and "fix" by rebuilding
+the renderer under a perfectly healthy starfield.
+
+### The shell's reading side
+
+The engine store's header always said panels should subscribe rather than be
+handed props. Nothing did, because the snapshot carried two fields and every
+panel needed a third — so the engine was read by four other mechanisms at four
+rates: an 8 Hz sampler, `usePolled` at 6/4/3 Hz, bare `setInterval`s at 100 ms
+and 250 ms, and raw animation-frame loops. `usePolled` is deleted. What is left
+is two polls that are not field reads at all: the travel survey (a star sweep)
+and the sky labels' projection (geometry over the camera and the viewport).
+
+**The cutscene player was guessing.** `cutsceneStatus()` goes null for three
+different reasons and the player reconstructed which from a half-second window
+around the final frame — so `stopCutscene` from the console read as an ending,
+because a stop near the end produces identical evidence, and the reopen undid
+the stop within 100 ms. The director records how a scene left now
+(`lastOutcome`: `ended` / `stopped` / `abandoned`), which is additive and leaves
+`sample(frame)` exactly as pure as ADR-0010 requires. `cinema/session.ts` is the
+one reader; three components polled it at three rates and each reached around it
+into `world.clock.paused` for itself. `toggle` was implemented twice,
+identically. The scrubber's drag latch stays in `useScrubber` — it is the
+pointer — but what the latch _means_, that the published frame stands still,
+moved to the session, because both transports needed the rule and neither owned
+it.
+
+**"Restored by whoever lowered it" was a convention with no owner.**
+`GameEngine` named it; three modes implemented it three ways. The menu captured
+and restored; the planetarium restored to hard-coded literals, so leaving it
+after arriving from the menu put `showShip` back to `true` — a value it had
+never held in that session; flight set and never restored, its own comment
+calling it "belt and braces".
+
+Designed twice, as the plan asked. A **mode-to-stance table** is tidier on paper
+— the mode is already derived from the URL, so a table read by the frame loop
+eliminates restore entirely, which fits ADR-0011 more tightly than anything
+does. The deciding constraint is `NavPanel`'s in-planetarium ship toggle: a user
+override on top of the mode's stance. The table needs a second channel for it
+and then a rule for what happens to that channel on a mode change, which is a
+restore rule wearing a hat. A **stack** gets it free — the toggle is another
+push, and `release()` means "whatever was under me". Released by identity rather
+than by position, because React interleaves one route's cleanup with the next
+one's mount and popping the top would take somebody else's layer. The whole
+round trip is a Node test with no React, no renderer and no world.
+
+### Two the review caught
+
+An `ultrareview` on the PR found two things the tests did not, both worth the
+shape of the finding rather than just the fix.
+
+**The end card was suppressed by an ordinary pause.** `dismissed` in
+`cinema/session.ts` conflated two meanings — "hide the card that is showing"
+and "suppress any future card" — because transport verbs set it and only `open`
+cleared it. Pausing part way through a scene and carrying on therefore cost that
+scene's ending its card, and with it the Replay button that lives there. The
+same conflation had a second head: the reopen was guarded on the scene's _id_,
+so a card that was dismissed and then played to the end again neither restored
+the final frame nor came back. It is two states now — `carded` is whether a card
+is up, raised by an ending and lowered by the person reading it; `handled` is
+whether this session has reacted to the ending it can see, reset when a scene
+starts, which is what lets one scene end twice and what bounds a reopen that
+throws.
+
+**A `useState` initializer is a factory, not a constructor.** `createFirstLight`
+registered a `visibilitychange` listener on its way out, and it is called from
+`useState(() => …)` — which StrictMode double-invokes. Two instances, two
+listeners, and only the one React kept could remove its own, so every mount
+cycle leaked a handler that dispatched a resize on each visibility change. The
+same root cause as the boot census two sections up, arriving through a different
+door: there the answer was idempotence, here it is that the factory does nothing
+and `start()` returns its own teardown. Dev-only — StrictMode does not
+double-invoke initializers in production — and worth fixing anyway, because the
+rule had just been written down.
+
+### Width, edges, and the measurement
+
+`openSession` was accreting width: `presentation` and `onWorldReplaced` folded
+into one `host` parameter — they are both the host's render side and always
+travelled together — and, more to the point, the render answers are _named_
+rather than spread. The spread landed last in the session object, so a stray
+`world` key would have shadowed the getter the module exists to protect. That
+bug class is unrepresentable now rather than commented against. `shipName` had
+zero callers and is gone.
+
+The service-worker registration was 36 untested lines beside a well-tested
+worker, and it is where the shipped bug was: it listened for a `load` event that
+had already fired, because `main.tsx` awaits the catalog at module scope and
+that resolves _after_ load — measured on a cold review app at 761 ms and 969 ms.
+The seam between "the page is ready" and "install the worker" was implicit in
+module evaluation order, which is the thing that broke.
+
+**The catalog index gate, measured.** The plan said to measure decode with and
+without index construction before building. The answer is that the exact-name
+index already existed — the decode loop calls `searchKeysFor` for every star —
+so a _searchable_ one costs **0.18 ms** marginal, because the only extra work is
+keeping the pairs instead of discarding all but the first. Decode is 22 ms for
+7,123 stars; a query over all 16,537 keys is **0.14–0.30 ms**, which is
+per-keystroke, and a 150 ly star sweep is not and never could be. Built eagerly,
+parallel arrays rather than an array of pairs.
+
+Splitting `find` from `search` bought something unplanned. `α Cen` is what gets
+pasted out of Wikipedia and nothing could resolve it: dropping the superscript
+keys `ζ¹ Reticuli` and `ζ² Reticuli` — two unrelated systems — to one string, so
+the exact map cannot hold it without answering an ambiguous name arbitrarily.
+That is a constraint on `find`, not on a search box, which should simply offer
+both. The un-superscripted Bayer forms go into the search index and stay out of
+the exact map. Gacrux, at 88.6 ly, is findable by name; under the old
+survey-and-filter arrangement it was not merely hard to find but unexpressible.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).
@@ -2704,10 +2934,6 @@ Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md
 - **The planetarium has no bookmarks, filters or measure tool.** The address is
   already the whole record for a bookmark, so what is missing is a store; the
   filter fields are the ones `docs/design/galaxy.md` lists for the galaxy map.
-- **The catalog panel surveys 16 ly and filters in the client.** That is right
-  for a list of a few hundred rows and wrong the moment a search is meant to
-  reach the whole 150 ly sphere — `travelTargets` is a star sweep and cannot be
-  run per keystroke. A name index over the catalog is the seam.
 - **Mode routes are not covered by a Node test.** Each drives a live engine, and
   a test that stubbed a renderer, a worker pool and a camera would assert
   against the stub. `modeForPath`, the link builders, the dock algebra, the
@@ -2715,11 +2941,6 @@ Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md
 - **Piloting on a touchscreen is not designed.** The flight modes are
   desktop-only and the menu says so. The planetarium and the cinema player are
   the mobile surface.
-- **The interface never says `observed` or `projected`.** PRODUCT.md makes
-  stating it a brand commitment and `SystemStub.catalogued` has carried the
-  answer all along; `TravelTarget` does not forward it, so the destination list
-  shows a real star and a generated one identically. See the colorize note in
-  [the hardening pass](#what-the-colorize-pass-found-before-it-started).
 - Binary and multiple-star systems are modeled as single stars (`components`
   in the catalog records the truth for all 375 of them within 150 ly).
 - Moons outside the Solar System are all projections, which is right — no
@@ -2734,10 +2955,12 @@ Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md
 - The atmosphere is still an analytic uniform-density shell with authored
   scattering colors, not the Bruneton LUTs spike 2 made a requirement. The
   colors are per body now, which was the loudest half of the problem.
-- **Nothing diffs two catalog versions.** Every save records the version it was
-  written against and every build records its own, which is both halves of the
-  input to a revision notice — and no code compares them. Until it does, a
-  rebuild that moves a body is invisible to a loaded save.
+- **A catalog drift is reported, not resolved.** `versionDrift` compares the two
+  manifests wherever they meet — the handshake, the save loader, the health
+  panel — so a save written against a moved catalog says so on the way in. What
+  is still missing is the _revision notice_: nothing tells a player which of
+  their bodies moved, or offers to re-resolve the references. That is a
+  roadmap seam, not a comparison problem.
 - The 50 systems whose only identifier is HYG's own row key (0.7%) have ids a
   rebuild can move. They are counted on every ingest and asserted under 1%.
 - **The procedural fill's IMF is not conditioned on what the catalog is missing.**

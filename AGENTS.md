@@ -45,7 +45,12 @@ Violating one of these is a rewrite later, not a refactor.
 - **Never put canonical state in a React component,** and never put gameplay
   behavior in a lifecycle callback. Components consume snapshots from
   `apps/game/src/state/engineStore.ts`. Subscribe to the narrowest slice you
-  need.
+  need, and do not add a timer of your own — one sampler owns the rate.
+- **Never write a presentation switch directly.** `showShip`, `showOrbits`,
+  `flareArtifacts` and the observatory's target go through
+  `engine.presentation`: a mode pushes a stance on mount and releases it on
+  unmount, a panel's override is another push, and `release()` restores what
+  was underneath rather than a literal.
 - **Never construct a `Worker` outside `apps/game/src/engine/browserWorker.ts`.**
   Tasks are typed and versioned; the pool owns dispatch, cancellation, and
   instrumentation.
@@ -70,6 +75,9 @@ Violating one of these is a rewrite later, not a refactor.
 - **Never store what the catalog can derive.** The packed file carries
   measurements. Temperature, luminosity, radius, mass, and color are computed
   at load.
+- **Never filter a survey to serve a search box.** `travelTargets` is a star
+  sweep with a radius; `StarCatalog.search` is an index over the whole catalog.
+  They answer different questions and only one of them can run per keystroke.
 - **Never sort a system's planets by orbit and call it order.** `b:2` is the
   third body issued, not the third one out. `orbitalOrder` is for display.
   [ADR-0009](docs/adr/0009-issue-ordinal-addressing.md).
@@ -114,6 +122,10 @@ Violating one of these is a rewrite later, not a refactor.
   are title case; `text-transform` on the type step decides what is shouted.
 - **Never import from `three` in `apps/game`.** Import `three/webgpu` and
   `three/tsl`. `packages/*` may not import Three.js at all.
+- **Never hand-write a compile-ahead.** `render/warmup.ts` owns the recipe —
+  the visibility toggle `compileAsync` silently needs, the renderer cast, the
+  swallowed rejection — and the census the boot progress totals. Registration
+  is idempotent by label, because StrictMode does everything twice.
 - **Never edit a file `pnpm brand` writes.** The mark is
   `design/brand/brandmark.svg`. `pnpm brand:check` is in `pnpm check`.
 - **Never change what the site says about itself in only one place.**

@@ -76,10 +76,28 @@ interface ActiveCutscene {
   lastRenderTime: number | null
 }
 
+/**
+ * How a scene left the director.
+ *
+ * `ended` ran to its final frame; `stopped` was stopped by somebody; and
+ * `abandoned` lost the world it was playing in — a save loaded from the
+ * console, say.
+ */
+export type CutsceneEnding = 'ended' | 'stopped' | 'abandoned'
+
+/** Which scene left, and how. */
+export interface CutsceneOutcome {
+  readonly id: string
+  readonly ending: CutsceneEnding
+  readonly durationFrames: number
+  readonly fps: number
+}
+
 export class CutsceneDirector {
   readonly #host: HarnessHost
   readonly #scripts: readonly CutsceneScript[]
   #active: ActiveCutscene | null = null
+  #last: CutsceneOutcome | null = null
 
   constructor(host: HarnessHost, scripts: readonly CutsceneScript[]) {
     this.#host = host
@@ -92,6 +110,23 @@ export class CutsceneDirector {
       description: script.description,
       seconds: script.durationFrames / script.fps,
     }))
+  }
+
+  /**
+   * How the last scene left, or `null` if none ever has.
+   *
+   * `status()` answers "is a scene playing" and goes null for three different
+   * reasons; this is what tells them apart. Without it a caller has to
+   * reconstruct the answer from a null and a remembered playhead — the cinema
+   * player did, with a half-second window around the final frame, and
+   * `stopCutscene` from the console read as an ending because it produced the
+   * identical evidence.
+   *
+   * Cleared by `play`, so it always describes the *last* scene rather than an
+   * older one.
+   */
+  lastOutcome(): CutsceneOutcome | null {
+    return this.#last
   }
 
   status(): CutsceneStatus | null {
@@ -159,20 +194,33 @@ export class CutsceneDirector {
       pendingSeekFrame: null,
       lastRenderTime: null,
     }
+    // A scene that is playing has not left yet.
+    this.#last = null
     log.info('cutscene started', { id, frames: script.durationFrames })
     return this.status() as CutsceneStatus
   }
 
   /** Stop and restore. Safe to call when nothing is playing. */
   stop(): void {
+    this.#finish('stopped')
+  }
+
+  #finish(ending: CutsceneEnding): void {
     const active = this.#active
     if (active === null) return
     this.#active = null
+    this.#last = {
+      id: active.script.id,
+      ending,
+      durationFrames: active.script.durationFrames,
+      fps: active.script.fps,
+    }
 
     // The world can be replaced under a running cutscene (a save loaded from
     // the console). The captured state belongs to the discarded world;
     // restoring it into the new one would teleport a stranger.
     if (active.world !== this.#host.world) {
+      this.#last = { ...this.#last, ending: 'abandoned' }
       log.warn('cutscene abandoned: the world it was playing in is gone', {
         id: active.script.id,
       })
@@ -238,6 +286,12 @@ export class CutsceneDirector {
     if (active.world !== this.#host.world) {
       // Abandon without restore — see `stop` for why restoring would be worse.
       this.#active = null
+      this.#last = {
+        id: active.script.id,
+        ending: 'abandoned',
+        durationFrames: active.script.durationFrames,
+        fps: active.script.fps,
+      }
       return null
     }
 
@@ -250,7 +304,10 @@ export class CutsceneDirector {
 
     const frame = (renderTime - active.epoch) * active.script.fps
     if (frame >= active.script.durationFrames) {
-      this.stop()
+      // `ended`, not `stopped`. It is the same restore either way, and it is a
+      // completely different thing to a player: one draws an end card, the
+      // other closes the transport.
+      this.#finish('ended')
       return null
     }
     return active.prepared.sample(Math.max(0, frame))

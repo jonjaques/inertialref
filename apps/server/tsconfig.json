@@ -9,7 +9,10 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "lib": ["ES2023"],
-    "types": []
+    "types": [],
+    /* The health record names the catalog version, which is a fact about the
+       bundle this Worker serves and lives in `data/catalog/manifest.json`. */
+    "resolveJsonModule": true
   },
   "include": ["src", "worker-configuration.d.ts"]
 }

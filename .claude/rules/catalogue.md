@@ -16,6 +16,12 @@ Reasoning: `docs/guides/catalogue.md`, `docs/design/galaxy.md` Rule 1.
   passed as an argument everywhere: `resolveSystem`, `systemsWithin`, `new World({
 catalog })`. A singleton would make the catalog _version_ a hidden input, which
   invalidates every save the next time astronomy publishes.
+- **`find` is exact; `search` is the search box.** `find` answers an address and must
+  never answer an ambiguous name arbitrarily, which is why `α Cen` is not in its map —
+  dropping the superscript keys `ζ¹` and `ζ² Reticuli`, two unrelated systems, to one
+  string. `search` may offer both, so the un-superscripted forms live in the search index
+  and out of the exact one. Never filter a _survey_ to serve a search box: `travelTargets`
+  is a star sweep with a radius, so a query against it can only reach a few light years.
 - **`packages/universe/src/catalog/` decodes bytes; it does not fetch them.** No `fetch`,
   no `node:fs`, no `TextEncoder` — the root tsconfig has neither DOM nor Node lib. Each
   host supplies the bytes.

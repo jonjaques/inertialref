@@ -36,6 +36,15 @@ export interface ClientHello {
   readonly protocol: number
   /** Which universe this build derives. Compared, not logged. */
   readonly generation: Readonly<Record<string, number>>
+  /**
+   * The star catalog this client loaded, by version.
+   *
+   * The second generation input, and the one that used to be missing here — so
+   * a client whose catalog had moved joined a server whose catalog had not,
+   * cleanly, and then disagreed about where the stars were. `versionDrift` in
+   * `@inertialref/protocol` compares both manifests at once.
+   */
+  readonly catalog: string
   readonly seed: string
   readonly galaxy: string
   /**
@@ -164,6 +173,11 @@ export function clientHello(
   return {
     protocol: NET_PROTOCOL_VERSION,
     generation: GENERATION_VERSIONS,
+    // From the world's own catalog rather than a constant: a client that
+    // degraded to `SOL_ONLY_CATALOG` because the asset failed to fetch derives
+    // a different galaxy, and must say so rather than claim the one it meant
+    // to load.
+    catalog: world.catalog.version,
     seed: world.seedText,
     galaxy: world.galaxy,
     owns,

@@ -5,6 +5,7 @@ import type { CinematicTextState, GameEngine } from '../engine/GameEngine.ts'
 import { CutsceneTransport } from './CutsceneTransport.tsx'
 import { labelStyle, textStyle } from './cutsceneText.ts'
 import { useScrubber } from './useScrubber.ts'
+import { useEngine } from '../state/engineStore.ts'
 
 /*
  * The cutscene's screen-space layer: the blackout, the title cards, the
@@ -15,12 +16,13 @@ import { useScrubber } from './useScrubber.ts'
  * typefaces — and because the analysis pipeline measures titles by color
  * masking a video capture, which cares nothing for how the pixels were made.
  *
- * `'use no memo'`: this component reads `engine.cinematic`, a stable
- * reference whose contents change every frame — the PerfPanel case exactly.
- * React renders only the *structure* (once per cutscene start/stop, at a slow
- * poll); the per-frame opacity and transform writes go straight to the DOM
- * nodes from a rAF loop, because 24-fps-timed fades re-rendered through React
- * at display rate would be all reconcile and no picture.
+ * `'use no memo'`: the render body reads `engine.cutsceneAudio`, a plain field
+ * the console may write — the PerfPanel case exactly. The transport's readout
+ * no longer needs it: that is a published playhead now, and its selector bails
+ * out honestly. React renders only the *structure* (once per cutscene
+ * start/stop); the per-frame opacity and transform writes go straight to the
+ * DOM nodes from a rAF loop, because 24-fps-timed fades re-rendered through
+ * React at display rate would be all reconcile and no picture.
  */
 
 /** How closely the audio element tracks the reference clock, seconds. */
@@ -57,47 +59,36 @@ export function CutsceneOverlay({
   // — starting and stopping are human-rate events.
   const [texts, setTexts] = useState<readonly CinematicTextState[] | null>(null)
   /*
-   * The transport's readout, at a human rate. The scrubber must not fight the
-   * hand dragging it, so while `scrubbing` the poll leaves the input alone
-   * and the drag drives the playhead instead.
+   * The transport's readout: the same published playhead the cinema player
+   * reads, so the two cannot disagree and neither costs a timer. This file used
+   * to poll the director every 100 ms and read `world.clock.paused` for itself.
    */
-  const [transport, setTransport] = useState<{
-    frame: number
-    duration: number
-    paused: boolean
-  } | null>(null)
-  // The drag latch and the guarded seek, shared with the cinema player's
+  const transport = useEngine((snapshot) => snapshot.playhead)
+  // The pointer latch and the guarded seek, shared with the cinema player's
   // transport — see `useScrubber.ts` for what each of them is for.
-  const { held: scrubbing, grab, seek } = useScrubber(engine)
+  const { grab, seek } = useScrubber(engine)
   const blackout = useRef<HTMLDivElement>(null)
   const hint = useRef<HTMLDivElement>(null)
   const audio = useRef<HTMLAudioElement>(null)
   const lines = useRef(new Map<string, HTMLDivElement>())
 
+  /*
+   * The text list, which is structure rather than a readout.
+   *
+   * Keyed off the *published* playhead rather than a timer: `engine.cinematic`
+   * is rebuilt every frame, and the array inside it is static for the life of a
+   * script — so adopting the array itself as the mounted structure makes "same
+   * cutscene" a reference check, and this effect only has to run when a scene
+   * opens or closes.
+   */
+  const sceneId = transport?.id ?? null
   useEffect(() => {
-    const structure = window.setInterval(() => {
-      const active = engine.cinematic
-      setTexts((current) => {
-        if (active === null) return current === null ? current : null
-        // The text list is static for the life of a script; adopting the
-        // array itself as the mounted structure makes "same cutscene" a
-        // reference check.
-        return current === null ? active.texts : current
-      })
-      const status = engine.harness.cutsceneStatus()
-      if (status === null) setTransport(null)
-      else if (!scrubbing.current) {
-        setTransport({
-          frame: status.frame,
-          duration: status.durationFrames,
-          paused: engine.world.clock.paused,
-        })
-      }
-    }, 100)
-    return () => window.clearInterval(structure)
-    // A ref, so it never changes identity — listed for the same reason the
-    // cinema player's poll lists it.
-  }, [engine, scrubbing])
+    if (sceneId === null) {
+      setTexts(null)
+      return
+    }
+    setTexts((current) => current ?? engine.cinematic?.texts ?? null)
+  }, [engine, sceneId, transport])
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
@@ -244,20 +235,17 @@ export function CutsceneOverlay({
       {showTransport && transport !== null && (
         <CutsceneTransport
           frame={transport.frame}
-          durationFrames={transport.duration}
+          durationFrames={transport.durationFrames}
           paused={transport.paused}
           onGrab={grab}
           onSeek={(frame) => {
             if (!seek(frame)) return
-            setTransport((current) =>
-              current === null ? current : { ...current, frame },
-            )
+            engine.cutscene.seek(frame)
           }}
-          onTogglePlay={() => {
-            if (engine.world.clock.paused) engine.harness.resume()
-            else engine.harness.pause()
-          }}
-          onStop={() => engine.harness.stopCutscene()}
+          // The same verb the cinema player's play button calls. It used to be
+          // written out here as well, identically, against the clock.
+          onTogglePlay={() => engine.cutscene.toggle()}
+          onStop={() => engine.cutscene.stop()}
         />
       )}
       {engine.cutsceneAudio !== null && (

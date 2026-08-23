@@ -142,10 +142,17 @@ export function HomePage({ engine }: { engine: GameEngine }) {
    */
   useEffect(() => {
     const observatory = engine.harness.observatory
-    const previousShip = engine.showShip
-    const previousArtifacts = engine.flareArtifacts
-    engine.showShip = false
-    engine.flareArtifacts = MENU_FLARE_ARTIFACTS
+    /*
+     * The menu's stance. It used to capture the previous values and put them
+     * back by hand — the only one of the three writers that did, which is why
+     * it was the one that worked. Now nobody remembers anything: `release`
+     * means whatever was underneath.
+     */
+    const stance = engine.presentation.push({
+      showShip: false,
+      flareArtifacts: MENU_FLARE_ARTIFACTS,
+      observatory: true,
+    })
     try {
       observatory.focus('s:SOL/b:2', { fill: FILL, ease: false })
       observatory.setPhase(PHASE_OPEN, SWING_TILT)
@@ -165,9 +172,9 @@ export function HomePage({ engine }: { engine: GameEngine }) {
 
     return () => {
       window.cancelAnimationFrame(handle)
-      engine.showShip = previousShip
-      engine.flareArtifacts = previousArtifacts
-      observatory.clear()
+      // Releasing the stance is what drops the observatory's target, so the
+      // camera goes back to whatever the next layer is holding.
+      stance.release()
     }
   }, [engine])
 

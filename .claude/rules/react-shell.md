@@ -13,7 +13,16 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", ADR-0011.
   consume snapshots, republished at 8 Hz by one sampler through `state/engineStore.ts`.
   Subscribe to the narrowest slice you need:
   `useEngine((s) => s.status)` returns a fresh object every sample and so never bails out
-  of a re-render.
+  of a re-render; a primitive or a stable slice does, and several fields want
+  `useShallow`. **Do not add a timer.** The two that remain are not field reads — a star
+  sweep (`hud/useTravelTargets.ts`) and a scene projection (`planetarium/SkyLabels.tsx`).
+- **Never write a presentation switch directly.** `showShip`, `showOrbits`,
+  `flareArtifacts` and the observatory's target go through `engine.presentation` — a mode
+  pushes a stance on mount and releases on unmount, a panel's override is another push,
+  and `release()` restores what was underneath. Assigning the field instead is the
+  "restored by whoever lowered it" convention that had three implementations and no owner:
+  leaving the planetarium after arriving from the menu put `showShip` back to a value it
+  had never held.
 - **`App` owns the `<Canvas>` and `.hud-layer` for the life of the session.** Every route
   renders _inside_ that layer, as a sibling of the canvas. A router over the whole tree
   rebuilds the `WebGPURenderer` on every navigation — the black-screen class
@@ -40,6 +49,12 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", ADR-0011.
   `slate-950` panel and 3.2:1 with a star behind it, so no alpha rescues it. The one
   exception is the connection pip, a non-text indicator held to 3:1. DESIGN.md § Neutral
   has the measurements.
+- **A `useState` initializer is a factory, not a constructor.** StrictMode double-invokes
+  them, and React keeps one of the two — so a factory that registers a listener, starts a
+  timer or opens a subscription leaks one of every pair, and only the survivor can ever
+  clean up after itself. Return the object; register from a `useEffect`, and have the
+  starter hand back its own teardown so the two cannot be called in different places.
+  `render/firstLight.ts` is the worked example.
 - **Never guard a "run once" effect with a ref.** React re-runs effects while refs
   survive, so a latch plus a cleanup means the cleanup wins and the effect never fires
   again. Reconcile against the state's actual owner instead —

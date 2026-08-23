@@ -470,3 +470,88 @@ describe('the catalog at runtime', () => {
     expect(axes).toEqual([0.0229, 0.0281])
   })
 })
+
+describe('searching the catalog by name', () => {
+  /*
+   * `find` is exact-key-only and no panel called it: the search boxes filtered a
+   * *survey* with `.includes()`, so a query could only ever reach what was
+   * already within a few light years of the camera. `search` asks the index the
+   * question the survey interface cannot express.
+   */
+  const ids = (text: string, limit?: number): string[] =>
+    TEST_CATALOG.search(text, limit).map((star) => star.id as string)
+
+  it('reaches one star by every name it has', () => {
+    // Superscripts, diacritics, Greek, spacing, case and catalog number all
+    // fold to the same key — `designations.ts` owns that and this is the proof
+    // that the index is keyed by it.
+    for (const query of [
+      'Alpha Centauri',
+      'alpha centauri',
+      'ALPHA CENTAURI',
+      'Alpha¹ Centauri',
+      'Rigil Kentaurus',
+      'HIP 71683',
+      'hip71683',
+      'HD 128620',
+      'α¹ Cen',
+      'α Cen',
+    ]) {
+      expect(ids(query)[0], query).toBe('HIP71683')
+    }
+  })
+
+  it('answers an ambiguous Bayer name that `find` must refuse', () => {
+    /*
+     * `α Cen` is what gets pasted out of Wikipedia, and until now nothing could
+     * resolve it: dropping the superscript keys `ζ¹ Reticuli` and `ζ² Reticuli`
+     * — two unrelated systems — to one string, so the exact map cannot hold it
+     * without answering an ambiguous name with an arbitrary star.
+     *
+     * That is a constraint on `find`, not on a search box, which should simply
+     * offer both. It is the clearest thing the split by question bought.
+     */
+    expect(TEST_CATALOG.find('α Cen')).toBeUndefined()
+    expect(ids('α Cen')).toContain('HIP71683')
+  })
+
+  it('finds a star from a fragment of its name', () => {
+    // The whole point of the split. `find('sir')` is undefined; a search box
+    // that could only answer complete names would be a spelling test.
+    expect(ids('sir')).toContain('HIP32349')
+    expect(TEST_CATALOG.find('sir')).toBeUndefined()
+  })
+
+  it('ranks an exact name over a prefix, and a prefix over a fragment', () => {
+    // A query that is somebody's whole name should not be outranked by a star
+    // that merely contains it.
+    const hits = ids('proximacentauri')
+    expect(hits[0]).toBe('HIP70890')
+  })
+
+  it('returns each star once, however many of its names match', () => {
+    // A star is indexed under several keys — `HIP71683`, `alphacentauri`,
+    // `rigilkentaurus`, `αcen` — and a query can hit more than one. Keeping the
+    // best per star is what stops one result filling the list.
+    const hits = ids('cen')
+    expect(new Set(hits).size).toBe(hits.length)
+  })
+
+  it('limits stars, not matched keys', () => {
+    expect(ids('a', 2)).toHaveLength(2)
+    expect(ids('a', 1)).toHaveLength(1)
+  })
+
+  it('matches nothing on an empty query rather than everything', () => {
+    // An empty needle is at index 0 of every key, which would return the first
+    // `limit` stars in decode order dressed up as search results.
+    expect(ids('')).toEqual([])
+    expect(ids('   ')).toEqual([])
+    // ...and nothing on a query that folds away entirely.
+    expect(ids('---')).toEqual([])
+  })
+
+  it('says nothing rather than guessing when no star is called that', () => {
+    expect(ids('betelgeuse')).toEqual([])
+  })
+})

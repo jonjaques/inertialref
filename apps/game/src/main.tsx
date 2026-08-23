@@ -6,6 +6,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { createConsoleSink, logHub } from '@inertialref/shared'
 import { startAnalytics } from './analytics.ts'
 import App from './App.tsx'
+import { registerServiceWorker } from './net/registerServiceWorker.ts'
 import { BUILD_ID } from './build.ts'
 import { loadStarCatalog } from './engine/catalogAsset.ts'
 import './index.css'
@@ -188,45 +189,18 @@ try {
  * from a seed and saves live in IndexedDB — so the game is fully playable with
  * no server.
  *
- * The build id rides on the URL because `public/sw.js` is copied verbatim and
- * never compiled, so nothing can be injected into it. Registering a different
- * URL is what makes the browser install a new worker, and the worker reads the
- * id back off its own location to name its cache — which is how a deploy stops
- * inheriting the last one's precached index.html.
+ * The thirty-six lines that used to be here are `net/registerServiceWorker.ts`
+ * now, with the page-readiness and registration dependencies injected. What
+ * they hid was a seam: "the page is ready" and "install the worker" were
+ * related only by module evaluation order, which is the thing that broke.
  */
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
-  const register = (): void => {
-    const url = `/sw.js?build=${encodeURIComponent(BUILD_ID)}`
-    void navigator.serviceWorker.register(url).catch((cause: unknown) => {
-      console.warn(
-        'service worker registration failed; the game still runs online',
-        cause,
-      )
-    })
-  }
-
-  /*
-   * `load` has usually already fired by the time this line runs.
-   *
-   * This module awaits the catalog at module scope, and that await resolves
-   * *after* the load event — measured on a cold visit to a review app: load at
-   * 761 ms, the 460 KB catalog at 969 ms. A bare
-   * `addEventListener('load', …)` here is therefore a listener for an event
-   * that has been and gone, and the worker is never registered.
-   *
-   * It looked fine, which is the worst part. A registration persists across
-   * visits, so the *second* visit to an origin — where the catalog comes out
-   * of the HTTP cache and resolves before load — registers one, and every visit
-   * after that is controlled. What was actually broken was the first visit to
-   * any origin, which is exactly the visit where "install it and it works on a
-   * plane" has to be true. It surfaced on a review app because that is the only
-   * origin nobody had ever opened twice.
-   *
-   * Deferring to `load` at all is still right when it has not fired: the
-   * worker's install fetches `/`, `/index.html` and the icons, and doing that
-   * while the page is still pulling its own critical path is bandwidth taken
-   * from the thing the player is waiting for.
-   */
-  if (document.readyState === 'complete') register()
-  else window.addEventListener('load', register, { once: true })
+  registerServiceWorker({
+    page: {
+      readyState: () => document.readyState,
+      onLoad: (run) => window.addEventListener('load', run, { once: true }),
+    },
+    register: (url) => navigator.serviceWorker.register(url),
+    buildId: BUILD_ID,
+  })
 }

@@ -13,9 +13,10 @@ import type { GameEngine } from '../engine/GameEngine.ts'
  * poll and a director make possible, which is what makes them a hook rather
  * than a shared component.
  *
- * Nothing here holds a playhead. The reading is the caller's — the two
- * transports show different things — and this owns only the two moments the
- * caller has no way of knowing about on its own.
+ * Nothing here holds a playhead. The reading is `cinema/session.ts`'s, which
+ * publishes one for both transports; this owns only the two moments the
+ * session has no way of knowing about on its own — the pointer, and the seek
+ * that arrives a poll interval after a scene has stopped itself.
  */
 
 export interface Scrubber {
@@ -55,6 +56,7 @@ export function useScrubber(engine: GameEngine): Scrubber {
   useEffect(() => {
     const release = (): void => {
       held.current = false
+      engine.cutscene.hold(false)
     }
     window.addEventListener('pointerup', release)
     window.addEventListener('pointercancel', release)
@@ -63,12 +65,18 @@ export function useScrubber(engine: GameEngine): Scrubber {
       window.removeEventListener('pointerup', release)
       window.removeEventListener('pointercancel', release)
       window.removeEventListener('blur', release)
+      // A transport that unmounts mid-drag must not leave the playhead frozen
+      // for the rest of the session.
+      engine.cutscene.hold(false)
     }
-  }, [])
+  }, [engine])
 
   const grab = useCallback(() => {
     held.current = true
-  }, [])
+    // What the hold *means* — the published frame stands still — belongs to the
+    // session, because both transports need the same rule and neither owned it.
+    engine.cutscene.hold(true)
+  }, [engine])
 
   /*
    * Seek, or decline — never throw.

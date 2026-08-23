@@ -3,11 +3,14 @@ import {
   decodeSaveGame,
   decode,
   decodeFrameState,
+  describeDrift,
   encodeFrameState,
   encodeVec3,
   SAVE_SCHEMA_VERSION,
   type SaveEntity,
   type SaveGame,
+  type VersionDrift,
+  versionDrift,
 } from '@inertialref/protocol'
 import { type FrameId, vec3 } from '@inertialref/spatial'
 import {
@@ -89,10 +92,24 @@ export const serializeSave = (save: SaveGame): string => JSON.stringify(save)
 export interface RestoredWorld {
   readonly world: World
   readonly playerEntity: EntityId | null
-  /** Generation versions the save was written with, for the caller to compare. */
+  /** Generation versions the save was written with. */
   readonly generation: Readonly<Record<string, number>>
   /** The catalog version the save was written against. */
   readonly catalog: string
+  /**
+   * Every way the save's universe differs from this build's — empty when they
+   * agree, which is the ordinary case.
+   *
+   * Returned on **success**, not only on failure, and that is the change this
+   * field exists to make. A save whose catalog moved usually loads: the systems
+   * it names still resolve, the entities still spawn, and the only symptom is
+   * that a star is a few light years from where it was. The old code could only
+   * mention the versions while building an error message for a load that had
+   * already failed, so the interesting case — it worked, and it is not the same
+   * sky — had nowhere to be reported. `describeDrift` turns this into a
+   * sentence; the caller decides whether that is a notice or a refusal.
+   */
+  readonly drift: readonly VersionDrift[]
 }
 
 /**
@@ -113,19 +130,31 @@ export function restoreSave(
     catalog,
   })
 
+  /*
+   * The verdict, computed once and used twice.
+   *
+   * The same function the handshake reads, so "is this the same universe" gets
+   * one answer whether it is asked of a peer or of a file. It is computed
+   * before the load rather than after because it is the explanation for a
+   * failure below *and* the notice on a success — a save from a degraded
+   * session, where the catalog asset failed to fetch and the game fell back to
+   * `SOL_ONLY_CATALOG`, can reference procedural stars the full catalog
+   * suppresses, and vice versa.
+   */
+  const drift = versionDrift(
+    { generation: save.generation, catalog: save.catalog },
+    { generation: GENERATION_VERSIONS, catalog: catalog.version },
+  )
+
   for (const system of save.loadedSystems) {
     try {
       world.loadSystem(system as SystemId)
     } catch (cause) {
-      // A save from a degraded session — the catalog asset failed to fetch
-      // and the game fell back to SOL_ONLY_CATALOG — can reference procedural
-      // stars the full catalog suppresses, and vice versa. Naming both
-      // versions turns "cannot load system" from a mystery into a diagnosis;
-      // the revision notice that would *resolve* it is a roadmap seam.
+      // Naming the drift turns "cannot load system" from a mystery into a
+      // diagnosis; the revision notice that would *resolve* it is a roadmap
+      // seam.
       const mismatch =
-        save.catalog === catalog.version
-          ? ''
-          : ` (saved against catalog ${save.catalog}, loading against ${catalog.version})`
+        drift.length === 0 ? '' : ` (saved against ${describeDrift(drift)})`
       return err(
         `cannot load system ${system}${mismatch}: ${cause instanceof Error ? cause.message : String(cause)}`,
       )
@@ -177,6 +206,7 @@ export function restoreSave(
       save.playerEntity === null ? null : (save.playerEntity as EntityId),
     generation: save.generation,
     catalog: save.catalog,
+    drift,
   })
 }
 

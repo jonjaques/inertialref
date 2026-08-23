@@ -1,8 +1,7 @@
-'use no memo'
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { Search } from 'lucide-react'
 import { Input } from '@/components/ui/input'
-import { usePolled } from '../hud/usePolled.ts'
+import { useTravelTargets } from '../hud/useTravelTargets.ts'
 import { CatalogueRow } from './CatalogueRow.tsx'
 import type { PlanetariumContext } from './context.ts'
 
@@ -17,47 +16,33 @@ import type { PlanetariumContext } from './context.ts'
  * object that disagrees with the camera. The panels poll; the harness answers.
  */
 
-/** How far the survey reaches. A few hundred rows, re-read every two seconds. */
+/** How far the survey reaches when nothing has been typed. */
 const SURVEY_LIGHT_YEARS = 16
 
 export function CataloguePanel({ engine, target, focus }: PlanetariumContext) {
   const [query, setQuery] = useState('')
   /*
-   * Centered on the camera, not on the ship.
+   * Two questions, one hook (`hud/useTravelTargets.ts`).
    *
-   * `look` moves a camera and nothing else, which is the planetarium's whole
-   * verb — so "you" in this mode is the eye, and it can be four light years
-   * from the hull. Centered on the player, this list opened at Alpha Centauri
-   * still ordered by distance from Earth: Sol's moons at the top, and the star
-   * filling the frame reported as 4.4 ly away, twenty rows down. Sorted from
-   * the eye, the thing you are looking at is the first thing in the list and
-   * its neighbors are the next ones — which is what makes a catalog a way of
-   * traveling rather than a table.
+   * Empty: the survey, centered on the camera, not on the ship. `look` moves a
+   * camera and nothing else, which is the planetarium's whole verb — so "you"
+   * in this mode is the eye, and it can be four light years from the hull.
+   * Centered on the player, this list opened at Alpha Centauri still ordered by
+   * distance from Earth: Sol's moons at the top, and the star filling the frame
+   * reported as 4.4 ly away, twenty rows down.
+   *
+   * Typed: the catalog's own index, over all 150 light years. This used to
+   * filter the survey's result with `.includes()`, so the search box could only
+   * find what was already within sixteen light years of the camera — a star
+   * ninety light years out was not merely hard to find, it was unreachable by
+   * name.
    */
-  const targets = usePolled(
-    () =>
-      engine.harness.targets({
-        lightYears: SURVEY_LIGHT_YEARS,
-        origin: 'observer',
-      }),
-    2,
-  )
-
-  /*
-   * Filtered here rather than by the harness, because `travelTargets` is a
-   * *survey* — it costs a star sweep — and re-running it per keystroke would
-   * put a 16 light-year query behind every letter typed. The list is a few
-   * hundred rows; filtering it in the client is free.
-   */
-  const rows = useMemo(() => {
-    const needle = query.trim().toLowerCase()
-    if (needle.length === 0) return targets
-    return targets.filter(
-      (row) =>
-        row.name.toLowerCase().includes(needle) ||
-        row.address.toLowerCase().includes(needle),
-    )
-  }, [targets, query])
+  const { rows, ready } = useTravelTargets(engine, {
+    lightYears: SURVEY_LIGHT_YEARS,
+    origin: 'observer',
+    query,
+    refreshMs: 500,
+  })
 
   return (
     <div className="flex min-h-0 flex-col gap-2">
@@ -88,8 +73,19 @@ export function CataloguePanel({ engine, target, focus }: PlanetariumContext) {
           />
         ))}
         {rows.length === 0 && (
+          /*
+           * Three different answers, not one. "Surveying…" and "there is
+           * nothing here" have different next steps, and the empty state used
+           * to give the second for both. The typed case is a third: it is the
+           * whole catalog now, so "no star is called that" is a fact rather
+           * than a statement about how far the survey reached.
+           */
           <li className="px-1 py-2 text-slate-400">
-            nothing within {SURVEY_LIGHT_YEARS} ly matches that
+            {!ready
+              ? 'surveying…'
+              : query.trim() === ''
+                ? `nothing within ${SURVEY_LIGHT_YEARS} ly`
+                : 'no cataloged star is called that'}
           </li>
         )}
       </ul>

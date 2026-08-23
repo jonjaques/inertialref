@@ -13,17 +13,38 @@
    * no origin here — the Worker *is* the site — so a route would need an
    * orange-clouded record pointing at nothing to hang itself on.
    *
-   * `inertialrefd.jaquers.workers.dev` keeps answering, and that is deliberate
-   * rather than forgotten: it is the address a deploy can be checked on before
-   * DNS is trusted. It is not the canonical one — `<link rel="canonical">`
-   * names this hostname, and `src/analytics.ts` measures only this hostname, so
-   * the workers.dev address is a back door rather than a second front door.
-   *
    * The first deploy after adding this creates the record. It needs the
    * `jonjaques.com` zone on the same account; Wrangler fails loudly if it is
    * not there, which is the right failure.
    */
   "routes": [{ "pattern": "inertialref.jonjaques.com", "custom_domain": true }],
+
+  /*
+   * One front door, and a per-version side door.
+   *
+   * `inertialrefd.jaquers.workers.dev` used to keep answering as "the address a
+   * deploy can be checked on before DNS is trusted". Wrangler now disables it
+   * unless it is asked for, and asking would be asking for the wrong thing: a
+   * single shared hostname always shows *whatever was deployed last*, which is
+   * exactly the question a pre-DNS check is not trying to answer. Stated as
+   * `false` rather than left to a default, because a second front door is a
+   * decision either way — `<link rel="canonical">` names one hostname and
+   * `src/analytics.ts` measures one hostname.
+   *
+   * Preview URLs replace it and are strictly better for the job. Every uploaded
+   * version gets its own `<version>-inertialrefd.<subdomain>.workers.dev`, so a
+   * check is against a *specific build* rather than against the tip. Generic
+   * ones only: `wrangler versions upload --preview-alias <name>` would mint a
+   * readable vanity hostname, and a named alias is another thing that outlives
+   * the reason it was created.
+   *
+   * `preview_urls` has to be explicit here. It defaults to whatever
+   * `workers_dev` is, so turning the front door off would silently take the
+   * side door with it — which is what the deploy log warns about, in as many
+   * words, and why both lines are written down.
+   */
+  "workers_dev": false,
+  "preview_urls": true,
 
   /*
    * One Worker is the whole front door (docs/hosting.md H-1): it serves the

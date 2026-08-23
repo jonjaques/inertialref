@@ -1,8 +1,9 @@
 import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useMemo } from 'react'
-import type { PerspectiveCamera, Scene, WebGPURenderer } from 'three/webgpu'
+import type { PerspectiveCamera, Scene } from 'three/webgpu'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { createWarpEffects } from '../render/warpEffects.ts'
+import { warmAtMount, warmCompile, warmRenderer } from '../render/warmup.ts'
 
 /**
  * The cutscene's warp streaks, nacelle glow, flash wash and motion smear —
@@ -26,17 +27,25 @@ export function WarpFx({ engine }: { engine: GameEngine }) {
    * warp flash appeared in — measured as a hard hitch at `tng-intro` f1085 on
    * the WebGL fallback, where program linking is synchronous and the backend
    * builds shader source per material *instance* (an archetype warmed in
-   * `render/preload.ts` does not cover it). `compileAsync` only walks visible
-   * objects and its traversal is synchronous, so the toggle never lets the
-   * quads reach a drawn frame; the per-frame `update` below keeps visibility
-   * honest from the very next frame either way.
+   * `render/preload.ts` does not cover it).
+   *
+   * Registered rather than fired, so the boot cover stays up until it lands
+   * and the progress total counts it. `warmup.ts` owns the visibility toggle
+   * that makes the compile see anything at all.
    */
   useEffect(() => {
-    fx.group.visible = true
-    void (gl as unknown as WebGPURenderer)
-      .compileAsync(fx.group, camera, scene as Scene)
-      .catch(() => {})
-    fx.group.visible = false
+    warmAtMount({
+      label: 'compiling the warp',
+      units: 1,
+      run: async (done) => {
+        await warmCompile(warmRenderer(gl), {
+          object: fx.group,
+          camera,
+          scene: scene as Scene,
+        })
+        done()
+      },
+    })
   }, [fx, gl, camera, scene])
 
   useFrame(() => {

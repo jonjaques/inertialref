@@ -13,6 +13,7 @@ only the imperative. If a copy disagrees, `AGENTS.md` wins.
 | No wall-clock or `Math.random` in canonical code      | [Determinism](../concepts/determinism.md) · [ADR-0005](../adr/0005-procedural-seeds.md)     |
 | Generation does not depend on order                   | [Determinism](../concepts/determinism.md) · [Identity](../concepts/identity.md)             |
 | Canonical state is not in React                       | [Architecture](../architecture.md) · [ADR-0011](../adr/0011-application-shell-and-modes.md) |
+| Presentation switches go through the stance stack     | [Client](../guides/client.md)                                                               |
 | One `Worker` constructor                              | [Workers](../concepts/workers.md) · [Development](../guides/development.md)                 |
 | One session constructor                               | [Client](../guides/client.md)                                                               |
 | Terrain is sampled in body-fixed axes                 | [Frames](../concepts/frames.md)                                                             |
@@ -21,6 +22,7 @@ only the imperative. If a copy disagrees, `AGENTS.md` wins.
 | Saves store references, not regenerable content       | [Persistence](../concepts/persistence.md) · [ADR-0007](../adr/0007-persistence.md)          |
 | The star catalog is an argument, not a singleton      | [Galaxy](../design/galaxy.md) · [Catalog](../guides/catalogue.md)                           |
 | Do not store what the catalog can derive              | [Catalog](../guides/catalogue.md)                                                           |
+| A survey is not a search box                          | [Catalog](../guides/catalogue.md)                                                           |
 | Issue order is not orbital order                      | [Identity](../concepts/identity.md) · [ADR-0009](../adr/0009-issue-ordinal-addressing.md)   |
 | No hosting SDK below the adapter                      | [Architecture](../architecture.md) · [Hosting](../hosting.md)                               |
 | Do not let the compiler memoize a mutable read        | [Client](../guides/client.md)                                                               |
@@ -38,6 +40,7 @@ only the imperative. If a copy disagrees, `AGENTS.md` wins.
 | Cinematic effects are staging, not scripts            | [Cinematics](../guides/cinematics.md)                                                       |
 | Labels are title case in source                       | [`DESIGN.md`](../../DESIGN.md) · [UX](../design/ux.md)                                      |
 | Import `three/webgpu`, not `three`                    | [Rendering](../concepts/rendering.md) · [Development](../guides/development.md)             |
+| Compile-ahead goes through one recipe                 | [Rendering](../concepts/rendering.md)                                                       |
 | Do not edit files `pnpm brand` writes                 | [Development](../guides/development.md)                                                     |
 | Site metadata is duplicated on purpose                | [Hosting](../hosting.md) · [Development](../guides/development.md)                          |
 | Third-party tags load from a module, not `index.html` | [Hosting](../hosting.md)                                                                    |

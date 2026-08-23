@@ -138,6 +138,7 @@ describe('the author’s instruments', () => {
       state: 'unreachable',
       detail: 'Failed to fetch',
       health: null,
+      drift: [],
       checkedAt: null,
       failures: 3,
     }

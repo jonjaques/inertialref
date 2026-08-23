@@ -203,6 +203,15 @@ export function texturesFor(
   return set
 }
 
+/**
+ * How many maps the manifest ships, before any of them are fetched.
+ *
+ * The boot census declares its units up front, and this is the only number
+ * available synchronously — a decode that fails is one fewer upload than this
+ * promises, which `warmup.ts` credits when the producer resolves.
+ */
+export const SHIPPED_TEXTURE_COUNT = entries.length
+
 /** True when the manifest has anything at all for this key. */
 export const hasTextures = (key: string | null): boolean =>
   key !== null && entries.some((entry) => entry.body === key)

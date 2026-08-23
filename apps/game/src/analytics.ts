@@ -8,11 +8,12 @@ import { SITE } from './site.ts'
  *
  *   1. **Production builds only.** A dev server reload every time a file is
  *      saved is not a visit.
- *   2. **The canonical host only.** The same bundle answers on
- *      `inertialrefd.jaquers.workers.dev`, on a Wrangler versions preview URL,
- *      and on `localhost:8787` under `pnpm preview` — all of which are this
- *      build wearing a different name. Measuring them puts the maintainer's own
- *      testing in the numbers that are supposed to describe strangers.
+ *   2. **The canonical host only.** The same bundle answers on every Wrangler
+ *      versions preview URL — one per uploaded version, on the account's
+ *      `workers.dev` subdomain — and on `localhost:8787` under `pnpm preview`,
+ *      both of which are this build wearing a different name. Measuring them
+ *      puts the maintainer's own testing in the numbers that are supposed to
+ *      describe strangers.
  *   3. **Not against an explicit opt-out.** Global Privacy Control is a signal
  *      a person set on purpose, and honoring it costs a line. Delete the check
  *      if it should not be honored; do not weaken it into a heuristic.

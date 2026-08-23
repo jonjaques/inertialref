@@ -259,6 +259,55 @@ describe('migrations', () => {
   })
 })
 
+describe('the universe a save was written against', () => {
+  /*
+   * A save records two manifests — the generation versions and the catalog
+   * version — and until `versionDrift` existed nothing compared them. The
+   * loader could only mention them while building the message for a load that
+   * had already failed, so the interesting case had nowhere to be reported: the
+   * load *worked*, and it is not the same sky.
+   */
+
+  it('reports a moved catalog on a load that succeeded', () => {
+    const { world, ship } = flownWorld(50)
+    const save = { ...captureSave(world, ship.id), catalog: 'hyg-4.4' }
+
+    const restored = unwrap(restoreSave(save), 'restore')
+    // It loaded. Sol resolves under any catalog, the entities spawned, and the
+    // state hash is the one that was saved — which is exactly why a silent
+    // success here is the failure mode worth catching.
+    expect(restored.world.stateHash()).toBe(world.stateHash())
+    expect(restored.drift).toEqual([
+      { key: 'catalog', ours: 'hyg-4.4', theirs: 'sol-only' },
+    ])
+  })
+
+  it('reports a generation algorithm this build has never heard of', () => {
+    // Not ignored. A generator the save ran and this build does not is a
+    // universe this build cannot derive, and the reverse is the same thing.
+    const { world, ship } = flownWorld(50)
+    const captured = captureSave(world, ship.id)
+    const save = {
+      ...captured,
+      generation: { ...captured.generation, weather: 1 },
+    }
+    const restored = unwrap(restoreSave(save), 'restore')
+    expect(restored.drift.map((one) => one.key)).toContain('weather')
+    expect(restored.drift).toContainEqual({
+      key: 'weather',
+      ours: 1,
+      theirs: undefined,
+    })
+  })
+
+  it('says nothing at all when the save is from this build', () => {
+    const { world, ship } = flownWorld(50)
+    const restored = unwrap(restoreSave(captureSave(world, ship.id)), 'restore')
+    expect(restored.drift).toEqual([])
+    expect(restored.catalog).toBe(restored.world.catalog.version)
+  })
+})
+
 describe('velocity survives the trip', () => {
   it('preserves motion exactly, not approximately', () => {
     const { world, ship } = flownWorld(200)

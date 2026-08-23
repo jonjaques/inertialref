@@ -1,9 +1,10 @@
 'use no memo'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import type { PerspectiveCamera } from 'three/webgpu'
 import { DEFAULT_FILL } from '@inertialref/devtools'
 import type { GameEngine } from '../engine/GameEngine.ts'
+import type { StanceHandle } from '../engine/presentation.ts'
 import { Workspace } from '../dock/Workspace.tsx'
 import type { DevWorkspace } from '../dock/workspace.ts'
 import { isBoolean, usePersistentState } from '../hud/panelState.ts'
@@ -66,37 +67,35 @@ export function PlanetariumMode({
   const [notice, setNotice] = useState<string | null>(null)
 
   /*
-   * Presentation switches, pushed onto the engine rather than read from React.
+   * The mode's stance: what it wants drawn while it is on screen.
    *
-   * The frame loop reads these every frame and must not touch React to do it —
-   * the same arrangement `App` uses for the lens flare. Restored on the way
-   * out, because leaving the planetarium with the ship still hidden would be
-   * this mode reaching into the flight modes.
+   * One push on mount, released on unmount, and `update` for the switches — so
+   * "restore" means *whatever was underneath*, not a literal. This mode used to
+   * restore `showShip` to `true` and `showOrbits` to `false` on the way out,
+   * which is wrong whenever it was entered from the menu: the menu had hidden
+   * the ship, and leaving the planetarium put back a value nothing had set.
+   *
+   * `observatory: true` is a claim on the target's *lifetime*, not on the
+   * camera. Releasing it is what hands the camera back — without it, leaving
+   * for a flight mode leaves the chase camera parked on whatever was being
+   * looked at, with the ship flying away from a stationary view.
    */
+  const stance = useRef<StanceHandle | null>(null)
   useEffect(() => {
-    engine.showShip = ship
-    engine.showOrbits = orbits
+    const held = engine.presentation.push({ observatory: true })
+    stance.current = held
     return () => {
-      engine.showShip = true
-      engine.showOrbits = false
+      stance.current = null
+      held.release()
     }
-  }, [engine, ship, orbits])
-
-  /*
-   * Hand the camera back on the way out.
-   *
-   * `engine.observer` is only produced while the observatory has a target, so
-   * dropping the target is what returns the camera to the ship. Without this,
-   * leaving for a flight mode would leave the chase camera parked at whatever
-   * the planetarium was looking at — the ship visible in the distance, flying
-   * away from a stationary view.
-   */
-  useEffect(
-    () => () => {
-      engine.harness.observatory.clear()
-    },
-    [engine],
-  )
+  }, [engine])
+  useEffect(() => {
+    stance.current?.update({
+      showShip: ship,
+      showOrbits: orbits,
+      observatory: true,
+    })
+  }, [ship, orbits])
 
   const focus = useCallback(
     (address: string, options: { url?: boolean } = {}) => {

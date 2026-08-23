@@ -6,10 +6,10 @@ import {
   type Group,
   Mesh,
   type Scene,
-  type WebGPURenderer,
 } from 'three/webgpu'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { createTerrainMaterial } from '../render/materials.ts'
+import { warmAtMount, warmCompile, warmRenderer } from '../render/warmup.ts'
 
 /**
  * Streamed terrain patches: geometry uploaded once, moved every frame.
@@ -40,35 +40,45 @@ export function TerrainPatches({ engine }: { engine: GameEngine }) {
    * traversal is synchronous, so nothing here can reach a drawn frame.
    */
   useEffect(() => {
-    const geometry = new BufferGeometry()
-    geometry.setAttribute(
-      'position',
-      new BufferAttribute(new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]), 3),
-    )
-    geometry.setAttribute(
-      'normal',
-      new BufferAttribute(new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1]), 3),
-    )
-    geometry.setIndex([0, 1, 2])
-    const renderer = gl as unknown as WebGPURenderer
-    /*
-     * Both pipeline variants, because the frame loop below flips
-     * `transparent` with the fade — and the *transparent* one is what the
-     * first real patch draws with, mid-descent, since terrain always fades
-     * in. The flag is read during the compile call's synchronous walk, so
-     * flipping it between the two calls compiles one variant each; two
-     * meshes, because a repeated (object, material) pair would hand the
-     * second call the first call's cached render object.
-     */
-    material.transparent = true
-    const fading = renderer
-      .compileAsync(new Mesh(geometry, material), camera, scene as Scene)
-      .catch(() => {})
-    material.transparent = false
-    const opaque = renderer
-      .compileAsync(new Mesh(geometry, material), camera, scene as Scene)
-      .catch(() => {})
-    void Promise.all([fading, opaque]).finally(() => geometry.dispose())
+    warmAtMount({
+      label: 'compiling the ground',
+      units: 2,
+      run: async (done) => {
+        const geometry = new BufferGeometry()
+        geometry.setAttribute(
+          'position',
+          new BufferAttribute(new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]), 3),
+        )
+        geometry.setAttribute(
+          'normal',
+          new BufferAttribute(new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1]), 3),
+        )
+        geometry.setIndex([0, 1, 2])
+        const renderer = warmRenderer(gl)
+        const target = { camera, scene: scene as Scene }
+        /*
+         * Both pipeline variants, because the frame loop below flips
+         * `transparent` with the fade — and the *transparent* one is what the
+         * first real patch draws with, mid-descent, since terrain always fades
+         * in. The flag is read during `warmCompile`'s synchronous walk, so
+         * flipping it between the two calls compiles one variant each; two
+         * meshes, because a repeated (object, material) pair would hand the
+         * second call the first call's cached render object.
+         */
+        material.transparent = true
+        const fading = warmCompile(renderer, {
+          object: new Mesh(geometry, material),
+          ...target,
+        })
+        material.transparent = false
+        const opaque = warmCompile(renderer, {
+          object: new Mesh(geometry, material),
+          ...target,
+        })
+        await Promise.all([fading.then(done), opaque.then(done)])
+        geometry.dispose()
+      },
+    })
   }, [gl, camera, scene, material])
 
   useFrame(() => {

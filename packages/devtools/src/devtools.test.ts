@@ -356,6 +356,91 @@ describe('travel targets', () => {
     expect([...systems].sort((a, b) => a - b)).toEqual(systems)
   })
 
+  it('says whether a destination was observed or is a projection', () => {
+    /*
+     * The projection onto `TravelTarget` used to drop `stub.catalogued`, so a
+     * real star and an invented one rendered identically — against the one
+     * claim PRODUCT.md says the interface always makes. It is not `loaded`:
+     * Proxima is a stub nobody has generated yet and is still a real star.
+     */
+    const { harness: ir } = harness()
+    const targets = ir.targets({ lightYears: 6 })
+
+    const proxima = targets.find((t) => t.name === 'Proxima Centauri')
+    expect(proxima?.provenance).toBe('observed')
+    expect(proxima?.loaded).toBe(false)
+
+    const sol = targets.find((t) => t.kind === 'system' && t.system === 'SOL')
+    expect(sol?.provenance).toBe('observed')
+
+    // A body carries its own, not its system's. Sol is built from measurements
+    // all the way down to its moons; a catalog star's bodies are not, and the
+    // row has to be able to say so for each.
+    const earth = targets.find((t) => t.name === 'Earth')
+    expect(earth?.provenance).toBe('observed')
+    const luna = targets.find((t) => t.name === 'Luna')
+    expect(luna?.provenance).toBe('observed')
+
+    // Whatever the fixture catalog does not contain is generated, and every
+    // generated star says so.
+    const invented = targets.filter(
+      (t) => t.kind === 'system' && t.provenance === 'projected',
+    )
+    for (const star of invented) expect(star.loaded).toBe(false)
+  })
+
+  it('searches the catalog by name rather than filtering the survey', () => {
+    /*
+     * The other half of the split. `targets` is a sweep — it cannot run per
+     * keystroke and cannot see past its own radius — so both panels filtered
+     * its *result*, which made a search box a search of a few light years.
+     * This asks the catalog's index instead, and the rows are the same shape so
+     * the same list renders them.
+     */
+    const { harness: ir } = harness()
+    const hits = ir.search('sirius')
+    expect(hits[0]?.name).toBe('Sirius')
+    expect(hits[0]?.address).toBe('g:milky-way/s:HIP32349')
+    // A catalog star is an observed one; that is what being in it means.
+    expect(hits.every((row) => row.provenance === 'observed')).toBe(true)
+    // Rows a listing can render: system rows, with a distance from here.
+    expect(hits.every((row) => row.kind === 'system' && row.depth === 0)).toBe(
+      true,
+    )
+    expect(hits[0]?.distance).toBeGreaterThan(0)
+  })
+
+  it('reports a searched system as loaded when it is', () => {
+    // Sol is loaded at open, so its row carries the loaded detail rather than
+    // the catalog stub's — the same distinction `targets` draws.
+    const { harness: ir } = harness()
+    const sol = ir.search('Sol')[0]
+    expect(sol?.loaded).toBe(true)
+    expect(sol?.detail).toContain('planets')
+  })
+
+  it('finds nothing rather than everything for an empty query', () => {
+    const { harness: ir } = harness()
+    expect(ir.search('')).toEqual([])
+  })
+
+  it('calls everything outside Sol a projection in a Sol-only session', () => {
+    // The catalog is a generation input, so a session without one is a
+    // different universe — one containing Sol and nothing else that is real.
+    const registry = createTaskRegistry()
+    const session = openSession({
+      seed: 'inertialref',
+      workers: () => createInlineWorker(registry),
+    })
+    const targets = session.harness.targets({ lightYears: 6 })
+    for (const target of targets) {
+      const expected = target.system === 'SOL' ? 'observed' : 'projected'
+      expect(target.provenance, target.name).toBe(expected)
+    }
+    expect(targets.some((t) => t.provenance === 'projected')).toBe(true)
+    session.dispose()
+  })
+
   it('keeps a system listed after the player has left its survey radius', () => {
     // Flying four light years away and having the place you came from drop out
     // of the list is how a debug tool strands you.

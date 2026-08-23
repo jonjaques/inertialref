@@ -71,20 +71,25 @@ export class LocalAuthority implements AuthorityPort {
     partition: PartitionKey,
     hello: ClientHello,
   ): Promise<Result<Joined, string>> {
+    const world = this.#world()
     /*
      * The same check a remote authority will run, against this build's own
-     * constants.
+     * constants and this session's own catalog.
      *
      * Locally it is very nearly a tautology, because `clientHello` is built
-     * from the constants it is compared against — and it is here anyway, for
-     * two reasons. It means the local and remote paths cannot drift into
-     * applying different rules to the same question. And "very nearly" is not
-     * "always": a hello assembled from a *save file's* generation manifest is a
-     * real thing to want (that is how you would ask "can this save still be
-     * played by this build"), and this refuses it rather than pretending.
+     * from the things it is compared against — and it is here anyway, for two
+     * reasons. It means the local and remote paths cannot drift into applying
+     * different rules to the same question. And "very nearly" is not "always":
+     * a hello assembled from a *save file's* manifests is a real thing to want
+     * (that is how you would ask "can this save still be played by this
+     * build"), and this refuses it rather than pretending.
      */
     const mismatch = incompatibility(
-      { protocol: NET_PROTOCOL_VERSION, generation: GENERATION_VERSIONS },
+      {
+        protocol: NET_PROTOCOL_VERSION,
+        generation: GENERATION_VERSIONS,
+        catalog: world.catalog.version,
+      },
       hello,
     )
     if (mismatch !== null) {
@@ -94,7 +99,6 @@ export class LocalAuthority implements AuthorityPort {
       return Promise.resolve(err(mismatch))
     }
 
-    const world = this.#world()
     if (hello.seed !== world.seedText || hello.galaxy !== world.galaxy) {
       // Not pedantry: the seed *is* the universe. A client joining with a
       // different one derives different planets, so a position means nothing.

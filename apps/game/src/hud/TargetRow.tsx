@@ -55,6 +55,13 @@ export function TargetRow({
       <span className="min-w-0 flex-1 truncate">
         {target.name}
         <span className="ml-1.5 text-slate-400">{target.detail}</span>
+        {/* Said in the detail line rather than as a badge: this list is already
+            the densest in the interface, and provenance belongs beside the
+            spectral type it qualifies. Only `projected` is marked — everything
+            the catalog knows is observed. */}
+        {target.provenance === 'projected' && (
+          <span className="ml-1.5 text-slate-500">· projected</span>
+        )}
       </span>
       {/* Loaded reads as a value, unloaded as a stale one — 300 against 400,
           which is the grade DESIGN.md already names for "a stale distance".

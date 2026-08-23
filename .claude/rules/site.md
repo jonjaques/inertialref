@@ -21,7 +21,9 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", `docs/hosting.md`, A
   `pnpm brand:check` is in `pnpm check`.
 - **`index.html`'s head and `src/site.ts` are duplicated on purpose and change together.**
   No social scraper runs JavaScript, so the static head is the only card the site has;
-  `DocumentMeta.tsx` covers only readers that execute scripts.
+  `DocumentMeta.tsx` covers only readers that execute scripts. `scripts/brand/checkHead.mjs`
+  is what holds them together, and it runs inside `pnpm brand:check` — adding a tag to the
+  head means covering it there and moving the census count, in that order.
 - **`DocumentMeta.tsx` is the one place `location.pathname` is read raw.** It is about the
   URL, not about what is on screen. Everything deciding _what is rendered_ still goes
   through `resolvedLocation`.

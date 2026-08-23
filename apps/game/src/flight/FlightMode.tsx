@@ -46,16 +46,22 @@ export function FlightMode({
   /*
    * The ship is the camera here, so nothing else may be holding it.
    *
-   * Belt and braces with the planetarium's own cleanup: arriving at a flight
-   * route by a pasted URL, a back button, or a redirect from a mode that threw
-   * all have to end with the chase camera on the ship, and an observatory that
-   * kept its target would leave the ship flying away from a stationary view.
+   * A stance rather than three assignments, and no longer "belt and braces":
+   * it used to set and never restore, which meant a flight mode entered from
+   * the menu left the ship visible after the menu came back. Pushed and
+   * released, arriving by a pasted URL, a back button, or a redirect from a
+   * mode that threw all end with the chase camera on the ship, and leaving puts
+   * back whatever was underneath rather than a literal.
    */
-  useEffect(() => {
-    engine.harness.observatory.clear()
-    engine.showShip = true
-    engine.showOrbits = false
-  }, [engine])
+  useEffect(
+    () =>
+      engine.presentation.push({
+        showShip: true,
+        showOrbits: false,
+        observatory: false,
+      }).release,
+    [engine],
+  )
 
   if (play === 'multiplayer') return <DeferredMultiplayer />
 

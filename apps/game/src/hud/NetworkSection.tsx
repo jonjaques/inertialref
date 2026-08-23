@@ -1,3 +1,4 @@
+import { describeDrift } from '@inertialref/protocol'
 import { BUILD_ID } from '../build.ts'
 import { CLIENT_VERSIONS, type Connection } from '../net/health.ts'
 import { Action } from './Action.tsx'
@@ -17,6 +18,11 @@ import { Section } from './Section.tsx'
  * the handshake actually compares. Two clients agreeing on a protocol version
  * and disagreeing on a terrain version derive different mountains, and this is
  * the row where that becomes visible instead of mysterious.
+ *
+ * The drift row below it is the same comparison read the other way: not what
+ * each side claims, but which keys they disagree about. It comes from
+ * `versionDrift`, the one function the handshake and the save loader also read,
+ * so a disagreement is worded identically wherever it surfaces.
  */
 export function NetworkSection({
   connection,
@@ -25,7 +31,7 @@ export function NetworkSection({
   connection: Connection
   onCheck: () => void
 }) {
-  const { state, detail, health, checkedAt, failures } = connection
+  const { state, detail, health, drift, checkedAt, failures } = connection
   const generation = Object.entries(health?.generation ?? {})
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([name, version]) => `${name} ${version}`)
@@ -55,6 +61,12 @@ export function NetworkSection({
         }
       />
       <Row label="Generation" value={generation || '—'} wrap />
+      <Row label="Catalog" value={health?.catalog || '—'} />
+      {/* Only when there is one. An empty row here would read as a reassurance
+          the panel is not entitled to give before the first probe lands. */}
+      {drift.length > 0 && (
+        <Row label="Drift" value={describeDrift(drift)} wrap />
+      )}
       <Row label="Client Build" value={BUILD_ID} />
       <Row label="Server Build" value={health?.revision ?? '—'} />
       <Row label="Checked" value={sinceText(checkedAt)} />
