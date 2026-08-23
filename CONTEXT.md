@@ -697,7 +697,7 @@ is the whole quantity:
 - Generating none leaves it five times too sparse, because HYG holds about 59% of
   the known stars within 25 pc and none of the brown dwarfs.
 
-So the fill is `expected − catalogued`. That was still wrong near the Sun: the
+So the fill is `expected − cataloged`. That was still wrong near the Sun: the
 first run put a procedural M dwarf **3.4 light-years away**, closer than Proxima
 Centauri, which would have been the astronomical discovery of the century. The
 density model is right about how many stars there are and says nothing about how
@@ -1963,7 +1963,7 @@ overlay — were each a 100 ms poll driving a range input, written out
 independently. Both latched `scrubbing` on `pointerdown` and cleared it only on
 `pointerup` **on the input**, so a drag released anywhere else froze the
 readout for the life of the player; touch never cleared it at all, because a
-cancelled gesture fires `pointercancel` and nothing else. And they disagreed
+canceled gesture fires `pointercancel` and nothing else. And they disagreed
 about the other half: the player guarded its seek against a scene that had
 already ended, the overlay did not, so the same click was safe in one and threw
 in the other — out of an event handler, where a React error boundary cannot
@@ -2043,7 +2043,7 @@ missed because it is not an axis.
 `Tab` was worse, because its guard could never open. It toggled the dock unless
 focus was already inside `.hud-layer` — but on load `document.activeElement` is
 `<body>`, whose `closest` returns null, so the guard was false, the dock
-toggled, and `preventDefault` cancelled the browser's focus move. With no
+toggled, and `preventDefault` canceled the browser's focus move. With no
 `tabIndex` on the canvas there was nothing outside the layer to bootstrap from:
 **focus could never enter the overlay at all**, and every focus ring,
 `role="tab"` and `aria-expanded` in the PR was unreachable by keyboard. There is
@@ -2147,7 +2147,7 @@ That closes a design question rather than opening one: **the legible ramp is
 `slate-400` and are separated by position and case instead of brightness, which
 is what the Case Rule was already doing. `slate-500` survives in exactly one
 place, `hud/connection.ts`, where the pip is a non-text indicator held to 3:1
-and where `checking` and `offline` are two greys that must stay distinguishable.
+and where `checking` and `offline` are two grays that must stay distinguishable.
 
 The flight strip is the one surface where the **alpha** moved rather than the
 ink: at `/75` its bottom line was 2.43:1 and the line above it cleared 4.5:1 by

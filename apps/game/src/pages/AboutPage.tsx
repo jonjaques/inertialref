@@ -14,7 +14,7 @@ import { Reference } from './Reference.tsx'
  */
 
 const FACTS: readonly (readonly [string, string])[] = [
-  ['catalogue', '7,123 real systems and 702 planets within 150 light years'],
+  ['catalog', '7,123 real systems and 702 planets within 150 light years'],
   ['beyond that', 'generated from a seed — identical on every client, forever'],
   ['positions', 'sector index plus offset; sub-millimeter out to 249,000 ly'],
   ['simulation', '64 Hz fixed tick, deterministic, replayable'],

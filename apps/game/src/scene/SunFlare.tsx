@@ -51,7 +51,7 @@ export function SunFlare({ engine }: { engine: GameEngine }) {
       // The cinematic camera is a cleaner lens than the flight one; see the
       // `artifacts` note in `flare.ts`. 0.05 rather than 0 so a scripted shot
       // still has a lens, just not one that argues with the composition: at
-      // 0.12 the iris ghosts were still three visible grey disks marching
+      // 0.12 the iris ghosts were still three visible gray disks marching
       // across an empty half-frame beside Jupiter. Off a script, the host
       // decides — the front door runs a nearly clean lens because its ghosts
       // land on the poster's type. See `GameEngine.flareArtifacts`.
