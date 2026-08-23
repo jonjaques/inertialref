@@ -352,7 +352,9 @@ again in a neighboring system.
   determinism test still passed, because determinism is a claim about the tick
   and this is a claim about the wall clock between ticks. See the entry below.
 - **The observatory placed its camera at `clock.time` while the scene drew every
-  body at `renderTime`** (23 Aug 2026). Up to one tick apart, and sawtoothing —
+  body at `renderTime`** (23 Aug 2026), and so did the orbit traces' per-frame
+  shift — found by review, in a file the invariant's own glob covers, the same
+  day the invariant was written. Up to one tick apart, and sawtoothing —
   so the camera aimed at where the target used to be, by a different amount every
   frame. `observatory.test.ts` already asserted the standoff, and passed, because
   its own helper asked at `clock.time` too: the test and the code were wrong

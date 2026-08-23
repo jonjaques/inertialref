@@ -125,8 +125,10 @@ Violating one of these is a rewrite later, not a refactor.
   thing's own radius, so it is invisible on a planet and enormous on a small
   fast moon: at `clock.time` the observatory vibrated Phobos and Deimos by 11
   and 19 pixels in the planetarium at 1×, while Mars and Luna held inside a
-  twentieth of a pixel. `terrainStreamer` learned this first; the camera
-  learned it second. [ADR-0006](docs/adr/0006-simulation-clock.md).
+  twentieth of a pixel. Three sites have now had to learn this — the terrain
+  streamer, the observatory, and the orbit traces — and nothing mechanical
+  catches a fourth, so it is a rule rather than three comments.
+  [ADR-0006](docs/adr/0006-simulation-clock.md).
 - **Never give a mode its chrome without `pointer-events-auto`.**
   `.hud-layer` is `pointer-events: none` so the scene stays reachable.
 - **Never give `AnimatePresence` `mode="wait"` over the overlay routes,** and
