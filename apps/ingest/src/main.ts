@@ -64,7 +64,7 @@ function printReport(report: BuildReport): void {
 
   with a proper name      ${pad(report.withProperName)}   ${percent(report.withProperName, s)}
   with a spectral type    ${pad(report.withSpectralType)}   ${percent(report.withSpectralType, s)}
-  with a color index     ${pad(report.withColourIndex)}   ${percent(report.withColourIndex, s)}
+  with a color index      ${pad(report.withColourIndex)}   ${percent(report.withColourIndex, s)}
   with a magnitude        ${pad(report.withMagnitude)}   ${percent(report.withMagnitude, s)}
 
   unparsed spectral types ${pad(report.spectralUnparsed)}   had a string the parser could not read
@@ -313,7 +313,7 @@ ${attribution.map((line) => `- ${line}`).join('\n\n')}
 
 Per-file provenance — source URL, license and output digest — is in
 \`manifest.json\`. Rebuild with \`pnpm textures:build\`; see
-\`docs/guides/catalog.md\`.
+\`docs/guides/catalogue.md\`.
 `
 
 const command = process.argv[2] ?? 'build'

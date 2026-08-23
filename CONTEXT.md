@@ -2623,7 +2623,7 @@ for different jobs.
   [`docs/guides/client.md`](docs/guides/client.md) and
   [`docs/guides/cinematics.md`](docs/guides/cinematics.md).
 - British spelling in the docs was converted where it was safe. Identifiers,
-  filenames (`catalogue.md`), and `canceled()` are left for a later pass.
+  filenames (`catalogue.md`), and `cancelled()` are left for a later pass.
 
 ## The first look was the expensive one, so everything loads at boot (23 Aug 2026)
 
@@ -2692,8 +2692,8 @@ frames. Pace with `queue.onSubmittedWorkDone()` before believing any number.
 
 British spelling in user-facing copy, labels, comments, and documentation is
 now American: _color_, _center_, _meter_, _catalog_, _behavior_, _license_,
-_gray_, _artifact_, _toward_. Identifiers, panel ids (`catalog`), JSON keys
-(`license`), enum values (`center`), and filenames (`catalogue.md`) were left
+_gray_, _artifact_, _toward_. Identifiers, panel ids (`catalogue`), JSON keys
+(`licence`), enum values (`centre`), and filenames (`catalogue.md`) were left
 alone for a later programmatic rename. [`docs/STYLE.md`](docs/STYLE.md)
 already stated the policy; this pass applies it to the rest of the tree.
 
@@ -2716,7 +2716,7 @@ Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md
   desktop-only and the menu says so. The planetarium and the cinema player are
   the mobile surface.
 - **The interface never says `observed` or `projected`.** PRODUCT.md makes
-  stating it a brand commitment and `SystemStub.cataloged` has carried the
+  stating it a brand commitment and `SystemStub.catalogued` has carried the
   answer all along; `TravelTarget` does not forward it, so the destination list
   shows a real star and a generated one identically. See the colorize note in
   [the hardening pass](#what-the-colorize-pass-found-before-it-started).

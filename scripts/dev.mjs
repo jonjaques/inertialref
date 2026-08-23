@@ -46,20 +46,20 @@ const DIM = `${ESC}[2m`
 const CHILDREN = [
   {
     label: 'client',
-    color: `${ESC}[36m`, // cyan, the accent
+    colour: `${ESC}[36m`, // cyan, the accent
     argv: ['--filter', '@inertialref/game', 'run', 'dev'],
   },
   {
     label: 'server',
-    color: `${ESC}[35m`, // magenta — distinct from anything either tool prints
+    colour: `${ESC}[35m`, // magenta — distinct from anything either tool prints
     argv: ['--filter', '@inertialref/server', 'run', 'dev'],
   },
 ]
 
 /** One prefixed writer per stream, holding a partial line between chunks. */
-function prefixer(label, color, stream) {
+function prefixer(label, colour, stream) {
   let pending = ''
-  const head = `${color}${label.padEnd(6)}${RESET} ${DIM}|${RESET} `
+  const head = `${colour}${label.padEnd(6)}${RESET} ${DIM}|${RESET} `
   return (chunk) => {
     pending += chunk
     const lines = pending.split('\n')
