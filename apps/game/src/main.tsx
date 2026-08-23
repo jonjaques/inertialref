@@ -4,6 +4,7 @@ import { MotionConfig } from 'motion/react'
 import { BrowserRouter } from 'react-router'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { createConsoleSink, logHub } from '@inertialref/shared'
+import { startAnalytics } from './analytics.ts'
 import App from './App.tsx'
 import { BUILD_ID } from './build.ts'
 import { loadStarCatalog } from './engine/catalogAsset.ts'
@@ -19,6 +20,19 @@ import './index.css'
  * hub.
  */
 logHub.addSink(createConsoleSink(console, 'info'))
+
+/*
+ * Analytics, wired here for the same reason the log sink is: loading a third
+ * party tag is a process-wide side effect and belongs to the process's entry
+ * point, not to a component that might mount twice.
+ *
+ * It is a no-op unless this is a production build on the canonical host with no
+ * Global Privacy Control set, so a dev server, `pnpm preview`, a Wrangler
+ * preview URL and a fork all measure nothing. `analytics.ts` has the argument.
+ * Individual page views come from `pages/DocumentMeta.tsx`, which is inside the
+ * router and therefore knows when the address changed.
+ */
+startAnalytics()
 
 /*
  * The last resort, when there is no React left to draw one.
@@ -181,7 +195,7 @@ try {
  * inheriting the last one's precached index.html.
  */
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
+  const register = (): void => {
     const url = `/sw.js?build=${encodeURIComponent(BUILD_ID)}`
     void navigator.serviceWorker.register(url).catch((cause: unknown) => {
       console.warn(
@@ -189,5 +203,30 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
         cause,
       )
     })
-  })
+  }
+
+  /*
+   * `load` has usually already fired by the time this line runs.
+   *
+   * This module awaits the catalogue at module scope, and that await resolves
+   * *after* the load event — measured on a cold visit to a review app: load at
+   * 761 ms, the 460 KB catalogue at 969 ms. A bare
+   * `addEventListener('load', …)` here is therefore a listener for an event
+   * that has been and gone, and the worker is never registered.
+   *
+   * It looked fine, which is the worst part. A registration persists across
+   * visits, so the *second* visit to an origin — where the catalogue comes out
+   * of the HTTP cache and resolves before load — registers one, and every visit
+   * after that is controlled. What was actually broken was the first visit to
+   * any origin, which is exactly the visit where "install it and it works on a
+   * plane" has to be true. It surfaced on a review app because that is the only
+   * origin nobody had ever opened twice.
+   *
+   * Deferring to `load` at all is still right when it has not fired: the
+   * worker's install fetches `/`, `/index.html` and the icons, and doing that
+   * while the page is still pulling its own critical path is bandwidth taken
+   * from the thing the player is waiting for.
+   */
+  if (document.readyState === 'complete') register()
+  else window.addEventListener('load', register, { once: true })
 }

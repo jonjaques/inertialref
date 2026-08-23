@@ -5,32 +5,41 @@
   "type": "module",
   "packageManager": "pnpm@11.22.0",
   "scripts": {
-    "dev": "pnpm --filter @inertialref/game dev",
+    "dev": "node scripts/dev.mjs",
+    "dev:client": "pnpm --filter @inertialref/game dev",
     "dev:server": "pnpm --filter @inertialref/server run dev",
     "format": "prettier -w .",
     "format:check": "prettier -c .",
-    "build": "pnpm typecheck && pnpm --filter @inertialref/game build",
-    "preview": "pnpm --filter @inertialref/game preview",
+    "build": "node scripts/media.mjs pull --optional && pnpm typecheck && pnpm --filter @inertialref/game build",
+    "preview": "pnpm build && pnpm --filter @inertialref/server exec wrangler dev",
+    "preview:client": "pnpm --filter @inertialref/game preview",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.json && tsc -p apps/game/tsconfig.json && tsc -p apps/headless/tsconfig.json && tsc -p apps/server/tsconfig.json && tsc -p apps/ingest/tsconfig.json",
     "lint": "oxlint",
     "graph": "node scripts/check-graph.mjs",
+    "brand": "node scripts/brand/build.mjs",
+    "brand:check": "node scripts/brand/build.mjs --check",
+    "media:pull": "node scripts/media.mjs pull",
+    "media:push": "node scripts/media.mjs push",
     "sim": "node apps/headless/src/main.ts",
     "catalog:fetch": "node apps/ingest/src/main.ts fetch",
     "catalog:report": "node apps/ingest/src/main.ts report",
     "catalog:build": "node apps/ingest/src/main.ts build",
     "textures:build": "node apps/ingest/src/main.ts textures",
     "deploy:worker": "pnpm build && pnpm --filter @inertialref/server run deploy",
-    "check": "pnpm graph && pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+    "check": "pnpm graph && pnpm brand:check && pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",
     "fast-check": "^4.1.1",
+    "fontkit": "^2.0.4",
     "oxlint": "^1.75.0",
     "prettier": "^3.9.6",
+    "sharp": "^0.35.3",
     "typescript": "~6.0.2",
     "vite": "^8.2.0",
-    "vitest": "^4.0.5"
+    "vitest": "^4.0.5",
+    "wawoff2": "^2.0.1"
   }
 }

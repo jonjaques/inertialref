@@ -87,19 +87,22 @@ Full reasoning is in `docs/adr/`. The short version:
 ## Commands
 
 ```bash
-pnpm dev         # vite dev server (apps/game)
-pnpm dev:server  # wrangler dev on 8787; `pnpm dev` proxies /api and /ws to it
+pnpm dev         # ONE command: vite on 5173 and wrangler on 8787, /api proxied
+pnpm dev:client  # just vite      pnpm dev:server  # just wrangler
+pnpm preview     # build, then the real Worker over the real dist — production
 pnpm test        # vitest, node environment only
 pnpm typecheck   # five tsconfig projects
 pnpm lint        # oxlint
 pnpm graph       # dependency layering + cycle check
-pnpm build
+pnpm brand       # re-render every brand artefact from design/brand/brandmark.svg
+pnpm build       # optional media pull, typecheck, vite build
 pnpm check       # all of the above
 pnpm vitest run <substring>   # single test file
 pnpm run deploy:worker        # pnpm build, then wrangler deploy
 
 pnpm catalog:report           # build the star catalogue and print the counts
 pnpm catalog:build            # ...and write data/catalog
+pnpm media:pull               # the cutscene audio, from R2 (never committed)
 ```
 
 ## The architecture pass (19 Aug 2026)
@@ -2437,6 +2440,164 @@ is a function of it.
 trips `gray-on-color` because `data-[state=off]:text-slate-400` and
 `data-[state=on]:bg-sky-500/15` are in one class string; they are mutually
 exclusive states and never composite.
+
+## The front door as a public surface (23 Aug 2026)
+
+Everything a person or a machine meets before the canvas does. The site is now
+**<https://inertialref.jonjaques.com>** — a Cloudflare custom domain declared in
+`wrangler.jsonc`; `inertialrefd.jaquers.workers.dev` still answers and is
+deliberately not canonical, because it is the address a deploy gets checked on
+before DNS is trusted. `docs/hosting.md` H-7 and H-8 are the record.
+
+**One dev command.** `scripts/dev.mjs` runs Vite and `wrangler dev` as two
+children with one lifetime — prefixed output, and one exiting stops the other.
+The two-process split was never the problem; the second terminal was, because
+forgetting it makes every `/api` call fail in a way indistinguishable from a
+broken client. `pnpm preview` is the new production emulation: build, then
+`wrangler dev` alone, so the assets come through the real static asset store,
+the real `run_worker_first` and the real SPA fallback, with the service worker
+actually registering. Reach for it when a bug is about how something is
+_served_. `@cloudflare/vite-plugin` is still declined and still for the same
+reason — it takes over a tuned client build — and that is now written down in
+one place instead of two.
+
+**The brand is generated from one drawing.** `design/brand/brandmark.svg` is the
+mark; `pnpm brand` renders `favicon.svg`, `favicon.ico` (hand-written ICO
+container around three PNGs), `apple-touch-icon.png`, `icon-192`, `icon-512`,
+`icon-maskable-512`, the 1200×630 `og.png`, `manifest.webmanifest`,
+`robots.txt`, `sitemap.xml` and `src/icons/brandmark.ts`. `pnpm brand --check`
+is in `pnpm check`. Before this there were three hand-kept copies of the same
+three paths with comments on each asking the next person to keep them in step.
+
+Two things in that pipeline cost real time and must not be rediscovered:
+
+- **sharp's `text` input silently ignores `fontfile` for a WOFF2.** Measured:
+  byte-identical 447×75 output for Archivo, Martian Mono and no font at all. A
+  share card that renders in whatever the build machine happens to have looks
+  fine locally and wrong everywhere else.
+- **fontkit's `getVariation()` throws on a WOFF2.** It rebuilds a `TTFFont` from
+  the _compressed_ stream, so the table directory is garbage and the first
+  `cmap` lookup dies on `Cannot read properties of undefined (reading 'tables')`.
+  `wawoff2.decompress()` first, then `fontkit.create()`, and the width axis
+  works. That matters here because `type-display` is Archivo at `wdth 70%` — the
+  condensed voice _is_ the wordmark, and the default 100% instance is a
+  different brand.
+
+The mark's content box is **measured** by rasterizing and asking sharp to trim,
+not declared — and `trimOffsetLeft`/`trimOffsetTop` are the negative of the crop
+origin, which taken at face value mirrors the mark about its viewBox. The only
+symptom was a favicon two units off centre, which reads as a rendering artefact
+rather than a sign error.
+
+**The static head is the card, and it is hand-kept on purpose.** No social
+scraper runs JavaScript, and `not_found_handling` is `single-page-application`,
+so one document is the card for every path. `index.html` carries the full Open
+Graph and Twitter set plus a JSON-LD `@graph`; `pages/DocumentMeta.tsx` updates
+`<title>`, the description and the canonical link per route for the readers that
+_do_ execute scripts. `src/site.ts` is what both are written from, and Node runs
+it directly so the generators import it rather than keeping a third copy.
+Per-route Open Graph needs `HTMLRewriter` on every navigation, which turns a
+free asset request into a billed invocation; that is recorded as a seam, not an
+oversight.
+
+`DocumentMeta` is the one place in the client that reads `location.pathname`
+raw. Everywhere else that is the bug AGENTS.md names — but this is about the
+_URL_, not about what is on screen, and the address bar is exactly what a tab,
+a bookmark and a canonical link are describing.
+
+**Analytics is a gate, not a snippet.** GA4 loads only in a production build,
+only on the canonical host, and only without Global Privacy Control — so
+localhost, `pnpm preview`, a Wrangler preview URL and the `workers.dev` address
+all measure nothing. `send_page_view: false` plus an explicit `page_view` per
+navigation, because GA4's automatic collection depends on an enhanced-measurement
+setting in a web console this repository cannot see. The measurement id is
+`VITE_GA_MEASUREMENT_ID` in `apps/game/.env.production` — a build-time _public_
+variable, committed because it ships in the bundle anyway. `site.test.ts` states
+the rule; the failure is silent in both directions.
+
+**Installable, and honest to agents.** The manifest was the only missing half of
+a PWA — the service worker and a universe that is a pure function of a seed were
+already there. `/llms.txt` is prose for a reader that is not a person, and the
+`<noscript>` block is the same courtesy for one who is; both existed as a black
+page and a boot message about a catalogue before this.
+
+**The reference audio left the working tree, and R2 is bound.** It lives in
+`r2://inertialrefd-storage/dropbox/tng-intro.mp3` and reaches the browser two
+ways from one table (`apps/server/src/media.ts`): `pnpm media:pull` copies it
+into the gitignored `apps/game/public/media/` so it ships as a static asset —
+free, never wakes the script, `Range` handled by the asset server — and the
+Worker's `MEDIA` binding serves it when a credential-less build did not. Two
+transports, one object, so there is nothing to drift.
+
+`run_worker_first` now covers `/media/*`, which costs an invocation on a path
+that was free. It buys two things: the response is `immutable`, so it is roughly
+one invocation per client rather than one per play, and an **unlisted** name now
+404s where the SPA fallback used to answer a request for an `.mp3` with
+`index.html` and a 200 — an `<audio>` element handed a page of markup fails as
+though it could not decode the file. The miss is detected by content type
+because there is no status code to test, and `/media/*` is an **allow-list**
+rather than a key prefix: that bucket is the site's general storage, and a
+prefix rule would have made all of it world-readable and turned `/media/../`
+into a bucket read.
+
+Two workerd traps, both found by running it and neither by reading:
+
+- **`R2Range` is published as a union of three exclusive shapes**, so the
+  obvious implementation narrows with `'suffix' in range`. The object workerd
+  hands over has all three keys present with two of them `undefined`, so that
+  test is true for a range with no suffix and the arithmetic runs
+  `size - undefined`. Everything came out `NaN`, the runtime quietly replaced
+  `Content-Length` from the real body size, and the only visible symptom was
+  `Content-Range: bytes NaN-NaN/2747091` on a response whose bytes were
+  correct. **Narrow on the value.** `routes.test.ts` has the regression, and it
+  was checked by reintroducing the bug.
+- **`stored.range` is populated whether or not the request carried a `Range`
+  header** — an unranged get reports the whole object as its range — so keying
+  the status off it answers every plain GET with `206 Partial Content`.
+
+Verified against a local workerd with the bundled copy removed: 200 for a plain
+GET, 206 with a correct `Content-Range` for explicit / suffix / open-ended
+ranges, 304 on `If-None-Match`, 404 for an unlisted name and for `/media/../`,
+405 for a POST — and the first 1024 and last 500 bytes byte-identical to the
+source.
+
+A third thing turned up on the deployed review app rather than locally:
+**`env.ASSETS` does not serve ranges.** `Range: bytes=0-1023` came back 200 with
+all 2.7 MB. A browser copes by buffering the whole track and seeking locally,
+but the overlay drives `currentTime` against a reference clock, so on a slow
+connection every seek waits for a download a 206 would have avoided. The handler
+now treats "a range was asked for and the asset store answered 200" as a miss
+and lets R2 answer — the one case where the second transport is better rather
+than a fallback. The service worker treats `/media/` as immutable for a second reason:
+stale-while-revalidate would re-fetch 2.7 MB in the background on every load.
+
+**The service worker was never registering on a first visit, and that is older
+than this change.** `main.tsx` awaits the packed catalogue at module scope, and
+that await resolves _after_ the load event — measured on a cold visit to a
+review app: load at 761 ms, the 460 KB catalogue at 969 ms. The registration was
+inside `window.addEventListener('load', …)`, so it was a listener for an event
+that had already been and gone.
+
+It looked fine because a registration persists across visits: the _second_ visit
+to an origin serves the catalogue out of the HTTP cache, the await resolves
+before load, and a worker is registered for good. What was broken was the first
+visit to any origin — precisely the visit where "install it and it works on a
+plane" has to be true. It surfaced now only because a review app is the one
+origin nobody had ever opened twice. `document.readyState === 'complete'` is
+checked first now.
+
+**The GA measurement id is not in the repository.** It is not a credential — it
+ships in the bundle and is visible in every request the tag makes — but this
+repository is public, and an id committed in it is an id every fork measures
+into. `.env*` is gitignored, `apps/game/.env.example` is the committed
+documentation, and the real value is a Workers Builds **build variable**; a
+deploy run from a developer's machine reads the same name from a local
+`.env.production`. Vite gives a real environment variable precedence over a file
+of the same name, verified by building with each in turn.
+
+Also removed: `public/icons.svg`, a starter-template sprite sheet of Bluesky,
+Discord and GitHub glyphs in `#aa3bff` that nothing referenced and the service
+worker had been precaching.
 
 ## Known gaps
 

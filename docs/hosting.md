@@ -3,11 +3,12 @@
 How InertialRef gets from a `dist/` directory to a URL, and what has to exist
 behind that URL before the persistent universe is possible.
 
-> **H0, H1 and H3 are built and deployed; H2 is half done. Everything from H4
-> onward is still a plan.** The client is live at
-> <https://inertialrefd.jaquers.workers.dev>, served by `apps/server` — one
-> Worker, the static bundle, `/api/health`, and `/ws` reserved behind a
-> deliberate 501. `packages/net` holds the authority port and the local
+> **H0, H1, H3, H7 and H8 are built and deployed; H2 is half done. Everything from
+> H4 onward is still a plan.** The client is live at
+> <https://inertialref.jonjaques.com> — a Cloudflare custom domain — and also at
+> <https://inertialrefd.jaquers.workers.dev>, which is the same deployment and
+> is deliberately not canonical. It is served by `apps/server`: one Worker, the
+> static bundle, `/api/health`, and `/ws` reserved behind a deliberate 501. `packages/net` holds the authority port and the local
 > implementation of it that every solo player runs. There is no Durable Object,
 > no D1 and no socket yet, and the sections below still describe those in the
 > future tense.
@@ -70,7 +71,7 @@ flowchart TB
         DO2["<b>DO</b> partition s:HIP71683"]
         DO3["<b>DO</b> partition c:12,-3,7"]
         D1["<b>D1</b><br/>accounts · discovery credit<br/>catalogue revisions · sync"]
-        R2["<b>R2</b> ⬜<br/>material sets, when they exist"]
+        R2["<b>R2</b><br/>inertialrefd-storage<br/><i>reference audio · material sets later</i>"]
     end
 
     B -->|"GET /"| W
@@ -82,6 +83,7 @@ flowchart TB
     W --> DO2
     W --> DO3
     DO1 -.->|"writes needing a global<br/>uniqueness guarantee"| D1
+    W --> R2
     B -.->|"biome textures"| R2
 
     style W fill:#0369a1,stroke:#0c4a6e,color:#fff
@@ -100,16 +102,16 @@ have sidestepped one real problem for free.
 
 ## What each Cloudflare primitive is for
 
-| Primitive              | Holds                                                                         | Why this one and not another                                                                                                                                 |
-| ---------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Workers**            | The client bundle, the API, WebSocket upgrade routing                         | Static asset requests are free and never reach the script. One deploy, one origin, one artefact.                                                             |
-| **Durable Objects**    | One authority per partition: connected players, live entity states, mutations | A DO is a single-threaded, addressable, consistent island with its own SQLite. That is precisely the shape of a star system under patched conics.            |
-| **DO SQLite**          | Per-partition durable state, co-located with the authority                    | Transactional with the code that owns it. No network round trip. 10 GB per object, which is four orders of magnitude more than a partition will ever need.   |
-| **D1**                 | Account-scoped and globally-unique data                                       | Cross-partition queries and global uniqueness — "who discovered this first" — need one writer for the whole galaxy, not one per system.                      |
-| **R2** ⬜              | Biome material sets                                                           | The only real asset download the design admits ([modes](design/modes.md), 40–120 MB). Zero egress fees. Not needed until material sets exist.                |
-| **Workers KV**         | ⛔ nothing                                                                    | The catalogue is 159 KB brotli and ships in the bundle ([spike 3](spikes.md#3--catalogue-bundle-size)). There is no eventually-consistent read tier to fill. |
-| **Queues / Workflows** | ⛔ nothing yet                                                                | No asynchronous fan-out exists. Revisit if catalogue revision publishing becomes a batch job.                                                                |
-| **Cloudflare Pages**   | ⛔ nothing                                                                    | Workers static assets is the same capability inside the Worker that already has to exist. Two deploy targets for one site is one too many.                   |
+| Primitive              | Holds                                                                         | Why this one and not another                                                                                                                                                                                |
+| ---------------------- | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Workers**            | The client bundle, the API, WebSocket upgrade routing                         | Static asset requests are free and never reach the script. One deploy, one origin, one artefact.                                                                                                            |
+| **Durable Objects**    | One authority per partition: connected players, live entity states, mutations | A DO is a single-threaded, addressable, consistent island with its own SQLite. That is precisely the shape of a star system under patched conics.                                                           |
+| **DO SQLite**          | Per-partition durable state, co-located with the authority                    | Transactional with the code that owns it. No network round trip. 10 GB per object, which is four orders of magnitude more than a partition will ever need.                                                  |
+| **D1**                 | Account-scoped and globally-unique data                                       | Cross-partition queries and global uniqueness — "who discovered this first" — need one writer for the whole galaxy, not one per system.                                                                     |
+| **R2** ✅              | What the repository will not carry; biome material sets later                 | Zero egress fees. Today one bucket, `inertialrefd-storage`, holding the cutscene's reference audio ([H-8](#h-8--r2-holds-what-the-repository-will-not-carry)). Material sets are the planned second tenant. |
+| **Workers KV**         | ⛔ nothing                                                                    | The catalogue is 159 KB brotli and ships in the bundle ([spike 3](spikes.md#3--catalogue-bundle-size)). There is no eventually-consistent read tier to fill.                                                |
+| **Queues / Workflows** | ⛔ nothing yet                                                                | No asynchronous fan-out exists. Revisit if catalogue revision publishing becomes a batch job.                                                                                                               |
+| **Cloudflare Pages**   | ⛔ nothing                                                                    | Workers static assets is the same capability inside the Worker that already has to exist. Two deploy targets for one site is one too many.                                                                  |
 
 ### Numbers, with their source
 
@@ -166,6 +168,10 @@ This is what is deployed, minus the comments:
   "name": "inertialrefd",
   "main": "src/index.ts",
   "compatibility_date": "2026-08-20",
+  // A custom domain, not a route: it provisions the DNS record and the
+  // certificate and points the hostname at this Worker. A route is a pattern
+  // over an origin that already exists, and there is no origin here.
+  "routes": [{ "pattern": "inertialref.jonjaques.com", "custom_domain": true }],
   "assets": {
     "directory": "../game/dist",
     "binding": "ASSETS",
@@ -389,6 +395,126 @@ is a universe the client cannot derive, and the reverse is the same statement.
 Ignoring unknown keys would make the handshake pass in exactly the case it
 exists to catch.
 
+### H-7 · The front door is a public surface, not just a bundle
+
+✅ **Built.** Everything a person or a machine meets before the WebGPU canvas
+does: the share card, the install manifest, the crawler files, the analytics
+gate, and the one asset the repository will not carry.
+
+**One canonical hostname.** `inertialref.jonjaques.com` is what
+`<link rel="canonical">` names, what `sitemap.xml` lists, and the only host
+`src/analytics.ts` will load a tag on. `inertialrefd.jaquers.workers.dev` and
+every Wrangler preview URL are the same deployment under a different name —
+useful for checking a deploy, and wrong to count as visits or to let a crawler
+index as a duplicate site.
+
+**The static head is the card, and it is hand-kept.** `not_found_handling` is
+`single-page-application`, so one document is served for every path — and no
+social scraper runs JavaScript. Whatever React writes into `og:title` is
+therefore invisible to Slack, iMessage, Discord and every other unfurler. So
+`index.html` carries a complete Open Graph and Twitter set plus a JSON-LD
+`@graph` (`WebSite`, `Person`, `SoftwareApplication`/`VideoGame`), written for
+the home page, and `pages/DocumentMeta.tsx` updates `<title>`, the description
+and the canonical link per route for the readers that _do_ execute scripts — the
+browser, Googlebot, an agent driving a headless browser. `src/site.ts` is the
+single source both are written from; the duplication into the head is
+deliberate and is called out at both ends.
+
+> **The seam.** Per-route Open Graph tags need `HTMLRewriter`, which needs the
+> Worker to run on navigations — `run_worker_first` on `/*` — which turns a
+> free, unbilled static asset request into a billed invocation on every page
+> load of the site. That is a real trade and not obviously the right one for a
+> project whose shareable pages number three. Revisit it when a _scene_ deserves
+> its own card, which is the first case where the generic one is actually wrong.
+
+**Installable, because offline was already true.** The service worker predates
+this; what was missing was the manifest that lets a browser act on it. The game
+is a pure function of a seed, so once the bundle and the 460 KB catalogue are
+cached there is nothing left to fetch — an installed copy is a real offline
+application rather than a shortcut with a dinosaur behind it.
+
+**The brand is generated.** `design/brand/brandmark.svg` is the mark, and
+`pnpm brand` renders the favicon, the `.ico`, the apple-touch and PWA icons, the
+maskable variant, the 1200×630 share card, the manifest, `robots.txt`,
+`sitemap.xml` and the `<Logomark>` module from it. `pnpm brand --check` is in
+`pnpm check`. The card is _drawn_ rather than screenshotted: a screenshot
+pipeline would need a GPU in the build and would produce a different picture
+every time, where this one is byte-stable enough to be checked.
+
+**Agents are welcome and are told so.** `robots.txt` allows everything and
+points at `/llms.txt`, which is the short prose version of what this project is
+— written on the premise that a reader arriving at a WebGPU canvas with no
+JavaScript has otherwise been handed nothing. The `<noscript>` block is the same
+courtesy for a person.
+
+### H-8 · R2 holds what the repository will not carry
+
+✅ **Built.** The cutscene is cut against a piece of music that is somebody
+else's. Its use here is a fair-use claim this project is willing to make in a
+deployment and not in a git history — which is permanent, mirrored by every fork
+and indexed. So the track lives in `r2://inertialrefd-storage/dropbox/` and
+reaches the browser two ways, both of which start from **one table** in
+`apps/server/src/media.ts`:
+
+1. **`pnpm media:pull`**, run by `pnpm build` with `--optional`, copies it into
+   `apps/game/public/media/` (gitignored as a directory) so it ships in the
+   bundle as an ordinary static asset. Free, never wakes the script, and `Range`
+   is the asset server's problem.
+2. **The `MEDIA` binding**, when the bundle does not have it — a build that ran
+   without R2 credentials, which is what a fork gets.
+
+They are not two sources. It is one object under one key, reached by two
+transports, and the fallback is what makes a credential-less build a slower
+first byte rather than a missing feature.
+
+**`run_worker_first` covers `/media/*`, and that is the cost.** The path is no
+longer free: the script runs, asks `env.ASSETS` first, and only reaches R2 on a
+miss. Two things buy it back. The response is `immutable`, so it is about one
+invocation per client rather than one per play. And a name that is _not_ served
+now 404s — where before, the SPA fallback answered a request for an `.mp3` with
+`index.html` and a 200, and an `<audio>` element handed a page of markup fails
+as though it could not decode the file.
+
+**The miss is detected by content type**, because there is no status code to
+test: `not_found_handling: single-page-application` means the asset store
+answers what it does not have with a 200. Nothing under `/media/` is ever HTML,
+so an HTML answer to a request for an `.mp3` is unambiguous.
+
+**`env.ASSETS` does not serve ranges**, which is the second reason the binding
+is here rather than only the fallback one. Measured against a deployed review
+app: `Range: bytes=0-1023` on this file comes back **200 with all 2.7 MB**. A
+browser copes — it buffers the whole track and seeks locally — but the cutscene
+overlay drives `currentTime` against a reference clock, so on a slow connection
+every seek waits for a download a 206 would have made unnecessary. So when a
+range is asked for and the asset store ignores it, R2 answers instead. That is
+the one case where the second transport is not a fallback but the better path.
+
+**An allow-list, not a key prefix.** `inertialrefd-storage` is the site's general
+storage, not a public directory. Mapping `/media/*` onto a prefix would make
+everything under it world-readable and would turn `/media/../` into a bucket
+read; `mediaFor` answers for exactly the names in the table.
+
+> **Two things bit here and are worth reading before touching the handler.**
+>
+> **`R2Range` is published as a union of three exclusive shapes**, so the
+> obvious implementation narrows with `'suffix' in range`. The object workerd
+> actually hands over has all three keys present with two of them `undefined`,
+> so that test is true for a range with no suffix and the arithmetic runs
+> `size - undefined`. Everything came out `NaN`, the runtime quietly replaced
+> `Content-Length` from the real body size, and the only visible symptom was
+> `Content-Range: bytes NaN-NaN/2747091` on a response whose bytes were
+> correct. **Narrow on the value.** `routes.test.ts` has the regression.
+>
+> **`stored.range` is populated whether or not the request carried a `Range`
+> header** — an unranged get reports the whole object as its range — so keying
+> the status off it answers every plain GET with `206 Partial Content`. Browsers
+> mostly cope; caches are entitled not to.
+
+Workers Builds needs R2 read on whatever token it runs `wrangler` with for the
+_bundled_ copy to exist. If it does not have one, the deploy still succeeds, the
+build log says so in one line, and the Worker serves the track from the bucket
+instead — which is the whole point of having both.
+
 ---
 
 ## The seams that already exist
@@ -500,11 +626,15 @@ sends `cache-control: no-store`, and the client's probe asks for
 Three other things came out of looking at that file properly, all of which would
 have bitten later rather than sooner:
 
-- **Cache-first is wrong for the unhashed files too.** `favicon.svg` and
-  `icons.svg` have no hash in their names, so cache-first meant a change to
-  either could never reach anyone who had loaded the game once. They are
-  stale-while-revalidate now; only `/assets/*` stays cache-first, which is
-  honest because Vite's content hashing is what makes it safe.
+- **Cache-first is wrong for the unhashed files too.** `favicon.svg`, the web
+  manifest, `robots.txt` and the share card have no hash in their names, so
+  cache-first meant a change to any of them could never reach anyone who had
+  loaded the game once. They are stale-while-revalidate now. Cache-first is
+  kept for `/assets/*`, which is honest because Vite's content hashing is what
+  makes it safe — and for `/media/*`, which is object storage
+  ([H-8](#h-8--r2-holds-what-the-repository-will-not-carry)): a fixed
+  reference track, where stale-while-revalidate would re-fetch 2.7 MB of audio
+  in the background on every load of the site.
 - **A fixed cache name has to be bumped by hand.** It is now
   `inertialref-${build}`, where the build id arrives on the registration URL —
   `sw.js` is copied verbatim out of `public/` and never compiled, so the URL is
@@ -646,15 +776,30 @@ workerd, which is genuinely nicer. It also takes over the client build — and t
 current build is Vite 8 with the Oxc transform, `@rolldown/plugin-babel` running
 the React Compiler preset, and Tailwind, which is tuned and load-bearing.
 
-✅ **Wired.** `vite dev` proxies `/api` and `/ws` to `wrangler dev` on 8787
-(`pnpm dev` and `pnpm dev:server`). Revisit the plugin once the two-process loop
-is annoying enough to be worth the build risk, and revisit it as a _separate_
-change so a build regression has one suspect.
+✅ **Wired, and now one command.** `vite dev` proxies `/api` and `/ws` to
+`wrangler dev` on 8787, and `scripts/dev.mjs` starts both under `pnpm dev` with
+prefixed output and a shared lifetime — one exits, both stop. That was the
+actual cost of the split: not two processes, but a second terminal somebody
+could forget, after which every `/api` call fails in a way indistinguishable
+from a broken client. `pnpm dev:client` and `pnpm dev:server` are still the
+halves, and `dev:client` exists partly because piping Vite's stdio costs its
+interactive `r`/`o`/`q` keys.
 
-A property worth keeping rather than fixing: with `wrangler dev` **not** running,
+Revisit the plugin once _that_ is annoying enough to be worth the build risk,
+and revisit it as a _separate_ change so a build regression has one suspect.
+
+**`pnpm preview` is the production emulation**, and it is what to reach for when
+a bug is about how something is _served_ rather than what it does: it builds and
+then runs `wrangler dev` alone, so the assets come out of the real static asset
+store through the real `run_worker_first` and the real SPA fallback, and the
+service worker registers because it is a production build. Under `pnpm dev` all
+of that is Vite's.
+
+A property worth keeping rather than fixing: with the Worker **not** running,
 the proxy fails and the client reports `no server`. The offline path is
-therefore the default in development, which is the right way round for a game
-whose normal case is solo offline.
+therefore easy to exercise in development, which is the right way round for a
+game whose normal case is solo offline — `pnpm dev:client` is now the way to get
+it deliberately.
 
 ### Cross-origin isolation is a door that is currently open
 
@@ -742,19 +887,20 @@ regression is reproducible in CI without a browser.
 version at its own URL. That removes the API token from GitHub entirely, which
 is why it won out over a deploy workflow in Actions.
 
-| Concern        | Approach                                                                                                                                                                                   |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Production     | Push to `main` → `wrangler deploy`. One Worker, `inertialrefd`, on `*.workers.dev` until a custom domain exists.                                                                           |
-| Review apps    | Any other branch → `wrangler versions upload`, which uploads a version and its assets without promoting it. Its own URL, its own origin.                                                   |
-| The gate       | `pnpm check` stays in `.github/workflows/check.yml`. **Cloudflare cannot see a GitHub status check**, so branch protection on `main` is what actually prevents a red merge from deploying. |
-| Build command  | `pnpm build` — typecheck across four projects, then `vite build` into `apps/game/dist`, which is what `assets.directory` points at.                                                        |
-| Node version   | `.node-version`, read by Cloudflare's build image _and_ by the Actions workflow, so the two cannot disagree about the runtime.                                                             |
-| Build identity | `WORKERS_CI_COMMIT_SHA` and `WORKERS_CI_BRANCH` become `__BUILD_ID__`, so a review app's HUD names the branch it was built from.                                                           |
-| Migrations     | D1 migrations run from the build command, before the deploy step, so the schema is never behind the code. Not needed until H2.                                                             |
-| Secrets        | `wrangler secret put`, never `vars`, and **not** Workers Builds' build variables — those exist only during the build. Nothing in `wrangler.jsonc` may be a credential; it is committed.    |
-| Rollback       | `wrangler rollback`, or promote a previous version from the dashboard. DO SQLite migrations are not rolled back by it; write them additively.                                              |
-| Manual deploy  | `pnpm run deploy:worker` still works and is the escape hatch when CI is the thing that is broken.                                                                                          |
-| Observability  | `observability.enabled` for Workers Logs. The client already has structured logging in `packages/shared` — use the same shape.                                                             |
+| Concern         | Approach                                                                                                                                                                                                                                                                                                                                                                                                    |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Production      | Push to `main` → `wrangler deploy`. One Worker, `inertialrefd`, on the `inertialref.jonjaques.com` custom domain; the `*.workers.dev` address keeps answering and is deliberately not canonical.                                                                                                                                                                                                            |
+| Review apps     | Any other branch → `wrangler versions upload`, which uploads a version and its assets without promoting it. Its own URL, its own origin.                                                                                                                                                                                                                                                                    |
+| The gate        | `pnpm check` stays in `.github/workflows/check.yml`. **Cloudflare cannot see a GitHub status check**, so branch protection on `main` is what actually prevents a red merge from deploying.                                                                                                                                                                                                                  |
+| Build command   | `pnpm build` — an optional R2 media pull, typecheck across five projects, then `vite build` into `apps/game/dist`, which is what `assets.directory` points at. See [H-8](#h-8--r2-holds-what-the-repository-will-not-carry).                                                                                                                                                                                |
+| Node version    | `.node-version`, read by Cloudflare's build image _and_ by the Actions workflow, so the two cannot disagree about the runtime.                                                                                                                                                                                                                                                                              |
+| Build identity  | `WORKERS_CI_COMMIT_SHA` and `WORKERS_CI_BRANCH` become `__BUILD_ID__`, so a review app's HUD names the branch it was built from.                                                                                                                                                                                                                                                                            |
+| Migrations      | D1 migrations run from the build command, before the deploy step, so the schema is never behind the code. Not needed until H2.                                                                                                                                                                                                                                                                              |
+| Secrets         | `wrangler secret put`, never `vars`, and **not** Workers Builds' build variables — those exist only during the build. Nothing in `wrangler.jsonc` may be a credential; it is committed.                                                                                                                                                                                                                     |
+| Build variables | `VITE_GA_MEASUREMENT_ID`, set in Workers Builds. Not a secret — it ships in the bundle — but this repository is public, and an id committed in it is an id every fork measures into. A build run from a developer's machine reads the same name out of the gitignored `apps/game/.env.production`; a real environment variable wins over the file. `apps/game/.env.example` is the committed documentation. |
+| Rollback        | `wrangler rollback`, or promote a previous version from the dashboard. DO SQLite migrations are not rolled back by it; write them additively.                                                                                                                                                                                                                                                               |
+| Manual deploy   | `pnpm run deploy:worker` still works and is the escape hatch when CI is the thing that is broken.                                                                                                                                                                                                                                                                                                           |
+| Observability   | `observability.enabled` for Workers Logs. The client already has structured logging in `packages/shared` — use the same shape.                                                                                                                                                                                                                                                                              |
 
 ### Review apps stop at H4, and that is worth knowing now
 

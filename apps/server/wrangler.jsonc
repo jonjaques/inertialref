@@ -5,6 +5,27 @@
   "compatibility_date": "2026-08-20",
 
   /*
+   * The site's address.
+   *
+   * A **custom domain**, not a route: a custom domain provisions the DNS record
+   * and the certificate and points the hostname at this Worker outright, where
+   * a route is a pattern layered over an origin that already exists. There is
+   * no origin here — the Worker *is* the site — so a route would need an
+   * orange-clouded record pointing at nothing to hang itself on.
+   *
+   * `inertialrefd.jaquers.workers.dev` keeps answering, and that is deliberate
+   * rather than forgotten: it is the address a deploy can be checked on before
+   * DNS is trusted. It is not the canonical one — `<link rel="canonical">`
+   * names this hostname, and `src/analytics.ts` measures only this hostname, so
+   * the workers.dev address is a back door rather than a second front door.
+   *
+   * The first deploy after adding this creates the record. It needs the
+   * `jonjaques.com` zone on the same account; Wrangler fails loudly if it is
+   * not there, which is the right failure.
+   */
+  "routes": [{ "pattern": "inertialref.jonjaques.com", "custom_domain": true }],
+
+  /*
    * One Worker is the whole front door (docs/hosting.md H-1): it serves the
    * client bundle, answers `/api/*`, and will route `/ws` to a Durable Object.
    *
@@ -26,8 +47,15 @@
      * SPA fallback above would otherwise answer a bare `/api` with index.html —
      * a 200 full of HTML is the single most confusing thing an API can return.
      * `/ws` is listed before it exists for the same reason.
+     *
+     * `/media/*` is here so the script can fall back to R2 for an object the
+     * bundle does not have, and so an unknown name 404s instead of getting the
+     * SPA fallback — an `<audio>` element handed `index.html` fails as if it
+     * could not decode the file. It costs an invocation on a path that is
+     * otherwise free; the response is `immutable`, so it is about one
+     * invocation per client rather than one per play. `src/media.ts`.
      */
-    "run_worker_first": ["/api", "/api/*", "/ws"],
+    "run_worker_first": ["/api", "/api/*", "/ws", "/media/*"],
   },
 
   /*
@@ -38,6 +66,23 @@
   "version_metadata": { "binding": "CF_VERSION_METADATA" },
 
   "observability": { "enabled": true },
+
+  /*
+   * The site's object storage (docs/hosting.md H-8).
+   *
+   * It holds what the repository will not carry: today, one piece of
+   * copyrighted reference audio whose use here is a claim worth making in a
+   * deployment and not in a permanent, forkable, indexed git history. The
+   * allow-list of what is actually served — and why it is an allow-list and not
+   * a key prefix — is `src/media.ts`.
+   *
+   * The bucket is shared with anything else the site ever stores, so the
+   * binding is *not* a licence for the Worker to serve it. `run_worker_first`
+   * routes `/media/*` here; `mediaFor` decides whether a name exists at all.
+   *
+   * Biome material sets, when they exist, are the other planned tenant.
+   */
+  "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "inertialrefd-storage" }],
 
   /*
    * Deliberately absent until the milestone that needs them (docs/hosting.md):
@@ -51,9 +96,11 @@
    *                                 writes needing a galaxy-wide uniqueness
    *                                 guarantee rather than a per-partition
    *                                 ordering one.
-   *   r2_buckets                    biome material sets, when they exist.
    *
    * Nothing in this file may ever be a credential — it is committed. Secrets go
-   * through `wrangler secret put`, never `vars`.
+   * through `wrangler secret put`, never `vars`. The GA measurement id is not a
+   * credential and is still not here: it is a *build* variable, set in Workers
+   * Builds, because this repository is public and a fork should not measure
+   * into somebody else's property. `apps/game/src/analytics.ts`.
    */
 }

@@ -1,6 +1,6 @@
 import { execSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import react, { reactCompilerPreset } from '@vitejs/plugin-react'
 import babel from '@rolldown/plugin-babel'
 import tailwindcss from '@tailwindcss/vite'
@@ -51,57 +51,94 @@ function buildId(): string {
 const slug = (text: string): string =>
   text.replace(/[^A-Za-z0-9._-]+/g, '-').slice(0, 40)
 
-export default defineConfig({
+/**
+ * One line in the build log saying whether this build can measure anything.
+ *
+ * `VITE_GA_MEASUREMENT_ID` is a Workers Builds *build variable* and is
+ * deliberately not in the repository (`src/analytics.ts`), which means the one
+ * way it fails — not reaching the build environment — produces a bundle that is
+ * correct, passes every check, deploys cleanly and silently measures nothing.
+ * There is no error to notice. Grepping the deployed bundle is how it was
+ * caught the first time; this is so the *build log* answers it instead.
+ *
+ * The id is not printed. It is public, but a build log is a bad habit to start.
+ */
+function reportAnalytics(mode: string): void {
   /*
-   * `@/` is the one non-relative import specifier in this repository.
-   *
-   * Everything else here imports by relative path with its extension, and that
-   * stays true for code written by hand. This alias exists because shadcn/ui's
-   * registry emits components that import `@/lib/utils` and `@/components/ui/*`
-   * literally — `pnpm dlx shadcn add <name>` writes those strings into the file
-   * — so without it every added component is a file to hand-edit before it
-   * compiles, and re-adding one to pick up an upstream fix undoes the edit.
-   * `apps/game/tsconfig.json` carries the matching `paths` entry; they have to
-   * agree or the build and the typecheck disagree about the same import.
+   * Through `loadEnv`, not `process.env`, because the two sources are the whole
+   * point: CI sets a real environment variable and a developer's machine has a
+   * gitignored `.env.production`. Reading only the former reports "not set" on
+   * a local build whose bundle does contain the id, which is a diagnostic that
+   * lies in the direction that wastes the most time.
    */
-  resolve: {
-    alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
-  },
-  plugins: [
-    react(),
-    // React Compiler handles memoisation, so components here do not hand-write
-    // useMemo/useCallback around render work.
-    babel({ presets: [reactCompilerPreset()] }),
-    tailwindcss(),
-  ],
-  define: {
-    __BUILD_ID__: JSON.stringify(buildId()),
-  },
-  server: {
+  const fromEnvironment = (process.env['VITE_GA_MEASUREMENT_ID'] ?? '') !== ''
+  const resolved =
+    loadEnv(mode, fileURLToPath(new URL('.', import.meta.url)), 'VITE_')[
+      'VITE_GA_MEASUREMENT_ID'
+    ] ?? ''
+  console.log(
+    resolved === ''
+      ? `analytics: VITE_GA_MEASUREMENT_ID is NOT set — this build measures ` +
+          `nothing, which is correct for a fork and wrong for production (${mode})`
+      : `analytics: VITE_GA_MEASUREMENT_ID is set from ` +
+          `${fromEnvironment ? 'the environment' : 'a .env file'} (${mode})`,
+  )
+}
+
+export default defineConfig(({ mode }) => {
+  reportAnalytics(mode)
+  return {
     /*
-     * Two processes in development, deliberately (docs/hosting.md).
+     * `@/` is the one non-relative import specifier in this repository.
      *
-     * `@cloudflare/vite-plugin` would run the Worker inside this dev server on
-     * real workerd, which is nicer — and it takes over the client build, which
-     * is Vite 8 with the Oxc transform, a Babel pass for the React Compiler and
-     * Tailwind. That build is tuned and load-bearing; a proxy is not. Revisit
-     * the plugin when the second terminal is more annoying than a build
-     * regression with two suspects, and revisit it on its own.
-     *
-     * With `wrangler dev` not running, these fail and the client reports
-     * `no server` — which is the offline path, exercised by default.
+     * Everything else here imports by relative path with its extension, and that
+     * stays true for code written by hand. This alias exists because shadcn/ui's
+     * registry emits components that import `@/lib/utils` and `@/components/ui/*`
+     * literally — `pnpm dlx shadcn add <name>` writes those strings into the file
+     * — so without it every added component is a file to hand-edit before it
+     * compiles, and re-adding one to pick up an upstream fix undoes the edit.
+     * `apps/game/tsconfig.json` carries the matching `paths` entry; they have to
+     * agree or the build and the typecheck disagree about the same import.
      */
-    proxy: {
-      '^/api($|/)': { target: 'http://127.0.0.1:8787' },
-      '^/ws$': { target: 'ws://127.0.0.1:8787', ws: true },
+    resolve: {
+      alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
     },
-  },
-  worker: {
-    // The worker imports workspace packages as ES modules; the classic worker
-    // format cannot.
-    format: 'es',
-  },
-  build: {
-    target: 'es2023',
-  },
+    plugins: [
+      react(),
+      // React Compiler handles memoisation, so components here do not hand-write
+      // useMemo/useCallback around render work.
+      babel({ presets: [reactCompilerPreset()] }),
+      tailwindcss(),
+    ],
+    define: {
+      __BUILD_ID__: JSON.stringify(buildId()),
+    },
+    server: {
+      /*
+       * Two processes in development, deliberately (docs/hosting.md).
+       *
+       * `@cloudflare/vite-plugin` would run the Worker inside this dev server on
+       * real workerd, which is nicer — and it takes over the client build, which
+       * is Vite 8 with the Oxc transform, a Babel pass for the React Compiler and
+       * Tailwind. That build is tuned and load-bearing; a proxy is not. Revisit
+       * the plugin when the second terminal is more annoying than a build
+       * regression with two suspects, and revisit it on its own.
+       *
+       * With `wrangler dev` not running, these fail and the client reports
+       * `no server` — which is the offline path, exercised by default.
+       */
+      proxy: {
+        '^/api($|/)': { target: 'http://127.0.0.1:8787' },
+        '^/ws$': { target: 'ws://127.0.0.1:8787', ws: true },
+      },
+    },
+    worker: {
+      // The worker imports workspace packages as ES modules; the classic worker
+      // format cannot.
+      format: 'es',
+    },
+    build: {
+      target: 'es2023',
+    },
+  }
 })

@@ -11,6 +11,8 @@ loading screens and no scale seams.
 [![pnpm 11](https://img.shields.io/badge/pnpm-11-orange.svg)](#prerequisites)
 [![12/12 capabilities](https://img.shields.io/badge/capabilities-12%2F12%20proven-success.svg)](#the-twelve-capabilities-proven)
 
+**[Try it → inertialref.jonjaques.com](https://inertialref.jonjaques.com)**
+
 [Quick start](#quick-start) · [What it does](#what-it-does-today) ·
 [Architecture](#architecture-in-one-page) · [Development](#development) ·
 [Documentation](#documentation) · [Contributing](#contributing)
@@ -91,9 +93,31 @@ pnpm install
 pnpm dev                 # → http://localhost:5173
 ```
 
-That is the whole setup. No environment variables, no `.env` file, no services to
-start, no API keys — the universe is generated from a seed, and there is no
-backend.
+One command starts both halves — Vite on 5173 and the Cloudflare Worker on 8787,
+with `/api` and `/ws` proxied to it. `pnpm dev:client` and `pnpm dev:server` are
+the halves if you want one without the other, and `pnpm preview` builds and then
+serves the result through the real Worker, which is the closest thing to
+production that runs locally.
+
+That is the whole setup. No environment variables you have to set, no services to
+start, no API keys — the universe is generated from a seed, and the game is
+fully playable with the server stopped.
+
+<details>
+<summary><b>Two things this repository deliberately does not contain</b></summary>
+
+Neither is needed to run the game, the tests or the build.
+
+- **The cutscene's reference audio.** The scene is cut against a piece of music
+  that is somebody else's; it is served from the site's own R2 bucket and pulled
+  in at build time (`pnpm media:pull`), never committed. Without it the cutscene
+  plays silent, which is what a fork gets and is a supported outcome rather than
+  a failure. `scripts/media.mjs` has the reasoning.
+- **Raw catalogue downloads.** 34 MB of HYG to produce a 460 KB asset, and the
+  asset is committed. `pnpm catalog:fetch` re-downloads them if you want to
+  rebuild.
+
+</details>
 
 ### First sixty seconds
 
@@ -251,18 +275,21 @@ in `packages/*`.
 
 ### Commands
 
-| Command                       | What it does                                                   |
-| ----------------------------- | -------------------------------------------------------------- |
-| `pnpm dev`                    | Vite dev server for `apps/game` on :5173                       |
-| `pnpm test`                   | Vitest, Node environment only — no DOM is ever registered      |
-| `pnpm typecheck`              | Three independent tsconfig projects; see below                 |
-| `pnpm lint`                   | **oxlint**, not eslint (`oxlint --fix` applies autofixes)      |
-| `pnpm graph`                  | Dependency layering + cycle check, and prints the graph        |
-| `pnpm build`                  | `typecheck`, then `vite build`                                 |
-| **`pnpm check`**              | **graph → lint → typecheck → test → build. This is the gate.** |
-| `pnpm sim --self-test`        | Headless run plus the twelve capability checks                 |
-| `pnpm vitest run <substring>` | A single test file                                             |
-| `pnpm preview`                | Serve a production build on :4173                              |
+| Command                       | What it does                                                            |
+| ----------------------------- | ----------------------------------------------------------------------- |
+| `pnpm dev`                    | Vite on :5173 **and** the Worker on :8787, in one terminal              |
+| `pnpm dev:client`             | Just Vite — keeps its interactive `r` / `o` / `q` keys                  |
+| `pnpm dev:server`             | Just `wrangler dev`                                                     |
+| `pnpm preview`                | Build, then serve it through the real Worker on :8787                   |
+| `pnpm test`                   | Vitest, Node environment only — no DOM is ever registered               |
+| `pnpm typecheck`              | Five independent tsconfig projects; see below                           |
+| `pnpm lint`                   | **oxlint**, not eslint (`oxlint --fix` applies autofixes)               |
+| `pnpm graph`                  | Dependency layering + cycle check, and prints the graph                 |
+| `pnpm brand`                  | Re-render every icon, the share card and the crawler files              |
+| `pnpm build`                  | Optional media pull, `typecheck`, then `vite build`                     |
+| **`pnpm check`**              | **The gate: graph → brand → format → lint → typecheck → test → build.** |
+| `pnpm sim --self-test`        | Headless run plus the twelve capability checks                          |
+| `pnpm vitest run <substring>` | A single test file                                                      |
 
 **Do not report a task complete without `pnpm check` passing.** CI runs exactly
 that command, so there is no separate list of CI stages to drift out of step.

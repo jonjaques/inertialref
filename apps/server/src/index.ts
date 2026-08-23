@@ -4,6 +4,7 @@ import {
   type ServerHealth,
 } from '@inertialref/protocol'
 import { GENERATION_VERSIONS } from '@inertialref/universe'
+import { type MediaObject, resolveRange } from './media.ts'
 import { routeFor } from './routes.ts'
 
 /*
@@ -74,6 +75,18 @@ export default {
       case 'api-not-found':
         return api({ error: 'no such endpoint' }, 404)
 
+      case 'media':
+        if (request.method !== 'GET' && request.method !== 'HEAD') {
+          return api({ error: 'media is a GET' }, 405)
+        }
+        return media(request, env, route.object)
+
+      case 'media-not-found':
+        return new Response('no such media object', {
+          status: 404,
+          headers: { 'content-type': 'text/plain; charset=utf-8' },
+        })
+
       case 'asset':
         // Unreachable under the current `run_worker_first`, and handled anyway
         // so that changing that config cannot silently turn the site into 404s.
@@ -81,6 +94,150 @@ export default {
     }
   },
 } satisfies ExportedHandler<Env>
+
+/**
+ * One media object, from the bundle if it is there and from R2 if it is not.
+ *
+ * The order is not a preference, it is a cost: an asset request is free, never
+ * leaves the asset store, and gets `Range` right without any of the code below.
+ * R2 is the guarantee behind it — a build that ran without credentials produces
+ * a bundle with no audio, and this is what makes that a slower first byte
+ * rather than a missing feature. `media.ts` has the whole arrangement.
+ *
+ * **The miss is detected by content type, and that is not a heuristic.**
+ * `not_found_handling: single-page-application` means the asset store answers a
+ * path it does not have with `index.html` and a **200**, so there is no status
+ * code to test. Nothing under `/media/` is ever HTML, so an HTML answer to a
+ * request for an `.mp3` is unambiguous — and the alternative, trusting the 200,
+ * hands an `<audio>` element a page of markup.
+ *
+ * **`env.ASSETS` does not serve ranges**, which is the second reason R2 is
+ * here. Measured against the deployed review app: a `Range: bytes=0-1023` for
+ * this file comes back `200` with all 2.7 MB of it. A browser copes — it
+ * buffers the whole track and then seeks locally — but the cutscene overlay
+ * drives `currentTime` against a reference clock, so on a slow connection every
+ * seek waits for a download that a 206 would have made unnecessary. When a
+ * range is asked for and the asset store ignores it, the bucket answers
+ * instead.
+ */
+async function media(
+  request: Request,
+  env: Env,
+  object: MediaObject,
+): Promise<Response> {
+  const wantsRange = request.headers.has('range')
+  const asset = await env.ASSETS.fetch(request)
+  const type = asset.headers.get('content-type') ?? ''
+  const servedByAssets =
+    !type.startsWith('text/html') && !(wantsRange && asset.status === 200)
+  if (servedByAssets) return asset
+
+  /*
+   * `range` and `onlyIf` are handed the request's own headers: R2 parses
+   * `Range`, `If-None-Match` and the rest itself, which is the only way to get
+   * this right without reimplementing RFC 9110 in a Worker.
+   */
+  /*
+   * `R2Object | R2ObjectBody`, because a conditional `get` that fails its
+   * precondition returns the metadata without a body. `'body' in stored` below
+   * is what tells the two apart, and it is why this is not inferred: the
+   * overload picked for a `get` with options resolves to the body-carrying type
+   * alone, which is exactly the case the 304 branch exists for.
+   */
+  let stored: R2ObjectBody | R2Object | null
+  try {
+    stored = await env.MEDIA.get(object.key, {
+      range: request.headers,
+      onlyIf: request.headers,
+    })
+  } catch {
+    /*
+     * A `Range` header is client input, and R2 throws on one it cannot satisfy.
+     * The answer to bad client input is a 4xx naming the constraint, not a 500
+     * — and a 500 here would also be indistinguishable in the logs from the
+     * bucket being down.
+     *
+     * The extra `head` buys the one thing that makes a 416 actionable: the
+     * length the caller should have asked within. It is a second round trip on
+     * a path nothing reaches unless it asked for bytes that do not exist.
+     */
+    const meta = await env.MEDIA.head(object.key).catch(() => null)
+    return unsatisfiable(meta?.size)
+  }
+  if (stored === null) {
+    return new Response('not in storage', {
+      status: 404,
+      headers: { 'content-type': 'text/plain; charset=utf-8' },
+    })
+  }
+
+  const headers = new Headers()
+  stored.writeHttpMetadata(headers)
+  headers.set('etag', stored.httpEtag)
+  headers.set('accept-ranges', 'bytes')
+  /*
+   * Immutable, and it is true rather than optimistic: the name is an
+   * allow-listed constant in `media.ts`, so a *different* track is a different
+   * entry and a different URL. This is also what keeps the invocation cost of
+   * `run_worker_first` on this path down to roughly one per client.
+   */
+  headers.set('cache-control', 'public, max-age=31536000, immutable')
+  if (!headers.has('content-type')) headers.set('content-type', object.type)
+
+  // No body means R2 answered a conditional request: the client already has it.
+  if (!('body' in stored) || stored.body === null) {
+    return new Response(null, { status: 304, headers })
+  }
+
+  /*
+   * A 206 only when one was asked for.
+   *
+   * `stored.range` is populated whether or not the request carried a `Range`
+   * header — an unranged get reports the whole object as its range — so keying
+   * the status off it alone answers every plain GET with 206 Partial Content.
+   * Nothing errors: the bytes are right, and a browser mostly copes. What it
+   * breaks is every cache in between, which is entitled to treat a partial
+   * response as one it must not reuse as a whole one.
+   */
+  const range = wantsRange
+    ? resolveRange(stored.range ?? {}, stored.size)
+    : null
+  if (wantsRange && range === null) return unsatisfiable(stored.size)
+  if (range === null) {
+    headers.set('content-length', String(stored.size))
+    return new Response(request.method === 'HEAD' ? null : stored.body, {
+      status: 200,
+      headers,
+    })
+  }
+  headers.set('content-range', range.contentRange)
+  headers.set('content-length', String(range.length))
+  return new Response(request.method === 'HEAD' ? null : stored.body, {
+    status: 206,
+    headers,
+  })
+}
+
+/**
+ * 416, for a `Range` that names bytes this object does not have.
+ *
+ * The alternative — answering 200 — is the bug this replaced: with a range
+ * requested, `stored.body` is the *slice*, so a 200 carrying `content-length:
+ * <whole object>` describes a body that is not there. A player reading that
+ * waits forever for bytes nobody is going to send.
+ */
+function unsatisfiable(size?: number): Response {
+  return new Response('range not satisfiable', {
+    status: 416,
+    headers: {
+      'content-type': 'text/plain; charset=utf-8',
+      'accept-ranges': 'bytes',
+      // RFC 9110: the `*` form is what says "here is the length you should have
+      // asked within", and it is the only thing that makes a retry informed.
+      ...(size === undefined ? {} : { 'content-range': `bytes */${size}` }),
+    },
+  })
+}
 
 /**
  * A JSON response that nothing is allowed to cache.

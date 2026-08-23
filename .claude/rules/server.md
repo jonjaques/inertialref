@@ -24,4 +24,12 @@ Reasoning: `AGENTS.md` § "Layout and layering", ADR-0007, ADR-0008,
   client correctly reports "no server" — that is not a bug to fix in the client.
 - **Deploy is `pnpm run deploy:worker`, not `pnpm deploy:worker`** — `deploy` is a pnpm
   built-in. It ships to the `inertialrefd` Worker.
+- **`/media/*` is an allow-list, never a key prefix.** `src/media.ts` is the one table of
+  what exists and where; `scripts/media.mjs` imports it rather than repeating it. The
+  bucket is the site's general storage, so a prefix rule would make it world-readable.
+- **Narrow `R2Range` on the value, not with `in`.** workerd sets all three keys, two of
+  them `undefined`, so `'suffix' in range` is true for a range with no suffix and every
+  number comes out `NaN` — silently. `routes.test.ts` has the regression.
+- **`stored.range` is populated with or without a `Range` header.** Key the 206 off the
+  request, or every plain GET is a partial response.
 - **A save stores references and mutations, never regenerable content.**

@@ -52,6 +52,21 @@ export const HEALTH_PATH = '/api/health'
 export const SOCKET_PATH = '/ws'
 
 /**
+ * Files the site serves but does not carry — object storage, not the bundle.
+ *
+ * The *prefix* is here because it is a path the client, the router and
+ * `run_worker_first` all have to spell the same way. **What is under it is
+ * not**: the mapping from a name to a storage key is a fact about a bucket, and
+ * a package that knew a bucket layout would be the same layering break as one
+ * that knew what a Durable Object is. `apps/server/src/media.ts` holds the
+ * manifest, and it is the adapter layer's business.
+ */
+export const MEDIA_PREFIX = '/media/'
+
+/** The URL a named media object is served at. */
+export const mediaPath = (name: string): string => `${MEDIA_PREFIX}${name}`
+
+/**
  * What a server says about itself.
  *
  * Deliberately not a timestamp. `Date.now()` in a Worker returns the time of
