@@ -134,9 +134,13 @@ export const aaDprFactor = (level: AaLevel): number => (level === '4x' ? 2 : 1)
  *
  * `(pointer: coarse)` rather than a user-agent string or a width: it is a
  * question about the input hardware, which is the closest thing the platform
- * exposes to "is this a phone", and it is the same query `dock/viewport.ts`
- * already asks to choose a drag backend. A tablet with a keyboard reports fine
- * and gets the desktop ceiling, which is the right answer for an iPad Pro.
+ * exposes to "is this a phone", and it is the same query `hud/viewport.ts`
+ * already asks to choose a drag backend. It answers *coarse* for an iPad with a
+ * trackpad — WebKit reports the primary pointer, and on iPadOS that is always
+ * the finger — so a tablet gets the handheld ceiling. That is the conservative
+ * side of the trade and the right one: an iPad's GPU is closer to a phone's
+ * than to a laptop's, and the query that would say otherwise
+ * (`any-pointer: fine`) is true of every phone with a stylus.
  *
  * Measured on a laptop and reasoned about for the handheld — an on-device
  * profile is what would turn 1.5 into a number rather than a judgement, and

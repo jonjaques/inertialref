@@ -2975,12 +2975,26 @@ the one device where the app is full-screen. `viewport-fit=cover` fixes that and
 creates the second half of the problem, which is that the insets then have to be
 respected by hand.
 
-They are spent in exactly one place. `index.css` names the four as
-`--safe-*` and puts them on `.hud-layer` as **padding** — and because an
-absolutely positioned element resolves `inset-0` against its ancestor's padding
-box, every readout, panel, dialog and menu in the interface is clear of the
-notch and the home indicator without being told, including one written next
-year. Surfaces that are _picture_ rather than chrome opt back out with
+They are spent in exactly one place. `index.css` names the four as `--safe-*`
+and puts them on `.hud-layer` as its four **offsets**, which makes the layer the
+containing block of every absolutely positioned piece of chrome in the interface
+— so every readout, panel, dialog and menu is clear of the notch and the home
+indicator without being told, including one written next year.
+
+The first version of this used **padding** and was a no-op, which is worth
+writing down because the reading behind it is the one every reference invites:
+an absolutely positioned element does resolve `inset-0` against its ancestor's
+_padding box_ — and the padding box's edge is the **outside** of the padding, not
+the inside. Padding there shrinks a content box nothing in this layer uses and
+moves nothing. The same trap is one level down in `hud-bleed`, whose padding
+reaches an **in-flow** child only: the boot overlay's corner readout is
+`flex items-end` plus a margin now rather than `absolute bottom-3 left-3`, which
+would have resolved against the bled-out edge and sat on the home indicator
+through the whole of boot. It was caught by review rather than by a test,
+because the failure is a rectangle in a browser and every check in this
+repository runs in Node — what did catch it, in the end, was overriding the four
+custom properties in a live page and measuring the rectangles, which is a thing
+worth doing again the next time one of these is written. Surfaces that are _picture_ rather than chrome opt back out with
 `hud-bleed`, which offsets out and pads back in so its own children stay inside:
 the cutscene blackout, the dialog scrim, the boot cover, and the transparent
 surface a mode listens for drags on — that last one because a drag starting in
@@ -3017,9 +3031,11 @@ second on top of the scene that was already the reason the gesture felt bad. The
 surface cannot move under a gesture in a viewport that cannot scroll.
 
 **The planetarium could fly inside a planet's atmosphere.**
-`MIN_DISTANCE_RADII` was 1.02 — two percent of a radius of clearance, which for
-Titan's 1.078-radius haze shell is _inside_ it, and for Venus and Earth is level
-with theirs. That is the worst place this camera can be: the shell covers the
+`MIN_DISTANCE_RADII` was 1.02 — two percent of a radius of clearance, and
+Titan's haze shell is drawn at **1.155 radii**: 400 km of tholin smog on a
+2,575 km moon, which is what makes it a featureless orange ball in every
+photograph before Cassini's radar. The camera could sit well inside that, and
+level with Venus's shell and Earth's at ~1.016. That is the worst place this camera can be: the shell covers the
 whole viewport, the march's near end clamps to zero so every pixel integrates
 the full chord, and the picture is the inside of a ball of fog. A phone runs out
 of fragment budget there first, which is how it was reported. It is 1.5 radii

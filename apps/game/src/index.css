@@ -368,6 +368,45 @@ body,
 }
 
 /*
+ * The installed copy, where `dvh` is short by the status bar.
+ *
+ * `100dvh` is the right unit in a browser tab and the wrong one on the home
+ * screen. Measured off a screenshot of the installed app on an iPhone 16 Pro —
+ * 402 x 874 CSS px, `env(safe-area-inset-top)` of 62 — the document came back
+ * **812** px tall: the display less the top inset, exactly. Everything is
+ * anchored to the top of the screen, so the entire shortfall landed at the
+ * bottom as a 62 px band of the `#000` above, with the canvas stopping short of
+ * it and the menu's footer floating 96 px clear of the edge. That is the bug
+ * `viewport-fit=cover` was supposed to have removed: WebKit hands the page the
+ * strip under the status bar and then measures the dynamic viewport as though
+ * it had not.
+ *
+ * `vh` is the *large* viewport, which is exactly why it is wrong in a tab — it
+ * is the height the page would have with Safari's toolbars retracted, and a
+ * layout sized in it runs a toolbar's worth of itself underneath them. That is
+ * what the `dvh` above is there for and it must stay. But an installed app has
+ * no toolbars to retract, so within this query the large, small and dynamic
+ * viewports can differ only by the bug, and the largest of them is the display.
+ * Hence a query rather than a bare `max(100vh, 100dvh)`, which would pick `vh`
+ * in a tab and put the nav bar back under the chrome. All three units are named
+ * because the fix rests on WebKit having shortened only the *dynamic* one, and
+ * that is an inference from a single screenshot rather than something this
+ * repository can test: none of them can report more than the display, so the
+ * largest is the closest to right whichever one turns out to be honest.
+ *
+ * `fullscreen` beside `standalone` because Android installs to either; iOS
+ * reports `standalone` for anything added to the home screen.
+ */
+@media (display-mode: standalone), (display-mode: fullscreen) {
+  html,
+  body,
+  #root {
+    height: 100vh;
+    height: max(100vh, 100lvh, 100dvh);
+  }
+}
+
+/*
  * What the operating system has already spent, on each edge.
  *
  * Named as custom properties rather than written as `env()` at each call site,
@@ -377,14 +416,18 @@ body,
  * is unreadable three times over. One name, four values, defined to zero
  * everywhere the concept does not exist.
  *
- * `.hud-layer` is where they are spent. It is the padding box of every piece of
- * chrome in the interface (an absolutely positioned child resolves `inset-0`
- * against its ancestor's *padding* box), so one declaration insets the dock, the
- * flight strip, the notices, the menu and every dialog off the notch and the
- * home indicator at once — and a piece of chrome written next year is inside it
- * without being told. The canvas is a sibling of the layer and gets none of it:
- * the sky is meant to run under the notch, which is the whole point of
- * `viewport-fit=cover`.
+ * `.hud-layer` is where they are spent, and it spends them as *offsets* rather
+ * than as padding. The distinction is the whole mechanism and it is easy to get
+ * backwards: the containing block an absolutely positioned descendant resolves
+ * `inset-0` against is the ancestor's **padding edge**, which is the outside of
+ * the padding — the border box. Padding on the layer would therefore shrink its
+ * content box and move no piece of chrome at all, because every piece of chrome
+ * in here is absolutely positioned. Insetting the layer itself is what puts the
+ * dock, the flight strip, the notices, the menu and every dialog clear of the
+ * notch and the home indicator at once — and a piece of chrome written next
+ * year is inside it without being told. The canvas is a sibling of the layer and
+ * gets none of it: the sky is meant to run under the notch, which is the whole
+ * point of `viewport-fit=cover`.
  */
 :root {
   --safe-top: env(safe-area-inset-top, 0px);
@@ -497,13 +540,17 @@ a {
  */
 .hud-layer {
   dynamic-range-limit: standard;
-  /* See `:root` above: this is the one place the safe-area insets are spent,
-     and it works because an absolutely positioned descendant resolves against
-     the padding box. */
-  padding-top: var(--safe-top);
-  padding-right: var(--safe-right);
-  padding-bottom: var(--safe-bottom);
-  padding-left: var(--safe-left);
+  /* See `:root` above: this is the one place the safe-area insets are spent.
+     Offsets, not padding — an absolutely positioned descendant resolves against
+     this element's padding *edge*, which is outside the padding, so padding
+     here would move nothing. This sets all four offsets, so the element must
+     not also carry `inset-0`: the two rules are the same specificity and only
+     the cascade layer separates them, which is a version bump away from being
+     the other way round. Same rule as `hud-bleed` below. */
+  top: var(--safe-top);
+  right: var(--safe-right);
+  bottom: var(--safe-bottom);
+  left: var(--safe-left);
 }
 
 /**
@@ -517,11 +564,18 @@ a {
  * the 44 px the OS keeps at the side of a landscape phone and never arrived.
  *
  * The padding is the second half and is what stops this being a footgun. The
- * offsets alone would put a `hud-bleed` element's children back under the
+ * offsets alone would put a `hud-bleed` element's contents back under the
  * notch, undoing `.hud-layer`'s work one level down — so the insets are spent
  * again here, which leaves the *box* covering the display and its contents
- * exactly where they were. The boot overlay's readout and the dialog card
- * inside the scrim both land in the safe area without either of them saying so.
+ * exactly where they were. The dialog card centered in the scrim lands in the
+ * safe area without saying so.
+ *
+ * The padding only reaches **in-flow** children, for the same reason
+ * `.hud-layer` spends its own insets as offsets rather than as padding: an
+ * absolutely positioned child of a `hud-bleed` box resolves against the box's
+ * padding *edge*, which is the bled-out rectangle. A corner readout inside one
+ * of these has to inset itself, or be laid out in flow so the padding can reach
+ * it — `hud/BootOverlay.tsx` is the worked example.
  *
  * Offsets rather than negative margins because every one of these is an
  * inset-stretched box already, and a margin on one of those changes its size in
@@ -533,6 +587,17 @@ a {
  * blackout back inside the notch. Every element that carries this drops
  * `inset-0` and keeps `absolute`.
  */
+@utility hud-bleed {
+  top: calc(-1 * var(--safe-top));
+  right: calc(-1 * var(--safe-right));
+  bottom: calc(-1 * var(--safe-bottom));
+  left: calc(-1 * var(--safe-left));
+  padding-top: var(--safe-top);
+  padding-right: var(--safe-right);
+  padding-bottom: var(--safe-bottom);
+  padding-left: var(--safe-left);
+}
+
 /**
  * The same escape, for a band pinned to the bottom of the screen.
  *
@@ -543,23 +608,13 @@ a {
  * stretched by `inset-0`, and this is a flow-laid band whose height is its
  * contents. So it is margins, and unlike `hud-bleed` it deliberately does *not*
  * pad the insets back — the band's own children do that, because the padding
- * has to land on the row that draws the ground rather than on the wrapper.
+ * has to land on the row that draws the ground rather than on the wrapper, and
+ * *every* child has to, not only the one that draws it.
  */
 @utility hud-bleed-bottom {
   margin-right: calc(-1 * var(--safe-right));
   margin-bottom: calc(-1 * var(--safe-bottom));
   margin-left: calc(-1 * var(--safe-left));
-}
-
-@utility hud-bleed {
-  top: calc(-1 * var(--safe-top));
-  right: calc(-1 * var(--safe-right));
-  bottom: calc(-1 * var(--safe-bottom));
-  left: calc(-1 * var(--safe-left));
-  padding-top: var(--safe-top);
-  padding-right: var(--safe-right);
-  padding-bottom: var(--safe-bottom);
-  padding-left: var(--safe-left);
 }
 
 /*

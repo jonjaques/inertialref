@@ -25,7 +25,13 @@ import {
   shortestAngle,
   zoomFactorForNotches,
 } from './observer.ts'
-import { walkSolarBodies } from '@inertialref/universe'
+import {
+  systemId,
+  TEST_CATALOG,
+  walkBodies,
+  walkSolarBodies,
+} from '@inertialref/universe'
+import { World } from '@inertialref/simulation'
 
 /*
  * The planetarium camera, as arithmetic.
@@ -138,15 +144,41 @@ describe('zoom', () => {
      * Titan alone, so vendoring a thicker one fails here rather than in the
      * renderer.
      */
+    /*
+     * Over the generated bodies as well as the vendored ones, because both
+     * produce a haze and only one of them is a table anybody would think to
+     * re-read. The generator derives its height from a drag ceiling —
+     * `min(ceiling, radius · 0.02)`, and `radius · 0.008` for a giant — so the
+     * clearance holds by construction today, and this is what says so if either
+     * coefficient moves. Through `World` rather than `generateSystem` directly:
+     * this package may not reach for a seed of its own, and the world is the
+     * thing the planetarium is actually pointed at.
+     */
+    // A tenth of the clearance as margin, so a body that merely grazes the
+    // floor reads as a failure rather than as a pass by two decimal places.
+    const ceiling = MIN_DISTANCE_RADII * 0.9
     const inside: string[] = []
+
     for (const body of walkSolarBodies()) {
       if (body.haze === null) continue
       const shellTop = (body.radius + body.haze.height) / body.radius
-      // A tenth of the clearance as margin, so a body that merely grazes the
-      // floor reads as a failure rather than as a pass by two decimal places.
-      if (shellTop > MIN_DISTANCE_RADII * 0.9)
+      if (shellTop > ceiling)
         inside.push(`${body.name} at ${shellTop.toFixed(3)} radii`)
     }
+
+    const world = new World({ seed: 'inertialref', catalog: TEST_CATALOG })
+    for (const id of ['SOL', 'HIP70890', 'HIP71683']) {
+      for (const body of walkBodies(world.loadSystem(systemId(id)))) {
+        const haze = body.appearance.haze
+        if (haze === null) continue
+        const shellTop = (body.radius + haze.height) / body.radius
+        if (shellTop > ceiling)
+          inside.push(
+            `${body.name} at ${shellTop.toFixed(3)} radii (generated)`,
+          )
+      }
+    }
+
     expect(inside).toEqual([])
   })
 

@@ -69,12 +69,17 @@ export const ELEVATION_LIMIT = Math.PI / 2 - 0.035
  *
  * **The air.** The atmosphere shell is drawn at `(radius + hazeHeight)` over
  * the sunk sphere, and the tallest one in the Solar System model is Titan's, at
- * 1.078 radii. At 1.02 the camera sat *inside* it. That is the single worst
- * place to put this camera: the shell covers the whole viewport, the ray's near
- * end clamps to zero so every pixel marches the full chord, and none of it is a
- * picture of anything — it is the inside of a hazy ball. A phone runs out of
- * fragment budget there long before a laptop does, which is how the bug was
- * reported.
+ * **1.155 radii** — 400 km of tholin smog on a 2,575 km moon, which is what
+ * makes it a featureless orange ball in every photograph before Cassini's
+ * radar. Triton is next at 1.030, then Mars at 1.018 and Earth at 1.016 — so at
+ * 1.02 radii the camera sat well inside the first and level with the rest,
+ * which is the single worst place to put it. The shell covers the whole
+ * viewport, the ray's near end clamps to zero so every pixel marches the full
+ * chord, and none of it is a picture of anything: it is the inside of a hazy
+ * ball. A phone runs out of fragment budget there long before a laptop does,
+ * which is how the bug was reported. `observer.test.ts` states the clearance
+ * over every haze the model produces, generated as well as vendored, so the
+ * number that has to change if a thicker one is authored is this one.
  *
  * **The ground.** Below about 1.011 radii the terrain streamer starts asking
  * the worker pool for a 3×3 window of patches (`terrainOpacity` fades in over

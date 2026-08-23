@@ -32,7 +32,16 @@ const CLICK_SLOP = 5
 export interface ObserverInputOptions {
   /** Off in every other mode; the listeners are not attached at all. */
   readonly enabled: boolean
-  /** A click that was not a drag, in element-relative pixels. */
+  /**
+   * A click that was not a drag, in **client** pixels.
+   *
+   * Client rather than element-relative, and the distinction is load-bearing
+   * now that the surface carries `hud-bleed`: its own box starts at
+   * `-safe-area-inset-left`, so an element-relative point is 44 px out on a
+   * landscape iPhone. The only consumer projects the scene into
+   * `window.innerWidth`/`innerHeight`, which is client space, so this is the
+   * space the two have to agree in.
+   */
   readonly onPick: (point: Point) => void
   /** `F` — frame the current target. */
   readonly onFrame: () => void
@@ -108,7 +117,11 @@ export function useObserverInput(
       phase = { centre: centroid(points), spread: spread(points) }
       if (down.size === 1) {
         travelled = 0
-        pressedAt = phase.centre
+        // Client coordinates, not `phase.centre`. The gesture arithmetic only
+        // ever reads *differences*, so the element's own offset cancels out of
+        // it; a pick is an absolute position and the projection it is tested
+        // against is in client space. See `onPick`.
+        pressedAt = { x: event.clientX, y: event.clientY }
       } else {
         // A second finger landing means this is not a click any more, and the
         // centroid has just jumped to the midpoint — so the next move must not
