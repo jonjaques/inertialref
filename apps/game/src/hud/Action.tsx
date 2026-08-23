@@ -63,7 +63,7 @@ export function Action({
        * — but every hand-written control in `hud/` says `rounded`, and one
        * spelling is what makes a grep for the dock's radius answer.
        */
-      className={`min-h-6 min-w-6 rounded border px-1.5 py-0.5 text-[10px] font-normal whitespace-nowrap shadow-none disabled:opacity-35 ${FOCUS_RING} ${TONE[tone]}`}
+      className={`type-ui min-h-6 min-w-6 rounded border px-1.5 py-0.5 font-normal whitespace-nowrap shadow-none disabled:opacity-35 ${FOCUS_RING} ${TONE[tone]}`}
     >
       {label}
     </Button>

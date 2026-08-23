@@ -46,6 +46,11 @@ const state = {
     onAa: () => {},
   },
   camera: { fov: 65, onFov: () => {} },
+  render: {
+    preference: 'auto' as const,
+    output: null,
+    onPreference: () => {},
+  },
 }
 
 const at = (path: string): string =>
@@ -69,9 +74,9 @@ describe('the routed dialogs', () => {
 
   it('renders settings, with its sections and a way out', () => {
     const markup = at(SETTINGS)
-    // The panels are the dock's own components rather than a second copy, so
-    // their own strings are the proof that the page reached them.
-    expect(markup).toContain('lens flare')
+    // The panels are the workspace's own components rather than a second copy,
+    // so their own strings are the proof that the page reached them.
+    expect(markup).toContain('Lens Flare')
     // The design's claim about this page, stated on the page.
     expect(markup).toContain('the simulation keeps running')
     // shadcn/ui's Button and a lucide icon, both resolved through `@/`.
@@ -93,7 +98,7 @@ describe('the routed dialogs', () => {
     // `/settings/audio` from a future build, or a typo. Opening settings is a
     // better answer than opening nothing.
     const markup = at(settingsSection('audio'))
-    expect(markup).toContain('lens flare')
+    expect(markup).toContain('Lens Flare')
   })
 
   it('renders the informational and account pages', () => {

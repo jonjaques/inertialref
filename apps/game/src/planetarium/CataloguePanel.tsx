@@ -22,8 +22,24 @@ const SURVEY_LIGHT_YEARS = 16
 
 export function CataloguePanel({ engine, target, focus }: PlanetariumContext) {
   const [query, setQuery] = useState('')
+  /*
+   * Centred on the camera, not on the ship.
+   *
+   * `look` moves a camera and nothing else, which is the planetarium's whole
+   * verb — so "you" in this mode is the eye, and it can be four light years
+   * from the hull. Centred on the player, this list opened at Alpha Centauri
+   * still ordered by distance from Earth: Sol's moons at the top, and the star
+   * filling the frame reported as 4.4 ly away, twenty rows down. Sorted from
+   * the eye, the thing you are looking at is the first thing in the list and
+   * its neighbours are the next ones — which is what makes a catalogue a way of
+   * travelling rather than a table.
+   */
   const targets = usePolled(
-    () => engine.harness.targets({ lightYears: SURVEY_LIGHT_YEARS }),
+    () =>
+      engine.harness.targets({
+        lightYears: SURVEY_LIGHT_YEARS,
+        origin: 'observer',
+      }),
     2,
   )
 
@@ -50,11 +66,11 @@ export function CataloguePanel({ engine, target, focus }: PlanetariumContext) {
         <Input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="name or address"
+          placeholder="Name or address"
           aria-label="Search the catalogue"
-          className="h-7 border-0 bg-transparent px-0 font-mono text-[11px] shadow-none focus-visible:ring-0 md:text-[11px] dark:bg-transparent"
+          className="type-readout h-7 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0 dark:bg-transparent"
         />
-        <span className="shrink-0 text-[10px] text-slate-400 tabular-nums">
+        <span className="type-micro shrink-0 text-slate-400">
           {rows.length}
         </span>
       </label>

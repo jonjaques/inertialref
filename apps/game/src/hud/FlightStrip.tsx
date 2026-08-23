@@ -17,7 +17,7 @@ export function FlightStrip({ status }: { status: HarnessStatus | null }) {
   // clears 4.5:1 by 0.01. Alpha is functional here and loses every argument
   // against contrast — DESIGN.md § Legibility-Over-Glass.
   return (
-    <div className="pointer-events-none absolute bottom-3 left-3 max-w-[calc(100vw-1.5rem)] rounded-lg border border-slate-700/60 bg-slate-950/85 px-3 py-2 font-mono text-xs text-slate-200 backdrop-blur">
+    <div className="pointer-events-none absolute bottom-3 left-3 max-w-[calc(100vw-1.5rem)] rounded-lg border border-slate-700/60 bg-slate-950/85 px-3 py-2 type-figure text-slate-200 backdrop-blur">
       {/* Entity names come from the universe, and the universe has not promised
           they are short. The strip is anchored to a corner with nothing to push
           against, so an unbounded one would run off the frame. */}

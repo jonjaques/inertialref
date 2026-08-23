@@ -7,6 +7,37 @@
 @import 'tw-animate-css';
 
 /*
+ * The three faces, self-hosted.
+ *
+ * `@fontsource`, not a Google Fonts `<link>`, and that is a hard requirement
+ * rather than a preference: offline is the base case here — the service worker
+ * caches the app and the game runs with the server stopped — and a stylesheet
+ * on fonts.googleapis.com is a render-blocking request to a host that is not
+ * there. Fontsource's CSS points at `./files/*.woff2` relatively, so Vite emits
+ * them content-hashed under `/assets`, which is exactly the cache-first branch
+ * in `public/sw.js`. Nothing extra to precache and nothing that can go stale.
+ *
+ * `standard.css` rather than `index.css` on the two variable faces: the default
+ * export registers the weight axis alone, and both of these carry a *width*
+ * axis this system leans on — Martian Mono runs at 87.5% everywhere so a
+ * readout fits a 19rem column, and Instrument Sans narrows for a dense label.
+ * `font-stretch` is how CSS drives `wdth`, and it only works if the `@font-face`
+ * declares the range.
+ *
+ * Archivo is imported the same way and for the same reason: `standard.css`
+ * carries `wght 100–900` *and* `wdth 62–125%` in one file, and this system
+ * drives the width axis hard — 70% for the name, 78% for every uppercase label.
+ * One variable file covers four of the nine type steps.
+ *
+ * The Cyrillic subsets ride along in the same files and cost nothing: they are
+ * `unicode-range`-gated, so a Latin interface never fetches them and the worker
+ * never caches them.
+ */
+@import '@fontsource-variable/archivo/standard.css';
+@import '@fontsource-variable/instrument-sans/standard.css';
+@import '@fontsource-variable/martian-mono/standard.css';
+
+/*
  * shadcn/ui's design tokens, pointed at the instrument.
  *
  * The registry's components are written against a fixed vocabulary —
@@ -70,6 +101,49 @@
   --ring: oklch(74.6% 0.16 232.661); /* sky-400 */
 }
 
+@theme {
+  /*
+   * Three faces, one job each. `docs/design/type.md` has the argument; the
+   * short version is that this interface has always had three *registers* of
+   * language — the product charter names them — and until now all three were
+   * drawn in one face, so the only thing separating a heading from a number
+   * was capitalisation.
+   *
+   *   display  Archivo (condensed)  the name, a place, and every label
+   *   sans     Instrument Sans      prose, and the words on a control
+   *   mono     Martian Mono         instrument: every value the simulation knows
+   *
+   * **A condensed grotesque, and no serif at all.** Two serifs were tried in
+   * this slot and both were the same mistake in different clothes: Instrument
+   * Serif read as a title page from 1780 over a live render of the Milky Way,
+   * and Spectral — lower contrast, more technical — still put a *book* voice on
+   * an instrument. What this interface has always been is signage: a legend on
+   * a console, a name stencilled on a hull, a heading over a column of
+   * readings. That is a condensed grotesque's whole job.
+   *
+   * Archivo carries four of the nine steps, because the same argument runs all
+   * the way down. The uppercase micro-labels were set in Instrument Sans — a
+   * humanist face with generous sidebearings — so at 10px with 0.15em of
+   * tracking they came out loose and soft. Condensed at 78% they fit more
+   * characters in a 19rem column, hold their counters at 11px over a starfield,
+   * and read as *stencilled* rather than merely small.
+   *
+   * The fallbacks are the platform stacks each face is closest to, so a first
+   * paint before the woff2 lands is the same *shape* of interface rather than
+   * a different one. `font-display: swap` in Fontsource's own CSS makes that a
+   * real state on a cold, slow load rather than a hypothetical.
+   */
+  --font-display:
+    'Archivo Variable', ui-sans-serif, 'Arial Narrow', 'Helvetica Neue',
+    system-ui, sans-serif;
+  --font-sans:
+    'Instrument Sans Variable', ui-sans-serif, system-ui, -apple-system,
+    'Segoe UI', sans-serif;
+  --font-mono:
+    'Martian Mono Variable', ui-monospace, SFMono-Regular, Menlo, Monaco,
+    Consolas, monospace;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -96,6 +170,164 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+/* ------------------------------------------------------------------------- */
+/* The type scale                                                             */
+/* ------------------------------------------------------------------------- */
+
+/*
+ * Nine steps, each with exactly one job, and every one of them names its face,
+ * size, weight, tracking and figure style together.
+ *
+ * They exist because the alternative is what this interface had: `text-[10px]
+ * tracking-widest uppercase text-sky-400/80` written out at ninety call sites,
+ * with four of them subtly disagreeing and no way to change the scale that is
+ * not a hundred-file edit. A step is a decision made once. `text-slate-*` stays
+ * at the call site because *which grade of ink* is a per-element judgement —
+ * these carry everything except colour.
+ *
+ * The optical sizing is the part worth stating, and every one of these three
+ * faces is driven off its natural width.
+ *
+ * Martian Mono is genuinely wide: at `wdth 100` an eleven-character readout
+ * does not fit the label column of a 19rem panel. It runs at 87.5% everywhere,
+ * the width at which it matches the advance of a normal mono while keeping the
+ * squared terminals that make it legible at 10px over a moving starfield.
+ *
+ * Archivo runs at **70% for the name and 78% for the two label steps**, and the
+ * narrower setting is what let both of them grow a pixel: `type-heading` went
+ * 11 → 12 and `type-label` 10 → 11 while still fitting *more* characters per
+ * column than the Instrument Sans they replaced. Tracking came down with the
+ * width — 0.13em and 0.15em on a humanist face were compensating for
+ * sidebearings a condensed grotesque does not have, and at those values the
+ * words came apart into letters. 0.08em and 0.1em is what uppercase actually
+ * needs here.
+ *
+ * Instrument Sans has a large x-height for its em, so the sans steps sit a
+ * point *above* the mono steps they align with — 12px sans reads the same size
+ * as 11px mono, and setting both to 11 makes the sans look shrunken beside it.
+ */
+
+/**
+ * The name, and nothing else. Condensed, heavy, large, never under 20px.
+ *
+ * 700 at 70% width: a grotesque set at a text weight and a text width reads
+ * *loose* at 76px, which is the failure every display setting of a non-display
+ * face runs into. Weight and width together are what give it presence, and they
+ * are also what make it read as signage rather than as a headline — the name
+ * stencilled on something, which is what a wordmark over a planet should be.
+ * Tracking stays near neutral: a condensed face has already closed the
+ * wordspace that a negative track would otherwise be closing.
+ */
+@utility type-display {
+  font-family: var(--font-display);
+  font-stretch: 70%;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  line-height: 0.95;
+  font-feature-settings: 'liga' 1;
+}
+
+/**
+ * The title of a place: a mode, a page, a scene, the body in frame.
+ *
+ * Title case rather than uppercase, and it is the one place in the structural
+ * register that is: these are proper nouns — *Earth*, *Cinema*, *Alpha
+ * Centauri* — and uppercasing a proper noun throws away the one signal that
+ * says it is a name rather than a heading.
+ */
+@utility type-title {
+  font-family: var(--font-display);
+  font-size: 1.375rem; /* 22px */
+  font-stretch: 80%;
+  font-weight: 600;
+  letter-spacing: 0.005em;
+  line-height: 1.2;
+}
+
+/**
+ * A panel's title. Condensed caps — structure, not data.
+ *
+ * `text-transform` rather than shouting in the source, which is the rule for
+ * every step here that renders uppercase: the strings are written in title case
+ * so that a tooltip, an `aria-label`, a compact tab and a `<title>` all read as
+ * language, and the *typography* decides the case.
+ */
+@utility type-heading {
+  font-family: var(--font-display);
+  font-size: 0.75rem; /* 12px */
+  font-stretch: 78%;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+/** The smallest structural label: a section heading, a tab, a badge, a menu item. */
+@utility type-label {
+  font-family: var(--font-display);
+  font-size: 0.6875rem; /* 11px */
+  font-stretch: 78%;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+/** Prose. The Correspondence register — sentences a person reads. */
+@utility type-body {
+  font-family: var(--font-sans);
+  font-size: 0.8125rem; /* 13px */
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1.55;
+}
+
+/** Everything a control or a row says in words. The Record register. */
+@utility type-ui {
+  font-family: var(--font-sans);
+  font-size: 0.75rem; /* 12px */
+  font-weight: 500;
+  letter-spacing: 0.005em;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+
+/**
+ * A value the simulation knows. The Instrument register, and the default
+ * inside every panel.
+ */
+@utility type-readout {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem; /* 11px */
+  font-stretch: 87.5%;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  line-height: 1.55;
+  font-variant-numeric: tabular-nums;
+}
+
+/** The one readout that is read while flying rather than while stopped. */
+@utility type-figure {
+  font-family: var(--font-mono);
+  font-size: 0.78125rem; /* 12.5px */
+  font-stretch: 87.5%;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
+}
+
+/** Dense annotation: a chart axis, a unit, a timecode under a control. */
+@utility type-micro {
+  font-family: var(--font-mono);
+  font-size: 0.625rem; /* 10px */
+  font-stretch: 87.5%;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+
 /* The game fills the viewport and never scrolls; the HUD is absolutely
    positioned over the canvas. */
 html,
@@ -108,8 +340,12 @@ body,
 }
 
 body {
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-sans);
   color-scheme: dark;
+  /* Small type over a moving, dark scene. Without this the sans is rendered a
+     grade heavier than it is on macOS and the 10px labels fill in. */
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 canvas {
@@ -120,12 +356,12 @@ canvas {
 /*
  * The surfaces the browser draws, in the system's own colours.
  *
- * Selection, the caret and a scrollbar are chrome nobody in this repository
- * wrote, and they ship as light-mode blue-on-white over a near-black overlay
- * unless something says otherwise. The dock scrolls internally, the destination
- * list scrolls inside that, and on any platform without overlay scrollbars —
- * which is most of them — that gutter was the one bright rectangle in a
- * dark-adapted interface.
+ * Selection, the caret, a placeholder and a scrollbar are chrome nobody in this
+ * repository wrote, and they ship as light-mode blue-on-white over a near-black
+ * overlay unless something says otherwise. The dock scrolls internally, the
+ * destination list scrolls inside that, and on any platform without overlay
+ * scrollbars — which is most of them — that gutter was the one bright rectangle
+ * in a dark-adapted interface.
  *
  * Deliberately global rather than scoped to `.hud-layer`: the fatal panel in
  * `main.tsx` and the boot line in `index.html` are outside it by construction,
@@ -137,6 +373,27 @@ canvas {
      as a fill in this system. */
   background: rgb(14 165 233 / 0.3);
   color: #e0f2fe;
+}
+
+input,
+textarea {
+  /* sky-400. The caret is a one-pixel bar that tells you the field is live, and
+     the platform default is a white one that belongs to no palette here. */
+  caret-color: #38bdf8;
+}
+
+::placeholder {
+  /* slate-500 is below this system's ink floor for *reading* text, but a
+     placeholder is a hint that has to sit visibly under the value it will be
+     replaced by. slate-400 at 70% lands where slate-500 would and stays on the
+     one ramp. */
+  color: rgb(148 163 184 / 0.7);
+}
+
+/* A link underline that clears the descenders instead of striking them. */
+a {
+  text-underline-offset: 0.2em;
+  text-decoration-thickness: from-font;
 }
 
 * {
@@ -176,9 +433,9 @@ canvas {
  * "composited after tonemapping at fixed luminance".
  *
  * `dynamic-range-limit` inherits, which is why this is one declaration on a
- * wrapper rather than one per overlay — and why it must never move to `#root`,
- * where it would clamp the canvas along with them. Chrome and Safari implement
- * it; Firefox does not, and has no extended-range output to need it.
+ * wrapper rather than one per overlay — and why it must not be on the root: the
+ * canvas is a sibling and would be clamped with them. Chrome and Safari
+ * implement it; Firefox does not, and has no extended-range output to need it.
  */
 .hud-layer {
   dynamic-range-limit: standard;
@@ -191,6 +448,12 @@ canvas {
  * `font-display: block` rather than `swap`, deliberately — the first title
  * appears mid-scene, so there is time to load, and a system-font flash inside
  * a title sequence is worse than a beat of blank.
+ *
+ * Quarantined, and it stays that way now that the interface has display faces
+ * of its own: these two are a *reference*, reproduced to prove the cinematic
+ * director works (ADR-0010). Nothing outside `hud/cutsceneText.ts` may name
+ * them, and the title sequence this project eventually ships is set in
+ * Archivo like everything else with the product's name on it.
  */
 @font-face {
   font-family: 'TNG Title';

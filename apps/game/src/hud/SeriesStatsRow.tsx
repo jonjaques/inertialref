@@ -13,7 +13,7 @@ export function SeriesStatsRow({
   const suffix = unit === '' ? '' : ` ${unit}`
   return (
     <Row
-      label="min · mean · max"
+      label="Min · Mean · Max"
       value={`${format(stats.min)} · ${format(stats.mean)} · ${format(stats.max)}${suffix}`}
     />
   )

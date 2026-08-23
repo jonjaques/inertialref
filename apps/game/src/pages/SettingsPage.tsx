@@ -1,7 +1,11 @@
 import { Link, useParams } from 'react-router'
 import { Camera, Keyboard, MonitorCog, type LucideIcon } from 'lucide-react'
 import { CameraPanel } from '../hud/CameraPanel.tsx'
-import type { CameraState, GraphicsState } from '../hud/controls.ts'
+import type {
+  CameraState,
+  GraphicsState,
+  HudRenderState,
+} from '../hud/controls.ts'
 import { GraphicsPanel } from '../hud/GraphicsPanel.tsx'
 import { FOCUS_RING } from '../hud/focus.ts'
 import { ControlsSection } from './ControlsSection.tsx'
@@ -12,25 +16,26 @@ import { useOverlay } from './useOverlay.ts'
 /*
  * Settings, as a page with sections.
  *
- * The panels are the ones the dock already draws — the same components, the
- * same props, the same engine fields underneath. That is deliberate: inventing
- * a second set of controls for the same three knobs is how a build ends up with
- * two anti-aliasing switches that disagree.
+ * The panels are the ones the workspace already draws — the same components,
+ * the same props, the same engine fields underneath. That is deliberate:
+ * inventing a second set of controls for the same three knobs is how a build
+ * ends up with two anti-aliasing switches that disagree.
  *
  * Sections are *routes* (`/settings/display`) rather than tabs in component
  * state, for the same reason the modes are: a link to a specific setting is a
  * thing people send each other, and "turn off the lens flare" is much easier to
  * answer with a URL than with three sentences of navigation.
  *
- * `docs/design/ux.md` puts settings here rather than in the dock, and the dock
- * is scaffolding rather than the shipping HUD, so the eventual move is out of
- * the dock and into this page. Both render today; neither is a copy.
+ * `docs/design/ux.md` puts settings here rather than in a panel, and the
+ * author's instruments are scaffolding rather than the shipping HUD, so the
+ * eventual move is out of the workspace and into this page. Both render today;
+ * neither is a copy.
  */
 
 const SECTIONS = [
-  { id: 'display', title: 'display', icon: MonitorCog },
-  { id: 'camera', title: 'camera', icon: Camera },
-  { id: 'controls', title: 'controls', icon: Keyboard },
+  { id: 'display', title: 'Display', icon: MonitorCog },
+  { id: 'camera', title: 'Camera', icon: Camera },
+  { id: 'controls', title: 'Controls', icon: Keyboard },
 ] as const satisfies readonly {
   id: string
   title: string
@@ -44,9 +49,11 @@ const DEFAULT_SECTION: SectionId = 'display'
 export function SettingsPage({
   graphics,
   camera,
+  render,
 }: {
   graphics: GraphicsState
   camera: CameraState
+  render: HudRenderState
 }) {
   const { section } = useParams<{ section?: string }>()
   /*
@@ -55,7 +62,7 @@ export function SettingsPage({
    * A section tab is a route, so clicking one is a navigation — and without
    * the state it clears `location.state`, `ModeRoutes` re-resolves at
    * `/settings/camera`, matches nothing, falls through to the menu and tears
-   * down the mode behind the open dialog. `ShellBar`'s own gear link passed
+   * down the mode behind the open dialog. The IR menu's own gear link passes
    * the state; these did not.
    */
   const { keep } = useOverlay()
@@ -77,7 +84,7 @@ export function SettingsPage({
             state={keep}
             replace
             aria-current={entry.id === active ? 'page' : undefined}
-            className={`flex min-h-6 items-center gap-1.5 rounded px-2 py-1 text-[10px] tracking-widest uppercase transition-colors ${FOCUS_RING} ${
+            className={`type-label flex min-h-7 items-center gap-1.5 rounded px-2 py-1 transition-colors ${FOCUS_RING} ${
               entry.id === active
                 ? 'bg-sky-500/15 text-sky-200'
                 : 'text-slate-400 hover:text-slate-300'
@@ -89,7 +96,9 @@ export function SettingsPage({
         ))}
       </nav>
 
-      {active === 'display' && <GraphicsPanel graphics={graphics} />}
+      {active === 'display' && (
+        <GraphicsPanel graphics={graphics} render={render} />
+      )}
       {active === 'camera' && <CameraPanel camera={camera} />}
       {active === 'controls' && <ControlsSection />}
     </OverlayPage>

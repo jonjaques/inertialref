@@ -18,9 +18,6 @@ export interface ControlBindings {
   readonly onWarp: (direction: number) => void
   readonly onSave: () => void
   readonly onLoad: () => void
-  readonly onToggleHud: () => void
-  readonly onShowNavigation: () => void
-  readonly onShowPerformance: () => void
 }
 
 const AXIS_KEYS: Readonly<
@@ -189,32 +186,30 @@ export function useShipControls(
           event.preventDefault()
           break
         /*
-         * `H`, not `Tab`.
+         * `H`, `G` and `P` are deliberately absent, and they are still bound.
          *
-         * Tab was the binding, guarded by "unless focus is already in the
-         * overlay" — and that guard could never open. On load
-         * `document.activeElement` is `<body>`, whose `closest('.hud-layer')`
-         * is null, so the guard was false, the dock toggled and
-         * `preventDefault` cancelled the browser's focus move. Every
-         * subsequent Tab did the same, and with no `tabIndex` on the canvas
-         * there was no focusable element outside the layer to bootstrap from:
-         * focus could never enter the overlay at all, and every focus ring,
-         * `role="tab"` and `aria-expanded` in it was unreachable by keyboard.
+         * They are about what is on screen rather than about the ship, and
+         * what is on screen is now a per-mode workspace rather than one dock
+         * `App` owns — so they moved to `dock/useWorkspaceKeys.ts`, beside the
+         * state they change. Routing them from here would mean an event bus in
+         * place of a function call.
+         *
+         * None of them is `Tab`, which is the part worth keeping written down.
+         * Tab was the original binding for the collapse, guarded by "unless
+         * focus is already in the overlay" — and that guard could never open.
+         * On load `document.activeElement` is `<body>`, whose
+         * `closest('.hud-layer')` is null, so the guard was false, the dock
+         * toggled and `preventDefault` cancelled the browser's focus move.
+         * Every subsequent Tab did the same, and with no `tabIndex` on the
+         * canvas there was no focusable element outside the layer to bootstrap
+         * from: focus could never enter the overlay at all, and every focus
+         * ring and `aria-expanded` in it was unreachable by keyboard.
          *
          * There is no version of this that keeps both. Tab is how a browser
          * moves focus and a window-level `preventDefault` always wins, so a
          * mode that binds it owns focus navigation whether it means to or not.
-         * Tab goes back to the browser; the collapse gets a letter.
+         * Tab goes back to the browser; the panes get a letter.
          */
-        case 'KeyH':
-          latest.current.onToggleHud()
-          break
-        case 'KeyG':
-          latest.current.onShowNavigation()
-          break
-        case 'KeyP':
-          latest.current.onShowPerformance()
-          break
         default:
           break
       }
@@ -258,8 +253,8 @@ export const CONTROL_HELP: readonly (readonly [string, string])[] = [
   ['Space', 'pause'],
   ['[ / ]', 'time warp'],
   ['F5 / F9', 'save / load'],
-  ['G', 'navigation panel'],
-  ['P', 'performance panel'],
-  ['H', 'collapse the dock'],
+  ['G', 'the navigate panel'],
+  ['P', 'the perf panel'],
+  ['H', 'hide both panes, or bring them back'],
   ['Tab', 'move between the controls on screen'],
 ]

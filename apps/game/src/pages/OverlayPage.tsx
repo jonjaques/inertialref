@@ -153,18 +153,26 @@ export function OverlayPage({
         role="dialog"
         aria-modal="false"
         aria-label={title}
-        className="flex max-h-[calc(100vh-4rem)] w-[34rem] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-lg border border-slate-700/60 bg-slate-950/85 font-mono text-[11px] leading-relaxed text-slate-300 shadow-xl"
+        className="type-body flex max-h-[calc(100vh-4rem)] w-[34rem] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-lg border border-slate-700/60 bg-slate-950/85 text-slate-300 shadow-xl"
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: 8 }}
         transition={{ duration: 0.18 }}
       >
-        <header className="flex items-center gap-2 border-b border-slate-800 px-3 py-2">
-          <h1 className="text-[10px] tracking-widest text-sky-300 uppercase">
-            {title}
-          </h1>
+        <header className="flex items-baseline gap-3 border-b border-slate-800 px-4 py-2.5">
+          {/*
+           * The display face, because a page is a *place* — the same rule the
+           * mode name follows in the IR menu and the mode title on the front
+           * door. It was a 10px uppercase label, which made a dialog whose
+           * whole job is to be read announce itself in the register reserved
+           * for structure.
+           */}
+          <h1 className="type-title text-slate-100">{title}</h1>
           {subtitle !== undefined && (
-            <span className="min-w-0 truncate text-slate-400" title={subtitle}>
+            <span
+              className="type-ui min-w-0 truncate text-slate-400"
+              title={subtitle}
+            >
               {subtitle}
             </span>
           )}
@@ -179,7 +187,7 @@ export function OverlayPage({
             <X />
           </Button>
         </header>
-        <div className="min-h-0 overflow-y-auto px-3 py-2">{children}</div>
+        <div className="min-h-0 overflow-y-auto px-4 py-3">{children}</div>
       </motion.div>
     </motion.div>
   )

@@ -34,7 +34,7 @@ export function TargetActions({
     return (
       <>
         <Action
-          label="travel"
+          label="Travel"
           tone="primary"
           title="Orbit this system's star, looking at it"
           onClick={() =>
@@ -44,7 +44,7 @@ export function TargetActions({
           }
         />
         <Action
-          label="generate"
+          label="Generate"
           disabled={target.loaded}
           title="Generate the system and list its bodies without going there"
           onClick={() =>
@@ -59,7 +59,7 @@ export function TargetActions({
   return (
     <>
       <Action
-        label="orbit"
+        label="Orbit"
         tone="primary"
         title="Circular orbit at an altitude that frames the body"
         onClick={() =>
@@ -69,7 +69,7 @@ export function TargetActions({
         }
       />
       <Action
-        label="land"
+        label="Land"
         disabled={!target.landable}
         title={target.landable ? 'Park on the surface' : 'Not solid ground'}
         onClick={() =>
@@ -83,7 +83,7 @@ export function TargetActions({
         }
       />
       <Action
-        label="face"
+        label="Face"
         title="Point the nose at it without touching the trajectory"
         onClick={() =>
           run(`facing ${target.name}`, () =>
@@ -92,7 +92,7 @@ export function TargetActions({
         }
       />
       <Action
-        label="burn"
+        label="Burn"
         title="Aim at it and light the main drive"
         onClick={() =>
           run(`burning toward ${target.name}`, () =>

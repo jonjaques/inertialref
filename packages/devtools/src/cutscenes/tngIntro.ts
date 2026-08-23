@@ -1366,8 +1366,36 @@ function effectsAt(frame: number): CinematicEffects {
     flash,
     streaks,
     nacelleGlow,
+    /*
+     * The corona, on for the eclipse shot and nowhere else in the sequence.
+     *
+     * A hard edge rather than a ramp, because both ends of this shot *are*
+     * cuts — f240 is the composition-matched match cut and f357 lands in empty
+     * starfield — and a fade across a cut is a fade nobody can see the far side
+     * of. The ring's own envelope is the occlusion geometry: `flareMath` returns
+     * a depth that runs 0 at first contact to 1 at totality, so this switch says
+     * *whether there is an eclipse in this shot*, not how deep it is.
+     */
+    corona: coronaAt(frame),
     spark,
   }
+}
+
+/**
+ * Whether this frame is inside the eclipse shot.
+ *
+ * `Math.floor`, and it is not decoration: `frame` arrives as
+ * `(renderTime - epoch) * fps` and at 24000/1001 the round trip through a float
+ * lands the last frame of a shot at 356.00000000000006 as often as at 356. An
+ * inclusive comparison against the shot table then reads it as the *next* shot
+ * and the corona drops out one frame early — invisible in motion, and a test
+ * asserting the boundary that fails on some machines and not others. A frame is
+ * an integer index; the fraction is sub-frame interpolation and no shot
+ * boundary is a function of it.
+ */
+const coronaAt = (frame: number): number => {
+  const index = Math.floor(frame)
+  return index >= CUTS.eclipse[0] && index <= CUTS.eclipse[1] ? 1 : 0
 }
 
 function textsAt(frame: number): CinematicTextState[] {

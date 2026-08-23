@@ -242,6 +242,48 @@ describe('the observatory', () => {
     expect(other.observerStatus()).toBeNull()
   })
 
+  it('centres the catalogue on the eye, not on the ship', () => {
+    /*
+     * A regression test for a listing that described somewhere the reader was
+     * not.
+     *
+     * `travelTargets` took the *player's* position, which is the same thing as
+     * the camera in a flight mode and is not remotely the same thing here —
+     * `look` is the planetarium's whole verb, and it moves a camera four light
+     * years without moving the hull. Centred on the ship, opening the
+     * catalogue at Alpha Centauri listed Sol's moons first and reported the
+     * star filling the frame as 4.4 ly away, twenty rows down.
+     *
+     * The survey radius is centred on the same point, so what is offered is the
+     * eye's neighbours rather than the hull's.
+     */
+    const { harness: ir } = harness()
+    const nearest = (origin?: 'player' | 'observer') =>
+      ir
+        .targets({ lightYears: 6, ...(origin === undefined ? {} : { origin }) })
+        .filter((row) => row.kind === 'system')
+        .map((row) => row.name)[0]
+
+    // The ship starts in Sol, so both agree before the camera goes anywhere.
+    ir.look('s:SOL/b:2')
+    expect(nearest('observer')).toBe('Sol')
+
+    ir.look('HIP71683')
+    // The hull has not moved — that is the guarantee the mode is built on —
+    // so the player-centred listing still leads with Sol.
+    expect(nearest('player')).toBe('Sol')
+    expect(nearest()).toBe('Sol')
+    // The eye has, and the listing follows it.
+    expect(nearest('observer')).toBe('Alpha Centauri')
+
+    // With nothing held, the observer origin falls back to the player rather
+    // than to an empty listing: the panel polls before the mode's first focus
+    // lands, and an empty state flashing on every entry is worse than a stale
+    // centre for two frames.
+    ir.observatory.clear()
+    expect(nearest('observer')).toBe('Sol')
+  })
+
   it('reports how much of the frame the target fills', () => {
     const { harness: ir } = harness()
     const status = ir.look('s:SOL/b:2', { fill: 0.5, ease: false })

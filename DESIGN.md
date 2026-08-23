@@ -1,6 +1,6 @@
 ---
 name: InertialRef
-description: A dark-adapted instrument layer, held at standard range over a live simulation of the Milky Way.
+description: An observatory console at night — a condensed grotesque for names and labels, a humanist sans for prose, a wide mono for readings, held at standard range over a live simulation of the Milky Way.
 colors:
   instrument-blue-200: 'oklch(90.1% 0.058 230.902)'
   instrument-blue-300: 'oklch(82.8% 0.111 230.318)'
@@ -20,30 +20,64 @@ colors:
   caution-amber: 'oklch(82.8% 0.189 84.429)'
   fault-red: 'oklch(71.2% 0.194 13.428)'
 typography:
-  readout:
-    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace'
-    fontSize: '11px'
-    fontWeight: 400
-    lineHeight: 1.625
-    letterSpacing: 'normal'
-  strip:
-    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace'
+  display:
+    fontFamily: "'Archivo Variable', ui-sans-serif, 'Arial Narrow', sans-serif"
+    fontSize: 'clamp(3rem, 7vw, 4.75rem)'
+    fontWeight: 700
+    fontStretch: '70%'
+    lineHeight: 0.95
+    letterSpacing: '-0.005em'
+  title:
+    fontFamily: "'Archivo Variable', ui-sans-serif, 'Arial Narrow', sans-serif"
+    fontSize: '1.375rem'
+    fontWeight: 600
+    fontStretch: '80%'
+    lineHeight: 1.2
+    letterSpacing: '0.005em'
+  heading:
+    fontFamily: "'Archivo Variable', ui-sans-serif, 'Arial Narrow', sans-serif"
     fontSize: '0.75rem'
-    fontWeight: 400
-    lineHeight: 1.3333
-    letterSpacing: 'normal'
+    fontWeight: 600
+    fontStretch: '78%'
+    lineHeight: 1.4
+    letterSpacing: '0.08em'
   label:
-    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace'
-    fontSize: '10px'
-    fontWeight: 400
-    lineHeight: 1.625
+    fontFamily: "'Archivo Variable', ui-sans-serif, 'Arial Narrow', sans-serif"
+    fontSize: '0.6875rem'
+    fontWeight: 600
+    fontStretch: '78%'
+    lineHeight: 1.4
     letterSpacing: '0.1em'
-  control:
-    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace'
-    fontSize: '10px'
+  body:
+    fontFamily: "'Instrument Sans Variable', ui-sans-serif, system-ui, sans-serif"
+    fontSize: '0.8125rem'
     fontWeight: 400
-    lineHeight: 1.625
-    letterSpacing: 'normal'
+    lineHeight: 1.55
+    letterSpacing: '0'
+  ui:
+    fontFamily: "'Instrument Sans Variable', ui-sans-serif, system-ui, sans-serif"
+    fontSize: '0.75rem'
+    fontWeight: 500
+    lineHeight: 1.4
+    letterSpacing: '0.005em'
+  readout:
+    fontFamily: "'Martian Mono Variable', ui-monospace, SFMono-Regular, Menlo, monospace"
+    fontSize: '0.6875rem'
+    fontWeight: 400
+    lineHeight: 1.55
+    letterSpacing: '-0.01em'
+  figure:
+    fontFamily: "'Martian Mono Variable', ui-monospace, SFMono-Regular, Menlo, monospace"
+    fontSize: '0.78125rem'
+    fontWeight: 500
+    lineHeight: 1.45
+    letterSpacing: '-0.015em'
+  micro:
+    fontFamily: "'Martian Mono Variable', ui-monospace, SFMono-Regular, Menlo, monospace"
+    fontSize: '0.625rem'
+    fontWeight: 400
+    lineHeight: 1.5
+    letterSpacing: '-0.01em'
 rounded:
   control: '0.25rem'
   panel: '0.5rem'
@@ -72,7 +106,18 @@ components:
     textColor: '{colors.panel-graphite-300}'
     typography: '{typography.readout}'
     rounded: '{rounded.panel}'
-    width: '27rem'
+    width: '19rem'
+  panel-floating:
+    backgroundColor: '{colors.panel-graphite-950}'
+    borderColor: '{colors.instrument-blue-500}'
+    rounded: '{rounded.panel}'
+    width: '19rem'
+  menu:
+    backgroundColor: '{colors.panel-graphite-950}'
+    textColor: '{colors.panel-graphite-300}'
+    typography: '{typography.label}'
+    rounded: '{rounded.panel}'
+    padding: '0.25rem 0.375rem'
   readout-strip:
     backgroundColor: '{colors.panel-graphite-950}'
     textColor: '{colors.panel-graphite-200}'
@@ -106,10 +151,10 @@ stays legible rather than the largest that fits, and colour is spent only where
 state changes meaning. The standing test is the one the product already sets for
 itself: **would this still be readable with a star filling the frame behind it?**
 
-The system is deliberately narrow. One typeface, one accent family, one neutral
-family, two corner radii, four status colours. That narrowness is not minimalism
-as a style — it is what lets an 11px readout hold its own against a
-dynamic-range image that can reach twice diffuse white. The interface earns its
+The system is deliberately narrow. Three typefaces with one job each, one accent
+family, one neutral family, two corner radii, four status colours. That
+narrowness is not minimalism as a style — it is what lets an 11px readout hold
+its own against a dynamic-range image that can reach twice diffuse white. The interface earns its
 place by being complete and quiet at the same time: every number the simulation
 knows is reachable, and none of it competes with the thing being simulated.
 
@@ -121,11 +166,15 @@ defined by what it commits to, not by what it refuses.
 
 **Key Characteristics:**
 
-- Monospace everywhere, 10–12px, tabular figures on anything that changes
-- Near-black translucent panels anchored to screen corners; the centre stays empty
+- Three faces, three registers: a condensed grotesque names places and labels,
+  a humanist sans carries prose, a wide mono carries every reading
+- A workspace, not a dock: two panes at the edges, panels that float, and one
+  menu at the bottom centre that says what is on screen
+- Near-black translucent panels; the centre of the frame stays empty
 - One accent (Instrument Blue) doing every job that isn't status
 - Status colour as readout, never as alarm
-- Hairline borders instead of shadows; a single elevation step in the whole system
+- Hairline borders instead of shadows; two elevation steps, and the second one
+  means "this panel has come loose"
 - All chrome unmounts entirely while a cutscene plays
 
 ## Colors
@@ -216,87 +265,180 @@ anything and the problem is the screen, not the palette.
 
 ## Typography
 
-**Display Font:** none. The system has no display face.
-**Body Font:** the platform monospace stack (`ui-monospace, SFMono-Regular,
-Menlo, Monaco, Consolas, monospace`).
-**Label/Mono Font:** the same stack. There is exactly one face.
+**Display / Label Font:** **Archivo Variable** (`wght` 100–900, `wdth`
+62–125%), run condensed — 70% for the name, 80% for a title, 78% for the two
+uppercase label steps.
+**Prose Font:** **Instrument Sans Variable** (`wght` 400–700, `wdth` 75–100).
+**Instrument Font:** **Martian Mono Variable** (`wght` 100–800, `wdth`
+75–112.5), run at `font-stretch: 87.5%` everywhere.
 
-A sans-serif stack is declared on `body` in `index.css` and, in practice,
-nothing renders in it — every panel sets `font-mono` at its root. That is worth
-knowing rather than fixing: the built interface lives entirely in the
-**Instrument** register (monospace, abbreviated, uppercase labels), and the
-proportional registers the product reserves for records and prose have no
-implementation yet.
+**A condensed grotesque, and deliberately not a serif.** Two serifs were tried
+in this slot and both were the same mistake in different clothes. Instrument
+Serif's hairline contrast and angled stress read as _antique_ — a title page
+from 1780 over a live render of the Milky Way. Spectral, lower contrast and
+more technical, still put a _book_ voice on an instrument. What this interface
+has always been is **signage**: a legend on a console, a name stencilled on a
+hull, a heading over a column of readings. That is a condensed grotesque's whole
+job, and Archivo is a functional one with a real width axis, which is what makes
+one variable file cover four type steps.
 
-**Character:** terminal-adjacent and unromantic. Figures are tabular wherever a
-number changes, so a readout updating in place never reflows and never makes you
-re-find the digit you were watching. Nothing is bold; hierarchy comes from
-colour grade and case, not weight.
+**It carries the labels too, and that is the larger half of the change.** The
+uppercase micro-labels were set in Instrument Sans — a humanist face with
+generous sidebearings — so at 10px with 0.15em of tracking they came out loose
+and soft, which is precisely how "a bit small and a bit ugly" happens to an
+interface made almost entirely of labels. Condensed at 78%, both steps grew a
+pixel (`type-heading` 11 → 12, `type-label` 10 → 11) while still fitting _more_
+characters per column, and the tracking came down with the width: 0.13em and
+0.15em were compensating for sidebearings a condensed face does not have, and at
+those values the words came apart into letters.
+
+All three are self-hosted from `@fontsource` and bundled by Vite into
+content-hashed `/assets` files. That is a requirement rather than a preference:
+offline is the base case here, and a stylesheet on `fonts.googleapis.com` is a
+render-blocking request to a host that is not there.
+
+**Three faces, because the product already had three registers.** The charter
+names them — **Instrument** text is monospace, uppercase, abbreviated;
+**Record** text is proportional, mixed case, precise, carrying units;
+**Correspondence** is proportional prose — and once all three were drawn in one
+monospace stack, so the only thing separating a heading from a number was
+capitalisation. The faces map onto them almost exactly:
+
+| Face                | Register                | What it sets                      |
+| ------------------- | ----------------------- | --------------------------------- |
+| Archivo (condensed) | structure               | the name, a place, every label    |
+| Instrument Sans     | Correspondence / Record | prose, and the words on a control |
+| Martian Mono        | Instrument              | every value the simulation knows  |
+
+**Character:** a console legend beside a printed log. Archivo is the stencil on
+the equipment — it names things, it never explains them, and it is uppercase
+everywhere except a title, where the thing being named is a proper noun and
+uppercasing it would throw away the one signal that says so. Martian Mono is
+deliberately low-contrast and squared, so it survives a bright background better
+than a conventional mono, which is the standing test this whole system is judged
+on. Figures are tabular wherever a number changes, so a readout updating in
+place never reflows and never makes you re-find the digit you were watching.
+
+**Case is typography, not content.** Every string in the source is written in
+title case and the `text-transform` on the step decides what is shouted. That is
+not a style rule — a label is read in four places the CSS never reaches (a
+`title`, an `aria-label`, a screen reader, a copied string), and `'PLAYABLE'`
+written into a constant is a shout none of them can turn off.
 
 ### Hierarchy
 
-- **Strip** (400, `0.75rem`/12px, ~1.33): the flight readout, bottom left. The
-  largest type in the system, because it is what you read while flying rather
-  than while stopped.
-- **Readout** (400, `11px`, 1.625): the default inside every panel — row values,
-  target names, error prose. Line height is deliberately loose for the size; at
-  11px in a dense grid, leading is what makes rows scannable.
-- **Label** (400, `10px`, `0.1em` tracking, uppercase): section headings and tab
-  names. Uppercase plus `tracking-widest` is the only typographic decoration in
-  the system, and it exists to make a heading readable at a size where case
-  differences alone would not.
-- **Control** (400, `10px`, sentence case): button labels. Same size as a label,
-  deliberately _not_ uppercase — a control is a verb, a heading is a category,
-  and case is what separates them.
+Nine steps, each defined once as a `@utility` in `apps/game/src/index.css` and
+named at the call site. They exist because the alternative is what this
+interface had: `text-[10px] tracking-widest uppercase text-sky-400/80` written
+out at ninety call sites, four of them subtly disagreeing, with no way to change
+the scale that is not a hundred-file edit. Colour stays at the call site,
+because which grade of ink is a per-element judgement; everything else is here.
+
+| Step           | Face  | Size    | Weight | Job                                            |
+| -------------- | ----- | ------- | ------ | ---------------------------------------------- |
+| `type-display` | cond. | clamped | 700    | the product name, once, on the front door      |
+| `type-title`   | cond. | 22px    | 600    | a mode, a page, a scene, the body in frame     |
+| `type-heading` | cond. | 12px    | 600    | a panel's title; uppercase, `0.08em`           |
+| `type-label`   | cond. | 11px    | 600    | a section heading, a tab, a badge, a menu item |
+| `type-body`    | sans  | 13px    | 400    | prose — the Correspondence register            |
+| `type-ui`      | sans  | 12px    | 500    | a control's label, a row's label, a list title |
+| `type-readout` | mono  | 11px    | 400    | any value the simulation knows                 |
+| `type-figure`  | mono  | 12.5px  | 500    | the flight strip, and a headline number        |
+| `type-micro`   | mono  | 10px    | 400    | a chart axis, a unit, a timecode               |
+
+Two facts about the sizes are worth stating because they look like mistakes.
+The sans steps sit a point _above_ the mono steps they align with — Instrument
+Sans has a large x-height for its em, so 12px sans reads the same size as 11px
+mono and setting both to 11 makes the sans look shrunken. And Martian Mono runs
+at 87.5% width everywhere, because at its natural width an eleven-character
+readout does not fit the label column of a 19rem panel.
 
 ### Named Rules
 
-**The One Face Rule.** Everything is the monospace stack. A proportional face
-appearing anywhere in the dock or the strip is a defect, not a variation.
+**The Three Registers Rule.** Structure is the condensed grotesque, prose is the
+humanist sans, data is the mono.
+The strongest axis available for a distinction is _face_, and the panels are
+repetitive enough to need the strongest one: a column of forty label/value rows
+set in one face has one texture and the eye has nothing to catch on. This is
+what replaced the One Face Rule, and it replaced it deliberately.
 
-**The Tabular Rule.** Any number that updates carries `tabular-nums`. Distances,
-tick counts, frame times, percentages. A number that jitters horizontally while
-you read it is unreadable at 10px.
+**The Serif Scarcity Rule.** The display face names a place and does nothing
+else. It never appears below `type-title`, never carries a value, and never
+carries prose. If it is on screen more than twice, something has been promoted
+that is not a place.
 
-**The Case Rule.** Uppercase with `0.1em` tracking is reserved for structural
-labels — sections and tabs. Values, controls and prose are sentence case. Two
-registers, no third.
+**The Tabular Rule.** Any number that updates carries tabular figures. The mono
+steps set `font-variant-numeric: tabular-nums` themselves, and so does
+`type-ui`, because a row label is sometimes a count.
+
+**The Case Rule.** Uppercase with wide tracking is reserved for structural
+labels — panel titles, section headings, tabs, the menu. Values, controls and
+prose are sentence case. Two registers, no third.
 
 ## Layout
 
-**Corner-anchored chrome over a full-bleed canvas.** The app is
+**Two panes, a field, and a menu, over a full-bleed canvas.** The app is
 `h-screen w-screen overflow-hidden` with a `<Canvas>` filling it and a sibling
-`.hud-layer` pinned `absolute inset-0` above. Everything in the interface hangs
-off a corner or an edge of that layer at a uniform `0.75rem` inset: the dock top
-right, the flight strip bottom left, transient notices bottom centre, the
-cutscene scrubber bottom centre when a scene is running.
+`.hud-layer` pinned `absolute inset-0` above. Inside that layer the running mode
+draws a **workspace** (`apps/game/src/dock/Workspace.tsx`):
 
-**The centre is reserved.** The only element at screen centre is a 16px
-crosshair ring (`border-sky-300/40`). Nothing else is allowed to occupy the
-middle of the frame, because the middle of the frame is the subject.
+- a **pane** against each vertical edge, `19rem` wide, `top-3 bottom-16`,
+  holding a column of panels and scrolling internally
+- the **float field**, `inset-0`, which is the scene treated as a place a panel
+  can be put down
+- the **IR menu**, bottom centre at the system's `0.75rem` inset — the mark, the
+  place, the pane toggles, one glyph per panel, and the settings
 
-**The dock is a fixed 27rem column** with `max-h-[calc(100vh-1.5rem)]` and its
-own internal scroll, so panel content grows without the panel growing. Inside
-it, readouts are two-column: a shrink-proof label left, a truncating value right,
-with `gap-3` between them. The perf panel switches to an explicit
-`grid-cols-[5.5rem_1fr]` where labels must align across a block of charts.
+Everything else still hangs off a corner or an edge at the same inset: the
+flight strip bottom left, a transient notice at `bottom-16` so it clears the
+menu, the cutscene scrubber bottom centre while a scene runs.
+
+**The centre is reserved.** The only element at screen centre is a small
+crosshair ring (`border-sky-300/40`). Nothing else may occupy the middle of the
+frame, because the middle of the frame is the subject. The menu is at the bottom
+_edge_, not in the middle distance.
+
+**A panel is `19rem` and never taller than 60% of the frame.** The cap is two
+failures avoided with one number: uncapped, a seventy-five-row catalogue runs
+past the bottom of its pane and is clipped mid-row; capped at the pane's full
+height it fits exactly and pushes every panel below it off the bottom, where the
+menu still reports them open. At 60vh the next panel's header stays visible.
+Inside a panel, readouts are two-column — a shrink-proof sans label left, a
+truncating mono value right, `gap-3` between. The perf panel switches to an
+explicit `grid-cols-[5.5rem_1fr]` where labels must align across a block of
+charts.
 
 **Spacing rhythm** runs on a 4px base: `0.25rem` between adjacent controls,
 `0.5rem` between rows and around panel padding, `0.75rem` for the viewport inset
-and the label/value gutter. Control padding is `0.125rem 0.375rem`; panel padding
-is `0.5rem`.
+and the label/value gutter. A panel header is `min-h-8`; a menu button is 28px.
 
-**There is no responsive system.** No breakpoint utility appears anywhere in the
-interface. The only viewport-relative values are the dock's max height and the
-cutscene scrubber's `max-w-[80vw]`. This is a desktop-only surface by design,
-and adding breakpoints would be a new decision rather than a completion of an
-existing one.
+**There is one breakpoint, and it is a layout change rather than a scale.**
+Below 900px (`hud/viewport.ts`, `COMPACT_MAX_WIDTH`) the panes stop being drawn
+and the workspace becomes **a nav bar with a sheet above it** — because a 19rem
+column is the entire width of a phone, so "left" and "right" stop meaning
+anything and a drag between them would be a gesture with an invisible effect.
+The number is measured: a rail, one column and a column on the other side is
+41.5rem, and below about 900 the scene between them is narrower than the panels
+beside it.
+
+**The bar is the IR menu's three questions at thumb scale** — the mark and the
+place going home, a `panels` toggle, and the settings — and it is never the
+thing that disappears. It replaced a single row of tabs that carried the panels
+and nothing else, which failed twice over: the row scrolled horizontally, so the
+fourth name was clipped mid-word and the fifth was off screen with nothing to
+say so, and with the menu absent a mode on a phone had **no route home and no
+settings at all**. The panels moved inside the sheet they open, where they wrap
+onto as many rows as they need. Every target is `min-h-11` — 44px, the platform
+minimum for a thumb — and the bar clears the home indicator with
+`env(safe-area-inset-bottom)`.
 
 ### Named Rules
 
-**The Corner Rule.** Chrome anchors to corners and edges at a `0.75rem` inset.
-Nothing floats in the middle distance, and nothing but the crosshair enters the
-centre.
+**The Edge Rule.** Chrome anchors to an edge or a corner at a `0.75rem` inset.
+Nothing but the crosshair enters the centre of the frame. A _floating panel_ is
+the one thing allowed in the middle distance, and only because a hand put it
+there — its position is a user preference, it is clamped inside the frame, and
+it is never where anything opens by default.
 
 **The Cinema Rule.** While a cutscene is running, every piece of chrome unmounts
 — dock, strip, notice, crosshair — so a capture is the picture and nothing else.
@@ -304,11 +446,13 @@ Any new overlay must participate in that unmount, not merely fade.
 
 ## Elevation & Depth
 
-**Depth is a legibility mechanism, not a visual language.** The system has
-effectively one elevation: floating panels sit above the canvas with a hairline
-border and a translucent, blurred background, and everything inside a panel is
-flat. There is a single `shadow-xl` in the entire interface, on the dock, and it
-does structural work rather than expressive work — nothing else casts anything.
+**Depth is a legibility mechanism, not a visual language.** The system has two
+elevations and the second one carries information rather than expression: a
+docked panel is `shadow-xl` with a `slate-700/60` hairline, and a panel that has
+been pulled out of its pane is `shadow-2xl` with a `sky-500/30` hairline. That
+accent edge is the same fact the pin icon in its header carries, in the
+peripheral vision that actually notices a panel has come loose. Everything
+inside a panel is flat, and nothing else in the interface casts anything.
 
 The translucency exists so 11px text survives over a moving starfield without
 the panel going opaque, and both the alpha and the blur are tunable in service
@@ -326,8 +470,10 @@ are being read.
 
 ### Shadow Vocabulary
 
-- **Panel lift** (`box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)`):
-  the dock only. Separates the tallest surface from the scene behind it.
+- **Panel lift** (`shadow-xl`): every docked panel, the IR menu and a routed
+  page. Separates a surface from the scene behind it.
+- **Loose lift** (`shadow-2xl shadow-black/60`): a floating panel, and only a
+  floating panel. Paired with the accent hairline, never used alone.
 
 ### Named Rules
 
@@ -343,9 +489,15 @@ would clamp the canvas along with the chrome.
 ## Shapes
 
 Two radii and nothing else. **Controls, inputs and inner containers are
-`0.25rem`** (`rounded`, `rounded-sm`); **floating panels are `0.5rem`**
-(`rounded-lg`). No pills, no circles except the connection pip and the crosshair
-ring, no asymmetric corners, no clipping.
+`0.25rem`** (`rounded`, `rounded-sm`); **panels, the menu and pages are
+`0.5rem`** (`rounded-lg`). No pills, no circles except the connection pip and
+the crosshair ring, no clipping.
+
+One asymmetric shape, and it is a consequence rather than an exception: the tab
+a closed pane leaves at the frame edge is rounded on its inner side only. The
+Two Radii Rule is about the _size_ of a corner, not about every corner being
+drawn, and a tab flush to the edge with a rounded outer corner reads as a panel
+that failed to reach it.
 
 Definition comes from **hairline borders rather than fills**. A control is a 1px
 `slate-700` line around a `slate-800/60` wash; a sub-container is a 1px
@@ -374,8 +526,9 @@ second click on itself. That self-blur is the component philosophy in one line:
 nothing in this interface holds attention, and nothing holds state the
 simulation does not already own.
 
-- **Shape:** gently rounded (`0.25rem`), 1px border, `0.125rem 0.375rem` padding,
-  10px label.
+- **Shape:** gently rounded (`0.25rem`), 1px border, `0.125rem 0.375rem`
+  padding, a `type-ui` label — 12px sans, not the 10px mono it was. A control is
+  a _word_, and words are the sans register.
 - **Normal:** `slate-800/60` fill, `slate-700` border, `slate-300` label.
 - **Primary:** `sky-500/15` fill, `sky-500/50` border, `sky-200` label. Reserved
   for the one obvious verb in a group — `go`, `travel`, `orbit`.
@@ -390,8 +543,9 @@ simulation does not already own.
 
 ### Inputs / Fields
 
-- **Style:** `slate-900/80` fill, 1px `slate-700` border, `0.25rem` radius, 11px
-  text, `slate-400` placeholder. The placeholder is used to teach syntax rather
+- **Style:** `slate-900/80` fill, 1px `slate-700` border, `0.25rem` radius,
+  `type-readout` — a field here is for typing an _address_, which is instrument
+  text — with a `slate-400/70` placeholder and a `sky-400` caret. The placeholder is used to teach syntax rather
   than to name the field — `SOL · b:2 · g:milky-way/s:HIP71683/b:3.0`.
 - **Focus:** border shifts to `sky-500/60` and the native outline is removed. No
   glow, no ring offset.
@@ -403,8 +557,10 @@ simulation does not already own.
 
 Two nested levels, and no more.
 
-- **Panel** (`aside`): `slate-950/85`, `backdrop-blur` (8px), 1px `slate-700/60`
-  border, `0.5rem` radius, `shadow-xl`, fixed `27rem` wide.
+- **Panel** (`section`): `slate-950/85`, `backdrop-blur` (8px), 1px
+  `slate-700/60` border, `0.5rem` radius, `shadow-xl`, `19rem` wide,
+  `max-h-[60vh]`. Floating, the border becomes `sky-500/30` and the shadow
+  `shadow-2xl`.
 - **Sub-container:** `slate-900/40`, 1px `slate-800/80` border, `0.25rem` radius,
   `0.5rem 0.25rem` padding. Used for the destination list, the selection
   summary, and each settings row.
@@ -412,35 +568,82 @@ Two nested levels, and no more.
 
 ### Navigation
 
-Tabs, not a nav bar. Five lowercase 10px labels with `0.1em` tracking, separated
-by `0.25rem`, sitting on a `border-b` rail. The active tab carries a `sky-400`
-bottom border and `sky-300` text with `-mb-px` so its underline merges into the
-rail; inactive tabs are `slate-400` and go `slate-300` on hover. No pills, no
-background fill, no icons.
+**One bar, bottom centre — the IR menu.** It replaced two pieces of chrome that
+were doing one job between them: a shell bar in the top-left corner carrying the
+place and the settings, and a launcher rail down the left edge carrying the
+panels. Read left to right it answers three questions in the order they are
+asked — _where am I_ (the mark and the place, one link), _what can I see_ (the
+two pane toggles, then one glyph per panel), _what else is there_ (the settings).
+
+Every toggle is the same 28px ghost button: pressed is `sky-500/15` with a
+`sky-200` glyph, resting is a `slate-400` glyph. Groups are separated by a
+`h-4 w-px bg-slate-800` rule. The bar is `slate-950/90` with a `slate-700/60`
+hairline and `shadow-xl` — a hair denser than a panel, because it is the one
+piece of chrome that is always there.
+
+Icon-only, which is the one place in this system that is settled rather than
+argued (see the Don'ts): a menu is a row of peers with nothing else on it, read
+by shape and position. Each carries a real tooltip, because with no visible text
+the hint _is_ the label.
+
+**Tabs are gone.** The dev dock's five-tab strip decided that exactly one
+readout could be on screen; they are six panels now.
+
+### Panel (signature)
+
+The unit everything readable is made of. A `19rem` surface with a `min-h-8`
+header and a body that scrolls.
+
+The header is the drag handle _and_ the collapse toggle, which looks like a
+conflict and is not: a press that does not move is a click, a press that moves
+is a drag, and the browser resolves which happened before either handler runs.
+What it buys is a header with two buttons rather than four — at 19rem, four 20px
+controls and a title is a title with no room left to be read.
+
+- `chevron · icon · TITLE` on the left, as one button. The title is
+  `type-heading` in `slate-200`; the icon is `sky-400/70`.
+- **A pin** and `close` on the right, `slate-400` going `sky-200`. The pin is
+  one glyph carrying two states through its rotation: upright and `sky-300/80`
+  is docked into a pane, tipped to 45° and `slate-400` is loose over the scene,
+  and it tips _under the pointer_ to the state pressing it would produce. It
+  replaced a picture-in-picture glyph, which names a mechanism nobody outside a
+  docking library has a word for, where everybody already has one for pinned.
+  `aria-pressed`, because that is what it is.
+- **No tooltips in this header.** It is the one place the icon-only exception
+  below does not also buy a hover card: a pin and an × are the two most settled
+  glyphs in interface history, and three popovers appearing over a running scene
+  every time a hand crosses a panel it was only trying to drag is noise standing
+  in for a label. `aria-label` names all three.
+- **The title is the quieter colour and the larger size; the section headings
+  inside it are the accent and smaller.** That ordering is the fix for every
+  panel reading as five equally important shouts: a title says what you are
+  looking at, a heading organises what is in it.
 
 ### Section
 
-The dock's repeating structural unit: a full-width collapsible heading with a
-`▾`/`▸` marker in `slate-400`, a `sky-400/80` uppercase title, and an optional
-right-aligned `slate-400` trailing count. Open state persists per section id.
-This is the one component that defines the dock's rhythm — every panel is a
-stack of them.
+A panel's repeating structural unit: a full-width collapsible heading with a
+lucide chevron in `slate-400`, a `sky-400/80` `type-label` title, and an
+optional right-aligned `type-micro` trailing count. Open state persists per
+section id.
 
 ### Row
 
-A label/value pair: `slate-400` label that never shrinks, `slate-300` value that
-truncates or breaks, `gap-3` between. The whole readout surface of the interface
-is this component repeated.
+A label/value pair, and **the two halves are set in two different faces**: a
+`type-ui` sans label in `slate-400` that never shrinks, a `type-readout` mono
+value in `slate-300` that truncates or breaks, `gap-3` between. The whole
+readout surface of the interface is this component repeated, which is exactly
+why face rather than colour carries the distinction — forty rows in one face
+have one texture and the eye has nothing to catch on.
 
 ### Flight Strip (signature)
 
-The one piece of chrome that is not the dock, and deliberately so: it is what
-you read _while_ flying, where the dock is what you read when you have stopped
-to look at something. Bottom left, `slate-950/85`, `0.5rem` radius, 12px
-monospace — a hair larger than everything else — with four lines in descending
+The one readout that is not a panel, and deliberately so: it is what you read
+_while_ flying, where a panel is what you read when you have stopped to look at
+something. Bottom left, `slate-950/85`, `0.5rem` radius, `type-figure` — the
+largest mono step, a hair above everything else — with four lines in descending
 brightness: ship name in `sky-300`, speed in `slate-200`, frame or altitude in
-`slate-300`, tick and time-scale in `slate-400`. It stays legible with the dock
-collapsed, which is the state the game is actually played in.
+`slate-300`, tick and time-scale in `slate-400`. It stays legible with both
+panes slid away, which is the state the game is actually played in.
 
 The ladder used to run to `slate-500` on a `/75` ground, and both halves of that
 failed the same measurement: 2.4:1 for the bottom line, and 4.51:1 for the line
@@ -450,10 +653,10 @@ Legibility-Over-Glass working exactly as written.
 
 ### Connection Pip (signature)
 
-A single `●` in the dock header carrying five states in one glyph: `slate-500`
-checking, `emerald-400` online, `slate-400` offline, `amber-400` unreachable,
-`rose-400` incompatible. Collapsed, the header is the entire overlay, so the pip
-explains itself through a `title` rather than a label.
+A single `●` carrying five states in one glyph: `slate-500` checking,
+`emerald-400` online, `slate-400` offline, `amber-400` unreachable, `rose-400`
+incompatible. It lives in the telemetry panel's network section, and it explains
+itself through a `title` rather than a label.
 
 ### Cutscene Overlay (quarantined)
 
@@ -495,14 +698,26 @@ Rules that follow:
 - **Never run `shadcn init`.** It rewrites `index.css` with its own light and
   dark palettes and would take that mapping with it. `shadcn add <name>` is
   safe and is the supported path.
-- **A registry component's visual defaults are not authority here.** Two are
-  already known to disagree with this system and are open work:
-  `TooltipContent` ships inverted (`bg-foreground` on `text-background` — a
-  light chip in a dark-adapted interface, which is what the scrollbar rules
-  exist to stop), and every overlay component portals to `document.body`, which
-  is **outside `.hud-layer`** and therefore outside the standard-range clamp.
-  Radix's `Portal` takes a `container`; until it is wired, do not ship a
-  tooltip, popover, select or dialog.
+- **A registry component's visual defaults are not authority here.** Both known
+  faults were in `tooltip.tsx` and both are fixed in that file rather than at
+  the call sites, because a `className` on every `TooltipContent` in the
+  codebase is exactly the drift this section exists to stop:
+  - It shipped **inverted** — `bg-foreground` on `text-background`, a white chip
+    appearing over a starfield whenever the pointer rested near the menu, which
+    is what the scrollbar rules exist to stop. It is the panel material at chip
+    scale now: `slate-950/95`, a `slate-700/60` hairline, `type-micro`, no
+    arrow, an 8px offset and a 4px rise on entry.
+  - It portalled to `document.body`, **outside `.hud-layer`** and therefore
+    outside `dynamic-range-limit: standard`. Radix's `Portal` takes a
+    `container`; `hudLayer()` supplies it, read per render because the layer
+    element is replaced whenever the tree remounts.
+  - The provider's `delayDuration` is 350ms rather than the registry's 0. At 0
+    it is not a hint, it is a popover following the pointer: crossing the seven
+    glyphs of the IR menu fired seven of them.
+
+  Popover, select and dialog will each need the same two corrections when they
+  arrive. Do not ship one until they have them.
+
 - `--chart-*` and `--sidebar-*` are deliberately absent. Add them in this
   palette at the moment something needs them, not before.
 
@@ -510,9 +725,12 @@ Rules that follow:
 
 A routed page is a scrim plus one panel, centred, over a live simulation —
 `docs/design/ux.md` is explicit that settings open as an overlay and that
-nothing stops the world. The panel is the standard panel (`slate-950/85`,
-`0.5rem`, hairline `slate-700/60`) at `34rem` rather than the dock's `27rem`,
-because a page is read rather than scanned.
+nothing stops the world. The panel is the standard surface (`slate-950/85`,
+`0.5rem`, hairline `slate-700/60`) at `34rem` rather than a pane's `19rem`,
+because a page is read rather than scanned — and its body is `type-body`, the
+sans, for the same reason. Its title is `type-title`: a page is a _place_, so it
+gets the display face, which is what replaced the 10px uppercase label that used
+to announce a dialog whose whole job is to be read.
 
 **The scrim is `slate-950/70` with no backdrop blur, and the number was
 measured in front of Earth rather than picked.** Adding a blur obliterates the
@@ -530,7 +748,9 @@ addressable, and both Escape and the browser's back button leave it.
 
 - **Do** keep every new overlay inside `.hud-layer`. It is the only thing holding
   the interface at standard range over an extended-range canvas.
-- **Do** use `tabular-nums` on any figure that updates in place.
+- **Do** reach for a named step from the type scale — `type-readout`,
+  `type-label`, `type-title` — rather than writing a size, a weight and a
+  tracking at the call site. Colour stays at the call site; nothing else does.
 - **Do** give every control a `title` that names both the action and its keyboard
   equivalent, and pair every clickable action with a harness verb — a panel that
   can reach somewhere `ir.*` and the headless runner cannot breaks the guarantee
@@ -539,9 +759,18 @@ addressable, and both Escape and the browser's back button leave it.
 - **Do** express hierarchy with the graphite grade — 200 brightest through 600
   faintest — before reaching for size or weight.
 - **Do** keep disabled controls visible at 35% opacity. Their presence is
-  information.
-- **Do** anchor new chrome to a corner at the `0.75rem` inset, and unmount it
-  while a cutscene runs.
+  information. The exception is a control that is _also_ a readout — the time
+  panel's `1×` is both the rate and the way back to it, and disabling it at 1×
+  hid the number in order to grey out a no-op.
+- **Do** write every label in title case and let the step's `text-transform`
+  decide the case on screen. A label is read in four places the CSS never
+  reaches: a `title`, an `aria-label`, a screen reader, and a copied string.
+- **Do** anchor new chrome to an edge or corner at the `0.75rem` inset, and
+  unmount it while a cutscene runs.
+- **Do** add a new readout as a _panel_ in a mode's registry
+  (`planetarium/registry.tsx`, `hud/registry.tsx`) rather than as a new piece of
+  corner chrome. It then docks, floats, collapses, closes and appears in the
+  menu for free, and it is reachable identically in every mode.
 
 ### Don't:
 
@@ -554,21 +783,46 @@ addressable, and both Escape and the browser's back button leave it.
   its three plot colours now live in one named `CHART` constant in
   `hud/PerfPanel.tsx`, which is where a future palette move should find them.
 - **Don't** put anything but the crosshair at screen centre.
-- **Don't** set a proportional face anywhere in the dock or the strip.
-- **Don't** add shadows to create depth. There is one `shadow-xl`, on the dock,
-  and hairline borders do the rest.
-- **Don't** build icon-only controls _in the dock or the flight strip_. Every
-  control on a readout surface is a word — an icon among a hundred labels is a
-  guess. The exception, added 22 Aug 2026 with `lucide-react`, is **navigation
-  chrome**: the settings affordance in the top-left corner and a page's close
-  control, where a word would be a label floating over the scene rather than a
-  row in a panel. Both carry a `title` and an `aria-label` naming the action and
-  its key, which is the same contract every worded control already has. Two
-  icons is the exception; a third is a new decision.
-- **Don't** treat the cutscene overlay's blues and gold as tokens, or derive
-  anything from `public/favicon.svg` — the mark is violet
-  (`#863bff` / `#7e14ff`), shares no colour with the running interface, and is a
-  placeholder awaiting replacement in this system's own palette.
-- **Don't** polish the dev dock toward the cockpit specified in
-  `docs/design/ux.md`. It is scaffolding on purpose; the cockpit starts from the
-  question of where an element physically sits, not from this layout.
+- **Don't** set the display face at `type-title` or above on anything that is
+  not a place, and never
+  below `type-title`. It names the product, a mode, a page and the body in
+  frame. That is the whole list.
+- **Don't** set a value in the sans or a label in the mono. Structure is sans,
+  data is mono; that pairing is what makes a column of forty rows scannable.
+- **Don't** add shadows to create depth. There are two steps — a docked panel
+  and a floating one — and the second one is information, not expression.
+  Hairline borders do the rest.
+- **Don't** build icon-only controls _on a readout surface_. Every control in a
+  panel body is a word — an icon among a hundred labels is a guess. The
+  exception is **navigation chrome**, and it is now a whole surface rather than
+  two affordances: the IR menu, a panel header's three controls, and a pane's
+  reopen tab. What makes it the exception rather than a loophole is that a menu
+  is a row of peers with nothing else on it, read by shape and position, at a
+  size where fourteen words would be a paragraph across the bottom of the frame.
+  Most of them carry a real tooltip — not a `title` — because with no visible
+  text the hint _is_ the label. The panel header is the one place that does not,
+  and the reason is the same argument read the other way: a pin and an × are
+  already labels, and the header is crossed by a pointer that is usually only
+  trying to drag it. **On a phone none of this holds** — a finger cannot hover
+  to ask — so the compact arrangement names every panel in words. See
+  `dock/CompactDock.tsx`.
+- **Don't** treat the cutscene overlay's blues and gold as tokens. Its two
+  display faces are a _reference_, reproduced to prove the cinematic director
+  works (ADR-0010), and they are quarantined in `hud/cutsceneText.ts`. The title
+  sequence this project eventually ships is set in Archivo like everything else
+  with the product's name on it.
+- **Don't** let a cinematic effect fire off a script. The corona around an
+  eclipsed limb was drawn from occlusion geometry alone, so it appeared wherever
+  a camera sat on a body's anti-sun line — one press of `crescent` in the
+  planetarium, a third of every slow orbit on the front door — as a gold halo
+  filling the frame in a mode that had never asked for an eclipse. It is a drive
+  in `CinematicEffects` now, 0 everywhere except `tng-intro`'s eclipse shot, and
+  anything else authored for a scene belongs in that list beside it.
+- **Don't** re-derive the mark. It is three sheared bars in `sky-100`, `sky-300`
+  and `sky-500`, drawn once in `icons/Logomark.tsx` and reproduced path-for-path
+  in `public/favicon.svg`. The violet lightning glyph it replaced shared no
+  colour with the running interface.
+- **Don't** polish the author's instruments toward the cockpit specified in
+  `docs/design/ux.md`. They are scaffolding on purpose — that is what the
+  disclosure in the menu is saying — and the cockpit starts from the question of
+  where an element physically sits, not from this layout.

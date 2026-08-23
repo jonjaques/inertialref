@@ -245,6 +245,18 @@ export interface LensFlare {
      * shot composed around that reads as broken with one.
      */
     artifacts: number,
+    /**
+     * Whether an eclipse may draw its corona, 0..1 — a scripted effect drive
+     * (`CinematicEffects.corona`) rather than a property of the geometry.
+     *
+     * Zero is the default everywhere, and the ring's absence is not a missing
+     * feature: at planetarium and menu ranges the physical corona is a fraction
+     * of a degree past the limb, where this one is authored at `CORONA_SPAN`
+     * times the disc because it exists to read from the back of a cinema. Any
+     * camera that wandered onto a body's anti-sun line got a gold halo across
+     * the whole frame in a mode that had never asked for an eclipse.
+     */
+    coronaDrive: number,
   ): void
   dispose(): void
 }
@@ -286,6 +298,7 @@ export function createLensFlare(): LensFlare {
       angularRadius,
       occlusion,
       artifacts,
+      coronaDrive,
     ) {
       // Behind test in view space; NDC alone cannot tell front from back.
       view
@@ -303,9 +316,11 @@ export function createLensFlare(): LensFlare {
        * gating the whole group on `strength` is what used to leave a total
        * eclipse as an unlit disc on an empty starfield.
        */
-      const eclipse = behind ? null : occlusion.eclipse
+      const eclipse = behind || coronaDrive <= 0.002 ? null : occlusion.eclipse
       const coronaStrength =
-        eclipse === null ? 0 : eclipse.depth * fade * (0.35 + 0.65 * brightness)
+        eclipse === null
+          ? 0
+          : coronaDrive * eclipse.depth * fade * (0.35 + 0.65 * brightness)
 
       if (strength < 0.003 && coronaStrength < 0.003) {
         group.visible = false

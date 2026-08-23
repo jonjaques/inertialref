@@ -138,13 +138,13 @@ export function NavPanel({
         <NavFailure failure={failure} onDismiss={() => setFailure(null)} />
       )}
 
-      <Section id="nav.go" title="go to">
+      <Section id="nav.go" title="Go to">
         <AddressForm query={query} onQuery={setQuery} onSubmit={goTo} />
       </Section>
 
       <Section
         id="nav.targets"
-        title="destinations"
+        title="Destinations"
         trailing={`${targets.length}`}
       >
         <div className="max-h-64 overflow-auto rounded border border-slate-800/80">
@@ -187,7 +187,7 @@ export function NavPanel({
 
       <Section
         id="nav.shots"
-        title="shots"
+        title="Shots"
         trailing={target?.kind === 'body' ? target.name : 'current body'}
       >
         {/*
@@ -219,7 +219,7 @@ export function NavPanel({
             className="mx-1 !h-3 bg-slate-800"
           />
           <Action
-            label={shipShown ? 'hide ship' : 'show ship'}
+            label={shipShown ? 'Hide Ship' : 'Show Ship'}
             title="Draw the debug ship and reference props, or keep them out of the frame"
             onClick={() => {
               engine.showShip = !engine.showShip
@@ -229,7 +229,7 @@ export function NavPanel({
         </div>
       </Section>
 
-      <Section id="nav.cutscenes" title="cutscenes">
+      <Section id="nav.cutscenes" title="Cutscenes">
         {/*
          * Scripted scenes: `ir.play(id)` with a button per script, and a stop
          * that is safe to press at any time. The game never plays one on its
@@ -248,7 +248,7 @@ export function NavPanel({
             />
           ))}
           <Action
-            label="stop"
+            label="Stop"
             title="Stop the running cutscene and restore the ship"
             onClick={() =>
               run('cutscene stopped', () => engine.harness.stopCutscene())
@@ -259,7 +259,7 @@ export function NavPanel({
 
       <Section
         id="nav.scenarios"
-        title="scenarios"
+        title="Scenarios"
         trailing={pending === null ? undefined : `${pending} running…`}
       >
         <div className="flex flex-wrap gap-1">
@@ -282,7 +282,7 @@ export function NavPanel({
             />
           ))}
           <Action
-            label={pending === 'self test' ? 'self test…' : 'self test'}
+            label={pending === 'self test' ? 'Self Test…' : 'Self Test'}
             disabled={pending !== null}
             title="The twelve milestone capability checks, against this build"
             onClick={() =>

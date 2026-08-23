@@ -1,6 +1,10 @@
 import { AnimatePresence } from 'motion/react'
 import { Route, Routes, useLocation } from 'react-router'
-import type { CameraState, GraphicsState } from '../hud/controls.ts'
+import type {
+  CameraState,
+  GraphicsState,
+  HudRenderState,
+} from '../hud/controls.ts'
 import { AboutPage } from './AboutPage.tsx'
 import { AuthCallbackPage } from './AuthCallbackPage.tsx'
 import { overlaySurface } from './paths.ts'
@@ -24,6 +28,7 @@ import { SignUpPage } from './SignUpPage.tsx'
 interface OverlayRouteProps {
   readonly graphics: GraphicsState
   readonly camera: CameraState
+  readonly render: HudRenderState
 }
 
 /**
@@ -50,18 +55,22 @@ interface OverlayRouteProps {
  * click of a tab. Keyed on the surface, a section change is content changing
  * inside a panel that never re-enters, which is what it looks like anyway.
  */
-export function OverlayRoutes({ graphics, camera }: OverlayRouteProps) {
+export function OverlayRoutes({ graphics, camera, render }: OverlayRouteProps) {
   const location = useLocation()
   return (
     <AnimatePresence>
       <Routes location={location} key={overlaySurface(location.pathname)}>
         <Route
           path={SETTINGS}
-          element={<SettingsPage graphics={graphics} camera={camera} />}
+          element={
+            <SettingsPage graphics={graphics} camera={camera} render={render} />
+          }
         />
         <Route
           path={`${SETTINGS}/:section`}
-          element={<SettingsPage graphics={graphics} camera={camera} />}
+          element={
+            <SettingsPage graphics={graphics} camera={camera} render={render} />
+          }
         />
         <Route path={ABOUT} element={<AboutPage />} />
         <Route path={SIGN_IN} element={<SignInPage />} />

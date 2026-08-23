@@ -60,7 +60,7 @@ export function TransportButton({
           <Icon className={primary ? 'size-4' : 'size-3.5'} />
         </Button>
       </TooltipTrigger>
-      <TooltipContent className="font-mono text-[10px]">{label}</TooltipContent>
+      <TooltipContent>{label}</TooltipContent>
     </Tooltip>
   )
 }

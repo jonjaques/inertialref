@@ -49,9 +49,15 @@ function useMediaQuery(query: string): boolean {
 /** Too narrow for docked columns beside the scene. */
 export const useCompact = (): boolean => useMediaQuery(COMPACT_QUERY)
 
-/** The primary pointer is a finger: bigger targets, no hover affordances. */
-export const useCoarsePointer = (): boolean => useMediaQuery(COARSE_QUERY)
-
+/*
+ * There is deliberately no `useCoarsePointer` hook beside this one.
+ *
+ * There was, and nothing ever called it: the one thing in this build that asks
+ * about the pointer is `DockProvider`, choosing a drag-and-drop backend once at
+ * mount, and it needs the answer *outside* React — see `coarsePointer` below.
+ * A live hook that nothing subscribes to is a media query listener nobody
+ * removes and a second way to ask a question that already has one.
+ */
 /**
  * The same question, answered once and outside React.
  *

@@ -33,8 +33,8 @@ const PANELS = [
   { id: 'catalogue', zone: 'left' as DockZone },
   { id: 'object', zone: 'right' as DockZone },
   { id: 'view', zone: 'right' as DockZone },
-  { id: 'time', zone: 'bottom' as DockZone },
-  { id: 'presets', zone: 'bottom' as DockZone },
+  { id: 'time', zone: 'left' as DockZone },
+  { id: 'presets', zone: 'float' as DockZone },
 ]
 
 const IDS = PANELS.map((panel) => panel.id)
@@ -74,7 +74,7 @@ describe('the layout invariant', () => {
           fc.record({
             panel: fc.constantFrom(...IDS),
             verb: fc.constantFrom('hide', 'show', 'toggle'),
-            zone: fc.constantFrom('left', 'right', 'bottom'),
+            zone: fc.constantFrom('left', 'right', 'float'),
           }),
           { maxLength: 40 },
         ),
@@ -98,8 +98,8 @@ describe('the layout invariant', () => {
 
 describe('moving a panel', () => {
   it('puts it where it was asked for', () => {
-    const layout = movePanel(defaultLayout(PANELS), 'catalogue', 'bottom', 0)
-    expect(layout.bottom[0]).toBe('catalogue')
+    const layout = movePanel(defaultLayout(PANELS), 'catalogue', 'right', 0)
+    expect(layout.right[0]).toBe('catalogue')
     expect(layout.left).not.toContain('catalogue')
   })
 
@@ -178,7 +178,7 @@ describe('a drop, against the panels that were on screen', () => {
     fc.assert(
       fc.property(
         fc.constantFrom(...IDS),
-        fc.constantFrom('left', 'right', 'bottom'),
+        fc.constantFrom('left', 'right', 'float'),
         fc.array(anyMove, { maxLength: 12 }),
         fc.integer({ min: 0, max: 6 }),
         (panel, zone, moves, index) => {
@@ -240,7 +240,7 @@ describe('normalising a stored layout', () => {
     const stored: DockLayout = { ...EMPTY_LAYOUT, left: ['catalogue'] }
     const layout = normalizeLayout(stored, PANELS)
     expectIntact(layout)
-    expect(layout.bottom).toContain('time')
+    expect(layout.left).toContain('time')
   })
 
   it('de-duplicates a panel that somehow reached two zones', () => {
@@ -264,7 +264,7 @@ describe('normalising a stored layout', () => {
         fc.record({
           left: fc.array(fc.constantFrom(...IDS, 'ghost'), { maxLength: 6 }),
           right: fc.array(fc.constantFrom(...IDS, 'ghost'), { maxLength: 6 }),
-          bottom: fc.array(fc.constantFrom(...IDS, 'ghost'), { maxLength: 6 }),
+          float: fc.array(fc.constantFrom(...IDS, 'ghost'), { maxLength: 6 }),
           hidden: fc.array(fc.constantFrom(...IDS, 'ghost'), { maxLength: 6 }),
         }),
         (stored) => {
@@ -291,7 +291,7 @@ describe('the stored-value guard', () => {
     expect(isDockLayout(defaultLayout(PANELS))).toBe(true)
     expect(isDockLayout(null)).toBe(false)
     expect(isDockLayout('left')).toBe(false)
-    expect(isDockLayout({ left: [], right: [], bottom: [] })).toBe(false)
+    expect(isDockLayout({ left: [], right: [], float: [] })).toBe(false)
     expect(isDockLayout({ ...EMPTY_LAYOUT, left: [1, 2] })).toBe(false)
   })
 

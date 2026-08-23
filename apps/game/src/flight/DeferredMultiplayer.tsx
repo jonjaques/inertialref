@@ -19,18 +19,18 @@ export function DeferredMultiplayer() {
           <Users aria-hidden className="size-5 text-slate-400" />
           Multiplayer is deferred
         </h1>
-        <p className="mt-3 font-mono text-[11px] leading-relaxed text-slate-400">
+        <p className="type-body mt-3 text-slate-400">
           Deliberately, and the seams are the reason it can wait: a star system
           is the unit of authority, partition keys are already a live field on
           every entity, and no hosting vendor’s SDK appears anywhere in the
           engine. See ADR-0008.
         </p>
-        <p className="mt-2 font-mono text-[11px] leading-relaxed text-slate-400">
+        <p className="type-body mt-2 text-slate-400">
           With few players a shared galaxy is indistinguishable from solo online
           — so the mode degrades into one that already works, rather than
           failing.
         </p>
-        <div className="mt-4 flex flex-wrap gap-2 font-mono text-[11px]">
+        <div className="type-ui mt-4 flex flex-wrap gap-2">
           <Button
             asChild
             variant="outline"

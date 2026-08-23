@@ -119,6 +119,34 @@ export function formatDistance(m: Meters, digits = 3): string {
   return `${(m * 1e3).toFixed(digits)} mm`
 }
 
+/*
+ * What the simulation clock's zero actually is.
+ *
+ * Every orbit in the build is solved from elements published for **J2000.0**
+ * with `epoch: 0` — see `universe/src/solar/bodies.ts` — so simulation time is
+ * seconds after that instant, and has been since the first Kepler solve. The
+ * clock has simply never been able to *say* so: `world.clock.time` is a
+ * duration, and a readout of "15.23 s" is a stopwatch reading in a game whose
+ * subject is where the planets are.
+ *
+ * J2000.0 is 2000-01-01 12:00:00 **TT**, which was 11:58:55.816 UTC. This uses
+ * noon UTC and does not pretend otherwise: nothing in this simulation models
+ * the TT−UTC offset, and carrying 64 seconds of precision through a clock that
+ * has none is a more expensive lie than being a minute out. Anything that ever
+ * needs the real offset needs a leap-second table first.
+ */
+export const SIMULATION_EPOCH_UTC_MS = Date.UTC(2000, 0, 1, 12, 0, 0)
+
+/**
+ * The instant a simulation time names, as milliseconds since the Unix epoch.
+ *
+ * Milliseconds rather than a `Date`, because that is the currency every
+ * formatter and every date picker already speaks, and because a `Date` handed
+ * across a module boundary is a mutable object nobody owns.
+ */
+export const instantMillis = (s: Seconds): number =>
+  SIMULATION_EPOCH_UTC_MS + s * 1000
+
 /** Human-readable duration for HUD/debug output. Input is simulation seconds. */
 export function formatDuration(s: Seconds): string {
   const a = Math.abs(s)

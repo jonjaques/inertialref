@@ -84,7 +84,7 @@ export class ErrorBoundary extends Component<
         </div>
         <div className="mt-1.5">
           <Action
-            label="retry"
+            label="Retry"
             title="Render it again — the simulation kept running underneath"
             onClick={() => this.setState({ error: null })}
           />

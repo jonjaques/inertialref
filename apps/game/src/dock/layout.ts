@@ -23,28 +23,39 @@
  * `hidden` is a zone rather than an absence, which is what makes the invariant
  * expressible at all — "closed" is somewhere a panel *is*, so closing one and
  * reopening it is a move rather than a deletion followed by an invention.
+ *
+ * `float` is the same trick pointed the other way. A panel pulled out of a pane
+ * is not *outside* the layout; it is in the one zone whose arrangement happens
+ * to be two coordinates rather than an order. Those coordinates live in
+ * `floating.ts` and deliberately not here: a position is a decoration that can
+ * be lost without anything breaking, and the census this file guards must never
+ * depend on one existing.
  */
-export const DOCK_ZONES = ['left', 'right', 'bottom', 'hidden'] as const
+export const DOCK_ZONES = ['left', 'right', 'float', 'hidden'] as const
 export type DockZone = (typeof DOCK_ZONES)[number]
 
-/** The zones a drag can drop into. `hidden` is reached by closing, not dragging. */
-export const DROP_ZONES = ['left', 'right', 'bottom'] as const
+/**
+ * The two panes: the zones that are an ordered stack with a drop target.
+ *
+ * There is no `bottom`. It existed while the dock was three edges and a rail;
+ * the workspace is two panes and a menu, and a horizontal band of panels along
+ * the bottom is exactly the strip the menu now occupies.
+ */
+export const PANE_ZONES = ['left', 'right'] as const
+export type PaneZone = (typeof PANE_ZONES)[number]
+
+/** Whether a zone is one of the two ordered stacks. */
+export const isPane = (zone: DockZone): zone is PaneZone =>
+  zone === 'left' || zone === 'right'
 
 /**
- * Whether a zone stacks vertically.
+ * The zones a drag can drop *into a slot of*.
  *
- * Here rather than in the React layer because four components need the same
- * answer — the zone container's flex direction, the drop indicator's axis, the
- * panel's own width rule and the insertion measurement's axis — and the one
- * time they disagreed the drop line was drawn horizontally in a row that
- * inserted left-to-right.
- *
- * The bottom bar spans the width and the sidebars stop above it, rather than
- * the other way round. That is the arrangement every editor converged on for a
- * reason worth restating: a transport or a timeline is read left to right
- * across the whole frame, and a catalogue is read top to bottom in a column.
+ * `hidden` is reached by closing and `float` by releasing over the scene, which
+ * is a drop with no stack to insert into — so neither has a `DockZoneView` and
+ * neither belongs here.
  */
-export const isColumn = (zone: DockZone): boolean => zone !== 'bottom'
+export const DROP_ZONES = PANE_ZONES
 
 export type DockLayout = {
   readonly [Z in DockZone]: readonly string[]
@@ -53,7 +64,7 @@ export type DockLayout = {
 export const EMPTY_LAYOUT: DockLayout = {
   left: [],
   right: [],
-  bottom: [],
+  float: [],
   hidden: [],
 }
 
@@ -87,7 +98,7 @@ export function movePanel(
   const stripped: Record<DockZone, string[]> = {
     left: layout.left.filter((id) => id !== panel),
     right: layout.right.filter((id) => id !== panel),
-    bottom: layout.bottom.filter((id) => id !== panel),
+    float: layout.float.filter((id) => id !== panel),
     hidden: layout.hidden.filter((id) => id !== panel),
   }
   const target = stripped[zone]
@@ -129,11 +140,37 @@ export const hidePanel = (layout: DockLayout, panel: string): DockLayout =>
   movePanel(layout, panel, 'hidden')
 
 /**
+ * Every panel that is on screen, in zone order, as the definitions themselves.
+ *
+ * The compact arrangement's whole census: on a phone the zones stop being read,
+ * so what is left of a layout is *which panels are open and in what order*.
+ * Pure, and here rather than inside `CompactDock`, for the reason every other
+ * function in this file is here — it is the claim worth testing ("nothing is
+ * stranded in a zone the compact layout no longer draws") and testing it
+ * through a component means first getting a sheet open, which a static render
+ * cannot do.
+ *
+ * A layout naming a panel that no longer exists is dropped rather than left as
+ * a hole: `normalizeLayout` is the guard against stored ids going stale, and
+ * this must not disagree with it.
+ */
+export function openPanels<T extends { readonly id: string }>(
+  panels: readonly T[],
+  layout: DockLayout,
+): readonly T[] {
+  return DOCK_ZONES.filter((zone) => zone !== 'hidden')
+    .flatMap((zone) => [...layout[zone]])
+    .map((id) => panels.find((panel) => panel.id === id))
+    .filter((panel): panel is T => panel !== undefined)
+}
+
+/**
  * Show a panel again, in a zone that suits it.
  *
  * The zone a panel *prefers* is the panel's own business — a catalogue belongs
- * at the side and a transport belongs along the bottom — so the caller passes
- * it. Reopening always appends rather than restoring a remembered slot: the
+ * on the left and the thing you are looking at belongs on the right — so the
+ * caller passes it. Reopening always appends rather than restoring a remembered
+ * slot: the
  * slot it left is very likely occupied, and a panel appearing in the middle of
  * a stack the user arranged is more surprising than one appearing at the end.
  */
@@ -178,7 +215,7 @@ export function normalizeLayout(
   const next: Record<DockZone, string[]> = {
     left: [],
     right: [],
-    bottom: [],
+    float: [],
     hidden: [],
   }
 

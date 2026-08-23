@@ -71,6 +71,22 @@ export const PhaseCrescent = createLucideIcon('PhaseCrescent', [
   ['path', { d: 'M12 3a5 9 0 0 1 0 18', key: 'terminator' }],
 ])
 
+/**
+ * The star behind the body: an unlit disc inside a ring of its own atmosphere.
+ *
+ * The odd one out of the four, and it has to be. At full phase the terminator
+ * has no width and at new phase it has all of it — so drawn to the same recipe
+ * as the three above, this glyph would be the bare circle that already means
+ * *full*, which is the opposite composition. What is actually on screen at 170°
+ * is a dark body ringed by scattered light, so that is what this draws: a disc
+ * at r = 5.5 inside a ring at r = 9, which is 3.5 px apart and clears the 2 px
+ * rule at 16 px.
+ */
+export const PhaseRim = createLucideIcon('PhaseRim', [
+  ['circle', { cx: '12', cy: '12', r: '9', key: 'ring' }],
+  ['circle', { cx: '12', cy: '12', r: '5.5', key: 'disc' }],
+])
+
 /* ------------------------------------------------------------------------- */
 /* Sphere of influence                                                        */
 /* ------------------------------------------------------------------------- */

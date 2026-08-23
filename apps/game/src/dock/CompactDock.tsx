@@ -1,45 +1,74 @@
 import { useState } from 'react'
-import { ChevronDown, ChevronUp } from 'lucide-react'
+import { Link, useLocation } from 'react-router'
+import { ChevronDown, ChevronUp, Rows3, SlidersHorizontal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Separator } from '@/components/ui/separator'
 import { FOCUS_RING, releaseFocus } from '../hud/focus.ts'
+import { Logomark } from '../icons/Logomark.tsx'
+import { HOME, overlayState, SETTINGS } from '../pages/paths.ts'
+import { CompactTab } from './CompactTab.tsx'
 import type { DockLayout } from './layout.ts'
-import { DROP_ZONES } from './layout.ts'
+import { openPanels } from './layout.ts'
 import type { DockPanelDefinition } from './panels.ts'
 
 /*
- * The same panels on a phone: a sheet, and a strip of glyphs to choose from.
+ * The same workspace on a phone: a nav bar, and a sheet of panels above it.
  *
  * Docking is deliberately not offered here, and that is a design decision
  * rather than a shortcut. "Left" and "right" have no meaning on a 390 px screen
  * — a 19 rem column is the entire width — so a drag that moved a panel between
- * zones would be a gesture with an invisible effect, which is worse than no
- * gesture. What *does* transfer is the part that matters on a phone: every
- * panel is reachable, one at a time, over a scene that is still the whole
- * screen.
+ * panes would be a gesture with an invisible effect, which is worse than no
+ * gesture. Floating is the same argument twice over: there is nothing for a
+ * panel to float *over* that it would not also cover.
  *
  * The arrangement is still the same `DockLayout`, so a workspace arranged on a
  * desktop and opened on a phone keeps its panel *set* — the zones simply stop
- * being read. Rotating a tablet back to landscape restores the columns exactly
- * as they were, because nothing was thrown away to draw this.
+ * being read, floating included. Rotating a tablet back to landscape restores
+ * the panes exactly as they were, because nothing was thrown away to draw this.
  *
- * No tooltips on this one, unlike the desktop rail: the tabs carry their names
- * as text, and a hover hint is a thing a finger cannot ask for.
+ * ## What this replaced, and why
+ *
+ * One row of tabs across the bottom, scrolling horizontally. Two failures, and
+ * the second is the serious one:
+ *
+ * 1. **A horizontal scroller hides its own contents.** At 390 px the fourth tab
+ *    was clipped mid-word and the fifth was off-screen with nothing to say so.
+ *    Open the author's instruments and there were eleven. The panels are named
+ *    in words here precisely because a finger cannot hover a glyph to find out
+ *    what it is — and then the words were the thing that did not fit.
+ * 2. **There was no way out of the mode at all.** The IR menu carries the mark,
+ *    the place and the settings, and `Workspace` renders it only in the desktop
+ *    arrangement. On a phone the planetarium had no route home and no settings:
+ *    the browser's back button was the entire navigation model.
+ *
+ * So the strip is a *nav bar* now — the same three questions the IR menu
+ * answers, in the same order, at thumb scale — and the panels moved into the
+ * sheet they open, where they wrap onto as many rows as they need instead of
+ * scrolling off the edge of one.
  */
 
-/** How much of the screen the open sheet takes. Under half, so the sky wins. */
-const SHEET_HEIGHT = 'max-h-[42vh]'
+/**
+ * How much of the screen the open sheet takes.
+ *
+ * Up from 42vh, because the sheet carries the panel picker now as well as the
+ * panel: at 42 the tab rows left about 120 px of body, which is four rows of a
+ * catalogue. Still comfortably under two thirds, and it is one tap to put the
+ * sky back.
+ */
+const SHEET_HEIGHT = 'max-h-[58vh]'
 
 export function CompactDock({
   panels,
   layout,
+  mode,
 }: {
   panels: readonly DockPanelDefinition[]
   layout: DockLayout
+  /** The name of the place, beside the mark — as in the IR menu. */
+  mode: string
 }) {
-  const order = DROP_ZONES.flatMap((zone) => [...layout[zone]])
-  const available = order
-    .map((id) => panels.find((panel) => panel.id === id))
-    .filter((panel): panel is DockPanelDefinition => panel !== undefined)
+  const location = useLocation()
+  const available = openPanels(panels, layout)
 
   /*
    * Which panel is showing, and whether the sheet is open at all.
@@ -52,38 +81,38 @@ export function CompactDock({
   const [openId, setOpenId] = useState<string | null>(null)
   const open = available.find((panel) => panel.id === openId) ?? null
 
-  if (available.length === 0) return null
-
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col">
       {open !== null && (
         <section
-          className={`pointer-events-auto mx-2 flex ${SHEET_HEIGHT} min-h-0 flex-col overflow-hidden rounded-t-lg border border-b-0 border-slate-700/60 bg-slate-950/90 font-mono text-[12px] leading-relaxed text-slate-300 shadow-xl backdrop-blur`}
+          className={`pointer-events-auto mx-2 flex ${SHEET_HEIGHT} type-readout min-h-0 flex-col overflow-hidden rounded-t-lg border border-b-0 border-slate-700/60 bg-slate-950/90 text-slate-300 shadow-xl backdrop-blur`}
         >
-          <header className="flex items-center gap-2 border-b border-slate-800 px-3 py-2">
-            <open.icon
-              aria-hidden
-              className="size-4 shrink-0 text-sky-400/80"
-            />
-            <h2 className="truncate text-[11px] tracking-widest text-sky-300 uppercase">
-              {open.title}
-            </h2>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label={`Close ${open.title}`}
-              onClick={(event) => {
-                releaseFocus(event)
-                setOpenId(null)
-              }}
-              // 44 px, the platform minimum for a thumb — the same rule the
-              // tab strip below follows, applied to the control that is
-              // hardest to hit because it is in a corner.
-              className={`ml-auto size-11 rounded text-slate-400 hover:bg-transparent hover:text-sky-200 ${FOCUS_RING}`}
-            >
-              <ChevronDown className="size-4" />
-            </Button>
-          </header>
+          {/*
+           * The picker, inside the sheet and wrapping.
+           *
+           * Wrapping rather than scrolling is the whole fix: every panel is on
+           * screen at once, at whatever number of rows that takes, and nothing
+           * is hidden behind a gesture with no affordance. It is capped and
+           * scrollable as a backstop — eleven panels with the instruments out
+           * is four rows, and a picker that could grow past the body it is
+           * picking for would be the old problem on the other axis.
+           */}
+          <div
+            role="group"
+            aria-label="Panels"
+            className="flex max-h-32 shrink-0 flex-wrap gap-1 overflow-y-auto border-b border-slate-800 px-2 py-1.5"
+          >
+            {available.map((panel) => (
+              <CompactTab
+                key={panel.id}
+                panel={panel}
+                active={panel.id === open.id}
+                onClick={() =>
+                  setOpenId(panel.id === open.id ? null : panel.id)
+                }
+              />
+            ))}
+          </div>
           <div className="min-h-0 flex-1 overflow-auto px-3 py-2">
             {open.render()}
           </div>
@@ -91,44 +120,69 @@ export function CompactDock({
       )}
 
       {/*
-       * The tab strip, and the reason it scrolls horizontally rather than
-       * wrapping: a second row of tabs on a phone eats the sky, and the panels
-       * a person uses are the first two or three either way.
+       * The nav bar: where you are, what you can see, what else there is —
+       * the IR menu's three questions, at thumb scale.
        *
-       * `pb-[env(safe-area-inset-bottom)]` keeps the strip off the home
-       * indicator on a notched device, where the bottom 34 px belong to the OS
-       * and anything drawn there is both dimmed and un-tappable.
+       * `pb-[env(safe-area-inset-bottom)]` keeps it off the home indicator on a
+       * notched device, where the bottom 34 px belong to the OS and anything
+       * drawn there is both dimmed and un-tappable.
        */}
       <nav
-        aria-label="Panels"
-        className="pointer-events-auto flex gap-1 overflow-x-auto border-t border-slate-700/60 bg-slate-950/90 px-2 py-1.5 pb-[max(0.375rem,env(safe-area-inset-bottom))] backdrop-blur"
+        aria-label="Workspace"
+        className="pointer-events-auto flex items-center gap-1 border-t border-slate-700/60 bg-slate-950/90 px-2 py-1.5 pb-[max(0.375rem,env(safe-area-inset-bottom))] backdrop-blur"
       >
-        {available.map((panel) => {
-          const Icon = panel.icon
-          const active = panel.id === openId
-          return (
-            <Button
-              key={panel.id}
-              variant="ghost"
-              aria-pressed={active}
-              onClick={(event) => {
-                releaseFocus(event)
-                setOpenId(active ? null : panel.id)
-              }}
-              // 44 px of height, which is the platform minimum for a target a
-              // thumb has to hit while the other hand is holding the device.
-              className={`min-h-11 shrink-0 gap-1.5 rounded px-3 font-mono text-[11px] font-normal ${FOCUS_RING} ${
-                active
-                  ? 'bg-sky-500/15 text-sky-200 hover:bg-sky-500/25 hover:text-sky-100'
-                  : 'text-slate-400 hover:bg-transparent active:bg-slate-800/60'
-              }`}
-            >
-              <Icon className="size-4" />
-              <span className="tracking-widest uppercase">{panel.title}</span>
-              {active && <ChevronUp className="size-3 opacity-60" />}
-            </Button>
-          )
-        })}
+        <Link
+          to={HOME}
+          aria-label="Back to the menu"
+          className={`flex min-h-11 shrink-0 items-center gap-2 rounded px-2 text-slate-300 transition-colors active:bg-slate-800/60 ${FOCUS_RING}`}
+        >
+          <Logomark className="size-4 shrink-0" />
+          <span className="type-label truncate">{mode}</span>
+        </Link>
+
+        {/*
+         * The panel toggle sits in the middle and takes the slack, so the two
+         * navigation targets stay pinned to the edges a thumb reaches for.
+         * Disabled rather than hidden when a workspace has nothing open —
+         * `DESIGN.md` keeps a disabled control on screen because its presence
+         * is information, and here the information is "this mode has panels".
+         */}
+        <Button
+          variant="ghost"
+          aria-expanded={open !== null}
+          disabled={available.length === 0}
+          onClick={(event) => {
+            releaseFocus(event)
+            setOpenId(open === null ? (available[0]?.id ?? null) : null)
+          }}
+          className={`mx-auto min-h-11 gap-1.5 rounded px-3 disabled:opacity-35 ${FOCUS_RING} ${
+            open === null
+              ? 'text-slate-400 hover:bg-transparent active:bg-slate-800/60'
+              : 'bg-sky-500/15 text-sky-200 hover:bg-sky-500/25 hover:text-sky-100'
+          }`}
+        >
+          <Rows3 className="size-4" />
+          <span className="type-label">{open?.title ?? 'Panels'}</span>
+          {open === null ? (
+            <ChevronUp className="size-3 opacity-60" />
+          ) : (
+            <ChevronDown className="size-3 opacity-60" />
+          )}
+        </Button>
+
+        <Separator
+          orientation="vertical"
+          className="mx-0.5 !h-5 bg-slate-800"
+        />
+
+        <Link
+          to={SETTINGS}
+          state={overlayState(location)}
+          aria-label="Settings"
+          className={`flex size-11 shrink-0 items-center justify-center rounded text-slate-400 transition-colors active:bg-slate-800/60 ${FOCUS_RING}`}
+        >
+          <SlidersHorizontal className="size-4" />
+        </Link>
       </nav>
     </div>
   )

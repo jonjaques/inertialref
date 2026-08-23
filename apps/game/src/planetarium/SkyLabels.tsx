@@ -35,8 +35,26 @@ const MAX_LABELS = 18
 /** Minimum separation before one of a pair is dropped, in CSS pixels. */
 const SPACING = { x: 96, y: 18 }
 
-/** The name plus its leader, in pixels: 12 of type and a 12 px tick. */
-const TICK_LIFT = 24
+/** The name plus its leader, in pixels: 12 of type and a 14 px leader. */
+const TICK_LIFT = 26
+
+/**
+ * The dark edge an unplated name carries, as a text shadow.
+ *
+ * The plate is gone, and that is a trade the brief asked for in those words:
+ * eighteen boxed chips read as a form laid over a sky, and the sky is the
+ * thing. Two shadows rather than one — a tight 2px to draw the counters and a
+ * wide 7px to sink the ground under the strokes — is what a single offset
+ * cannot do, because the failing case is a *bright* background where the glyph
+ * needs a hole around it rather than a drop.
+ *
+ * It is honestly weaker than the plate was. A name that lands on a lit limb
+ * measures around 3:1 where the plate held 4.5, so the one label that has to
+ * survive anything keeps a ground: the selected one, which is the name being
+ * read. `#020617` is slate-950.
+ */
+const HALO =
+  '0 0 2px rgb(2 6 23 / 0.95), 0 0 7px rgb(2 6 23 / 0.9), 0 1px 3px rgb(2 6 23 / 0.85)'
 
 /**
  * A label's nodes, kept out of React so the loop can write to them.
@@ -179,30 +197,32 @@ export function SkyLabels({
               className="flex flex-col items-center will-change-transform"
               style={{ transform: 'translate(-50%, -24px)' }}
             >
-              {/* Selection is hue and a hairline, never a glow: the old one was
-                  sky-coloured light on a star, which measured 1.16:1 — a glow
-                  can only add brightness, and the failing case is already
-                  bright. */}
               <span
                 /* Bounded, because catalogue names are not. `declutter` spaces
-                   labels 96 px apart and a designation longer than the plate
-                   would quietly overlap the neighbour it was spaced away from. */
-                className={`max-w-[14rem] truncate rounded border px-1 py-px font-mono text-[10px] tracking-[0.18em] whitespace-nowrap uppercase ${
+                   labels 96 px apart and a designation longer than that would
+                   quietly overlap the neighbour it was spaced away from. */
+                style={selected ? undefined : { textShadow: HALO }}
+                className={`type-label max-w-[14rem] truncate whitespace-nowrap ${
                   selected
-                    ? 'border-sky-400/60 bg-slate-950/85 text-sky-200'
-                    : 'border-transparent bg-slate-950/85 text-slate-300'
+                    ? 'rounded-full bg-sky-400/12 px-2 py-0.5 text-sky-100 ring-1 ring-sky-400/35'
+                    : 'text-slate-200'
                 }`}
               >
                 {name}
               </span>
-              {/* The leader crosses the same two grounds the name does, so it
-                  carries its own dark edge rather than one colour that can only
-                  survive on one of them. */}
+              {/* The leader fades as it falls, so the end that lands on a lit
+                  limb is the faint end. One gradient covers both grounds where
+                  a solid line needed an outline to survive either. */}
               <span
                 aria-hidden
-                className={`mt-0.5 h-3 w-px outline outline-1 outline-slate-950/85 ${
-                  selected ? 'bg-sky-300' : 'bg-slate-300'
-                }`}
+                className="mt-1 h-3.5 w-px"
+                style={{
+                  backgroundImage: `linear-gradient(to bottom, ${
+                    selected
+                      ? 'rgb(125 211 252 / 0.9)'
+                      : 'rgb(226 232 240 / 0.6)'
+                  }, transparent)`,
+                }}
               />
             </div>
           </div>

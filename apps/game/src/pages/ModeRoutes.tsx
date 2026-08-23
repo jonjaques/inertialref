@@ -1,5 +1,6 @@
 import { Route, Routes, useLocation } from 'react-router'
 import type { HarnessStatus } from '@inertialref/devtools'
+import type { DevWorkspace } from '../dock/workspace.ts'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { CinemaMode } from '../cinema/CinemaMode.tsx'
 import { FlightMode } from '../flight/FlightMode.tsx'
@@ -31,6 +32,16 @@ interface ModeRouteProps {
   readonly status: HarnessStatus | null
   readonly fov: number
   readonly onFov: (fov: number) => void
+  /**
+   * The author's instruments, and the disclosure that reveals them.
+   *
+   * Assembled in `App` because only `App` has the renderer description, the
+   * connection monitor and the command table — and handed to the mode because
+   * the *workspace* they go into belongs to the mode. Every mode below merges
+   * them with its own panels; `HomePage` is the one that does not, because the
+   * menu is not a place with a workspace in it.
+   */
+  readonly dev: DevWorkspace
 }
 
 /**
@@ -58,7 +69,13 @@ export function ModeRoutes(props: ModeRouteProps) {
       <Route path={HOME} element={<HomePage engine={props.engine} />} />
       <Route
         path="/play/:mode"
-        element={<FlightMode engine={props.engine} status={props.status} />}
+        element={
+          <FlightMode
+            engine={props.engine}
+            status={props.status}
+            dev={props.dev}
+          />
+        }
       />
       <Route
         path={PLANETARIUM}
@@ -67,13 +84,17 @@ export function ModeRoutes(props: ModeRouteProps) {
             engine={props.engine}
             fov={props.fov}
             onFov={props.onFov}
+            dev={props.dev}
           />
         }
       />
-      <Route path={CINEMA} element={<CinemaMode engine={props.engine} />} />
+      <Route
+        path={CINEMA}
+        element={<CinemaMode engine={props.engine} dev={props.dev} />}
+      />
       <Route
         path={`${CINEMA}/:scene`}
-        element={<CinemaMode engine={props.engine} />}
+        element={<CinemaMode engine={props.engine} dev={props.dev} />}
       />
       {/*
        * Anything else falls through to the menu rather than to a 404 page.

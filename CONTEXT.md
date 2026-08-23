@@ -2295,6 +2295,149 @@ the scene (labels and orbit traces appeared), and a dialog opened over the
 planetarium still closes back to `/planetarium?at=…` with the mode mounted, the
 camera where it was, and no scrim left behind.
 
+## A condensed voice, and the front door's lens (22 Aug 2026)
+
+A design pass over the three surfaces a visitor actually meets. Everything below
+was driven from a review of the running build rather than from the source, and
+the two largest items are typographic.
+
+**The display face is a condensed grotesque, and there is no serif in the
+system.** Two serifs were tried in that slot in one sitting and both were the
+same mistake in different clothes: Instrument Serif reads as a title page from
+1780 over a live render of the Milky Way, and Spectral — lower contrast, more
+technical — still puts a _book_ voice on an instrument. What this interface has
+always been is signage. It is **Archivo Variable** now, run at 70% width and 700
+weight for the name, 80%/600 for a title.
+
+**It took the label steps with it, and that is the larger half.** The uppercase
+micro-labels were Instrument Sans, a humanist face with generous sidebearings,
+so at 10px with 0.15em of tracking they were loose and soft — which is how "the
+labels look ugly" happens to an interface made almost entirely of labels.
+Condensed at 78%, both steps grew a pixel (`type-heading` 11 → 12, `type-label`
+10 → 11) while fitting _more_ characters per column, and the tracking came down
+to 0.08em/0.1em because it had been compensating for sidebearings a condensed
+face does not have. `type-ui` and `type-body` stay Instrument Sans: structure is
+the grotesque, prose is the sans, data is the mono.
+
+**Case is typography.** Every label in the source is title case and the step's
+`text-transform` decides what is shouted, because a label is read in four places
+CSS never reaches — a `title`, an `aria-label`, a screen reader, a copied
+string — and `'PLAYABLE'` in a constant is a shout none of them can turn off.
+About sixty strings moved.
+
+**The corona was firing off-script.** The ring around an eclipsed limb was drawn
+from occlusion geometry alone, so it appeared wherever a camera sat on a body's
+anti-sun line: one press of `crescent` in the planetarium, and a third of every
+slow orbit on the front door, as a gold halo filling the frame in a mode that
+had never asked for an eclipse. At those ranges the physical corona is a
+fraction of a degree past the limb and the drawn one is nearly a disc radius
+thick. It is `CinematicEffects.corona` now — a script drive like `blackout` and
+`flash` — and `tng-intro`'s eclipse shot (f240–356) is the only thing that sets
+it.
+
+**The front door orbits in phase, not in azimuth, and that is why the star
+crosses the frame.** The old drift dragged the azimuth at 0.4°/s, which orbits
+the world's pole; where the star ends up in that circle depends on how Sol's
+ecliptic lies against the galactic plane, and it never reliably entered the
+frame at all. `anglesForPhase` solves against the _star line_ and is continuous
+through 360°, so the menu ramps phase at 1.8°/s from −112°. Measured on the
+running page: on the positive arc the star's image sits at NDC x = −0.58, dead
+centre of the poster's black gradient with its ghost chain out over empty sky;
+negated it is at +0.58 and the composition is a bright rim on the left, the star
+clear of it two thirds across, and the anamorphic streak running the full width
+under the type. `engine.flareArtifacts` is the new dial that lets the menu run a
+near-clean lens — at 1.0 the red aperture ghost is a 260px hoop on the
+paragraph.
+
+**The catalogue is measured from the camera.** `travelTargets` took the
+_player's_ position, so in the planetarium — whose only verb is `look` — the
+list opened at Alpha Centauri still ordered by distance from Earth: Sol's moons
+at the top, and the star filling the frame reported as 4.4 ly away twenty rows
+down. `targets({ origin: 'observer' })` centres the survey and the sort on
+`Observatory.eye`. Systems sort by distance; bodies stay in orbital order under
+their star.
+
+**The clock has a date.** Every orbit is solved from J2000 elements at
+`epoch: 0`, so simulation time has always been seconds after a real instant and
+the readout has never said so — it was `formatDuration(clock.time)`, "15.23 s",
+a stopwatch reading in a mode whose subject is _when_ you are looking.
+`SIMULATION_EPOCH_UTC_MS` in `@inertialref/shared` is noon UTC on 2000-01-01 and
+does not pretend to model TT−UTC; the panel formats it in the reader's own zone.
+The transport is Stellarium's: slower, play/pause, faster, and the rate readout
+doubles as the way back to 1×. **There is no reverse**, and it is not an
+omission — `SimulationClock` counts fixed ticks forward, `setTimeScale` refuses
+anything not positive, and ship state is integrated rather than derived, so
+running it backwards is a re-simulation from a snapshot rather than a sign flip.
+
+**On a phone the workspace had no way out of itself.** `Workspace` rendered the
+IR menu only in the desktop arrangement, so the mark, the place and the settings
+did not exist below 900px: the browser's back button was the entire navigation
+model. The compact strip is a nav bar now — the same three questions at thumb
+scale — and the panels moved into the sheet they open, where they wrap onto as
+many rows as they need instead of scrolling the fourth name off the edge of one.
+`openPanels` in `dock/layout.ts` is the census, pure and tested, because the
+picker lives inside a sheet that opens closed and a static render could never
+reach it.
+
+**Cinema: three defects, one cause each.**
+
+- The end of a scene cut to whatever the chase camera saw — the debug hull in
+  front of Earth, arriving as a hard cut on the last beat of a title sequence —
+  with "scene ended" in the display face over a sunlit planet at about 1.6:1.
+  The player reopens two frames short of the end and pauses, so the last shot
+  holds, and the card is a real surface with three ways out including one home.
+  Two frames rather than one: the director reports `done` _on_ the final frame,
+  so seeking to it loops.
+- The transport sat under the IR menu at the bottom centre. It is at
+  `bottom-14` now, above it, which is the same stacking the notice already used.
+- The menu stayed on screen through the entire title sequence while the
+  transport faded. `useTransportIdle` is one timer in `CinemaMode` and both bars
+  fade together; the wrapper uses `visibility` alongside opacity so an invisible
+  bar does not keep taking clicks.
+
+**`TooltipContent` was the registry component `DESIGN.md` said not to ship.** It
+was inverted — a white chip over a starfield — and portalled to `document.body`,
+outside `.hud-layer` and therefore outside the standard-range clamp. Both are
+fixed in the file rather than at ninety call sites, along with a 350ms delay:
+at the registry's 0 it is not a hint, it is a popover following the pointer, and
+crossing the seven glyphs of the menu fired seven of them.
+
+**Smaller, all from looking at it:** panel headers carry a pin whose rotation is
+the state and which tips under the pointer to the state pressing it would
+produce, and their three controls lost their hover cards; the graphics panel's
+icon is a monitor rather than an aperture, which belongs to the camera panel
+next door; the extended-range override and the anti-aliasing level are one
+generic `OptionGroup` instead of a cycling button and a bespoke toggle group,
+with `auto → extended` stated underneath only when `auto` is what is selected;
+the planetarium's presets lost their "tour" — five buttons that were a second,
+worse catalogue — and gained six named compositions; sky labels dropped the
+boxed plate for a text halo and a fading leader, keeping a ground only on the
+selected one; and `SwitchRow` puts its detail on a second line, because beside
+the label it truncated to "Show the Ship the hull the …", which reads as a
+rendering fault rather than as a hint.
+
+**Two new invariants, both with a regression test behind them.** _An effect is
+staging, so a script turns it on_ — `cutscene.test.ts` walks all 2,742 frames
+and asserts `effects.corona` is 1 inside f240–356 and 0 everywhere else; and
+_labels are title case in the source, the type step decides the case_.
+`observatory.test.ts` guards the catalogue's origin: after `ir.look('HIP71683')`
+the player-centred listing still leads with Sol — the hull has not moved, which
+is the mode's whole guarantee — and the observer-centred one leads with Alpha
+Centauri. Both tests were checked against a reintroduced bug and go red.
+
+**One frame-index trap, found by that test.** `frame` reaches the effects
+function as `(renderTime - epoch) * fps`, and at 24000/1001 the round trip
+through a float lands the last frame of a shot at 356.00000000000006 as often as
+at 356 — so an inclusive comparison against the shot table read it as the _next_
+shot and dropped the corona a frame early. `coronaAt` floors first. A frame is
+an integer index; the fraction is sub-frame interpolation and no shot boundary
+is a function of it.
+
+**One detector finding is a knowing false positive.** `hud/OptionGroup.tsx`
+trips `gray-on-color` because `data-[state=off]:text-slate-400` and
+`data-[state=on]:bg-sky-500/15` are in one class string; they are mutually
+exclusive states and never composite.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

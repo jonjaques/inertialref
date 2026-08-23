@@ -28,7 +28,7 @@ export function GpuMeasureButton({
     gl !== null && engine.view !== null && canMeasureGpu(gl.renderer)
   return (
     <Action
-      label={busy ? 'measuring…' : 'measure gpu'}
+      label={busy ? 'Measuring…' : 'Measure GPU'}
       title="Submit 40 frames and time them across a drained queue — the only measurement three's own timestamp does not exaggerate"
       disabled={!ready || busy}
       onClick={onMeasure}

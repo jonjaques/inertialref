@@ -86,10 +86,16 @@ deploys to the `inertialrefd` Worker, live at
   constant or a type it needs goes in a sibling `.ts`. Both that rule and
   `react/only-export-components` are off for `apps/game/src/components/ui/*.tsx`,
   which shadcn/ui generates and rewrites.
+- **The three typefaces are self-hosted from `@fontsource`** — Instrument Serif
+  (display), Instrument Sans Variable (structure and prose), Martian Mono
+  Variable (every reading). Imported in `src/index.css`, which also defines the
+  nine `type-*` utilities the whole interface is set in. **Do not write a size,
+  a weight and a tracking at a call site**; reach for a named step. A Google
+  Fonts `<link>` would break offline, which is the base case here.
 - **React DnD 16** (`react-dnd`, `react-dnd-html5-backend`,
   `react-dnd-touch-backend`) drives the dockable panels, and _only_ the gesture:
-  what a drop means is pure arithmetic in `apps/game/src/dock/layout.ts` with
-  property tests. The backend is chosen once at mount from `(pointer: coarse)`
+  what a drop means is pure arithmetic in `apps/game/src/dock/layout.ts` and
+  `dock/floating.ts`, both property-tested. The backend is chosen once at mount from `(pointer: coarse)`
   because `DndProvider` cannot be handed a different one. ADR-0012.
 - **shadcn/ui is installed and is what the overlay is built from** — `Button`,
   `Collapsible`, `Tabs`, `Slider`, `Switch`, `Toggle`, `ToggleGroup`,
@@ -98,7 +104,7 @@ deploys to the `inertialrefd` Worker, live at
   `hud/TransportButton.tsx`, which carry the two things the registry cannot know
   (`releaseFocus`, and that the accent is never a fill behind text).
   `ScrollArea` is installed and deliberately unused — its `display: table`
-  viewport breaks the `truncate` every dock readout depends on.
+  viewport breaks the `truncate` every panel readout depends on.
   `docs/roadmap.md` § "The overlay refactor" is the map.
   (`apps/game/components.json`, style `new-york`, base `slate`, lucide icons.)
   Add a component with `pnpm dlx shadcn@latest add <name>` **run from

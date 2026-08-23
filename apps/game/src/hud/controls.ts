@@ -53,7 +53,16 @@ export interface GraphicsState {
 export interface HudRenderState {
   readonly preference: OutputPreference
   readonly output: RendererDescription | null
-  readonly onCyclePreference: () => void
+  /**
+   * Ask for a specific state, not the next one.
+   *
+   * This was `onCyclePreference`, and cycling is what a three-state setting
+   * does when it is drawn as one button: reaching `standard` from `standard`
+   * cost three presses and three renderer rebuilds, each of which is a visible
+   * stall. The control is a radio group now, so the verb is the one a radio
+   * group has.
+   */
+  readonly onPreference: (preference: OutputPreference) => void
 }
 
 /** Every verb that is bound to both a key and a button. See `App`. */
