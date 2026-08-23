@@ -2,7 +2,7 @@
 name: drive
 description: Launch, drive and screenshot InertialRef — the dev server, the window.ir harness, the headless runner, and the browser gotchas (hard reload, ~18s renderer boot, double screenshot after a seek) that otherwise cost an hour. Use whenever asked to run the game, verify a change in the real app, capture a still, or step a cutscene. This is the project skill the built-in /run defers to.
 argument-hint: '[what to verify]'
-allowed-tools: Bash(pnpm dev:*) Bash(pnpm dev:client) Bash(pnpm dev:server) Bash(pnpm preview:*) Bash(pnpm sim:*) Bash(pnpm vitest:*)
+allowed-tools: Bash(pnpm dev) Bash(pnpm dev:*) Bash(pnpm preview) Bash(pnpm preview:*) Bash(pnpm sim:*) Bash(pnpm vitest:*)
 ---
 
 # Driving InertialRef

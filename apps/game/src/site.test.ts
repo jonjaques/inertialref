@@ -109,6 +109,22 @@ describe('what a search result and a tab strip get', () => {
     expect(canonicalUrl(HOME).endsWith('/')).toBe(false)
   })
 
+  it('gives one page one canonical, whatever slash it was reached by', () => {
+    /*
+     * `pageMetaFor` already treats these as the same page and `sitemap.xml`
+     * lists the slash-less form, so a shared `/planetarium/` link used to
+     * declare itself canonical *and* disagree with the sitemap — two
+     * canonicals for one page, which is the split the tag exists to prevent.
+     * It divided the analytics `page_location` the same way.
+     */
+    for (const path of [PLANETARIUM, CINEMA, ABOUT]) {
+      expect(canonicalUrl(`${path}/`)).toBe(canonicalUrl(path))
+      expect(canonicalUrl(`${path}//`)).toBe(canonicalUrl(path))
+    }
+    // `/` is the one path where the slash *is* the path.
+    expect(canonicalUrl(HOME)).toBe(SITE.origin)
+  })
+
   it('states an origin that agrees with the host', () => {
     // Two constants, one fact. They are separate because one is compared
     // against `location.hostname` and the other is concatenated into a URL.

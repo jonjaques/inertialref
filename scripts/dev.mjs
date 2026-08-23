@@ -86,6 +86,20 @@ for (const { label, colour, argv } of CHILDREN) {
     stdio: ['ignore', 'pipe', 'pipe'],
     env: { ...process.env, FORCE_COLOR: '1' },
   })
+  /*
+   * Character mode, not Buffer mode, and it is not a formality.
+   *
+   * Without it each chunk is decoded in isolation by `Buffer#toString('utf8')`
+   * when it is appended below — so a codepoint split across a pipe boundary
+   * becomes two U+FFFD. Both children print three-byte glyphs in their opening
+   * lines (Wrangler's ⛅ and its box rules, Vite's ⚡), which is exactly the
+   * output most likely to straddle the first chunk. `setEncoding` installs
+   * Node's `StringDecoder`, which holds an incomplete sequence until the rest
+   * of it arrives. The line buffering below already does the same job one level
+   * up; this is the same idea at codepoint granularity.
+   */
+  child.stdout.setEncoding('utf8')
+  child.stderr.setEncoding('utf8')
   child.stdout.on('data', prefixer(label, colour, process.stdout))
   child.stderr.on('data', prefixer(label, colour, process.stderr))
   child.on('error', (cause) => {

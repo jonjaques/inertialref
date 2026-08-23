@@ -165,7 +165,7 @@ const ROOT = PAGES[PAGES.length - 1] as PageMeta
  * the top of this file says why that is not free.
  */
 export function pageMetaFor(pathname: string): PageMeta {
-  const path = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname
+  const path = withoutTrailingSlash(pathname)
   return (
     PAGES.find(
       (page) =>
@@ -188,7 +188,27 @@ export function documentTitle(page: PageMeta): string {
     : `${page.title} · ${SITE.name}`
 }
 
-/** The absolute URL for a path, for a canonical link or a sitemap entry. */
+/**
+ * `/planetarium/` and `/planetarium` are one page, so they get one spelling.
+ *
+ * `/` is left alone — it is the only path where the slash is the path rather
+ * than a separator with nothing after it.
+ */
+const withoutTrailingSlash = (pathname: string): string =>
+  pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname
+
+/**
+ * The absolute URL for a path, for a canonical link or a sitemap entry.
+ *
+ * Normalised, and that is the whole reason this is a function rather than a
+ * template literal at each call site. `pageMetaFor` already treats a trailing
+ * slash as the same page and `sitemap.xml` lists the slash-less form — so a
+ * visitor arriving at a shared `/planetarium/` link used to be served a
+ * self-referencing canonical that disagreed with the sitemap. Two canonicals
+ * for one page is the exact duplicate-content split the tag exists to prevent,
+ * and it split the analytics `page_location` the same way.
+ */
 export function canonicalUrl(pathname: string): string {
-  return pathname === HOME ? SITE.origin : `${SITE.origin}${pathname}`
+  const path = withoutTrailingSlash(pathname)
+  return path === HOME ? SITE.origin : `${SITE.origin}${path}`
 }
