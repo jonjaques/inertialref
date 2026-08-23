@@ -39,7 +39,7 @@ export function CatalogueRow({
           }`}
         />
         <span className="min-w-0 flex-1 truncate">{row.name}</span>
-        <span className="shrink-0 text-[10px] text-slate-400 tabular-nums">
+        <span className="type-micro shrink-0 text-slate-400">
           {row.distanceText}
         </span>
       </button>

@@ -263,7 +263,17 @@ export class GameHarness {
    * The debug overlay renders this list and the console prints it.
    */
   targets(options: TravelTargetOptions = {}): readonly TravelTarget[] {
-    return travelTargets(this.world, this.#here(), options)
+    /*
+     * `origin: 'observer'` falls back to the player rather than returning
+     * nothing, and that is not defensiveness — the observatory holds no target
+     * until the planetarium's first focus lands, which is several frames after
+     * the panel's first poll. A listing that was empty for those frames would
+     * flash a "nothing within 16 ly" empty state on every entry to the mode.
+     */
+    const from =
+      (options.origin === 'observer' ? this.observatory.eye : null) ??
+      this.#here()
+    return travelTargets(this.world, from, options)
   }
 
   /**

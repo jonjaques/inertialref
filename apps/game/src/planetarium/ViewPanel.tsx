@@ -26,29 +26,29 @@ export function ViewPanel({
        */}
       <SwitchRow
         icon={Tag}
-        label="names"
+        label="Names"
         detail="draw a name against everything in view"
         on={labels}
         onChange={onLabels}
       />
       <SwitchRow
         icon={Compass}
-        label="orbit paths"
+        label="Orbit Paths"
         detail="trace each body's path around its primary"
         on={orbits}
         onChange={onOrbits}
       />
       <SwitchRow
         icon={Telescope}
-        label="show the ship"
+        label="Show the Ship"
         detail="the hull the flight modes fly, where it actually is"
         on={ship}
         onChange={onShip}
       />
 
       <div className="mt-1 flex flex-col gap-1">
-        <span className="flex items-center justify-between text-[10px] tracking-widest text-sky-400/80 uppercase">
-          field of view
+        <span className="type-label flex items-center justify-between text-sky-400/80">
+          Field of View
           <span className="text-slate-400 tabular-nums">{fov}°</span>
         </span>
         <FovSlider fov={fov} onFov={onFov} />
@@ -56,7 +56,7 @@ export function ViewPanel({
       {/* A lens choice is a framing choice here, not just a crop: the
           observatory solves its distance against this angle, so narrowing the
           lens pulls the camera back rather than magnifying. */}
-      <p className="text-[10px] text-slate-400">
+      <p className="type-ui mt-0.5 text-slate-400">
         the camera re-solves its distance, so the subject stays the same size
       </p>
     </div>

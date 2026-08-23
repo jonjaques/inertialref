@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import type { GameEngine } from '../engine/GameEngine.ts'
+import { isOverlayControl, isTyping } from './focus.ts'
 
 /*
  * Keyboard flight.
@@ -18,9 +19,6 @@ export interface ControlBindings {
   readonly onWarp: (direction: number) => void
   readonly onSave: () => void
   readonly onLoad: () => void
-  readonly onToggleHud: () => void
-  readonly onShowNavigation: () => void
-  readonly onShowPerformance: () => void
 }
 
 const AXIS_KEYS: Readonly<
@@ -43,51 +41,23 @@ const AXIS_KEYS: Readonly<
   KeyE: ['rotation', 2, -1],
 }
 
-/**
- * Whether the keystroke belongs to something being typed into.
+/*
+ * `isTyping` and `isOverlayControl` moved to `hud/focus.ts`, because three
+ * window-level listeners now need them — this one, the workspace keys, and
+ * the cinema transport — and a forked guard is how a new editable target gets
+ * added to one copy and not the others.
  *
- * The overlay grew a text field for addresses, and flight input is a
- * window-level listener: without this, typing `SOL` fires the retro thruster
- * twice and toggles nothing you meant. The keys are not remapped and the field
- * is not special — the handler simply declines to read input aimed elsewhere.
- */
-function isTyping(event: KeyboardEvent): boolean {
-  const target = event.target
-  if (!(target instanceof HTMLElement)) return false
-  return (
-    target.isContentEditable ||
-    target.tagName === 'INPUT' ||
-    target.tagName === 'TEXTAREA' ||
-    target.tagName === 'SELECT'
-  )
-}
-
-/**
- * Whether the keystroke is aimed at a control in the overlay.
+ * The typing refusal exists because the overlay grew a text field for
+ * addresses: without it, typing `SOL` fires the retro thruster twice and
+ * toggles nothing you meant.
  *
- * Only `Space` asks, and it is the one key that has to: it is the pause key
- * *and* it is how a keyboard activates a focused button, and a window-level
- * `preventDefault` on keydown cancels the activation before the click event
- * that would have carried it ever exists. So with focus on any dock, shell-bar
- * or settings button, pressing Space paused the simulation and the button did
- * nothing — silently, because there is no error in cancelling an event.
- * `hud/focus.ts` depends on this guard: it deliberately keeps focus after a
- * keyboard activation, which is only navigable if Space still activates.
- *
- * Same shape as `isTyping` and for the same reason: the handler declines input
- * aimed at something else rather than the overlay learning about flight. From
- * the canvas or the body — which is where focus is during flight, because every
- * control hands it straight back on a *pointer* click — nothing has changed.
- *
- * `F5` and `F9` deliberately do not ask. No control in the overlay responds to
- * either, so declining them would not activate anything; it would hand the key
- * back to the browser, and F5 is Reload. Losing the session because focus
+ * Only `Space` asks `isOverlayControl` here, and it is the one key that has
+ * to: it is the pause key *and* how a keyboard activates a focused button.
+ * `F5` and `F9` deliberately do not ask. No control in the overlay responds
+ * to either, so declining them would not activate anything; it would hand the
+ * key back to the browser, and F5 is Reload. Losing the session because focus
  * happened to be on a dock button is worse than the thing that would fix.
  */
-function isOverlayControl(event: KeyboardEvent): boolean {
-  const target = event.target
-  return target instanceof HTMLElement && target.closest('.hud-layer') !== null
-}
 
 export interface ControlOptions {
   /**
@@ -189,32 +159,30 @@ export function useShipControls(
           event.preventDefault()
           break
         /*
-         * `H`, not `Tab`.
+         * `H`, `G` and `P` are deliberately absent, and they are still bound.
          *
-         * Tab was the binding, guarded by "unless focus is already in the
-         * overlay" — and that guard could never open. On load
-         * `document.activeElement` is `<body>`, whose `closest('.hud-layer')`
-         * is null, so the guard was false, the dock toggled and
-         * `preventDefault` cancelled the browser's focus move. Every
-         * subsequent Tab did the same, and with no `tabIndex` on the canvas
-         * there was no focusable element outside the layer to bootstrap from:
-         * focus could never enter the overlay at all, and every focus ring,
-         * `role="tab"` and `aria-expanded` in it was unreachable by keyboard.
+         * They are about what is on screen rather than about the ship, and
+         * what is on screen is now a per-mode workspace rather than one dock
+         * `App` owns — so they moved to `dock/useWorkspaceKeys.ts`, beside the
+         * state they change. Routing them from here would mean an event bus in
+         * place of a function call.
+         *
+         * None of them is `Tab`, which is the part worth keeping written down.
+         * Tab was the original binding for the collapse, guarded by "unless
+         * focus is already in the overlay" — and that guard could never open.
+         * On load `document.activeElement` is `<body>`, whose
+         * `closest('.hud-layer')` is null, so the guard was false, the dock
+         * toggled and `preventDefault` cancelled the browser's focus move.
+         * Every subsequent Tab did the same, and with no `tabIndex` on the
+         * canvas there was no focusable element outside the layer to bootstrap
+         * from: focus could never enter the overlay at all, and every focus
+         * ring and `aria-expanded` in it was unreachable by keyboard.
          *
          * There is no version of this that keeps both. Tab is how a browser
          * moves focus and a window-level `preventDefault` always wins, so a
          * mode that binds it owns focus navigation whether it means to or not.
-         * Tab goes back to the browser; the collapse gets a letter.
+         * Tab goes back to the browser; the panes get a letter.
          */
-        case 'KeyH':
-          latest.current.onToggleHud()
-          break
-        case 'KeyG':
-          latest.current.onShowNavigation()
-          break
-        case 'KeyP':
-          latest.current.onShowPerformance()
-          break
         default:
           break
       }
@@ -258,8 +226,8 @@ export const CONTROL_HELP: readonly (readonly [string, string])[] = [
   ['Space', 'pause'],
   ['[ / ]', 'time warp'],
   ['F5 / F9', 'save / load'],
-  ['G', 'navigation panel'],
-  ['P', 'performance panel'],
-  ['H', 'collapse the dock'],
+  ['G', 'the navigate panel'],
+  ['P', 'the perf panel'],
+  ['H', 'hide both panes, or bring them back'],
   ['Tab', 'move between the controls on screen'],
 ]

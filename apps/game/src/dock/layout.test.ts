@@ -13,6 +13,7 @@ import {
   movePanel,
   normalizeLayout,
   showPanel,
+  slotIndex,
   togglePanel,
   zoneOf,
 } from './layout.ts'
@@ -33,8 +34,8 @@ const PANELS = [
   { id: 'catalogue', zone: 'left' as DockZone },
   { id: 'object', zone: 'right' as DockZone },
   { id: 'view', zone: 'right' as DockZone },
-  { id: 'time', zone: 'bottom' as DockZone },
-  { id: 'presets', zone: 'bottom' as DockZone },
+  { id: 'time', zone: 'left' as DockZone },
+  { id: 'presets', zone: 'float' as DockZone },
 ]
 
 const IDS = PANELS.map((panel) => panel.id)
@@ -74,7 +75,7 @@ describe('the layout invariant', () => {
           fc.record({
             panel: fc.constantFrom(...IDS),
             verb: fc.constantFrom('hide', 'show', 'toggle'),
-            zone: fc.constantFrom('left', 'right', 'bottom'),
+            zone: fc.constantFrom('left', 'right', 'float'),
           }),
           { maxLength: 40 },
         ),
@@ -98,8 +99,8 @@ describe('the layout invariant', () => {
 
 describe('moving a panel', () => {
   it('puts it where it was asked for', () => {
-    const layout = movePanel(defaultLayout(PANELS), 'catalogue', 'bottom', 0)
-    expect(layout.bottom[0]).toBe('catalogue')
+    const layout = movePanel(defaultLayout(PANELS), 'catalogue', 'right', 0)
+    expect(layout.right[0]).toBe('catalogue')
     expect(layout.left).not.toContain('catalogue')
   })
 
@@ -178,7 +179,7 @@ describe('a drop, against the panels that were on screen', () => {
     fc.assert(
       fc.property(
         fc.constantFrom(...IDS),
-        fc.constantFrom('left', 'right', 'bottom'),
+        fc.constantFrom('left', 'right', 'float'),
         fc.array(anyMove, { maxLength: 12 }),
         fc.integer({ min: 0, max: 6 }),
         (panel, zone, moves, index) => {
@@ -220,6 +221,81 @@ describe('a drop, against the panels that were on screen', () => {
   })
 })
 
+describe('a drop measured among the rendered panels only', () => {
+  /*
+   * The other seam: a guarded group's panels are suppressed at render time
+   * while staying resident in their zones, so the list the indicator was drawn
+   * against can be *shorter* than `layout[zone]` — not only by the dragged
+   * panel. `slotIndex` anchors the translation on the panel at the slot rather
+   * than the number, which makes a suppressed resident as invisible to the
+   * arithmetic as it is to the eye.
+   */
+  it('lands where the line was drawn, past a suppressed resident', () => {
+    // `telemetry` is a suppressed dev panel; the eye sees only catalogue and
+    // time. Dropping catalogue below time drew the line after time — spliced
+    // by the visible number alone, this composed to a silent no-op.
+    const layout: DockLayout = {
+      ...EMPTY_LAYOUT,
+      left: ['telemetry', 'catalogue', 'time'],
+    }
+    const visible = ['catalogue', 'time']
+    const at = slotIndex(layout.left, visible, 2)
+    expect(
+      movePanel(
+        layout,
+        'catalogue',
+        'left',
+        dropIndex(layout, 'catalogue', 'left', at),
+      ).left,
+    ).toEqual(['telemetry', 'time', 'catalogue'])
+  })
+
+  it('inserts before the anchor, wherever it sits in the full list', () => {
+    const layout: DockLayout = {
+      ...EMPTY_LAYOUT,
+      left: ['telemetry', 'catalogue', 'time'],
+      right: ['object'],
+    }
+    // The line between catalogue and time is visible slot 1; its anchor is
+    // `time`, at full index 2.
+    const at = slotIndex(layout.left, ['catalogue', 'time'], 1)
+    expect(at).toBe(2)
+    expect(
+      movePanel(
+        layout,
+        'object',
+        'left',
+        dropIndex(layout, 'object', 'left', at),
+      ).left,
+    ).toEqual(['telemetry', 'catalogue', 'object', 'time'])
+  })
+
+  it('appends for a slot past the end, or an anchor the layout lost', () => {
+    expect(slotIndex(['a', 'b'], ['a', 'b'], 2)).toBe(2)
+    // An anchor the zone no longer holds — a composed gesture can produce one
+    // — appends rather than guessing, which is `movePanel`'s own out-of-range
+    // behaviour.
+    expect(slotIndex(['a', 'b'], ['ghost'], 0)).toBe(2)
+  })
+
+  it('is the identity translation when nothing is suppressed', () => {
+    // With every resident rendered, the anchor's index is the slot itself —
+    // so the drop property above keeps holding through this path unchanged.
+    fc.assert(
+      fc.property(
+        fc.array(fc.string(), { maxLength: 6 }),
+        fc.integer({ min: 0, max: 8 }),
+        (list, index) => {
+          const zone = [...new Set(list)]
+          expect(slotIndex(zone, zone, index)).toBe(
+            Math.min(index, zone.length),
+          )
+        },
+      ),
+    )
+  })
+})
+
 describe('normalising a stored layout', () => {
   it('drops a panel this build no longer has', () => {
     // The `localStorage` outlives the code problem, in its layout form: a
@@ -240,7 +316,7 @@ describe('normalising a stored layout', () => {
     const stored: DockLayout = { ...EMPTY_LAYOUT, left: ['catalogue'] }
     const layout = normalizeLayout(stored, PANELS)
     expectIntact(layout)
-    expect(layout.bottom).toContain('time')
+    expect(layout.left).toContain('time')
   })
 
   it('de-duplicates a panel that somehow reached two zones', () => {
@@ -264,7 +340,7 @@ describe('normalising a stored layout', () => {
         fc.record({
           left: fc.array(fc.constantFrom(...IDS, 'ghost'), { maxLength: 6 }),
           right: fc.array(fc.constantFrom(...IDS, 'ghost'), { maxLength: 6 }),
-          bottom: fc.array(fc.constantFrom(...IDS, 'ghost'), { maxLength: 6 }),
+          float: fc.array(fc.constantFrom(...IDS, 'ghost'), { maxLength: 6 }),
           hidden: fc.array(fc.constantFrom(...IDS, 'ghost'), { maxLength: 6 }),
         }),
         (stored) => {
@@ -291,7 +367,7 @@ describe('the stored-value guard', () => {
     expect(isDockLayout(defaultLayout(PANELS))).toBe(true)
     expect(isDockLayout(null)).toBe(false)
     expect(isDockLayout('left')).toBe(false)
-    expect(isDockLayout({ left: [], right: [], bottom: [] })).toBe(false)
+    expect(isDockLayout({ left: [], right: [], float: [] })).toBe(false)
     expect(isDockLayout({ ...EMPTY_LAYOUT, left: [1, 2] })).toBe(false)
   })
 

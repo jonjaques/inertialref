@@ -20,7 +20,7 @@ export function CameraPanel({ camera }: { camera: CameraState }) {
     <div>
       <Section
         id="camera.lens"
-        title="field of view"
+        title="Field of View"
         trailing={`${camera.fov}°`}
       >
         <div className="flex items-center gap-2">
@@ -29,7 +29,7 @@ export function CameraPanel({ camera }: { camera: CameraState }) {
             {camera.fov}°
           </span>
           <Action
-            label="reset"
+            label="Reset"
             title={`Back to the ${DEFAULT_FOV}° flying default`}
             disabled={camera.fov === DEFAULT_FOV}
             onClick={() => camera.onFov(DEFAULT_FOV)}

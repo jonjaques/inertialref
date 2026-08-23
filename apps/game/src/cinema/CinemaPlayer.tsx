@@ -7,18 +7,18 @@ import {
   Link2,
   Pause,
   Play,
-  RotateCcw,
   SkipBack,
   SkipForward,
   X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { GameEngine } from '../engine/GameEngine.ts'
-import { FOCUS_RING } from '../hud/focus.ts'
+import { FOCUS_RING, isOverlayControl, isTyping } from '../hud/focus.ts'
 import { FrameScrubber } from '../hud/FrameScrubber.tsx'
 import { TransportButton } from '../hud/TransportButton.tsx'
 import { useScrubber } from '../hud/useScrubber.ts'
 import { CINEMA, cinemaLink, QUERY } from '../pages/paths.ts'
+import { EndCard } from './EndCard.tsx'
 import {
   durationText,
   parseAutoplay,
@@ -45,9 +45,6 @@ import {
  * then `ir.seekCutscene(1150)` is what this does, with buttons on it.
  */
 
-/** How long the transport stays up after the pointer stops, while playing. */
-const IDLE_MS = 2_600
-
 interface Playhead {
   readonly id: string
   readonly frame: number
@@ -59,15 +56,27 @@ interface Playhead {
 export function CinemaPlayer({
   engine,
   id,
+  idle,
 }: {
   engine: GameEngine
   id: string
+  /** Whether the mode's chrome is out of the picture. See `useTransportIdle`. */
+  idle: boolean
 }) {
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
   const [playhead, setPlayhead] = useState<Playhead | null>(null)
   const [failed, setFailed] = useState<string | null>(null)
-  const [idle, setIdle] = useState(false)
+  /*
+   * Whether the scene has run to its end, as distinct from not being open.
+   *
+   * The director restores the ship and stops on the final frame, so the only
+   * signal the player gets is `cutsceneStatus()` going null — which is also
+   * what it reads before the scene has started and after `stopCutscene`. This
+   * flag is what tells the end apart from the beginning, and it survives the
+   * re-open below that puts the last frame back on screen.
+   */
+  const [ended, setEnded] = useState(false)
   // The drag latch and the guarded seek, shared with the debug transport in
   // `hud/CutsceneOverlay.tsx` — see `hud/useScrubber.ts` for what each is for.
   const { held: scrubbing, grab, seek: seekFrame } = useScrubber(engine)
@@ -97,6 +106,9 @@ export function CinemaPlayer({
     },
     [engine, id],
   )
+
+  /** The last playhead the poll saw, so it can tell "ended" from "never open". */
+  const seen = useRef<Playhead | null>(null)
 
   const opened = useRef<string | null>(null)
   useEffect(() => {
@@ -139,23 +151,63 @@ export function CinemaPlayer({
     const poll = window.setInterval(() => {
       const status = engine.harness.cutsceneStatus()
       if (status === null) {
-        setPlayhead(null)
+        /*
+         * The scene ran out, and the picture went with it.
+         *
+         * The director restores the ship and stops on the final frame, which
+         * is correct — a scene that kept the camera after it ended would be a
+         * script nobody could get out of. What it leaves on screen, though, is
+         * whatever the chase camera happens to see: the debug hull in front of
+         * Earth, a composition nobody wrote, arriving as a hard cut on the
+         * last beat of a title sequence. Reopening two frames short of the end
+         * and pausing puts the picture back — `engine.cinematic` is non-null
+         * again, so the camera is the shot's — and it hands back a scrubber
+         * with the end of the scene under it rather than an empty bar.
+         *
+         * Two frames rather than one: the director reports `done` *on* the
+         * final frame, so a seek to it would end the scene again on the next
+         * sample and this would run in a loop.
+         *
+         * Read through a ref rather than the state, because the effect must not
+         * depend on the playhead — it polls it — and a stale closure here is
+         * the difference between "the scene ended" and "no scene was open".
+         *
+         * Only a playhead that was *near the end* means the scene ran out.
+         * `stopCutscene` — the console, the Navigate panel's Stop, now one
+         * disclosure away inside this mode — goes null through the exact same
+         * reading, and reopening then undid the stop within 100 ms. Half a
+         * second of frames is the discriminator because it is the poll gap
+         * with room for the director stepping several frames per sample; a
+         * scene stopped by hand more than that from its end stays stopped.
+         */
+        const previous = seen.current
+        if (previous !== null) {
+          seen.current = null
+          if (previous.frame >= previous.durationFrames - previous.fps / 2) {
+            setEnded(true)
+            open(Math.max(0, previous.durationFrames - 2), false)
+          } else {
+            setPlayhead(null)
+          }
+        }
         return
       }
       if (scrubbing.current) return
-      setPlayhead({
+      const next = {
         id: status.id,
         frame: status.frame,
         durationFrames: status.durationFrames,
         fps: status.fps,
         paused: engine.world.clock.paused,
-      })
+      }
+      seen.current = next
+      setPlayhead(next)
     }, 100)
     return () => window.clearInterval(poll)
     // `scrubbing` is a ref and never changes identity; it is named so the
     // dependency list can be read as the complete list of what this closes
     // over rather than as an omission somebody has to re-derive.
-  }, [engine, scrubbing])
+  }, [engine, scrubbing, open])
 
   /*
    * Write the parked frame back into the URL.
@@ -186,30 +238,13 @@ export function CinemaPlayer({
     )
   }, [playhead, params, setParams])
 
-  /* The transport hides itself while a scene is running and nothing moves. */
-  useEffect(() => {
-    if (playhead?.paused !== false) {
-      setIdle(false)
-      return
-    }
-    let timer = window.setTimeout(() => setIdle(true), IDLE_MS)
-    const wake = (): void => {
-      setIdle(false)
-      window.clearTimeout(timer)
-      timer = window.setTimeout(() => setIdle(true), IDLE_MS)
-    }
-    window.addEventListener('pointermove', wake)
-    window.addEventListener('keydown', wake)
-    return () => {
-      window.clearTimeout(timer)
-      window.removeEventListener('pointermove', wake)
-      window.removeEventListener('keydown', wake)
-    }
-  }, [playhead?.paused])
-
   const seek = useCallback(
     (frame: number) => {
       if (!seekFrame(frame)) return
+      // Using the transport is how someone stops reading the end card, so a
+      // seek dismisses it — without this the card sat over a scene that was
+      // visibly somewhere else.
+      setEnded(false)
       setPlayhead((current) =>
         current === null ? current : { ...current, frame },
       )
@@ -218,13 +253,37 @@ export function CinemaPlayer({
   )
 
   const toggle = useCallback(() => {
+    // Same dismissal as `seek`: pressing play on an ended scene is watching
+    // it again, not reading a card about how it went.
+    setEnded(false)
     if (engine.world.clock.paused) engine.harness.resume()
     else engine.harness.pause()
   }, [engine])
 
+  const replay = useCallback(() => {
+    // Play it again through the same verb the URL used, and clear the frame the
+    // ended playhead left in the address bar — a replay that opened on the last
+    // frame would end immediately.
+    setEnded(false)
+    void navigate(cinemaLink(id, { autoplay: true }), { replace: true })
+    open(0, true)
+  }, [id, navigate, open])
+
   /* Space plays and pauses, the arrows step. What a player's keys always are. */
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
+      /*
+       * The same two refusals every window-level listener here makes, and
+       * this one went without them for as long as no text field could exist
+       * beside the player. The workspace changed that: the Navigate panel's
+       * address input is one disclosure away, and typing a space into it
+       * toggled the scene while `preventDefault` ate the character. The
+       * overlay guard is the Space-on-a-focused-button rule from
+       * `useShipControls`, plus the arrows — Radix gives a focused slider and
+       * a toggle group arrow keys of their own, and two handlers stepping on
+       * one keystroke seeks twice.
+       */
+      if (isTyping(event) || isOverlayControl(event)) return
       const status = engine.harness.cutsceneStatus()
       if (status === null) return
       const step = event.shiftKey ? secondStep(status.fps) : 1
@@ -252,11 +311,11 @@ export function CinemaPlayer({
   if (failed !== null) {
     return (
       <div className="pointer-events-auto absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center">
-        <p className="font-mono text-[12px] text-rose-300">{failed}</p>
+        <p className="type-body max-w-[42ch] text-rose-300">{failed}</p>
         <Button
           asChild
           variant="outline"
-          className={`h-auto rounded border-slate-700 bg-transparent px-3 py-1 font-mono text-[11px] font-normal text-slate-300 shadow-none hover:border-sky-500/60 hover:bg-transparent hover:text-sky-200 ${FOCUS_RING}`}
+          className={`type-ui h-auto rounded border-slate-700 bg-transparent px-3 py-1.5 font-normal text-slate-300 shadow-none hover:border-sky-500/60 hover:bg-transparent hover:text-sky-200 ${FOCUS_RING}`}
         >
           <Link to={CINEMA}>back to the library</Link>
         </Button>
@@ -265,142 +324,135 @@ export function CinemaPlayer({
   }
 
   /*
-   * A scene that has ended. The director restores the ship and returns null
-   * from `sample`, so there is nothing on screen to scrub — which is a state
-   * worth a replay button rather than an empty transport bar.
+   * A scene with no picture at all — the player opened and the director never
+   * produced a frame, or something outside the player stopped the scene
+   * mid-run and the stop was respected. The natural end of a scene no longer
+   * reaches this branch: the poll reopens the final frame, so what is on
+   * screen is the last shot, and the End of Scene card is drawn *over* it.
    */
   if (playhead === null) {
     return (
-      <div className="pointer-events-auto absolute inset-0 flex flex-col items-center justify-center gap-3">
-        <p className="font-mono text-[11px] tracking-widest text-slate-400 uppercase">
-          scene ended
-        </p>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={() => {
-              // Play it again through the same verb the URL used, and clear the
-              // frame the ended playhead left in the address bar — a replay
-              // that opened on the last frame would end immediately.
-              void navigate(cinemaLink(id, { autoplay: true }), {
-                replace: true,
-              })
-              open(0, true)
-            }}
-            className={`h-auto gap-1.5 rounded border-sky-500/50 bg-sky-500/15 px-3 py-1.5 font-mono text-[11px] font-normal text-sky-200 shadow-none hover:bg-sky-500/25 hover:text-sky-100 ${FOCUS_RING}`}
-          >
-            <RotateCcw className="size-3.5" /> replay
-          </Button>
-          <Button
-            asChild
-            variant="outline"
-            className={`h-auto gap-1.5 rounded border-slate-700 bg-transparent px-3 py-1.5 font-mono text-[11px] font-normal text-slate-300 shadow-none hover:border-sky-500/60 hover:bg-transparent hover:text-sky-200 ${FOCUS_RING}`}
-          >
-            <Link to={CINEMA}>
-              <X className="size-3.5" /> library
-            </Link>
-          </Button>
-        </div>
-      </div>
+      <EndCard
+        title="Nothing Playing"
+        detail="the scene stopped before its end, or never produced a frame"
+        onReplay={replay}
+      />
     )
   }
 
-  const last = Math.max(0, playhead.durationFrames - 1)
+  const lastFrame = Math.max(0, playhead.durationFrames - 1)
   const step = secondStep(playhead.fps)
   return (
-    <div
-      className={`pointer-events-none absolute inset-x-0 bottom-0 transition-opacity duration-300 ${
-        idle ? 'opacity-0' : 'opacity-100'
-      }`}
-    >
-      <div className="pointer-events-auto mx-auto mb-3 flex w-[min(56rem,calc(100vw-1.5rem))] flex-col gap-2 rounded-lg border border-slate-700/60 bg-slate-950/80 px-3 py-2 backdrop-blur">
-        {/* The scrubber, full width and first: it is the control this bar
+    <>
+      {ended && (
+        <EndCard
+          title="End of Scene"
+          detail={durationText(playhead.durationFrames, playhead.fps)}
+          onReplay={replay}
+          onDismiss={() => setEnded(false)}
+        />
+      )}
+      <div
+        /* `invisible`, not opacity alone — the same fix `CinemaMode` applies
+           to its own bar: opacity leaves a fully transparent transport still
+           taking hits, so a tap at the bottom of a playing scene landed on an
+           invisible Pause or the way out. Visibility also removes it from the
+           tab order while it is gone. */
+        className={`pointer-events-none absolute inset-x-0 bottom-14 transition-opacity duration-300 ${
+          idle ? 'invisible opacity-0' : 'visible opacity-100'
+        }`}
+      >
+        <div className="pointer-events-auto mx-auto flex w-[min(56rem,calc(100vw-1.5rem))] flex-col gap-2 rounded-lg border border-slate-700/60 bg-slate-950/80 px-3 py-2 backdrop-blur">
+          {/* The scrubber, full width and first: it is the control this bar
             exists for, and putting it above the buttons is what stops a
             transport from reading as a toolbar. */}
-        <FrameScrubber
-          frame={playhead.frame}
-          durationFrames={playhead.durationFrames}
-          onGrab={grab}
-          onSeek={seek}
-          className="w-full"
-        />
-
-        <div className="flex flex-wrap items-center gap-1.5 font-mono text-[11px] text-slate-300">
-          <TransportButton
-            label="Start"
-            icon={ChevronFirst}
-            onClick={() => seek(0)}
-          />
-          <TransportButton
-            label={`Back ${step} frames`}
-            icon={SkipBack}
-            onClick={() => seek(Math.max(0, Math.floor(playhead.frame) - step))}
-          />
-          <TransportButton
-            label={playhead.paused ? 'Play' : 'Pause'}
-            icon={playhead.paused ? Play : Pause}
-            primary
-            onClick={toggle}
-          />
-          <TransportButton
-            label={`Forward ${step} frames`}
-            icon={SkipForward}
-            onClick={() =>
-              seek(Math.min(last, Math.floor(playhead.frame) + step))
-            }
-          />
-          <TransportButton
-            label="End"
-            icon={ChevronLast}
-            onClick={() => seek(last)}
+          <FrameScrubber
+            frame={playhead.frame}
+            durationFrames={playhead.durationFrames}
+            onGrab={grab}
+            onSeek={seek}
+            className="w-full"
           />
 
-          <span className="ml-2 tabular-nums">
-            <span className="text-sky-200">
-              {timecode(playhead.frame, playhead.fps)}
+          <div className="type-readout flex flex-wrap items-center gap-1.5 text-slate-300">
+            <TransportButton
+              label="Start"
+              icon={ChevronFirst}
+              onClick={() => seek(0)}
+            />
+            <TransportButton
+              label={`Back ${step} frames`}
+              icon={SkipBack}
+              onClick={() =>
+                seek(Math.max(0, Math.floor(playhead.frame) - step))
+              }
+            />
+            <TransportButton
+              label={playhead.paused ? 'Play' : 'Pause'}
+              icon={playhead.paused ? Play : Pause}
+              primary
+              onClick={toggle}
+            />
+            <TransportButton
+              label={`Forward ${step} frames`}
+              icon={SkipForward}
+              onClick={() =>
+                seek(Math.min(lastFrame, Math.floor(playhead.frame) + step))
+              }
+            />
+            <TransportButton
+              label="End"
+              icon={ChevronLast}
+              onClick={() => seek(lastFrame)}
+            />
+
+            <span className="ml-2 tabular-nums">
+              <span className="text-sky-200">
+                {timecode(playhead.frame, playhead.fps)}
+              </span>
+              <span className="text-slate-400">
+                {' / '}
+                {durationText(playhead.durationFrames, playhead.fps)}
+              </span>
             </span>
             <span className="text-slate-400">
-              {' / '}
-              {durationText(playhead.durationFrames, playhead.fps)}
-            </span>
-          </span>
-          <span className="text-slate-400">
-            {/* Rounded, because 23.976023976023978 is the true rate and it is
+              {/* Rounded, because 23.976023976023978 is the true rate and it is
                 also fourteen characters of noise in a transport bar. Two
                 decimals distinguishes 23.98 from 24 and 29.97 from 30, which
                 is the whole reason anyone reads this field. */}
-            f{Math.floor(playhead.frame)} · {Number(playhead.fps.toFixed(2))}{' '}
-            fps
-          </span>
+              f{Math.floor(playhead.frame)} · {Number(playhead.fps.toFixed(2))}{' '}
+              fps
+            </span>
 
-          <span className="ml-auto flex items-center gap-1.5">
-            <TransportButton
-              label="Copy a link to this frame"
-              icon={Link2}
-              onClick={() => {
-                void navigator.clipboard?.writeText(
-                  new URL(
-                    cinemaLink(id, { frame: playhead.frame }),
-                    window.location.origin,
-                  ).toString(),
-                )
-              }}
-            />
-            <Button
-              asChild
-              variant="outline"
-              size="icon-xs"
-              aria-label="Back to the library"
-              title="Back to the library"
-              className={`size-7 rounded border-slate-700 bg-transparent text-slate-400 shadow-none hover:border-sky-500/60 hover:bg-transparent hover:text-sky-200 ${FOCUS_RING}`}
-            >
-              <Link to={CINEMA}>
-                <X />
-              </Link>
-            </Button>
-          </span>
+            <span className="ml-auto flex items-center gap-1.5">
+              <TransportButton
+                label="Copy a link to this frame"
+                icon={Link2}
+                onClick={() => {
+                  void navigator.clipboard?.writeText(
+                    new URL(
+                      cinemaLink(id, { frame: playhead.frame }),
+                      window.location.origin,
+                    ).toString(),
+                  )
+                }}
+              />
+              <Button
+                asChild
+                variant="outline"
+                size="icon-xs"
+                aria-label="Back to the library"
+                title="Back to the library"
+                className={`size-7 rounded border-slate-700 bg-transparent text-slate-400 shadow-none hover:border-sky-500/60 hover:bg-transparent hover:text-sky-200 ${FOCUS_RING}`}
+              >
+                <Link to={CINEMA}>
+                  <X />
+                </Link>
+              </Button>
+            </span>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   )
 }

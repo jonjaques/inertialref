@@ -78,21 +78,21 @@ export function TelemetryPanel({
     <div>
       <Section
         id="tel.simulation"
-        title="simulation"
+        title="Simulation"
         trailing={`tick ${world.tick}`}
       >
         <Row
-          label="seed"
+          label="Seed"
           value={`${world.seed} · ${world.seedHex.slice(0, 12)}…`}
         />
-        <Row label="tick" value={`${world.tick} · ${world.timeText}`} />
+        <Row label="Tick" value={`${world.tick} · ${world.timeText}`} />
         <Row
-          label="clock"
+          label="Clock"
           value={`${world.timeScale}× ${world.paused ? '· paused' : ''}${world.droppedTicks > 0 ? ` · ${world.droppedTicks} dropped` : ''}`}
         />
-        <Row label="state hash" value={world.stateHash} />
+        <Row label="State Hash" value={world.stateHash} />
         <Row
-          label="frame"
+          label="Frame"
           value={
             frame === null
               ? '—'
@@ -104,25 +104,25 @@ export function TelemetryPanel({
       {player !== null && (
         <Section
           id="tel.player"
-          title="player"
+          title="Player"
           trailing={player.landed ? 'landed' : 'flying'}
         >
-          <Row label="entity" value={`${player.id} · ${player.name}`} />
-          <Row label="address" value={player.address ?? '(dynamic)'} />
-          <Row label="frame" value={player.frame} />
-          <Row label="chain" value={player.frameChain.join(' › ')} wrap />
-          <Row label="authority" value={player.partition} />
-          <Row label="canonical" value={player.canonical.text} wrap />
+          <Row label="Entity" value={`${player.id} · ${player.name}`} />
+          <Row label="Address" value={player.address ?? '(dynamic)'} />
+          <Row label="Frame" value={player.frame} />
+          <Row label="Chain" value={player.frameChain.join(' › ')} wrap />
+          <Row label="Authority" value={player.partition} />
+          <Row label="Canonical" value={player.canonical.text} wrap />
           <Row
-            label="local"
+            label="Local"
             value={`${player.local.x.toFixed(2)}, ${player.local.y.toFixed(2)}, ${player.local.z.toFixed(2)} m`}
           />
           <Row
-            label="speed"
+            label="Speed"
             value={`${player.localSpeedText} local · ${player.speedText} universe`}
           />
-          <Row label="altitude" value={player.altitudeText ?? '—'} />
-          <Row label="state" value={player.landed ? 'landed' : 'flying'} />
+          <Row label="Altitude" value={player.altitudeText ?? '—'} />
+          <Row label="State" value={player.landed ? 'landed' : 'flying'} />
         </Section>
       )}
 
@@ -134,18 +134,18 @@ export function TelemetryPanel({
        * claim this page is not in a position to make.
        */}
       {output !== null && (
-        <Section id="tel.output" title="output" trailing={output.mode}>
-          <Row label="pipeline" value={describeOutput(output)} />
-          <Row label="backend" value={output.backend} />
+        <Section id="tel.output" title="Output" trailing={output.mode}>
+          <Row label="Pipeline" value={describeOutput(output)} />
+          <Row label="Backend" value={output.backend} />
           <Row
-            label="range"
+            label="Range"
             value={
               output.mode === 'extended'
                 ? `extended · ${output.headroom}× headroom`
                 : 'sRGB · clamped at white'
             }
           />
-          <Row label="preference" value={output.preference} />
+          <Row label="Preference" value={output.preference} />
           <Row
             label="navigator.gpu"
             value={output.capability.webgpu ? 'present' : 'absent'}
@@ -155,7 +155,10 @@ export function TelemetryPanel({
             value={String(output.capability.dynamicRangeHigh)}
           />
           <Row
-            label="rgba16float canvas"
+            // `rgba16float` stays verbatim like `navigator.gpu` above — it is
+            // the literal GPUTextureFormat token, and title-casing it makes a
+            // string that matches nothing in any WebGPU document.
+            label="rgba16float Canvas"
             value={output.capability.extendedCanvas ? 'configured' : 'refused'}
           />
         </Section>
@@ -164,21 +167,21 @@ export function TelemetryPanel({
       {render !== null && (
         <Section
           id="tel.render"
-          title="render"
+          title="Render"
           trailing={`${render.starCount} stars`}
         >
-          <Row label="origin sector" value={render.originSector.join(', ')} />
-          <Row label="rebases" value={String(render.originGeneration)} />
-          <Row label="anchor" value={render.anchorFrame} />
+          <Row label="Origin Sector" value={render.originSector.join(', ')} />
+          <Row label="Rebases" value={String(render.originGeneration)} />
+          <Row label="Anchor" value={render.anchorFrame} />
           <Row
-            label="camera"
+            label="Camera"
             value={render.cameraRenderPosition
               .map((n) => n.toFixed(1))
               .join(', ')}
           />
-          <Row label="stars" value={String(render.starCount)} />
+          <Row label="Stars" value={String(render.starCount)} />
           <Row
-            label="streaming"
+            label="Streaming"
             value={summarise(render.terrainCandidates)}
             wrap
           />
@@ -205,20 +208,20 @@ export function TelemetryPanel({
 
       <Section
         id="tel.universe"
-        title="universe"
+        title="Universe"
         trailing={`${world.loadedSystems.length} systems`}
       >
         <Row
-          label="systems"
+          label="Systems"
           value={summarise(
             world.loadedSystems.map((s) => `${s.name} (${s.bodies})`),
           )}
           wrap
         />
-        <Row label="frames" value={String(world.frames)} />
-        <Row label="entities" value={String(world.entityCount)} />
+        <Row label="Frames" value={String(world.frames)} />
+        <Row label="Entities" value={String(world.entityCount)} />
         <Row
-          label="workers"
+          label="Workers"
           value={
             workers === null
               ? 'inline'
@@ -231,7 +234,7 @@ export function TelemetryPanel({
       {world.events.length > 0 && (
         <Section
           id="tel.events"
-          title="events"
+          title="Events"
           trailing={String(world.events.length)}
         >
           {world.events.slice(-5).map((event, index) => (
@@ -249,7 +252,7 @@ export function TelemetryPanel({
 
       {network}
 
-      <Section id="tel.controls" title="controls">
+      <Section id="tel.controls" title="Controls">
         <div className="grid grid-cols-[5.5rem_1fr] gap-x-2">
           {CONTROL_HELP.map(([key, description]) => (
             <div key={key} className="contents">

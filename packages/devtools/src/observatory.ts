@@ -157,6 +157,22 @@ export class Observatory {
     return this.#state
   }
 
+  /**
+   * Where the camera is this instant, or null when it is holding nothing.
+   *
+   * Deliberately not `sample()`: that one advances the ease and is the render
+   * loop's to call exactly once per frame. This is a *reading*, for anything
+   * that needs to know where the viewer is without being the viewer — the
+   * catalogue sorts by distance from it, so calling `sample` to find out would
+   * have a panel stepping the camera's animation every time it polled.
+   */
+  get eye(): UniverseVector | null {
+    const target = this.#target
+    if (target === null) return null
+    const centre = this.#targetPosition(target)
+    return centre === null ? null : observerPose(centre, this.#state).position
+  }
+
   /** The host's current vertical field of view; framing depends on it. */
   setFov(fovDeg: number): void {
     if (Number.isFinite(fovDeg) && fovDeg > 1 && fovDeg < 179) {

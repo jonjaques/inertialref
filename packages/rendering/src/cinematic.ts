@@ -95,6 +95,23 @@ export interface CinematicEffects {
   readonly streaks: number
   /** Nacelle grille glow, building before a warp-out. */
   readonly nacelleGlow: number
+  /**
+   * The star's light around an occulting limb, during a total eclipse.
+   *
+   * **Opt-in, and it has to be.** The ring is drawn from real occlusion
+   * geometry, so before this existed it appeared wherever a camera sat on a
+   * body's anti-sun line — which in the planetarium is one press of `crescent`
+   * away, and on the front door is a third of every slow orbit. At the ranges
+   * those cameras work at the physical corona is a fraction of a degree past
+   * the limb and the drawn one is nearly a disc radius thick, so what it
+   * actually delivered was a gold halo swallowing the frame in a mode that had
+   * not asked for an eclipse.
+   *
+   * It is staging, in other words, not lighting — `tng-intro`'s eclipse shot is
+   * composed around it — so it belongs with `blackout` and `flash` in the list
+   * of things a script turns on, and it is 0 everywhere else by construction.
+   */
+  readonly corona: number
   /** The warp point's lens spike. */
   readonly spark: CinematicSpark
 }
@@ -110,6 +127,7 @@ export const NO_EFFECTS: CinematicEffects = Object.freeze({
   flash: 0,
   streaks: 0,
   nacelleGlow: 0,
+  corona: 0,
   spark: NO_SPARK,
 })
 

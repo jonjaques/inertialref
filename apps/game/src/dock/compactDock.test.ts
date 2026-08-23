@@ -1,9 +1,15 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
+import { MemoryRouter } from 'react-router'
 import { describe, expect, it } from 'vitest'
 import { Circle, Globe, Star } from 'lucide-react'
 import { CompactDock } from './CompactDock.tsx'
-import { EMPTY_LAYOUT, movePanel, type DockLayout } from './layout.ts'
+import {
+  EMPTY_LAYOUT,
+  movePanel,
+  openPanels,
+  type DockLayout,
+} from './layout.ts'
 import type { DockPanelDefinition } from './panels.ts'
 
 /*
@@ -34,7 +40,7 @@ const panel = (id: string, zone: DockPanelDefinition['zone']) =>
 const PANELS = [
   panel('catalogue', 'left'),
   panel('object', 'right'),
-  panel('time', 'bottom'),
+  panel('time', 'float'),
   panel('closed', 'right'),
 ]
 
@@ -43,30 +49,73 @@ const LAYOUT: DockLayout = movePanel(
     ...EMPTY_LAYOUT,
     left: ['catalogue'],
     right: ['object'],
-    bottom: ['time'],
+    float: ['time'],
   },
   'closed',
   'hidden',
 )
 
+/*
+ * Inside a router, because the bar carries the two links that used not to exist
+ * on a phone at all — the mark going home and the settings dialog. A memory
+ * router is the whole dependency: nothing here reads a path, only writes one.
+ */
 const render = (layout: DockLayout = LAYOUT): string =>
-  renderToStaticMarkup(createElement(CompactDock, { panels: PANELS, layout }))
+  renderToStaticMarkup(
+    createElement(
+      MemoryRouter,
+      null,
+      createElement(CompactDock, {
+        panels: PANELS,
+        layout,
+        mode: 'planetarium',
+      }),
+    ),
+  )
 
 describe('the compact dock', () => {
-  it('offers every docked panel as a tab, whatever zone it was in', () => {
-    // The claim: on a phone the zones stop being read and nothing becomes
-    // unreachable. A panel stranded in a zone the layout no longer draws is
-    // exactly the failure this replaces.
-    const markup = render()
-    for (const id of ['catalogue', 'object', 'time']) {
-      expect(markup).toContain(`>${id}</span>`)
-    }
+  it('offers every open panel, whatever zone it was in', () => {
+    /*
+     * The claim: on a phone the zones stop being read and nothing becomes
+     * unreachable — floating included, since there is nothing on a 390 px
+     * screen for a panel to float over that it would not also cover. A panel
+     * stranded in a zone the layout no longer draws is exactly the failure
+     * this arrangement replaces.
+     *
+     * Asserted against the census rather than the markup, because the picker
+     * lives inside the sheet now and the sheet opens closed. That is not the
+     * test being weakened: `openPanels` *is* what the picker renders, and a
+     * static render could only ever have proved that a list was drawn, not
+     * that it was the right list.
+     */
+    expect(openPanels(PANELS, LAYOUT).map((panel) => panel.id)).toEqual([
+      'catalogue',
+      'object',
+      'time',
+    ])
   })
 
   it('does not offer a closed panel', () => {
     // `hidden` is still a zone here: closing a panel on the desktop and opening
     // the same workspace on a phone must not resurrect it.
+    expect(openPanels(PANELS, LAYOUT).map((panel) => panel.id)).not.toContain(
+      'closed',
+    )
     expect(render()).not.toContain('>closed</span>')
+  })
+
+  it('names the panels in words, and only inside the sheet', () => {
+    /*
+     * The bar is navigation and the sheet is the picker, which is the division
+     * that fixed the old strip: eleven panel names cannot share one row across
+     * a 390 px screen, and the row that tried scrolled the last of them off the
+     * edge with nothing to say it had. The bar names the *open* panel, or the
+     * affordance that opens one.
+     */
+    const markup = render()
+    expect(markup).toContain('>Panels</span>')
+    expect(markup).not.toContain('>catalogue</span>')
+    expect(markup).not.toContain('overflow-x-auto')
   })
 
   it('opens with the sky, not with a panel', () => {
@@ -78,12 +127,28 @@ describe('the compact dock', () => {
     expect(markup).not.toContain('time body')
   })
 
-  it('renders nothing at all when every panel is closed', () => {
-    // Not an empty bar: a strip of chrome with no tabs in it is worse than no
-    // strip, and the rail on the desktop is the way back either way.
-    expect(render({ ...EMPTY_LAYOUT, hidden: PANELS.map((p) => p.id) })).toBe(
-      '',
-    )
+  it('keeps the way out even when every panel is closed', () => {
+    /*
+     * This used to render nothing at all, on the argument that a strip of
+     * chrome with no tabs in it is worse than no strip. That was true of a
+     * strip which was only tabs, and it is what left a phone in the
+     * planetarium with no route home and no settings — the browser's back
+     * button was the entire navigation model. The bar carries the mark, the
+     * place and the settings now, so it is never the thing that disappears;
+     * the panel toggle goes disabled instead, visible, because its presence is
+     * the information that this mode has panels at all.
+     */
+    const markup = render({ ...EMPTY_LAYOUT, hidden: PANELS.map((p) => p.id) })
+    expect(markup).toContain('href="/"')
+    expect(markup).toContain('planetarium')
+    expect(markup).toContain('disabled')
+    expect(markup).not.toContain('>catalogue</span>')
+  })
+
+  it('offers the mode a route home and a route to settings', () => {
+    const markup = render()
+    expect(markup).toContain('aria-label="Back to the menu"')
+    expect(markup).toContain('aria-label="Settings"')
   })
 
   it('keeps the tab strip clear of the home indicator', () => {

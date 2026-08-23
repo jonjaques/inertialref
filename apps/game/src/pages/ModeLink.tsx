@@ -1,10 +1,18 @@
 import { Link } from 'react-router'
 import { ArrowRight } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
 import { FOCUS_RING } from '../hud/focus.ts'
-import { type ModeCard, STATUS_LABEL, STATUS_TONE } from './modes.ts'
+import type { ModeCard } from './modes.ts'
+import { StatusBadge } from './StatusBadge.tsx'
 
-/** One of the menu's five choices: a glyph, a name, a claim and a status. */
+/**
+ * A door: a mode you can actually walk into.
+ *
+ * There are two of these, which is the whole reason this is worth being a card
+ * at all. Five equal cards is a scaffold — a list pretending to be a decision —
+ * and it was what this page had. Two doors and a quiet line of what is not open
+ * yet (`ModeRow`) is the same information with the hierarchy the page actually
+ * has.
+ */
 export function ModeLink({ mode }: { mode: ModeCard }) {
   const Icon = mode.icon
   return (
@@ -13,7 +21,7 @@ export function ModeLink({ mode }: { mode: ModeCard }) {
       // The surfaces are near-opaque rather than a wash. They sit over a sunlit
       // planet at the brightest end of the frame, and a 50% slate over that is
       // a lighter grey than the type on it.
-      className={`group flex items-center gap-4 rounded-lg border px-4 py-3 backdrop-blur-sm transition-colors ${FOCUS_RING} ${
+      className={`group flex items-center gap-4 rounded-lg border px-4 py-3.5 backdrop-blur-sm transition-colors ${FOCUS_RING} ${
         mode.accent
           ? 'border-sky-500/40 bg-sky-950/70 hover:border-sky-400/70 hover:bg-sky-900/60'
           : 'border-slate-700/60 bg-slate-950/80 hover:border-slate-500 hover:bg-slate-900/85'
@@ -21,31 +29,30 @@ export function ModeLink({ mode }: { mode: ModeCard }) {
     >
       <Icon
         aria-hidden
-        className={`size-6 shrink-0 transition-colors ${
+        className={`size-7 shrink-0 transition-colors ${
           mode.accent
             ? 'text-sky-300'
             : 'text-slate-400 group-hover:text-sky-300'
         }`}
-        strokeWidth={1.5}
+        strokeWidth={1.25}
       />
       <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-2">
-          <span className="text-slate-100">{mode.title}</span>
-          {/* shadcn's `Badge`, with its radius overridden: the registry's is a
-              `rounded-full` pill and this system has two radii, neither of
-              which is a pill. 10px, not the variant's 12, for the same reason —
-              the type scale bottoms out at 10 and a badge is not the place to
-              add a step. */}
-          <Badge
-            variant="outline"
-            className={`rounded border px-1.5 py-px font-mono text-[10px] font-normal tracking-widest uppercase ${STATUS_TONE[mode.status]}`}
-          >
-            {STATUS_LABEL[mode.status]}
-          </Badge>
+        <span className="flex items-center gap-2.5">
+          {/*
+           * The display face, at the smallest size it is ever set.
+           *
+           * A mode is a *place* — the same thing the IR menu names beside the
+           * mark — and naming places is the display face's job in this system.
+           * It is also the only thing on this card that is not the prose sans
+           * or the mono, which is what makes a door read as a door rather than
+           * as a row with an icon.
+           */}
+          <span className="type-title truncate text-slate-100">
+            {mode.title}
+          </span>
+          <StatusBadge status={mode.status} />
         </span>
-        <span className="mt-0.5 block font-mono text-[11px] leading-snug text-slate-400">
-          {mode.blurb}
-        </span>
+        <span className="type-ui mt-1 block text-slate-400">{mode.blurb}</span>
       </span>
       <ArrowRight
         aria-hidden

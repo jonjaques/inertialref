@@ -101,7 +101,7 @@ export function PerfPanel({
     <div>
       <Section
         id="perf.frame"
-        title="frame"
+        title="Frame"
         trailing={`${fps(period.mean)} fps`}
       >
         <SeriesPlot
@@ -115,18 +115,18 @@ export function PerfPanel({
             p95" and "57 fps at the 95th percentile" land differently and only
             one of them is the number the budget is written in. */}
         <Row
-          label="p95"
+          label="P95"
           value={`${period.p95.toFixed(2)} ms · ${fps(period.p95)} fps`}
         />
         <Row
-          label="worst"
+          label="Worst"
           value={`${period.max.toFixed(2)} ms · ${fps(period.max)} fps`}
         />
       </Section>
 
       <Section
         id="perf.engine"
-        title="engine"
+        title="Engine"
         trailing={`${metrics.engineMs.summarise().mean.toFixed(2)} ms`}
       >
         {/* Simulation, snapshot, scene build and terrain reconciliation — but
@@ -138,7 +138,7 @@ export function PerfPanel({
           budget={ENGINE_BUDGET_MS}
         />
         <SeriesStatsRow stats={metrics.engineMs.summarise()} unit="ms" />
-        <Row label="gpu" value={gpuLabel(engine, metrics.gpuMs, gpuBusy)} />
+        <Row label="GPU" value={gpuLabel(engine, metrics.gpuMs, gpuBusy)} />
         <div className="mt-1">
           <GpuMeasureButton
             engine={engine}
@@ -150,7 +150,7 @@ export function PerfPanel({
 
       <Section
         id="perf.sim"
-        title="simulation"
+        title="Simulation"
         trailing={world === null ? '—' : `${world.tick} ticks`}
       >
         <SeriesPlot series={metrics.ticks} unit="" />
@@ -161,7 +161,7 @@ export function PerfPanel({
          * short of the request is being dropped.
          */}
         <Row
-          label="time warp"
+          label="Time Warp"
           value={
             world === null
               ? '—'
@@ -174,18 +174,18 @@ export function PerfPanel({
           </div>
         )}
         <Row
-          label="ticks/frame"
+          label="Ticks/frame"
           value={format(metrics.ticks.summarise().mean)}
         />
         <Row
-          label="dropped"
+          label="Dropped"
           value={world === null ? '—' : String(world.droppedTicks)}
         />
       </Section>
 
       <Section
         id="perf.render"
-        title="render"
+        title="Render"
         trailing={`${format(metrics.drawCalls.summarise().last)} calls`}
       >
         <SeriesPlot
@@ -195,37 +195,37 @@ export function PerfPanel({
         />
         <SeriesStatsRow stats={metrics.drawCalls.summarise()} unit="" />
         <Row
-          label="triangles"
+          label="Triangles"
           value={format(metrics.triangles.summarise().last)}
         />
         <Row
-          label="pipeline"
+          label="Pipeline"
           value={engine.gl === null ? 'starting…' : describeGl(engine)}
         />
       </Section>
 
       <Section
         id="perf.workers"
-        title="workers"
+        title="Workers"
         trailing={workers === null ? '—' : `${workers.workers} threads`}
       >
         <SeriesPlot series={metrics.queuedJobs} unit="" />
         {workers !== null && (
           <>
             <Row
-              label="queued / active"
+              label="Queued / Active"
               value={`${workers.queued} / ${workers.active}`}
             />
             <Row
-              label="queue wait"
+              label="Queue Wait"
               value={`${workers.averageQueueMs.toFixed(1)} ms avg · ${workers.longestQueueMs.toFixed(1)} ms worst`}
             />
             <Row
-              label="run"
+              label="Run"
               value={`${workers.averageRunMs.toFixed(1)} ms avg`}
             />
             <Row
-              label="completed / failed"
+              label="Completed / Failed"
               value={`${workers.completed} / ${workers.failed}`}
             />
           </>
@@ -234,7 +234,7 @@ export function PerfPanel({
 
       <Section
         id="perf.memory"
-        title="memory"
+        title="Memory"
         trailing={heap.count === 0 ? 'n/a' : `${heap.last.toFixed(0)} MB`}
       >
         {heap.count === 0 ? (

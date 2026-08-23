@@ -214,6 +214,24 @@ export class GameEngine implements PresentationHost {
   fov = DEFAULT_FOV
 
   /*
+   * How much of the lens's artefact stack is showing, 0..1 — the ghost chain,
+   * not the glow and the streak, which are always the whole point.
+   *
+   * A field rather than a constant in `SunFlare` because it is a *composition*
+   * decision and the two producers of a camera disagree about it. A flight
+   * camera is 1: `docs/design/art.md` § the lens is explicit that the camera
+   * admits it is a camera. A scripted shot runs near 0 (`SunFlare` floors the
+   * cinematic case). The menu is the third case and the reason this exists —
+   * the ghosts march along the line from the star through frame centre, so a
+   * sun on the right of the poster puts a red aperture ring squarely over the
+   * paragraph on the left. That is a lens artefact landing on type, which is
+   * the one place it is never a photograph.
+   *
+   * Restored by whoever lowered it, exactly like `showShip`.
+   */
+  flareArtifacts = 1
+
+  /*
    * The host's renderer, once it has one. `null` under Node, and for as long as
    * the capability probe is still running.
    *

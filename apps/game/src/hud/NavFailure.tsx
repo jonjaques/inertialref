@@ -34,7 +34,7 @@ export function NavFailure({
           {failure.action} failed
         </span>
         <Action
-          label="dismiss"
+          label="Dismiss"
           title="Clear this. The next action that succeeds clears it too."
           onClick={onDismiss}
         />

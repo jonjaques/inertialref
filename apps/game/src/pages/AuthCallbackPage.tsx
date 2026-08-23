@@ -50,7 +50,7 @@ export function AuthCallbackPage() {
           <p className="text-rose-300">Sign-in did not complete.</p>
           {/* The provider's own error code, which is safe to show and is the
               only thing that makes a support question answerable. */}
-          <p className="font-mono text-[10px] text-slate-400">{state.error}</p>
+          <p className="type-micro text-slate-400">{state.error}</p>
           <Button
             asChild
             variant="outline"

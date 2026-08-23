@@ -1,24 +1,25 @@
 import { DockPanel } from './DockPanel.tsx'
 import { DropLine } from './DropLine.tsx'
-import type { DockZone } from './layout.ts'
+import type { PaneZone } from './layout.ts'
 import type { DockPanelDefinition } from './panels.ts'
+import type { Workspace } from './useWorkspace.ts'
 
-/** One panel in a zone, with the drop indicator that may precede it. */
+/** One panel in a pane, with the drop indicator that may precede it. */
 export function PanelSlot({
   definition,
   zone,
   indicate,
-  onHide,
+  workspace,
 }: {
   definition: DockPanelDefinition
-  zone: DockZone
+  zone: PaneZone
   indicate: boolean
-  onHide: (id: string) => void
+  workspace: Workspace
 }) {
   return (
     <>
-      {indicate && <DropLine zone={zone} />}
-      <DockPanel definition={definition} zone={zone} onHide={onHide} />
+      {indicate && <DropLine />}
+      <DockPanel definition={definition} zone={zone} workspace={workspace} />
     </>
   )
 }

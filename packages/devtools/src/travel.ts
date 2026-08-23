@@ -67,6 +67,20 @@ export interface TravelTargetOptions {
    * list is how you get stranded with no way back.
    */
   readonly lightYears?: number
+  /**
+   * Whose "here" the listing is centred on and sorted by. Default `player`.
+   *
+   * The two are the same thing in a flight mode and are not remotely the same
+   * thing in the planetarium, where the whole verb is `look` — the camera goes
+   * to Alpha Centauri and the ship does not. Centred on the player, the
+   * catalogue there listed Sol's bodies first and reported Alpha Centauri at
+   * 4.4 light years while it filled the frame, which is a listing describing
+   * somewhere the reader is not.
+   *
+   * It is a survey origin as well as a sort key: `systemsWithin` sweeps around
+   * this point, so the observer's neighbours are the ones offered.
+   */
+  readonly origin?: 'player' | 'observer'
 }
 
 /** Default survey radius. Wide enough to hold the nearest half-dozen stars. */

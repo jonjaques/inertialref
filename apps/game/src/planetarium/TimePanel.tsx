@@ -1,56 +1,102 @@
 'use no memo'
-import { Gauge, Pause, Play } from 'lucide-react'
-import { Separator } from '@/components/ui/separator'
+import { FastForward, Pause, Play, Rewind } from 'lucide-react'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { Action } from '../hud/Action.tsx'
 import { TransportButton } from '../hud/TransportButton.tsx'
 import { usePolled } from '../hud/usePolled.ts'
 import { nextWarp } from '../hud/warp.ts'
 import type { PlanetariumContext } from './context.ts'
+import { localZone, simulationInstant } from './simulationTime.ts'
 
-/** Pause, warp, and what the clock is actually delivering. */
+/*
+ * A transport for the clock, and the instant it is standing at.
+ *
+ * The shape every planetarium since Stellarium has converged on: slower, play,
+ * faster, and a way back to normal time. What is deliberately *not* here is a
+ * reverse button, and it is worth writing down why rather than leaving it to be
+ * re-proposed. `SimulationClock` counts fixed ticks forward and `setTimeScale`
+ * refuses anything that is not positive; ship state is integrated rather than
+ * derived, so running it backwards is not a sign flip but a re-simulation from
+ * a snapshot. The determinism guarantee — same tick count, same state hash — is
+ * built on that being impossible. Time warp is the axis this panel controls.
+ *
+ * The readout used to be `formatDuration(clock.time)`: "15.23 s", a stopwatch
+ * reading in a mode whose entire subject is *when* you are looking. It is an
+ * instant now — the elements every orbit is solved from are J2000, so the clock
+ * has always had a date, and `@inertialref/shared` is where that mapping lives.
+ * A picker that writes into it is the obvious next control and this is the
+ * readout it will replace.
+ */
 export function TimePanel({ engine }: PlanetariumContext) {
   const world = usePolled(() => engine.harness.status().world)
+  const at = simulationInstant(world.time)
+  const normal = world.timeScale === 1
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <TransportButton
-        label={world.paused ? 'Run (Space)' : 'Pause (Space)'}
-        icon={world.paused ? Play : Pause}
-        primary
-        onClick={() => engine.world.clock.setPaused(!world.paused)}
-      />
+    <div className="flex flex-col gap-2">
+      {/*
+       * The instant first, and set in the largest mono step.
+       *
+       * It is the answer this panel exists to give, and the transport under it
+       * is how the answer is changed — which is the order those two belong in.
+       */}
+      <div title={at.utc}>
+        <div className="flex items-baseline gap-2">
+          <span className="type-figure shrink-0 text-slate-200">{at.time}</span>
+          <span className="type-readout min-w-0 truncate text-slate-300">
+            {at.date}
+          </span>
+        </div>
+        <p className="type-micro truncate text-slate-400">{localZone()}</p>
+      </div>
 
-      <div className="flex items-center gap-1">
-        <Action
-          label="−"
-          title="Slower ( [ )"
+      <div className="flex flex-wrap items-center gap-1.5">
+        <TransportButton
+          label="Slower ( [ )"
+          icon={Rewind}
           onClick={() => warp(engine, -1)}
         />
-        <span className="w-16 text-center text-slate-300 tabular-nums">
-          {world.timeScale}×
-        </span>
-        <Action
-          label="+"
-          title="Faster ( ] )"
+        <TransportButton
+          label={world.paused ? 'Run (Space)' : 'Pause (Space)'}
+          icon={world.paused ? Play : Pause}
+          primary
+          onClick={() => engine.world.clock.setPaused(!world.paused)}
+        />
+        <TransportButton
+          label="Faster ( ] )"
+          icon={FastForward}
           onClick={() => warp(engine, 1)}
+        />
+        {/*
+         * The rate readout *is* the way back to normal time.
+         *
+         * A separate reset button would be a fourth glyph saying "1×" beside a
+         * label already saying "1×". Never disabled, though it was for one
+         * revision: at 1× the disabled style took it to 35% opacity, which
+         * hides the *readout* — the one number this row exists to show — in
+         * order to grey out an action that is a no-op anyway. A reset that is
+         * already reset is a control asserting a state, not a dead one.
+         */}
+        <Action
+          label={`${world.timeScale}×`}
+          tone={normal ? 'normal' : 'primary'}
+          title={
+            normal ? 'Normal time' : `${world.timeScale}× — back to normal time`
+          }
+          onClick={() => engine.world.clock.setTimeScale(1)}
         />
       </div>
 
-      <Separator orientation="vertical" className="mx-1 !h-4 bg-slate-800" />
-
-      <Gauge aria-hidden className="size-3.5 shrink-0 text-slate-400" />
-      <span className="text-slate-400 tabular-nums">{world.timeText}</span>
       {/* What the clock is actually delivering. Below the requested warp when
           the simulation cannot keep up, and saying so is the whole point —
           `hud/PerfPanel.tsx` found that warp above 5× had never worked. */}
       {world.achievedTimeScale < world.timeScale * 0.95 && (
-        <span
-          className="text-amber-300/80"
+        <p
+          className="type-micro text-amber-300/90"
           title="The simulation is not keeping up with the requested warp"
         >
           {world.achievedTimeScale.toFixed(1)}× actual
-        </span>
+        </p>
       )}
     </div>
   )

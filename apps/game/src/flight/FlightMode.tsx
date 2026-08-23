@@ -1,6 +1,8 @@
 import { useEffect } from 'react'
 import { useParams } from 'react-router'
 import type { HarnessStatus } from '@inertialref/devtools'
+import { Workspace } from '../dock/Workspace.tsx'
+import type { DevWorkspace } from '../dock/workspace.ts'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { ErrorBoundary } from '../hud/ErrorBoundary.tsx'
 import { FlightStrip } from '../hud/FlightStrip.tsx'
@@ -24,12 +26,17 @@ import { NotConnected } from './NotConnected.tsx'
 const KNOWN = ['solo', 'online', 'multiplayer'] as const
 type PlayMode = (typeof KNOWN)[number]
 
+/** Flight contributes no panels of its own. Named, so the array is stable. */
+const NO_PANELS = [] as const
+
 export function FlightMode({
   engine,
   status,
+  dev,
 }: {
   engine: GameEngine
   status: HarnessStatus | null
+  dev: DevWorkspace
 }) {
   const { mode } = useParams<{ mode?: string }>()
   const play: PlayMode = (KNOWN as readonly string[]).includes(mode ?? '')
@@ -56,7 +63,7 @@ export function FlightMode({
     <>
       <ErrorBoundary
         what="the flight strip"
-        className="pointer-events-auto absolute bottom-3 left-3 max-w-[calc(100vw-1.5rem)] font-mono text-[11px]"
+        className="type-readout pointer-events-auto absolute bottom-3 left-3 max-w-[calc(100vw-1.5rem)]"
       >
         <FlightStrip status={status} />
       </ErrorBoundary>
@@ -69,6 +76,13 @@ export function FlightMode({
       </div>
 
       {play === 'online' && <NotConnected />}
+
+      {/* No panels of its own — the cockpit `docs/design/ux.md` specifies is
+          unbuilt, and the flight strip above is the whole of what exists. What
+          this gets is the workspace itself, so the author's instruments are
+          reachable here in exactly the arrangement and by exactly the gestures
+          they are reachable in everywhere else. */}
+      <Workspace id="flight" title="Flight" panels={NO_PANELS} dev={dev} />
     </>
   )
 }

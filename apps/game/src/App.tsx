@@ -4,18 +4,23 @@ import { AnimatePresence, motion } from 'motion/react'
 import { useLocation } from 'react-router'
 import type { StarCatalog } from '@inertialref/universe'
 import { DEFAULT_FOV, GameEngine } from './engine/GameEngine.ts'
-import type { CameraState, GraphicsState, HudCommands } from './hud/controls.ts'
+import type {
+  CameraState,
+  GraphicsState,
+  HudCommands,
+  HudRenderState,
+} from './hud/controls.ts'
 import { FOV_MAX, FOV_MIN } from './hud/controls.ts'
 import { CutsceneOverlay } from './hud/CutsceneOverlay.tsx'
 import { ErrorBoundary } from './hud/ErrorBoundary.tsx'
-import { HudDock } from './hud/HudDock.tsx'
+import { isTyping } from './hud/focus.ts'
 import {
   isBoolean,
   numberWithin,
   oneOf,
   usePersistentState,
 } from './hud/panelState.ts'
-import { type HudTab, TABS } from './hud/tabs.ts'
+import { devPanels } from './hud/registry.tsx'
 import { nextWarp } from './hud/warp.ts'
 import { useShipControls } from './hud/useShipControls.ts'
 import {
@@ -35,13 +40,13 @@ import {
   type AaLevel,
   aaAntialias,
   aaDprFactor,
+  OUTPUT_PREFERENCES,
   type OutputPreference,
   type RendererDescription,
 } from './render/output.ts'
 import { ModeRoutes } from './pages/ModeRoutes.tsx'
 import { OverlayRoutes } from './pages/OverlayRoutes.tsx'
 import { modeForPath, resolvedLocation } from './pages/paths.ts'
-import { ShellBar } from './pages/ShellBar.tsx'
 import { SceneView } from './scene/SceneView.tsx'
 import {
   engineStore,
@@ -81,13 +86,6 @@ const PANEL_HZ = 8
 
 /** How long a transient notice stays up. */
 const NOTICE_MS = 2_500
-
-/** `auto` first, because it is right more often than it is wrong. */
-const HDR_STATES = [
-  'auto',
-  'extended',
-  'standard',
-] as const satisfies readonly OutputPreference[]
 
 /** An unknown throw, as a sentence. Every rejection here reaches a notice. */
 const describe = (cause: unknown): string =>
@@ -159,26 +157,16 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    * who turned it on is working, and a reload is part of working.
    */
   const [debug, setDebug] = usePersistentState('debug.on', false, isBoolean)
-  const [dockOpen, setDockOpen] = usePersistentState(
-    'dock.open',
-    true,
-    isBoolean,
-  )
   /*
    * Every restored preference is checked against what this build accepts.
    *
-   * `localStorage` outlives the code that wrote it. A `dock.tab` of `"nav"` from
-   * before these five names existed parses cleanly, matches no tab, and renders
-   * an empty dock with no active tab and no way back that is not devtools; an
-   * `aa` of `"8x"` from an experiment reaches the renderer's constructor. The
-   * guards turn every one of those into "the default", which is what an absent
-   * value already meant.
+   * `localStorage` outlives the code that wrote it. A stored dock layout naming
+   * panels that no longer exist renders empty slots and hides the ones that do;
+   * an `aa` of `"8x"` from an experiment reaches the renderer's constructor.
+   * The guards turn every one of those into "the default", which is what an
+   * absent value already meant. `dock/useWorkspace.ts` does the same for the
+   * four preferences the workspace keeps.
    */
-  const [tab, setTab] = usePersistentState<HudTab>(
-    'dock.tab',
-    'navigate',
-    oneOf(TABS),
-  )
   const [notice, setNotice] = useState<string | null>(null)
   /*
    * The three-state HDR override.
@@ -192,7 +180,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
   const [hdr, setHdr] = usePersistentState<OutputPreference>(
     'render.hdr',
     'auto',
-    oneOf(HDR_STATES),
+    oneOf(OUTPUT_PREFERENCES),
   )
   /*
    * The graphics and camera panels' knobs. Persisted like the HDR override —
@@ -437,6 +425,45 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
     },
   }
   const cameraState: CameraState = { fov, onFov: setFov }
+  const renderState: HudRenderState = {
+    preference: hdr,
+    output,
+    onPreference: (next: OutputPreference) => {
+      if (next === hdr) return
+      // The renderer is rebuilt for this, so say what happened — otherwise the
+      // only feedback is a frame the player may not be able to see the
+      // difference in, which is the whole problem.
+      setHdr(next)
+      flash(`hdr ${next}`)
+    },
+  }
+
+  /*
+   * The author's instruments, assembled here and handed to whichever mode is
+   * running.
+   *
+   * `App` is the only place that can build them: the renderer description, the
+   * connection monitor and the command table all live here, and three of the
+   * six panels read at least one of them. The *workspace* they go into belongs
+   * to the mode, because a panel body closes over what the mode has in scope —
+   * so this is passed down rather than rendered here. `dock/workspace.ts` has
+   * the shape and the reason the disclosure is a setter.
+   */
+  const dev = {
+    panels: devPanels({
+      engine,
+      status,
+      render: renderState,
+      graphics: graphicsState,
+      camera: cameraState,
+      connection,
+      onCheckConnection: monitor.refresh,
+      commands,
+      onNotice: flash,
+    }),
+    open: debug,
+    onOpenChange: setDebug,
+  }
 
   useShipControls(
     engine,
@@ -447,15 +474,6 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
       onWarp: commands.warp,
       onSave: commands.save,
       onLoad: commands.load,
-      onToggleHud: () => setDockOpen(!dockOpen),
-      onShowNavigation: () => {
-        setTab('navigate')
-        setDockOpen(true)
-      },
-      onShowPerformance: () => {
-        setTab('perf')
-        setDockOpen(true)
-      },
     },
     // The flight axes belong to the flight modes. The planetarium binds the
     // arrows to orbiting a camera and `F` to framing a target, and the cinema
@@ -480,14 +498,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       if (event.code !== 'Backquote' || event.metaKey || event.ctrlKey) return
-      const target = event.target
-      if (
-        target instanceof HTMLElement &&
-        (target.isContentEditable ||
-          target.tagName === 'INPUT' ||
-          target.tagName === 'TEXTAREA')
-      )
-        return
+      if (isTyping(event)) return
       event.preventDefault()
       setDebug(!debug)
     }
@@ -565,19 +576,28 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
        * change nothing about what is clickable: each piece of chrome turns
        * events back on for itself, exactly as before.
        *
-       *   0  the mode           — at its widest a full-viewport input surface
+       *   0  the mode           — its input surface, its panes and its menu
        *   10 the cutscene layer — blackout and titles: picture, not UI
-       *   20 the dock           — the instrument, over the mode it drives
-       *   30 the shell bar, notices, and the cinema player
+       *   30 notices, and the cinema player
        *   40 dialogs            — over all of it, which is what a dialog is
+       *
+       * The band that used to sit at 20 was the dev dock, a fixed panel in the
+       * top-right corner that `App` drew over whichever mode was running. There
+       * is no such thing now: the author's instruments are panels in the mode's
+       * own workspace (`dock/Workspace.tsx`), so they are inside the mode band
+       * and ordered against its input surface by DOM order, exactly like every
+       * other panel.
        *
        * The cutscene layer is above the mode because its blackout is part of
        * the picture. The cinema player is the one mode that has to be read
        * *through* that blackout — it carries the transport and the way out —
        * which is why the mode band is lifted to 30 there and nowhere else.
        *
-       * Radix portals its tooltips to `<body>` at `z-50`, outside this layer
-       * and above all of it, which is what a tooltip should be.
+       * The tooltip wrapper portals its content *into* this layer at `z-50`
+       * — above every band here, and inside the standard-range clamp, which
+       * is the point: a chip portalled to `<body>` sat outside the clamp and
+       * composited over a star at twice diffuse white. See
+       * `components/ui/tooltip.tsx`.
        */}
       <div className="hud-layer pointer-events-none absolute inset-0">
         {/* Renders nothing at all when no cutscene is running. While one is,
@@ -586,7 +606,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
         <div className="pointer-events-none absolute inset-0 z-10">
           <ErrorBoundary
             what="the cutscene overlay"
-            className="pointer-events-auto absolute bottom-5 left-1/2 w-[34rem] max-w-[80vw] -translate-x-1/2 font-mono text-[11px]"
+            className="type-readout pointer-events-auto absolute bottom-5 left-1/2 w-[34rem] max-w-[80vw] -translate-x-1/2"
           >
             {/* The scene's own screen-space layer: blackout, titles, audio. Its
                 transport is the *debug* one — the cinema player provides the
@@ -599,54 +619,15 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
             />
           </ErrorBoundary>
         </div>
-        {!cinema && debug && (
-          <div className="pointer-events-none absolute inset-0 z-20">
-            <ErrorBoundary
-              what="the dock"
-              className="pointer-events-auto absolute right-3 top-3 w-[27rem] max-w-[calc(100vw-1.5rem)] font-mono text-[11px] leading-relaxed"
-            >
-              <HudDock
-                engine={engine}
-                status={status}
-                render={{
-                  preference: hdr,
-                  output,
-                  onCyclePreference: () => {
-                    const next =
-                      HDR_STATES[
-                        (HDR_STATES.indexOf(hdr) + 1) % HDR_STATES.length
-                      ] ?? 'auto'
-                    // The renderer is rebuilt for this, so say what happened —
-                    // otherwise the only feedback is a frame the player may not be
-                    // able to see the difference in, which is the whole problem.
-                    setHdr(next)
-                    flash(`hdr ${next}`)
-                  },
-                }}
-                graphics={graphicsState}
-                camera={cameraState}
-                connection={connection}
-                onCheckConnection={monitor.refresh}
-                open={dockOpen}
-                onOpenChange={setDockOpen}
-                tab={tab}
-                onTabChange={setTab}
-                commands={commands}
-                onNotice={flash}
-              />
-            </ErrorBoundary>
-          </div>
-        )}
         {/*
          * The mode: the menu, a flight session, the planetarium, the player.
          *
-         * Its own boundary, separate from the dock's and the cutscene layer's.
-         * A single boundary around the whole overlay would take the debug dock
-         * down with whichever mode failed — and the dock is how the simulation
-         * is driven, so losing it to a throw in a planetarium panel is the
-         * expensive half of the failure, not the cheap one. The scene is
-         * outside all of them: `<Canvas>` is a sibling of `.hud-layer` and
-         * nothing in here can reach it.
+         * Its own boundary, separate from the cutscene layer's. The scene is
+         * outside both: `<Canvas>` is a sibling of `.hud-layer` and nothing in
+         * here can reach it, so a throw in a panel loses the panel and not the
+         * picture. Each panel carries its own boundary inside this one — see
+         * `dock/PanelChrome.tsx` — so one failing readout does not take the
+         * menu that could close it down with it.
          */}
         {/*
          * The one exception to "a cutscene hides every other piece of chrome":
@@ -668,6 +649,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
                 status={status}
                 fov={fov}
                 onFov={setFov}
+                dev={dev}
               />
             </ErrorBoundary>
           </div>
@@ -678,6 +660,12 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
             so a paste is a truncated sentence rather than a band across the
             bottom of the frame.
 
+            `bottom-16` rather than the usual `0.75rem` inset: the IR menu is at
+            the bottom centre now, and a notice at the same inset landed on top
+            of it — covering the panel toggles for two and a half seconds after
+            every command, which is exactly when somebody is most likely to
+            reach for one.
+
             `AnimatePresence` is here rather than a CSS transition because the
             element is conditionally rendered: it can fade *in* under CSS and
             never fade out, since by the time the notice clears there is no node
@@ -685,8 +673,14 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
             arriving while the first is up crossfades rather than swapping text
             inside a box that never moved. Transform is dropped for anyone who
             asks for reduced motion; see `MotionConfig` in `main.tsx`. */}
+        {/* The cinema exception again, and for the same reason as the dialog
+            band below: the player's workspace carries the save, warp and HDR
+            controls, and this notice is the only confirmation any of them
+            gives — visually and to a screen reader. Suppressed there, the
+            commands ran silently. In every other mode a cutscene still takes
+            the notice out of the picture. */}
         <AnimatePresence>
-          {!cinema && notice !== null && (
+          {(!cinema || mode === 'cinema') && notice !== null && (
             <motion.div
               key={notice}
               /* Announced, not just drawn. This is the only confirmation most
@@ -708,33 +702,35 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
                  the moment it was worth reading. The panel ground carries it;
                  the accent stays what it is everywhere else in this system, a
                  material rather than a fill behind text. */
-              className="pointer-events-none absolute bottom-3 left-1/2 z-30 max-w-[min(36rem,calc(100vw-1.5rem))] -translate-x-1/2 truncate rounded border border-sky-500/40 bg-slate-950/85 px-3 py-1 font-mono text-xs text-sky-200 backdrop-blur"
+              className="type-readout pointer-events-none absolute bottom-16 left-1/2 z-30 max-w-[min(36rem,calc(100vw-1.5rem))] -translate-x-1/2 truncate rounded border border-sky-500/40 bg-slate-950/85 px-3 py-1 text-sky-200 backdrop-blur"
             >
               {notice}
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* Where you are, the way back, and the settings — the one cluster
-            that is on screen in every mode, and the first thing to step out of
-            the frame when a scene plays. The cinema player's own transport
-            carries the way out while one is running. */}
-        {!cinema && (
-          <div className="pointer-events-none absolute inset-0 z-30">
-            <ShellBar mode={mode} debug={debug} onDebug={setDebug} />
-          </div>
-        )}
-
         {/* Dialogs, over a running simulation and over whatever mode is behind
             them. Inside the layer so they inherit the standard-range clamp; a
-            sibling of `<Canvas>`, so navigating cannot remount the renderer. */}
-        {!cinema && (
+            sibling of `<Canvas>`, so navigating cannot remount the renderer.
+
+            The cinema mode is the same exception it is for the mode band
+            above: its workspace carries the settings link, so a scene being
+            open must not unmount the dialog that link opens — gated on
+            `!cinema` alone, settings from the player changed the URL and drew
+            nothing, and a second press wrapped the dead `/settings` as the new
+            background and killed the scene. Elsewhere a cutscene still clears
+            the frame. */}
+        {(!cinema || mode === 'cinema') && (
           <div className="pointer-events-none absolute inset-0 z-40">
             <ErrorBoundary
               what="the page overlay"
               className="pointer-events-auto absolute inset-0"
             >
-              <OverlayRoutes graphics={graphicsState} camera={cameraState} />
+              <OverlayRoutes
+                graphics={graphicsState}
+                camera={cameraState}
+                render={renderState}
+              />
             </ErrorBoundary>
           </div>
         )}

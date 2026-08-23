@@ -19,9 +19,9 @@ export function ControlsSection() {
       </dl>
 
       <div className="border-t border-slate-800 pt-2">
-        <h3 className="mb-1 flex items-center gap-1.5 text-[10px] tracking-widest text-sky-400/80 uppercase">
+        <h3 className="type-label mb-1 flex items-center gap-1.5 text-sky-400/80">
           <Sparkles aria-hidden className="size-3" />
-          planetarium
+          Planetarium
         </h3>
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
           {PLANETARIUM_HELP.map(([keys, what]) => (

@@ -114,7 +114,7 @@ export function SeriesPlot({
       </svg>
       {/* ImGui writes the current value over the plot rather than beside it; it
           costs no height and the eye is already there. */}
-      <span className="pointer-events-none absolute top-0 right-1 text-[10px] text-slate-400 tabular-nums">
+      <span className="type-micro pointer-events-none absolute top-0 right-1 text-slate-400">
         {format(stats.last)}
         {unit}
       </span>

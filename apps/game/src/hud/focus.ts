@@ -44,3 +44,46 @@ export const FOCUS_RING =
 export function releaseFocus(event: MouseEvent<HTMLElement>): void {
   if (event.detail > 0) event.currentTarget.blur()
 }
+
+/**
+ * Whether the keystroke belongs to something being typed into.
+ *
+ * Every window-level key listener needs this same refusal — flight input,
+ * the workspace keys, the cinema transport — and it lives here rather than in
+ * any one of them because the failure mode of a fork is silent: a new editable
+ * target added to one copy and not the others leaves H, Space or an arrow
+ * firing mid-typing in whichever handler was missed. The keys are not
+ * remapped and the field is not special — a handler simply declines to read
+ * input aimed elsewhere.
+ */
+export function isTyping(event: KeyboardEvent): boolean {
+  const target = event.target
+  if (!(target instanceof HTMLElement)) return false
+  return (
+    target.isContentEditable ||
+    target.tagName === 'INPUT' ||
+    target.tagName === 'TEXTAREA' ||
+    target.tagName === 'SELECT'
+  )
+}
+
+/**
+ * Whether the keystroke is aimed at a control in the overlay.
+ *
+ * The keys that have to ask are the ones a focused control also answers:
+ * Space activates a button, and a window-level `preventDefault` on keydown
+ * cancels that activation before the click event that would have carried it
+ * ever exists — so a handler that did not decline left a focused button doing
+ * nothing, silently, while the simulation paused underneath. The arrows are
+ * the same conflict through Radix: a focused slider or toggle group owns them
+ * for stepping and roving focus. `releaseFocus` depends on this guard — it
+ * deliberately keeps focus after a keyboard activation, which is only
+ * navigable if the focused control still hears its own keys.
+ *
+ * From the canvas or the body — where focus is during flight, because every
+ * control hands it straight back on a *pointer* click — nothing declines.
+ */
+export function isOverlayControl(event: KeyboardEvent): boolean {
+  const target = event.target
+  return target instanceof HTMLElement && target.closest('.hud-layer') !== null
+}

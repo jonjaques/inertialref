@@ -22,7 +22,7 @@ export function AuthoritySection({
 }) {
   if (authority === null)
     return (
-      <Section id="tel.authority" title="authority" trailing="none">
+      <Section id="tel.authority" title="Authority" trailing="none">
         <div className="text-slate-400">no authority joined</div>
       </Section>
     )
@@ -30,21 +30,21 @@ export function AuthoritySection({
   const { kind, state, partition, peers, streaming, submitted, detail } =
     authority
   return (
-    <Section id="tel.authority" title="authority" trailing={kind}>
-      <Row label="owner" value={`${kind} · ${state}`} />
-      <Row label="partition" value={partition ?? '—'} />
+    <Section id="tel.authority" title="Authority" trailing={kind}>
+      <Row label="Owner" value={`${kind} · ${state}`} />
+      <Row label="Partition" value={partition ?? '—'} />
       <Row
-        label="peers"
+        label="Peers"
         value={
           peers === 0 ? 'alone' : `${peers} other${peers === 1 ? '' : 's'}`
         }
       />
       <Row
-        label="streaming"
+        label="Streaming"
         value={streaming ? 'entities' : 'nothing to send'}
       />
-      <Row label="intent" value={`${submitted} submitted`} />
-      {detail !== null && <Row label="detail" value={detail} wrap />}
+      <Row label="Intent" value={`${submitted} submitted`} />
+      {detail !== null && <Row label="Detail" value={detail} wrap />}
       <div className="mt-1 text-slate-400">
         alone is not degraded — it is the mode the universe is designed around
       </div>

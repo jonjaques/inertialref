@@ -52,8 +52,14 @@ export function SunFlare({ engine }: { engine: GameEngine }) {
       // `artifacts` note in `flare.ts`. 0.05 rather than 0 so a scripted shot
       // still has a lens, just not one that argues with the composition: at
       // 0.12 the iris ghosts were still three visible grey discs marching
-      // across an empty half-frame beside Jupiter.
-      engine.cinematic === null ? 1 : 0.05,
+      // across an empty half-frame beside Jupiter. Off a script, the host
+      // decides — the front door runs a nearly clean lens because its ghosts
+      // land on the poster's type. See `GameEngine.flareArtifacts`.
+      engine.cinematic === null ? engine.flareArtifacts : 0.05,
+      // The corona is staging, and only a script stages. Zero everywhere else,
+      // which is what keeps a crescent preset in the planetarium from turning
+      // into an eclipse nobody asked for.
+      engine.cinematic?.effects.corona ?? 0,
     )
   })
 

@@ -4,14 +4,9 @@ import { useSearchParams } from 'react-router'
 import type { PerspectiveCamera } from 'three/webgpu'
 import { DEFAULT_FILL } from '@inertialref/devtools'
 import type { GameEngine } from '../engine/GameEngine.ts'
-import { CompactDock } from '../dock/CompactDock.tsx'
-import { Dock } from '../dock/Dock.tsx'
-import { DockRail } from '../dock/DockRail.tsx'
-import { DockProvider } from '../dock/DockProvider.tsx'
-import { togglePanel } from '../dock/layout.ts'
-import { useDockLayout } from '../dock/useDockLayout.ts'
+import { Workspace } from '../dock/Workspace.tsx'
+import type { DevWorkspace } from '../dock/workspace.ts'
 import { isBoolean, usePersistentState } from '../hud/panelState.ts'
-import { useCompact } from '../hud/viewport.ts'
 import { QUERY } from '../pages/paths.ts'
 import type { PlanetariumContext } from './context.ts'
 import { planetariumPanels } from './registry.tsx'
@@ -42,13 +37,14 @@ export function PlanetariumMode({
   engine,
   fov,
   onFov,
+  dev,
 }: {
   engine: GameEngine
   fov: number
   onFov: (fov: number) => void
+  dev: DevWorkspace
 }) {
   const [params, setParams] = useSearchParams()
-  const compact = useCompact()
   const requested = params.get(QUERY.at)
 
   const [target, setTarget] = useState<string | null>(null)
@@ -161,7 +157,6 @@ export function PlanetariumMode({
     fov,
     onFov,
   } satisfies PlanetariumContext)
-  const [layout, setLayout] = useDockLayout('planetarium', panels)
 
   /*
    * A click in the sky.
@@ -230,40 +225,20 @@ export function PlanetariumMode({
       </div>
 
       {notice !== null && (
-        <p className="pointer-events-none absolute top-14 left-1/2 -translate-x-1/2 rounded bg-rose-500/20 px-3 py-1 font-mono text-[11px] text-rose-200">
+        <p className="pointer-events-none absolute top-14 left-1/2 -translate-x-1/2 rounded border border-rose-500/40 bg-slate-950/85 px-3 py-1 type-readout text-rose-200 backdrop-blur">
           {notice}
         </p>
       )}
 
-      <DockProvider>
-        {compact ? (
-          <CompactDock panels={panels} layout={layout} />
-        ) : (
-          <Dock
-            panels={panels}
-            layout={layout}
-            onLayout={setLayout}
-            // Always rendered, even with every zone empty: the rail is the only
-            // way a closed panel comes back, and one that disappeared with the
-            // last panel would be a dead end.
-            rail={
-              <DockRail
-                panels={panels}
-                layout={layout}
-                onToggle={(id: string) => {
-                  const definition = panels.find((panel) => panel.id === id)
-                  if (definition === undefined) return
-                  // Against the previous state rather than the rendered one,
-                  // for the reason `Dock`'s `move` gives at length.
-                  setLayout((current) =>
-                    togglePanel(current, id, definition.zone),
-                  )
-                }}
-              />
-            }
-          />
-        )}
-      </DockProvider>
+      {/* Two panes, the floating panels, and the menu that says what is in
+          them — the same component every other mode renders, given this mode's
+          own panels plus the author's instruments. */}
+      <Workspace
+        id="planetarium"
+        title="Planetarium"
+        panels={panels}
+        dev={dev}
+      />
     </div>
   )
 }

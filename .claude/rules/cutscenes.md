@@ -29,6 +29,10 @@ not the explanation.
   interpolates range in log space so a four-decade approach does not overshoot the lens.
 - **Camera-relative choreography is offset beats, never absolute beats off a moving
   camera.** Never per-frame look-at a hull near the lens.
+- **An effect is staging, so a script turns it on.** Anything screen-space belongs in
+  `CinematicEffects` with a drive a shot sets, and 0 everywhere else. Derived from geometry
+  alone it fires in every other mode: the corona did, for any camera on a body's anti-sun
+  line, as a gold halo filling a planetarium frame that never asked for an eclipse.
 - **Light is staging.** A key's screen position is a _product_ of two dot products, and
   both must carry the right sign. Whiteouts are honest scene changes, not a fade to hide a
   seam. Ask the font for its cap height rather than guessing it.

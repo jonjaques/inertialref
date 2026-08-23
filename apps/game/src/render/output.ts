@@ -14,6 +14,22 @@
 /** The three-state override. `docs/design/art.md` calls it mandatory. */
 export type OutputPreference = 'auto' | 'extended' | 'standard'
 
+/**
+ * The three states in the order a control offers them. `auto` first, because it
+ * is right more often than it is wrong.
+ *
+ * Beside the type rather than in `App`, where it used to be, because two things
+ * now need it: the guard that validates a restored preference, and the panel
+ * that draws one segment per state. A control that listed them itself would be
+ * a second copy of a closed set, and the first thing to drift when a fourth
+ * state is added.
+ */
+export const OUTPUT_PREFERENCES = [
+  'auto',
+  'extended',
+  'standard',
+] as const satisfies readonly OutputPreference[]
+
 /** What the renderer was actually built to do. Never `auto`. */
 export type OutputMode = 'extended' | 'standard'
 

@@ -34,7 +34,7 @@ export function NetworkSection({
   return (
     <Section
       id="tel.network"
-      title="network"
+      title="Network"
       trailing={CONNECTION_LABEL[state]}
     >
       <div className="flex justify-between gap-3">
@@ -45,22 +45,22 @@ export function NetworkSection({
           {failures > 1 ? ` · ${failures} failed checks` : ''}
         </span>
       </div>
-      <Row label="detail" value={detail ?? '—'} wrap />
+      <Row label="Detail" value={detail ?? '—'} wrap />
       <Row
-        label="protocol"
+        label="Protocol"
         value={
           health === null
             ? `${CLIENT_VERSIONS.protocol} here, server unknown`
             : `${health.protocol} server · ${CLIENT_VERSIONS.protocol} here`
         }
       />
-      <Row label="generation" value={generation || '—'} wrap />
-      <Row label="client build" value={BUILD_ID} />
-      <Row label="server build" value={health?.revision ?? '—'} />
-      <Row label="checked" value={sinceText(checkedAt)} />
+      <Row label="Generation" value={generation || '—'} wrap />
+      <Row label="Client Build" value={BUILD_ID} />
+      <Row label="Server Build" value={health?.revision ?? '—'} />
+      <Row label="Checked" value={sinceText(checkedAt)} />
       <div className="mt-1 flex items-center gap-1">
         <Action
-          label="check now"
+          label="Check Now"
           title="Probe /api/health immediately"
           onClick={onCheck}
         />

@@ -46,7 +46,7 @@ export function Section({
         // Radix drives the open state, so this only has to hand focus back to
         // the flight loop — the toggle itself is `onOpenChange` above.
         onClick={releaseFocus}
-        className={`flex min-h-6 w-full items-center gap-1 text-left text-[10px] tracking-widest text-sky-400/80 uppercase hover:text-sky-300 ${FOCUS_RING}`}
+        className={`type-label flex min-h-6 w-full items-center gap-1 text-left text-sky-400/80 hover:text-sky-300 ${FOCUS_RING}`}
       >
         {/* Lucide rather than `▾`/`▸`. The two glyphs are different widths in
             most monospace faces, so every heading shifted a fraction of a
@@ -58,7 +58,7 @@ export function Section({
             was annotating out of its own heading. */}
         {trailing !== undefined && (
           <span
-            className="ml-auto min-w-0 truncate tracking-normal text-slate-400 normal-case"
+            className="type-micro ml-auto min-w-0 truncate normal-case text-slate-400"
             title={trailing}
           >
             {trailing}

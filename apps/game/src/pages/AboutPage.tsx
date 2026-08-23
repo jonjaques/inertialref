@@ -54,22 +54,22 @@ export function AboutPage() {
         <div className="flex flex-wrap items-center gap-3 pt-1">
           <Reference
             icon={BookOpen}
-            label="the design bible"
+            label="The Design Bible"
             detail="docs/design/"
           />
           <Reference
             icon={StellarSpan}
-            label="the catalogue guide"
+            label="The Catalogue Guide"
             detail="docs/guides/catalogue.md"
           />
           <Reference
             icon={TerminalSquare}
-            label="the harness"
+            label="The Harness"
             detail="ir.help()"
           />
         </div>
 
-        <p className="pt-1 font-mono text-[10px] text-slate-400">
+        <p className="type-micro pt-1 text-slate-400">
           {/* The build id is the same string the service worker names its cache
               with. When a stale page is the suspect, this is the first thing
               worth reading out. */}

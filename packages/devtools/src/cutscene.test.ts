@@ -397,6 +397,41 @@ describe('tng-intro camera discipline', () => {
     }
   })
 
+  it('drives the corona in the eclipse shot and nowhere else', () => {
+    /*
+     * A regression test for an effect that used to have no gate at all.
+     *
+     * The corona around an eclipsed limb was drawn purely from occlusion
+     * geometry, so it fired for any camera sitting on a body's anti-sun line —
+     * one press of `crescent` in the planetarium, and a third of every slow
+     * orbit on the front door, as a gold halo filling a frame in a mode that
+     * had never asked for an eclipse. At those ranges the physical corona is a
+     * fraction of a degree past the limb and the drawn one is nearly a disc
+     * radius thick.
+     *
+     * It is a script drive now, like `blackout` and `flash`. The claim worth
+     * guarding is not the ring's shape — that is a shader — but that exactly
+     * one shot in the whole piece asks for it, and that nothing else can.
+     */
+    const { at } = playing()
+    const eclipse = TNG_CUTS.find((cut) => cut.id === 'eclipse')
+    expect(eclipse).toBeDefined()
+    const { from, to } = eclipse!
+
+    // Hard edges: both boundaries of this shot *are* cuts (f240 is the
+    // composition match cut, f357 lands in empty starfield), so a ramp here
+    // would be a fade across a cut.
+    expect(at(from)!.effects.corona).toBe(1)
+    expect(at(to)!.effects.corona).toBe(1)
+    expect(at(from - 1)!.effects.corona).toBe(0)
+    expect(at(to + 1)!.effects.corona).toBe(0)
+
+    for (let f = 0; f < 2742; f += 7) {
+      const inside = f >= from && f <= to
+      expect(at(f)!.effects.corona, `frame ${f}`).toBe(inside ? 1 : 0)
+    }
+  })
+
   it('emits finite poses across the whole piece', () => {
     const { at } = playing()
     for (let f = 0; f < 2742; f += 25) {

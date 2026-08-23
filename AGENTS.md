@@ -137,7 +137,7 @@ authority at the moment of the edit, and states the previous rule.
   Reconcile against the state's actual owner instead
   (`observatory.target?.address === wanted`), which is idempotent by
   construction.
-- **Never move a dock panel by splicing an array at a call site.**
+- **Never move a workspace panel by splicing an array at a call site.**
   `dock/layout.ts` owns every move and preserves one invariant: _every known
   panel is in exactly one zone, exactly once._ Property-tested. Use the
   **updater** form of the setter — one gesture can deliver two drops, and two
@@ -150,9 +150,9 @@ authority at the moment of the edit, and states the previous rule.
   loses the camera, which is the most expensive thing an edit loop can do. It is
   also what let `SceneView.tsx` reach 1,390 lines and eleven components. Where a
   component needs a constant or a type as well, that goes in a sibling `.ts`;
-  `hud/controls.ts`, `hud/tabs.ts`, `planetarium/context.ts`,
-  `planetarium/presets.ts`, `pages/modes.ts` and `scene/debugMaterials.ts` are
-  all that pattern. The one exemption is `apps/game/src/components/ui/*.tsx`: a
+  `hud/controls.ts`, `hud/context.ts`, `planetarium/context.ts`,
+  `planetarium/presets.ts`, `planetarium/simulationTime.ts`, `pages/modes.ts`
+  and `scene/debugMaterials.ts` are all that pattern. The one exemption is `apps/game/src/components/ui/*.tsx`: a
   Radix wrapper set communicates through a context declared in its own module
   and is useless split, and those files are rewritten by `pnpm dlx shadcn add`.
 - **Never hand-roll a control the registry already has.** shadcn/ui is installed
@@ -164,6 +164,23 @@ authority at the moment of the edit, and states the previous rule.
   wrong for the primary tone and `outline` plus the `sky-500/15` wash is right.
   `docs/roadmap.md` § "The overlay refactor" records what each control became,
   and the two registry components deliberately not used.
+- **Never let a cinematic effect fire off a script.** An effect is _staging_,
+  so it belongs in `CinematicEffects` where a shot turns it on, and it is 0
+  everywhere else by construction. The corona around an eclipsed limb was drawn
+  from occlusion geometry alone, which is a rule with no author in it: it fired
+  for any camera on a body's anti-sun line — one press of `crescent` in the
+  planetarium, a third of every slow orbit on the front door — as a gold halo
+  filling a frame in a mode that had never asked for an eclipse. The give-away
+  is scale: at planetarium range the physical corona is a fraction of a degree
+  past the limb, and the drawn one is authored to read from the back of a
+  cinema. `cutscene.test.ts` guards the window. ADR-0010.
+- **Never write a label in the case you want to see it in.** Every string in the
+  interface is title case in the source and the type step's `text-transform`
+  decides what is shouted — `type-heading` and `type-label` are uppercase,
+  `type-title` is not. A label is read in four places CSS never reaches: a
+  `title`, an `aria-label`, a screen reader, and a string somebody copied. Once
+  `'PLAYABLE'` is in a constant it is a shout none of them can turn off, and the
+  case can never be changed from the stylesheet again. DESIGN.md § Typography.
 - **Never import from `three` in `apps/game`.** It is `three/webgpu` and
   `three/tsl`. Both share `three.core.js`, so `Mesh` is the same class either way
   and nothing breaks loudly — but only `three/webgpu` carries the node system, and
@@ -311,12 +328,18 @@ moves only a camera. Both end with Jupiter filling the frame and only one leaves
 you in orbit of it. `ir.observatory` is the camera itself — `drag`, `zoom`,
 `setPhase`, `frameTarget`, `clear`.
 
-The same verbs are on the dev dock, top right in the browser: **navigate** lists
-the destinations with a button per manoeuvre, **telemetry** is the inspection
-overlay, **perf** plots frame time, engine time, ticks per frame, draw calls,
-worker queue and heap over a rolling window. `H` collapses the whole thing,
-`G` opens navigation and `P` opens perf. It calls the harness and nothing else,
-so anything you can do by clicking is reproducible in a test.
+The same verbs are on the author's instruments, which are six dockable panels
+rather than the tabbed dock they used to be. Press the **bug** in the IR menu at
+the bottom centre of the frame — or `` ` `` — and six glyphs appear beside it,
+one per panel, all closed. **navigate** lists the destinations with a button per
+manoeuvre, **controls** carries the clock, the attitude helpers and the save
+slot, **telemetry** is the inspection overlay, **perf** plots frame time, engine
+time, ticks per frame, draw calls, worker queue and heap over a rolling window,
+and **graphics** and **camera** are the render knobs. Each one docks into either
+pane, floats free over the scene, collapses to its header or closes. `H` slides
+both panes away, `G` opens navigate and `P` opens perf. Every panel calls the
+harness and nothing else, so anything you can do by clicking is reproducible in
+a test.
 
 **Look at the perf tab before optimising anything, and before believing a
 performance claim in a design document.** The first thing it found was that time
@@ -349,8 +372,11 @@ is not:
   (or a moon's trace is an open corkscrew), and each point is placed with the
   _body's own radius_ (or render compression draws the curve at a completely
   different depth from the planet).
-- **`apps/game/src/dock/`** — the panel layout algebra (pure, property-tested)
-  and the React DnD wiring over it. ADR-0012.
+- **`apps/game/src/dock/`** — the workspace: two panes, a field of floating
+  panels and the IR menu. `layout.ts` owns which zone a panel is in and
+  `floating.ts` owns where a floating one sits; both are pure and
+  property-tested, and the React DnD wiring over them is the gesture only.
+  ADR-0012.
 - **`apps/game/src/planetarium/`** — gestures, picking, labels, panels. The
   gesture and pick arithmetic is in `gestures.ts` and `pick.ts` and is tested;
   what is in the components is the bookkeeping only a browser has.
