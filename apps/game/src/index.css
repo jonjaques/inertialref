@@ -368,6 +368,45 @@ body,
 }
 
 /*
+ * The installed copy, where `dvh` is short by the status bar.
+ *
+ * `100dvh` is the right unit in a browser tab and the wrong one on the home
+ * screen. Measured off a screenshot of the installed app on an iPhone 16 Pro —
+ * 402 x 874 CSS px, `env(safe-area-inset-top)` of 62 — the document came back
+ * **812** px tall: the display less the top inset, exactly. Everything is
+ * anchored to the top of the screen, so the entire shortfall landed at the
+ * bottom as a 62 px band of the `#000` above, with the canvas stopping short of
+ * it and the menu's footer floating 96 px clear of the edge. That is the bug
+ * `viewport-fit=cover` was supposed to have removed: WebKit hands the page the
+ * strip under the status bar and then measures the dynamic viewport as though
+ * it had not.
+ *
+ * `vh` is the *large* viewport, which is exactly why it is wrong in a tab — it
+ * is the height the page would have with Safari's toolbars retracted, and a
+ * layout sized in it runs a toolbar's worth of itself underneath them. That is
+ * what the `dvh` above is there for and it must stay. But an installed app has
+ * no toolbars to retract, so within this query the large, small and dynamic
+ * viewports can differ only by the bug, and the largest of them is the display.
+ * Hence a query rather than a bare `max(100vh, 100dvh)`, which would pick `vh`
+ * in a tab and put the nav bar back under the chrome. All three units are named
+ * because the fix rests on WebKit having shortened only the *dynamic* one, and
+ * that is an inference from a single screenshot rather than something this
+ * repository can test: none of them can report more than the display, so the
+ * largest is the closest to right whichever one turns out to be honest.
+ *
+ * `fullscreen` beside `standalone` because Android installs to either; iOS
+ * reports `standalone` for anything added to the home screen.
+ */
+@media (display-mode: standalone), (display-mode: fullscreen) {
+  html,
+  body,
+  #root {
+    height: 100vh;
+    height: max(100vh, 100lvh, 100dvh);
+  }
+}
+
+/*
  * What the operating system has already spent, on each edge.
  *
  * Named as custom properties rather than written as `env()` at each call site,

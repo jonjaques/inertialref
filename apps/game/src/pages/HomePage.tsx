@@ -230,8 +230,21 @@ export function HomePage({ engine }: { engine: GameEngine }) {
            would flatten it to the phone value on every desktop. It is here
            rather than on the `hud-bleed` wrapper because this column is
            absolutely positioned, and padding on an ancestor cannot reach an
-           absolutely positioned descendant. */
-        className="pointer-events-auto absolute inset-y-0 left-0 flex w-full max-w-[56rem] flex-col justify-center gap-9 overflow-y-auto bg-gradient-to-r from-slate-950 from-64% via-slate-950/85 via-82% to-transparent pt-[max(2.5rem,var(--safe-top))] pr-6 pb-[max(2.5rem,var(--safe-bottom))] pl-[max(1.5rem,var(--safe-left))] sm:pr-14 sm:pl-[max(3.5rem,var(--safe-left))]"
+           absolutely positioned descendant.
+
+           `justify-center-safe`, not `justify-center`, and it is the other half
+           of the notch bug. `justify-content: center` centers the items in the
+           *content* box and, when they are taller than it, overflows them
+           equally past both padding edges — so on a phone the padding above is
+           not a floor, it is a hint the overflow walks straight through.
+           Measured on the same iPhone 16 Pro screenshot: `pt` resolved to the
+           62 px inset and the mark still drew at 27.5 px, under the clock, with
+           `overflow-y-auto` clipping the top and no scroll position that could
+           bring it back — the start of an overflowing centered flex box is
+           unreachable by construction. `safe center` is the keyword for exactly
+           this: center while it fits, align to the start the moment it does
+           not. */
+        className="pointer-events-auto absolute inset-y-0 left-0 flex w-full max-w-[56rem] flex-col justify-center-safe gap-8 overflow-y-auto bg-gradient-to-r from-slate-950 from-64% via-slate-950/85 via-82% to-transparent pt-[max(2.5rem,var(--safe-top))] pr-6 pb-[max(2.5rem,var(--safe-bottom))] pl-[max(1.5rem,var(--safe-left))] sm:pr-14 sm:pl-[max(3.5rem,var(--safe-left))]"
       >
         <header>
           <Logomark className="mb-5 h-9 w-auto" />
@@ -262,9 +275,8 @@ export function HomePage({ engine }: { engine: GameEngine }) {
            */}
           <p className="type-body mt-4 max-w-[38ch] text-slate-300">
             A spaceflight simulator, built in the open, in a browser tab. The
-            Milky Way it is set in is the real one, and the aim is one
-            continuous space — from interstellar distance down to a rock you
-            could pick up, with nothing to load in between.
+            Milky Way is the real one, and the aim is one continuous space —
+            interstellar distance down to a rock you could pick up.
           </p>
           <p className="type-body mt-2 max-w-[38ch] text-slate-400">
             It is early. What runs today is the sky, the catalog and the camera.

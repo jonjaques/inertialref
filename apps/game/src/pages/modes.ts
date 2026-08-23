@@ -60,7 +60,7 @@ export const MODES: readonly ModeCard[] = [
   {
     to: CINEMA,
     title: 'Cinema',
-    blurb: 'Scripted scenes over the live world, frame by frame.',
+    blurb: 'Scripted scenes over the live world.',
     icon: Clapperboard,
     status: 'ready',
   },
