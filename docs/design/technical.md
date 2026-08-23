@@ -195,7 +195,7 @@ invalidation policy at M2, not for a faster inner loop.
 | ---------------------------------------------- | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | Cold load to interactive                       | ≤ 4 s on a 20 Mbit connection         | Unmeasured                                                                                                           |
 | Client bundle, gzipped                         | ≤ 900 KB with code splitting          | **541.4 KB gzip / 412.7 KB brotli**, measured 2026-08-21, no splitting                                               |
-| Catalog, 150 ly, over the wire               | Was a guess at ~2 MB                  | **159 KB brotli**, measured — [spike 3](../spikes.md#3--catalog-bundle-size)                                       |
+| Catalog, 150 ly, over the wire                 | Was a guess at ~2 MB                  | **159 KB brotli**, measured — [spike 3](../spikes.md#3--catalog-bundle-size)                                         |
 | Material sets, per biome                       | ≤ 12 MB                               | —                                                                                                                    |
 | Peak JS heap                                   | ≤ 900 MB                              | **66–74 MB** across orbit, approach and surface                                                                      |
 | Terrain patch generation                       | ≤ 8 ms per patch per worker           | Measured; within                                                                                                     |
@@ -243,16 +243,16 @@ The ones that will actually cause problems, with what they force.
 
 Nothing here is architectural. Everything lands on a seam that already exists.
 
-| Area           | Work                                                                                                 | Seam                                                                                                          |
-| -------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| **Terrain**    | Quadtree LOD, geomorphing, edge stitching, cube-face wrapping, materials                             | `terrainLevelFor` already returns a level; the streamer needs per-patch levels                                |
-| **LOD**        | Hysteresis, cross-fade, sphere-derived impostors                                                     | `selectLod` takes the current tier as a new input — see [art](art.md#continuity--the-no-pop-in-specification) |
-| **Streaming**  | Predictive loading, per-frame generation budget, a spatial index for interest                        | `updateInterest`; `systemsWithin` already bounds and refuses oversized queries                                |
-| **Simulation** | Move to a Web Worker when entity counts rise                                                         | Mechanical, not architectural — the snapshot is already structured-cloneable                                  |
-| **Replay**     | An input log of `(tick, entityId, controlInput)` plus a driver                                       | Everything else exists: canonical tick, state hash, persisted input                                           |
-| **Catalog**  | The [ingest pipeline](galaxy.md#ingest-pipeline) and catalog versioning in the generation manifest | `algorithm()` and `manifest()` already version generation                                                     |
-| **Character**  | A controller attached kinematically to a rotating surface frame                                      | The same approach `flight.ts` takes for a landed ship                                                         |
-| **Automation** | ~~CI~~ ✅ · a stored save fixture, performance regression tests, a formatter                         | CI runs `pnpm check` plus the capability self-test on every PR                                                |
+| Area           | Work                                                                                               | Seam                                                                                                          |
+| -------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| **Terrain**    | Quadtree LOD, geomorphing, edge stitching, cube-face wrapping, materials                           | `terrainLevelFor` already returns a level; the streamer needs per-patch levels                                |
+| **LOD**        | Hysteresis, cross-fade, sphere-derived impostors                                                   | `selectLod` takes the current tier as a new input — see [art](art.md#continuity--the-no-pop-in-specification) |
+| **Streaming**  | Predictive loading, per-frame generation budget, a spatial index for interest                      | `updateInterest`; `systemsWithin` already bounds and refuses oversized queries                                |
+| **Simulation** | Move to a Web Worker when entity counts rise                                                       | Mechanical, not architectural — the snapshot is already structured-cloneable                                  |
+| **Replay**     | An input log of `(tick, entityId, controlInput)` plus a driver                                     | Everything else exists: canonical tick, state hash, persisted input                                           |
+| **Catalog**    | The [ingest pipeline](galaxy.md#ingest-pipeline) and catalog versioning in the generation manifest | `algorithm()` and `manifest()` already version generation                                                     |
+| **Character**  | A controller attached kinematically to a rotating surface frame                                    | The same approach `flight.ts` takes for a landed ship                                                         |
+| **Automation** | ~~CI~~ ✅ · a stored save fixture, performance regression tests, a formatter                       | CI runs `pnpm check` plus the capability self-test on every PR                                                |
 
 ---
 

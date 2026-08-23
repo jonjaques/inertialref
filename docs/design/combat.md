@@ -96,7 +96,7 @@ Four classes. Deliberately few — depth comes from
 [subsystem targeting](ships.md#sensors-and-targeting) and heat management, not
 from a catalog.
 
-| Class                             | Behavior                                 | vs Shields | vs Hull  | Heat     | Counter                     |
+| Class                             | Behavior                                  | vs Shields | vs Hull  | Heat     | Counter                     |
 | --------------------------------- | ----------------------------------------- | ---------- | -------- | -------- | --------------------------- |
 | **Kinetic** — railgun, autocannon | Projectile, real travel time, must be led | 0.6×       | **1.4×** | Low      | Range, evasion              |
 | **Thermal** — beam, pulse         | Effectively instant inside 3 km           | **1.5×**   | 0.7×     | **High** | Shields, distance, heat war |
@@ -161,7 +161,7 @@ Honest scoping: a solo pipeline cannot produce great AI, so the design targets
 **readable** AI rather than clever AI. Every opponent's intent must be legible
 from its behavior within three seconds.
 
-| Type          | Behavior                                               | Count |
+| Type          | Behavior                                                | Count |
 | ------------- | ------------------------------------------------------- | ----- |
 | **Scavenger** | Opportunistic; disengages below 40% hull                | 1–2   |
 | **Pirate**    | Targets your drive first, demands cargo, will accept it | 1–3   |

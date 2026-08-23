@@ -183,7 +183,7 @@ Three timelines, for pacing the curve. All three assume the
 | Week 1   | Sol, the Moon, first jump        | Sol fully surveyed, 4 systems      | 20 systems, first 100 ly             |
 | Month 1  | ~12 systems, _Cannon_ hull       | ~50 systems, grade D fit           | ~200 systems, grade B fit            |
 | Month 3  | ~40 systems, still in the bubble | Grade A drive, 400 ly out          | 1,000+ ly out, capability curve flat |
-| Month 6  | Beyond the catalog horizon     | Deep frontier; Almanac is the game | Somewhere nobody has been            |
+| Month 6  | Beyond the catalog horizon       | Deep frontier; Almanac is the game | Somewhere nobody has been            |
 | The wall | Never hits one                   | ~month 4, when capability flattens | ~month 2, same                       |
 
 **"The wall" is not a failure.** When capability flattens, the game becomes

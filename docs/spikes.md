@@ -20,7 +20,7 @@ answer it and is now waiting on hardware.
 | --- | ---------------------------------------------------------------------- | ------ | ---------------------------------------------- | ----------------------------------------------------------------------------------- |
 | 1   | [HDR display detection](#1--hdr-display-detection)                     | M2     | ✅ **Resolved — negative**                     | Three browsers, one display, `(dynamic-range: high)` = true, true, **false**        |
 | 2   | [TSL and the atmosphere integral](#2--tsl-and-the-atmosphere-integral) | M2     | ✅ **Resolved — positive**                     | **1.000×** against hand-written WGSL, pixel-identical                               |
-| 3   | [Catalog bundle size](#3--catalog-bundle-size)                     | M4     | ✅ **Resolved — positive**                     | 150 ly, 7,529 stars + 861 planets = **159 KB brotli**                               |
+| 3   | [Catalog bundle size](#3--catalog-bundle-size)                         | M4     | ✅ **Resolved — positive**                     | 150 ly, 7,529 stars + 861 planets = **159 KB brotli**                               |
 | 4   | [Gaia and HYG attribution terms](#4--gaia-and-hyg-attribution-terms)   | M4     | ⚠️ **Resolved — reverses a decision**          | **Gaia is CC BY-NC 3.0 IGO**, not "open with attribution"                           |
 | 5   | [WebHID and Gamepad for HOTAS](#5--webhid-and-gamepad-for-hotas)       | M3     | 🟡 **Software answered, hardware outstanding** | WebHID: Chrome ✅, Safari ❌, Firefox ❌ · Gamepad caps at **16 axes / 32 buttons** |
 
@@ -298,12 +298,12 @@ is what transfers between machines; the absolute milliseconds do not.**
 
 ## 3 · Catalog bundle size
 
-|              |                                                                                          |
-| ------------ | ---------------------------------------------------------------------------------------- |
-| **Blocks**   | [M4](design/production.md#m4--the-explorer--mvp)                                         |
+|              |                                                                                        |
+| ------------ | -------------------------------------------------------------------------------------- |
+| **Blocks**   | [M4](design/production.md#m4--the-explorer--mvp)                                       |
 | **Question** | What does a packed catalog sphere actually cost over the wire, at 25 ly and at 150 ly? |
-| **Answer**   | **159 KB brotli for everything out to 150 ly.** Bundle it all.                           |
-| **Lives in** | [`design/galaxy.md` § Ingest pipeline](design/galaxy.md#ingest-pipeline)                 |
+| **Answer**   | **159 KB brotli for everything out to 150 ly.** Bundle it all.                         |
+| **Lives in** | [`design/galaxy.md` § Ingest pipeline](design/galaxy.md#ingest-pipeline)               |
 
 ### Source
 
@@ -337,7 +337,7 @@ sentinel and must be dropped, not clamped).
 | 0–8   | position, 3 × int24            | galactic cartesian, quantised against the chunk extent            |
 | 9     | spectral class                 | class × subclass × giant flag, one byte                           |
 | 10–11 | absolute magnitude, int16 ×100 | luminosity is `10^((4.85 − M)/2.5)` — **do not store it as well** |
-| 12–13 | color index B−V, int16 ×1000  | `-32768` is "unknown"; drives the render color                   |
+| 12–13 | color index B−V, int16 ×1000   | `-32768` is "unknown"; drives the render color                    |
 | 14    | flags                          | component count, has-name, provenance                             |
 | 15    | reserved                       |                                                                   |
 
@@ -382,7 +382,7 @@ Measured from `pnpm build` on the same day:
 | `index.css`          | 15,554 B    | 3.9 KB   | 3.4 KB      |
 | `universe.worker.js` | 20,127 B    | 8.1 KB   | 7.3 KB      |
 | **Total client**     | 1.19 MB     | ~337 KB  | **~260 KB** |
-| **150 ly catalog** | 274 KB      | —        | **~159 KB** |
+| **150 ly catalog**   | 274 KB      | —        | **~159 KB** |
 
 The full local tier is **61% of the current client** and lands the whole download
 around 420 KB. That is not a conversation, it is a rounding error against the

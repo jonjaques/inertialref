@@ -57,7 +57,7 @@ Three frames exist per body, and the distinction is load-bearing:
 
 | Prefix | Frame                                           | Spins?        | Who lives here                                      |
 | ------ | ----------------------------------------------- | ------------- | --------------------------------------------------- |
-| `b:`   | body-centered **inertial**                       | no            | satellites, approaching ships, anything integrating |
+| `b:`   | body-centered **inertial**                      | no            | satellites, approaching ships, anything integrating |
 | `bf:`  | body-**fixed**                                  | yes           | terrain, anything bolted to the ground              |
 | `sf:`  | **surface** tangent plane at one lat/lon, +Y up | with the body | landed ships, meter-scale gameplay                  |
 

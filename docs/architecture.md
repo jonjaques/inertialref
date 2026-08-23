@@ -92,20 +92,20 @@ it declares a **port** and the host implements it — see
 
 ### What each package is for
 
-| Package       | Owns                                                          | Never knows about               |
-| ------------- | ------------------------------------------------------------- | ------------------------------- |
-| `shared`      | units, brands, invariants, structured logging                 | anything domain-specific        |
-| `spatial`     | absolute position, frame graph, floating origin               | orbits, bodies, rendering       |
-| `procedural`  | PRNG, seed derivation, noise, algorithm versions              | what is being generated         |
-| `physics`     | Kepler solutions, 6-DoF integration, drag, thrusters          | which body, which ship          |
+| Package       | Owns                                                        | Never knows about               |
+| ------------- | ----------------------------------------------------------- | ------------------------------- |
+| `shared`      | units, brands, invariants, structured logging               | anything domain-specific        |
+| `spatial`     | absolute position, frame graph, floating origin             | orbits, bodies, rendering       |
+| `procedural`  | PRNG, seed derivation, noise, algorithm versions            | what is being generated         |
+| `physics`     | Kepler solutions, 6-DoF integration, drag, thrusters        | which body, which ship          |
 | `universe`    | addressing, catalog, generation, terrain, frames-for-bodies | entities, ticks                 |
-| `simulation`  | clock, entities, flight, frame transitions, streaming         | React, Three.js, the DOM        |
-| `protocol`    | validated wire/save shapes                                    | where bytes come from           |
-| `workers`     | typed tasks, job pool, transport ports                        | `Worker` (the class)            |
-| `persistence` | save capture/restore, migrations                              | IndexedDB (a port)              |
-| `net`         | who owns the simulation this client does not                  | sockets, Cloudflare, transports |
-| `rendering`   | canonical→render bridge, LOD, terrain meshing                 | Three.js                        |
-| `devtools`    | inspection, capability checks, harness, session wiring        | — (it may depend on everything) |
+| `simulation`  | clock, entities, flight, frame transitions, streaming       | React, Three.js, the DOM        |
+| `protocol`    | validated wire/save shapes                                  | where bytes come from           |
+| `workers`     | typed tasks, job pool, transport ports                      | `Worker` (the class)            |
+| `persistence` | save capture/restore, migrations                            | IndexedDB (a port)              |
+| `net`         | who owns the simulation this client does not                | sockets, Cloudflare, transports |
+| `rendering`   | canonical→render bridge, LOD, terrain meshing               | Three.js                        |
+| `devtools`    | inspection, capability checks, harness, session wiring      | — (it may depend on everything) |
 
 `rendering` deliberately does **not** import Three.js. It emits positions,
 scales, orientations and vertex buffers as plain data; `apps/game` applies them.

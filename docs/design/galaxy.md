@@ -42,9 +42,9 @@ Every body carries `provenance`, and the UI shows it everywhere the body appears
 
 | Provenance  | Drawn as                      | Panel shows                                         |
 | ----------- | ----------------------------- | --------------------------------------------------- |
-| `observed`  | Solid, full color            | Catalog name, designation, source, release        |
+| `observed`  | Solid, full color             | Catalog name, designation, source, release          |
 | `projected` | Dashed outline, 60% opacity   | "Projected from stellar parameters — not confirmed" |
-| `surveyed`  | Solid, with your survey stamp | Your scan date, tick, and catalog version         |
+| `surveyed`  | Solid, with your survey stamp | Your scan date, tick, and catalog version           |
 
 > 🎮 Designer's Note: This is the single highest-leverage idea in the bible.
 > Every procedural space game has to choose between claiming its content is real
@@ -66,12 +66,12 @@ Exoplanet Archive and committed. It replaced 18 hand-entered stars, which is the
 swap that file's comment promised would change nothing downstream — it changed
 three signatures and no architecture.
 
-| Dataset                      | Provides                                                  | Scale                                                                                                                                                           | License posture                                                                                                                                                                                                    |
-| ---------------------------- | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Gaia DR3** (ESA)           | Astrometry, parallax, photometry, radial velocity         | ~1.8 billion sources [Source: ESA Gaia Data Release 3, June 2022]                                                                                               | ⛔ **CC BY-NC 3.0 IGO — non-commercial.** Verified 2026-08-19. Credit line `Credit: ESA, Gaia DPAC`. See [spike 4](../spikes.md#4--gaia-and-hyg-attribution-terms) — **this keeps Gaia out of the shipped bundle** |
-| **HYG v4.4**                 | Merged Hipparcos + Yale + Gliese, pre-cleaned, game-sized | 119,614 rows, 109,390 with usable parallax [Source: `hyg_v44.csv`, measured]                                                                                    | CC BY-SA 4.0 — attribution required, share-alike reaches the packed binary                                                                                                                                         |
-| **NASA Exoplanet Archive**   | Confirmed exoplanets, orbital elements, masses, radii     | **6,336** confirmed planets; 861 within 150 ly around 550 hosts [Source: archive TAP service, read 2026-08-19 — the archive updates weekly, never hard-code it] | No license stated. Operated by Caltech under NASA contract; **not confirmed public domain**. Use the requested acknowledgement                                                                                     |
-| **CNS5 / Gliese**            | Completeness within 25 pc                                 | ~5,900 objects [Source: Golovin et al., _The Fifth Catalog of Nearby Stars_, 2023]                                                                            | Open, attribution                                                                                                                                                                                                  |
+| Dataset                    | Provides                                                  | Scale                                                                                                                                                           | License posture                                                                                                                                                                                                    |
+| -------------------------- | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Gaia DR3** (ESA)         | Astrometry, parallax, photometry, radial velocity         | ~1.8 billion sources [Source: ESA Gaia Data Release 3, June 2022]                                                                                               | ⛔ **CC BY-NC 3.0 IGO — non-commercial.** Verified 2026-08-19. Credit line `Credit: ESA, Gaia DPAC`. See [spike 4](../spikes.md#4--gaia-and-hyg-attribution-terms) — **this keeps Gaia out of the shipped bundle** |
+| **HYG v4.4**               | Merged Hipparcos + Yale + Gliese, pre-cleaned, game-sized | 119,614 rows, 109,390 with usable parallax [Source: `hyg_v44.csv`, measured]                                                                                    | CC BY-SA 4.0 — attribution required, share-alike reaches the packed binary                                                                                                                                         |
+| **NASA Exoplanet Archive** | Confirmed exoplanets, orbital elements, masses, radii     | **6,336** confirmed planets; 861 within 150 ly around 550 hosts [Source: archive TAP service, read 2026-08-19 — the archive updates weekly, never hard-code it] | No license stated. Operated by Caltech under NASA contract; **not confirmed public domain**. Use the requested acknowledgement                                                                                     |
+| **CNS5 / Gliese**          | Completeness within 25 pc                                 | ~5,900 objects [Source: Golovin et al., _The Fifth Catalog of Nearby Stars_, 2023]                                                                              | Open, attribution                                                                                                                                                                                                  |
 | **Open Exoplanet Catalog** | Cross-check, community corrections                        | —                                                                                                                                                               | MIT                                                                                                                                                                                                                |
 
 **Start with HYG.** It is the right size to ship in a browser, it is already
@@ -276,11 +276,11 @@ the transition between them is a cross-fade, not a mode switch
 ([pillar 1](charter.md#pillar-1--one-continuous-space) applies to interfaces
 too):
 
-| Tier         | Range           | What is drawn                                                                                                        | Source                |
-| ------------ | --------------- | -------------------------------------------------------------------------------------------------------------------- | --------------------- |
+| Tier         | Range           | What is drawn                                                                                                       | Source              |
+| ------------ | --------------- | ------------------------------------------------------------------------------------------------------------------- | ------------------- |
 | **Local**    | 0 – 150 ly      | Every catalogued star individually, at true position, colored by blackbody temperature from its real spectral class | Catalog             |
-| **Regional** | 150 ly – 5 kly  | Catalogued bright stars individually; the rest as a sampled point cloud                                              | Catalog + generated |
-| **Galactic** | 5 kly – 100 kly | A density volume — arms, bar, bulge, halo                                                                            | Generated             |
+| **Regional** | 150 ly – 5 kly  | Catalogued bright stars individually; the rest as a sampled point cloud                                             | Catalog + generated |
+| **Galactic** | 5 kly – 100 kly | A density volume — arms, bar, bulge, halo                                                                           | Generated           |
 
 The **horizon of knowledge** shell is drawn across all three as a translucent,
 irregular boundary with a completeness readout: _"catalog completeness at this
@@ -294,7 +294,7 @@ distance: 4%"_.
 | Select system      | Click a star             | Info panel: real data, provenance, citation, your survey status  |
 | Plot route         | Select destination       | Route computed; see below                                        |
 | Bookmark           | `B` on a selected system | Saved to a personal list, syncs online, works offline            |
-| Search             | `/` then type            | Name, designation (HIP/HD/Gliese/2MASS), or catalog id         |
+| Search             | `/` then type            | Name, designation (HIP/HD/Gliese/2MASS), or catalog id           |
 | Filter             | Panel, multi-select      | See table below                                                  |
 | Measure            | Shift-click two systems  | Straight-line distance and minimum jump count                    |
 
@@ -388,7 +388,7 @@ under 200 ms.
 **Resolved: two tiers of the same overlay.** Both keep the cockpit running behind
 them — the map is a HUD layer, never a place you go.
 
-| Tier         | For                                                          | Behavior                                                                                                                                               |
+| Tier         | For                                                          | Behavior                                                                                                                                                |
 | ------------ | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Compact**  | Routine target selection; the common case                    | A strip over the lower canopy at 70% opacity. Bodies, scan state, distance. One click plots a burn and it closes. Must be under 200 ms open-to-plotted. |
 | **Planning** | Long routes, multi-leg expeditions, cargo and passenger runs | Expands to fill the canopy. Full orrery, filters, route comparison, multi-leg sequencing, fuel and time projected across the whole itinerary.           |
@@ -461,7 +461,7 @@ The record layout, because it is the whole answer:
 | 0–8   | position, 3 × int24            | 1.13 AU per step at 150 ly — four orders below the parallax error, so the quantiser is free |
 | 9     | spectral class                 | class × subclass × giant flag                                                               |
 | 10–11 | absolute magnitude, int16 ×100 | luminosity is `10^((4.85 − M)/2.5)`; **storing both is storing it twice**                   |
-| 12–13 | color index B−V, int16 ×1000  | `-32768` for unknown                                                                        |
+| 12–13 | color index B−V, int16 ×1000   | `-32768` for unknown                                                                        |
 | 14–15 | flags, reserved                | component count, has-name, provenance                                                       |
 
 Store it **columnar, not interleaved** — the same fields structure-of-arrays

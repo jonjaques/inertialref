@@ -46,7 +46,7 @@ a production build. What follows is depth, not foundations.
 | Reference frames and transitions    | ✅     | [ADR-0002](adr/0002-reference-frames.md)                                                                       |
 | Render coordinates, floating origin | ✅     | [ADR-0003](adr/0003-render-coordinates.md)                                                                     |
 | Stable identity and addressing      | ✅     | [ADR-0004](adr/0004-entity-addressing.md)                                                                      |
-| Deterministic generation            | ✅     | Core proven; two inputs now — seed _and_ catalog version                                                     |
+| Deterministic generation            | ✅     | Core proven; two inputs now — seed _and_ catalog version                                                       |
 | Real astronomical data              | ✅     | 7,123 systems and 702 planets within 150 ly; [guide](guides/catalogue.md)                                      |
 | Simulation clock and determinism    | 🟡     | All of it except [replay](#replay-and-reconciliation)                                                          |
 | Simulation / rendering separation   | ✅     | Proven by `apps/headless`                                                                                      |
@@ -64,7 +64,7 @@ a production build. What follows is depth, not foundations.
 | Performance                         | 🟡     | Designed for, [barely measured](#performance-work)                                                             |
 | Multiplayer                         | ⛔     | Deferred. Seams only — [ADR-0008](adr/0008-multiplayer-partitions.md); the partition key is a live debug field |
 | Application shell and modes         | ✅     | Five modes, routes as the public surface — [ADR-0011](adr/0011-application-shell-and-modes.md)                 |
-| Planetarium                         | ✅     | Free navigation, catalog, orbit traces, labels, presets — [design](design/planetarium.md)                    |
+| Planetarium                         | ✅     | Free navigation, catalog, orbit traces, labels, presets — [design](design/planetarium.md)                      |
 | Cinema player                       | ✅     | Transport, timecode and a frame-exact link over the cutscene format — [design](design/cinema.md)               |
 | Dockable panels                     | ✅     | Four zones, property-tested layout algebra — [ADR-0012](adr/0012-dockable-panels.md)                           |
 | Mobile                              | 🟡     | Looking works and is verified; piloting on a touchscreen is not designed                                       |
@@ -79,12 +79,12 @@ change** — they are generators plus representations.
 
 | Thing                    | Status | Seam                                                                                                            |
 | ------------------------ | ------ | --------------------------------------------------------------------------------------------------------------- |
-| Galaxy, systems, stars   | ✅     | Real out to 150 ly, procedural beyond — [catalog guide](guides/catalogue.md)                                  |
+| Galaxy, systems, stars   | ✅     | Real out to 150 ly, procedural beyond — [catalog guide](guides/catalogue.md)                                    |
 | Planets, moons           | ✅     | Confirmed exoplanets and the Solar System are `observed`; the rest is `projected`                               |
 | Moons of real planets    | ⬜     | `PackedPlanet` needs a moon list; every moon in the game is currently a projection, including Luna              |
-| Catalog revision diff  | ⬜     | Both versions are recorded — in every save and every manifest — and nothing compares them yet                   |
+| Catalog revision diff    | ⬜     | Both versions are recorded — in every save and every manifest — and nothing compares them yet                   |
 | Planetary terrain        | 🟡     | Heightfields only; no biomes or materials                                                                       |
-| Ships                    | 🟡     | One modeled hull (a CC-BY Enterprise-D in `data/models/`, debug cone as fallback), no variants or subsystems   |
+| Ships                    | 🟡     | One modeled hull (a CC-BY Enterprise-D in `data/models/`, debug cone as fallback), no variants or subsystems    |
 | Rings                    | ✅     | Saturn's, with the planet's shadow on them and theirs on the planet; procedural giants get a 1-in-6 chance      |
 | Asteroids / belts        | ⬜     | Wants a _population_ generator: many small bodies from one cell seed, addressed as `o:` objects within a region |
 | Star clusters, nebulae   | ⬜     | Density modulation in the galaxy generator + volumetric rendering                                               |
@@ -126,10 +126,10 @@ flowchart TB
 | Gap                                         | Consequence today                         | Seam                                                                                        |
 | ------------------------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------- |
 | Single LOD level                            | The visible horizon is a few patches wide | `terrainLevelFor` already picks a level from altitude; the streamer needs a per-patch level |
-| No edge stitching                           | Hairline seams between patches            | `buildPatch` uses one-sided differences at edges; it needs the neighbors' edge rows        |
+| No edge stitching                           | Hairline seams between patches            | `buildPatch` uses one-sided differences at edges; it needs the neighbors' edge rows         |
 | No cube-face wrapping                       | Patches at a face boundary are skipped    | The streamer skips out-of-range `i`/`j` rather than crossing to the adjacent face           |
 | Spherical-only normals for the datum sphere | Fallback sphere is featureless            | Acceptable; it is only visible beyond the streamed set                                      |
-| No terrain materials                        | One flat color                           | Elevation and slope are already available per vertex                                        |
+| No terrain materials                        | One flat color                            | Elevation and slope are already available per vertex                                        |
 
 ---
 
@@ -374,15 +374,15 @@ sits on a canopy, not from this layout.
 
 Not roadmap items so much as honest labels on what is modeled:
 
-| Simplification                                 | Reality                                                                       |
-| ---------------------------------------------- | ----------------------------------------------------------------------------- |
-| Multiple-star systems modeled as single stars | The catalog records true component counts for all 375 of them within 150 ly |
-| No vendored maps for seven Solar System moons  | They render from their measured albedo and tint; USGS has mosaics for several |
-| Patched conics, no n-body                      | Lagrange points, resonances and perturbations do not exist                    |
-| No collision except ground contact             | No hull, no entity-to-entity, no terrain slope response                       |
-| Circular-ish orbits, coplanar-ish systems      | Generated inclinations and eccentricities are small                           |
-| Atmospheres are isothermal exponential         | No layers, no weather, no wind                                                |
-| Bodies are spheres                             | No oblateness, so no J2 precession                                            |
+| Simplification                                | Reality                                                                       |
+| --------------------------------------------- | ----------------------------------------------------------------------------- |
+| Multiple-star systems modeled as single stars | The catalog records true component counts for all 375 of them within 150 ly   |
+| No vendored maps for seven Solar System moons | They render from their measured albedo and tint; USGS has mosaics for several |
+| Patched conics, no n-body                     | Lagrange points, resonances and perturbations do not exist                    |
+| No collision except ground contact            | No hull, no entity-to-entity, no terrain slope response                       |
+| Circular-ish orbits, coplanar-ish systems     | Generated inclinations and eccentricities are small                           |
+| Atmospheres are isothermal exponential        | No layers, no weather, no wind                                                |
+| Bodies are spheres                            | No oblateness, so no J2 precession                                            |
 
 ---
 

@@ -72,7 +72,7 @@ called the _Meridian_.
 
 | Lineage         | Class names                                                  | Why                                                                                               |
 | --------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
-| **Survey**      | Astronomers — Bessel, Cannon, Kapteyn, Hertzsprung, Herschel | An institution names its vessels after its own history, and the Survey's history is the catalog |
+| **Survey**      | Astronomers — Bessel, Cannon, Kapteyn, Hertzsprung, Herschel | An institution names its vessels after its own history, and the Survey's history is the catalog   |
 | **Independent** | Maritime working vessels — Cutter, Tender, Packet, Dory      | Armed and commercial hulls are not Survey-built, and the naming says so before anything else does |
 
 **The convention is therefore information.** A hull's class name tells you where

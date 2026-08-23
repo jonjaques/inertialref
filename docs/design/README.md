@@ -54,14 +54,14 @@ flowchart LR
 
 ### Systems
 
-| Page                          | What it settles                                            |
-| ----------------------------- | ---------------------------------------------------------- |
-| [flight](flight.md)           | The Reference Drive, the three travel regimes, fuel        |
-| [ships](ships.md)             | Hulls, modules, power, heat, damage, targeting             |
-| [galaxy](galaxy.md)           | Real data, catalog revisions, the galaxy and system maps |
-| [exploration](exploration.md) | Scanning, discovery credit, the reward model, the economy  |
-| [onfoot](onfoot.md)           | The first-person layer, the suit, interaction, inventory   |
-| [combat](combat.md)           | Ship combat and the deliberately scarce on-foot combat     |
+| Page                          | What it settles                                           |
+| ----------------------------- | --------------------------------------------------------- |
+| [flight](flight.md)           | The Reference Drive, the three travel regimes, fuel       |
+| [ships](ships.md)             | Hulls, modules, power, heat, damage, targeting            |
+| [galaxy](galaxy.md)           | Real data, catalog revisions, the galaxy and system maps  |
+| [exploration](exploration.md) | Scanning, discovery credit, the reward model, the economy |
+| [onfoot](onfoot.md)           | The first-person layer, the suit, interaction, inventory  |
+| [combat](combat.md)           | Ship combat and the deliberately scarce on-foot combat    |
 
 ### Content and presentation
 

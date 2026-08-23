@@ -169,7 +169,7 @@ enforced by `pnpm graph`, not documented. `pnpm check` is the gate.
 | One person plus coding agents | Every system must be generated or simulated, never hand-authored at volume. A feature needing 200 hand-made assets is not a feature. |
 | Browser, ~10 W of laptop GPU  | Geometric fidelity sits well below the comparables; the budget goes to light transport and HDR output instead.                       |
 | Non-commercial                | No revenue funds servers, so solo must be the complete experience and the persistent universe an addition.                           |
-| No content pipeline           | Ships, stations and interiors are procedurally assembled from parts, not modeled.                                                   |
+| No content pipeline           | Ships, stations and interiors are procedurally assembled from parts, not modeled.                                                    |
 | Real data, forever changing   | Address stability and generation purity are non-negotiable.                                                                          |
 
 **Deliberately not built, with the seam named for each** — multiplayer, n-body

@@ -251,7 +251,7 @@ Stated here so no page below has to relitigate them.
 | One person and coding agents                     | Every system must be _generated or simulated_, never authored by hand at volume. A feature requiring 200 hand-made assets is not a feature.                                  |
 | Browser, WebGPU, ~10 W of GPU budget on a laptop | Geometric fidelity is well below Star Citizen. [art](art.md) spends the budget on light transport and HDR output instead, which is where this subject matter actually lives. |
 | Non-commercial                                   | No revenue to fund servers, so [modes](modes.md) must make solo the complete experience and the persistent universe an addition.                                             |
-| No content pipeline                              | Ships, stations and interiors must be procedurally assembled from parts, not modeled. See [content](content.md).                                                            |
+| No content pipeline                              | Ships, stations and interiors must be procedurally assembled from parts, not modeled. See [content](content.md).                                                             |
 | Real data, forever changing                      | Address stability and generation purity are non-negotiable. See [galaxy](galaxy.md).                                                                                         |
 
 > 🎮 Designer's Note: The largest risk in this document is not technical. It is

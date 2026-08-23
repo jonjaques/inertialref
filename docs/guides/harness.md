@@ -44,7 +44,7 @@ pixels.
 | `ir.inspect(id?)`      | one entity in full — frames, canonical + local coords, velocities |
 | `ir.snapshot(alpha?)`  | the raw presentation snapshot                                     |
 | `ir.bodies(system?)`   | flat listing of a system's bodies with addresses                  |
-| `ir.systemsNearby(ly)` | nearest star systems, catalog and procedural                    |
+| `ir.systemsNearby(ly)` | nearest star systems, catalog and procedural                      |
 | `ir.logs(n)`           | recent structured log records                                     |
 
 ```js

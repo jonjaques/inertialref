@@ -46,7 +46,7 @@ every touch of its directory, and the thing it is competing with for attention i
 | `rendering.md`   | `render/`, `scene/`, or `packages/rendering`                  |
 | `cutscenes.md`   | the cinematic director, its scripts, or `cinema/`             |
 | `dock.md`        | `apps/game/src/dock`                                          |
-| `catalogue.md`   | the star catalog or the ingest app                          |
+| `catalogue.md`   | the star catalog or the ingest app                            |
 | `server.md`      | the Worker, net, protocol or persistence                      |
 | `testing.md`     | any `*.test.ts`                                               |
 | `site.md`        | the document head, `public/`, the brand pipeline, analytics   |

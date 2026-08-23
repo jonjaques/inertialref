@@ -109,8 +109,8 @@ have sidestepped one real problem for free.
 | **DO SQLite**          | Per-partition durable state, co-located with the authority                    | Transactional with the code that owns it. No network round trip. 10 GB per object, which is four orders of magnitude more than a partition will ever need.                                                  |
 | **D1**                 | Account-scoped and globally-unique data                                       | Cross-partition queries and global uniqueness — "who discovered this first" — need one writer for the whole galaxy, not one per system.                                                                     |
 | **R2** ✅              | What the repository will not carry; biome material sets later                 | Zero egress fees. Today one bucket, `inertialrefd-storage`, holding the cutscene's reference audio ([H-8](#h-8--r2-holds-what-the-repository-will-not-carry)). Material sets are the planned second tenant. |
-| **Workers KV**         | ⛔ nothing                                                                    | The catalog is 159 KB brotli and ships in the bundle ([spike 3](spikes.md#3--catalog-bundle-size)). There is no eventually-consistent read tier to fill.                                                |
-| **Queues / Workflows** | ⛔ nothing yet                                                                | No asynchronous fan-out exists. Revisit if catalog revision publishing becomes a batch job.                                                                                                               |
+| **Workers KV**         | ⛔ nothing                                                                    | The catalog is 159 KB brotli and ships in the bundle ([spike 3](spikes.md#3--catalog-bundle-size)). There is no eventually-consistent read tier to fill.                                                    |
+| **Queues / Workflows** | ⛔ nothing yet                                                                | No asynchronous fan-out exists. Revisit if catalog revision publishing becomes a batch job.                                                                                                                 |
 | **Cloudflare Pages**   | ⛔ nothing                                                                    | Workers static assets is the same capability inside the Worker that already has to exist. Two deploy targets for one site is one too many.                                                                  |
 
 ### Numbers, with their source
@@ -266,7 +266,7 @@ There is exactly one question, and it is not "which is faster":
 | Which players are connected                  | DO SQLite | Same                                                                                |
 | **First-discovery claims**                   | **D1**    | "First in the galaxy" is a global uniqueness claim. One writer, one unique index.   |
 | Accounts, tokens                             | D1        | Cross-partition by definition                                                       |
-| Catalog revisions                          | D1        | Read by every client, written by nobody at runtime                                  |
+| Catalog revisions                            | D1        | Read by every client, written by nobody at runtime                                  |
 | Almanac / bookmark sync                      | D1        | Per player, not per place                                                           |
 
 Discovery credit is the interesting one because it is tempting to put it in the

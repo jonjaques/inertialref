@@ -76,14 +76,14 @@ take the solutions and spend the saved effort elsewhere.
 
 **What we do differently.**
 
-|                    | Elite                                                                       | InertialRef                                                                |
-| ------------------ | --------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+|                    | Elite                                                                       | InertialRef                                                              |
+| ------------------ | --------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
 | Galaxy             | Synthetic beyond the local bubble; ~150,000 real stars in a synthetic frame | Catalog-first, procedurally filled, **and it updates as astronomy does** |
-| Atmospheric worlds | Expansion content, still limited                                            | The base case                                                              |
-| On foot            | _Odyssey_ — built as a shooter, to a mixed reception                        | Built as a survey and hazard layer                                         |
-| Economy            | Credits, grind, engineering RNG                                             | Data only; no grind, no RNG                                                |
-| Install            | ~50 GB                                                                      | A link                                                                     |
-| Progression        | ~8× jump-range curve, with a long cage at the bottom                        | ~7.7×, same spread — but a steep early curve, so the cage phase is short   |
+| Atmospheric worlds | Expansion content, still limited                                            | The base case                                                            |
+| On foot            | _Odyssey_ — built as a shooter, to a mixed reception                        | Built as a survey and hazard layer                                       |
+| Economy            | Credits, grind, engineering RNG                                             | Data only; no grind, no RNG                                              |
+| Install            | ~50 GB                                                                      | A link                                                                   |
+| Progression        | ~8× jump-range curve, with a long cage at the bottom                        | ~7.7×, same spread — but a steep early curve, so the cage phase is short |
 
 **The lesson.** Elite's most-loved system — exploration — has the least
 mechanical machinery in it. Its least-loved systems are the ones with the most:
@@ -162,7 +162,7 @@ audience noticed immediately and loudly. That is strong evidence that
 
 |                            | **InertialRef**      | Star Citizen | Elite Dangerous | No Man's Sky | Space Engine | Starfield |
 | -------------------------- | -------------------- | ------------ | --------------- | ------------ | ------------ | --------- |
-| Real star catalog        | ✅ **and versioned** | ❌           | Partial         | ❌           | ✅           | ❌        |
+| Real star catalog          | ✅ **and versioned** | ❌           | Partial         | ❌           | ✅           | ❌        |
 | Updates with new astronomy | ✅                   | ❌           | ❌              | ❌           | Manual       | ❌        |
 | Seamless orbit → surface   | ✅                   | ✅           | ✅              | Partial      | ✅           | ❌        |
 | Seamless ship → on foot    | ✅                   | ✅           | Partial         | ✅           | ❌           | Partial   |

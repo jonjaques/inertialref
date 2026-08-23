@@ -103,13 +103,13 @@ no time would have taught nothing about four light years.
 Everything is a **panel**, and every panel is dockable — see
 [ux](ux.md#dockable-panels).
 
-| Panel         | Answers                                                         |
-| ------------- | --------------------------------------------------------------- |
+| Panel       | Answers                                                         |
+| ----------- | --------------------------------------------------------------- |
 | **Catalog** | Where can I go? Search by name or designation, browse by system |
-| **Object**    | What is this? Real data, provenance, orbit, and its address     |
-| **View**      | Names, orbit traces, the ship, the lens                         |
-| **Presets**   | Lighting, framing, and a short tour                             |
-| **Time**      | Pause, warp, and what the clock is actually delivering          |
+| **Object**  | What is this? Real data, provenance, orbit, and its address     |
+| **View**    | Names, orbit traces, the ship, the lens                         |
+| **Presets** | Lighting, framing, and a short tour                             |
+| **Time**    | Pause, warp, and what the clock is actually delivering          |
 
 ### Names
 
@@ -203,7 +203,7 @@ address. The planetarium has no ship to be in.
 | Thing                        | Note                                                                                     |
 | ---------------------------- | ---------------------------------------------------------------------------------------- |
 | Bookmarks                    | ⬜ The address is already the whole record; the store is what is missing                 |
-| Filters over the catalog   | ⬜ [galaxy](galaxy.md#interactions) lists the fields; the planetarium wants the same set |
+| Filters over the catalog     | ⬜ [galaxy](galaxy.md#interactions) lists the fields; the planetarium wants the same set |
 | Measure between two objects  | ⬜ Shift-click two things, get a distance                                                |
 | Surface-level free look      | ⬜ The observatory's floor is the datum sphere; standing on the ground is a flight mode  |
 | Export a still               | ⬜ Photo mode's export, without the ship                                                 |

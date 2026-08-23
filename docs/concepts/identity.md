@@ -49,13 +49,13 @@ g:milky-way/s:HIP71683/b:2/r:3.6.12.44            a surface region
 g:milky-way/s:HIP71683/b:2/r:3.6.12.44/o:7        an object in that region
 ```
 
-| Segment | Meaning                                                          |
-| ------- | ---------------------------------------------------------------- |
-| `g:`    | galaxy id                                                        |
+| Segment | Meaning                                                        |
+| ------- | -------------------------------------------------------------- |
+| `g:`    | galaxy id                                                      |
 | `s:`    | system id — a catalog designation or an encoded cell reference |
-| `b:`    | orbital index path; `2.0` is "third planet, first moon"          |
-| `r:`    | cube-sphere region: `face.level.i.j`                             |
-| `o:`    | object index within a region                                     |
+| `b:`    | orbital index path; `2.0` is "third planet, first moon"        |
+| `r:`    | cube-sphere region: `face.level.i.j`                           |
+| `o:`    | object index within a region                                   |
 
 Parsing and formatting round-trip exactly, which a property test asserts across
 randomly generated addresses of every kind.
