@@ -53,17 +53,22 @@ front of Vite and turn every edit into a caching investigation. See
 | `Space`     | pause                              |
 | `[` / `]`   | time warp down / up                |
 | `F5` / `F9` | save / load                        |
-| `Tab`       | hide the debug panel               |
+| `G`         | open the navigate panel            |
+| `P`         | open the perf panel                |
+| `H`         | hide or restore both dock panes    |
+| `Tab`       | move between on-screen controls    |
 
 Flight is full 6-DoF with no artificial "space mode" — the same controls fly
 between stars, into orbit, and down to a landing.
 
 ---
 
-## The debug panel
+## The author's instruments
 
-The panel on the right is the architecture made visible. Four sections worth
-understanding on day one:
+Press the bug in the IR menu at the bottom center, or `` ` ``, to reveal six
+dockable panels: navigate, controls, telemetry, perf, graphics, and camera.
+Open telemetry to see the architecture made visible. Four groups repay
+attention on day one:
 
 ```mermaid
 flowchart TB
@@ -106,7 +111,7 @@ await ir.scenario('surface')
 
 Puts the ship on the ground. Watch the `chain` field gain two levels, `state`
 become `landed`, and local speed drop to zero while universe speed stays at tens
-of kilometres per second.
+of kilometers per second.
 
 ### 3. Watch a frame transition
 
@@ -171,9 +176,10 @@ time if you do not know it.
 
 ## Where to go next
 
-|                       |                                                             |
-| --------------------- | ----------------------------------------------------------- |
-| Understand the system | [Architecture](../architecture.md)                          |
-| Drive it properly     | [The harness](harness.md)                                   |
-| Change it safely      | [AGENTS.md](../../AGENTS.md) then [Extending](extending.md) |
-| Know what is missing  | [Roadmap](../roadmap.md)                                    |
+|                       |                                                              |
+| --------------------- | ------------------------------------------------------------ |
+| Understand the system | [Architecture](../architecture.md)                           |
+| Drive it properly     | [The harness](harness.md)                                    |
+| Change it safely      | [AGENTS.md](../../AGENTS.md), then [Extending](extending.md) |
+| Agent handbook        | [docs/agents/](../agents/README.md)                          |
+| Know what is missing  | [Roadmap](../roadmap.md)                                     |

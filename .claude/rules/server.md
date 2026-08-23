@@ -8,7 +8,7 @@ paths:
 
 # The Worker and the wire
 
-Reasoning: `AGENTS.md` § "Layout and layering", ADR-0007, ADR-0008,
+Reasoning: `docs/guides/development.md`, ADR-0007, ADR-0008.
 `docs/hosting.md`.
 
 - **The vendor SDK stops at the adapter.** `apps/server` may know what a Durable Object

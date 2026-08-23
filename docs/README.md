@@ -1,11 +1,14 @@
 # InertialRef documentation
 
-InertialRef is a browser-based 6-DoF simulation of the Milky Way that spans
+InertialRef is a browser-based 6-DoF simulation of the Milky Way, from
 galactic distances down to inch-scale interaction on a planetary surface.
 
-This directory explains **how it works and why it is built that way**. The code
-is the authority on _what_ it does; these pages exist so that the code reads as
-a set of deliberate decisions rather than a pile of clever tricks.
+This directory explains **how it works and why it is built that way**. The
+code is the authority on what it does. These pages exist so the code reads as
+a set of decisions rather than a pile of tricks.
+
+Writing voice, American English, and where each audience should look:
+[`STYLE.md`](STYLE.md).
 
 ```mermaid
 flowchart LR
@@ -23,21 +26,27 @@ flowchart LR
     class START entry
 ```
 
+---
+
 ## Start here
 
-| If you want to…                                                     | Read                                                      |
-| ------------------------------------------------------------------- | --------------------------------------------------------- |
-| Know what this project is for                                       | [Vision and scope](vision.md)                             |
-| Know what the **game** is, and why each mechanic is shaped that way | [Design bible](design/README.md)                          |
-| Run it and fly around                                               | [Getting started](guides/getting-started.md)              |
-| Understand the system in one sitting                                | [Architecture](architecture.md)                           |
-| Know why a decision was made                                        | [ADRs](adr/README.md)                                     |
-| Drive the game from code or a console                               | [The harness](guides/harness.md)                          |
-| Add a feature without breaking an invariant                         | [Extending](guides/extending.md)                          |
-| Know what is deliberately not built                                 | [Roadmap](roadmap.md)                                     |
-| Know how it gets deployed, and what a server would cost             | [Hosting](hosting.md) — a plan, not a description         |
-| See what was measured, and what it changed                          | [Spikes](spikes.md) — five measurements, with the numbers |
-| Look up a term                                                      | [Glossary](glossary.md)                                   |
+| If you want to…                                  | Read                                                                                                   |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| Know what this project is for                    | [Vision](vision.md)                                                                                    |
+| Know what the **game** is                        | [Design bible](design/README.md)                                                                       |
+| Run it and fly around                            | [Getting started](guides/getting-started.md)                                                           |
+| Understand the system in one sitting             | [Architecture](architecture.md)                                                                        |
+| Know why a decision was made                     | [ADRs](adr/README.md)                                                                                  |
+| Drive the simulation from code or a console      | [The harness](guides/harness.md)                                                                       |
+| Add a feature without breaking an invariant      | [Extending](guides/extending.md)                                                                       |
+| Work on the client, the toolchain, or a cutscene | [Development](guides/development.md) · [Client](guides/client.md) · [Cinematics](guides/cinematics.md) |
+| Know what is deliberately not built              | [Roadmap](roadmap.md)                                                                                  |
+| Know how it is deployed                          | [Hosting](hosting.md)                                                                                  |
+| See what was measured                            | [Spikes](spikes.md)                                                                                    |
+| Look up a term                                   | [Glossary](glossary.md)                                                                                |
+| Change the code (human or agent)                 | [`AGENTS.md`](../AGENTS.md) · [Agent handbook](agents/README.md)                                       |
+
+---
 
 ## Concepts
 
@@ -57,97 +66,96 @@ problem, the mechanism, the numbers, and what breaks if you get it wrong.
 | [Persistence](concepts/persistence.md)     | What is worth storing when everything can be regenerated?              |
 | [Observability](concepts/observability.md) | How do you debug a coordinate system you cannot see?                   |
 
+---
+
 ## The design bible
 
 [`design/`](design/README.md) is the game-design counterpart to this
-documentation: what the player does, and why each mechanic is shaped the way it
-is. Twenty-two cross-linked pages. Start with
-[charter](design/charter.md) and [loops](design/loops.md) — together they are the
-whole game in about twenty minutes.
-
-| Page                                                    | What it settles                                           |
-| ------------------------------------------------------- | --------------------------------------------------------- |
-| [charter](design/charter.md)                            | High concept, the four pillars, positioning               |
-| [loops](design/loops.md)                                | The micro, macro and meta loops                           |
-| [flight](design/flight.md) · [ships](design/ships.md)   | The Reference Drive, travel regimes, modules, power, heat |
-| [galaxy](design/galaxy.md)                              | Real astronomy, catalogue revisions, the two maps         |
-| [modes](design/modes.md)                                | The five modes, and why they are one build                |
-| [planetarium](design/planetarium.md)                    | Free navigation — the mode with no ship                   |
-| [cinema](design/cinema.md)                              | The scene player, and its URL contract                    |
-| [ux](design/ux.md)                                      | The shell and routes, cockpit, HUD, accessibility         |
-| [exploration](design/exploration.md)                    | Scanning, discovery credit, the data economy              |
-| [onfoot](design/onfoot.md) · [combat](design/combat.md) | The first-person layer, and conflict                      |
-| [art](design/art.md)                                    | The photorealism doctrine and the no-pop-in specification |
-| [production](design/production.md)                      | Milestones M2–M7 and the named MVP                        |
+documentation: what the player does, and why each mechanic is shaped the way
+it is. Start with [charter](design/charter.md) and [loops](design/loops.md).
 
 Where the bible and [vision.md](vision.md) disagree, vision.md wins.
+
+---
 
 ## Guides
 
 | Page                                         | What it covers                                                  |
 | -------------------------------------------- | --------------------------------------------------------------- |
 | [Getting started](guides/getting-started.md) | Install, run, fly, and the first things to try                  |
-| [The harness](guides/harness.md)             | Driving the simulation from a console, a test or an agent       |
-| [The star catalogue](guides/catalogue.md)    | Where the real astronomy comes from, and how to rebuild it      |
+| [Development](guides/development.md)         | Commands, toolchain, and conventions                            |
+| [Client](guides/client.md)                   | Canvas, modes, camera, dock                                     |
+| [Cinematics](guides/cinematics.md)           | Authoring scripted scenes                                       |
+| [The harness](guides/harness.md)             | Driving the simulation from a console, a test, or an agent      |
+| [The star catalog](guides/catalogue.md)      | Where the real astronomy comes from, and how to rebuild it      |
 | [Testing](guides/testing.md)                 | What to test, which style, and how to write an honest assertion |
 | [Extending](guides/extending.md)             | Adding generated content, a worker task, a body type, a frame   |
 
-## Decision records
+---
 
-Nine decisions are expensive to reverse. Each has an ADR with context,
-alternatives and consequences — see the [index](adr/README.md).
+## For coding agents
+
+[`agents/`](agents/README.md) is the handbook for agents. [`AGENTS.md`](../AGENTS.md)
+at the repository root is the auto-loaded working card — invariants and
+definition of done. Claude Code setup lives in [`CLAUDE.md`](../CLAUDE.md).
+The visual design system is [`DESIGN.md`](../DESIGN.md). The product brief is
+[`PRODUCT.md`](../PRODUCT.md). The build log is [`CONTEXT.md`](../CONTEXT.md).
+
+---
 
 ## How these documents relate
 
 ```mermaid
 flowchart TB
     subgraph Orientation
-        RM[README.md<br/><i>repo overview</i>]
-        DOC[docs/README.md<br/><i>this page</i>]
-        VISION[vision.md<br/><i>scope & principles</i>]
+        RM[README.md]
+        DOC[docs/README.md]
+        VISION[vision.md]
         GLOS[glossary.md]
+        STYLE[STYLE.md]
     end
 
     subgraph Designing
-        DESIGN[design/*<br/><i>what the game is</i>]
+        DESIGN[design/]
     end
 
     subgraph Understanding
         ARCH[architecture.md]
-        CON[concepts/*]
-        ADR[adr/*]
+        CON[concepts/]
+        ADR[adr/]
     end
 
     subgraph Working
-        AG[AGENTS.md<br/><i>rules & conventions</i>]
-        GUIDE[guides/*]
-        CTX[CONTEXT.md<br/><i>build log</i>]
+        DEV[guides/development.md]
+        GUIDE[guides/]
+        AG[AGENTS.md]
+        AH[docs/agents/]
+        CTX[CONTEXT.md]
         ROAD[roadmap.md]
     end
 
     RM --> DOC
     DOC --> VISION
+    DOC --> STYLE
     VISION --> DESIGN
     DESIGN -.->|"seams"| ROAD
     VISION --> ARCH
-    DOC --> ARCH
     ARCH --> CON
     CON <--> ADR
     ARCH --> GUIDE
-    AG --> GUIDE
+    AG --> AH
+    AH --> DEV
     ROAD --> CTX
     CON -.->|"terms"| GLOS
 
     style DOC fill:#0ea5e9,stroke:#0369a1,color:#fff
 ```
 
-- **[`../README.md`](../README.md)** — what the project is, and the proof it works.
-- **[`../AGENTS.md`](../AGENTS.md)** — the rules for changing it. Read before editing.
-- **[`../CONTEXT.md`](../CONTEXT.md)** — the build log: what exists, what was decided, which bugs were found and must not return.
+---
 
-## A note on accuracy
+## Accuracy
 
-Where these pages quote a number — 2^40 m sectors, 64 Hz, 0.24 mm — it came from
-the implementation or a test, not from an estimate. Where a page describes a
-tradeoff as _measured_, there is a test that measures it. If you find a
-discrepancy, the code wins and the page is a bug.
+Where these pages quote a number — 2^40 m sectors, 64 Hz, 0.24 mm — it came
+from the implementation or a test, not from an estimate. Where a page
+describes a tradeoff as measured, there is a test that measures it. If you
+find a discrepancy, the code wins and the page is a bug.

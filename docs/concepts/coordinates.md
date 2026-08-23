@@ -30,22 +30,22 @@ that span:
 flowchart LR
     subgraph FAIL["what does not work"]
         direction TB
-        F32["<b>float32 metres</b><br/>useless past a few km"]
-        F64["<b>float64 metres</b><br/>ULP ≈ 100 km at the galactic rim"]
-        I64MM["<b>int64 millimetres</b><br/>range 0.97 ly — the galaxy is 100,000"]
-        I64M["<b>int64 metres</b><br/>range 975 ly — still two orders short"]
-        BIG["<b>BigInt / int128</b><br/>works, ~10× slower, serialises badly"]
+        F32["<b>float32 meters</b><br/>useless past a few km"]
+        F64["<b>float64 meters</b><br/>ULP ≈ 100 km at the galactic rim"]
+        I64MM["<b>int64 millimeters</b><br/>range 0.97 ly — the galaxy is 100,000"]
+        I64M["<b>int64 meters</b><br/>range 975 ly — still two orders short"]
+        BIG["<b>BigInt / int128</b><br/>works, ~10× slower, serializes badly"]
     end
 ```
 
 The float64 line is the one that surprises people, so it is worth making
-concrete. In JavaScript, at 8 kiloparsecs from the galactic centre:
+concrete. In JavaScript, at 8 kiloparsecs from the galactic center:
 
 ```js
 8000 * PARSEC + 0.0254 === 8000 * PARSEC // → true
 ```
 
-An inch simply vanishes. There is no arrangement of doubles-as-metres that both
+An inch simply vanishes. There is no arrangement of doubles-as-meters that both
 reaches the rim and resolves a hand tool.
 
 ---
@@ -57,7 +57,7 @@ flowchart LR
     subgraph UV["UniverseVector"]
         direction TB
         SEC["<b>sector</b> (sx, sy, sz)<br/>int32 · which 2^40 m cube"]
-        OFF["<b>offset</b> (ox, oy, oz)<br/>float64 metres · where inside it<br/>normalised to [0, 2^40)"]
+        OFF["<b>offset</b> (ox, oy, oz)<br/>float64 meters · where inside it<br/>normalized to [0, 2^40)"]
     end
     SEC --- OFF
     style UV fill:#0369a1,stroke:#0c4a6e,color:#fff
@@ -78,7 +78,7 @@ positions are always represented identically and `equals` is a field comparison.
 | `POSITION_RESOLUTION`  | 2^40 × 2^-52 m       | **≈ 0.24 mm, everywhere**               |
 
 The Milky Way is ~100,000 ly across, so the addressable volume holds the galaxy
-plus a wide halo, and a quarter of a millimetre is below anything a player can
+plus a wide halo, and a quarter of a millimeter is below anything a player can
 interact with.
 
 ---
@@ -108,7 +108,7 @@ So **crossing a sector boundary costs nothing**. A ship can fly across the
 galaxy through millions of sector boundaries and accumulate no drift from the
 representation itself. Had the sector size been, say, 1e12 m — a rounder number
 — each carry would round, and the error would be a function of how far you had
-travelled, which is exactly the property a canonical coordinate must not have.
+traveled, which is exactly the property a canonical coordinate must not have.
 
 ### The residual error, and where it comes from
 
@@ -122,7 +122,7 @@ Precision is bounded by the _offset_, not by the absolute magnitude:
 
 Worst case ≈ 0.12 mm, and `POSITION_RESOLUTION` (0.24 mm) is the conservative
 bound the tests assert against. Measured in capability check 7: an inch-scale
-displacement 8.18 kpc from the galactic centre resolves to within **9.4 µm**.
+displacement 8.18 kpc from the galactic center resolves to within **9.4 µm**.
 
 There is one place the error is slightly larger — two points straddling a sector
 boundary, where the difference is computed as `Δsector · 2^40 + Δoffset` and the
@@ -139,8 +139,8 @@ which is itself a safety property.
 ```mermaid
 flowchart LR
     UV1["UniverseVector"] -->|"translate(uv, Vec3)"| UV2["UniverseVector"]
-    UV1 -->|"difference(a, b)"| V["Vec3 (metres)"]
-    UV1 -->|"distance(a, b)"| S["number (metres)"]
+    UV1 -->|"difference(a, b)"| V["Vec3 (meters)"]
+    UV1 -->|"distance(a, b)"| S["number (meters)"]
     V -->|"ordinary double maths"| V
 
     style UV1 fill:#0369a1,stroke:#0c4a6e,color:#fff
@@ -148,7 +148,7 @@ flowchart LR
 ```
 
 - **`translate`** — move by a displacement. Exact carry, as above.
-- **`difference`** — subtract two positions into a plain `Vec3` in metres. Valid
+- **`difference`** — subtract two positions into a plain `Vec3` in meters. Valid
   at any separation: a galaxy-crossing difference quantises to ~1e5 m, while the
   near-field differences that feed physics and rendering keep full double
   precision.
@@ -165,14 +165,14 @@ by construction — that is the whole point of the type.
 
 ---
 
-## Why the origin is the galactic centre
+## Why the origin is the galactic center
 
-The universe origin sits at the centre of the Milky Way, so Sol lands 8.178 kpc
+The universe origin sits at the center of the Milky Way, so Sol lands 8.178 kpc
 out rather than at zero. That is deliberate: an origin at the player's home
-system would have to move the moment the game modelled anywhere else, and every
+system would have to move the moment the game modeled anywhere else, and every
 sector index would be a relative quantity pretending to be absolute.
 
-Catalogue stars are converted ICRS → galactic → simulation axes on the way in.
+Catalog stars are converted ICRS → galactic → simulation axes on the way in.
 The conversion validates itself: Proxima and Alpha Centauri are placed from
 _independent_ right ascension / declination / parallax entries and land **0.2025
 ly** apart, matching the published separation.
@@ -183,18 +183,18 @@ ly** apart, matching the published separation.
 
 **Buys**
 
-- Sub-millimetre resolution anywhere, with no special cases and no modes.
+- Sub-millimeter resolution anywhere, with no special cases and no modes.
 - JSON- and structured-clone-friendly: six plain numbers, no BigInt, no classes.
 - Free to send to a worker; trivially comparable; trivially hashable.
 - Exact carries, so long journeys do not accumulate representation error.
 
 **Costs**
 
-- 0.24 mm is a floor. Millimetre-scale assembly gameplay would need a smaller
+- 0.24 mm is a floor. Millimeter-scale assembly gameplay would need a smaller
   sector, which costs range.
-- Constructing from absolute metres (`fromMeters`) is limited by the double you
+- Constructing from absolute meters (`fromMeters`) is limited by the double you
   hand it — at 1e19 m the input has already lost ~2 km before the call. It is
-  the right tool for placing catalogue stars, whose published positions are far
+  the right tool for placing catalog stars, whose published positions are far
   more uncertain than that, and the wrong tool for anything else.
 - Six numbers rather than three, everywhere.
 

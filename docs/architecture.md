@@ -50,7 +50,7 @@ flowchart TB
         PRO["<b>protocol</b><br/>codecs · wire · save schema"]
     end
     subgraph L3["layer 3"]
-        UNI["<b>universe</b><br/>addressing · catalogue · generation · terrain"]
+        UNI["<b>universe</b><br/>addressing · catalog · generation · terrain"]
     end
     subgraph L2["layer 2"]
         PHY["<b>physics</b><br/>Kepler · rigid body · atmosphere"]
@@ -92,20 +92,20 @@ it declares a **port** and the host implements it — see
 
 ### What each package is for
 
-| Package       | Owns                                                          | Never knows about               |
-| ------------- | ------------------------------------------------------------- | ------------------------------- |
-| `shared`      | units, brands, invariants, structured logging                 | anything domain-specific        |
-| `spatial`     | absolute position, frame graph, floating origin               | orbits, bodies, rendering       |
-| `procedural`  | PRNG, seed derivation, noise, algorithm versions              | what is being generated         |
-| `physics`     | Kepler solutions, 6-DoF integration, drag, thrusters          | which body, which ship          |
-| `universe`    | addressing, catalogue, generation, terrain, frames-for-bodies | entities, ticks                 |
-| `simulation`  | clock, entities, flight, frame transitions, streaming         | React, Three.js, the DOM        |
-| `protocol`    | validated wire/save shapes                                    | where bytes come from           |
-| `workers`     | typed tasks, job pool, transport ports                        | `Worker` (the class)            |
-| `persistence` | save capture/restore, migrations                              | IndexedDB (a port)              |
-| `net`         | who owns the simulation this client does not                  | sockets, Cloudflare, transports |
-| `rendering`   | canonical→render bridge, LOD, terrain meshing                 | Three.js                        |
-| `devtools`    | inspection, capability checks, harness, session wiring        | — (it may depend on everything) |
+| Package       | Owns                                                        | Never knows about               |
+| ------------- | ----------------------------------------------------------- | ------------------------------- |
+| `shared`      | units, brands, invariants, structured logging               | anything domain-specific        |
+| `spatial`     | absolute position, frame graph, floating origin             | orbits, bodies, rendering       |
+| `procedural`  | PRNG, seed derivation, noise, algorithm versions            | what is being generated         |
+| `physics`     | Kepler solutions, 6-DoF integration, drag, thrusters        | which body, which ship          |
+| `universe`    | addressing, catalog, generation, terrain, frames-for-bodies | entities, ticks                 |
+| `simulation`  | clock, entities, flight, frame transitions, streaming       | React, Three.js, the DOM        |
+| `protocol`    | validated wire/save shapes                                  | where bytes come from           |
+| `workers`     | typed tasks, job pool, transport ports                      | `Worker` (the class)            |
+| `persistence` | save capture/restore, migrations                            | IndexedDB (a port)              |
+| `net`         | who owns the simulation this client does not                | sockets, Cloudflare, transports |
+| `rendering`   | canonical→render bridge, LOD, terrain meshing               | Three.js                        |
+| `devtools`    | inspection, capability checks, harness, session wiring      | — (it may depend on everything) |
 
 `rendering` deliberately does **not** import Three.js. It emits positions,
 scales, orientations and vertex buffers as plain data; `apps/game` applies them.
@@ -173,8 +173,8 @@ lossless _in the direction it is used_, and each has a reason to exist.
 ```mermaid
 flowchart TB
     UV["<b>UniverseVector</b><br/>int32 sector + double offset<br/><code>[-229507999, 583732, -1] + (932.6e9, 815.7e9, 1055.2e9)</code>"]
-    LOCAL["<b>frame-local Vec3</b><br/>metres from a frame origin<br/><code>(1408267.67, -19516.01, 2944871.77)</code>"]
-    RENDER["<b>render-space Vec3</b><br/>metres from the floating origin<br/><code>(-1874.1, -41.3, 2294.0)</code>"]
+    LOCAL["<b>frame-local Vec3</b><br/>meters from a frame origin<br/><code>(1408267.67, -19516.01, 2944871.77)</code>"]
+    RENDER["<b>render-space Vec3</b><br/>meters from the floating origin<br/><code>(-1874.1, -41.3, 2294.0)</code>"]
     GPU["<b>float32 attribute</b><br/>what the GPU stores"]
 
     UV -->|"universeToLocal(pose)"| LOCAL
@@ -183,7 +183,7 @@ flowchart TB
     RENDER -->|"fromRenderSpace(origin)"| UV
     RENDER -->|"LOD + compression"| GPU
 
-    UVNOTE["sub-millimetre<br/>anywhere in 249,000 ly"]
+    UVNOTE["sub-millimeter<br/>anywhere in 249,000 ly"]
     LOCALNOTE["exact near its own frame,<br/>lossy far from it"]
     RENDERNOTE["kept within ±4096 m<br/>of the camera"]
 
@@ -199,7 +199,7 @@ flowchart TB
 
 The middle box carries the subtlety worth internalising: **a frame-local `Vec3`
 is only precise near its own frame.** Expressing a point in a frame four
-light-years away degrades to metres, because a `Vec3` is a double. That is not a
+light-years away degrades to meters, because a `Vec3` is a double. That is not a
 defect to be fixed; it is why canonical state is a `UniverseVector` and why an
 approaching ship is re-framed into the system it is entering.
 
@@ -305,8 +305,9 @@ reproduce in one runtime and not the other.
 
 ## Invariants
 
-The short list. Violating one of these is a rewrite later, not a refactor —
-[AGENTS.md](../AGENTS.md) has the full set with rationale.
+The short list. Violating one of these is a rewrite later, not a refactor.
+The full set is in [AGENTS.md](../AGENTS.md); each rule's technical home is
+in the [invariant map](agents/invariants.md).
 
 | #   | Invariant                                                            | Enforced by                                                    |
 | --- | -------------------------------------------------------------------- | -------------------------------------------------------------- |
@@ -332,7 +333,7 @@ vector no longer compiles. Adding the brand immediately surfaced a third call
 site nobody had found by reading.
 
 Invariants 9 and 10 have the same shape. `teleport` used to take a `landed`
-boolean, and the harness used it to declare a ship landed three metres above the
+boolean, and the harness used it to declare a ship landed three meters above the
 pad — `stepFlight` short-circuits for an already-landed entity, so the contact
 test never ran and the ship hovered there for the rest of the session while the
 overlay reported an altitude of zero. Removing the parameter makes the state
@@ -343,16 +344,18 @@ unreachable rather than merely discouraged.
 ## Verification
 
 ```bash
-pnpm check   # graph → lint → typecheck (3 projects) → tests → build
+pnpm check   # graph → brand → format → lint → typecheck (5 projects) → tests → build
 ```
 
-| Stage       | What it proves                                                   |
-| ----------- | ---------------------------------------------------------------- |
-| `graph`     | layering intact, no cycles                                       |
-| `lint`      | oxlint across the workspace                                      |
-| `typecheck` | three tsconfig projects — packages (no DOM), client, Node runner |
-| `test`      | 200 tests, all in plain Node — `packages/*` and `apps/*` alike   |
-| `build`     | the client actually bundles, workers included                    |
+| Stage          | What it proves                                                                              |
+| -------------- | ------------------------------------------------------------------------------------------- |
+| `graph`        | layering intact, no cycles                                                                  |
+| `brand:check`  | generated brand artifacts match their source                                                |
+| `format:check` | committed files match Prettier                                                              |
+| `lint`         | oxlint across the workspace                                                                 |
+| `typecheck`    | five tsconfig projects — portable packages, client, Node runner, Worker, and offline ingest |
+| `test`         | the full Vitest suite runs in plain Node — `packages/*` and `apps/*` alike                  |
+| `build`        | the client actually bundles, workers included                                               |
 
 On top of that, twelve **capability checks** execute the milestone's claims
 against the live build — in Node via `pnpm sim --self-test`, and in the browser
@@ -365,4 +368,6 @@ rather than described. [Testing](guides/testing.md)
 
 - [Concepts](README.md#concepts) — how each mechanism actually works
 - [ADRs](adr/README.md) — why, and what was rejected
+- [Development](guides/development.md) — commands, toolchain, conventions
+- [Agent handbook](agents/README.md) — how to change it
 - [Roadmap](roadmap.md) — what is deliberately not built yet

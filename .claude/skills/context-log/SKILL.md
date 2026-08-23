@@ -6,10 +6,11 @@ argument-hint: '[what to record]'
 
 # The build log
 
-`CONTEXT.md` is working memory for agents: what actually exists, what was decided and why,
-and which mistakes have already been made and must not return. It is ~1900 lines and
-**deliberately not loaded into context** — it is read on demand, which is why entries have
-to be findable by their headings.
+`CONTEXT.md` is the build log: what actually exists, what was decided and why,
+and which mistakes have already been made and must not return. It is a diary,
+not the working guide — that is `AGENTS.md` and `docs/agents/`. It is long and
+**deliberately not loaded into context** — it is read on demand, which is why
+entries have to be findable by their headings.
 
 ## Where the entry goes
 

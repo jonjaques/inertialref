@@ -67,7 +67,7 @@ path by a pure function.**
 away the property that makes any of this interesting: the planetarium and the
 flight modes share _one running world_, so you can leave a ship in orbit, look at
 Saturn, and come back to the same state hash. Two builds is also two service
-worker caches, two catalogue fetches and two renderers to get right.
+worker caches, two catalog fetches and two renderers to get right.
 
 **Mode in React state, with the URL as a side effect.** Simpler to write and it
 fails on the first reload: state and address drift, and a pasted link becomes a

@@ -104,7 +104,7 @@ and the assertion was `now <= start`, which equality satisfies.
 ### 5. Example tests for boundaries
 
 Malformed JSON, a save from a newer schema, a frame that cannot be rebuilt, an
-unknown worker task, a version mismatch. These are the paths where behaviour is
+unknown worker task, a version mismatch. These are the paths where behavior is
 a _decision_ (refuse? default? migrate?) and the test documents the decision.
 
 ---
@@ -128,6 +128,14 @@ Related: prefer **relative** comparisons when magnitudes span orders of
 magnitude. `expect(Math.abs(a / b - 1)).toBeLessThan(1e-9)` means something at
 both 1e-3 and 1e16; an absolute epsilon does not.
 
+### Prove a regression test can fail
+
+Before keeping a regression test, temporarily reintroduce the defect and
+watch that test fail for the intended reason. Then restore the fix and watch
+it pass. A terrain-normal regression once asserted only that normals were unit
+length; a radial normal is also unit length, so the test passed both before and
+after the bug it claimed to guard.
+
 ---
 
 ## Testing across the boundary
@@ -150,6 +158,17 @@ flowchart LR
 
 The inline worker is **not a mock** — it runs the real host loop through the
 real envelopes, so a value that is not structured-cloneable still fails.
+
+### Shader behavior needs a real GPU
+
+A TSL node graph cannot be evaluated in Node. Do not write a scalar mirror of
+a shader and test that instead: the mirror can pass while the graph it claims
+to describe drifts. Verify shader behavior on a GPU.
+
+A headless GPU is not equivalent to the real browser target. One renderer
+failure reproduced only at `devicePixelRatio` 2, so a headless check could not
+prove that path. Use the browser verification procedure in
+[Driving](../agents/driving.md) for rendering work.
 
 ---
 
@@ -176,7 +195,7 @@ otherwise assert in prose.
 | A fixture captured from a released build, for real compatibility testing (the v0 shape is covered, but from an inline literal) | [roadmap](../roadmap.md#persistent-mutations)      |
 | Recorded input replay                                                                                                          | [roadmap](../roadmap.md#replay-and-reconciliation) |
 | Performance regression benchmarks                                                                                              | [roadmap](../roadmap.md#performance-work)          |
-| Any rendering test that touches a GPU                                                                                          | out of scope by design — `rendering` is pure data  |
+| Shader behavior in the Node suite                                                                                              | verify on a real GPU; do not test a scalar mirror  |
 
 ---
 
@@ -186,7 +205,7 @@ otherwise assert in prose.
 pnpm test                       # everything
 pnpm vitest run world.test      # one file
 pnpm vitest                     # watch
-pnpm check                      # the gate: graph, lint, typecheck, test, build
+pnpm check                      # graph, brand, format, lint, typecheck, test, build
 ```
 
 ---
@@ -196,3 +215,4 @@ pnpm check                      # the gate: graph, lint, typecheck, test, build
 - [Observability](../concepts/observability.md) — the structures tests assert on
 - [Determinism](../concepts/determinism.md) — what the golden vectors protect
 - [AGENTS.md](../../AGENTS.md) — the rules a test is defending
+- [Agent handbook](../agents/README.md)

@@ -40,7 +40,7 @@ decision about where that budget goes and how fast the heat leaves.
 ## Hulls
 
 Six hulls at launch. They are **procedurally assembled from parts** — a spine,
-hull sections, nacelles, a cockpit module and greebling — rather than modelled,
+hull sections, nacelles, a cockpit module and greebling — rather than modeled,
 because [one person and coding agents](charter.md#the-honest-constraints) cannot
 author a ship pipeline. The parts are hand-designed; the assemblies and their
 variants are generated, seeded from the hull id so a given ship always looks the
@@ -55,7 +55,7 @@ same everywhere.
 | _**Hertzsprung**_ | Ejnar Hertzsprung — the H–R diagram                           | Multi-role medium   | 120 t      | 6    | 7        | 3 × S3         | 5       | Cockpit + 3 bays   |
 | _**Herschel**_    | Caroline and William Herschel — the first great sky surveys   | Large, mobile base  | 340 t      | 6    | 11       | 4 × S4         | 8       | Full deck + hangar |
 
-The _**Cannon**_ is the design's centre of gravity — the ship the
+The _**Cannon**_ is the design's center of gravity — the ship the
 [MVP](production.md#the-mvp-the-explorer) is balanced around, and every number in
 [flight](flight.md) is quoted for it. That the survey vessel is named for the
 astronomer whose spectral classification the
@@ -72,7 +72,7 @@ called the _Meridian_.
 
 | Lineage         | Class names                                                  | Why                                                                                               |
 | --------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
-| **Survey**      | Astronomers — Bessel, Cannon, Kapteyn, Hertzsprung, Herschel | An institution names its vessels after its own history, and the Survey's history is the catalogue |
+| **Survey**      | Astronomers — Bessel, Cannon, Kapteyn, Hertzsprung, Herschel | An institution names its vessels after its own history, and the Survey's history is the catalog   |
 | **Independent** | Maritime working vessels — Cutter, Tender, Packet, Dory      | Armed and commercial hulls are not Survey-built, and the naming says so before anything else does |
 
 **The convention is therefore information.** A hull's class name tells you where
@@ -115,7 +115,7 @@ the ship. Full numbers in [flight](flight.md#drive-ratings).
 | **Core** (6, mandatory) | Reactor, Reference Drive, Thrusters, Life Support, Sensors, Fuel Tank     | Cannot be empty. A ship with a dead core module does not fly. |
 | **Optional**            | Cargo, shield, fuel scoop, scanners, repair, extra tank, hangar, quarters | Sized; a size-4 module needs a size-4-or-larger slot          |
 | **Hardpoint**           | Weapons                                                                   | Sized S1–S4; retractable                                      |
-| **Utility**             | Countermeasures, heat sinks, point defence, surface scanner               | Small, external, always exposed                               |
+| **Utility**             | Countermeasures, heat sinks, point defense, surface scanner               | Small, external, always exposed                               |
 
 ### Size and grade
 

@@ -46,7 +46,7 @@ a production build. What follows is depth, not foundations.
 | Reference frames and transitions    | ✅     | [ADR-0002](adr/0002-reference-frames.md)                                                                       |
 | Render coordinates, floating origin | ✅     | [ADR-0003](adr/0003-render-coordinates.md)                                                                     |
 | Stable identity and addressing      | ✅     | [ADR-0004](adr/0004-entity-addressing.md)                                                                      |
-| Deterministic generation            | ✅     | Core proven; two inputs now — seed _and_ catalogue version                                                     |
+| Deterministic generation            | ✅     | Core proven; two inputs now — seed _and_ catalog version                                                       |
 | Real astronomical data              | ✅     | 7,123 systems and 702 planets within 150 ly; [guide](guides/catalogue.md)                                      |
 | Simulation clock and determinism    | 🟡     | All of it except [replay](#replay-and-reconciliation)                                                          |
 | Simulation / rendering separation   | ✅     | Proven by `apps/headless`                                                                                      |
@@ -64,7 +64,7 @@ a production build. What follows is depth, not foundations.
 | Performance                         | 🟡     | Designed for, [barely measured](#performance-work)                                                             |
 | Multiplayer                         | ⛔     | Deferred. Seams only — [ADR-0008](adr/0008-multiplayer-partitions.md); the partition key is a live debug field |
 | Application shell and modes         | ✅     | Five modes, routes as the public surface — [ADR-0011](adr/0011-application-shell-and-modes.md)                 |
-| Planetarium                         | ✅     | Free navigation, catalogue, orbit traces, labels, presets — [design](design/planetarium.md)                    |
+| Planetarium                         | ✅     | Free navigation, catalog, orbit traces, labels, presets — [design](design/planetarium.md)                      |
 | Cinema player                       | ✅     | Transport, timecode and a frame-exact link over the cutscene format — [design](design/cinema.md)               |
 | Dockable panels                     | ✅     | Four zones, property-tested layout algebra — [ADR-0012](adr/0012-dockable-panels.md)                           |
 | Mobile                              | 🟡     | Looking works and is verified; piloting on a touchscreen is not designed                                       |
@@ -79,12 +79,12 @@ change** — they are generators plus representations.
 
 | Thing                    | Status | Seam                                                                                                            |
 | ------------------------ | ------ | --------------------------------------------------------------------------------------------------------------- |
-| Galaxy, systems, stars   | ✅     | Real out to 150 ly, procedural beyond — [catalogue guide](guides/catalogue.md)                                  |
+| Galaxy, systems, stars   | ✅     | Real out to 150 ly, procedural beyond — [catalog guide](guides/catalogue.md)                                    |
 | Planets, moons           | ✅     | Confirmed exoplanets and the Solar System are `observed`; the rest is `projected`                               |
 | Moons of real planets    | ⬜     | `PackedPlanet` needs a moon list; every moon in the game is currently a projection, including Luna              |
-| Catalogue revision diff  | ⬜     | Both versions are recorded — in every save and every manifest — and nothing compares them yet                   |
+| Catalog revision diff    | ⬜     | Both versions are recorded — in every save and every manifest — and nothing compares them yet                   |
 | Planetary terrain        | 🟡     | Heightfields only; no biomes or materials                                                                       |
-| Ships                    | 🟡     | One modelled hull (a CC-BY Enterprise-D in `data/models/`, debug cone as fallback), no variants or subsystems   |
+| Ships                    | 🟡     | One modeled hull (a CC-BY Enterprise-D in `data/models/`, debug cone as fallback), no variants or subsystems    |
 | Rings                    | ✅     | Saturn's, with the planet's shadow on them and theirs on the planet; procedural giants get a 1-in-6 chance      |
 | Asteroids / belts        | ⬜     | Wants a _population_ generator: many small bodies from one cell seed, addressed as `o:` objects within a region |
 | Star clusters, nebulae   | ⬜     | Density modulation in the galaxy generator + volumetric rendering                                               |
@@ -98,7 +98,7 @@ change** — they are generators plus representations.
 landing ✅. Interstellar travel is 🟡 — possible but takes hours of
 simulated time, so it wants either a warp/jump mechanic or much higher
 acceleration. Atmospheric entry is 🟡: drag and an exponential atmosphere are
-modelled, but there is no heating, no plasma, no structural stress. Surface
+modeled, but there is no heating, no plasma, no structural stress. Surface
 exploration is 🟡 — you can land and fly around, but there is nothing to explore
 yet.
 
@@ -126,10 +126,10 @@ flowchart TB
 | Gap                                         | Consequence today                         | Seam                                                                                        |
 | ------------------------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------- |
 | Single LOD level                            | The visible horizon is a few patches wide | `terrainLevelFor` already picks a level from altitude; the streamer needs a per-patch level |
-| No edge stitching                           | Hairline seams between patches            | `buildPatch` uses one-sided differences at edges; it needs the neighbours' edge rows        |
+| No edge stitching                           | Hairline seams between patches            | `buildPatch` uses one-sided differences at edges; it needs the neighbors' edge rows         |
 | No cube-face wrapping                       | Patches at a face boundary are skipped    | The streamer skips out-of-range `i`/`j` rather than crossing to the adjacent face           |
 | Spherical-only normals for the datum sphere | Fallback sphere is featureless            | Acceptable; it is only visible beyond the streamed set                                      |
-| No terrain materials                        | One flat colour                           | Elevation and slope are already available per vertex                                        |
+| No terrain materials                        | One flat color                            | Elevation and slope are already available per vertex                                        |
 
 ---
 
@@ -188,7 +188,7 @@ universes, and control input is already persisted. What is missing is an input
 **log** — `(tick, entityId, controlInput)` — plus a driver that replays it.
 
 That would also give: a bug report format that reproduces exactly, a regression
-test format for flight behaviour, and the foundation for client prediction if
+test format for flight behavior, and the foundation for client prediction if
 multiplayer arrives.
 
 ---
@@ -220,7 +220,7 @@ contains, which is not a coincidence and is worth preserving.
 ## Performance work
 
 The principle is _design for these, measure before optimising_
-([vision](vision.md#measure-before-optimising)). The design admits all of them;
+([vision](vision.md#measure-before-optimizing)). The design admits all of them;
 almost none are applied, and almost nothing is measured.
 
 | Technique            | Status | Where it would go first                                                                                                           |
@@ -262,8 +262,8 @@ recover it. The budget is 900 KB gzip with splitting, so this is inside it.
 - A single-scattering atmosphere raymarch at 256 samples per pixel costs
   **7.27 ms at 1080p on an Apple M5** — 2.4× the frame budget's atmosphere line on
   a GPU well above target. Precomputed LUTs are a requirement, not an
-  optimisation.
-- The whole 150 ly catalogue is **159 KB brotli**. It is not a performance
+  optimization.
+- The whole 150 ly catalog is **159 KB brotli**. It is not a performance
   problem and does not need streaming.
 
 > ⚠️ **When the benchmark harness is built, do not use
@@ -313,7 +313,7 @@ a specific level in one press instead of up to three.
   content in a `display: table` box that grows past 100% to fit the widest line —
   and every readout in the dock is `truncate` inside a 27 rem column, so the
   ellipsis would simply stop happening. `index.css` already paints the native
-  gutter in this system's colours for exactly this surface. The row in the old
+  gutter in this system's colors for exactly this surface. The row in the old
   plan was wrong.
 - **`OverlayPage` keeps its hand-rolled dialog.** Radix's `Dialog` with
   `modal={false}` is genuinely the shape this wants, and the ~60 lines it would
@@ -372,17 +372,17 @@ sits on a canopy, not from this layout.
 
 ## Known simplifications in the physics
 
-Not roadmap items so much as honest labels on what is modelled:
+Not roadmap items so much as honest labels on what is modeled:
 
-| Simplification                                 | Reality                                                                       |
-| ---------------------------------------------- | ----------------------------------------------------------------------------- |
-| Multiple-star systems modelled as single stars | The catalogue records true component counts for all 375 of them within 150 ly |
-| No vendored maps for seven Solar System moons  | They render from their measured albedo and tint; USGS has mosaics for several |
-| Patched conics, no n-body                      | Lagrange points, resonances and perturbations do not exist                    |
-| No collision except ground contact             | No hull, no entity-to-entity, no terrain slope response                       |
-| Circular-ish orbits, coplanar-ish systems      | Generated inclinations and eccentricities are small                           |
-| Atmospheres are isothermal exponential         | No layers, no weather, no wind                                                |
-| Bodies are spheres                             | No oblateness, so no J2 precession                                            |
+| Simplification                                | Reality                                                                       |
+| --------------------------------------------- | ----------------------------------------------------------------------------- |
+| Multiple-star systems modeled as single stars | The catalog records true component counts for all 375 of them within 150 ly   |
+| No vendored maps for seven Solar System moons | They render from their measured albedo and tint; USGS has mosaics for several |
+| Patched conics, no n-body                     | Lagrange points, resonances and perturbations do not exist                    |
+| No collision except ground contact            | No hull, no entity-to-entity, no terrain slope response                       |
+| Circular-ish orbits, coplanar-ish systems     | Generated inclinations and eccentricities are small                           |
+| Atmospheres are isothermal exponential        | No layers, no weather, no wind                                                |
+| Bodies are spheres                            | No oblateness, so no J2 precession                                            |
 
 ---
 

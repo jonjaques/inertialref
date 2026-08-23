@@ -123,10 +123,10 @@ rather than being a bolted-on novelty.
 ## The Almanac
 
 The player's permanent record. Every body they have personally scanned, with what
-they found, when, and under which catalogue version.
+they found, when, and under which catalog version.
 
 ```
-┌─ ALMANAC ─────────────────────── 1,204 bodies · 3,391 ly travelled ─┐
+┌─ ALMANAC ─────────────────────── 1,204 bodies · 3,391 ly traveled ─┐
 │                                                                      │
 │  HIP 71683 · Alpha Centauri                        7 bodies · 4 ⌾   │
 │  ├ b:3   rocky · 1.09 M⊕ · thin CO₂ · LANDABLE                      │
@@ -146,8 +146,8 @@ Three properties that matter:
 a compromise — it is the point. A record of where you have been should not be
 something you can be logged out of.
 
-**It is versioned.** Every entry stamps the catalogue version it was made under,
-so a [revision](galaxy.md#catalogue-revisions) can change the galaxy without
+**It is versioned.** Every entry stamps the catalog version it was made under,
+so a [revision](galaxy.md#catalog-revisions) can change the galaxy without
 falsifying your record. You saw what you saw.
 
 **It is the second [progression ratchet](progression.md#ratchet-2--knowledge)**,
@@ -289,12 +289,12 @@ confirmed exoplanets under 2 M⊕"_, _"return ground samples from three worlds w
 liquid-water surface temperatures"_.
 
 They exist to give players who want a target a target, without ever gating
-anything behind them. They are generated from the **real** catalogue, so a
+anything behind them. They are generated from the **real** catalog, so a
 commission is genuinely answerable and its difficulty is a real fact about the
 sky — a commission for confirmed exoplanets under 2 M⊕ is hard because such
 detections are hard.
 
-**Resolved: generated targets, authored voice.** The target set is a catalogue
+**Resolved: generated targets, authored voice.** The target set is a catalog
 query; the framing is drawn from a written pool of institutional correspondence
 with real personality — dry, competent, slightly overworked. Specificity comes
 from the real sky, and the voice makes it feel addressed to someone. A commission

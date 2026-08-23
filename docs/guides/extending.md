@@ -4,7 +4,7 @@ How to add things without breaking an invariant. Each section names the seam,
 the steps, and the trap.
 
 > Read [AGENTS.md](../../AGENTS.md) first — it is the rules. This is the
-> how-to.
+> how-to. The agent handbook is [docs/agents/](../agents/README.md).
 
 ---
 
@@ -15,7 +15,7 @@ flowchart TB
     Q{"what are you adding?"}
     Q -->|"new generated content"| GEN["<b>universe</b><br/>a generator + an address segment"]
     Q -->|"expensive computation"| WRK["<b>workers</b><br/>a task definition"]
-    Q -->|"new physical behaviour"| PHY["<b>physics</b> + <b>simulation</b>"]
+    Q -->|"new physical behavior"| PHY["<b>physics</b> + <b>simulation</b>"]
     Q -->|"something to draw"| REN["<b>rendering</b> (data)<br/>+ <b>apps/game</b> (Three.js)"]
     Q -->|"something to store"| PER["<b>protocol</b> (schema)<br/>+ <b>persistence</b> (migration)"]
     Q -->|"something to inspect"| DEV["<b>devtools</b>"]

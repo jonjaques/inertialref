@@ -7,7 +7,7 @@ is the central design question rather than an aesthetic one.
 
 ## The silence problem
 
-Space is silent. A game that honours that is authentic and, handled badly, feels
+Space is silent. A game that honors that is authentic and, handled badly, feels
 broken; a game that ignores it sounds like every other space game.
 
 **The resolution: everything you hear is something you could plausibly hear.**

@@ -16,7 +16,7 @@ Everything in this game is one of three things:
 |               | What it is                             | How many can exist             | Example                                                     |
 | ------------- | -------------------------------------- | ------------------------------ | ----------------------------------------------------------- |
 | **Generated** | A pure function of seed and address    | Unbounded                      | Planets, terrain, asteroids, ship variants                  |
-| **Observed**  | Ingested from a real catalogue         | As many as astronomy has found | Stars, confirmed exoplanets                                 |
+| **Observed**  | Ingested from a real catalog           | As many as astronomy has found | Stars, confirmed exoplanets                                 |
 | **Parts**     | Hand-authored, assembled by generation | Tens, not thousands            | Room modules, hull sections, weapon models, biome materials |
 
 The third row is the entire art budget. Twelve room modules and a layout grammar
@@ -34,7 +34,7 @@ is the engineering-facing view of this same table.
 
 | Thing                  | Status | Launch target                        | Notes                                                                                             |
 | ---------------------- | ------ | ------------------------------------ | ------------------------------------------------------------------------------------------------- |
-| Galaxy, systems, stars | ✅     | Catalogue + procedural fill          | 7,123 real systems within 150 ly, from the [ingest pipeline](galaxy.md#ingest-pipeline)           |
+| Galaxy, systems, stars | ✅     | Catalog + procedural fill            | 7,123 real systems within 150 ly, from the [ingest pipeline](galaxy.md#ingest-pipeline)           |
 | Planets, moons         | ✅     | Full                                 | Deterministic from address                                                                        |
 | Planetary terrain      | 🟡     | Quadtree LOD, biomes, materials      | The visible ceiling on everything — see [production](production.md)                               |
 | Ships                  | 🟡     | 6 hulls, ~60 modules                 | One debug ship today                                                                              |
@@ -54,7 +54,7 @@ is the engineering-facing view of this same table.
 
 ### Distribution
 
-Where the catalogue is silent, generation fills in — and it should fill in
+Where the catalog is silent, generation fills in — and it should fill in
 _plausibly_, which means the generator's statistics should look like the real
 ones rather than like a designer's preferences.
 
@@ -109,7 +109,7 @@ properties (temperature, atmosphere, water presence).
 
 | Biome        | Conditions                                           | Material set                                      |
 | ------------ | ---------------------------------------------------- | ------------------------------------------------- |
-| Regolith     | Airless, any latitude                                | Fine grey-brown dust, high-frequency crater noise |
+| Regolith     | Airless, any latitude                                | Fine gray-brown dust, high-frequency crater noise |
 | Basalt plain | Airless or thin, low slope, low altitude             | Dark, low roughness variance                      |
 | Highland     | High altitude, high slope                            | Exposed rock, scree at the base of slopes         |
 | Polar ice    | High latitude, temperature below freezing            | Bright, low roughness, wind-scour patterning      |
@@ -160,20 +160,20 @@ the reason the frontier means something.
 For the [MVP](production.md#the-mvp-the-explorer), the numbers that have to be
 true:
 
-|                                  | Target                                | How it is met                       |
-| -------------------------------- | ------------------------------------- | ----------------------------------- |
-| Star systems reachable           | Effectively unbounded                 | Generated; ~119k catalogued via HYG |
-| Systems with real catalogue data | ~119,000                              | HYG ingest                          |
-| Confirmed exoplanets             | ~6,000 `[Assumption: read at ingest]` | NASA Exoplanet Archive              |
-| Landable bodies                  | Millions                              | Generated                           |
-| Biomes                           | 8                                     | Authored material sets              |
-| Ship hulls                       | 6                                     | Parts-assembled                     |
-| Ship modules                     | ~60 across 12 lines × 5 grades        | Parametric                          |
-| Suit modules                     | ~18                                   | Parametric                          |
-| Room modules                     | 12                                    | Authored parts                      |
-| Rock / scatter meshes            | ~20                                   | Authored parts                      |
-| Weapons                          | 12 across 4 classes                   | Post-MVP                            |
-| Structures                       | 3 kinds, parts-assembled              | Post-MVP                            |
+|                                | Target                                | How it is met                       |
+| ------------------------------ | ------------------------------------- | ----------------------------------- |
+| Star systems reachable         | Effectively unbounded                 | Generated; ~119k catalogued via HYG |
+| Systems with real catalog data | ~119,000                              | HYG ingest                          |
+| Confirmed exoplanets           | ~6,000 `[Assumption: read at ingest]` | NASA Exoplanet Archive              |
+| Landable bodies                | Millions                              | Generated                           |
+| Biomes                         | 8                                     | Authored material sets              |
+| Ship hulls                     | 6                                     | Parts-assembled                     |
+| Ship modules                   | ~60 across 12 lines × 5 grades        | Parametric                          |
+| Suit modules                   | ~18                                   | Parametric                          |
+| Room modules                   | 12                                    | Authored parts                      |
+| Rock / scatter meshes          | ~20                                   | Authored parts                      |
+| Weapons                        | 12 across 4 classes                   | Post-MVP                            |
+| Structures                     | 3 kinds, parts-assembled              | Post-MVP                            |
 
 **The authored column totals roughly 40 meshes and 8 material sets.** That is the
 number that has to be affordable, and it is. Everything else in the table is a

@@ -74,7 +74,7 @@ lets you carry more sample mass.
 
 **Gravity is real and it is different everywhere.** A moon at 0.16 g, a
 super-Earth at 2.3 g, and a station at 0 g are three genuinely different
-locomotion problems, and the design leans into that rather than normalising it.
+locomotion problems, and the design leans into that rather than normalizing it.
 
 | Environment                | Surface gravity        | How it plays                                                                      |
 | -------------------------- | ---------------------- | --------------------------------------------------------------------------------- |
@@ -101,7 +101,7 @@ _"needs a character controller on a surface frame."_
 | Fall damage onset | 4.5 m/s impact | Scales with suit mass                                                       |
 
 > 🎮 Designer's Note: EVA thruster ΔV as a hard, non-regenerating budget is the
-> single mechanic that will produce the game's best stories. Forty-two metres per
+> single mechanic that will produce the game's best stories. Forty-two meters per
 > second, spent, is a person drifting away from their ship. It should never be
 > made forgiving. It should be made _legible_ — a large, always-visible number,
 > and a predicted-trajectory line while thrusting.

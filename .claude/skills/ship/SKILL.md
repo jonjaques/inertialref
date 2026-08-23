@@ -33,8 +33,9 @@ genuinely not applicable, and say which:
   the next number. Use `/adr`.
 - **`CONTEXT.md`** if anything was decided, measured, or is a bug that must not return.
   Use `/context-log`.
-- **`AGENTS.md`** if a new invariant now exists — and then `.claude/rules/` for the
-  path-scoped one-liner, per the contract in `.claude/rules/README.md`.
+- **`AGENTS.md`** if a new invariant now exists — then `.claude/rules/` for the
+  path-scoped one-liner, and a row in `docs/agents/invariants.md`. See
+  `.claude/rules/README.md`.
 - **A regression test** if a defect exposed a missing invariant. Patch the invariant, not
   the symptom, and check the test can actually fail by reintroducing the bug.
 - **`worker-configuration.d.ts`** if `wrangler.jsonc` changed —

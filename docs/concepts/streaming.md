@@ -47,8 +47,8 @@ sequenceDiagram
     participant G as galaxy generator
 
     E->>W: updateInterest(playerPosition, 6 ly)
-    W->>G: systemsWithin(centre, radius)
-    G-->>W: catalogue hits + procedural cells
+    W->>G: systemsWithin(center, radius)
+    G-->>W: catalog hits + procedural cells
     loop each not-yet-loaded system
         W->>W: generateSystem(seed, stub)
         W->>W: installSystemFrames()

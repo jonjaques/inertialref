@@ -1,6 +1,6 @@
 ---
 name: invariant-auditor
-description: Audits a change against this repository's thirty named invariants — determinism, addressing, layering, camera precedence, the dock, the catalogue. Use before opening a PR, after a large change, or whenever a change touches more than one package. Read-only; it reports, it does not fix.
+description: Audits a change against this repository's thirty named invariants — determinism, addressing, layering, camera precedence, the dock, the catalog. Use before opening a PR, after a large change, or whenever a change touches more than one package. Read-only; it reports, it does not fix.
 tools: Read, Grep, Glob, Bash, WebFetch
 model: opus
 effort: high
@@ -48,8 +48,8 @@ than derived from the path. A second producer of the camera. Chrome without
 `pointer-events-auto`. A "run once" effect latched with a ref. A component reading mutable
 state without `'use no memo'`.
 
-**Persistence and the catalogue.** Regenerable content in a save. Something stored that the
-catalogue derives. The catalogue reached ambiently rather than passed as an argument.
+**Persistence and the catalog.** Regenerable content in a save. Something stored that the
+catalog derives. The catalog reached ambiently rather than passed as an argument.
 
 **Tests.** A regression test that cannot fail — the terrain-normals test asserted normals
 were unit length, which a radial normal also is, so it passed before and after the fix.

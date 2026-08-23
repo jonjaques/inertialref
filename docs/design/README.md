@@ -38,7 +38,7 @@ flowchart LR
 > with real [HDR output](art.md#hdr), and widened the jump-range spread to ~7.7×.
 >
 > **What v0.4 changed, in one line each:** Gaia is non-commercial and leaves the
-> bundle · the catalogue is 12× cheaper than estimated · TSL is free · HDR
+> bundle · the catalog is 12× cheaper than estimated · TSL is free · HDR
 > detection does not work and `auto` becomes a capability probe · HOTAS is a
 > Chromium promise.
 
@@ -54,14 +54,14 @@ flowchart LR
 
 ### Systems
 
-| Page                          | What it settles                                            |
-| ----------------------------- | ---------------------------------------------------------- |
-| [flight](flight.md)           | The Reference Drive, the three travel regimes, fuel        |
-| [ships](ships.md)             | Hulls, modules, power, heat, damage, targeting             |
-| [galaxy](galaxy.md)           | Real data, catalogue revisions, the galaxy and system maps |
-| [exploration](exploration.md) | Scanning, discovery credit, the reward model, the economy  |
-| [onfoot](onfoot.md)           | The first-person layer, the suit, interaction, inventory   |
-| [combat](combat.md)           | Ship combat and the deliberately scarce on-foot combat     |
+| Page                          | What it settles                                           |
+| ----------------------------- | --------------------------------------------------------- |
+| [flight](flight.md)           | The Reference Drive, the three travel regimes, fuel       |
+| [ships](ships.md)             | Hulls, modules, power, heat, damage, targeting            |
+| [galaxy](galaxy.md)           | Real data, catalog revisions, the galaxy and system maps  |
+| [exploration](exploration.md) | Scanning, discovery credit, the reward model, the economy |
+| [onfoot](onfoot.md)           | The first-person layer, the suit, interaction, inventory  |
+| [combat](combat.md)           | Ship combat and the deliberately scarce on-foot combat    |
 
 ### Content and presentation
 
@@ -118,3 +118,4 @@ in the appendix so nothing hides in a paragraph.
 - [`docs/roadmap.md`](../roadmap.md) — engineering sequence; [production](production.md) is the design-facing view of the same work
 - [`docs/adr/`](../adr/) — the twelve decisions everything here assumes
 - [`AGENTS.md`](../../AGENTS.md) — how to change any of it
+- [`docs/agents/`](../agents/README.md) — the agent handbook

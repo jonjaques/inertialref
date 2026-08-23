@@ -6,7 +6,7 @@ paths:
 
 # packages/\* — the portable core
 
-Reasoning: `AGENTS.md` § "Layout and layering". Enforced mechanically by `pnpm graph`.
+Reasoning: `docs/guides/development.md`, `pnpm graph`.
 
 - **No third-party runtime dependency.** The core runs unchanged in a browser, a worker
   and Node; depending on nothing but itself is the cheapest guarantee of that.

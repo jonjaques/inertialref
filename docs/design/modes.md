@@ -31,7 +31,7 @@ the URL each answers to is in [ux](ux.md#the-routes).
 
 > **Offline is not a degraded mode. It is the base case.**
 
-Because the universe is a deterministic pure function of a seed, a catalogue
+Because the universe is a deterministic pure function of a seed, a catalog
 version and an address, a client can derive the entire galaxy on its own. There
 is nothing to download and nothing to ask a server for. **Online adds a mutation
 stream on top of a complete game**, rather than online being the game and offline
@@ -43,7 +43,7 @@ persistent universe at all: the server's job is small.
 
 ```mermaid
 flowchart TB
-    BASE["<b>derived universe</b><br/>seed · catalogue version · address<br/><i>identical on every client, forever</i>"]
+    BASE["<b>derived universe</b><br/>seed · catalog version · address<br/><i>identical on every client, forever</i>"]
     LOCAL["<b>local state</b><br/>ship · Almanac · bookmarks<br/>696-byte save"]
     NET["<b>replicated state</b><br/>other entities<br/>persistent mutations"]
 
@@ -51,7 +51,7 @@ flowchart TB
     LOCAL --> SOLO
     BASE --> SON["<b>Solo online</b>"]
     LOCAL --> SON
-    NET -.->|"discovery records<br/>catalogue revisions"| SON
+    NET -.->|"discovery records<br/>catalog revisions"| SON
     BASE --> PU["<b>Persistent universe</b>"]
     LOCAL --> PU
     NET ==>|"everything"| PU
@@ -77,7 +77,7 @@ The complete game, with no network of any kind.
 | ----------------------------- | ------------------------------------------------------------------------------ |
 | **Universe**                  | Fully derived. Identical to every other player's.                              |
 | **Discovery credit**          | Local. Everything you find is a first discovery, because there is nobody else. |
-| **Catalogue**                 | Whatever version was cached. Revisions arrive when you next connect.           |
+| **Catalog**                   | Whatever version was cached. Revisions arrive when you next connect.           |
 | **Almanac, bookmarks, saves** | Local, IndexedDB, complete                                                     |
 | **Cost to run**               | Zero, forever                                                                  |
 
@@ -87,19 +87,19 @@ worker, streams terrain from its worker pool, and passes 12/12 capability checks
 
 **What is still needed:** an explicit **offline preparation** step. The brief
 calls for it and it is a real piece of work — the player chooses to cache the
-client, the catalogue chunks for a chosen volume, and the material sets, and the
+client, the catalog chunks for a chosen volume, and the material sets, and the
 UI shows what is cached and how large it is.
 
 | Cache tier              | Contents                 | Size                                                                                                        |
 | ----------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------- |
 | Client                  | App, workers, shaders    | ~2–4 MB `[Assumption: measured at 1.19 MB raw / 260 KB brotli on 2026-08-19, pre-WebGPU and pre-materials]` |
-| Catalogue, 25 ly        | 166 stars, 84 planets    | **~5 KB brotli** ✅ measured                                                                                |
-| Catalogue, 150 ly       | 7,529 stars, 861 planets | **~159 KB brotli** ✅ measured — [spike 3](../spikes.md#3--catalogue-bundle-size)                           |
+| Catalog, 25 ly          | 166 stars, 84 planets    | **~5 KB brotli** ✅ measured                                                                                |
+| Catalog, 150 ly         | 7,529 stars, 861 planets | **~159 KB brotli** ✅ measured — [spike 3](../spikes.md#3--catalog-bundle-size)                             |
 | Material sets, 8 biomes | Textures                 | 40–120 MB, the dominant cost                                                                                |
 
-**The catalogue tier collapsed.** It was estimated at ~2 MB and measured at 159 KB
+**The catalog tier collapsed.** It was estimated at ~2 MB and measured at 159 KB
 — small enough that there is nothing to choose about it. The preparation screen
-does not need a catalogue-volume slider; **it ships the whole 150 ly sphere as
+does not need a catalog-volume slider; **it ships the whole 150 ly sphere as
 part of the client** and the screen is entirely about material sets.
 
 > 🎮 Designer's Note: The material sets are now the _only_ thing in this game that
@@ -119,7 +119,7 @@ The same game, connected. **No other players are present in your instance.**
 | Adds                          |                                                                               |
 | ----------------------------- | ----------------------------------------------------------------------------- |
 | **Global discovery credit**   | Your first discoveries are checked against everyone's and attributed publicly |
-| **Catalogue revisions**       | Delivered as they are published                                               |
+| **Catalog revisions**         | Delivered as they are published                                               |
 | **Bookmark and Almanac sync** | Across devices                                                                |
 | **Commissions**               | Issued and completed against a shared pool                                    |
 
@@ -173,13 +173,13 @@ work brought forward cheaply.
 
 ### Design decisions this mode forces
 
-| Question              | Position                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **PvP consent**       | Opt-in, and off by default. A survey game whose players carry hours of unbanked data cannot have non-consensual PvP without becoming a different game — the [banking tension](exploration.md#banking) only works if the risk is one the player chose. **Resolved: opt-in, off by default.** PvP-enabled players can see and engage each other; everyone else is present and non-hostile. The fragmentation cost is accepted, and it is smaller here than in Elite: there is no economy for PvP to distort and no competitive ladder for it to feed. |
-| **Catalogue version** | All clients in a partition must run the same version. It becomes a protocol handshake.                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| **Cheating**          | The universe is derivable, so a client knows everything anyway — there are no secrets to protect. What must be authoritative is _mutation writes_: discovery records and placements. Validate those server-side and the rest does not matter.                                                                                                                                                                                                                                                                                                       |
-| **Hosting cost**      | The real constraint. See [sustainability](sustainability.md#the-hosting-question).                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| **Population**        | With few players, a shared galaxy is indistinguishable from solo online. That is fine, and it means the mode degrades gracefully rather than failing.                                                                                                                                                                                                                                                                                                                                                                                               |
+| Question            | Position                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **PvP consent**     | Opt-in, and off by default. A survey game whose players carry hours of unbanked data cannot have non-consensual PvP without becoming a different game — the [banking tension](exploration.md#banking) only works if the risk is one the player chose. **Resolved: opt-in, off by default.** PvP-enabled players can see and engage each other; everyone else is present and non-hostile. The fragmentation cost is accepted, and it is smaller here than in Elite: there is no economy for PvP to distort and no competitive ladder for it to feed. |
+| **Catalog version** | All clients in a partition must run the same version. It becomes a protocol handshake.                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| **Cheating**        | The universe is derivable, so a client knows everything anyway — there are no secrets to protect. What must be authoritative is _mutation writes_: discovery records and placements. Validate those server-side and the rest does not matter.                                                                                                                                                                                                                                                                                                       |
+| **Hosting cost**    | The real constraint. See [sustainability](sustainability.md#the-hosting-question).                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| **Population**      | With few players, a shared galaxy is indistinguishable from solo online. That is fine, and it means the mode degrades gracefully rather than failing.                                                                                                                                                                                                                                                                                                                                                                                               |
 
 ---
 

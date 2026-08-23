@@ -58,8 +58,8 @@ accumulate zero drift rather than ten thousand roundings — asserted directly:
 > space is unchanged.
 
 Within ±2048 m of the origin float32 resolves 0.24 mm, and better than half a
-millimetre all the way out to the ±4096 m rebase threshold — which is why a
-metre-scale object beside the ship is exact no matter where in the galaxy the
+millimeter all the way out to the ±4096 m rebase threshold — which is why a
+meter-scale object beside the ship is exact no matter where in the galaxy the
 ship is. Capability check 8 measures it: two points 1 m apart at 8.18 kpc render
 1.000 m apart _after_ rounding to float32.
 
@@ -81,7 +81,7 @@ flowchart TB
     D["true distance d, radius r"]
     SURF["surfaceDistance = d − r"]
     TEST{"surfaceDistance<br/>≤ 2e6 m?"}
-    NEAR["<b>untouched</b><br/>true metres, true scale"]
+    NEAR["<b>untouched</b><br/>true meters, true scale"]
     COMP["compressed = 2e6 + 2e6·ln(1 + (s − 2e6)/2e6)<br/>factor = (r + compressed) / d<br/>position ×= factor<br/>radius ×= factor"]
     OUT["angular size <b>exactly</b> preserved<br/>only depth is a lie"]
 
@@ -119,13 +119,13 @@ A first version of that test asserted strict monotonicity everywhere and was
 
 ### The bug that made terrain invisible
 
-Compression originally keyed off the distance to a body's **centre**. In a
+Compression originally keyed off the distance to a body's **center**. In a
 400 km orbit around a 2,864 km planet:
 
 ```mermaid
 flowchart LR
-    subgraph BROKEN["keyed off the centre"]
-        C1["planet centre 3,264 km away<br/>→ beyond the 2,000 km near limit<br/>→ <b>compressed</b>"]
+    subgraph BROKEN["keyed off the center"]
+        C1["planet center 3,264 km away<br/>→ beyond the 2,000 km near limit<br/>→ <b>compressed</b>"]
         C2["terrain patches 400 km away<br/>→ inside the near limit<br/>→ <b>not compressed</b>"]
         C1 --> GAP["datum sphere and the ground it<br/>represents ended up 30 km apart<br/><b>no terrain visible at all</b>"]
     end
@@ -210,7 +210,7 @@ sequenceDiagram
 ### The normals bug
 
 `buildPatch` originally emitted **radial** normals — each vertex's normal
-pointing straight out from the planet's centre. That shades a mountain range
+pointing straight out from the planet's center. That shades a mountain range
 _exactly_ like a smooth sphere.
 
 Real relief was being generated, transferred, and drawn, and it was completely
@@ -232,10 +232,10 @@ is drawn one full relief below the datum, and patches always win.
 
 ## Planetary surfaces
 
-⬜→✅ Bodies used to be a flat colour on a `MeshStandardNodeMaterial` picked by
+⬜→✅ Bodies used to be a flat color on a `MeshStandardNodeMaterial` picked by
 kind. They are now shaded from their own photometry, from measured maps where a
 map exists. `apps/game/src/render/planet.ts` is the material;
-[the catalogue guide](../guides/catalogue.md#planetary-surface-maps) is where the
+[the catalog guide](../guides/catalogue.md#planetary-surface-maps) is where the
 maps come from.
 
 ### The lighting is hand-written, and the reason is not performance
@@ -245,7 +245,7 @@ wrong model, and not by a little:
 
 > **Planetary surfaces are not Lambertian.** The full Moon is famously _flat_ —
 > no limb darkening at all — because regolith backscatters. A Lambertian moon has
-> a bright centre and a dark rim, which is what every naive renderer produces and
+> a bright center and a dark rim, which is what every naive renderer produces and
 > what nobody has ever photographed.
 
 So the diffuse term is the **lunar-Lambert** function planetary scientists use, a
@@ -275,11 +275,11 @@ east is `north × up`. Every _shadowing_ decision uses the geometric normal rath
 than the mapped one, because a mountain on the night side is still on the night
 side — letting a normal-mapped slope catch the sun across the terminator produces
 lit specks floating in the dark, which is the classic normal-map-on-a-planet
-artefact.
+artifact.
 
 Normal maps are exaggerated, and the honest name for it is in `tuningFor`. At
-4096 across, one texel of Earth is ten kilometres and the real slope across ten
-kilometres is a fraction of a degree — the map's standard deviation is 2.4 out of 255. `docs/design/art.md` licenses exactly this ("roughness and detail are art")
+4096 across, one texel of Earth is ten kilometers and the real slope across ten
+kilometers is a fraction of a degree — the map's standard deviation is 2.4 out of 255. `docs/design/art.md` licenses exactly this ("roughness and detail are art")
 and forbids the thing next door to it: the elevation is the published one and the
 terrain is where it really is; only how sharply it catches the light is turned up.
 
@@ -330,11 +330,11 @@ pixels long and any faceting shows as a scalloped edge.
 ### The haze is not the atmosphere
 
 `Atmosphere.ceiling` is a physics number — where the drag model stops
-integrating — and for a gas giant it is a thousand kilometres of "there is no
+integrating — and for a gas giant it is a thousand kilometers of "there is no
 surface". Rendered as a shell that thick, Saturn wore a halo 3% of its own radius
-wide _and_ Earth's Rayleigh blue, because the scattering colour was a constant.
+wide _and_ Earth's Rayleigh blue, because the scattering color was a constant.
 Both are now per body: `BodyAppearance.haze` carries a rendered thickness and the
-published limb colours, and Titan's haze is orange in every direction because
+published limb colors, and Titan's haze is orange in every direction because
 tholins are.
 
 ---
@@ -423,7 +423,7 @@ is what lets one expression serve both an orbital limb and a sky seen from the
 ground. It is _not_ scattering — uniform density, a path length, authored
 constants — and the replacement is named:
 [Bruneton's precomputed LUTs](../spikes.md#2--tsl-and-the-atmosphere-integral),
-which spike 2 promoted from optimisation to requirement when a 256-sample raymarch
+which spike 2 promoted from optimization to requirement when a 256-sample raymarch
 measured 7.27 ms against a 3.0 ms budget.
 
 The star field is instanced sprites rather than a point cloud, and that is not a
