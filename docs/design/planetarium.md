@@ -85,7 +85,7 @@ cinematic approach, met again at a larger scale.
 
 **Zoom-out is capped absolutely, not relative to the target.** A radius-relative
 ceiling puts Luna's at 0.003 ly and a star's at 0.3 ly, so "zoom out until the
-neighbouring stars appear" — the single most planetarium-shaped gesture there is
+neighboring stars appear" — the single most planetarium-shaped gesture there is
 — would work at a star and refuse at a moon, for a reason no player could infer.
 
 ### Fly-to is a move, not a cut

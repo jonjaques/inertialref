@@ -78,7 +78,7 @@ describe('floating origin', () => {
       origin = maintainOrigin(origin, camera)
       const render = toRenderSpace(origin, camera)
       expect(V.length(render)).toBeLessThan(REBASE_THRESHOLD * 2)
-      // What the GPU will actually store must still be sub-millimetre.
+      // What the GPU will actually store must still be sub-millimeter.
       const rounded = V.toFloat32(render)
       worstError = Math.max(worstError, V.distance(render, rounded))
     }

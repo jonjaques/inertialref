@@ -90,7 +90,7 @@ const sets = new Map<string, BodyTextures>()
 const pending = new Map<string, Promise<void>>()
 
 /*
- * Colour space is not a detail here.
+ * Color space is not a detail here.
  *
  * An albedo map and a night map are photographs and are sRGB-encoded. A normal
  * map and a cloud mask are *data* wearing an image's clothes, and must not be
@@ -130,7 +130,7 @@ function load(entry: Entry, anisotropy: number): Texture | null {
       /*
        * A failed fetch must not stay cached. The loader hands back its Texture
        * before the image arrives, so on error the object exists, samples as
-       * black, and — being non-null — beats the material's base-colour fallback
+       * black, and — being non-null — beats the material's base-color fallback
        * for the rest of the session. Evict it, and drop the body's assembled
        * set a few seconds later so the per-frame ask retries without hammering
        * a dead network once per frame.
@@ -150,7 +150,7 @@ function load(entry: Entry, anisotropy: number): Texture | null {
   texture.generateMipmaps = true
   texture.minFilter = LinearMipmapLinearFilter
   // A planet from orbit is the textbook case for anisotropic filtering: the
-  // texture compresses to nothing towards the limb, and without it the edge of
+  // texture compresses to nothing toward the limb, and without it the edge of
   // every body is a band of aliased mush — which is exactly where the eye looks.
   texture.anisotropy = anisotropy
   loaded.set(entry.file, texture)
@@ -170,7 +170,7 @@ const find = (
  * The maps for one body, starting the fetch if this is the first ask.
  *
  * Returns whatever is ready. Textures arrive asynchronously and the material
- * reads this every frame, so a body is drawn in its base colour first and gains
+ * reads this every frame, so a body is drawn in its base color first and gains
  * its surface a moment later — strictly better than blocking the frame or
  * holding the body back until it is complete.
  */

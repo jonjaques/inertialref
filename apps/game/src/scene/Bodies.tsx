@@ -131,7 +131,7 @@ function tuningFor(body: RenderBody): PlanetTuning {
   const giant = body.kind === 'gas-giant' || body.kind === 'ice-giant'
   if (giant)
     return {
-      // A cloud deck kilometres thick is as close to Lambert as anything gets,
+      // A cloud deck kilometers thick is as close to Lambert as anything gets,
       // and its terminator is soft because there is no surface to end at.
       lunarLambert: 0.1,
       terminator: 0.22,
@@ -139,7 +139,7 @@ function tuningFor(body: RenderBody): PlanetTuning {
       specular: 0,
       night: 0,
       // The two knobs that separate a decal from a photograph of a giant:
-      // the disc rolls off toward the limb, and the published near-true-colour
+      // the disk rolls off toward the limb, and the published near-true-color
       // maps get the chroma stretch every released image has had.
       limbDarkening: 0.72,
       saturation: body.kind === 'gas-giant' ? 1.3 : 1.15,
@@ -150,7 +150,7 @@ function tuningFor(body: RenderBody): PlanetTuning {
     }
   return {
     // Closer to Lambert than it was: the aerial veil now brightens the limb
-    // on top of this, and 0.45 under the veil left the disc reading flat.
+    // on top of this, and 0.45 under the veil left the disk reading flat.
     lunarLambert: air ? 0.3 : 0.92,
     terminator: air ? 0.09 : 0.025,
     limbDarkening: 0,
@@ -159,8 +159,8 @@ function tuningFor(body: RenderBody): PlanetTuning {
     /*
      * Normal-map exaggeration, and the honest name for it.
      *
-     * At 4096 across, one texel of Earth is ten kilometres, and the real slope
-     * across ten kilometres is a fraction of a degree — measured: the normal map
+     * At 4096 across, one texel of Earth is ten kilometers, and the real slope
+     * across ten kilometers is a fraction of a degree — measured: the normal map
      * has a standard deviation of 2.4 out of 255. Rendered at unity it is
      * invisible. `docs/design/art.md` licenses exactly this ("roughness and
      * detail are art") and forbids the thing next door to it: the *elevation* is
@@ -222,7 +222,7 @@ export function Bodies({ engine }: { engine: GameEngine }) {
    * is deliberate — see the header — but it means React knows nothing about
    * them and cannot clean them up. Without this, a hot reload leaves the
    * previous mount's objects parented to the scene with nothing updating them:
-   * a stale Saturn ring, forty thousand kilometres across and still visible,
+   * a stale Saturn ring, forty thousand kilometers across and still visible,
    * hung across the Moon as a set of dark horizontal bands that looked
    * convincingly like a texture bug for rather too long.
    */
@@ -395,15 +395,15 @@ export function Bodies({ engine }: { engine: GameEngine }) {
       // except as the sea floor below it.
       visual.mesh.renderOrder = placement.tier === 'surface' ? -1 : 0
 
-      // The colour is a uniform rather than a construction argument because a
-      // star's rendered colour is derived from its temperature every frame, and
+      // The color is a uniform rather than a construction argument because a
+      // star's rendered color is derived from its temperature every frame, and
       // a material built once from the first frame's value would freeze it.
       if (star !== null && visual.star !== null) {
         visual.star.color.value.setRGB(star.r, star.g, star.b)
         // Presentation time, for the granulation churn — simulation seconds,
         // so time warp stirs the photosphere faster, which reads as intended.
         visual.star.time.value = engine.snapshot?.renderTime ?? 0
-        // Stop down as the disc grows: a sun that fills the frame is exposed
+        // Stop down as the disk grows: a sun that fills the frame is exposed
         // for its surface, not for the scene it lights. From afar this is 1
         // and the star stays the reference white the HDR path is built on.
         // Fully stopped down by ~0.1 rad — the star-orbit arrival parks at
@@ -423,7 +423,7 @@ export function Bodies({ engine }: { engine: GameEngine }) {
           .set(keyLight.x, keyLight.y, keyLight.z)
           .sub(visual.mesh.position)
           // A body sitting exactly on its star — which is what a star's own
-          // entry would be — leaves this zero-length, and a normalised zero is
+          // entry would be — leaves this zero-length, and a normalized zero is
           // NaN across the whole shell.
           .normalize()
 
@@ -469,9 +469,9 @@ export function Bodies({ engine }: { engine: GameEngine }) {
         /*
          * The aerial term reads the same authored haze the shell does, so the
          * air over the ground and the air past the limb cannot disagree about
-         * what colour the sky is. Giants get less: their "surface" already is
+         * what color the sky is. Giants get less: their "surface" already is
          * cloud-top, and a full-strength veil flattened Jupiter's bands into
-         * fog. The veil is what limb-brightens an atmosphere-bearing disc;
+         * fog. The veil is what limb-brightens an atmosphere-bearing disk;
          * lunar-Lambert would otherwise leave it too flat to read as a sphere.
          */
         const airHaze = appearance.haze
@@ -500,7 +500,7 @@ export function Bodies({ engine }: { engine: GameEngine }) {
           appearance.clouds === null
             ? 0
             : appearance.clouds.altitude / Math.max(body.trueRadius, 1)
-        // In render metres, because the shader measures the sun ray's
+        // In render meters, because the shader measures the sun ray's
         // plane-crossing against `positionWorld` — the dimensionless scales
         // alone sit far inside any drawn sphere and never shadow anything.
         planet.ringInner.value = (body.rings?.innerScale ?? 0) * placement.scale
@@ -517,10 +517,10 @@ export function Bodies({ engine }: { engine: GameEngine }) {
           /*
            * The shell is lifted to at least 0.4% of the radius.
            *
-           * Earth's cloud tops are twelve kilometres up on a radius of six
+           * Earth's cloud tops are twelve kilometers up on a radius of six
            * thousand, which is 0.2% and is a shell you cannot see past at the
            * limb. What sells a cloud deck from orbit is precisely that parallax
-           * — the clouds overhanging the edge of the disc — and the altitude is
+           * — the clouds overhanging the edge of the disk — and the altitude is
            * not on the list of things a player can check.
            */
           const lift = Math.max(
@@ -537,7 +537,7 @@ export function Bodies({ engine }: { engine: GameEngine }) {
           material.setTexture(cloudMap)
           // A deck with no map — Titan's, and every procedural world's — is
           // drawn from the body's tint over the opaque fallback texel; a
-          // mapped deck keeps its own colours untinted.
+          // mapped deck keeps its own colors untinted.
           if (cloudMap === null)
             material.baseColour.value.setRGB(
               appearance.colour.r,
@@ -547,7 +547,7 @@ export function Bodies({ engine }: { engine: GameEngine }) {
           else material.baseColour.value.setRGB(1, 1, 1)
           material.sunDirection.value.copy(sun)
           material.sunColour.value.setRGB(keyColour.r, keyColour.g, keyColour.b)
-          // The deck's dusk colour is the body's authored sunset, so clouds
+          // The deck's dusk color is the body's authored sunset, so clouds
           // and air agree about what the low sun does here.
           const deckHaze = appearance.haze
           if (deckHaze !== null)
@@ -588,11 +588,11 @@ export function Bodies({ engine }: { engine: GameEngine }) {
           material.sunColour.value.setRGB(keyColour.r, keyColour.g, keyColour.b)
           material.innerFraction.value = ring.innerScale / ring.outerScale
           material.centre.value.copy(visual.mesh.position)
-          // In render metres: the eclipse test runs on `positionWorld`, so a
+          // In render meters: the eclipse test runs on `positionWorld`, so a
           // mesh-local value (1/outerScale) never shadowed a single fragment.
           material.bodyRadius.value = placement.scale
           material.opticalDepth.value = ring.opticalDepth
-          // A generated strip carries its own greys — re-dying it with the
+          // A generated strip carries its own grays — re-dying it with the
           // body's tint is how Uranus's charcoal threads came out cyan. Only
           // a photographed strip is neutral enough to take the tint.
           if (ring.texture === null) material.baseColour.value.setRGB(1, 1, 1)

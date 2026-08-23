@@ -33,9 +33,9 @@ import { edgeFade, type FlareVisibility, ghostPosition } from './flareMath.ts'
  * ghosting, and a real point-spread function around a star ... It is a lens" —
  * and every reference photograph in `design/inspiration/` carries the
  * signature: a bloomed core, a streak, and iris ghosts strung along the line
- * from the star's image through the frame's centre, because that line is the
+ * from the star's image through the frame's center, because that line is the
  * axis of symmetry of the optics. The red ring in the ISS sunset frame is the
- * classic aperture ghost, mirrored past centre.
+ * classic aperture ghost, mirrored past center.
  *
  * Screen-space sprites in camera space, not a post pass: the elements are
  * quads parented to a group that is snapped onto the camera every frame, so
@@ -55,7 +55,7 @@ const PLANE = 20
 
 /**
  * Where the occluder's limb sits in the corona quad's UV circle: the quad is
- * `CORONA_SPAN`× the disc's diameter, so the limb is at `1/CORONA_SPAN`.
+ * `CORONA_SPAN`× the disk's diameter, so the limb is at `1/CORONA_SPAN`.
  */
 const CORONA_SPAN = 1.9
 const CORONA_LIMB = 1 / CORONA_SPAN
@@ -70,18 +70,18 @@ type ElementKind = 'glow' | 'streak' | 'disc' | 'ring' | 'corona'
 
 interface ElementSpec {
   readonly kind: ElementKind
-  /** Position on the sun→centre axis; see `ghostPosition`. */
+  /** Position on the sun→center axis; see `ghostPosition`. */
   readonly t: number
   /** Size as a fraction of the frame's height. */
   readonly size: number
-  /** Tint applied on top of the star's colour. */
+  /** Tint applied on top of the star's color. */
   readonly tint: readonly [number, number, number]
   /** Radiance multiplier. The glow is authored into HDR headroom on purpose. */
   readonly gain: number
 }
 
 /*
- * The recipe. Tints are the classic coating colours — teal and magenta from
+ * The recipe. Tints are the classic coating colors — teal and magenta from
  * anti-reflective coatings, the warm ring from the aperture — kept faint: a
  * flare the eye reads as "photograph" is one it barely notices.
  */
@@ -144,7 +144,7 @@ function elementMaterial(kind: ElementKind): {
       break
     }
     case 'disc': {
-      // An iris ghost: a soft disc whose rim runs warm — the chromatic
+      // An iris ghost: a soft disk whose rim runs warm — the chromatic
       // fringing real coatings leave on out-of-focus apertures.
       profile = oneMinus(smoothstep(float(0.3), float(0.95), r))
       colour = tint.mul(
@@ -176,10 +176,10 @@ function elementMaterial(kind: ElementKind): {
       /*
        * The star's own light around an occulting limb.
        *
-       * Not a ghost: this one is anchored on the *body*, sized to its disc,
+       * Not a ghost: this one is anchored on the *body*, sized to its disk,
        * and it is the only thing on screen during a total eclipse — the
        * occluder's night side is by definition unlit, so without it the
-       * signature shot of any transit is a hole. The quad is 1.9× the disc, so
+       * signature shot of any transit is a hole. The quad is 1.9× the disk, so
        * the limb sits at r = 0.526 and everything inside it stays dark, which
        * is what makes the silhouette read.
        */
@@ -200,10 +200,10 @@ function elementMaterial(kind: ElementKind): {
   material.colorNode = colour.mul(profile).mul(intensity)
   material.transparent = true
   /*
-   * Additive in colour, and **silent in alpha** — not `AdditiveBlending`.
+   * Additive in color, and **silent in alpha** — not `AdditiveBlending`.
    *
    * three's additive preset blends alpha (One, One), so every flare quad
-   * stamps +1 into the framebuffer's alpha channel. The colour math is
+   * stamps +1 into the framebuffer's alpha channel. The color math is
    * unaffected — the scene render target is tone-mapped and blitted by RGB —
    * but on the extended path that alpha survives into the `rgba16float`
    * canvas, and Chrome's premultiplied compositing turns each quad's alpha
@@ -233,11 +233,11 @@ export interface LensFlare {
     starColour: { readonly r: number; readonly g: number; readonly b: number },
     /** Apparent brightness of the star, 0..1 within the scene. */
     brightness: number,
-    /** Angular radius of the disc, radians — a close star blooms wider. */
+    /** Angular radius of the disk, radians — a close star blooms wider. */
     angularRadius: number,
     occlusion: FlareVisibility,
     /**
-     * How much of the artefact stack the lens is showing, 0..1. The flight
+     * How much of the artifact stack the lens is showing, 0..1. The flight
      * camera is 1 — the whole point of `art.md` § the lens is that it admits
      * it is a camera. The cinematic camera is a *different* camera and runs
      * near 0: the reference edit's optics put a clean warm ball beside a
@@ -252,7 +252,7 @@ export interface LensFlare {
      * Zero is the default everywhere, and the ring's absence is not a missing
      * feature: at planetarium and menu ranges the physical corona is a fraction
      * of a degree past the limb, where this one is authored at `CORONA_SPAN`
-     * times the disc because it exists to read from the back of a cinema. Any
+     * times the disk because it exists to read from the back of a cinema. Any
      * camera that wandered onto a body's anti-sun line got a gold halo across
      * the whole frame in a mode that had never asked for an eclipse.
      */
@@ -314,7 +314,7 @@ export function createLensFlare(): LensFlare {
        * The corona survives the test that hides everything else. Visibility is
        * *zero* at totality, which is precisely when the ring is the shot —
        * gating the whole group on `strength` is what used to leave a total
-       * eclipse as an unlit disc on an empty starfield.
+       * eclipse as an unlit disk on an empty starfield.
        */
       const eclipse = behind || coronaDrive <= 0.002 ? null : occlusion.eclipse
       const coronaStrength =
@@ -335,7 +335,7 @@ export function createLensFlare(): LensFlare {
       const aspect = camera.aspect ?? 1
       const frameHeight = 2 * tanHalf * PLANE
       // A star that subtends real angle blooms wider than a point: the glow
-      // tracks the disc so a close pass reads as approaching a *sun*, not a
+      // tracks the disk so a close pass reads as approaching a *sun*, not a
       // lamp.
       const bloom = 1 + Math.min(3, angularRadius * 30)
 
@@ -350,7 +350,7 @@ export function createLensFlare(): LensFlare {
           occluderNdc.y * tanHalf * PLANE,
           -PLANE,
         )
-        // Sized to the occluder's own disc, so the ring lands on its limb
+        // Sized to the occluder's own disk, so the ring lands on its limb
         // wherever the body is and however big it looks.
         const discRadius =
           Math.atan(eclipse.radius / Math.max(eclipse.distance, 1e-6)) * PLANE
@@ -359,7 +359,7 @@ export function createLensFlare(): LensFlare {
         coronaParts.intensity.value = coronaStrength * 1.9
         /*
          * A corona is the star's light bent past a limb, so it carries the
-         * star's colour warmed the way a grazing sight line always is — and
+         * star's color warmed the way a grazing sight line always is — and
          * warmed hard. Measured off the reference's totality, the ring runs
          * about (230, 150, 20): the green channel at two-thirds and the blue
          * nearly gone. Anything gentler tone-maps to cream, because the ring
@@ -405,7 +405,7 @@ export function createLensFlare(): LensFlare {
         /*
          * A ghost that lands on the star's own image is swamped by the glare
          * in a real photograph; drawn at full strength here it reads as a
-         * targeting reticle around a centred sun. Distance in aspect-corrected
+         * targeting reticle around a centered sun. Distance in aspect-corrected
          * NDC, so the fade ring is a circle on screen, not an ellipse.
          */
         const nearSun = core
@@ -415,7 +415,7 @@ export function createLensFlare(): LensFlare {
             )
         // The core glow is the star; everything else is the lens talking, and
         // `artifacts` is how loudly this lens is allowed to talk. The streak
-        // counts as artefact even though it sits on the core — a blade across
+        // counts as artifact even though it sits on the core — a blade across
         // the frame is the single most obviously *photographic* element here.
         const lens = spec.kind === 'glow' ? 1 : artifacts
         element.intensity.value = spec.gain * strength * nearSun * lens

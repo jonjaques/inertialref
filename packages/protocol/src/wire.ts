@@ -24,7 +24,7 @@ import {
  * Vectors go over the wire as arrays, not objects: `[x, y, z]` rather than
  * `{"x":…,"y":…,"z":…}` is about 40% smaller in JSON and orders the components
  * unambiguously, which matters when this eventually becomes a binary format.
- * The classes-are-not-serialised rule from the spec is easy to keep here
+ * The classes-are-not-serialized rule from the spec is easy to keep here
  * because nothing in `spatial` is a class in the first place.
  */
 
@@ -84,7 +84,7 @@ export const decodeUniverseVector: Decoder<UniverseVector> = (value, path) => {
     number,
     number,
   ]
-  // universeVector re-validates and re-normalises: a save file that has been
+  // universeVector re-validates and re-normalizes: a save file that has been
   // hand-edited, or written by an older build with a different sector size, must
   // not be able to install an out-of-range position.
   try {

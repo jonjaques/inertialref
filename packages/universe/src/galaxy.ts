@@ -34,11 +34,11 @@ import type {
 } from './catalog/starCatalog.ts'
 
 /*
- * The galaxy: a catalogue near the player and procedure everywhere else.
+ * The galaxy: a catalog near the player and procedure everywhere else.
  *
  * Procedural stars are generated per *cell* — a fixed cube of space — and a
  * cell's contents depend only on (galaxy seed, cell coordinate, how many
- * catalogued stars are already in it). Nothing consults neighbouring cells, so
+ * cataloged stars are already in it). Nothing consults neighboring cells, so
  * the streaming layer can generate cells in any order, in any number of workers,
  * and get the same galaxy. This is the order-independence requirement made
  * concrete.
@@ -48,17 +48,17 @@ import type {
  * rather than a search of a galaxy-wide index that would have to exist
  * somewhere.
  *
- * **The catalogue is a generation input, not ambient state.** Every function
- * here that can produce a catalogued system takes the catalogue as an argument.
+ * **The catalog is a generation input, not ambient state.** Every function
+ * here that can produce a cataloged system takes the catalog as an argument.
  * A module-level singleton would be smaller and would quietly break the one
  * property the whole project rests on: `docs/design/galaxy.md` Rule 1 says the
- * catalogue version is an explicit input to generation, because the catalogue
+ * catalog version is an explicit input to generation, because the catalog
  * changes and a universe that silently changes with it invalidates every save.
  */
 
 export const MILKY_WAY: GalaxyId = galaxyId('milky-way')
 
-/** Stellar number density in the solar neighbourhood, stars per cubic meter. */
+/** Stellar number density in the solar neighborhood, stars per cubic meter. */
 const LOCAL_DENSITY = 0.1 / PARSEC ** 3
 /** Exponential disk scale length and height (kpc-scale structure). */
 const DISK_SCALE_LENGTH: Meters = 2_600 * PARSEC
@@ -79,7 +79,7 @@ export interface SystemStub {
   /** Number of stellar components; >1 means the system is being simplified. */
   readonly components: number
   readonly catalogued: boolean
-  /** Confirmed planets. Empty for anything the catalogue does not know. */
+  /** Confirmed planets. Empty for anything the catalog does not know. */
   readonly planets: readonly CatalogPlanet[]
 }
 
@@ -109,7 +109,7 @@ export interface ProceduralSystemRef {
   readonly index: number
 }
 
-/** Decode a procedural system id, or null if it is a catalogue designation. */
+/** Decode a procedural system id, or null if it is a catalog designation. */
 export function parseProceduralSystemId(
   id: SystemId,
 ): ProceduralSystemRef | null {
@@ -164,7 +164,7 @@ const SPECTRAL_MASS_RANGE: Readonly<Record<string, readonly [number, number]>> =
  * A main-sequence star's remaining properties from its mass alone.
  *
  * R ∝ M^0.8, L ∝ M^3.5, and the temperature that makes those two consistent
- * under Stefan-Boltzmann. Catalogued stars do not go through here — they have
+ * under Stefan-Boltzmann. Cataloged stars do not go through here — they have
  * measurements, and `photometry.ts` converts those — but both paths have to
  * produce the same *shape*, or the renderer would need to know which kind of
  * star it was drawing.
@@ -184,18 +184,18 @@ export function mainSequenceProperties(solarMasses: number): {
 }
 
 /**
- * What the catalogue contributes to generating one cell.
+ * What the catalog contributes to generating one cell.
  *
- * Two scalars rather than the catalogue itself, because this crosses into a
- * worker that does not have one. Both are pure functions of the catalogue
+ * Two scalars rather than the catalog itself, because this crosses into a
+ * worker that does not have one. Both are pure functions of the catalog
  * version, so a caller that passes the wrong values gets a visibly different
  * galaxy rather than a subtly wrong one.
  */
 export interface CellContext {
-  /** Catalogued stars already in this cell. */
+  /** Cataloged stars already in this cell. */
   readonly catalogued: number
   /**
-   * Distance from the Sun inside which the catalogue is complete for the kind of
+   * Distance from the Sun inside which the catalog is complete for the kind of
    * star this generator makes, and procedural fill is therefore suppressed.
    *
    * Without it the fill happily invents an M dwarf 3.4 light-years away —
@@ -214,25 +214,25 @@ export interface CellContext {
   readonly completeRadius: Meters
 }
 
-/** No catalogue at all: fill everything, suppress nothing. */
+/** No catalog at all: fill everything, suppress nothing. */
 export const NO_CATALOGUE: CellContext = Object.freeze({
   catalogued: 0,
   completeRadius: 0,
 })
 
 /**
- * How many procedural stars belong in a cell, given what the catalogue already
+ * How many procedural stars belong in a cell, given what the catalog already
  * knows about it.
  *
- * The density model says how many stars are really there; the catalogue says how
+ * The density model says how many stars are really there; the catalog says how
  * many of them somebody has already written down. Generating the full expected
- * count *on top of* the catalogue would double the solar neighbourhood — 7,529
+ * count *on top of* the catalog would double the solar neighborhood — 7,529
  * real stars within 150 ly plus the ~40,000 the density model expects in the
  * same volume — and would scatter invented stars through a region the player can
  * check against Wikipedia.
  *
  * Subtracting instead is the honest reading of `docs/design/galaxy.md`: within
- * the catalogue's reach the sky is a record where it is known and a projection
+ * the catalog's reach the sky is a record where it is known and a projection
  * where it is not, and HYG is only about half complete at 25 pc. The gap between
  * the two numbers *is* the horizon of knowledge, and this is where it is drawn.
  */
@@ -255,9 +255,9 @@ export function proceduralCount(
  * Generate every procedural star in one cell.
  *
  * Pure in (seed, cell, cataloguedCount). The count is passed rather than looked
- * up because this runs in a worker that has no catalogue: shipping a 200 KB
+ * up because this runs in a worker that has no catalog: shipping a 200 KB
  * table to every worker so it can compute one integer would be the wrong trade,
- * and the integer is a pure function of the catalogue version, so a caller that
+ * and the integer is a pure function of the catalog version, so a caller that
  * passes the wrong one gets a different galaxy loudly rather than a subtly wrong
  * one.
  */
@@ -292,7 +292,7 @@ export function generateCell(
       ),
     )
     // Drawn and then discarded rather than skipped before the draw, so that a
-    // star's properties never depend on how many of its neighbours survived.
+    // star's properties never depend on how many of its neighbors survived.
     // The id keeps the generation index, which is why `resolveSystem` looks a
     // star up by id instead of by array position.
     if (UV.distance(position, SUN_POSITION) < context.completeRadius) continue
@@ -312,7 +312,7 @@ export function generateCell(
   return stars
 }
 
-/** A catalogued star as the generator sees it. */
+/** A cataloged star as the generator sees it. */
 export const catalogStub = (star: CatalogStar): SystemStub => ({
   id: star.id,
   name: star.name,
@@ -332,7 +332,7 @@ export const catalogStub = (star: CatalogStar): SystemStub => ({
 /**
  * Resolve any system id to its stub without a global index.
  *
- * Catalogue ids hit the table; procedural ids decode to a cell and regenerate
+ * Catalog ids hit the table; procedural ids decode to a cell and regenerate
  * it. Either way the answer does not depend on what is currently loaded, which
  * is what lets a save file reference a system nobody has visited.
  */
@@ -345,7 +345,7 @@ export function resolveSystem(
   if (catalogued !== undefined) return catalogStub(catalogued)
   const ref = parseProceduralSystemId(id)
   if (ref === null) return undefined
-  // By id, not by index. A star suppressed inside the catalogue's complete
+  // By id, not by index. A star suppressed inside the catalog's complete
   // radius leaves a gap in the generation indices, and `[ref.index]` would
   // silently return the wrong star rather than none.
   return generateCell(
@@ -355,7 +355,7 @@ export function resolveSystem(
   ).find((stub) => stub.id === id)
 }
 
-/** What `generateCell` needs to know about the catalogue for one cell. */
+/** What `generateCell` needs to know about the catalog for one cell. */
 export const cellContext = (
   catalog: StarCatalog,
   cell: GalacticCell,
@@ -365,11 +365,11 @@ export const cellContext = (
 })
 
 /**
- * Every system within `radius` of a point, catalogue and procedural alike.
+ * Every system within `radius` of a point, catalog and procedural alike.
  *
  * Cost is bounded by the cell grid, not by the size of the galaxy: a 100 ly
  * query touches ~1,000 cells regardless of where in the Milky Way it is asked,
- * and the catalogue is indexed by the same cells so it is not a linear scan of
+ * and the catalog is indexed by the same cells so it is not a linear scan of
  * 7,529 stars either.
  */
 export function systemsWithin(

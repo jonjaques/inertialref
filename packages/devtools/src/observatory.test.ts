@@ -73,7 +73,7 @@ describe('the observatory', () => {
 
   it('follows a body as it moves, rather than orbiting where it was', () => {
     /*
-     * The one behaviour that separates this from the cutscene director. A
+     * The one behavior that separates this from the cutscene director. A
      * script resolves its stage once and is pure afterwards; the observatory
      * must re-ask, or a minute of time warp leaves the camera orbiting empty
      * space where Jupiter used to be.
@@ -96,7 +96,7 @@ describe('the observatory', () => {
     const cameraMoved = UV.distance(first.position, later.position)
     // The camera went with it: it moved by about as much as the body did.
     expect(Math.abs(cameraMoved / bodyMoved - 1)).toBeLessThan(0.5)
-    // ...and it is still exactly its orbit radius from the new centre.
+    // ...and it is still exactly its orbit radius from the new center.
     const range = UV.distance(later.position, laterCentre)
     expect(range / ir.observatory.state.distance).toBeCloseTo(1, 6)
   })
@@ -203,7 +203,7 @@ describe('the observatory', () => {
     ir.look('s:SOL/b:2')
     ir.observatory.zoomNotches(-500)
     // Inside the datum sphere the body is drawn inside-out; there is nothing
-    // to look at and the framing maths has no answer.
+    // to look at and the framing math has no answer.
     expect(ir.observatory.state.distance).toBeGreaterThan(
       (ir.observatory.target?.radius ?? 0) * 1.0,
     )
@@ -242,7 +242,7 @@ describe('the observatory', () => {
     expect(other.observerStatus()).toBeNull()
   })
 
-  it('centres the catalogue on the eye, not on the ship', () => {
+  it('centers the catalog on the eye, not on the ship', () => {
     /*
      * A regression test for a listing that described somewhere the reader was
      * not.
@@ -250,12 +250,12 @@ describe('the observatory', () => {
      * `travelTargets` took the *player's* position, which is the same thing as
      * the camera in a flight mode and is not remotely the same thing here —
      * `look` is the planetarium's whole verb, and it moves a camera four light
-     * years without moving the hull. Centred on the ship, opening the
-     * catalogue at Alpha Centauri listed Sol's moons first and reported the
+     * years without moving the hull. Centered on the ship, opening the
+     * catalog at Alpha Centauri listed Sol's moons first and reported the
      * star filling the frame as 4.4 ly away, twenty rows down.
      *
-     * The survey radius is centred on the same point, so what is offered is the
-     * eye's neighbours rather than the hull's.
+     * The survey radius is centered on the same point, so what is offered is the
+     * eye's neighbors rather than the hull's.
      */
     const { harness: ir } = harness()
     const nearest = (origin?: 'player' | 'observer') =>
@@ -270,7 +270,7 @@ describe('the observatory', () => {
 
     ir.look('HIP71683')
     // The hull has not moved — that is the guarantee the mode is built on —
-    // so the player-centred listing still leads with Sol.
+    // so the player-centered listing still leads with Sol.
     expect(nearest('player')).toBe('Sol')
     expect(nearest()).toBe('Sol')
     // The eye has, and the listing follows it.
@@ -279,7 +279,7 @@ describe('the observatory', () => {
     // With nothing held, the observer origin falls back to the player rather
     // than to an empty listing: the panel polls before the mode's first focus
     // lands, and an empty state flashing on every entry is worse than a stale
-    // centre for two frames.
+    // center for two frames.
     ir.observatory.clear()
     expect(nearest('observer')).toBe('Sol')
   })
@@ -287,7 +287,7 @@ describe('the observatory', () => {
   it('reports how much of the frame the target fills', () => {
     const { harness: ir } = harness()
     const status = ir.look('s:SOL/b:2', { fill: 0.5, ease: false })
-    // The default framing is a disc with sky around it, and the readout is
+    // The default framing is a disk with sky around it, and the readout is
     // what a "frame it" button in a panel is checked against.
     expect(status.fill).toBeCloseTo(0.5, 2)
     expect(status.altitude).toBeGreaterThan(0)

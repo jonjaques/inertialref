@@ -23,7 +23,7 @@ import { lookAlong } from './cinematic.ts'
  *
  *   - `azimuth`   — around the target's pole
  *   - `elevation` — above its equator, clamped short of the poles
- *   - `distance`  — from its centre, in metres
+ *   - `distance`  — from its center, in meters
  *
  * A free camera is what a *flight* mode is for. Orbiting a subject is what
  * makes a planetarium usable with one finger on a phone, and it is also the
@@ -33,7 +33,7 @@ import { lookAlong } from './cinematic.ts'
  * browser has.
  *
  * **Distance is handled logarithmically everywhere.** The range this camera
- * covers is from a kilometre above a moon to a hundred light years, which is
+ * covers is from a kilometer above a moon to a hundred light years, which is
  * nineteen decades. Interpolating that linearly spends 99.9% of a transition
  * in the last decade and appears to teleport; the same trap
  * `screenRoutePosition` documents for a cinematic approach, met again at a
@@ -46,7 +46,7 @@ export interface ObserverState {
   readonly azimuth: number
   /** Radians above the target's equatorial plane. Clamped by `ELEVATION_LIMIT`. */
   readonly elevation: number
-  /** Metres from the target's centre. Always positive. */
+  /** Meters from the target's center. Always positive. */
   readonly distance: Meters
 }
 
@@ -69,16 +69,16 @@ export const ELEVATION_LIMIT = Math.PI / 2 - 0.035
 export const MIN_DISTANCE_RADII = 1.02
 
 /**
- * The furthest the camera may retreat from *any* target, metres.
+ * The furthest the camera may retreat from *any* target, meters.
  *
  * Absolute rather than a multiple of the target's radius, and that is the
  * whole point. A radius-relative ceiling puts Luna's at 0.003 ly and a star's
- * at 0.3 ly, so "zoom out from a moon until the neighbouring stars appear" —
+ * at 0.3 ly, so "zoom out from a moon until the neighboring stars appear" —
  * the single most planetarium-shaped gesture there is — would work at a star
  * and refuse at a moon, for a reason no user could ever infer. 120 ly is the
- * catalogue's complete sphere with room around it, and it is four orders
+ * catalog's complete sphere with room around it, and it is four orders
  * inside `UNIVERSE_HALF_EXTENT`, so the offset arithmetic below cannot leave
- * the addressable universe from any target the catalogue names.
+ * the addressable universe from any target the catalog names.
  */
 export const MAX_OBSERVER_DISTANCE: Meters = 120 * LIGHT_YEAR
 
@@ -106,11 +106,11 @@ export function distanceBounds(radius: Meters): {
   readonly max: Meters
 } {
   // A zero-radius target is a legitimate thing to look at — a system's
-  // barycentre, a Lagrange point, a ship — and it has no surface to clear.
+  // barycenter, a Lagrange point, a ship — and it has no surface to clear.
   // 1 km is close enough to be "right there" and far enough to be finite.
   const scale = radius > 0 ? radius : 1_000
   const min = scale * MIN_DISTANCE_RADII
-  // A target larger than the ceiling is not a thing the catalogue contains,
+  // A target larger than the ceiling is not a thing the catalog contains,
   // but the band still has to be non-empty or `clampDistance` would invert.
   return { min, max: Math.max(min, MAX_OBSERVER_DISTANCE) }
 }
@@ -163,9 +163,9 @@ export const zoomFactorForNotches = (notches: number): number =>
  * The distance at which a sphere of `radius` fills `fill` of the frame height.
  *
  * `fill` is the fraction of the *vertical* field of view the body's diameter
- * subtends, so 1 is edge-to-edge and the useful framing is nearer 0.6 — a disc
+ * subtends, so 1 is edge-to-edge and the useful framing is nearer 0.6 — a disk
  * with space around it, which is how every planetary photograph anyone
- * recognises is composed. See `shots.ts`, which makes the same argument in
+ * recognizes is composed. See `shots.ts`, which makes the same argument in
  * body radii for a fixed lens.
  */
 export function framingDistance(
@@ -187,7 +187,7 @@ export function framingDistance(
  * The offset is built in the target's *own* axes and then handed back in
  * universe coordinates: `UV.translate` carries the sector arithmetic, so a
  * camera 40 AU from a star that is 90 light years from the origin is still
- * placed to sub-millimetre precision. Composing this from an `approxMeters`
+ * placed to sub-millimeter precision. Composing this from an `approxMeters`
  * position and a float offset is exactly the mistake ADR-0001 exists to
  * prevent, and it looks fine until you are a few kiloparsecs out.
  */
@@ -217,7 +217,7 @@ export function observerOffset(state: ObserverState): Vec3 {
 }
 
 /**
- * Ease one observer state towards another, frame-rate independent.
+ * Ease one observer state toward another, frame-rate independent.
  *
  * Exponential approach rather than a fixed lerp: `1 - exp(-dt/tau)` is the same
  * curve at 30 fps and 144 fps, where `lerp(a, b, 0.1)` is a different

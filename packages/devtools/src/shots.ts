@@ -8,7 +8,7 @@ import { lookAlong } from '@inertialref/rendering'
  * field of view — the framing for *flying at* a planet, and the wrong one for
  * looking at it. From two radii you see a magnified 60° cap of the globe, so
  * the continents read enormous and the limb foreshortens; every photograph
- * anyone recognises was taken from much further back. Blue Marble is a 4.5
+ * anyone recognizes was taken from much further back. Blue Marble is a 4.5
  * body-radii shot. These bookmarks put the ship where the photographs were
  * taken, which is what makes "does the render match the photo" a question that
  * can be answered by looking.
@@ -21,7 +21,7 @@ import { lookAlong } from '@inertialref/rendering'
  *   150° a crescent.
  * - `elevation` lifts the camera out of the body's equatorial plane, which
  *   keeps a pole in the shot and stops every framing from being flat-on.
- * - `aim` decides what sits in the middle of the frame: the body's centre, the
+ * - `aim` decides what sits in the middle of the frame: the body's center, the
  *   sunward horizon (the ISS sunset composition), or the specular point where
  *   the star reflects off the surface (the sun-glint composition).
  */
@@ -32,7 +32,7 @@ export interface ShotDefinition {
   readonly name: string
   /** One line for the dock and `ir.shots()`. */
   readonly description: string
-  /** Camera distance from the body's centre, in body radii. */
+  /** Camera distance from the body's center, in body radii. */
   readonly distanceRadii: number
   /** Sun–body–camera angle, degrees. */
   readonly phaseDeg: number
@@ -41,8 +41,8 @@ export interface ShotDefinition {
   readonly aim: ShotAim
   /**
    * Radial lift of the aim point, in body radii. Positive tilts the camera
-   * towards space, dropping the horizon into the frame's lower third — the
-   * ISS dusk composition, where the sun sits low, not dead centre.
+   * toward space, dropping the horizon into the frame's lower third — the
+   * ISS dusk composition, where the sun sits low, not dead center.
    */
   readonly aimLift?: number
 }
@@ -54,7 +54,7 @@ export interface ShotDefinition {
 export const SHOTS: readonly ShotDefinition[] = [
   {
     name: 'full-face',
-    description: 'the whole lit disc, north up — the Blue Marble framing',
+    description: 'the whole lit disk, north up — the Blue Marble framing',
     distanceRadii: 5.2,
     phaseDeg: 12,
     elevationDeg: 8,
@@ -70,7 +70,7 @@ export const SHOTS: readonly ShotDefinition[] = [
   },
   {
     name: 'half',
-    description: 'terminator down the middle of the disc',
+    description: 'terminator down the middle of the disk',
     distanceRadii: 3.2,
     phaseDeg: 90,
     elevationDeg: 5,
@@ -122,7 +122,7 @@ export function findShot(name: string): ShotDefinition {
 }
 
 export interface ShotPlacement {
-  /** Camera position in the body's frame, metres from its centre. */
+  /** Camera position in the body's frame, meters from its center. */
   readonly position: Vec3
   /** Frame-local orientation: −Z looks at the aim point, horizon level. */
   readonly orientation: Quat
@@ -134,9 +134,9 @@ export interface ShotPlacement {
  * Where the camera goes and what it looks at, in the body's frame.
  *
  * @param shot        the composition
- * @param bodyRadius  metres
- * @param toStar      unit vector from the body towards its star, body frame
- * @param maxDistance ceiling on the camera's distance from the centre, metres —
+ * @param bodyRadius  meters
+ * @param toStar      unit vector from the body toward its star, body frame
+ * @param maxDistance ceiling on the camera's distance from the center, meters —
  *   the sphere-of-influence clamp, so a bookmark on a small moon does not park
  *   the ship outside the frame it is being parked in. The floor always wins:
  *   there is no composition from inside the ground.
@@ -191,7 +191,7 @@ export function placeShot(
   )
   const forward = Vec.normalize(Vec.sub(aim, position))
 
-  // Horizon-level roll. Centre-aimed shots hang the frame on the pole — north
+  // Horizon-level roll. Center-aimed shots hang the frame on the pole — north
   // up, like every printed photograph — but a limb shot looks *along* the
   // ground, where "level" means the local vertical, not the planet's axis.
   const upHint = shot.aim === 'centre' ? pole : direction
@@ -200,7 +200,7 @@ export function placeShot(
   // A tangential direction for a circular orbit, so the bookmark holds its
   // composition instead of falling. Along the direction the camera faces for
   // limb shots, so the ground scrolls under the frame rather than across it —
-  // but a centre-aimed camera faces straight down the radial, whose tangential
+  // but a center-aimed camera faces straight down the radial, whose tangential
   // part is zero, and there the equatorial track is as good as any.
   const facing = Vec.sub(
     forward,
@@ -233,7 +233,7 @@ function aimPoint(
 
   // The horizon, in the sun's direction: the point of the limb a low camera
   // actually sees the sun set behind. The horizon sits `acos(R/r)` away from
-  // the sub-camera point, along the great circle towards the star.
+  // the sub-camera point, along the great circle toward the star.
   const towardSun = Vec.normalize(
     Vec.sub(sun, Vec.scale(radial, Vec.dot(sun, radial))),
   )

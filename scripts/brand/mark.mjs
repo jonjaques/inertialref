@@ -6,7 +6,7 @@
  * is the only place that knows the file's shape.
  *
  * The content box is **measured, not declared**. A redraw that moves the
- * extents would otherwise sit off-centre in every icon, and off-centre by two
+ * extents would otherwise sit off-center in every icon, and off-center by two
  * units in a 32-unit drawing is a favicon that looks subtly broken and reads as
  * a rendering bug rather than as a stale constant. Measuring it means
  * rasterizing once and asking `sharp` where the opaque pixels stop — which is
@@ -25,9 +25,9 @@ const PROBE = 1024
  *
  * Deliberately a regex rather than an XML parser: the source file is one
  * `<svg>` and a handful of `<path>`s and is documented to stay that way, and a
- * dependency that can parse arbitrary XML would be a licence to make it
+ * dependency that can parse arbitrary XML would be a license to make it
  * arbitrary. If this ever throws, the fix is to simplify the SVG, not to
- * generalise the parser.
+ * generalize the parser.
  */
 export async function readMark() {
   // Comments first, and not as tidiness: the file documents its own contract in
@@ -64,7 +64,7 @@ export const markup = (paths, indent = '  ') =>
  * Where the drawing actually is inside its viewBox, in viewBox units.
  *
  * Needs a rasterizer, so it is imported lazily — `--check` re-derives the text
- * artefacts and must stay runnable without `sharp` present.
+ * artifacts and must stay runnable without `sharp` present.
  */
 export async function measure(mark) {
   const { default: sharp } = await import('sharp')
@@ -82,8 +82,8 @@ export async function measure(mark) {
    * `trimOffset*` is what you would translate the *cropped* image by to put it
    * back where it was, so it is the negative of the crop origin. Taken at face
    * value the mark comes out mirrored about the viewBox — and the only symptom
-   * is a favicon sitting a couple of units off centre, which reads as a
-   * rendering artefact rather than as a sign error.
+   * is a favicon sitting a couple of units off center, which reads as a
+   * rendering artifact rather than as a sign error.
    */
   const unit = mark.view.width / PROBE
   return {
@@ -96,7 +96,7 @@ export async function measure(mark) {
 
 /**
  * The transform that fits the measured drawing into `size` units of a square
- * `canvas`, centred.
+ * `canvas`, centered.
  *
  * Returned as a transform rather than as rewritten coordinates so that a diff
  * of any generated file is a diff of the mark. The scale is uniform and taken

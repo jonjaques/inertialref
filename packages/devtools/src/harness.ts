@@ -84,7 +84,7 @@ import type { CinematicSample } from '@inertialref/rendering'
  * UI. The app exposes it on `window`, so a browser console — or an agent
  * driving the browser — can set up a scenario, step the simulation
  * deterministically, and read back structured state instead of squinting at
- * pixels. Everything it returns is JSON-serialisable for exactly that reason.
+ * pixels. Everything it returns is JSON-serializable for exactly that reason.
  *
  * This is also why it lives in a package rather than in the app: the same
  * harness drives the headless Node runner, so a scenario that reproduces a bug
@@ -281,7 +281,7 @@ export class GameHarness {
    *
    * `bodies()` only sees systems that are loaded, so browsing what is in the
    * next system along used to require flying to it first. This is the seam that
-   * makes looking cheaper than travelling.
+   * makes looking cheaper than traveling.
    */
   loadSystem(system: string): readonly {
     address: string
@@ -384,7 +384,7 @@ export class GameHarness {
     // A star is somewhere you can orbit too: a system address names one, and
     // refusing it forced "orbit the star" through goToSystem's hold-off in the
     // dark. The star lives at its system frame's origin, so this is the same
-    // manoeuvre with the system frame standing in for a body frame.
+    // maneuver with the system frame standing in for a body frame.
     if (parsed.kind === 'system')
       return this.#orbitStar(parsed.system, altitudeKm)
     if (parsed.kind !== 'body')
@@ -418,7 +418,7 @@ export class GameHarness {
   }
 
   /**
-   * Unit vector from a frame's origin towards the system's star, in that
+   * Unit vector from a frame's origin toward the system's star, in that
    * frame's axes.
    *
    * The *star*, not the frame's parent. For a planet the two agree — its
@@ -477,7 +477,7 @@ export class GameHarness {
    *
    * The star is not a `Body` — it has no address and no frame of its own; it
    * *is* the system frame's origin — so none of the body machinery applies.
-   * The default altitude parks eight stellar radii out, where the disc
+   * The default altitude parks eight stellar radii out, where the disk
    * subtends ~14°: a sun hanging in the sky. The one-radius-up rule planets
    * use would put a wall of light across the whole view.
    */
@@ -510,7 +510,7 @@ export class GameHarness {
    * distances and phase angles the reference photographs were taken from. The
    * ship is left in a circular orbit through the bookmark position so the
    * composition holds instead of falling, and the nose — which is the camera —
-   * is aimed by the shot itself: the body's centre, the sunward horizon, or
+   * is aimed by the shot itself: the body's center, the sunward horizon, or
    * the star's reflection off the surface.
    *
    * With no address it re-frames the body whose frame the player is already
@@ -623,7 +623,7 @@ export class GameHarness {
    *
    * `orbit`, `land`, `goToSystem` and `face` are still the primitives and still
    * take exactly one kind of argument each — this dispatches to them rather
-   * than reimplementing them, so there is one placement rule per manoeuvre.
+   * than reimplementing them, so there is one placement rule per maneuver.
    */
   goTo(
     destination: string,
@@ -737,8 +737,8 @@ export class GameHarness {
   load(text: string): Result<string, string> {
     const parsed = parseSave(text)
     if (!parsed.ok) return parsed
-    // Restored against *this* world's catalogue, not the one the save names.
-    // A save is a set of references, and resolving them needs the catalogue the
+    // Restored against *this* world's catalog, not the one the save names.
+    // A save is a set of references, and resolving them needs the catalog the
     // client actually has; `restored.catalog` is what the save was written
     // against, and comparing the two is how a revision notice gets built.
     const restored = restoreSave(parsed.value, this.world.catalog)
@@ -922,7 +922,7 @@ export class GameHarness {
       '  ir.control({translation,rotation}) / ir.hold()',
       '  ir.targets()                  everywhere you can go, nearest first',
       '  ir.goTo(target)               a system id or a body address; does the right thing',
-      '  ir.loadSystem(id)             generate a system without travelling to it',
+      '  ir.loadSystem(id)             generate a system without traveling to it',
       '  ir.bodies() / ir.systemsNearby(ly)',
       '  ir.orbit(address, altitudeKm) / ir.land(address, lat, lon)',
       '  ir.shot(name, address?)       frame a camera bookmark: ' +

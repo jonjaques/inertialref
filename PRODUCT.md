@@ -84,7 +84,7 @@ Status is pre-alpha, single maintainer, no release, no gameplay.
 > _Elite Dangerous's exploration loop, run on real astronomy, seamless all the
 > way down to your hands, in a browser tab._
 
-The mechanism a neighbouring product could not truthfully copy is the
+The mechanism a neighboring product could not truthfully copy is the
 **intersection**, which is empty today: real astronomy, continuous scale, one
 body, one cockpit, zero install. Elite Dangerous is seamless but its galaxy is
 synthetic beyond the local bubble. Star Citizen is seamless and gorgeous across
@@ -223,7 +223,7 @@ surface, elevation, cloud and ring maps.
 
 **Attribution obligations, verified rather than assumed.** `data/catalog/` is a
 derived database under **CC BY-SA 4.0**, not the Apache license that covers the
-code. The NASA Exoplanet Archive's requested acknowledgement is carried. Gaia is
+code. The NASA Exoplanet Archive's requested acknowledgment is carried. Gaia is
 **deliberately unused** because ESA releases it CC BY-NC 3.0 IGO, and a
 non-commercial clause is not an open source license. See `NOTICE` and
 [the catalog guide](docs/guides/catalogue.md).

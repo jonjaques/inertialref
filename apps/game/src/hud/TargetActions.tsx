@@ -38,7 +38,7 @@ export function TargetActions({
           tone="primary"
           title="Orbit this system's star, looking at it"
           onClick={() =>
-            run(`travelling to ${target.name}`, () =>
+            run(`traveling to ${target.name}`, () =>
               engine.harness.goTo(target.address),
             )
           }

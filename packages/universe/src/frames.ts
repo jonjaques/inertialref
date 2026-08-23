@@ -30,7 +30,7 @@ import { type BodyFixedDirection, surfaceRadius } from './terrain.ts'
  *
  * Three frames exist per body, and the distinction matters:
  *
- *   b:…   body-centred *inertial* — translates along the orbit, does not spin.
+ *   b:…   body-centered *inertial* — translates along the orbit, does not spin.
  *         Satellites and approaching ships live here.
  *   bf:…  body-*fixed* — spins with the body. Anything bolted to the surface.
  *   sf:…  surface — a local tangent frame at one latitude/longitude, +Y up.
@@ -78,7 +78,7 @@ const ANGLE_PRECISION = 1e-6
  *
  * The frame's *geometry* is built from the quantised value too, not just its
  * name. Otherwise the id does not fully determine the frame: a landing site
- * rebuilt from a save landed half a metre from where it was written, because
+ * rebuilt from a save landed half a meter from where it was written, because
  * the original frame had used the unrounded latitude the id had thrown away.
  */
 export const quantizeAngle = (radians: Radians): Radians =>
@@ -144,8 +144,8 @@ export function parseSurfaceFrameId(id: FrameId): {
  *
  * `mu` is `G(M + m)`, not `G·M`, and callers pass it that way. The relative
  * position vector in the two-body problem obeys `r̈ = −G(M+m)·r/|r|³` — both
- * bodies orbit their barycentre, and the frame graph measures from the primary's
- * centre. Dropping the secondary's mass is a fine approximation for a planet
+ * bodies orbit their barycenter, and the frame graph measures from the primary's
+ * center. Dropping the secondary's mass is a fine approximation for a planet
  * around a star and a measurable error for a large moon: the Moon is 1.2% of
  * Earth, and ignoring it puts its sidereal period at 27.45 days against a
  * published 27.3217.

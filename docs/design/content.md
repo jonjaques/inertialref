@@ -162,7 +162,7 @@ true:
 
 |                                | Target                                | How it is met                       |
 | ------------------------------ | ------------------------------------- | ----------------------------------- |
-| Star systems reachable         | Effectively unbounded                 | Generated; ~119k catalogued via HYG |
+| Star systems reachable         | Effectively unbounded                 | Generated; ~119k cataloged via HYG |
 | Systems with real catalog data | ~119,000                              | HYG ingest                          |
 | Confirmed exoplanets           | ~6,000 `[Assumption: read at ingest]` | NASA Exoplanet Archive              |
 | Landable bodies                | Millions                              | Generated                           |

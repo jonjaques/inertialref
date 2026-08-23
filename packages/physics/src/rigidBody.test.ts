@@ -41,7 +41,7 @@ describe('rigid body integration', () => {
     )
   })
 
-  it('keeps orientation normalised under sustained rotation', () => {
+  it('keeps orientation normalized under sustained rotation', () => {
     let state: BodyState = {
       ...AT_REST,
       angularVelocity: vec3(0.7, -0.3, 1.1),

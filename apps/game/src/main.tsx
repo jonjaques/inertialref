@@ -95,10 +95,10 @@ if (root === null) {
 }
 
 /*
- * The catalogue is awaited before the first render.
+ * The catalog is awaited before the first render.
  *
  * It is a *generation input*, not a decoration: the world is built from a seed
- * and a catalogue together, so a world constructed before it arrives is a
+ * and a catalog together, so a world constructed before it arrives is a
  * different world and would have to be thrown away and rebuilt — replacing the
  * ship, the frames and the starfield a second or two after the player is already
  * flying. One fetch of a precached 460 KB asset is the cheaper trade, and a
@@ -137,7 +137,7 @@ try {
        */}
       <BrowserRouter useTransitions={false}>
         {/*
-         * Reduced motion, honoured globally rather than per animation.
+         * Reduced motion, honored globally rather than per animation.
          * `reducedMotion="user"` drops transform and layout animations for
          * anyone whose system asks for that, and leaves opacity alone — so a
          * page still fades in and simply does not travel. It cannot reach the
@@ -151,14 +151,14 @@ try {
            * Radix requires an ancestor provider and it is what shares the
            * "one is already open, skip the delay" timer between them — per
            * tooltip, every hover would wait the full delay again, which on a
-           * transport bar of five icon-only buttons is the behaviour that
+           * transport bar of five icon-only buttons is the behavior that
            * makes people give up on tooltips.
            *
            * The delay and the container both live in the wrapper now — 350 ms
            * (a hint, not a popover trailing the pointer), and a portal *into*
            * `.hud-layer`. The chip grew the panel material — translucent, with
            * a backdrop filter — and a backdrop filter samples what is behind
-           * it, which on the extended path includes a star's disc above
+           * it, which on the extended path includes a star's disk above
            * diffuse white; that is exactly the case `dynamic-range-limit:
            * standard` exists for, so the content has to render inside the
            * clamped layer. `components/ui/tooltip.tsx` carries both decisions
@@ -172,7 +172,7 @@ try {
     </StrictMode>,
   )
 } catch (cause) {
-  // The synchronous half: a module that failed to evaluate, a catalogue decode
+  // The synchronous half: a module that failed to evaluate, a catalog decode
   // that got past its own fallback, a `createRoot` that refused the container.
   reportFatal(cause)
 }
@@ -208,14 +208,14 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   /*
    * `load` has usually already fired by the time this line runs.
    *
-   * This module awaits the catalogue at module scope, and that await resolves
+   * This module awaits the catalog at module scope, and that await resolves
    * *after* the load event — measured on a cold visit to a review app: load at
-   * 761 ms, the 460 KB catalogue at 969 ms. A bare
+   * 761 ms, the 460 KB catalog at 969 ms. A bare
    * `addEventListener('load', …)` here is therefore a listener for an event
    * that has been and gone, and the worker is never registered.
    *
    * It looked fine, which is the worst part. A registration persists across
-   * visits, so the *second* visit to an origin — where the catalogue comes out
+   * visits, so the *second* visit to an origin — where the catalog comes out
    * of the HTTP cache and resolves before load — registers one, and every visit
    * after that is controlled. What was actually broken was the first visit to
    * any origin, which is exactly the visit where "install it and it works on a

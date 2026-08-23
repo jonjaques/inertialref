@@ -366,7 +366,7 @@ sits on a canopy, not from this layout.
 | ~~No formatter~~ ✅             | prettier, with `format:check` inside `pnpm check`, so a badly formatted file fails the gate rather than being noticed in review                                                                         |
 | No stored save fixture          | Compatibility testing currently synthesises old saves in-test rather than loading a real one from disk                                                                                                  |
 | No performance regression tests | See above                                                                                                                                                                                               |
-| No visual regression testing    | The seam now exists: the `tng-intro` cutscene (ADR-0010) is frame-seekable against a frame-analysed reference edit, so render → dump → re-measure → diff is a script away. Would still need a GPU in CI |
+| No visual regression testing    | The seam now exists: the `tng-intro` cutscene (ADR-0010) is frame-seekable against a frame-analyzed reference edit, so render → dump → re-measure → diff is a script away. Would still need a GPU in CI |
 
 ---
 

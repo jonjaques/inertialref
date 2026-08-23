@@ -95,7 +95,7 @@ export function usePersistentState<T>(
    * What is already on disk, so an unchanged value is not rewritten.
    *
    * Seeded with the mount-time value rather than with nothing, and that is the
-   * point rather than an optimisation: writing on mount would turn "never
+   * point rather than an optimization: writing on mount would turn "never
    * chose" into "chose the current default" for every visitor, and a later
    * change of default would then not reach any of them. An absent value means
    * the default, and it has to keep meaning that.

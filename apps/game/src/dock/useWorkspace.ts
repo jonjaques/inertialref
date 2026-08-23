@@ -39,7 +39,7 @@ import { usePersistentState } from '../hud/panelState.ts'
  * guard. That is the same argument `hud/panelState.ts` already makes about a
  * stored tab name, applied to a workspace.
  *
- * Normalising happens on *read* rather than only on write, for the reason
+ * Normalizing happens on *read* rather than only on write, for the reason
  * `useDockLayout` gave before this replaced it: what changes between sessions
  * is the panel set, so a layout written by yesterday's build is fine until
  * today's build adds a panel — and the write that would have repaired it may

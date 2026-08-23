@@ -117,8 +117,8 @@ describe('the routed dialogs', () => {
   it('handles an auth callback without leaving the code on screen', () => {
     // A code is a credential until it is redeemed. The page consumes the
     // parameters; it never prints them.
-    const markup = at(`${AUTH_CALLBACK}?code=super-secret-authorisation-code`)
-    expect(markup).not.toContain('super-secret-authorisation-code')
+    const markup = at(`${AUTH_CALLBACK}?code=super-secret-authorization-code`)
+    expect(markup).not.toContain('super-secret-authorization-code')
     expect(markup).toContain('Returning you')
   })
 
@@ -138,7 +138,7 @@ describe('the routed dialogs', () => {
 /*
  * The background-location contract, as arithmetic.
  *
- * Only the pure half is reachable here — React Router does not serialise a
+ * Only the pure half is reachable here — React Router does not serialize a
  * link's `state` into the anchor, so "every intra-dialog link carries the
  * background" has no observable in static markup and is checked by driving the
  * real app (`/drive`). What *is* checkable is the function everything else

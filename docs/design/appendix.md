@@ -44,7 +44,7 @@ reopening one is a deliberate act rather than a drift.
 | Decision                  | Resolution                                                                                                 |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | Hostile humanoids         | **Environmental threats only through M5.** The largest single scope saving available.                      |
-| Matched-burn combat       | **Deferred past M6.** Opponents engage at rest or on manoeuvre thrust.                                     |
+| Matched-burn combat       | **Deferred past M6.** Opponents engage at rest or on maneuver thrust.                                     |
 | The Hunter through a jump | **Once, with a visible tell.** Followed once is a story; followed forever is a punishment.                 |
 | Rescue                    | **Self-scuttle in solo; distress beacon in the persistent universe.** Degrades gracefully with population. |
 
@@ -149,14 +149,14 @@ Terms specific to this design. Engine and architecture terms are in
 | **Issue ordinal**         | A body's address index, assigned in the order bodies were _issued_ rather than by orbit. [galaxy](galaxy.md#the-four-rules)                                                                  |
 | **Inertial compensation** | The Reference Drive holding the crew near their original frame, so felt g is a fraction of the ship's proper acceleration. Why burns are minutes rather than days.                           |
 | **Jump**                  | Discrete re-anchoring between star systems                                                                                                                                                   |
-| **Manoeuvre**             | The low-power band: ordinary Newtonian 6-DoF flight. Compensation is weak here, so it is where g is felt.                                                                                    |
+| **Maneuver**             | The low-power band: ordinary Newtonian 6-DoF flight. Compensation is weak here, so it is where g is felt.                                                                                    |
 | **Observed**              | A body backed by a published catalog. Drawn solid.                                                                                                                                           |
 | **Pips**                  | The six units of reactor allocation across DRIVE, SYS and PAY                                                                                                                                |
 | **Projected**             | A generated body, presented in-fiction as the ship's prediction. Drawn dashed.                                                                                                               |
 | **Provenance**            | Whether a body is observed, projected or surveyed. Visible everywhere the body appears.                                                                                                      |
 | **Transit**               | The high-power band: superluminal coordinate velocity, comfortable felt g, used to cross a system                                                                                            |
 | **Ratchet**               | One of the three progression axes: capability, knowledge, standing                                                                                                                           |
-| **Reference Drive**       | The ship's drive. Holds the ship near a chosen inertial frame while re-anchoring that frame. Provides manoeuvre thrust, transit acceleration, inertial compensation and the jump — all four. |
+| **Reference Drive**       | The ship's drive. Holds the ship near a chosen inertial frame while re-anchoring that frame. Provides maneuver thrust, transit acceleration, inertial compensation and the jump — all four. |
 | **Retired**               | A projected body superseded by a confirmed one. Tombstoned, never deleted; its address stays valid forever.                                                                                  |
 | **Silent running**        | Radiators off. Near-invisible, and heat has nowhere to go.                                                                                                                                   |
 | **Survey, the**           | The in-fiction institution that maintains the catalog and issues revisions                                                                                                                   |

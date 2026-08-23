@@ -103,8 +103,8 @@ const failure = (
 
 /** 1. Deterministically generate the same systems from the global seed. */
 function checkDeterministicGeneration(world: World): CapabilityResult {
-  // The star the checks fly to, taken from the world's own catalogue rather
-  // than a hard-coded index: the catalogue is a generation input now, and a
+  // The star the checks fly to, taken from the world's own catalog rather
+  // than a hard-coded index: the catalog is a generation input now, and a
   // check that read a different one would be testing a different universe.
   const star = world.catalog.stars[
     Math.min(2, world.catalog.stars.length - 1)
@@ -171,7 +171,7 @@ function checkStableAddressing(world: World): CapabilityResult {
  *
  * The tolerance is the disagreement between measurements, not a fudge. The
  * Hipparcos parallax HYG carries puts the system at 4.321 ly and the modern
- * consensus is 4.344; a catalogue revision that swapped one for the other would
+ * consensus is 4.344; a catalog revision that swapped one for the other would
  * move this number and would not be a bug. Anything outside that band is a
  * broken coordinate conversion, which is what this check is for — the check
  * previously asserted 4.365 ± 0.01 against a hand-transcribed table, and the
@@ -229,7 +229,7 @@ function checkMovementWithinSystem(): CapabilityResult {
  * 5. Approach a planet.
  *
  * Checked against the analytic free-fall prediction rather than "the number got
- * smaller". A ship released 20 radii out falls about twenty metres in a minute,
+ * smaller". A ship released 20 radii out falls about twenty meters in a minute,
  * which rounds to no visible change at all — the first version of this check
  * passed while reporting "fell from 57287 km to 57287 km", which is exactly the
  * sort of vacuous green tick a self-test exists to not produce.
@@ -299,7 +299,7 @@ function checkFrameTransition(): CapabilityResult {
   return pass(
     6,
     'Frame transitions',
-    `entered ${world.entities.require(ship.id).state.frame} after travelling ${(drift / 1e6).toFixed(0)} Mm`,
+    `entered ${world.entities.require(ship.id).state.frame} after traveling ${(drift / 1e6).toFixed(0)} Mm`,
   )
 }
 
@@ -323,7 +323,7 @@ function checkSurfacePrecision(world: World): CapabilityResult {
   return pass(
     7,
     'Precision near the surface',
-    `1 inch resolved to ${(error * 1e6).toFixed(1)} µm, ${(outFromGalacticCentre / 3.0857e19).toFixed(2)} kpc from the galactic centre`,
+    `1 inch resolved to ${(error * 1e6).toFixed(1)} µm, ${(outFromGalacticCentre / 3.0857e19).toFixed(2)} kpc from the galactic center`,
   )
 }
 

@@ -68,17 +68,17 @@ export interface TravelTargetOptions {
    */
   readonly lightYears?: number
   /**
-   * Whose "here" the listing is centred on and sorted by. Default `player`.
+   * Whose "here" the listing is centered on and sorted by. Default `player`.
    *
    * The two are the same thing in a flight mode and are not remotely the same
    * thing in the planetarium, where the whole verb is `look` — the camera goes
-   * to Alpha Centauri and the ship does not. Centred on the player, the
-   * catalogue there listed Sol's bodies first and reported Alpha Centauri at
+   * to Alpha Centauri and the ship does not. Centered on the player, the
+   * catalog there listed Sol's bodies first and reported Alpha Centauri at
    * 4.4 light years while it filled the frame, which is a listing describing
    * somewhere the reader is not.
    *
    * It is a survey origin as well as a sort key: `systemsWithin` sweeps around
-   * this point, so the observer's neighbours are the ones offered.
+   * this point, so the observer's neighbors are the ones offered.
    */
   readonly origin?: 'player' | 'observer'
 }
@@ -174,7 +174,7 @@ export function travelTargets(
 
 function describeBody(body: Body): string {
   const radiusKm = `${(body.radius / 1000).toFixed(0)} km`
-  // Moons orbit at a few hundred thousand kilometres, which `formatDistance`
+  // Moons orbit at a few hundred thousand kilometers, which `formatDistance`
   // renders as "0.003 AU" — technically right, useless for telling two moons
   // apart. Planets are the other way round.
   const orbit =
@@ -202,7 +202,7 @@ export type TravelDestination =
  * Turn anything worth typing into a destination.
  *
  * Accepts the canonical form (`g:milky-way/s:SOL/b:2`), the galaxy-less form a
- * listing shows (`s:SOL/b:2`), a bare catalogue designation (`HIP71683`) and a
+ * listing shows (`s:SOL/b:2`), a bare catalog designation (`HIP71683`) and a
  * body relative to where the player already is (`b:2.0`). `parseAddress` itself
  * deliberately refuses all but the first — it is the strict boundary for
  * generation and save files, and loosening it there would mean an address whose
@@ -295,11 +295,11 @@ export function currentSystemOf(
 /**
  * A circular orbit that frames the body and stays put.
  *
- * One radius up, so the centre sits two radii away and the body subtends
+ * One radius up, so the center sits two radii away and the body subtends
  * 2·asin(1/2) = 60° — just inside the 65° field of view the client uses. A
  * quarter of a radius was the first guess and it is wrong in a way you only see
  * on screen: the body subtends 106° and fills the frame edge to edge, so
- * arriving somewhere new looks like a flat coloured wall rather than a planet.
+ * arriving somewhere new looks like a flat colored wall rather than a planet.
  *
  * The clamp against the sphere of influence is the part that is not obvious: a
  * "circular orbit" placed outside the SOI is reframed to the parent —
@@ -319,7 +319,7 @@ export function viewingAltitudeKm(body: Body): number {
   // clears its own surface. There is no orbit inside the SOI of such a thing,
   // so the choice is between a debug verb that refuses and one that puts you
   // somewhere you can see the body from; the second is more useful and the
-  // frame transition that follows is a real behaviour worth being able to watch.
+  // frame transition that follows is a real behavior worth being able to watch.
   return Math.max(MINIMUM_VIEWING_ALTITUDE, Math.min(wanted, ceiling)) / 1000
 }
 

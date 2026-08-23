@@ -70,7 +70,7 @@ describe('seed derivation', () => {
 
   it('gives unrelated seeds to adjacent labels', () => {
     // Sibling addresses differ by one character. If their seeds correlated,
-    // neighbouring planets would come out suspiciously similar.
+    // neighboring planets would come out suspiciously similar.
     const seen = new Set<string>()
     let bitDifferenceTotal = 0
     let comparisons = 0

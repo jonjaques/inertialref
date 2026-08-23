@@ -59,7 +59,7 @@ import type { CatalogPlanet } from './catalog/starCatalog.ts'
  *
  * A system is two layers, and the player can always tell which is which
  * (`docs/design/galaxy.md`). Planets that somebody has actually confirmed come
- * from the catalogue with their published masses, radii and orbits, and are
+ * from the catalog with their published masses, radii and orbits, and are
  * marked `observed`. Everything else is `projected` — what the ship's computer
  * expects to be there given the star. The game never claims a projection is
  * real, which is what lets real data arrive later without anything having lied.
@@ -82,7 +82,7 @@ export const GALAXY_ALGORITHM = algorithm('galaxy', 2)
  *
  * It belongs in the manifest because a system's planets are laid out from its
  * star's luminosity: changing a bolometric correction moves every frost line in
- * the catalogued half of the galaxy. It looks like presentation and it is not.
+ * the cataloged half of the galaxy. It looks like presentation and it is not.
  */
 export const PHOTOMETRY_ALGORITHM = algorithm('photometry', 1)
 
@@ -111,7 +111,7 @@ export interface Star {
   readonly temperature: Kelvin
   /** Bolometric luminosity, watts. */
   readonly luminosity: number
-  /** Linear sRGB of a blackbody at `temperature`, brightest channel normalised. */
+  /** Linear sRGB of a blackbody at `temperature`, brightest channel normalized. */
   readonly colour: LinearRgb
   readonly mu: Mu
 }
@@ -213,24 +213,24 @@ export interface CloudLayer {
  * The visible haze above a body, which is not the same thing as its atmosphere.
  *
  * `Atmosphere.ceiling` is a *physics* number — where the drag model stops
- * integrating — and for a gas giant it is a thousand kilometres or more, because
+ * integrating — and for a gas giant it is a thousand kilometers or more, because
  * there is no surface and the air just keeps going. Rendered as a shell that
  * thick, Saturn wears a halo 3% of its own radius and looks like a moon in a
- * jar. What you actually see above the cloud tops is a few hundred kilometres of
+ * jar. What you actually see above the cloud tops is a few hundred kilometers of
  * haze.
  *
- * The colours are the licensed part, and `docs/design/art.md` says so
+ * The colors are the licensed part, and `docs/design/art.md` says so
  * explicitly: scattering coefficients are "tuned within the real range for the
- * modelled composition". The hues are the published ones — Earth's limb is blue
+ * modeled composition". The hues are the published ones — Earth's limb is blue
  * and its terminator is orange because Rayleigh scattering says so; Titan's is
  * orange all the way round because its haze is tholins.
  */
 export interface HazeLayer {
   /** Rendered thickness above the datum. Not `Atmosphere.ceiling`. */
   readonly height: Meters
-  /** Scattering colour looking straight down through it. */
+  /** Scattering color looking straight down through it. */
   readonly colour: LinearRgb
-  /** Forward-scattered colour at the terminator — the sunset seen from orbit. */
+  /** Forward-scattered color at the terminator — the sunset seen from orbit. */
   readonly limb: LinearRgb
   /**
    * Visible optical thickness of the whole column, 0..1, where 1 is
@@ -247,7 +247,7 @@ export interface BodyAppearance {
   /** Texture-set key, or null for a body with no maps. */
   readonly texture: string | null
   readonly maps: readonly TextureMap[]
-  /** Peak-to-trough elevation the normal map represents, metres. */
+  /** Peak-to-trough elevation the normal map represents, meters. */
   readonly relief: Meters
   /** Geometric albedo: how bright the body is at full phase. */
   readonly geometricAlbedo: number
@@ -256,7 +256,7 @@ export interface BodyAppearance {
   readonly clouds: CloudLayer | null
   readonly rings: RingSystem | null
   readonly haze: HazeLayer | null
-  /** Used where there is no albedo map, and to tint one that is greyscale. */
+  /** Used where there is no albedo map, and to tint one that is grayscale. */
   readonly colour: LinearRgb
 }
 
@@ -295,14 +295,14 @@ const mu = (mass: Kilograms): Mu => GRAVITATIONAL_CONSTANT * mass
  * The star's class, for the handful of places that branch on one.
  *
  * Goes through the real parser rather than reading character zero, because the
- * catalogue's spectral strings are not MK strings: `dM4` is an M dwarf and
+ * catalog's spectral strings are not MK strings: `dM4` is an M dwarf and
  * `DA2` is a white dwarf, and `spect[0]` calls the first one a D and the second
  * one a D as well. See `catalog/spectral.ts` for the full list of ways this
  * looked easy.
  */
 function classify(spectralType: string): SpectralClass {
   // `M` for a string that carries no classification at all: three quarters of
-  // the neighbourhood is an M dwarf, so it is the least wrong default. A white
+  // the neighborhood is an M dwarf, so it is the least wrong default. A white
   // dwarf or a brown dwarf keeps its own class — forcing those onto the OBAFGKM
   // ladder is how a 10,000 K white dwarf came to be rendered as a red one.
   return parseSpectralType(spectralType).spectralClass ?? 'M'
@@ -311,13 +311,13 @@ function classify(spectralType: string): SpectralClass {
 /**
  * The system's star, from its stub.
  *
- * There is no astrophysics left to do here. A catalogued star's temperature,
- * luminosity and radius come from its published magnitude and colour through
+ * There is no astrophysics left to do here. A cataloged star's temperature,
+ * luminosity and radius come from its published magnitude and color through
  * `catalog/photometry.ts`; a procedural star's come from its mass through the
  * main-sequence relations in `galaxy.ts`. Both arrive already converted, which
  * is the point — this used to re-derive everything from mass, and doing that to
- * a catalogued star threw away the measurement and replaced it with a fit. Sol
- * came out at the right mass and the wrong colour.
+ * a cataloged star threw away the measurement and replaced it with a fit. Sol
+ * came out at the right mass and the wrong color.
  */
 function makeStar(stub: SystemStub): Star {
   const mass = stub.solarMasses * SOLAR_MASS
@@ -655,10 +655,10 @@ export function rotationalFlattening(
 }
 
 /**
- * Class-typical surface colours, linear sRGB.
+ * Class-typical surface colors, linear sRGB.
  *
  * These are what a body looks like when nobody has photographed it, and they are
- * deliberately desaturated: a real airless surface is grey rock or dirty ice,
+ * deliberately desaturated: a real airless surface is gray rock or dirty ice,
  * and the saturated palette a generator reaches for first is the single clearest
  * tell that a world was invented. Bodies in `solar/` override these with a map.
  */
@@ -690,7 +690,7 @@ const KIND_ROUGHNESS: Readonly<Record<BodyKind, number>> = {
  * What a generated body looks like.
  *
  * No maps — those exist only for bodies somebody has been to — so this is a
- * colour, a roughness and, for a giant, a chance of rings. The renderer's job is
+ * color, a roughness and, for a giant, a chance of rings. The renderer's job is
  * to make that look like a world rather than a ball, which is what the relief in
  * `surface` and the terminator are for.
  *
@@ -701,13 +701,13 @@ const KIND_ROUGHNESS: Readonly<Record<BodyKind, number>> = {
  * rather than wallpaper.
  */
 /*
- * Haze colour for a generated world, from its class.
+ * Haze color for a generated world, from its class.
  *
  * Rayleigh scattering goes as λ⁻⁴, so *any* clear atmosphere of small molecules
  * is blue looking down and red looking along — which is why Earth, Uranus and
  * Neptune are all blue for the same reason and Mars is not. A generated world's
- * composition is not modelled, so this is the class-typical answer and the
- * catalogued bodies in `solar/` override it with published ones.
+ * composition is not modeled, so this is the class-typical answer and the
+ * cataloged bodies in `solar/` override it with published ones.
  */
 const KIND_HAZE: Readonly<
   Record<BodyKind, { colour: LinearRgb; limb: LinearRgb }>
@@ -766,7 +766,7 @@ function proceduralAppearance(
       atmosphere === null
         ? null
         : {
-            // A giant's drag ceiling is a thousand kilometres of "there is no
+            // A giant's drag ceiling is a thousand kilometers of "there is no
             // surface"; what is visible above its cloud tops is a fraction of a
             // percent of the radius.
             height: giant
@@ -904,7 +904,7 @@ function makeObservedPlanet(
             planet.orbitalPeriodDays * SECONDS_PER_DAY,
           )
         : // Neither published. This is rare enough to be worth failing loudly
-          // over rather than inventing an orbit for a body labelled `observed`.
+          // over rather than inventing an orbit for a body labeled `observed`.
           Number.NaN
   invariant(
     Number.isFinite(semiMajorAxis) && semiMajorAxis > 0,
@@ -1025,7 +1025,7 @@ function makeObservedPlanet(
  * semi-major axis — because the point is to avoid two bodies visibly sharing an
  * orbit, not to be precise about a guess. Dropping rather than nudging keeps the
  * projection a pure function of its own seed; nudging would make planet 6 depend
- * on what the catalogue says about planet 2, which is exactly the
+ * on what the catalog says about planet 2, which is exactly the
  * order-dependence the whole generator is built to avoid.
  */
 export function generateSystem(
@@ -1067,7 +1067,7 @@ export function generateSystem(
 
   const drawn = layoutRng.weightedIndex([6, 9, 12, 14, 14, 12, 9, 7, 5, 3])
   // A system with four confirmed planets does not also want eight invented
-  // ones. The draw is the total the generator believes in; the catalogue has
+  // ones. The draw is the total the generator believes in; the catalog has
   // already accounted for some of it.
   const projectedCount = Math.max(0, drawn - observed.length)
   const luminosityScale = Math.sqrt(star.luminosity / SOLAR_LUMINOSITY)
@@ -1140,7 +1140,7 @@ export function findBody(
  *
  * The 1,000 km floor is what separates a world from a rubble pile — below it the
  * horizon is close enough that "landing" and "docking" stop being different
- * manoeuvres. This predicate decided where every session in the game starts and
+ * maneuvers. This predicate decided where every session in the game starts and
  * was written out five times as `body.kind === 'rocky' && body.radius > 1e6`,
  * which is how the client and the headless runner came to disagree about the
  * spawn distance without anything noticing.

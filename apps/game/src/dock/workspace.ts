@@ -46,7 +46,7 @@ export interface DevWorkspace {
  * The menu's groups, in order: this place, then the instruments.
  *
  * The mode's group is unlabelled in the bar itself — the mode's name is already
- * beside the mark, two centimetres to the left, and repeating it over its own
+ * beside the mark, two centimeters to the left, and repeating it over its own
  * panels would be the third time the word "planetarium" appeared in one strip.
  * The label survives for the screen reader and the tooltip.
  */

@@ -53,7 +53,7 @@ describe('transmittance', () => {
 
     // Near the horizon from a mid-shell altitude the path runs tens of times
     // the vertical column: red survives, blue does not. This asymmetry IS the
-    // sunset — no authored sunset colour exists anywhere downstream of it.
+    // sunset — no authored sunset color exists anywhere downstream of it.
     const [hr, , hb] = sampleT(0.15, 0.02)
     expect(hr).toBeGreaterThan(hb * 2)
   })
@@ -133,11 +133,11 @@ describe('multiple scattering', () => {
 })
 
 describe('the recipe', () => {
-  it('splits the column by the authored colour', () => {
-    // β·H must reproduce the vertical optical depth the colour describes:
+  it('splits the column by the authored color', () => {
+    // β·H must reproduce the vertical optical depth the color describes:
     // Earth's authored blue-heavy zenith puts ~2.5 times the extinction in
     // blue that it puts in green, and the real spectrum is within a few
-    // percent of that split — the fact that licenses colour-as-physics.
+    // percent of that split — the fact that licenses color-as-physics.
     const tau = earthRecipe.betaRayleigh.map(
       (beta) => beta * earthRecipe.hRayleigh,
     )

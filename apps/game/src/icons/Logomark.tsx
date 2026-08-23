@@ -15,7 +15,7 @@ import { BRANDMARK_PATHS, BRANDMARK_VIEW_BOX } from './brandmark.ts'
  *
  * Not a `createLucideIcon`, and deliberately: those are 24 x 24 two-pixel
  * strokes in `currentColor` by contract, and a logomark that inherited the
- * colour of the text beside it would stop being a logomark. It takes a
+ * color of the text beside it would stop being a logomark. It takes a
  * `className` for sizing and nothing else.
  */
 export function Logomark({ className = 'size-4' }: { className?: string }) {

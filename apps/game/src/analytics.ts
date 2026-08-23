@@ -14,8 +14,8 @@ import { SITE } from './site.ts'
  *      build wearing a different name. Measuring them puts the maintainer's own
  *      testing in the numbers that are supposed to describe strangers.
  *   3. **Not against an explicit opt-out.** Global Privacy Control is a signal
- *      a person set on purpose, and honouring it costs a line. Delete the check
- *      if it should not be honoured; do not weaken it into a heuristic.
+ *      a person set on purpose, and honoring it costs a line. Delete the check
+ *      if it should not be honored; do not weaken it into a heuristic.
  *
  * The measurement id is a build-time public variable, `VITE_GA_MEASUREMENT_ID`,
  * and it is deliberately **not in the repository**. This repository is public.
@@ -27,7 +27,7 @@ import { SITE } from './site.ts'
  * `apps/game/.env.production` (gitignored) for a deploy run from a developer's
  * machine. Vite gives a real environment variable precedence over a file of the
  * same name, so CI wins where both exist. With neither, this is empty and
- * nothing loads — which is the correct behaviour for a fork and needs no code
+ * nothing loads — which is the correct behavior for a fork and needs no code
  * change to get. `apps/game/.env.example` is the committed documentation.
  *
  * `new Date()` in `gtag('js', ...)` is Google's required call shape. It is
@@ -98,7 +98,7 @@ let started = false
  * enhanced measurement on — again on a history change, which for a client-side
  * router means either one view per session or two views per navigation
  * depending on a setting in a web console that this repository cannot see.
- * Sending them by hand is the only version whose behaviour is written down.
+ * Sending them by hand is the only version whose behavior is written down.
  */
 export function startAnalytics(): void {
   if (started || !isMeasured()) return

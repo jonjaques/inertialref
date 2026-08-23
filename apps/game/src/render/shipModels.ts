@@ -12,12 +12,12 @@ import { getLogger } from '@inertialref/shared'
 import manifest from '../../../../data/models/manifest.json'
 
 /*
- * Modelled ship hulls, loaded from `data/models/`.
+ * Modeled ship hulls, loaded from `data/models/`.
  *
  * One registry for however many ships end up flyable: the manifest names each
  * hull, its glTF file, and the true overall length the model is scaled to —
  * the meshes themselves arrive at whatever scale the artist exported, and
- * render space is strict 1 unit = 1 metre.
+ * render space is strict 1 unit = 1 meter.
  *
  * `GLTFLoader` is the one sanctioned crossing of the "never import from
  * `three`" rule, and it never touches the renderer: the loader builds classic
@@ -74,7 +74,7 @@ export interface LoadedShip {
  *
  * Copied rather than converted-in-place because the WebGPU renderer converting
  * a classic material "behind your back" is exactly what AGENTS.md forbids
- * relying on. The loader has already set colour spaces (sRGB for base colour
+ * relying on. The loader has already set color spaces (sRGB for base color
  * and emissive, linear for data maps) and `flipY` on every texture, so the
  * maps move across as-is. `KHR_materials_specular` is dropped deliberately:
  * its intensities in these assets are ≤1 and the standard model's default is
@@ -105,7 +105,7 @@ function rebuildMaterial(
   material.depthWrite = source.depthWrite
   material.side = source.side
   // A hull seen bow-on is all glancing angles; without anisotropy the window
-  // rows smear into grey bands exactly where the eye reads the scale.
+  // rows smear into gray bands exactly where the eye reads the scale.
   const maps: ReadonlyArray<Texture | null> = [
     source.map,
     source.normalMap,
@@ -128,8 +128,8 @@ async function build(
   const gltf = await new GLTFLoader().loadAsync(url)
   const hull = gltf.scene
 
-  // Recentre on the bounding-box middle so the hull yaws and pitches about its
-  // own centre; exported origins land wherever the artist left them.
+  // Recenter on the bounding-box middle so the hull yaws and pitches about its
+  // own center; exported origins land wherever the artist left them.
   const box = new Box3().setFromObject(hull)
   const size = box.getSize(new Vector3())
   hull.position.sub(box.getCenter(new Vector3()))
@@ -175,7 +175,7 @@ const loading = new Map<string, Promise<LoadedShip | null>>()
  * The hull for one ship id, fetched and rebuilt on first ask.
  *
  * Resolves `null` rather than rejecting — a missing or unloadable model
- * degrades to the debug hardware the same way a missing star catalogue
+ * degrades to the debug hardware the same way a missing star catalog
  * degrades to Sol, and for the same reason: the flight model and everything
  * else work identically without it.
  */

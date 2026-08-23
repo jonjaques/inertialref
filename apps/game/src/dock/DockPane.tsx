@@ -20,7 +20,7 @@ import type { Workspace } from './useWorkspace.ts'
  * a workspace and a set of toggles. Unmounting throws away every panel's scroll
  * position and re-runs every body's first render, so a pane closed to look at
  * something and reopened is a pane that has forgotten where you were in the
- * catalogue. Translating it costs a transform and keeps all of it.
+ * catalog. Translating it costs a transform and keeps all of it.
  *
  * What that costs in return is that a closed pane is still in the tree, so it
  * has to stop being interactive and stop being announced — `pointer-events` and

@@ -14,7 +14,7 @@ describe('sunVisibility', () => {
   it('ramps across the limb instead of stepping', () => {
     // Slide the body sideways so the sight line crosses its limb. The ramp is
     // the sunset: each ratio inside the band must sit strictly between its
-    // neighbours, which a step function fails.
+    // neighbors, which a step function fails.
     const radius = 1e5
     const at = (offset: number) =>
       sunVisibility(CAMERA, SUN, [
@@ -51,7 +51,7 @@ describe('sunVisibility', () => {
 })
 
 describe('ghostPosition', () => {
-  it('walks the sun–centre axis: on the sun at 0, centre at 1, mirrored past', () => {
+  it('walks the sun–center axis: on the sun at 0, center at 1, mirrored past', () => {
     expect(ghostPosition(0.6, -0.4, 0)).toEqual({ x: 0.6, y: -0.4 })
     expect(ghostPosition(0.6, -0.4, 1)).toEqual({ x: 0, y: -0 })
     const mirrored = ghostPosition(0.6, -0.4, 2)

@@ -15,7 +15,7 @@ import { type ModeCard, STATUS_LABEL, STATUS_TONE } from './modes.ts'
  *   - it is `font-semibold` on top of a step that already names its weight;
  *   - and its padding is symmetric, which is wrong for **any** tracked
  *     uppercase text. Letter-spacing is added *after* the last glyph, so a
- *     centred label sits one track to the left of where it looks like it should
+ *     centered label sits one track to the left of where it looks like it should
  *     — the specific thing that made these read as badly kerned. `pr` is short
  *     by exactly the track `type-label` carries.
  */

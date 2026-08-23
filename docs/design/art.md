@@ -73,7 +73,7 @@ human can read.
 |                  |                                                                                                    |
 | ---------------- | -------------------------------------------------------------------------------------------------- |
 | Exposure         | Auto, with a filmic response and a configurable shoulder                                           |
-| Highlights       | Roll off; a star has structure rather than a white disc                                            |
+| Highlights       | Roll off; a star has structure rather than a white disk                                            |
 | Shadows          | Lifted to the sensor's noise floor, with real noise                                                |
 | Faint structure  | **Integrated and visible** — the galactic plane, zodiacal light, airglow, nebulosity, ring shadows |
 | Color            | Mapped, not invented; saturation follows the sensor's response, not a mood                         |
@@ -249,7 +249,7 @@ browser. It has to be genuinely good.
 | Internal pipeline        | HDR throughout; `rgba16float` targets; tonemap once, at the end                                                                                                                                                                              |
 | Output                   | Extended range when the browser can produce it — **capability probe, not media query alone**; ACES-derived tonemap to SDR otherwise                                                                                                          |
 | The two paths must agree | The SDR render is a _tonemapped version of the same image_, never a differently-authored one                                                                                                                                                 |
-| Peak luminance           | Mapped so a G star's disc reaches display peak and everything else sits below it — the star is the reference white, always. **Peak is unknowable from the page**, so the mapping is relative and the curve must hold from 2× to 16× headroom |
+| Peak luminance           | Mapped so a G star's disk reaches display peak and everything else sits below it — the star is the reference white, always. **Peak is unknowable from the page**, so the mapping is relative and the curve must hold from 2× to 16× headroom |
 | Tonemapper               | ACES-derived, configurable shoulder, exposed as the Composite mode's response curve                                                                                                                                                          |
 | Adaptation               | Asymmetric: 0.4 s to bright, 3.5 s to dark, qualitatively matching human dark adaptation                                                                                                                                                     |
 | Adaptation clamp         | User-settable rate and range. **Mandatory.** See [ux](ux.md#accessibility).                                                                                                                                                                  |
@@ -391,7 +391,7 @@ is 4.5:1 against a fully blown-out background — verified with the tonemapper i
 the loop.
 
 **No information is carried by color alone** — provenance uses dash pattern,
-scan state uses glyphs, all three colourblind palettes tested against the
+scan state uses glyphs, all three colorblind palettes tested against the
 star-glare case. See [ux](ux.md#accessibility).
 
 ---

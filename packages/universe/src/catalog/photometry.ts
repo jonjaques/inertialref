@@ -7,17 +7,17 @@ import {
 } from './spectral.ts'
 
 /*
- * Turning what a catalogue measures into what a renderer needs.
+ * Turning what a catalog measures into what a renderer needs.
  *
- * A star catalogue records what a telescope can see: a distance, an apparent
- * magnitude in one band, a colour index, a spectral classification. A renderer
+ * A star catalog records what a telescope can see: a distance, an apparent
+ * magnitude in one band, a color index, a spectral classification. A renderer
  * needs radiant power, an emission temperature and an angular size. Nothing in
  * the first list is any of the second, and the conversion is the whole of this
  * file.
  *
- * The rule the packed catalogue depends on: **store measurements, derive the
+ * The rule the packed catalog depends on: **store measurements, derive the
  * rest.** HYG ships a `lum` column, and it is exactly 10^((4.85 − absmag)/2.5)
- * — a restatement of `absmag`, in V band, labelled as if it were bolometric.
+ * — a restatement of `absmag`, in V band, labeled as if it were bolometric.
  * Storing it would cost two bytes per star to say something the file already
  * says, and would enshrine the V-band error. So `absmag` and `ci` are stored and
  * everything here runs at load time.
@@ -32,7 +32,7 @@ export const SOLAR_BOLOMETRIC_MAGNITUDE = 4.74
 export const SOLAR_TEMPERATURE: Kelvin = 5772
 
 /**
- * Effective temperature from the B−V colour index (Ballesteros 2012).
+ * Effective temperature from the B−V color index (Ballesteros 2012).
  *
  * Derived by treating the star as a blackbody seen through the two Johnson
  * filters, so it needs no calibration table and it is monotonic — which matters
@@ -49,19 +49,19 @@ export function temperatureFromColourIndex(colourIndex: number): Kelvin {
 }
 
 /*
- * Effective temperature by spectral class, for the 8% of the catalogue with no
- * usable colour index — and, as it turns out, for most of the rest as well.
+ * Effective temperature by spectral class, for the 8% of the catalog with no
+ * usable color index — and, as it turns out, for most of the rest as well.
  *
- * The obvious source is the B−V colour index, which 89% of the catalogue
+ * The obvious source is the B−V color index, which 89% of the catalog
  * carries. Measured against seventeen stars with published temperatures, the
  * classification beats it: 2.8% mean absolute error against 4.7%, and 5% at the
  * worst case against 18%. B−V is a *photometric* proxy that Ballesteros' fit
- * bends badly at the red end, where most of the neighbourhood lives; the
+ * bends badly at the red end, where most of the neighborhood lives; the
  * spectral type is a direct classification by somebody who looked at the lines.
  * See `effectiveTemperature` for where B−V still wins.
  *
  * Keyed by the OBAFGKM ladder index (O0 = 0, M9 = 69) so a subclass interpolates
- * between neighbours instead of snapping to its class. Three ladders, because a
+ * between neighbors instead of snapping to its class. Three ladders, because a
  * K0III is 350 K cooler than a K0V and a K0I is 400 K cooler again — same
  * absorption lines, progressively larger and cooler stars. One ladder with a
  * scalar giant correction was tried first and left Arcturus 9% too hot.
@@ -175,16 +175,16 @@ export function temperatureFromSpectralType(type: SpectralType): Kelvin | null {
 }
 
 /**
- * The temperature the rest of the pipeline uses, from everything the catalogue
+ * The temperature the rest of the pipeline uses, from everything the catalog
  * knows about one star.
  *
  * The classification leads and B−V is the fallback, for the reason recorded
  * above the ladders — with one exception, measured rather than assumed: for
- * giants the colour index is the better of the two, because the ladder has one
+ * giants the color index is the better of the two, because the ladder has one
  * rung per five subclasses across a range where a giant's temperature moves
  * fast, and B−V does not care about the coarseness of the grid it is not on.
  * Blending the two geometrically was tried: it gives the best luminosity of any
- * policy and the second-worst temperature, and temperature is what the colour
+ * policy and the second-worst temperature, and temperature is what the color
  * of every star in the sky comes from.
  */
 export function effectiveTemperature(
@@ -213,13 +213,13 @@ export function effectiveTemperature(
  * ~4,000 K. Below that it is extrapolating past its calibrators: it returned
  * −3.11 for Barnard's Star where the published luminosity implies −2.36, and
  * that 0.75 mag put the star at **twice** its real luminosity. M dwarfs are
- * three quarters of the solar neighbourhood, so the polynomial was wrong about
+ * three quarters of the solar neighborhood, so the polynomial was wrong about
  * most of the sky. This table is measured out to 2,400 K instead.
  *
- * M5 and later are set from the V−Ks colours and K-band corrections rather than
- * the published BC_V column, which is shallower there than the colours imply and
- * left Proxima Centauri at 40% of its catalogued luminosity. Late M is where the
- * scatter is genuinely large — two catalogued M4 dwarfs six light-years apart
+ * M5 and later are set from the V−Ks colors and K-band corrections rather than
+ * the published BC_V column, which is shallower there than the colors imply and
+ * left Proxima Centauri at 40% of its cataloged luminosity. Late M is where the
+ * scatter is genuinely large — two cataloged M4 dwarfs six light-years apart
  * imply corrections 0.3 mag apart — so this end is fitted to the trend and not
  * to any one star. `photometry.test.ts` states the residual.
  */
@@ -344,7 +344,7 @@ export function estimateMass(
 }
 
 /* ------------------------------------------------------------------------- */
-/* Blackbody colour                                                           */
+/* Blackbody color                                                           */
 /* ------------------------------------------------------------------------- */
 
 export interface LinearRgb {
@@ -391,13 +391,13 @@ function planckianChromaticity(temperature: Kelvin): { x: number; y: number } {
 }
 
 /**
- * Linear sRGB for a blackbody at `temperature`, normalised so the brightest
+ * Linear sRGB for a blackbody at `temperature`, normalized so the brightest
  * channel is 1.
  *
- * Normalised rather than absolute because brightness is the renderer's business
- * — it comes from luminosity and distance, and multiplying it into the colour
+ * Normalized rather than absolute because brightness is the renderer's business
+ * — it comes from luminosity and distance, and multiplying it into the color
  * here would make a distant O star and a nearby M star indistinguishable after
- * exposure. Values can leave [0,1] before normalisation: the Planckian locus
+ * exposure. Values can leave [0,1] before normalization: the Planckian locus
  * runs outside the sRGB gamut at both ends, and clamping is a gamut mapping the
  * tone mapper should own, not this function.
  */

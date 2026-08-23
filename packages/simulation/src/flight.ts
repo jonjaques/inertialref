@@ -82,7 +82,7 @@ export interface FlightResult {
 }
 
 /**
- * Vector from the attracting body's centre to the entity, in the entity's frame
+ * Vector from the attracting body's center to the entity, in the entity's frame
  * axes.
  *
  * Goes through universe coordinates rather than subtracting frame-local
@@ -252,7 +252,7 @@ export function stepFlight(
 /**
  * Height of an entity above the generated terrain, in meters.
  *
- * The direction is taken in the *body-fixed* frame, not the body-centred
+ * The direction is taken in the *body-fixed* frame, not the body-centered
  * inertial one. Terrain is a function of position on the rotating body, so
  * sampling it with an inertial direction leaves the mountains standing still in
  * inertial space while the planet turns underneath them — which showed up as a
@@ -278,7 +278,7 @@ function groundAltitude(
 }
 
 /**
- * Unit vector from the body's centre to the entity, in body-fixed axes.
+ * Unit vector from the body's center to the entity, in body-fixed axes.
  *
  * The only way to obtain a `BodyFixedDirection` for an entity, which is what
  * makes `surfaceRadius` impossible to call with the wrong axes. A body with no

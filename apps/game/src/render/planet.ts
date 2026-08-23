@@ -50,11 +50,11 @@ import type { BodyTextures } from './planetTextures.ts'
  * ## Why the lighting is hand-written
  *
  * `MeshStandardNodeMaterial` and a point light would be less code. It would also
- * be the wrong model. A planet lit by a star at 150 million kilometres is a
+ * be the wrong model. A planet lit by a star at 150 million kilometers is a
  * *directional* problem, three's shadow and attenuation machinery has nothing to
  * contribute, and — the part that actually decides it — **planetary surfaces are
  * not Lambertian**. The full Moon is famously flat: no limb darkening at all,
- * because regolith backscatters. A Lambertian moon has a bright centre and a
+ * because regolith backscatters. A Lambertian moon has a bright center and a
  * dark rim, which is what every naive renderer produces and what nobody has ever
  * photographed.
  *
@@ -65,7 +65,7 @@ import type { BodyTextures } from './planetTextures.ts'
  *
  * At `k = 0` that is Lambert, which is right for a thick atmosphere. At `k → 1`
  * it is Lommel-Seeliger, which is right for airless regolith and is why the
- * Moon looks like a disc rather than a ball.
+ * Moon looks like a disk rather than a ball.
  *
  * ## What each map contributes
  *
@@ -80,11 +80,11 @@ import type { BodyTextures } from './planetTextures.ts'
  * — because the blue channel carries the ocean mask instead. The mask lived in
  * alpha once, and alpha is semantic to everything that touches an image:
  * libwebp's lossless encoder zeroes the RGB under transparent pixels, which
- * erased the whole Moon map the day the encoder went lossless. A colour
+ * erased the whole Moon map the day the encoder went lossless. A color
  * channel is just data.
  *
  * A body with none of them still shades: the maps default to flat, and the base
- * colour and albedo carry it. That is the procedural case, and it is most of the
+ * color and albedo carry it. That is the procedural case, and it is most of the
  * galaxy.
  */
 
@@ -117,13 +117,13 @@ const CLEAR = pixel(255, 255, 255, 0)
 
 export interface PlanetMaterial {
   readonly material: MeshBasicNodeMaterial
-  /** Unit vector towards the star, render space. */
+  /** Unit vector toward the star, render space. */
   readonly sunDirection: { value: Vector3 }
   readonly sunColour: { value: Color }
   readonly sunIntensity: { value: number }
   /** The body's spin axis in render space; the normal-map frame is built on it. */
   readonly spinAxis: { value: Vector3 }
-  /** Body centre in render space, for the ring-shadow projection. */
+  /** Body center in render space, for the ring-shadow projection. */
   readonly centre: { value: Vector3 }
   /** Tint, and the whole surface where there is no albedo map. */
   readonly baseColour: { value: Color }
@@ -133,7 +133,7 @@ export interface PlanetMaterial {
   /** Multiplier on the normal map's horizontal gradients. */
   readonly reliefScale: { value: number }
   /**
-   * How much the disc darkens towards its edge, 0..1. A deep atmosphere
+   * How much the disk darkens toward its edge, 0..1. A deep atmosphere
    * reflects from optical depth ~1, so a grazing view sees higher, thinner,
    * darker gas: every Cassini and Hubble giant rolls off at the limb, and a
    * giant drawn without it is a flat decal. Airless photometry gets this from
@@ -142,7 +142,7 @@ export interface PlanetMaterial {
   readonly limbDarkening: { value: number }
   /**
    * Chroma multiplier, 1 neutral. The published giant maps are near true
-   * colour, which is paler than any released photograph — press images are
+   * color, which is paler than any released photograph — press images are
    * stretched, and the stretched look is what a planet "looks like" to every
    * eye that will judge this render. A quarter more chroma is the difference
    * between a cream ball and Jupiter.
@@ -161,7 +161,7 @@ export interface PlanetMaterial {
   readonly nightStrength: { value: number }
   readonly specularStrength: { value: number }
   readonly specularSharpness: { value: number }
-  /** Scattering colour of the air, seen looking down through it. */
+  /** Scattering color of the air, seen looking down through it. */
   readonly hazeColour: { value: Color }
   /** What the low sun turns: the sunset tint the air lends the light. */
   readonly hazeLimb: { value: Color }
@@ -223,7 +223,7 @@ export function createPlanetMaterial(): PlanetMaterial {
   const hazeStrength = uniform(0)
   // Open-ocean reflectance in linear sRGB — a few percent, blue. Measured off
   // the mid-Pacific in orbital photographs, not off the albedo map, whose
-  // "ocean" is bathymetry data wearing water's colour.
+  // "ocean" is bathymetry data wearing water's color.
   const oceanColour = uniform(new Color(0.012, 0.04, 0.13))
   const cloudHeight = uniform(0)
   const cloudShadow = uniform(0)
@@ -256,7 +256,7 @@ export function createPlanetMaterial(): PlanetMaterial {
   // decision uses this one, because a mountain on the night side is still on the
   // night side — letting a normal-mapped slope catch the sun across the
   // terminator produces lit specks floating in the dark, which is the classic
-  // normal-map-on-a-planet artefact.
+  // normal-map-on-a-planet artifact.
   const geometric = normalize(normalWorld)
   const axis = normalize(spinAxis)
 
@@ -299,7 +299,7 @@ export function createPlanetMaterial(): PlanetMaterial {
    * Follow the sun ray from this point until it crosses the equatorial plane; if
    * it lands between the ring radii, the ring is between here and the star.
    * Exact, three dot products, and it is the thing that makes Saturn look
-   * photographed rather than modelled — those bands move with the season and no
+   * photographed rather than modeled — those bands move with the season and no
    * amount of surface detail substitutes for them.
    */
   const radial = positionWorld.sub(centre)
@@ -315,7 +315,7 @@ export function createPlanetMaterial(): PlanetMaterial {
   const crossingRadius = length(crossing)
   const throughRing = step(ringInner, crossingRadius)
     .mul(step(crossingRadius, ringOuter))
-    // Only when the plane is towards the star, not behind us.
+    // Only when the plane is toward the star, not behind us.
     .mul(step(float(0), toPlane))
   const ringSpan = max(ringOuter.sub(ringInner), float(1e-4))
   const ringSample = ringMap.sample(
@@ -330,9 +330,9 @@ export function createPlanetMaterial(): PlanetMaterial {
    *
    * The sun ray reaches this point after crossing the cloud layer some distance
    * away, and that distance grows as the sun gets low — which is why the shadow
-   * of a cloud stretches towards the terminator instead of sitting under it.
+   * of a cloud stretches toward the terminator instead of sitting under it.
    * Converting the offset to texture coordinates needs the cosine of the
-   * latitude, because a metre of longitude is worth more near the poles.
+   * latitude, because a meter of longitude is worth more near the poles.
    */
   const upwards = max(dot(geometric, light), float(0.12))
   const reach = cloudHeight.div(upwards)
@@ -352,18 +352,18 @@ export function createPlanetMaterial(): PlanetMaterial {
 
   const mu0 = max(dot(shaded, light), float(0))
   const mu = max(dot(shaded, view), float(0.05))
-  // Lommel-Seeliger, normalised so that head-on illumination and view give 1.
+  // Lommel-Seeliger, normalized so that head-on illumination and view give 1.
   const lommelSeeliger = mu0.div(mu0.add(mu)).mul(2)
   const photometric = mix(mu0, lommelSeeliger.mul(mu0.sign()), lunarLambert)
 
   /*
    * The light itself reddens as the sun drops. A surface near the terminator
-   * is lit through hundreds of kilometres of air that has scattered the blue
+   * is lit through hundreds of kilometers of air that has scattered the blue
    * away, which is why every orbital photograph puts an amber band along the
    * dawn and dusk lines — the ground there is lit by sunset. Keyed to the
    * geometric incidence, because it is the sun's altitude that decides the
    * path length, not the slope of any hill; and scaled by how much air the
-   * body has, because the Moon's terminator is grey to the end.
+   * body has, because the Moon's terminator is gray to the end.
    */
   const lowSun = smoothstep(float(0.35), float(0.02), incidence)
   const lightTint = mix(vec3(1), hazeLimb, lowSun.mul(hazeStrength).mul(0.85))
@@ -371,11 +371,11 @@ export function createPlanetMaterial(): PlanetMaterial {
   const lit = daylight.mul(ringShade).mul(cloudShade)
 
   /*
-   * Water and land are different materials, not different colours.
+   * Water and land are different materials, not different colors.
    *
    * The mask rides in the normal map's blue. Where it says water, the map's
-   * colour is mostly *bathymetry* — the sea floor, which no photograph from
-   * orbit shows — so the albedo is pulled towards a uniform deep-ocean blue.
+   * color is mostly *bathymetry* — the sea floor, which no photograph from
+   * orbit shows — so the albedo is pulled toward a uniform deep-ocean blue.
    * Fully replacing it would erase the real shallow-water turquoise on the
    * banks and reefs, which photographs do show; 0.65 keeps them.
    */
@@ -401,17 +401,17 @@ export function createPlanetMaterial(): PlanetMaterial {
    *
    * Three facts carry it. **Fresnel**: water reflects 2% head-on and nearly
    * everything at grazing incidence, so the glint is modest under a high sun
-   * and becomes a blown white-gold sheet towards the limb and the terminator —
+   * and becomes a blown white-gold sheet toward the limb and the terminator —
    * which is exactly where the photographs put it. **Two lobes**: wave slopes
    * spread the reflection into a bright core inside a wide skirt; a single
    * tight exponent reads as a chrome ball, and the skirt is most of what the
-   * eye recognises as "sea". **The geometric normal**: the normal map is
-   * ten-kilometre topography, and the wave field is not in any map at this
+   * eye recognizes as "sea". **The geometric normal**: the normal map is
+   * ten-kilometer topography, and the wave field is not in any map at this
    * resolution.
    *
    * The gain sets the core near diffuse white under a high sun and lets the
    * grazing case run well past 1 — that is what the HDR headroom is for, and
-   * the tone curve's shoulder is what keeps it from clipping to a disc.
+   * the tone curve's shoulder is what keeps it from clipping to a disk.
    */
   const half = normalize(light.add(view))
   const facing = max(dot(view, half), float(0))
@@ -426,7 +426,7 @@ export function createPlanetMaterial(): PlanetMaterial {
     .mul(lit)
 
   /*
-   * Aerial perspective: the disc seen through its own air.
+   * Aerial perspective: the disk seen through its own air.
    *
    * The atmosphere shell only survives the depth test outside the planet's
    * silhouette, so everything the air does *in front of* the ground has to
@@ -450,8 +450,8 @@ export function createPlanetMaterial(): PlanetMaterial {
   )
 
   const surfaceLight = diffuse.add(sunlight.mul(glint))
-  // 0.68, not higher: at 0.8 the whole disc went milky and the ocean lost
-  // its depth — the photographs keep a saturated blue mid-disc under the veil.
+  // 0.68, not higher: at 0.8 the whole disk went milky and the ocean lost
+  // its depth — the photographs keep a saturated blue mid-disk under the veil.
   const shadedSurface = mix(surfaceLight, veilColour, veil.mul(0.68))
 
   /*
@@ -466,7 +466,7 @@ export function createPlanetMaterial(): PlanetMaterial {
     .mul(nightStrength)
     // A city under cloud is not visible from orbit.
     .mul(oneMinus(cloudCover.mul(0.85)))
-    // And one under a hundred kilometres of slant air is dimmed by it.
+    // And one under a hundred kilometers of slant air is dimmed by it.
     .mul(oneMinus(veil.mul(0.6)))
 
   const material = new MeshBasicNodeMaterial()
@@ -525,7 +525,7 @@ export interface CloudMaterial {
   readonly drift: { value: number }
   /** Tint for a deck with no map — Titan's, and every procedural world's. */
   readonly baseColour: { value: Color }
-  /** What the low sun turns the deck: the body's sunset colour. */
+  /** What the low sun turns the deck: the body's sunset color. */
   readonly sunsetColour: { value: Color }
   setTexture(map: Texture | null): void
 }
@@ -562,7 +562,7 @@ export function createCloudMaterial(): CloudMaterial {
   const normal = normalize(normalWorld)
   const light = normalize(sunDirection)
   const incidence = dot(normal, light)
-  // A wider terminator than the ground's: cloud tops are ten kilometres up and
+  // A wider terminator than the ground's: cloud tops are ten kilometers up and
   // stay in sunlight after the surface below them has not.
   const daylight = smoothstep(float(-0.22), float(0.12), incidence)
 
@@ -572,7 +572,7 @@ export function createCloudMaterial(): CloudMaterial {
    * after the ground under them has gone dark, which is why the amber band in
    * every orbital dusk photograph is drawn on the weather, not the ground.
    * The old shading floor of 0.15 is cut to 0.04: it existed to keep night
-   * clouds legible and instead laid a grey film over the whole night side.
+   * clouds legible and instead laid a gray film over the whole night side.
    */
   const glow = mix(
     vec3(1),
@@ -618,7 +618,7 @@ export interface RingMaterial {
   readonly sunIntensity: { value: number }
   /** Ring radii as a fraction of the mesh's own extent, 0..1. */
   readonly innerFraction: { value: number }
-  /** Centre of the body that casts a shadow on the ring, render space. */
+  /** Center of the body that casts a shadow on the ring, render space. */
   readonly centre: { value: Vector3 }
   /**
    * That body's drawn radius in render space — the cylinder test runs on
@@ -655,7 +655,7 @@ export function createRingMaterial(): RingMaterial {
   // so a clear fallback zeroes the thickness and a mapless ring — every
   // procedural giant's, and Jupiter's, Uranus's and Neptune's — renders fully
   // transparent. White makes it a uniform slab whose density comes from
-  // `opticalDepth` and whose colour comes from `baseColour`.
+  // `opticalDepth` and whose color comes from `baseColour`.
   const map = texture(WHITE)
   const sunDirection = uniform(new Vector3(1, 0, 0))
   const sunColour = uniform(new Color(1, 1, 1))
@@ -668,7 +668,7 @@ export function createRingMaterial(): RingMaterial {
 
   // The geometry is an annulus in its own XZ plane with an outer radius of 1, so
   // the radial coordinate is available without a UV channel — and without the
-  // seam that any UV parameterisation of a disc has to put somewhere.
+  // seam that any UV parameterisation of a disk has to put somewhere.
   const radius = length(vec2(positionLocal.x, positionLocal.z))
   const across = saturate(
     radius.sub(innerFraction).div(max(oneMinus(innerFraction), float(1e-3))),
@@ -679,7 +679,7 @@ export function createRingMaterial(): RingMaterial {
   const view = normalize(cameraPosition.sub(positionWorld))
   const light = normalize(sunDirection)
 
-  // Which face of the slab is towards the star, and which towards the camera.
+  // Which face of the slab is toward the star, and which toward the camera.
   const lightSide = dot(normal, light)
   const viewSide = dot(normal, view)
   const sameSide = step(float(0), lightSide.mul(viewSide))
@@ -694,8 +694,8 @@ export function createRingMaterial(): RingMaterial {
    *     I/F = (ω₀/4) · μ₀/(μ₀ + μ) · [1 − e^(−τ(1/μ₀ + 1/μ))]
    *
    * A dense ring saturates rather than growing brighter without limit; a thin
-   * one brightens as the geometry closes towards edge-on, because the line of
-   * sight crosses more particles; and the whole thing dims towards zero as the
+   * one brightens as the geometry closes toward edge-on, because the line of
+   * sight crosses more particles; and the whole thing dims toward zero as the
    * rings turn edge-on to the *sun*, which is the seasonal cycle that took
    * Cassini seven years to watch once.
    *

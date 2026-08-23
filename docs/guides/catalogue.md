@@ -83,7 +83,7 @@ the first.
 | Source                                                                            | Provides                                                                       | License                                                    |
 | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------- |
 | [HYG v4.4](https://codeberg.org/astronexus/hyg)                                   | 119,614 stars: positions, parallaxes, magnitudes, spectral types, designations | **CC BY-SA 4.0**                                           |
-| [NASA Exoplanet Archive](https://exoplanetarchive.ipac.caltech.edu/) `pscomppars` | confirmed planets with published orbits, masses and radii                      | none stated; acknowledgement requested                     |
+| [NASA Exoplanet Archive](https://exoplanetarchive.ipac.caltech.edu/) `pscomppars` | confirmed planets with published orbits, masses and radii                      | none stated; acknowledgment requested                     |
 | `apps/ingest/src/solarSystem.ts`                                                  | the eight planets of the Solar System                                          | J2000 elements from JPL fact sheets — facts, not a dataset |
 
 **Gaia is deliberately absent.** Its data are CC BY-NC 3.0 IGO, and a
@@ -182,7 +182,7 @@ Expanding a Bayer designation through the constellation genitive is what turns
 `Tau Cet` into `Tau Ceti` and `61 Cyg` into `61 Cygni`. Only 214 systems within
 150 ly carry an IAU proper name; 649 carry a Bayer or Flamsteed designation, so
 that one table roughly quadruples the number of stars with a name a human
-recognises.
+recognizes.
 
 ---
 
@@ -209,7 +209,7 @@ Barnard's Star of all stars carries one.
 
 **The derivations are a generation input.** A system's planets are laid out from
 its star's luminosity, so changing a bolometric correction moves every frost line
-in the catalogued half of the galaxy. `PHOTOMETRY_ALGORITHM` is in the generation
+in the cataloged half of the galaxy. `PHOTOMETRY_ALGORITHM` is in the generation
 manifest for that reason; it looks like presentation and it is not.
 
 ### How accurate is it
@@ -224,14 +224,14 @@ Measured against seventeen stars with published values:
 
 The luminosity error concentrates in late-M dwarfs, where the bolometric
 correction is steep and the published values themselves disagree; Proxima
-Centauri is the worst case in the catalog at roughly half its catalogued
+Centauri is the worst case in the catalog at roughly half its cataloged
 luminosity, and it is a flare star at the edge of the calibration.
 
 Two findings worth keeping:
 
 - **The spectral classification beats the color index** as a temperature source —
   2.8% against 4.7%, and 5% at the worst case against 18%. B−V is a photometric
-  proxy whose fit bends badly at the red end, where most of the neighbourhood
+  proxy whose fit bends badly at the red end, where most of the neighborhood
   lives. The exception, also measured: for giants the color index is better.
 - **The two tables must come from one source.** An early version paired a
   Pecaut & Mamajek bolometric correction with an older temperature scale. Both are
@@ -277,19 +277,19 @@ supply` against `data/catalog/manifest.json` from the previous build. A large
 ## Things that will bite you
 
 **The catalog is an argument, never a global.** Every function that can produce
-a catalogued system takes it explicitly — `resolveSystem`, `systemsWithin`,
+a cataloged system takes it explicitly — `resolveSystem`, `systemsWithin`,
 `new World({ catalog })`. A module-level singleton would be smaller and would make
 the catalog version a hidden input to generation, which
 [Rule 1](../design/galaxy.md#the-four-rules) exists to prevent.
 
 **Workers do not have it.** Shipping a 458 KB table to every worker so it can
 compute one integer is the wrong trade, so tasks take what they need: a cell's
-catalogued _count_, or a whole resolved stub. See the header of
+cataloged _count_, or a whole resolved stub. See the header of
 `packages/workers/src/tasks.ts`.
 
 **Procedural fill subtracts, and stops.** The density model says how many stars
 there _are_, not how many are _unknown_. Generating the full expected count on top
-of the catalog would double the solar neighbourhood; generating none would leave
+of the catalog would double the solar neighborhood; generating none would leave
 it five times too sparse. So the fill is the difference — and it is switched off
 entirely inside `completeRadiusLightYears` (25 ly), because the first version
 without that put an invented M dwarf 3.4 light-years away, closer than Proxima
@@ -384,7 +384,7 @@ file and a **perfectly flat Moon**: `toColourspace('b-w')` is 8-bit in libvips,
 so it silently downcast LOLA's 16-bit product and every gradient came out 256
 times too small. `grey16` is the one that preserves it.
 
-**Luminance to alpha.** A cloud map published as a greyscale JPEG is a coverage
+**Luminance to alpha.** A cloud map published as a grayscale JPEG is a coverage
 mask wearing a color image's clothes. Drawn as color it is a gray shell over
 the whole planet; moved into alpha it is weather.
 

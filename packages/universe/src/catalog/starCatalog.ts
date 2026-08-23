@@ -44,12 +44,12 @@ import {
 } from './spectral.ts'
 
 /*
- * The catalogue at runtime.
+ * The catalog at runtime.
  *
  * `format.ts` reads the bytes; this turns them into something the simulation and
  * the renderer can use. Two jobs beyond decoding:
  *
- *   **Derive the physics.** A catalogue publishes a magnitude and a colour; a
+ *   **Derive the physics.** A catalog publishes a magnitude and a color; a
  *   renderer needs radiant power, an emission temperature, an angular size and a
  *   mass. `photometry.ts` does the conversion and this applies it once per star
  *   at load, because every one of those is needed by the star map on the first
@@ -59,12 +59,12 @@ import {
  *   of 7,529 rows: "which star is this id" and "what is within N light-years".
  *   The second is answered through the same cell grid the procedural generator
  *   uses, so that a query's cost depends on the volume asked about and not on
- *   how much catalogue happens to exist.
+ *   how much catalog happens to exist.
  *
  * This is a *value*, not a service: it is constructed from bytes and never
  * mutates. That is what lets it be an explicit input to generation rather than
  * ambient state, which is what `docs/design/galaxy.md` Rule 1 requires — the
- * catalogue version has to be a generation input, and a global would make it a
+ * catalog version has to be a generation input, and a global would make it a
  * hidden one.
  */
 
@@ -81,11 +81,11 @@ export interface StarPhysical {
    */
   readonly massBasis: 'derived' | 'typical'
   readonly temperature: Kelvin
-  /** Linear sRGB of a blackbody at `temperature`, brightest channel normalised. */
+  /** Linear sRGB of a blackbody at `temperature`, brightest channel normalized. */
   readonly colour: LinearRgb
   /** Absolute visual magnitude as published, or null. */
   readonly absoluteMagnitude: number | null
-  /** Colour index B−V as published, or null. */
+  /** Color index B−V as published, or null. */
   readonly colourIndex: number | null
   /**
    * True when the physical values above rest on a fallback rather than a
@@ -122,9 +122,9 @@ export interface CatalogStar {
 
 export interface StarCatalog {
   readonly metadata: CatalogMetadata
-  /** The whole-catalogue version. A generation input; see Rule 1. */
+  /** The whole-catalog version. A generation input; see Rule 1. */
   readonly version: string
-  /** Radius of the volume this catalogue covers. Procedure owns everything past it. */
+  /** Radius of the volume this catalog covers. Procedure owns everything past it. */
   readonly radius: Meters
   /** Radius inside which procedural fill is suppressed; see `CellContext`. */
   readonly completeRadius: Meters
@@ -133,9 +133,9 @@ export interface StarCatalog {
   get(id: SystemId): CatalogStar | undefined
   /** Lookup by any name or designation, case- and punctuation-insensitive. */
   find(text: string): CatalogStar | undefined
-  /** Every catalogued star within `radius` of a point, unordered. */
+  /** Every cataloged star within `radius` of a point, unordered. */
   within(centre: UniverseVector, radius: Meters): readonly CatalogStar[]
-  /** Catalogued stars in one generation cell. The procedural fill needs the count. */
+  /** Cataloged stars in one generation cell. The procedural fill needs the count. */
   inCell(cell: GalacticCell): readonly CatalogStar[]
 }
 
@@ -143,7 +143,7 @@ export interface StarCatalog {
 /* Deriving one star                                                          */
 /* ------------------------------------------------------------------------- */
 
-/** When nothing is known, the neighbourhood's most common kind of star. */
+/** When nothing is known, the neighborhood's most common kind of star. */
 const FALLBACK_TEMPERATURE: Kelvin = 3_550
 const FALLBACK_LUMINOSITY = 0.02
 
@@ -327,7 +327,7 @@ function expandedBayerOf(packed: PackedStar): BayerName | null {
  * Every name a star is known by, most familiar first.
  *
  * The common name leads because it is what the HUD shows and what a player
- * types; the catalogue numbers trail because they are what a paper cites.
+ * types; the catalog numbers trail because they are what a paper cites.
  */
 export function designationsOf(packed: PackedStar): readonly Designation[] {
   const names: Designation[] = []
@@ -364,7 +364,7 @@ export function designationsOf(packed: PackedStar): readonly Designation[] {
 }
 
 /* ------------------------------------------------------------------------- */
-/* The catalogue                                                              */
+/* The catalog                                                              */
 /* ------------------------------------------------------------------------- */
 
 class DecodedCatalog implements StarCatalog {
@@ -427,7 +427,7 @@ class DecodedCatalog implements StarCatalog {
       this.#byId.set(star.id, star)
       // The Greek Bayer form (`α Cen`) is search-only: designations.ts
       // promises it is findable — it is what gets pasted out of Wikipedia —
-      // but listing it as a designation would cite the same catalogue twice
+      // but listing it as a designation would cite the same catalog twice
       // on the system panel.
       const greek = expandedBayerOf(row)?.greek
       for (const key of searchKeysFor(
@@ -480,12 +480,12 @@ class DecodedCatalog implements StarCatalog {
 export const loadCatalog = (packed: PackedCatalog): StarCatalog =>
   new DecodedCatalog(packed)
 
-/** Decode a packed catalogue file and index it. */
+/** Decode a packed catalog file and index it. */
 export function readCatalog(bytes: Uint8Array): StarCatalog {
   const packed = decodeCatalog(bytes)
   invariant(
     packed.stars.length > 0,
-    'Star catalogue decoded to zero stars; the file is truncated or empty',
+    'Star catalog decoded to zero stars; the file is truncated or empty',
   )
   return new DecodedCatalog(packed)
 }
@@ -495,13 +495,13 @@ export function readCatalog(bytes: Uint8Array): StarCatalog {
 /* ------------------------------------------------------------------------- */
 
 /*
- * One star, so that a host with no catalogue asset still has somewhere to be.
+ * One star, so that a host with no catalog asset still has somewhere to be.
  *
  * The alternative — refusing to start — makes every unit test that touches a
  * `World` depend on a 160 KB binary, and makes a failed fetch a blank screen
  * rather than a smaller galaxy. This is honest about what it is: `radius: 0`
- * means the catalogue claims no volume, so procedural generation fills
- * everything including the solar neighbourhood, and the horizon-of-knowledge
+ * means the catalog claims no volume, so procedural generation fills
+ * everything including the solar neighborhood, and the horizon-of-knowledge
  * shell correctly collapses to nothing.
  */
 const SOL_ROW: PackedStar = {

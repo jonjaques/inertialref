@@ -43,11 +43,11 @@ describe('UniverseVector', () => {
   it('covers the galaxy with room to spare', () => {
     // Milky Way is ~100,000 ly across; we need to hold it plus a halo.
     expect(UV.UNIVERSE_HALF_EXTENT / LIGHT_YEAR).toBeGreaterThan(120_000)
-    // ...and still resolve below a millimetre at the far rim.
+    // ...and still resolve below a millimeter at the far rim.
     expect(UV.POSITION_RESOLUTION).toBeLessThan(1e-3)
   })
 
-  it('normalises offsets into the canonical range', () => {
+  it('normalizes offsets into the canonical range', () => {
     const uv = UV.universeVector(
       0,
       0,
@@ -71,10 +71,10 @@ describe('UniverseVector', () => {
   })
 
   it('preserves inch-scale displacement at galactic distance', () => {
-    // 8 kpc out — roughly the Sun's distance from the galactic centre — move an inch.
+    // 8 kpc out — roughly the Sun's distance from the galactic center — move an inch.
     const far = UV.fromMeters(8_000 * PARSEC, 0, 0)
     const moved = UV.translate(far, vec3(0.0254, 0, 0))
-    // Resolvable, to within the quarter-millimetre the representation promises
+    // Resolvable, to within the quarter-millimeter the representation promises
     // — not to within a double's idea of 8 kpc, which is 30 km wide.
     expect(Math.abs(UV.distance(far, moved) - 0.0254)).toBeLessThan(
       UV.POSITION_RESOLUTION * 2,
@@ -98,7 +98,7 @@ describe('UniverseVector', () => {
     fc.assert(
       fc.property(anyPosition, (uv) => {
         expect(UV.isValid(uv)).toBe(true)
-        // Re-normalising an already-normalised vector must be the identity.
+        // Re-normalizing an already-normalized vector must be the identity.
         const again = UV.universeVector(
           uv.sx,
           uv.sy,

@@ -1,8 +1,8 @@
 /*
  * Morgan-Keenan spectral type parsing.
  *
- * This exists because published catalogues do not contain MK strings; they
- * contain whatever the compiler of each source catalogue wrote down. Within
+ * This exists because published catalogs do not contain MK strings; they
+ * contain whatever the compiler of each source catalog wrote down. Within
  * 150 ly HYG v4.4 carries 796 distinct spectral strings across 7,529 stars, and
  * `spect[0]` classifies 87% of them — quietly wrong about the rest:
  *
@@ -18,7 +18,7 @@
  *
  * The parser is total: anything it cannot read returns a type with a null class
  * rather than throwing, because "no usable spectral type" is an ordinary answer
- * for 8% of the catalogue and the caller has a fallback for it.
+ * for 8% of the catalog and the caller has a fallback for it.
  */
 
 /**
@@ -80,7 +80,7 @@ const CLASS_LETTERS = new Set<string>([
 /**
  * Position on the OBAFGKM ladder as a continuous number: O0 = 0, M9 = 69.
  *
- * Null off the ladder. Every temperature and colour fallback keys off this, so
+ * Null off the ladder. Every temperature and color fallback keys off this, so
  * a brown dwarf or a white dwarf reaching one of them would be interpolated
  * against stars it has nothing in common with.
  */
@@ -120,7 +120,7 @@ const ROMAN: readonly (readonly [string, LuminosityClass])[] = [
 ]
 
 /**
- * Parse one catalogue spectral string.
+ * Parse one catalog spectral string.
  *
  * Ranges (`k-m`, `F5IV-V`, `G8/K0`) resolve to their first member rather than a
  * midpoint: the first is what the observer led with, and a midpoint invents a
@@ -151,7 +151,7 @@ export function parseSpectralType(raw: string): SpectralType {
   }
 
   for (const [prefix, implied] of PREFIXES) {
-    // Prefixes are lowercase in the catalogues; matching case-insensitively
+    // Prefixes are lowercase in the catalogs; matching case-insensitively
     // would eat the `C` of a carbon star and the `D` handled above.
     if (rest.startsWith(prefix) && rest.length > prefix.length) {
       luminosity = implied

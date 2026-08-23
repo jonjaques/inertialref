@@ -215,11 +215,11 @@ _exactly_ like a smooth sphere.
 
 Real relief was being generated, transferred, and drawn, and it was completely
 invisible. The fix is a second pass computing central differences over
-neighbouring vertices. It is not a polish detail: without it, terrain generation
+neighboring vertices. It is not a polish detail: without it, terrain generation
 has no observable effect.
 
 Patch edges use one-sided differences, which leaves a hairline seam between
-neighbouring patches — [roadmap item](../roadmap.md#terrain).
+neighboring patches — [roadmap item](../roadmap.md#terrain).
 
 ### The datum sphere sits _below_ the terrain
 
@@ -429,7 +429,7 @@ measured 7.27 ms against a 3.0 ms budget.
 The star field is instanced sprites rather than a point cloud, and that is not a
 stylistic choice: **WebGPU renders point primitives at exactly one pixel**, so
 `PointsNodeMaterial.sizeNode` is silently ignored on a `Points` object under the
-WebGPU backend and honoured under the WebGL one. The field would have shrunk on
+WebGPU backend and honored under the WebGL one. The field would have shrunk on
 the primary backend and looked correct on the fallback.
 
 ---

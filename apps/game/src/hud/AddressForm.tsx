@@ -15,8 +15,8 @@ const MAX_ADDRESS_LENGTH = 200
  * Type an address, go there.
  *
  * shadcn/ui's `Input` rather than a bare `<input>`, so this field and the
- * catalogue's search field are the same control: they were two hand-written
- * boxes with different borders, different focus colours and different
+ * catalog's search field are the same control: they were two hand-written
+ * boxes with different borders, different focus colors and different
  * placeholder grades, on two surfaces four files apart.
  */
 export function AddressForm({

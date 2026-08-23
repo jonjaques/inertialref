@@ -181,8 +181,8 @@ is one of the better consequences of the v0.2 redesign.
 | ------------------------------------ | -------------------------------------------------------------------- |
 | 0 g — coast, or **the flip**         | Freefall. Handholds, and everything unsecured is floating.           |
 | 0.1–1.4 g — transit                  | Normal. There is a floor and it is aft. You can work.                |
-| 1.5–3 g — hard transit, or manoeuvre | Heavy. Movement is slow and expensive; the suit warns.               |
-| 3–5 g — combat manoeuvring           | **Secure yourself or be injured.** Unsecured objects become hazards. |
+| 1.5–3 g — hard transit, or maneuver | Heavy. Movement is slow and expensive; the suit warns.               |
+| 3–5 g — combat maneuvering           | **Secure yourself or be injured.** Unsecured objects become hazards. |
 | > 5 g                                | Crew stations only. Egress from the seat is refused.                 |
 
 Two consequences worth having. **"Down" is the direction the drive is not** — so

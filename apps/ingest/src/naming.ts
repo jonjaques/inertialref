@@ -3,7 +3,7 @@ import { bayerName, flamsteedName, glieseName } from '@inertialref/universe'
 /*
  * Choosing the one name that goes on screen.
  *
- * The catalogue offers up to seven for a star and the HUD has room for one. The
+ * The catalog offers up to seven for a star and the HUD has room for one. The
  * rule below is short, and every clause in it is there because a star broke the
  * clause above it.
  */
@@ -69,7 +69,7 @@ export function chooseCommonName(
   /*
    * `Castor` and `Castor B` are one name, not two.
    *
-   * The catalogue names secondaries by appending the component letter, so a
+   * The catalog names secondaries by appending the component letter, so a
    * plain string comparison sees two distinct proper names and concludes that
    * neither can stand for the system — which turned Castor into
    * "Alpha Geminorum". Rigil Kentaurus and Toliman are still two names by this

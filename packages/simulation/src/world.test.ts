@@ -66,11 +66,11 @@ function airlessTarget(world: World) {
 }
 
 /**
- * Distance from the centre to the actual ground under the +X axis.
+ * Distance from the center to the actual ground under the +X axis.
  *
  * Not `body.radius`. The datum is a sea-level convention and the terrain sits
  * either side of it — on Venus it reaches 6.9 km above, and a ship "hovering
- * 30 m up" from the datum is nearly seven kilometres underground. These tests
+ * 30 m up" from the datum is nearly seven kilometers underground. These tests
  * used to spawn against the datum and passed only because the generated planet
  * they happened to land on had low ground at that longitude; the moment Sol's
  * bodies became the real ones, both landings began underground.
@@ -361,7 +361,7 @@ describe('flight', () => {
     expect(world.entities.require(ship.id).state.frame).toBe(
       bodyFrameId(planet.address),
     )
-    // It travelled; it did not teleport.
+    // It traveled; it did not teleport.
     expect(
       UV.distance(before, world.canonicalPositionOf(ship.id)),
     ).toBeGreaterThan(1e6)
@@ -447,7 +447,7 @@ describe('flight', () => {
      * On an **airless** body, deliberately. This used to run on whatever the
      * first rocky-with-an-atmosphere planet was, and against the real Solar
      * System that is Venus — where the surface air is 65 kg/m³, denser than any
-     * other gas in the system, and 400 m/s becomes a few metres per second long
+     * other gas in the system, and 400 m/s becomes a few meters per second long
      * before the ground arrives. That is the drag model working, and it is not
      * what this test is about.
      */
@@ -485,7 +485,7 @@ describe('streaming', () => {
     expect(near.loaded.length).toBeGreaterThan(0)
     expect(world.loadedSystems().length).toBeGreaterThan(1)
 
-    // Move the interest centre far away: everything unloads except the system
+    // Move the interest center far away: everything unloads except the system
     // the ship is actually in.
     const far = UV.translate(sol.position, vec3(200 * LIGHT_YEAR, 0, 0))
     world.updateInterest(far, 5 * LIGHT_YEAR)

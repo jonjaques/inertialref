@@ -11,7 +11,7 @@ import { hashString, mix32 } from './hash.ts'
  *     rng.next(); rng.next(); rng.next()
  *
  * inserting one planet shifts every value drawn afterwards, so adding a body to
- * a system silently rewrites its neighbours, and generating two regions in a
+ * a system silently rewrites its neighbors, and generating two regions in a
  * different order produces two different universes. Path derivation has neither
  * property — a region's seed depends only on its own address, so worker order,
  * traversal order and how much of the universe happens to be loaded are all
@@ -72,7 +72,7 @@ export function deriveSeed(parent: Seed, label: string): Seed {
   })
 }
 
-/** Integer-labelled derivation, for hot paths like terrain region indices. */
+/** Integer-labeled derivation, for hot paths like terrain region indices. */
 export function deriveSeedInt(parent: Seed, value: number): Seed {
   return deriveSeed(parent, String(value | 0))
 }

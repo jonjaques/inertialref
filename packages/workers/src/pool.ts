@@ -13,7 +13,7 @@ import type { WorkerFactory, WorkerPort } from './transport.ts'
  * the problem?" when the frame rate drops.
  *
  * Instrumentation separates queue latency from execution time on purpose. They
- * fail differently: slow tasks want optimisation, a deep queue wants more
+ * fail differently: slow tasks want optimization, a deep queue wants more
  * workers or fewer requests.
  */
 
@@ -89,7 +89,7 @@ export class WorkerPool {
     }
   }
 
-  /** Submit a job. The handle can be cancelled whether or not it has started. */
+  /** Submit a job. The handle can be canceled whether or not it has started. */
   submit<Request, Response>(
     task: TaskDefinition<Request, Response>,
     payload: Request,

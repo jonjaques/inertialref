@@ -13,7 +13,7 @@
  * time somebody regenerated it. This is drawn, so it is the same card every
  * time and `pnpm brand --check` can hold it to that.
  *
- * Every colour below is a Tailwind step already in `index.css`, written as a
+ * Every color below is a Tailwind step already in `index.css`, written as a
  * hex literal with the step named — the same convention that file uses, and for
  * the same reason: a bare triple is unreadable next to the palette it belongs
  * to. The type steps are quoted from `index.css` too, axis by axis, so a change
@@ -41,8 +41,8 @@ const GUTTER = 80
 /*
  * The star, and the planet it lights.
  *
- * The planet's centre is off the bottom-right corner so only its limb is in
- * frame — a full disc centred in the right third reads as a stock globe, where
+ * The planet's center is off the bottom-right corner so only its limb is in
+ * frame — a full disk centered in the right third reads as a stock globe, where
  * an arc leaving the frame reads as being near something. The star sits above
  * and outside it, which is what puts the terminator across the visible limb
  * instead of flattening it.
@@ -63,7 +63,7 @@ const SUBSTELLAR = {
 }
 
 /**
- * How far past the limb the falloff runs, as a fraction of the disc.
+ * How far past the limb the falloff runs, as a fraction of the disk.
  *
  * The one number on this card that is a picture rather than a fact. At 0.5 the
  * gradient ends exactly on the limb, which is the honest reading — and the
@@ -167,7 +167,7 @@ export async function composeOgCard() {
    */
   const figures = [
     ['7,123', 'Real Systems'],
-    ['150 ly', 'Catalogued'],
+    ['150 ly', 'Cataloged'],
     ['0', 'To Install'],
   ]
   const spec = []
@@ -203,8 +203,8 @@ export async function composeOgCard() {
     <!-- The lit hemisphere. The gradient's end circle is the planet's own
          circle and its focal point is the sub-stellar point, so an offset is
          distance from where the star is overhead. That is what makes the
-         falloff a terminator rather than a vignette: a radial fill centred on
-         the disc lights the middle and darkens the rim, which is the one thing
+         falloff a terminator rather than a vignette: a radial fill centered on
+         the disk lights the middle and darkens the rim, which is the one thing
          a lit sphere never does. -->
     <radialGradient id="planet" cx="0.5" cy="0.5" r="${LIT_SPREAD}" fx="${SUBSTELLAR.x.toFixed(3)}" fy="${SUBSTELLAR.y.toFixed(3)}">
       <stop offset="0%" stop-color="#bae6fd" stop-opacity="1" />
@@ -218,7 +218,7 @@ export async function composeOgCard() {
       <stop offset="100%" stop-color="${SLATE_950}" stop-opacity="1" />
     </radialGradient>
     <!-- Atmosphere: a stroke on the limb, brightest where the star is and gone
-         by the terminator. Filled behind the disc instead it is a halo all the
+         by the terminator. Filled behind the disk instead it is a halo all the
          way round, which reads as a glow effect rather than as air. -->
     <linearGradient id="rim" x1="0.1" y1="0.95" x2="0.7" y2="0">
       <stop offset="0%" stop-color="#38bdf8" stop-opacity="0" />
@@ -230,7 +230,7 @@ export async function composeOgCard() {
       <stop offset="35%" stop-color="#7dd3fc" stop-opacity="0.28" />
       <stop offset="100%" stop-color="#7dd3fc" stop-opacity="0" />
     </radialGradient>
-    <!-- The anamorphic streak. A blade, not a halo: it is the artefact the
+    <!-- The anamorphic streak. A blade, not a halo: it is the artifact the
          front door is composed around, and it is what carries light across the
          type instead of leaving the left third flat. -->
     <linearGradient id="streak" x1="0" y1="0" x2="1" y2="0">

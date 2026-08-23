@@ -16,10 +16,10 @@ import { format } from './perfFormat.ts'
  */
 
 /*
- * The plot's three colours, as literals because they are SVG paint attributes
+ * The plot's three colors, as literals because they are SVG paint attributes
  * chosen per sample rather than classes — but named, so they are findable when
  * the palette moves, and annotated with the step each one is, which is the form
- * `index.css` writes every colour in.
+ * `index.css` writes every color in.
  *
  * `budget` was `#f87171` (red-400), a second red for an idea that already had
  * one. Fault in this system is rose, so the budget rule is rose too.
@@ -40,7 +40,7 @@ export function SeriesPlot({
   unit: string
   /** Drawn as a dashed rule. Where the design says this number should sit. */
   budget?: number
-  /** Colours the plot when p95 exceeds it. Defaults to `budget`; see `DROPPED_FRAME_MS`. */
+  /** Colors the plot when p95 exceeds it. Defaults to `budget`; see `DROPPED_FRAME_MS`. */
   warnAbove?: number
 }) {
   // The series reference is stable and its contents are not, which is the same

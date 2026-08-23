@@ -5,8 +5,8 @@ import { fromMeters, type UniverseVector, vec3 } from '@inertialref/spatial'
 /*
  * Getting a published position into the universe's coordinates.
  *
- * Catalogues publish equatorial coordinates — right ascension and declination
- * on a sky centred on the Earth, tilted by the Earth's axis, at an epoch. None
+ * Catalogs publish equatorial coordinates — right ascension and declination
+ * on a sky centered on the Earth, tilted by the Earth's axis, at an epoch. None
  * of that is a fact about the galaxy; all of it is a fact about where the
  * observation was made from. Three changes of basis get from there to a
  * universe coordinate, and each is done exactly once, here:
@@ -16,7 +16,7 @@ import { fromMeters, type UniverseVector, vec3 } from '@inertialref/spatial'
  *   +Z up (astronomy) → +Y up (sim)    `physics/frameConvention.ts`
  */
 
-/** Distance from the galactic centre to the Sun (Gravity Collaboration, 2019). */
+/** Distance from the galactic center to the Sun (Gravity Collaboration, 2019). */
 export const SUN_GALACTOCENTRIC_RADIUS: Meters = 8_178 * PARSEC
 /** The Sun sits slightly north of the galactic mid-plane. */
 export const SUN_HEIGHT_ABOVE_PLANE: Meters = 20.8 * PARSEC
@@ -66,11 +66,11 @@ export function galacticToCartesian(
 }
 
 /**
- * Heliocentric galactic cartesian metres to a universe coordinate.
+ * Heliocentric galactic cartesian meters to a universe coordinate.
  *
- * The universe origin is the galactic centre, so the Sun lands 8.178 kpc out
+ * The universe origin is the galactic center, so the Sun lands 8.178 kpc out
  * rather than at zero. That is deliberate: an origin at the player's home system
- * would have to move the moment the game modelled anywhere else, and every
+ * would have to move the moment the game modeled anywhere else, and every
  * sector index would be a relative quantity pretending to be absolute.
  */
 export function heliocentricToUniverse(
@@ -87,5 +87,5 @@ export function heliocentricToUniverse(
   return fromMeters(sim.x, sim.y, sim.z)
 }
 
-/** The Sun's own universe position — the origin of every published catalogue. */
+/** The Sun's own universe position — the origin of every published catalog. */
 export const SUN_POSITION: UniverseVector = heliocentricToUniverse(0, 0, 0)

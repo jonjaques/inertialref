@@ -42,7 +42,7 @@ figure moves continuously; validate before external use].
 
 **What it does better than anything.** Seamless ship interiors, physicalised
 first-person interaction, and a sense of _presence_ in a machine that nothing
-else matches. When it works, standing in a ship's hold while it manoeuvres is the
+else matches. When it works, standing in a ship's hold while it maneuvers is the
 best thing in the genre.
 
 **What we take.** Ship interiors as continuous space. First-person everything.

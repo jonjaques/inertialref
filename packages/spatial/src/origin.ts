@@ -20,7 +20,7 @@ import { type Vec3, vec3 } from './vec3.ts'
  *
  * Two properties make this safe to do continuously:
  *
- *   - Rebasing is snapped to a power-of-two metre grid, so the shift applied to
+ *   - Rebasing is snapped to a power-of-two meter grid, so the shift applied to
  *     every render coordinate is exactly representable in both float64 and
  *     float32. Ten thousand rebases introduce exactly zero drift, rather than
  *     ten thousand roundings — `origin.test.ts` asserts bit-equality.

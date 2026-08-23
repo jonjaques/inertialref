@@ -48,7 +48,7 @@ export function ControlsSection() {
  * a mapping, and the mapping is a table in `keyAction`. Two lists that could
  * drift is a real risk and the alternative — deriving prose from a switch — is
  * worse; what stops the drift is that `gestures.test.ts` asserts each of these
- * behaviours by name.
+ * behaviors by name.
  */
 const PLANETARIUM_HELP: readonly (readonly [string, string])[] = [
   ['drag', 'orbit the target'],

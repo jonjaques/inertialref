@@ -10,9 +10,9 @@ import { useScrubber } from './useScrubber.ts'
  * The cutscene's screen-space layer: the blackout, the title cards, the
  * optional synced audio and the skip key.
  *
- * DOM rather than canvas because the reference's text behaviour is exactly
+ * DOM rather than canvas because the reference's text behavior is exactly
  * what DOM is good at — absolutely positioned lines, opacity fades, real
- * typefaces — and because the analysis pipeline measures titles by colour
+ * typefaces — and because the analysis pipeline measures titles by color
  * masking a video capture, which cares nothing for how the pixels were made.
  *
  * `'use no memo'`: this component reads `engine.cinematic`, a stable
@@ -173,7 +173,7 @@ export function CutsceneOverlay({
         // Position every frame, not just opacity: the logotype's two words are
         // thrown in from opposite sides of the frame and shrink onto their
         // marks. Writing `left`/`top` alongside the transform keeps the scale
-        // centred on the line while the line itself travels.
+        // centered on the line while the line itself travels.
         node.style.left = `${state.x * 100}%`
         node.style.top = `${state.y * 100}%`
         node.style.transform = `translate(-50%, -50%) scale(${state.scale})`

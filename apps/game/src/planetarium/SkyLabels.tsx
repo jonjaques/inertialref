@@ -15,7 +15,7 @@ import { projectScene } from './project.ts'
  *
  * Each name carries its own ground, and that is the whole reason the plate
  * exists. Tone mapping was doing less than this file used to assume: a name
- * over the Sun's disc measured 2.07:1, and its fill colour alone — with the
+ * over the Sun's disk measured 2.07:1, and its fill color alone — with the
  * text-shadow discounted — was 1.03:1, which is to say invisible. A dark shadow
  * under light text only works while the scene is dark, and a label is drawn on
  * the one thing in the frame guaranteed to be bright. The plate is the system's
@@ -198,9 +198,9 @@ export function SkyLabels({
               style={{ transform: 'translate(-50%, -24px)' }}
             >
               <span
-                /* Bounded, because catalogue names are not. `declutter` spaces
+                /* Bounded, because catalog names are not. `declutter` spaces
                    labels 96 px apart and a designation longer than that would
-                   quietly overlap the neighbour it was spaced away from. */
+                   quietly overlap the neighbor it was spaced away from. */
                 style={selected ? undefined : { textShadow: HALO }}
                 className={`type-label max-w-[14rem] truncate whitespace-nowrap ${
                   selected

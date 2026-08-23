@@ -33,7 +33,7 @@ export const FOCUS_RING =
  * and has to tab back in, which across five tabs of collapsible sections is not
  * navigation. `detail` is the click count, and a click synthesised from Enter
  * or Space on a focused button reports 0 in every engine — so a pointer keeps
- * the old behaviour exactly and a keyboard keeps its place.
+ * the old behavior exactly and a keyboard keeps its place.
  *
  * Keeping its place is only worth anything because `useShipControls` declines
  * Space when the keystroke is aimed at a control inside `.hud-layer`. Without

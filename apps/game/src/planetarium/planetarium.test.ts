@@ -204,7 +204,7 @@ describe('picking', () => {
     /*
      * The rule that makes clicking a planet work at all. A distant point source
      * three pixels from the cursor is the nearest thing to it and is never what
-     * was meant when a disc fills a third of the frame behind it.
+     * was meant when a disk fills a third of the frame behind it.
      */
     const planet = candidate({
       address: 'b:5',
@@ -220,7 +220,7 @@ describe('picking', () => {
     // The other half of the same rule, and the cost of it: a pointer inside
     // both takes the *larger*, so a moon has to be picked by being nearer
     // rather than by being on top. Here the pointer is outside the moon's few
-    // pixels but well inside its slop — and still inside the planet's disc,
+    // pixels but well inside its slop — and still inside the planet's disk,
     // which is why the planet wins.
     const planet = candidate({ address: 'b:5', x: 400, y: 300, radius: 300 })
     const moon = candidate({ address: 'b:5.1', x: 470, y: 260, radius: 4 })

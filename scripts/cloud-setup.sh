@@ -37,7 +37,7 @@ case "$(uname -m)" in
 esac
 
 # Resolve the current Node 26 patch release rather than pinning one that will go stale.
-# SHASUMS256.txt is a few KB and names every artefact for the release, so one request
+# SHASUMS256.txt is a few KB and names every artifact for the release, so one request
 # answers "what is the latest v26" without downloading the 1 MB dist index.
 TARBALL=$(curl -fsSL --max-time 60 "https://nodejs.org/dist/latest-v${NODE_MAJOR}.x/SHASUMS256.txt" 2>/dev/null \
   | grep -o "node-v${NODE_MAJOR}\.[0-9.]*-linux-${ARCH}\.tar\.xz" | head -1)

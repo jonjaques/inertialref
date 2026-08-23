@@ -68,7 +68,7 @@ export function FlightMode({
         <FlightStrip status={status} />
       </ErrorBoundary>
 
-      {/* The aiming reticle. Centre of frame, and the only permanent piece of
+      {/* The aiming reticle. Center of frame, and the only permanent piece of
           cockpit chrome this build has — `docs/design/ux.md` specifies the rest
           and none of it is built. */}
       <div className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">

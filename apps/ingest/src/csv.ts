@@ -7,7 +7,7 @@
  * `Barnard's Star`. The NASA archive additionally emits `""` for an embedded
  * quote. Both are ordinary RFC 4180; what is not ordinary is that a naive split
  * does not fail on them, it silently shifts every column after the offending one
- * by a position, so a star's spectral type becomes its colour index.
+ * by a position, so a star's spectral type becomes its color index.
  */
 
 export interface CsvTable {

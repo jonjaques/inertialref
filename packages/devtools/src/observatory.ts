@@ -85,7 +85,7 @@ export interface ObserverTarget {
   readonly system: SystemId
   /** The frame whose origin the camera orbits. */
   readonly frame: FrameId
-  /** Metres. A star's own radius, a body's equatorial radius. */
+  /** Meters. A star's own radius, a body's equatorial radius. */
   readonly radius: Meters
   /** One line of description for a panel header. */
   readonly detail: string
@@ -128,7 +128,7 @@ export const TRAVEL_TAU: Seconds = 0.55
 const ARRIVED_LOG_EPSILON = 1e-3
 
 /**
- * The opening framing for a newly picked target: a disc with space around it.
+ * The opening framing for a newly picked target: a disk with space around it.
  *
  * 0.55 of the frame height rather than 0.9. Every recognisable photograph of a
  * planet has sky around it, and a body that arrives edge-to-edge gives the eye
@@ -142,7 +142,7 @@ export class Observatory {
   #target: ObserverTarget | null = null
   #state: ObserverState = { azimuth: 0.6, elevation: 0.25, distance: 1e9 }
   #desired: ObserverState = this.#state
-  /** The lens the framing maths assumes. Set by the host from its camera. */
+  /** The lens the framing math assumes. Set by the host from its camera. */
   #fovDeg = 65
 
   constructor(host: HarnessHost) {
@@ -163,7 +163,7 @@ export class Observatory {
    * Deliberately not `sample()`: that one advances the ease and is the render
    * loop's to call exactly once per frame. This is a *reading*, for anything
    * that needs to know where the viewer is without being the viewer — the
-   * catalogue sorts by distance from it, so calling `sample` to find out would
+   * catalog sorts by distance from it, so calling `sample` to find out would
    * have a panel stepping the camera's animation every time it polled.
    */
   get eye(): UniverseVector | null {
@@ -405,7 +405,7 @@ export class Observatory {
     }
   }
 
-  /** Unit vector from the target towards its star, in universe axes. */
+  /** Unit vector from the target toward its star, in universe axes. */
   #starDirection(): Vec3 | null {
     const target = this.#target
     if (target === null || target.kind === 'star') return null

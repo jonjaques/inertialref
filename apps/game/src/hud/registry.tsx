@@ -23,7 +23,7 @@ import { TelemetryPanel } from './TelemetryPanel.tsx'
  * could be on screen, and it made "where does this readout live" a different
  * question in the planetarium — which had a docking system — than in flight,
  * which did not. Every one of them is now the same kind of object as a
- * catalogue: draggable between panes, floatable over the scene, collapsible to
+ * catalog: draggable between panes, floatable over the scene, collapsible to
  * its header, and openable from the same menu.
  *
  * The zones are *defaults*, and they are chosen for the pairing an author

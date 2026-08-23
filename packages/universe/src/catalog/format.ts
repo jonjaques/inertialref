@@ -1,7 +1,7 @@
 import { invariant } from '@inertialref/shared'
 
 /*
- * The packed catalogue file.
+ * The packed catalog file.
  *
  * One binary, shipped as its own asset and fetched at runtime. Both halves of
  * the codec live here on purpose: the ingest in `apps/ingest` imports `encode`
@@ -35,7 +35,7 @@ import { invariant } from '@inertialref/shared'
  * size — and the layout stops having invisible rules.
  */
 
-/** `IRSC` — InertialRef star catalogue. */
+/** `IRSC` — InertialRef star catalog. */
 export const MAGIC = 0x4952_5343
 
 /**
@@ -64,7 +64,7 @@ export const NO_INDEX = 255
 
 /**
  * Where a star's data came from, and therefore what the game may claim about it.
- * `observed` is in a published catalogue; the other two are defined by
+ * `observed` is in a published catalog; the other two are defined by
  * `docs/design/galaxy.md` and are carried here so the field exists from day one.
  */
 export const PROVENANCE = ['observed', 'projected', 'surveyed'] as const
@@ -111,18 +111,18 @@ export interface PackedStar {
    * an address. The ingest decides once and the file carries the decision.
    */
   readonly id: string
-  /** Galactic cartesian metres, Sun at the origin, +x toward the centre. */
+  /** Galactic cartesian meters, Sun at the origin, +x toward the center. */
   readonly x: number
   readonly y: number
   readonly z: number
   /** Absolute visual magnitude, or null. */
   readonly absoluteMagnitude: number | null
-  /** Colour index B−V, or null. */
+  /** Color index B−V, or null. */
   readonly colourIndex: number | null
   /**
-   * The classification string exactly as the source catalogue wrote it, or `''`.
+   * The classification string exactly as the source catalog wrote it, or `''`.
    *
-   * Verbatim, not canonicalised. Rewriting `sdM4` as `M4VI` at pack time was
+   * Verbatim, not canonicalized. Rewriting `sdM4` as `M4VI` at pack time was
    * tried and is the wrong side of the same rule the rest of the file follows:
    * the string is the measurement, the canonical MK form is derived from it, and
    * `parseSpectralType` runs at load anyway. Storing the original also lets the
@@ -159,7 +159,7 @@ export interface PackedStar {
    * back through the designations to the id.
    */
   readonly commonName: string
-  /** Gliese designation exactly as the catalogue writes it, or `''`. */
+  /** Gliese designation exactly as the catalog writes it, or `''`. */
   readonly gliese: string
 }
 
@@ -202,17 +202,17 @@ export interface PackedPlanet {
 }
 
 export interface CatalogMetadata {
-  /** The whole-catalogue version, e.g. `hyg-4.4+nea-20260820`. */
+  /** The whole-catalog version, e.g. `hyg-4.4+nea-20260820`. */
   readonly version: string
   /** Radius of the volume this file covers, light-years. */
   readonly radiusLightYears: number
   /**
-   * Radius inside which this catalogue is complete for main-sequence stars, so
+   * Radius inside which this catalog is complete for main-sequence stars, so
    * procedural generation adds nothing there. See `CellContext.completeRadius`
    * for why it is not simply zero.
    */
   readonly completeRadiusLightYears: number
-  /** Attribution and licence text that must travel with the data. */
+  /** Attribution and license text that must travel with the data. */
   readonly attribution: readonly string[]
   readonly sources: readonly {
     readonly name: string
@@ -443,7 +443,7 @@ export const utf8 = { encode: encodeUtf8, decode: decodeUtf8 }
  * random access into the blob. That cost four bytes per string per column and
  * the file has five of them — 142 KB of offsets for a 200 KB payload, to support
  * an access pattern nothing uses, because the decoder reads every column in
- * full. A `u8` length is enough for every name in the catalogue and cut the
+ * full. A `u8` length is enough for every name in the catalog and cut the
  * packed file by 40%.
  *
  * `255` escapes to a following `u32`, so a long string is representable rather
@@ -567,12 +567,12 @@ export function decodeCatalog(bytes: Uint8Array): PackedCatalog {
   const magic = r.u32()
   invariant(
     magic === MAGIC,
-    `Not a star catalogue: magic 0x${magic.toString(16)} at byte 0`,
+    `Not a star catalog: magic 0x${magic.toString(16)} at byte 0`,
   )
   const version = r.u32()
   invariant(
     version === FORMAT_VERSION,
-    `Star catalogue is format ${version}; this build reads ${FORMAT_VERSION}. ` +
+    `Star catalog is format ${version}; this build reads ${FORMAT_VERSION}. ` +
       `Re-run \`pnpm catalog:build\`.`,
   )
   const metadata = JSON.parse(decodeUtf8(r.slice(r.u32()))) as CatalogMetadata
@@ -675,7 +675,7 @@ export function decodeCatalog(bytes: Uint8Array): PackedCatalog {
 
   invariant(
     r.offset === bytes.length,
-    `Star catalogue has ${bytes.length - r.offset} trailing bytes; the reader ` +
+    `Star catalog has ${bytes.length - r.offset} trailing bytes; the reader ` +
       `and the writer disagree about the layout`,
   )
   return { metadata, stars, planets }

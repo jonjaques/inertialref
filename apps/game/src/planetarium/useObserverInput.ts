@@ -66,7 +66,7 @@ export function useObserverInput(
      * Every pointer currently down, by id.
      *
      * A Map rather than a count, because the centroid and the spread both need
-     * the actual positions, and because a pointer that is cancelled (a system
+     * the actual positions, and because a pointer that is canceled (a system
      * gesture claiming it, a phone call arriving) has to be removed by id
      * rather than by decrementing something.
      */
@@ -126,7 +126,7 @@ export function useObserverInput(
         node.releasePointerCapture(event.pointerId)
 
       if (down.size === 0) {
-        // A press that never travelled is a click. Checked on release rather
+        // A press that never traveled is a click. Checked on release rather
         // than on down, because on a touch screen there is no way to know at
         // press time which one it will turn out to be.
         if (

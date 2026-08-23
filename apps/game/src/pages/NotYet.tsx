@@ -26,7 +26,7 @@ import { OverlayPage } from './OverlayPage.tsx'
 const WHAT_AN_ACCOUNT_IS_FOR: readonly string[] = [
   'discovery credit checked against everyone else’s, and attributed publicly',
   'the Almanac and your bookmarks, synced across devices',
-  'catalogue revisions delivered as they are published',
+  'catalog revisions delivered as they are published',
 ]
 
 export function NotYet({

@@ -43,7 +43,7 @@ export type CinematicTextStyle =
   'logo' | 'subtitle' | 'label' | 'name' | 'card' | 'accent'
 
 /**
- * One line of text this frame. Position is normalised, origin top-left, and
+ * One line of text this frame. Position is normalized, origin top-left, and
  * every field is live: the reference's main logotype flies in from off-frame
  * and shrinks onto its mark, so `x`, `y` and `scale` are animated channels
  * rather than mount-time layout.
@@ -57,16 +57,16 @@ export interface CinematicTextState {
    * the same element rather than being its own text because the reference
    * left-aligns it to the *name's* left edge, and the name's width is a
    * property of the typeface the host chose, not a number a script can know.
-   * One block, centred, with the label flush left inside it, is the only
+   * One block, centered, with the label flush left inside it, is the only
    * arrangement that survives a font change.
    */
   readonly label?: string
-  /** Centre of the name line, 0..1 across the frame. */
+  /** Center of the name line, 0..1 across the frame. */
   readonly x: number
   readonly y: number
   /** 0..1; the full list is emitted every frame so the host can keep stable DOM. */
   readonly opacity: number
-  /** Uniform scale about the line's centre; 1 once a title has settled. */
+  /** Uniform scale about the line's center; 1 once a title has settled. */
   readonly scale: number
 }
 
@@ -75,12 +75,12 @@ export interface CinematicTextState {
  * that swells and dies over ~24 frames. The reference plays it twice, both
  * times as the bridge between a ship leaving at warp and the card that
  * follows, and it is anchored where that ship went — not on the frame's
- * centre — so it carries a screen position of its own.
+ * center — so it carries a screen position of its own.
  */
 export interface CinematicSpark {
   /** 0..1. */
   readonly drive: number
-  /** Screen anchor, normalised, origin top-left. */
+  /** Screen anchor, normalized, origin top-left. */
   readonly x: number
   readonly y: number
 }
@@ -103,7 +103,7 @@ export interface CinematicEffects {
    * body's anti-sun line — which in the planetarium is one press of `crescent`
    * away, and on the front door is a third of every slow orbit. At the ranges
    * those cameras work at the physical corona is a fraction of a degree past
-   * the limb and the drawn one is nearly a disc radius thick, so what it
+   * the limb and the drawn one is nearly a disk radius thick, so what it
    * actually delivered was a gold halo swallowing the frame in a mode that had
    * not asked for an eclipse.
    *
@@ -215,7 +215,7 @@ export function arrival(
 /**
  * The measured spark envelope: 24 frames, rising over 11 and dying over 13.
  *
- * Asymmetric because it is a lens artefact of something *receding* — the
+ * Asymmetric because it is a lens artifact of something *receding* — the
  * spike builds as the warp point brightens and then trails off with the glare
  * rather than snapping shut. Both of the reference's sparks fit this within a
  * frame at either end.
@@ -246,13 +246,13 @@ export interface FadeWindow {
  * How far into its rise a fade has to be before a threshold mask can see it.
  *
  * The reference's `firstVisibleFrame` is not when a title starts appearing —
- * it is when at least 800 pixels of it cross a B>=195 colour floor. Text at
+ * it is when at least 800 pixels of it cross a B>=195 color floor. Text at
  * RGB (64,138,230) over black only clears that floor near full opacity, so a
  * fade that *starts* on the measured frame crosses the threshold several
  * frames late: a captured render measured exactly +4 on all nine cast credits
  * and +5 on the Roddenberry card.
  *
- * The value is fitted to that lag rather than derived from the colour maths,
+ * The value is fitted to that lag rather than derived from the color math,
  * because the mask counts *pixels* and anti-aliased edges leave the band well
  * before the glyph interiors do. 0.72 of the rise — `smooth(0.72) = 0.809` —
  * brings every credit to +1, which is as close as an integer frame allows.
@@ -337,7 +337,7 @@ export interface AimBeat {
  * linear path announces every waypoint with a visible kink in the planet
  * passes, and the whole point of the beats is that nobody can see where they
  * are. Arithmetic runs in displacements from the segment's start beat — a
- * `Vec3` spanning AU-scale legs holds micrometre precision in doubles, and
+ * `Vec3` spanning AU-scale legs holds micrometer precision in doubles, and
  * `UniverseVector` remains the only absolute position in the interface.
  *
  * Before the first beat and after the last the route holds still: a cutscene
@@ -397,10 +397,10 @@ export function routePosition(
 /** A waypoint in frame terms: where in the frame, and how far from the lens. */
 export interface ScreenBeat {
   readonly frame: number
-  /** Normalised, origin top-left. Values outside 0..1 are off-frame. */
+  /** Normalized, origin top-left. Values outside 0..1 are off-frame. */
   readonly x: number
   readonly y: number
-  /** Distance from the lens, metres. */
+  /** Distance from the lens, meters. */
   readonly range: number
 }
 
@@ -449,11 +449,11 @@ function splineScalar(
  * in the terms they were measured in.
  *
  * Range is splined in **log space**, which is the whole point. An approach
- * beat list runs from tens of kilometres to tens of metres, and a Catmull-Rom
- * over those magnitudes in metres does what any spline does when its knots
+ * beat list runs from tens of kilometers to tens of meters, and a Catmull-Rom
+ * over those magnitudes in meters does what any spline does when its knots
  * span four decades: the tangent at the near end is set by the far one and it
  * overshoots hard — in practice through the camera and out the other side, so
- * a hull that should have been receding at a kilometre simply vanished for
+ * a hull that should have been receding at a kilometer simply vanished for
  * twenty frames. Constant *fractional* closing is also the honest description
  * of every approach in the reference, so the log is not a workaround; it is
  * the right coordinate.
@@ -522,7 +522,7 @@ export function routeOrientation(
 /* ------------------------------------------------------------------------- */
 
 /**
- * The orientation whose −Z is `forward` and whose +Y leans towards `upHint`.
+ * The orientation whose −Z is `forward` and whose +Y leans toward `upHint`.
  *
  * `Q.fromUnitVectors` alone leaves the roll wherever the shortest arc dropped
  * it, which for a composition is the one degree of freedom that matters most —
@@ -554,7 +554,7 @@ export function screenDirection(
   aspect: number,
 ): Vec3 {
   const tanHalf = Math.tan((fovDeg * Math.PI) / 360)
-  // Normalised screen (origin top-left, y down) to camera axes (−Z forward,
+  // Normalized screen (origin top-left, y down) to camera axes (−Z forward,
   // +Y up): the vertical flips, and x scales by the aspect.
   return Vec.normalize(
     vec3((x * 2 - 1) * tanHalf * aspect, (1 - y * 2) * tanHalf, -1),
@@ -563,12 +563,12 @@ export function screenDirection(
 
 /**
  * The camera-space offset that puts a point at a screen position, `range`
- * metres from the lens.
+ * meters from the lens.
  *
  * The authoring primitive for anything choreographed *against the frame*
  * rather than against the world. A reference edit is measured in screen
- * coordinates and apparent size — "the hull's bbox centre is (0.35, 0.51) and
- * it spans 0.70 of the frame at f872" — and converting each of those to metres
+ * coordinates and apparent size — "the hull's bbox center is (0.35, 0.51) and
+ * it spans 0.70 of the frame at f872" — and converting each of those to meters
  * by hand is where a recreation quietly stops matching: the numbers in the
  * script no longer resemble the numbers in the measurement, so nobody can see
  * that one has drifted from the other. Beats written in this language can be
@@ -621,7 +621,7 @@ export function rangeForWidth(
  *
  * The single-target relative of `frameTwoTargets`: aim at the target, then
  * rotate the *screen point's* view direction onto the forward axis, so the
- * target lands off-centre by exactly the asked-for amount. Roll comes from the
+ * target lands off-center by exactly the asked-for amount. Roll comes from the
  * hint rather than the solver, which is what a lone planet pass wants — the
  * second target in those compositions is empty space.
  */

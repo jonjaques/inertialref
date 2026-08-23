@@ -16,7 +16,7 @@ export interface FlareVector {
 }
 
 export interface FlareOccluder {
-  /** Body centre, render space. */
+  /** Body center, render space. */
   readonly position: FlareVector
   /** Drawn radius, render space. */
   readonly radius: number
@@ -32,7 +32,7 @@ export interface FlareOccluder {
  * visibility test — which already has both in hand — hands them back.
  */
 export interface FlareEclipse {
-  /** The occluder's centre, render space. */
+  /** The occluder's center, render space. */
   readonly position: FlareVector
   /** Its drawn radius, render space. */
   readonly radius: number
@@ -46,14 +46,14 @@ export interface FlareVisibility {
   /**
    * How much of the flare survives, 0..1. Zero behind a body, one in the
    * clear, and a smooth ramp across the limb — the ramp is the sunset: a
-   * finite solar disc does not blink out, it slides under the horizon.
+   * finite solar disk does not blink out, it slides under the horizon.
    */
   readonly visibility: number
   /**
    * How close the sight line grazes the nearest limb, 1 at the limb rising to
    * 0 away from it. This drives the flare's reddening: a star seen just over
    * a limb is seen through the deepest possible slant of that body's air,
-   * whatever colour that body reddens light to.
+   * whatever color that body reddens light to.
    */
   readonly graze: number
   /** The body in front of the star, deepest first; null in the clear. */
@@ -75,7 +75,7 @@ const smooth = (edge0: number, edge1: number, x: number): number => {
  * Visibility of `sun` from `camera` past a set of spherical occluders.
  *
  * Each body's contribution comes from the closest approach of the sight
- * *segment* to its centre — the segment, not the line, because a body behind
+ * *segment* to its center — the segment, not the line, because a body behind
  * the camera or beyond the star occludes nothing however well aligned it is.
  */
 export function sunVisibility(
@@ -128,8 +128,8 @@ export function sunVisibility(
 
 /**
  * Where each flare element sits on screen: on the line from the star's image
- * through the frame's centre, at parameter `t` — 0 on the star, 1 at the
- * centre, beyond 1 mirrored past it. That line is the axis of symmetry of a
+ * through the frame's center, at parameter `t` — 0 on the star, 1 at the
+ * center, beyond 1 mirrored past it. That line is the axis of symmetry of a
  * real lens, which is why every photographed ghost lies on it.
  */
 export const ghostPosition = (

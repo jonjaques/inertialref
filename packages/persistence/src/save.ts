@@ -71,9 +71,9 @@ export function captureSave(
     tick: world.clock.tick,
     generation: GENERATION_VERSIONS,
     // The second generation input. `generation` is a map of numbers and the
-    // catalogue version is not one, so it rides beside it rather than inside —
+    // catalog version is not one, so it rides beside it rather than inside —
     // but it is exactly as load-bearing: a save written against `hyg-4.4` and
-    // reloaded against `hyg-4.5` may find a body the catalogue has moved.
+    // reloaded against `hyg-4.5` may find a body the catalog has moved.
     catalog: world.catalog.version,
     entities,
     playerEntity,
@@ -91,7 +91,7 @@ export interface RestoredWorld {
   readonly playerEntity: EntityId | null
   /** Generation versions the save was written with, for the caller to compare. */
   readonly generation: Readonly<Record<string, number>>
-  /** The catalogue version the save was written against. */
+  /** The catalog version the save was written against. */
   readonly catalog: string
 }
 
@@ -117,15 +117,15 @@ export function restoreSave(
     try {
       world.loadSystem(system as SystemId)
     } catch (cause) {
-      // A save from a degraded session — the catalogue asset failed to fetch
+      // A save from a degraded session — the catalog asset failed to fetch
       // and the game fell back to SOL_ONLY_CATALOG — can reference procedural
-      // stars the full catalogue suppresses, and vice versa. Naming both
+      // stars the full catalog suppresses, and vice versa. Naming both
       // versions turns "cannot load system" from a mystery into a diagnosis;
       // the revision notice that would *resolve* it is a roadmap seam.
       const mismatch =
         save.catalog === catalog.version
           ? ''
-          : ` (saved against catalogue ${save.catalog}, loading against ${catalog.version})`
+          : ` (saved against catalog ${save.catalog}, loading against ${catalog.version})`
       return err(
         `cannot load system ${system}${mismatch}: ${cause instanceof Error ? cause.message : String(cause)}`,
       )

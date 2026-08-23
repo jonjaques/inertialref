@@ -64,7 +64,7 @@ export function NetworkSection({
           title="Probe /api/health immediately"
           onClick={onCheck}
         />
-        {/* Said plainly, because the colour of a dot is not a promise. */}
+        {/* Said plainly, because the color of a dot is not a promise. */}
         <span className="text-slate-400">
           the game does not need any of this
         </span>

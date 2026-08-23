@@ -12,7 +12,7 @@ import { SeriesStatsRow } from './SeriesStatsRow.tsx'
 /*
  * The performance overlay.
  *
- * Modelled on Dear ImGui's debug windows, and for its reasons rather than its
+ * Modeled on Dear ImGui's debug windows, and for its reasons rather than its
  * looks: every number carries its own history, the history is a plot rather than
  * a single value, and the plot is small enough that six of them fit above the
  * fold. A frame counter that says "60 fps" tells you nothing about the frame
@@ -33,7 +33,7 @@ const FRAME_BUDGET_MS = 16.6
 /**
  * Where a frame period stops being jitter and starts being a dropped frame.
  *
- * The budget and the measurement are not the same quantity, and colouring the
+ * The budget and the measurement are not the same quantity, and coloring the
  * plot on the budget alone gets this wrong in the most misleading direction.
  * The budget is 16.6 ms of *work*; what the plot samples is the interval between
  * animation frames, and on a vsynced display that interval is pinned at 16.67 ms
@@ -71,7 +71,7 @@ export function PerfPanel({
    * a renderer that had been live for minutes.
    *
    * `use no memo` is the documented opt-out and this is what it is for. It is
-   * not a licence to hand-write `useMemo` here — see CLAUDE.md — it is a
+   * not a license to hand-write `useMemo` here — see CLAUDE.md — it is a
    * statement that this subtree's whole job is to read mutable state on every
    * render, at the 8 Hz the dock re-renders at.
    */

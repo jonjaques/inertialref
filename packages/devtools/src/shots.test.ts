@@ -66,7 +66,7 @@ describe('placeShot', () => {
           const { forward } = Q.basis(orientation)
 
           if (shot.aim === 'centre') {
-            // Looking at the centre means forward is exactly anti-radial.
+            // Looking at the center means forward is exactly anti-radial.
             expect(
               Vec.dot(forward, Vec.normalize(Vec.negate(position))),
             ).toBeGreaterThan(0.999_9)
@@ -74,7 +74,7 @@ describe('placeShot', () => {
             // A limb or specular aim looks at a point *on the sphere*, plus
             // any composed lift above it: march forward from the camera and
             // the ray must graze within the lifted radius. The closest
-            // approach of the ray to the centre is |p|·sin(angle between −p
+            // approach of the ray to the center is |p|·sin(angle between −p
             // and forward).
             const toCentre = Vec.negate(position)
             const along = Vec.dot(toCentre, forward)
@@ -98,7 +98,7 @@ describe('placeShot', () => {
           const { position, orientation } = placeShot(shot, RADIUS, sun)
           const { right } = Q.basis(orientation)
           // Level means the frame's horizontal is perpendicular to the shot's
-          // vertical: the pole for a centre shot, the local vertical for a
+          // vertical: the pole for a center shot, the local vertical for a
           // limb shot. A tilted horizon is the first thing an eye notices.
           const vertical =
             shot.aim === 'centre' ? vec3(0, 1, 0) : Vec.normalize(position)

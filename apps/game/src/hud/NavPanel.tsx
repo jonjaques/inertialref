@@ -195,7 +195,7 @@ export function NavPanel({
          * composition. They act on the selected body when one is selected and
          * on the body you are at otherwise, so "frame the thing I am looking
          * at" is one click. The ship toggle lives here because the bookmarks
-         * are why it exists: a debug cone parked dead centre ruins every
+         * are why it exists: a debug cone parked dead center ruins every
          * composition it appears in.
          */}
         <div className="flex flex-wrap items-center gap-1">

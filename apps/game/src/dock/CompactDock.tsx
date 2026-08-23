@@ -53,7 +53,7 @@ import type { DockPanelDefinition } from './panels.ts'
  *
  * Up from 42vh, because the sheet carries the panel picker now as well as the
  * panel: at 42 the tab rows left about 120 px of body, which is four rows of a
- * catalogue. Still comfortably under two thirds, and it is one tap to put the
+ * catalog. Still comfortably under two thirds, and it is one tap to put the
  * sky back.
  */
 const SHEET_HEIGHT = 'max-h-[58vh]'

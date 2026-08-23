@@ -102,7 +102,7 @@ other stat on a ship.
 ### The Reference Drive is one module
 
 Worth stating explicitly because it does four jobs that other games split across
-three or four systems: manoeuvre thrust, transit acceleration, **inertial
+three or four systems: maneuver thrust, transit acceleration, **inertial
 compensation**, and the interstellar jump. Its rating therefore sets how fast you
 turn, how quickly you cross a system, how much g you feel doing it, and how far
 you can jump — which makes it the single most consequential fitting decision on
@@ -172,7 +172,7 @@ Six pips, three subsystems, redistributable at any moment.
 
 | Bank      | Feeds                                     | Starved effect                                                                                                                                                                                           |
 | --------- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **DRIVE** | Thrusters, Reference Drive                | Manoeuvre thrust, transit acceleration and inertial compensation all scale with allocation; at 0 pips, 45% of rated. **Starving DRIVE mid-burn raises felt g**, which is a real and unpleasant surprise. |
+| **DRIVE** | Thrusters, Reference Drive                | Maneuver thrust, transit acceleration and inertial compensation all scale with allocation; at 0 pips, 45% of rated. **Starving DRIVE mid-burn raises felt g**, which is a real and unpleasant surprise. |
 | **SYS**   | Shields, sensors, life support, radiators | Shield recharge stops; sensor range halves                                                                                                                                                               |
 | **PAY**   | Weapons, scanners, fuel scoop             | Weapons will not fire; scoop rate scales linearly                                                                                                                                                        |
 
@@ -262,7 +262,7 @@ situations worth having:
 
 | Module lost     | Consequence                                                                                                                                   |
 | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| Reference Drive | Cannot jump, and transit power is gone. Manoeuvre thrust remains, so you are not stranded — you are _hours_ from anywhere instead of minutes. |
+| Reference Drive | Cannot jump, and transit power is gone. Maneuver thrust remains, so you are not stranded — you are _hours_ from anywhere instead of minutes. |
 | Sensors         | No targeting, no scanning, no contacts list. Fly on the window.                                                                               |
 | Life Support    | A countdown, measured in the oxygen in the cockpit.                                                                                           |
 | Fuel Tank       | Leaking. The countdown is the tank.                                                                                                           |

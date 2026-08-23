@@ -16,7 +16,7 @@ import { Reference } from './Reference.tsx'
 const FACTS: readonly (readonly [string, string])[] = [
   ['catalogue', '7,123 real systems and 702 planets within 150 light years'],
   ['beyond that', 'generated from a seed — identical on every client, forever'],
-  ['positions', 'sector index plus offset; sub-millimetre out to 249,000 ly'],
+  ['positions', 'sector index plus offset; sub-millimeter out to 249,000 ly'],
   ['simulation', '64 Hz fixed tick, deterministic, replayable'],
   ['orbits', 'analytic rather than integrated — no drift at any time warp'],
   ['offline', 'the base case, not a degraded mode'],
@@ -28,7 +28,7 @@ export function AboutPage() {
       <div className="flex flex-col gap-3">
         <p className="text-slate-300">
           InertialRef is a space flight simulator whose universe is a
-          deterministic function of a seed and a star catalogue. There is
+          deterministic function of a seed and a star catalog. There is
           nothing to download and nothing to ask a server for: the galaxy is
           derived, so every client computes the same one.
         </p>
@@ -59,7 +59,7 @@ export function AboutPage() {
           />
           <Reference
             icon={StellarSpan}
-            label="The Catalogue Guide"
+            label="The Catalog Guide"
             detail="docs/guides/catalogue.md"
           />
           <Reference

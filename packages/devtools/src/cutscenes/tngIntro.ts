@@ -68,14 +68,14 @@ import { placeShot, type ShotDefinition } from '../shots.ts'
  *
  * **Screen-space beats.** Ship choreography is authored as
  * `(frame, screen x, screen y, range)` through `screenOffset`, because that is
- * the language the measurement speaks: a tracked bounding box gives a centre
+ * the language the measurement speaks: a tracked bounding box gives a center
  * and a width, and a width *is* a range once the hull's length and the lens
  * are known. Beats written this way can be read straight off the analysis.
  *
  * The structural facts, in the analysis's own terms:
  *
  * - The camera never moves while text is visible. Every credit is a pure 4–8
- *   frame opacity fade, horizontally centred, with its label line flush left
+ *   frame opacity fade, horizontally centered, with its label line flush left
  *   against the name above it.
  * - The main logotype is **not** a fade. Two words are thrown in from opposite
  *   sides of the frame, converge, and shrink onto their marks (measured: the
@@ -94,7 +94,7 @@ const DURATION = 2742
 
 /**
  * A cinematic lens rather than the 65° flight FOV. 45° is what the reference's
- * compositions measure out at: at that field the eclipsed disc's 440-pixel
+ * compositions measure out at: at that field the eclipsed disk's 440-pixel
  * diameter at f272 puts the camera 6.0 planet radii out, and the hull's
  * bounding box at f872 puts it 630 m away — both sane numbers for the shots
  * they describe, which is the test that fixes the field.
@@ -103,7 +103,7 @@ const FOV = 45
 /** Compositions are solved for the reference frame's shape. */
 const ASPECT = 16 / 9
 
-/** The hero hull's overall length, metres. Ranges below are derived from it. */
+/** The hero hull's overall length, meters. Ranges below are derived from it. */
 const HULL = 642.5
 
 const POLE = vec3(0, 1, 0)
@@ -139,8 +139,8 @@ const fade = (
 /*
  * Measured layout, from the blue-mask row bands of the reference frames:
  *
- * - A name's cap band is 79–81 px of 1080, centred on y 0.5032. Every name is
- *   horizontally centred at x 0.498–0.510; the per-credit centroids in the
+ * - A name's cap band is 79–81 px of 1080, centered on y 0.5032. Every name is
+ *   horizontally centered at x 0.498–0.510; the per-credit centroids in the
  *   older analysis drifted left only because they were pixel-weighted and the
  *   label line pulled them.
  * - A label sits 0.1056 of the frame height above its name and is flush left
@@ -284,7 +284,7 @@ const TITLES: readonly TitleSpec[] = [
   },
 
   // Shot 08 — end cards. The second is three label/name pairs on the measured
-  // rows (name centres y 0.2486, 0.5125, 0.8074).
+  // rows (name centers y 0.2486, 0.5125, 0.8074).
   {
     id: 'e1',
     style: 'name',
@@ -360,7 +360,7 @@ const TITLES: readonly TitleSpec[] = [
  * so the words are always the right size for where they are.
  *
  * Nothing here is a fade in disguise. The words are at full opacity from
- * f1136, which is why the tight colour mask first sees them — dim, because
+ * f1136, which is why the tight color mask first sees them — dim, because
  * they are big and moving — five frames before it sees a stable block.
  */
 const FLY_IN_START = 1134
@@ -375,8 +375,8 @@ const FLY_IN_SCALE = 2.246
  * Where each word is thrown from, as an offset from its settled mark.
  *
  * Recovered from the *unclipped* edge of each word, not its centroid: both
- * run off the frame for the first ten frames, so a bounding box's centre is a
- * measurement of where the frame ends. Reconstructing the centre from the
+ * run off the frame for the first ten frames, so a bounding box's center is a
+ * measurement of where the frame ends. Reconstructing the center from the
  * visible edge and the frame's own scale gives STAR entering low-left from
  * (0.000, 0.791) and TREK high-right from (0.932, −0.006), and the residuals
  * against every tracked frame sit under 0.005.
@@ -413,7 +413,7 @@ const atWidth = (fraction: number): number =>
 
 /*
  * The cruise shot's pass, read off the tracked bounding boxes. Screen
- * positions are box centres; ranges come from the box width through
+ * positions are box centers; ranges come from the box width through
  * `atWidth`, using the hull's length where it is broadside and its beam once
  * it is nose- or stern-on.
  *
@@ -445,17 +445,17 @@ const SHIP_CRUISE: readonly ScreenBeat[] = [
    */
   /*
    * The hull rides LOW through the close pass, and that is a measurement
-   * before it is a lighting decision: the reference's box centre is at y 0.60
+   * before it is a lighting decision: the reference's box center is at y 0.60
    * at f944, 0.62 at f960 and 0.64 through f990–1000 before rising again. The
-   * first authoring had it near the frame's centre, and the two facts turn out
-   * to be one fact — a hull below the centre shows the camera its dorsal,
+   * first authoring had it near the frame's center, and the two facts turn out
+   * to be one fact — a hull below the center shows the camera its dorsal,
    * which is the surface an overhead key lights. Riding it high showed the
    * belly instead, and the render's mean luminance collapsed from the
    * reference's 50–58 to 15–20 across the best hundred frames in the piece.
    *
    * Screen position barely tips the view angle once the hull is this close,
-   * which is worth knowing before reaching for it: at 145 metres from a
-   * 642-metre ship the camera is inside the envelope, and a mark 14 metres
+   * which is worth knowing before reaching for it: at 145 meters from a
+   * 642-meter ship the camera is inside the envelope, and a mark 14 meters
    * under the axis leaves it a tenth of a radian off the saucer's own plane —
    * edge-on, seeing neither surface. Measured in the browser,
    * `camOnDorsalSide` read −0.097 while the key sat a healthy 0.80 normal to
@@ -516,7 +516,7 @@ const mirrored = (beat: ScreenBeat, offset: number): ScreenBeat => ({
 
 /*
  * The return, and the beauty pass. The hull enters at the top edge at f1765
- * and descends through the last six credits — measured box centres and widths
+ * and descends through the last six credits — measured box centers and widths
  * again — then keeps coming until the camera is skimming its dorsal surface.
  * The bridge module crosses the frame around f2214, which fixes the tail of
  * the approach: the ship has to be within a hull-length by f2150 for the
@@ -554,7 +554,7 @@ const SHIP_RETURN: readonly ScreenBeat[] = [
  * the camera's own heading whenever the two share a frame, and the reference
  * plainly shows the hull nose-on to the lens through the whole approach.
  * Levelling against the camera's up is what makes the top/underside views come
- * out right for free — a level ship below the frame's centre shows its dorsal,
+ * out right for free — a level ship below the frame's center shows its dorsal,
  * above it shows its belly, which is exactly what the reference does at f820
  * and f892.
  */
@@ -567,7 +567,7 @@ interface FacingBeat {
 const FACING_CRUISE: readonly FacingBeat[] = [
   { frame: 676, forward: vec3(0.26, 0.02, 0.96) },
   { frame: 900, forward: vec3(0.16, -0.04, 0.98) },
-  // Nose-up through the low stretch: the hull sits below the frame's centre
+  // Nose-up through the low stretch: the hull sits below the frame's center
   // and pitching it down would tip the dorsal away from the lens again.
   { frame: 960, forward: vec3(-0.1, 0.18, 0.98), bankDeg: -8 },
   { frame: 1000, forward: vec3(-0.45, 0.1, 0.88), bankDeg: -18 },
@@ -576,7 +576,7 @@ const FACING_CRUISE: readonly FacingBeat[] = [
 ]
 
 const FACING_TITLES: readonly FacingBeat[] = [
-  // Nose-*down* through the wipes. The hull crosses above the frame's centre,
+  // Nose-*down* through the wipes. The hull crosses above the frame's center,
   // so a level ship shows the camera its belly — and the reference's wipe
   // frames plainly show the saucer's top, lit, right up to the occlusion. It
   // is diving at the lens, not flying level past it.
@@ -723,23 +723,23 @@ function buildStage(world: World): Stage {
   /* ------------------------- Shot: Earth, f125–239 ---------------------- */
 
   /*
-   * A low sweep, not a framed disc: the reference's limb slashes down the
+   * A low sweep, not a framed disk: the reference's limb slashes down the
    * frame at x≈0.22 at f150 with terrain filling everything to its right, and
-   * the pull-back only closes the disc in the last third. It ends on the
-   * composition the f240 cut answers — disc centred (0.634, 0.555) at 4.30
+   * the pull-back only closes the disk in the last third. It ends on the
+   * composition the f240 cut answers — disk centered (0.634, 0.555) at 4.30
    * radii with the star 15.7° away, 2.3° outside the left limb.
    *
    * One thing the reference does here cannot be reproduced honestly, and it is
    * worth naming rather than chasing. Its opening has *both* broadly lit
    * terrain and the sun in frame beside the planet, and those two facts
    * contradict each other: the sun's measured screen position puts it 72° from
-   * the disc's centre, which for a camera 1.2 radii up means the entire
+   * the disk's center, which for a camera 1.2 radii up means the entire
    * visible cap sits past the terminator. It is a CG render whose key light
    * and whose sun sprite were placed independently. Staged against a real
    * ephemeris you get one or the other.
    *
    * So the phase *ramps*: 78° at f125, where the cap is broadly lit and the
-   * star is behind the lens, opening to 164° by f239, where the disc is the
+   * star is behind the lens, opening to 164° by f239, where the disk is the
    * thin crescent the match cut needs and the star has swung into frame beside
    * it. The shot the reference is trying to be, told in an order that is true.
    */
@@ -772,7 +772,7 @@ function buildStage(world: World): Stage {
         { frame: 195, orientation: aimAt(e195, 0.84, 0.585) },
         { frame: 220, orientation: aimAt(e220, 0.72, 0.57) },
         // Both marks, because the f240 cut lands invisibly only if the two
-        // sides agree on the star *and* the disc; eyeballing a roll gets one.
+        // sides agree on the star *and* the disk; eyeballing a roll gets one.
         {
           frame: 239,
           orientation: frameTwoTargets(
@@ -795,9 +795,9 @@ function buildStage(world: World): Stage {
    * `placeShot`'s phase angle is unsigned and cannot express the crossing, so
    * these standoffs are built by hand in a sun-line basis.
    *
-   * The measured schedule: 15.7° of separation at f240 with the disc 13.4°
+   * The measured schedule: 15.7° of separation at f240 with the disk 13.4°
    * across, so the star sits 2.3° clear of the limb; zero at f272 with the
-   * disc down to 9.6°; then out the other side as the camera keeps pulling
+   * disk down to 9.6°; then out the other side as the camera keeps pulling
    * away. Angular radius α and standoff k are the same statement, k = 1/sin α,
    * which is what lets a measured pixel diameter fix a camera position.
    */
@@ -830,7 +830,7 @@ function buildStage(world: World): Stage {
       return UV.translate(marsPos, Vec.scale(direction, radii * mars.radius))
     }
     /*
-     * The standoff schedule is measured, and it is violent. The disc's height
+     * The standoff schedule is measured, and it is violent. The disk's height
      * in the reference frames inverts straight to a distance — k = 1/sin α —
      * and gives 4.3 radii at f240, 6.0 at totality, then 12 by f276, 17 by
      * f280, 24 by f284 and 32 by f288. The eclipse ends and the camera leaves
@@ -881,7 +881,7 @@ function buildStage(world: World): Stage {
         { frame: 240, orientation: pair(p240, [0.634, 0.555], [0.455, 0.435]) },
         { frame: 256, orientation: pair(p256, [0.56, 0.53], [0.475, 0.46]) },
         // Totality: the two targets are one direction and TRIAD degenerates,
-        // so the disc alone sets the frame.
+        // so the disk alone sets the frame.
         {
           frame: 272,
           orientation: frameTarget(
@@ -908,7 +908,7 @@ function buildStage(world: World): Stage {
    * The geometry: the eclipse camera sits on Mars's anti-sun line at 14,600 to
    * 71,000 km, the only bodies in reach are Phobos and Deimos at 11 km and
    * 6 km across, and a camera close enough to either for it to cover half the
-   * frame is twenty thousand kilometres off the line that *is* the shot.
+   * frame is twenty thousand kilometers off the line that *is* the shot.
    *
    * A seven-frame cutaway to Venus's limb was tried in its place, and the
    * capture loop is what killed it: the reference's body means 7–19 across the
@@ -1012,7 +1012,7 @@ function buildStage(world: World): Stage {
    * translation moves nothing in frame and only rotation would; the hull is
    * authored camera-relative anyway. A static camera is therefore not a
    * simplification but the *accurate* description of what the reference shows
-   * — and it is what makes "never track a hull crossing metres from the lens"
+   * — and it is what makes "never track a hull crossing meters from the lens"
    * free rather than a discipline.
    *
    * Light is staging, and this is the shot that proves it: the hull has to be
@@ -1097,7 +1097,7 @@ function buildStage(world: World): Stage {
    * A *different* stage from the cruise, swapped under the whiteout — the same
    * trick the reference plays at f240 with a hard cut. It has to be: the
    * cruise looks down-sun into the glare that sells the warp-out, and forty
-   * seconds of credits over a star's disc is not a title sequence.
+   * seconds of credits over a star's disk is not a title sequence.
    *
    * This one looks across the sun line with the star up and behind, so the
    * hull doing the fly-bys and the descent catches a strong dorsal key — the
@@ -1285,9 +1285,9 @@ function wipeStreak(occlusion: number, frame: number): number {
 }
 
 /*
- * The two lens spikes. Measured centres and windows: the first grows from
+ * The two lens spikes. Measured centers and windows: the first grows from
  * f1118 at (0.645, 0.665), the second from f2412 at (0.688, 0.43), both on the
- * 24-frame envelope. They are the same artefact — a warp point receding down
+ * 24-frame envelope. They are the same artifact — a warp point receding down
  * the axis — and each is the bridge into the card that follows it.
  */
 const SPARKS: readonly { start: number; x: number; y: number }[] = [
@@ -1430,9 +1430,9 @@ function cameraAt(
  * Both are camera-relative: offsets are interpolated in offset space and
  * rotated onto the camera's axes at sample time, and the facing is a direction
  * in those same axes. Absolute world beats were tried first and broke quietly
- * — the camera used to cover thousands of kilometres a frame, so the ship's
+ * — the camera used to cover thousands of kilometers a frame, so the ship's
  * spline and the camera's ran through beats far enough apart to diverge
- * mid-segment by tens of kilometres, and the hero hull rendered as a dot on
+ * mid-segment by tens of kilometers, and the hero hull rendered as a dot on
  * the wrong side of the sky. Relative choreography has to stay relative, and
  * the shot list is what finally makes the camera hold still enough for anyone
  * to notice when it does not.

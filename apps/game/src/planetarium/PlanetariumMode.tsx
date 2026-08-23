@@ -30,7 +30,7 @@ import { useObserverInput } from './useObserverInput.ts'
  * screen — which is what makes a planetarium view a thing you can send someone.
  */
 
-/** Where the camera opens when nothing else says. The disc everyone knows. */
+/** Where the camera opens when nothing else says. The disk everyone knows. */
 const DEFAULT_TARGET = 's:SOL/b:2'
 
 export function PlanetariumMode({
@@ -219,7 +219,7 @@ export function PlanetariumMode({
 
       {/* The aiming point. Small, dim and always there: it is the answer to
           "what will a click hit", and in a mode with no ship it is the only
-          thing anchoring the centre of the frame. */}
+          thing anchoring the center of the frame. */}
       <div className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
         <div className="size-1.5 rounded-full border border-sky-300/40" />
       </div>

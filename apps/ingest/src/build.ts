@@ -17,12 +17,12 @@ import { type CsvTable, number, parseCsv } from './csv.ts'
 import { chooseCommonName, type NameSource } from './naming.ts'
 
 /*
- * HYG + the NASA Exoplanet Archive → one packed catalogue.
+ * HYG + the NASA Exoplanet Archive → one packed catalog.
  *
- * The pipeline is normalise → resolve identity → merge planets → pack, and the
+ * The pipeline is normalize → resolve identity → merge planets → pack, and the
  * middle two steps are where an ingest goes quietly wrong, so both count what
  * they did and the caller prints it. A run that silently drops 30% of the
- * catalogue looks exactly like a run that does not, unless it says so.
+ * catalog looks exactly like a run that does not, unless it says so.
  */
 
 const PARSECS_TO_LIGHT_YEARS = PARSEC / LIGHT_YEAR
@@ -37,7 +37,7 @@ const PARSECS_TO_LIGHT_YEARS = PARSEC / LIGHT_YEAR
 const NO_PARALLAX_PARSECS = 100_000
 
 /**
- * Proper motions are 4-byte floats in a text file and the catalogue uses 9999.99
+ * Proper motions are 4-byte floats in a text file and the catalog uses 9999.99
  * as a "not measured" marker in at least one place — Barnard's Star, of all
  * stars, carries `pmdec = 9999.99`. Nothing downstream reads proper motion yet;
  * this exists so that when something does, the sentinel is already known about.
@@ -164,7 +164,7 @@ export function buildCatalog(
   const hyg = parseCsv(hygCsv)
   const maxParsecs = options.radiusLightYears / PARSECS_TO_LIGHT_YEARS
 
-  /* --- normalise ------------------------------------------------------- */
+  /* --- normalize ------------------------------------------------------- */
 
   let droppedNoParallax = 0
   let sentinelProperMotions = 0
@@ -235,7 +235,7 @@ export function buildCatalog(
       // Two systems cannot share an address. Keeping the first and reporting the
       // rest is the only choice that does not depend on iteration order; the
       // count is printed so a source change that starts producing collisions is
-      // visible rather than a silently shorter catalogue.
+      // visible rather than a silently shorter catalog.
       duplicateIds.push(id)
       continue
     }
@@ -298,7 +298,7 @@ export function buildCatalog(
    * `packages/universe/src/solar/`, because what Sol needs is not eight rows in
    * a planet table: it needs twenty moons, measured oblateness, axial tilts,
    * ring geometry and albedos, none of which this format has a column for and
-   * none of which is catalogue data. They are facts, and they live in source.
+   * none of which is catalog data. They are facts, and they live in source.
    */
   const hostSystems = new Set(planets.map((p) => p.host)).size
 
@@ -563,9 +563,9 @@ function findHost(
  *
  * `docs/spikes.md` §4 establishes that CC BY-SA 4.0's share-alike reaches the
  * packed database but not the code that reads it, and that the notice has to
- * carry the creator, a licence reference, a link to the source and a statement
+ * carry the creator, a license reference, a link to the source and a statement
  * that the data was modified. It is written into the file itself as well as into
- * the licence file beside it, so that a copy of the asset alone still carries
+ * the license file beside it, so that a copy of the asset alone still carries
  * its terms.
  */
 const ATTRIBUTION: readonly string[] = [

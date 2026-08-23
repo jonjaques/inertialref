@@ -14,7 +14,7 @@ import {
 /*
  * The cutscene director, held to the reference edit's measured numbers.
  *
- * The script exists to be diffable against a frame-analysed reference, so
+ * The script exists to be diffable against a frame-analyzed reference, so
  * these tests assert the measurements themselves: title fade windows, the
  * credit grid, the warp-flash shape, the locked camera, and the hard cut.
  * A change that shifts any of these is a change to the recreation's fidelity
@@ -76,7 +76,7 @@ describe('tng-intro timing', () => {
       return text
     }
     // Nothing before the throw; both words at full opacity while still
-    // travelling — the reference's mask sees them dim and huge at f1140, not
+    // traveling — the reference's mask sees them dim and huge at f1140, not
     // faded up on their marks.
     expect(word(1124, 'logo-star').opacity).toBe(0)
     expect(word(1142, 'logo-star').opacity).toBeGreaterThan(0.2)
@@ -118,13 +118,13 @@ describe('tng-intro timing', () => {
     expect(opacity(at(1272)!, 'subtitle')).toBe(0)
   })
 
-  it('centres every credit and hangs its label on the name', () => {
+  it('centers every credit and hangs its label on the name', () => {
     const { at } = playing()
     const sample = at(1340)!
     for (const id of ['c1', 'c2', 'c5', 'c8', 'e1']) {
       const text = sample.texts.find((candidate) => candidate.id === id)
       if (text === undefined) throw new Error(`no text ${id}`)
-      // Measured: every name's mask is centred at x 0.497–0.510. The older
+      // Measured: every name's mask is centered at x 0.497–0.510. The older
       // per-credit centroids drifted left only because they were
       // pixel-weighted and the label line pulled them.
       expect(text.x).toBeCloseTo(0.5, 6)
@@ -170,7 +170,7 @@ describe('tng-intro ship choreography', () => {
    * The reference's hull measurements are screen measurements — a tracked
    * bounding box per frame — so this is the diff that matters: put the sampled
    * hull back through the lens and check it lands where the box did. Every
-   * expected number below is a box centre or a box width from the analysis.
+   * expected number below is a box center or a box width from the analysis.
    */
   const track = (
     sample: NonNullable<ReturnType<ReturnType<typeof playing>['at']>>,
@@ -200,7 +200,7 @@ describe('tng-intro ship choreography', () => {
     expect(entry.x).toBeLessThan(0.16)
     expect(entry.y).toBeGreaterThan(0.9)
 
-    // Box centres and widths at the frames where the box is unclipped.
+    // Box centers and widths at the frames where the box is unclipped.
     for (const [frame, x, y, width] of [
       [760, 0.203, 0.757, 0.401],
       [824, 0.278, 0.635, 0.438],
@@ -223,10 +223,10 @@ describe('tng-intro ship choreography', () => {
     const { at } = playing()
     /*
      * The spline-overshoot regression. Ranges across an approach span four
-     * decades, and a Catmull-Rom over those knots in *metres* sets the near
+     * decades, and a Catmull-Rom over those knots in *meters* sets the near
      * end's tangent from the far end: it overshot through the camera and out
      * the other side, and the hull — which should have been receding at a
-     * kilometre — simply was not drawn for twenty frames. Interpolating the
+     * kilometer — simply was not drawn for twenty frames. Interpolating the
      * range in log space fixes it, and this is the assertion that notices if
      * anyone interpolates it any other way.
      *
@@ -270,7 +270,7 @@ describe('tng-intro ship choreography', () => {
   it('brings the hull down through the credits from the top edge', () => {
     const { at } = playing()
     // Measured: the box breaks the top edge at f1770 and descends past the
-    // vertical centre by f2100, which is why Spiner and Wheaton sit low.
+    // vertical center by f2100, which is why Spiner and Wheaton sit low.
     const early = track(at(1800)!)
     expect(early.y).toBeLessThan(0.1)
     expect(early.x).toBeCloseTo(0.462, 2)
@@ -406,7 +406,7 @@ describe('tng-intro camera discipline', () => {
      * one press of `crescent` in the planetarium, and a third of every slow
      * orbit on the front door, as a gold halo filling a frame in a mode that
      * had never asked for an eclipse. At those ranges the physical corona is a
-     * fraction of a degree past the limb and the drawn one is nearly a disc
+     * fraction of a degree past the limb and the drawn one is nearly a disk
      * radius thick.
      *
      * It is a script drive now, like `blackout` and `flash`. The claim worth

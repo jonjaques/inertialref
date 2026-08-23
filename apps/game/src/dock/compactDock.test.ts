@@ -114,7 +114,7 @@ describe('the compact dock', () => {
      */
     const markup = render()
     expect(markup).toContain('>Panels</span>')
-    expect(markup).not.toContain('>catalogue</span>')
+    expect(markup).not.toContain('>catalog</span>')
     expect(markup).not.toContain('overflow-x-auto')
   })
 
@@ -123,7 +123,7 @@ describe('the compact dock', () => {
     // sheet restored on arrival puts a panel over the view before anyone has
     // asked for anything.
     const markup = render()
-    expect(markup).not.toContain('catalogue body')
+    expect(markup).not.toContain('catalog body')
     expect(markup).not.toContain('time body')
   })
 
@@ -142,7 +142,7 @@ describe('the compact dock', () => {
     expect(markup).toContain('href="/"')
     expect(markup).toContain('planetarium')
     expect(markup).toContain('disabled')
-    expect(markup).not.toContain('>catalogue</span>')
+    expect(markup).not.toContain('>catalog</span>')
   })
 
   it('offers the mode a route home and a route to settings', () => {

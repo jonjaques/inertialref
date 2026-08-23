@@ -3,7 +3,7 @@ import { Slider } from '@/components/ui/slider'
 /**
  * The playhead, as a slider.
  *
- * The visual half of what `useScrubber` is the behavioural half of: there are
+ * The visual half of what `useScrubber` is the behavioral half of: there are
  * two transports over one director — the cinema player and the debug overlay —
  * and they were two range inputs with the same two off-by-ones. `useScrubber`
  * owns the drag latch and the guarded seek; this owns the control they drive.

@@ -31,7 +31,7 @@ import type { Body, SurfaceParameters } from './system.ts'
 export const FACE_COUNT = 6
 
 /**
- * A unit direction from a body's centre, expressed in that body's *rotating*
+ * A unit direction from a body's center, expressed in that body's *rotating*
  * axes.
  *
  * Branded because a bare `Vec3` carries no axes and this is the one place where
@@ -121,7 +121,7 @@ export function regionForDirection(
   return regionAddress(face, level, clamp(u), clamp(v))
 }
 
-/** Direction of a region's centre. */
+/** Direction of a region's center. */
 export function regionCentreDirection(region: RegionAddress): Vec3 {
   const span = 2 ** region.level
   const u = ((region.i + 0.5) / span) * 2 - 1
@@ -129,7 +129,7 @@ export function regionCentreDirection(region: RegionAddress): Vec3 {
   return faceToDirection(region.face, u, v)
 }
 
-/** Direction of a normalised (s, t) ∈ [0,1]² position inside a region. */
+/** Direction of a normalized (s, t) ∈ [0,1]² position inside a region. */
 export function regionDirection(
   region: RegionAddress,
   s: number,
@@ -223,7 +223,7 @@ export function surfaceRadius(
 
 /**
  * Vertices per side of a terrain patch. 65 gives a 64-quad patch with a shared
- * edge row, which is what lets neighbouring patches stitch without a seam.
+ * edge row, which is what lets neighboring patches stitch without a seam.
  *
  * Single-sourced here because the streamer, the worker task and capability
  * check 10 all have to agree: that check compares worker output to main-thread

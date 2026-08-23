@@ -56,7 +56,7 @@ describe('orbit traces', () => {
         bodyFrameId(address),
         session.world.clock.time,
       ).position
-      // A metre, against orbits of 1e11 m: this is the analytic solution
+      // A meter, against orbits of 1e11 m: this is the analytic solution
       // evaluated twice, so anything larger would mean the trace is a
       // different curve from the one the body is on.
       expect(UV.distance(at(path, 0), actual)).toBeLessThan(1)
@@ -114,7 +114,7 @@ describe('orbit traces', () => {
     expect(Math.abs(widest / major - 1)).toBeLessThan(0.01)
   })
 
-  it('honours the sample count and the period filter', () => {
+  it('honors the sample count and the period filter', () => {
     expect(traces({ samples: 12 }).paths[0]?.points).toHaveLength(13)
     // One Earth year. Everything outside Earth's orbit drops out, which is
     // what a "show the inner system" control does.

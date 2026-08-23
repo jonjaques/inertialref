@@ -15,7 +15,7 @@ import {
  * An *authority* is whatever owns the part of the simulation this client does
  * not: other players' ships, and mutations that have to outlive the session.
  * That is the entire job — the universe is a pure function of
- * (seed, catalogue version, address), so nothing about the galaxy itself ever
+ * (seed, catalog version, address), so nothing about the galaxy itself ever
  * crosses this boundary, and the set an authority replicates is the same set a
  * 696-byte save file holds.
  *

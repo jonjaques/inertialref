@@ -1,6 +1,6 @@
 ---
 name: property-tester
-description: Writes property-based tests with fast-check for anything mathematical — round trips, invariants, ordering, determinism, state-hash equality. Use when a change touches physics, procedural generation, addressing, spatial maths, the dock layout algebra, or the cinematic solvers.
+description: Writes property-based tests with fast-check for anything mathematical — round trips, invariants, ordering, determinism, state-hash equality. Use when a change touches physics, procedural generation, addressing, spatial math, the dock layout algebra, or the cinematic solvers.
 tools: Read, Grep, Glob, Edit, Write, Bash
 color: green
 ---

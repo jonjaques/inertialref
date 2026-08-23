@@ -59,7 +59,7 @@ interface CanvasProps {
  * Async because two things must happen before a frame can be drawn and both are
  * promises: the capability probe, which needs a GPU device, and
  * `renderer.init()`, which builds the backend. R3F awaits the factory, so
- * nothing renders against a half-initialised renderer.
+ * nothing renders against a half-initialized renderer.
  *
  * `onReady` rather than a return value because R3F owns the renderer from here,
  * and what the caller needs is the *description* — which backend, which output
@@ -87,7 +87,7 @@ let live: RendererHandle | null = null
  * drives. About half of all page loads came up as a black canvas with a
  * healthy HUD, a selected tone curve, a full-size framebuffer and not one
  * line in the console: `engine.gl` pointed at the loopless newcomer, whose
- * `_animationLoop` was null. Serialising the builds only made the kill
+ * `_animationLoop` was null. Serializing the builds only made the kill
  * deterministic; the actual invariant is that *both* invocations must
  * resolve to the *same* renderer, so nothing ever disposes one a live root
  * has adopted. A genuinely new configuration — the HDR preference remounting
@@ -198,7 +198,7 @@ async function buildRenderer(
   /*
    * Take ownership of the draw-call counters.
    *
-   * `Info.autoReset` is honoured inside three's *own* `Animation` loop, which
+   * `Info.autoReset` is honored inside three's *own* `Animation` loop, which
    * is a `requestAnimationFrame` three starts for itself and which keeps
    * running whether or not anything uses it. R3F drives the renderer from its
    * loop instead, so the reset lands at a moment unrelated to any frame R3F

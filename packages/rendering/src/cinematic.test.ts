@@ -86,7 +86,7 @@ describe('fadeEnvelope', () => {
   it('is 0 outside, 1 through the hold, and continuous', () => {
     /*
      * `firstVisible` is a threshold crossing, not a fade start: the reference
-     * calls a title visible once its mask clears a colour floor the text only
+     * calls a title visible once its mask clears a color floor the text only
      * reaches near full opacity. So the ramp *begins* before it — measured
      * against a captured render, treating the two as the same put every credit
      * four frames late — and the assertion is that the envelope is already
@@ -145,7 +145,7 @@ describe('warpFlashEnvelope', () => {
     for (let f = start + 4; f <= start + 11; f += 1) {
       expect(warpFlashEnvelope(start, f).flash).toBe(1)
     }
-    // Build and resolve mirror each other about the centre of the window.
+    // Build and resolve mirror each other about the center of the window.
     for (const dt of [0.5, 1, 2, 3, 3.5]) {
       expect(warpFlashEnvelope(start, start + dt).flash).toBeCloseTo(
         warpFlashEnvelope(start, start + 15 - dt).flash,
@@ -205,7 +205,7 @@ describe('routePosition', () => {
 })
 
 describe('routeOrientation', () => {
-  it('holds the end orientations and stays normalised', () => {
+  it('holds the end orientations and stays normalized', () => {
     const a = Q.fromAxisAngle(vec3(0, 1, 0), 0.3)
     const b = Q.fromAxisAngle(vec3(1, 0, 0), -0.9)
     const beats = [

@@ -44,7 +44,7 @@ const anyState = fc.record({
     max: ELEVATION_LIMIT,
     noNaN: true,
   }),
-  // Three metres to a hundred light years: the band the clamp actually
+  // Three meters to a hundred light years: the band the clamp actually
   // permits. Generating past `MAX_OBSERVER_DISTANCE` would only be testing
   // that `UV.translate` refuses to leave the universe, which is its own test.
   distance: fc
@@ -115,7 +115,7 @@ describe('zoom', () => {
   })
 
   it('clamps a target with no radius to a finite band', () => {
-    // A barycentre, a Lagrange point or a ship: zero radius is a real target
+    // A barycenter, a Lagrange point or a ship: zero radius is a real target
     // and a naive `radius * k` band would collapse to a point at the origin.
     const near = clampDistance(1e-9, 0)
     const far = clampDistance(1e30, 0)
@@ -125,7 +125,7 @@ describe('zoom', () => {
 
   it('lets a moon retreat as far as a star can', () => {
     // The reason the ceiling is absolute rather than a multiple of the radius:
-    // "zoom out until the neighbouring stars appear" has to mean the same
+    // "zoom out until the neighboring stars appear" has to mean the same
     // thing at Luna as at the Sun, or the gesture teaches nothing.
     const LUNA = 1.737e6
     const SUN = 6.957e8
@@ -144,7 +144,7 @@ describe('the pose', () => {
          * Two named limits rather than one tolerance that happens to pass.
          *
          * `POSITION_RESOLUTION` is the universe's own floor — a sector offset
-         * is a double inside 2^40 m — and it is what dominates at a kilometre,
+         * is a double inside 2^40 m — and it is what dominates at a kilometer,
          * where it is 2.4e-7 of the answer. Past a few light years it is the
          * 53-bit mantissa of the sum of squares instead, which is relative.
          * Eight resolutions covers rounding on three axes at both ends.

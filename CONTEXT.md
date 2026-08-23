@@ -197,7 +197,7 @@ Every driving verb took an address and nothing produced one.
   panel, every section collapsible and remembered in `localStorage`, and a
   toolbar so pause, time warp, assist and save/load are not keyboard-only. The
   panel calls the harness and nothing else, which is the rule that keeps a
-  clicked manoeuvre reproducible in a test.
+  clicked maneuver reproducible in a test.
 - **Flight input now ignores keystrokes aimed at a text field.** The address box
   is the first input in the game; without the guard, typing `SOL` fires the
   retro thruster. Buttons blur themselves on click for the same reason — a
@@ -210,7 +210,7 @@ Every driving verb took an address and nothing produced one.
 
 Each of these was invisible in a running browser and caught by a test or by
 driving the harness. They are listed because the same mistake is easy to make
-again in a neighbouring system.
+again in a neighboring system.
 
 - Terrain sampled in **inertial** rather than body-fixed axes: mountains stood
   still while the planet rotated under them.
@@ -248,7 +248,7 @@ again in a neighbouring system.
   (60–180 km), so every atmospheric pass in the game used it. Nothing rendered
   wrong and no test failed, because that number only ever reaches a drag
   coefficient. `BodyFixedDirection` now makes it unrepresentable.
-- **`seaLevel` was honoured by physics and ignored by the mesh.** It was carried
+- **`seaLevel` was honored by physics and ignored by the mesh.** It was carried
   from the generator through the worker to `terrainMesh` and dropped, so on a
   world with an ocean the landing pad sat on the water datum and the mesh drew
   the seabed underneath it.
@@ -444,7 +444,7 @@ atmosphere with a real path integral; and a star field of instanced sprites.
 
 - **WebGPU has no point size.** `PointsNodeMaterial.sizeNode` is ignored on a
   `Points` object under the WebGPU backend — every point renders at one pixel —
-  and honoured on the WebGL fallback. The star field is a `Sprite` with an
+  and honored on the WebGL fallback. The star field is a `Sprite` with an
   instanced position attribute and `Sprite.count` for exactly this reason. A bug
   visible only on the _primary_ backend is the worst shape a rendering bug has.
 - **A `vec3` clamped against `float` bounds renders black, silently.**
@@ -463,7 +463,7 @@ atmosphere with a real path integral; and a star field of instanced sprites.
   to agree, so headless verification reported it fixed while a Retina display was
   losing the tab on every load.
 - **Never share the probe's `GPUDevice` with the renderer.** `requestDevice` is
-  honoured once per adapter, so a renderer that later wants its own gets a device
+  honored once per adapter, so a renderer that later wants its own gets a device
   that is already lost, and a device shared with something that outlives its
   creator has no owner. The probe destroys its own; three requests its own from a
   fresh adapter.
@@ -513,7 +513,7 @@ calls; 66–74 MB heap.
 ### Three more things that must not come back
 
 - **`renderer.info` is reset by three's own rAF loop, not by the render.**
-  `Info.autoReset` is honoured inside `Animation`, a `requestAnimationFrame`
+  `Info.autoReset` is honored inside `Animation`, a `requestAnimationFrame`
   three starts for itself and keeps running whether or not anything uses it. With
   R3F driving the renderer instead, that reset lands at a moment unrelated to any
   frame R3F draws: `info.render.drawCalls` read from the frame loop was reliably
@@ -531,7 +531,7 @@ calls; 66–74 MB heap.
 - **A frame _period_ is not a frame _budget_.** The budget is 16.6 ms of work;
   the plot samples the interval between animation frames, and on a vsynced
   display that interval is pinned near 16.67 ms no matter how little work
-  happened. Colouring the plot on the budget alone marked a comfortable 60 fps as
+  happened. Coloring the plot on the budget alone marked a comfortable 60 fps as
   over budget permanently. The dashed rule is the budget; the warning fires at
   25 ms, which jitter cannot reach and a missed vsync always does.
 
@@ -679,7 +679,7 @@ Every worker task used to take a system id and resolve it, which now needs a
 458 KB table in every worker in every pool to answer a question the caller
 already knew the answer to. Two changes, both narrowing:
 
-- `generateCell` takes a `CellContext` — how many catalogued stars are in this
+- `generateCell` takes a `CellContext` — how many cataloged stars are in this
   cell, and the radius inside which the catalog is complete. Those two scalars
   are the whole of what procedural generation needs from the catalog.
 - `surveySystemTask` takes the resolved stub instead of an id. The caller had
@@ -692,7 +692,7 @@ of them somebody has written down. Those are different numbers and the differenc
 is the whole quantity:
 
 - Generating the full expected count _on top of_ the catalog doubles the solar
-  neighbourhood — 7,123 real systems within 150 ly plus the ~40,000 the density
+  neighborhood — 7,123 real systems within 150 ly plus the ~40,000 the density
   model expects in the same volume.
 - Generating none leaves it five times too sparse, because HYG holds about 59% of
   the known stars within 25 pc and none of the brown dwarfs.
@@ -730,7 +730,7 @@ assumption.
 temperature source — 89% of the catalog carries one — and it is worse: 4.7%
 mean absolute error against 17 published temperatures, versus 2.8% for the
 classification, and 18% at the worst case against 5%. Ballesteros' fit bends
-badly at the red end, which is where three quarters of the neighbourhood lives.
+badly at the red end, which is where three quarters of the neighborhood lives.
 The measured exception is giants, where B−V wins because the classification ladder
 is coarse exactly where a giant's temperature moves fast.
 
@@ -746,7 +746,7 @@ Flower (1996) with Torres' (2010) corrected coefficients is the usual reference
 and is fine above ~4,000 K. Below that it extrapolates past its calibrators: it
 returned −3.11 for Barnard's Star where the published luminosity implies −2.36,
 putting the star at **twice** its real luminosity. M dwarfs are three quarters of
-the solar neighbourhood, so the polynomial was wrong about most of the sky.
+the solar neighborhood, so the polynomial was wrong about most of the sky.
 
 **`spect[0]` is wrong about 13% of the catalog and never says so.** `dM4` is an
 M dwarf, `sdM4` is a subdwarf, `DA2` is a white dwarf, `A0m...` is an A0 with a
@@ -773,7 +773,7 @@ in the naming rule were arrived at only by looking at the output:
 Expanding Bayer and Flamsteed designations through the constellation genitive is
 what turns `Tau Cet` into `Tau Ceti`. Only 214 systems within 150 ly have an IAU
 proper name; 649 have a Bayer or Flamsteed designation, so one 88-row table
-roughly quadruples the number of stars with a name a human recognises.
+roughly quadruples the number of stars with a name a human recognizes.
 
 **Completeness, not size, is the constraint.** 178 confirmed planets around 117
 hosts are dropped because HYG does not contain the host at all — TRAPPIST-1 among
@@ -847,7 +847,7 @@ scatter through the standard slab result rather than a Lambert stand-in.
 ### Bugs worth not reintroducing
 
 **`toColourspace('b-w')` downcasts 16-bit elevation, silently.** libvips calls
-8-bit greyscale `b-w`, so it truncated LOLA's 16-bit product; a following
+8-bit grayscale `b-w`, so it truncated LOLA's 16-bit product; a following
 `raw({depth:'ushort'})` widened the container back to two bytes without restoring
 the range. Every gradient came out 256× too small and the Moon's normal map was
 _perfectly flat_ — a valid file, a plausible pipeline, and no error anywhere.
@@ -915,7 +915,7 @@ everything the air does in front of the ground has to happen in the surface
 material: a blue lift at nadir thickening to a white-blue wash at the limb,
 sunlight reddening near the terminator (keyed to geometric incidence — the
 sun's altitude, not any hill's slope), and night lights dimmed under slant air.
-This is the term that turned the disc from a map on a sphere into something
+This is the term that turned the disk from a map on a sphere into something
 photographed through weather.
 
 **Water is a material, not a color.** The ocean mask (normal-map alpha)
@@ -990,7 +990,7 @@ mount that survives. The App-level cleanup effect that also called
 `releaseRenderer()` is gone — under StrictMode its cleanup fires between the
 doubled mounts and could dispose the renderer the memo was about to hand out;
 the factory is the sole owner of disposal now. Two false trails worth
-remembering: serialising the builds _without_ the memo made the kill
+remembering: serializing the builds _without_ the memo made the kill
 deterministic instead of fixing it (the second build disposed the renderer
 the live root had already adopted), and a page loaded in a hidden tab shows
 the same black symptom benignly — R3F defers canvas creation until the
@@ -1019,7 +1019,7 @@ the helper needs.
 
 **Traveling to a star means the star** (21 Aug 2026). `goTo` with a system
 designation used to arrive at `planets[0]`; it now parks in the _system_ frame
-in a circular orbit of the star itself — eight stellar radii, where the disc
+in a circular orbit of the star itself — eight stellar radii, where the disk
 subtends ~14° — with the nose on it, and `orbit` accepts a system address the
 same way. The star has no `Body` and no frame of its own; it _is_ the system
 frame's origin, which is why none of the body machinery applied and the case
@@ -1066,7 +1066,7 @@ Saturn's 9.8% flattening the shell floated a tenth of a radius off each pole,
 and the analytic "ground" — a sphere of the _equatorial_ radius — drew air
 over ground the planet never fills, a detached gray ring around the whole
 limb. Both ray endpoints are now mapped into a space stretched 1/flattening
-along the spin axis, where the ellipsoid is the sphere the intersection maths
+along the spin axis, where the ellipsoid is the sphere the intersection math
 assumes, and the mesh is scaled oblate to match. The density also gains a
 `(1 − altitude)` factor so the shell ends by vanishing: the exponential alone
 left ~1% at the ceiling, which the HDR canvas rendered as a hard hairline
@@ -1089,16 +1089,16 @@ from the owning body's kind, seeded from its address: ice giants get sparse
 near-black threads with an ε-ring analog near the outer edge, gas giants a
 banded sheet with gaps. The same strip feeds the ring slab and the
 ring-shadow projection on the planet, so the shadow bands match the rings
-that cast them; procedural strips keep their own greys (the body tint is what
+that cast them; procedural strips keep their own grays (the body tint is what
 dyed Uranus's threads cyan).
 
 **The star has a surface** (`render/materials.ts`). Worley-noise granulation
 — bright convection cells draining into dark intergranular lanes — over a
 fractal mottling octave, churned by presentation time so a held star simmers
 under warp; a chromosphere-orange warm-up at the limb. Visible because the
-disc now _stops down_: at the authored radiance 8 every lane clips to the
+disk now _stops down_: at the authored radiance 8 every lane clips to the
 tone ceiling and the surface work is one white circle, so `exposure` ramps
-from 1 to 0.1 as the disc grows from 0.015 to 0.1 rad — a camera exposed for
+from 1 to 0.1 as the disk grows from 0.015 to 0.1 rad — a camera exposed for
 the sun once the sun is the picture — and the lens flare fades on the same
 ramp rather than repainting the stopped-down photosphere back to white. From
 afar nothing changes: the star stays the reference white the HDR path is
@@ -1140,7 +1140,7 @@ load-bearing.
 The debug cone is now the fallback rather than the ship. `data/models/` holds
 glTF hulls with a manifest naming each one's file, true length and nose axis —
 built as a registry because one ship was never going to stay one ship — and
-`apps/game/src/render/shipModels.ts` loads, recentres, yaws nose-to−Z and
+`apps/game/src/render/shipModels.ts` loads, recenters, yaws nose-to−Z and
 scales each to true meters (the Enterprise-D is 642.5 m; render space is
 1 unit = 1 m and stays that way). The asset is “Star Trek Online | USS
 Enterprise D” by LoganRolphh, CC BY 4.0, ~50k triangles with PBR maps and
@@ -1176,7 +1176,7 @@ focused.
 
 The engine can now play scripted scenes over the live world — ADR-0010 — and
 the proving scene is a shot-for-shot study of the 1987 television title
-sequence, chosen because a frame-analysed reference exists for it: 2742 frames
+sequence, chosen because a frame-analyzed reference exists for it: 2742 frames
 at 24000/1001 fps with measured shot boundaries, title fade windows, an
 alternating 65/67-frame credit grid, and camera-hold constraints, all of which
 are now asserted by tests. `ir.play('tng-intro')`, the dock's cutscene section,
@@ -1221,7 +1221,7 @@ What the recreation taught, at cost:
 - **The transit obeys the ephemeris.** The eclipse planet's moons are
   auditioned by how close their orbit lies to the camera's standoff sphere
   (Deimos at 6.9 Mars radii beats Phobos at 2.8, whose detour ballooned the
-  eclipsed disc), each candidate's detour is checked for clearance against the
+  eclipsed disk), each candidate's detour is checked for clearance against the
   planet, and when nothing fits the edit degrades to a plain eclipse.
 
 The blank-boot bug also finally fell. Measured: a wedged boot submits the full
@@ -1314,7 +1314,7 @@ What the frames actually show, against what the analysis had said:
 Two renderer capabilities came out of it, both useful outside a cutscene. The
 flare now draws a **corona** when a body occults the star: visibility is zero
 at totality, which is exactly when the ring is the entire shot, so gating the
-whole group on it left a total eclipse as an unlit disc on an empty starfield.
+whole group on it left a total eclipse as an unlit disk on an empty starfield.
 And the cinematic camera is a **cleaner lens** — `artifacts` scales the ghost
 chain to 0.05 while a script is playing, because the reference's optics put a
 warm ball beside a planet and nothing else, and three gray iris ghosts marching
@@ -1340,11 +1340,11 @@ Lessons with teeth:
 - **The reference is not physically consistent, and that is allowed.** Its
   opening has broadly lit terrain _and_ the sun in frame beside the planet;
   those contradict — the star's measured screen position puts it 72° from the
-  disc's center, which for a camera 1.2 radii up means the whole visible cap
+  disk's center, which for a camera 1.2 radii up means the whole visible cap
   is past the terminator. Its key light and its sun sprite were placed
   independently. Staged against a real ephemeris you get one or the other, so
   the phase ramps instead: 78° at f125 where the cap is lit and the star is
-  behind the lens, opening to 164° by f239 where the disc is the thin crescent
+  behind the lens, opening to 164° by f239 where the disk is the thin crescent
   the match cut needs and the star has swung into frame beside it.
 
 ## The verification loop, closed (22 Aug 2026)
@@ -1731,7 +1731,7 @@ met again two orders larger. Every zoom is a multiply; every ease is over
 
 **The zoom-out ceiling is absolute, not a multiple of the target's radius.** The
 radius-relative version put Luna's at 0.003 ly and a star's at 0.3 ly, so "zoom
-out until the neighbouring stars appear" — the single most planetarium-shaped
+out until the neighboring stars appear" — the single most planetarium-shaped
 gesture there is — worked at a star and refused at a moon, for a reason no user
 could ever infer.
 
@@ -1947,7 +1947,7 @@ the wrong Node is more useful than no session.
 
 A multi-agent review of the `tng` branch — 145 files, 22,273 lines, too large
 for one pass — against a tree where `pnpm check` was green and all 542 tests
-passed. Every finding was a runtime or behavioural defect, which is the useful
+passed. Every finding was a runtime or behavioral defect, which is the useful
 fact about the whole exercise: **the gate proves the code compiles, lints,
 type-checks and satisfies the assertions somebody thought to write. It says
 nothing about the ones nobody did.** Four of these left the session
@@ -2623,7 +2623,7 @@ for different jobs.
   [`docs/guides/client.md`](docs/guides/client.md) and
   [`docs/guides/cinematics.md`](docs/guides/cinematics.md).
 - British spelling in the docs was converted where it was safe. Identifiers,
-  filenames (`catalogue.md`), and `cancelled()` are left for a later pass.
+  filenames (`catalogue.md`), and `canceled()` are left for a later pass.
 
 ## The first look was the expensive one, so everything loads at boot (23 Aug 2026)
 
@@ -2688,6 +2688,15 @@ thread" stalls that are really GPU queue backpressure — the instrumented
 device showed zero shader modules, zero pipelines, zero uploads in those
 frames. Pace with `queue.onSubmittedWorkDone()` before believing any number.
 
+## American English in copy, comments, and docs (23 Aug 2026)
+
+British spelling in user-facing copy, labels, comments, and documentation is
+now American: _color_, _center_, _meter_, _catalog_, _behavior_, _license_,
+_gray_, _artifact_, _toward_. Identifiers, panel ids (`catalog`), JSON keys
+(`license`), enum values (`center`), and filenames (`catalogue.md`) were left
+alone for a later programmatic rename. [`docs/STYLE.md`](docs/STYLE.md)
+already stated the policy; this pass applies it to the rest of the tree.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).
@@ -2707,7 +2716,7 @@ Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md
   desktop-only and the menu says so. The planetarium and the cinema player are
   the mobile surface.
 - **The interface never says `observed` or `projected`.** PRODUCT.md makes
-  stating it a brand commitment and `SystemStub.catalogued` has carried the
+  stating it a brand commitment and `SystemStub.cataloged` has carried the
   answer all along; `TravelTarget` does not forward it, so the destination list
   shows a real star and a generated one identically. See the colorize note in
   [the hardening pass](#what-the-colorize-pass-found-before-it-started).

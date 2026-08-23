@@ -19,7 +19,7 @@ import { createLucideIcon } from 'lucide-react'
  * the 14–20 px these are actually drawn at:
  *
  *   - 24 × 24 canvas, at least 1 px of padding — nothing touches the edge
- *   - 2 px stroke, centred, round caps and round joins
+ *   - 2 px stroke, centered, round caps and round joins
  *   - 2 px corner radius on anything 8 px or larger, 1 px below that
  *   - **2 px of clear space between distinct elements** — the one that is
  *     easiest to violate and the one that decides whether an icon survives
@@ -32,7 +32,7 @@ import { createLucideIcon } from 'lucide-react'
  */
 
 /* ------------------------------------------------------------------------- */
-/* Phase — the terminator across a disc                                       */
+/* Phase — the terminator across a disk                                       */
 /* ------------------------------------------------------------------------- */
 
 /*
@@ -41,7 +41,7 @@ import { createLucideIcon } from 'lucide-react'
  * effect is a picture rather than a number. Words alone make four buttons that
  * look identical; the glyph is the specification.
  *
- * All three are the same disc (r = 9, so 3 px of padding) with the terminator
+ * All three are the same disk (r = 9, so 3 px of padding) with the terminator
  * drawn as an elliptical arc from pole to pole. The arc's x-radius is the whole
  * difference between them, which is also literally what a phase *is*: the
  * projected width of the terminator ellipse. Full phase has no terminator at
@@ -65,20 +65,20 @@ export const PhaseHalf = createLucideIcon('PhaseHalf', [
   ['path', { d: 'M12 3v18', key: 'terminator' }],
 ])
 
-/** A sliver: the terminator bows towards the lit limb. */
+/** A sliver: the terminator bows toward the lit limb. */
 export const PhaseCrescent = createLucideIcon('PhaseCrescent', [
   ['circle', { cx: '12', cy: '12', r: '9', key: 'disc' }],
   ['path', { d: 'M12 3a5 9 0 0 1 0 18', key: 'terminator' }],
 ])
 
 /**
- * The star behind the body: an unlit disc inside a ring of its own atmosphere.
+ * The star behind the body: an unlit disk inside a ring of its own atmosphere.
  *
  * The odd one out of the four, and it has to be. At full phase the terminator
  * has no width and at new phase it has all of it — so drawn to the same recipe
  * as the three above, this glyph would be the bare circle that already means
  * *full*, which is the opposite composition. What is actually on screen at 170°
- * is a dark body ringed by scattered light, so that is what this draws: a disc
+ * is a dark body ringed by scattered light, so that is what this draws: a disk
  * at r = 5.5 inside a ring at r = 9, which is 3.5 px apart and clears the 2 px
  * rule at 16 px.
  */
@@ -99,7 +99,7 @@ export const PhaseRim = createLucideIcon('PhaseRim', [
  * glyph for it anywhere, because no other interface has to show it.
  *
  * The three elements are laid out for the 2 px clearance rule at 16 px: the
- * body's disc ends at r = 2 and the influence ring starts at r = 5, and the
+ * body's disk ends at r = 2 and the influence ring starts at r = 5, and the
  * primary's arc sits in the opposite corner about 8 px clear of the ring at its
  * nearest approach.
  */
@@ -118,7 +118,7 @@ export const SphereOfInfluence = createLucideIcon('SphereOfInfluence', [
  *
  * A ruler would be wrong: nothing in this game measures a light year with a
  * ruler, and Lucide's `Ruler` already means "dimension" in the surface tools.
- * Two discs with a span between them is what a light year *is* in the only
+ * Two disks with a span between them is what a light year *is* in the only
  * place the player meets one — the gap between two points in the galaxy map —
  * and it survives being drawn at 14 px because it has only three parts.
  */
@@ -149,7 +149,7 @@ export const FlipAndBurn = createLucideIcon('FlipAndBurn', [
 ])
 
 /**
- * Delta-v: the budget a manoeuvre spends.
+ * Delta-v: the budget a maneuver spends.
  *
  * The delta is the mathematician's, the arrow is the velocity it applies to,
  * and the 3 px between them is what keeps the pair from fusing into one blob at

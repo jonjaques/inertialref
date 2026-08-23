@@ -27,7 +27,7 @@ import { astroToSim, simToAstro } from './frameConvention.ts'
 export interface OrbitalElements {
   /** Semi-major axis, meters. */
   readonly semiMajorAxis: Meters
-  /** Eccentricity, 0 ≤ e < 1. Hyperbolic trajectories are not modelled here. */
+  /** Eccentricity, 0 ≤ e < 1. Hyperbolic trajectories are not modeled here. */
   readonly eccentricity: number
   /** Inclination from the reference plane, radians. */
   readonly inclination: Radians

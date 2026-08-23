@@ -10,9 +10,9 @@ import {
 import { debugMaterials } from './debugMaterials.ts'
 
 /**
- * The player's ship: a modelled hull once its glTF resolves, the debug cone
+ * The player's ship: a modeled hull once its glTF resolves, the debug cone
  * until then and whenever loading fails. The cone is the same degradation
- * story as the star catalogue's Sol fallback — the flight model neither knows
+ * story as the star catalog's Sol fallback — the flight model neither knows
  * nor cares what the hull looks like.
  */
 export function ShipModel({ engine }: { engine: GameEngine }) {

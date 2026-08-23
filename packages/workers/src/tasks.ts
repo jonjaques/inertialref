@@ -36,14 +36,14 @@ import { defineTask, TaskRegistry } from './task.ts'
  */
 
 /*
- * The catalogue is not shipped to workers.
+ * The catalog is not shipped to workers.
  *
  * Every task here used to take a system id and resolve it, which now needs the
- * 200 KB star catalogue — in every worker, for every pool, to answer questions
+ * 200 KB star catalog — in every worker, for every pool, to answer questions
  * the caller already knows the answer to. Instead the caller passes what it
- * resolved: a cell's catalogued *count* for generation, and a whole stub for a
+ * resolved: a cell's cataloged *count* for generation, and a whole stub for a
  * survey. The count is the only thing procedural generation needs from the
- * catalogue (see `proceduralCount`), and passing it makes the dependency an
+ * catalog (see `proceduralCount`), and passing it makes the dependency an
  * argument rather than an ambient table that has to be kept in sync across a
  * thread boundary.
  */
@@ -51,9 +51,9 @@ export interface GenerateCellRequest {
   readonly seed: string
   readonly cell: GalacticCell
   /**
-   * What the catalogue contributes: how many stars it already has in this cell,
+   * What the catalog contributes: how many stars it already has in this cell,
    * and the radius inside which it is complete. Procedural stars fill the
-   * difference between the catalogue and the density model, so wrong values here
+   * difference between the catalog and the density model, so wrong values here
    * give a different galaxy — loudly, not subtly.
    */
   readonly context?: CellContext
@@ -142,9 +142,9 @@ export interface SurveyRegionRequest {
   /** Inclusive cell bounds. */
   readonly min: GalacticCell
   readonly max: GalacticCell
-  /** Catalogued star counts by `cellKey`; absent cells are zero. */
+  /** Cataloged star counts by `cellKey`; absent cells are zero. */
   readonly catalogued?: Readonly<Record<string, number>>
-  /** Radius inside which the catalogue is complete; see `CellContext`. */
+  /** Radius inside which the catalog is complete; see `CellContext`. */
   readonly completeRadius?: number
 }
 
@@ -242,7 +242,7 @@ export interface SurveySystemRequest {
   /**
    * The system to survey, already resolved.
    *
-   * An id would be smaller, but resolving one needs the star catalogue and this
+   * An id would be smaller, but resolving one needs the star catalog and this
    * runs where there isn't one. The caller has already resolved it — that is how
    * it knew there was a system worth surveying — so passing the stub also stops
    * the work being done twice.
@@ -254,7 +254,7 @@ export interface SurveyedBody {
   readonly address: string
   readonly name: string
   readonly kind: string
-  /** `observed` came from a catalogue; `projected` is the ship's computer. */
+  /** `observed` came from a catalog; `projected` is the ship's computer. */
   readonly provenance: string
   readonly radius: number
   readonly semiMajorAxis: number

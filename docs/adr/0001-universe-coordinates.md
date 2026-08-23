@@ -68,7 +68,7 @@ resolve it at all — `8000 * PARSEC + 0.0254 === 8000 * PARSEC` is `true`.
   walking a frame chain, and streaming needs that answer for systems that are
   not loaded (see ADR-0002).
 - **Larger sectors, fewer bits of index.** A 2^50 m sector gives more range and
-  ~0.25 m resolution — too coarse. A 2^30 m sector gives sub-micrometre
+  ~0.25 m resolution — too coarse. A 2^30 m sector gives sub-micrometer
   resolution and only 243 ly of range.
 
 ## Consequences
@@ -76,7 +76,7 @@ resolve it at all — `8000 * PARSEC + 0.0254 === 8000 * PARSEC` is `true`.
 - Positions are 6 numbers, JSON-serializable, structured-cloneable, and cost
   nothing to send to a worker.
 - Differences between two positions come back as an ordinary `Vec3` in meters,
-  so all downstream maths is plain double arithmetic.
+  so all downstream math is plain double arithmetic.
 - The 0.24 mm floor is a hard limit. Sub-millimeter gameplay (assembling
   machinery from millimeter parts) would need a smaller sector, which costs
   range. Nothing planned needs it.

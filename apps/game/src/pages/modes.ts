@@ -52,7 +52,7 @@ export const MODES: readonly ModeCard[] = [
   {
     to: PLANETARIUM,
     title: 'Planetarium',
-    blurb: 'Fly the catalogue. No ship, no fuel, nowhere you cannot go.',
+    blurb: 'Fly the catalog. No ship, no fuel, nowhere you cannot go.',
     icon: Observatory,
     status: 'ready',
     accent: true,

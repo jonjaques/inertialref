@@ -279,7 +279,7 @@
       {
         "name": "state-colors",
         "value": "color 150ms cubic-bezier(0.4, 0, 0.2, 1), background-color 150ms cubic-bezier(0.4, 0, 0.2, 1), border-color 150ms cubic-bezier(0.4, 0, 0.2, 1)",
-        "purpose": "The only transition in the interface. Controls change colour on hover and nothing moves, scales or lifts."
+        "purpose": "The only transition in the interface. Controls change color on hover and nothing moves, scales or lifts."
       }
     ]
   },
@@ -359,29 +359,29 @@
   ],
   "narrative": {
     "northStar": "The Dark-Adapted Instrument",
-    "overview": "This is an observatory console at night. The subject is outside the window — a real starfield rendered from real astronomy — and the interface is the panel of readouts beside it, built so that reading it never costs you the sky. Nothing on screen is brighter than it needs to be, type sits at the smallest size that stays legible rather than the largest that fits, and colour is spent only where state changes meaning. The standing test is the one the product already sets for itself: would this still be readable with a star filling the frame behind it?\n\nThe system is deliberately narrow. One typeface, one accent family, one neutral family, two corner radii, four status colours. That narrowness is not minimalism as a style — it is what lets an 11px readout hold its own against a dynamic-range image that can reach twice diffuse white. The interface earns its place by being complete and quiet at the same time: every number the simulation knows is reachable, and none of it competes with the thing being simulated.\n\nDepth is functional, not expressive. Panels are translucent and blurred because that is how small text stays readable over a moving scene, not because layered glass is a look worth having; if contrast ever demanded an opaque panel, the opaque panel wins. There are no confirmed anti-references — the system is defined by what it commits to, not by what it refuses.",
+    "overview": "This is an observatory console at night. The subject is outside the window — a real starfield rendered from real astronomy — and the interface is the panel of readouts beside it, built so that reading it never costs you the sky. Nothing on screen is brighter than it needs to be, type sits at the smallest size that stays legible rather than the largest that fits, and color is spent only where state changes meaning. The standing test is the one the product already sets for itself: would this still be readable with a star filling the frame behind it?\n\nThe system is deliberately narrow. One typeface, one accent family, one neutral family, two corner radii, four status colors. That narrowness is not minimalism as a style — it is what lets an 11px readout hold its own against a dynamic-range image that can reach twice diffuse white. The interface earns its place by being complete and quiet at the same time: every number the simulation knows is reachable, and none of it competes with the thing being simulated.\n\nDepth is functional, not expressive. Panels are translucent and blurred because that is how small text stays readable over a moving scene, not because layered glass is a look worth having; if contrast ever demanded an opaque panel, the opaque panel wins. There are no confirmed anti-references — the system is defined by what it commits to, not by what it refuses.",
     "keyCharacteristics": [
       "Monospace everywhere, 10–12px, tabular figures on anything that changes",
-      "Near-black translucent panels anchored to screen corners; the centre stays empty",
+      "Near-black translucent panels anchored to screen corners; the center stays empty",
       "One accent (Instrument Blue) doing every job that isn't status",
-      "Status colour as readout, never as alarm",
+      "Status color as readout, never as alarm",
       "Hairline borders instead of shadows; a single elevation step in the whole system",
       "All chrome unmounts entirely while a cutscene plays"
     ],
     "rules": [
       {
         "name": "The Instrument Speaks, It Does Not Shout",
-        "body": "Status colour is a readout in the same sense that altitude is. Being offline is a supported way to play, so the offline pip is text-slate-400 and not amber — the four ways of not being online get four different colours because they want four different reactions, not because any of them is an error.",
+        "body": "Status color is a readout in the same sense that altitude is. Being offline is a supported way to play, so the offline pip is text-slate-400 and not amber — the four ways of not being online get four different colors because they want four different reactions, not because any of them is an error.",
         "section": "colors"
       },
       {
         "name": "The One Accent Rule",
-        "body": "Instrument Blue is the only non-status hue in the system. A new colour family is a design change, not a detail; if something needs to stand out and isn't status, it earns it with weight, position or the accent — never with a new hue.",
+        "body": "Instrument Blue is the only non-status hue in the system. A new color family is a design change, not a detail; if something needs to stand out and isn't status, it earns it with weight, position or the accent — never with a new hue.",
         "section": "colors"
       },
       {
         "name": "The Scarcity Rule",
-        "body": "No status colour may appear in more than a few places at once. If a screen shows amber in five locations, amber has stopped meaning anything and the problem is the screen, not the palette.",
+        "body": "No status color may appear in more than a few places at once. If a screen shows amber in five locations, amber has stopped meaning anything and the problem is the screen, not the palette.",
         "section": "colors"
       },
       {
@@ -401,7 +401,7 @@
       },
       {
         "name": "The Corner Rule",
-        "body": "Chrome anchors to corners and edges at a 0.75rem inset. Nothing floats in the middle distance, and nothing but the crosshair enters the centre.",
+        "body": "Chrome anchors to corners and edges at a 0.75rem inset. Nothing floats in the middle distance, and nothing but the crosshair enters the center.",
         "section": "layout"
       },
       {
@@ -443,11 +443,11 @@
       "Don't introduce a second accent or neutral family. One blue, one graphite, four status hues.",
       "Don't move dynamic-range-limit to #root — the canvas is a sibling and would be clamped with the chrome.",
       "Don't use two reds for one idea. Fault is rose-400; the perf chart's budget rule currently draws in #f87171 (red-400), which is existing drift and should converge on rose rather than spread.",
-      "Don't put anything but the crosshair at screen centre.",
+      "Don't put anything but the crosshair at screen center.",
       "Don't set a proportional face anywhere in the dock or the strip.",
       "Don't add shadows to create depth. There is one shadow-xl, on the dock, and hairline borders do the rest.",
       "Don't build icon-only controls. Every control is a word.",
-      "Don't treat the cutscene overlay's blues and gold as tokens, or derive anything from public/favicon.svg — the mark is violet (#863bff / #7e14ff), shares no colour with the running interface, and is a placeholder awaiting replacement in this system's own palette.",
+      "Don't treat the cutscene overlay's blues and gold as tokens, or derive anything from public/favicon.svg — the mark is violet (#863bff / #7e14ff), shares no color with the running interface, and is a placeholder awaiting replacement in this system's own palette.",
       "Don't polish the dev dock toward the cockpit specified in docs/design/ux.md. It is scaffolding on purpose; the cockpit starts from the question of where an element physically sits, not from this layout."
     ]
   }

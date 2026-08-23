@@ -13,7 +13,7 @@ A different thing turned out to be wanted: scripted scenes played _by_ the
 engine, over the live world, as an exercise of the renderer and a seam for
 future authored moments (arrivals, discoveries, an attract mode). The proving
 case is a shot-for-shot study of the 1987 television title sequence, chosen
-because a frame-analysed reference exists for it — 2742 frames at 24000/1001
+because a frame-analyzed reference exists for it — 2742 frames at 24000/1001
 fps with measured shot boundaries, title fade windows, a credit grid, and
 camera-hold constraints — which turns "does the recreation match" from an
 opinion into a numeric diff.

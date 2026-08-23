@@ -21,7 +21,7 @@ import { ABOUT, SETTINGS } from './paths.ts'
  *
  * The layout is a poster: type and choices anchored left in a gradient that
  * fades to nothing, so the right two-thirds of the frame is the planet. A
- * centred modal over a scrim would have been easier and would have thrown away
+ * centered modal over a scrim would have been easier and would have thrown away
  * the reason to have a scene behind it at all.
  *
  * Four registers, in the order they are read, and the page is mostly an
@@ -34,7 +34,7 @@ import { ABOUT, SETTINGS } from './paths.ts'
  *
  * Before this the whole page was one weight of one face at four sizes, and the
  * name of the product and the caption under it were separated by 6px and a
- * colour. There is nothing subtle about the fix: a real display face, used
+ * color. There is nothing subtle about the fix: a real display face, used
  * once.
  */
 
@@ -54,14 +54,14 @@ import { ABOUT, SETTINGS } from './paths.ts'
  * The numbers, and each of them is a composition decision. The phase magnitudes
  * below were read off the running page, not derived:
  *
- *   PHASE_OPEN   112°  arrival: a broad lit disc turned three-quarters away
+ *   PHASE_OPEN   112°  arrival: a broad lit disk turned three-quarters away
  *                      from the star, which is still the blue marble and not
  *                      yet a crescent, with the star just past the right edge.
  *   PHASE_RATE   1.8°/s  a turn in 200 s. The star crosses into frame around
  *                      131° and slides behind the limb around 158°, so it
  *                      climbs into shot about ten seconds after the page opens
  *                      and streams across for the next fifteen. At 150° — the
- *                      picture this was tuned on — the disc is a bright rim on
+ *                      picture this was tuned on — the disk is a bright rim on
  *                      the left, the star sits clear of it at two thirds of the
  *                      way across, and the anamorphic streak runs the full
  *                      width of the frame under the type.
@@ -75,7 +75,7 @@ import { ABOUT, SETTINGS } from './paths.ts'
  * negative put the camera on mirror-image arcs either side of the star line, so
  * the sign decides which half of the frame the star crosses — and the poster's
  * left third is a near-solid gradient with all of the type on it. Measured on
- * the positive arc, the star's image sat at NDC x = −0.58: dead centre of the
+ * the positive arc, the star's image sat at NDC x = −0.58: dead center of the
  * black panel, invisible, with its ghost chain out over the empty sky on the
  * right. Negated it is at +0.58, and the picture is the one described above.
  *
@@ -91,17 +91,17 @@ const FILL = 0.66
 /**
  * How much of the lens's ghost chain the front door shows. About a third.
  *
- * The ghosts are strung along the line from the star through the centre of the
+ * The ghosts are strung along the line from the star through the center of the
  * frame, so the closer the star gets to the right edge the further the chain
- * reaches towards the type on the left — and at full strength the red aperture
+ * reaches toward the type on the left — and at full strength the red aperture
  * ring is a 260 px hoop that lands on the paragraph. A flight camera earns its
- * artefacts; a page of type does not.
+ * artifacts; a page of type does not.
  *
- * Not zero, because `flare.ts` counts the anamorphic streak as an artefact
+ * Not zero, because `flare.ts` counts the anamorphic streak as an artifact
  * along with the ghosts, and the streak is the *thing this page is composed
  * around* — a blade of light across the whole frame, which is the contrast the
  * gradient was always missing. A third is where the streak reads and the ring
- * has become two faint coloured smudges on empty sky.
+ * has become two faint colored smudges on empty sky.
  */
 const MENU_FLARE_ARTIFACTS = 0.35
 
@@ -115,7 +115,7 @@ const MENU_FLARE_ARTIFACTS = 0.35
  */
 const SPEC: readonly (readonly [string, string])[] = [
   ['7,123', 'Real Systems'],
-  ['150 ly', 'Catalogued'],
+  ['150 ly', 'Cataloged'],
   ['0', 'To Install'],
 ]
 
@@ -136,7 +136,7 @@ export function HomePage({ engine }: { engine: GameEngine }) {
    * for a minute comes back where the orbit should be rather than a minute
    * behind it.
    *
-   * The observatory eases towards what it is told, so at 1.8°/s the camera
+   * The observatory eases toward what it is told, so at 1.8°/s the camera
    * trails its own target by about a degree. That is the filter doing its job:
    * the picture is smooth and nothing here has to know the frame rate.
    */
@@ -240,7 +240,7 @@ export function HomePage({ engine }: { engine: GameEngine }) {
             could pick up, with nothing to load in between.
           </p>
           <p className="type-body mt-2 max-w-[38ch] text-slate-400">
-            It is early. What runs today is the sky, the catalogue and the
+            It is early. What runs today is the sky, the catalog and the
             camera.
           </p>
 

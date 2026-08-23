@@ -67,7 +67,7 @@ export async function probeOutputCapability(): Promise<OutputCapability> {
      * The probe's device is the probe's, and it dies here.
      *
      * Handing it to the renderer instead looks like a saving — one adapter round
-     * trip — and is a trap twice over. `requestDevice` may only be honoured once
+     * trip — and is a trap twice over. `requestDevice` may only be honored once
      * per adapter, so a renderer that later wants its own gets a device that is
      * already lost; and a device shared with something that outlives this
      * function has no owner, which is how a dev-mode remount leaks one per

@@ -30,7 +30,7 @@ import { type LodTier, selectLod } from './lod.ts'
  * `PlacementConfig` these replace had exactly one instance in the repository.
  */
 
-/** Distance below which nothing is touched: true metres, true scale. */
+/** Distance below which nothing is touched: true meters, true scale. */
 export const NEAR_LIMIT: Meters = 2e6
 /** Where the compressed range starts. Equal to NEAR_LIMIT, for continuity. */
 export const SHELL_START: Meters = 2e6
@@ -45,11 +45,11 @@ export const SHELL_START: Meters = 2e6
 export const SHELL_SPAN: Meters = 2e6
 
 export interface RenderPlacement {
-  /** Position in render space, metres, possibly compressed. */
+  /** Position in render space, meters, possibly compressed. */
   readonly position: Vec3
   /** Multiplier for unit-radius geometry. */
   readonly scale: number
-  /** True distance from the render origin, metres. */
+  /** True distance from the render origin, meters. */
   readonly distance: Meters
   readonly tier: LodTier
   /** True when the position is compressed and depth is no longer metric. */
@@ -69,7 +69,7 @@ export interface RenderPlacement {
  * It is non-decreasing everywhere, so rendered depth never inverts real depth.
  * It is *strictly* increasing only while the separation survives double
  * precision: past ~1e17 m the slope is around 1e-11, so two objects a hundred
- * metres apart compress to the same value. They are also the same pixel, so
+ * meters apart compress to the same value. They are also the same pixel, so
  * this costs nothing — but it is a property of the mapping, not an accident,
  * and the tests state it that way.
  */
@@ -94,10 +94,10 @@ export function placeAt(
       ? 0
       : Math.asin(Math.min(1, radius / Math.max(radius, distance)))
 
-  // Compression keys off the distance to the *surface*, not to the centre.
+  // Compression keys off the distance to the *surface*, not to the center.
   //
-  // Keying off the centre broke the thing this whole system exists for: in a
-  // 400 km orbit the planet's centre is 3,264 km away and was therefore
+  // Keying off the center broke the thing this whole system exists for: in a
+  // 400 km orbit the planet's center is 3,264 km away and was therefore
   // compressed, while the streamed terrain patches 400 km away were in the
   // uncompressed near field. The datum sphere and the ground it represents
   // ended up 30 km apart, so no terrain was visible at all.

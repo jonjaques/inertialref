@@ -6,12 +6,12 @@ import { UV, type UniverseVector, vec3 } from '@inertialref/spatial'
  *
  * A fixed cube lattice over the whole universe. Everything spatial that has to
  * be answered without a global index — which procedural stars exist here, which
- * catalogue stars are near there — is answered by walking cells, so the cost of
+ * catalog stars are near there — is answered by walking cells, so the cost of
  * a query is bounded by the volume asked about rather than by the size of the
  * galaxy.
  *
- * This lives apart from `galaxy.ts` because the star catalogue indexes itself by
- * cell and `galaxy.ts` reads the catalogue. Left together, that is a cycle.
+ * This lives apart from `galaxy.ts` because the star catalog indexes itself by
+ * cell and `galaxy.ts` reads the catalog. Left together, that is a cycle.
  */
 
 /** Edge length of a generation cell. 20 ly holds a couple of dozen stars locally. */

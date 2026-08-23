@@ -20,7 +20,7 @@ export function CinemaLibrary({ engine }: { engine: GameEngine }) {
     // that is very often a sunlit planet. `docs/design/ux.md` measured 70% in
     // front of Earth as the point where a page reads without obliterating what
     // it is over; the same number, for the same reason.
-    // Centred by the child's `m-auto`, not by `items-center`/`justify-center`
+    // Centered by the child's `m-auto`, not by `items-center`/`justify-center`
     // on the scroller: auto margins collapse when the column outgrows the
     // frame, where flex centering overflows it symmetrically — and the half
     // above the scroll origin, the heading first, is unreachable by any

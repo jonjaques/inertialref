@@ -130,7 +130,7 @@ describe('LOD selection', () => {
 
 describe('render placement', () => {
   it('does not compress the world you are in orbit around', () => {
-    // The regression that made terrain invisible: in a 400 km orbit the centre
+    // The regression that made terrain invisible: in a 400 km orbit the center
     // of a 2,864 km planet is far beyond the near limit, but its surface — and
     // the streamed patches on it — are right in front of the camera.
     const radius = 2.864e6
@@ -221,7 +221,7 @@ describe('render placement', () => {
     const star = UV.translate(ORIGIN.position, vec3(4 * LIGHT_YEAR, 0, 0))
     const placement = placeAt(ORIGIN, star, 6.957e8)
     expect(placement.distance / LIGHT_YEAR).toBeCloseTo(4, 3)
-    // Rendered under a billion metres out instead of 4e16 — inside what a
+    // Rendered under a billion meters out instead of 4e16 — inside what a
     // logarithmic depth buffer handles comfortably. The star's own radius
     // dominates that figure, because a body's radius is never compressed away.
     expect(Vec.length(placement.position)).toBeLessThan(1e10)
@@ -304,7 +304,7 @@ describe('scene', () => {
   it('lights the scene from the star you are actually at', () => {
     /*
      * `stars[0]` is the key light. It used to be whichever system was loaded
-     * first, which nothing could notice until travelling between systems became
+     * first, which nothing could notice until traveling between systems became
      * an ordinary thing to do: arriving 40 AU from Proxima left the scene lit by
      * Sol, 4.2 light years behind, and the star overhead contributing nothing.
      */
@@ -338,7 +338,7 @@ describe('scene', () => {
     const { shot, ship } = sceneFixture()
     const farAway = createRenderOrigin(UV.fromMeters(0, 0, 0))
     const scene = buildScene(shot, farAway, ship.id)
-    // From the galactic centre, Sol's planets are far below one pixel.
+    // From the galactic center, Sol's planets are far below one pixel.
     expect(scene.bodies).toHaveLength(0)
   })
 })
@@ -384,7 +384,7 @@ describe('chase camera', () => {
     // Up is the radial direction, so it does not care about attitude.
     expect(Vec.dot(level.camera.up, nose.camera.up)).toBeCloseTo(1, 6)
     expect(Vec.length(level.camera.up)).toBeCloseTo(1, 9)
-    // Parked, so the altitude is zero to within the millimetre the contact
+    // Parked, so the altitude is zero to within the millimeter the contact
     // clamp and the one-tick-old snapshot leave behind.
     expect(Math.abs(level.camera.altitude ?? 1)).toBeLessThan(0.01)
   })
@@ -405,7 +405,7 @@ describe('chase camera', () => {
     }
   })
 
-  it('keeps a modelled hull in frame at any length', () => {
+  it('keeps a modeled hull in frame at any length', () => {
     // The framing rule is a ratio, so the angle the hull subtends from the
     // camera must not depend on how long it is: a 6 m cone and a 642 m
     // starship should fill the same fraction of the view. The half-angle from
@@ -423,7 +423,7 @@ describe('chase camera', () => {
   })
 
   it('keeps the camera above the ground behind a full-size hull', () => {
-    // The clearance clamp was tuned against 14 m of lever arm; a modelled
+    // The clearance clamp was tuned against 14 m of lever arm; a modeled
     // hull hangs the camera ~900 m back, where the same nose-high pitch digs
     // proportionally deeper. The rule must hold regardless of the arm.
     for (const pitch of [0, 10, 20, 40, 60, 90, 180, -40]) {
@@ -483,15 +483,15 @@ describe('terrain mesh', () => {
     expect(patch.indices.length).toBe(16 * 16 * 6)
 
     // Vertices are anchor-relative, which is what keeps them inside float32's
-    // useful range: measured from the body's centre they would be ~10^6 m,
+    // useful range: measured from the body's center they would be ~10^6 m,
     // where a float32 step is 0.17 m and the relief this test checks for is
-    // gone. A patch is a few hundred metres across at this level.
+    // gone. A patch is a few hundred meters across at this level.
     for (let i = 0; i < patch.positions.length; i += 3) {
       expect(Math.abs(patch.positions[i] as number)).toBeLessThan(1e5)
     }
 
     // Put the pose back on: every vertex is then at the planet's radius plus
-    // its own elevation, measured from the body's centre in render space.
+    // its own elevation, measured from the body's center in render space.
     const placement = patchPlacement(
       patch,
       origin,
@@ -559,7 +559,7 @@ describe('terrain mesh', () => {
      * the property the whole feature stands on: wound the other way, every
      * patch is culled from above, the datum sphere 11 km below reads as the
      * ground, and the far slopes of ridges above eye level leak through as a
-     * terrain-coloured band floating over the horizon. That shipped, and it
+     * terrain-colored band floating over the horizon. That shipped, and it
      * passed every distance-based test in this file, because winding is
      * invisible to arithmetic about vertex positions.
      *
@@ -625,13 +625,13 @@ describe('terrain mesh', () => {
 
   it('places meter-scale detail on an astronomically distant surface', () => {
     // Requirement 8 of the milestone, checked at the level that decides it: a
-    // vertex a metre from its neighbour must still be a metre from it after
+    // vertex a meter from its neighbor must still be a meter from it after
     // going through render space, four light-years out.
     const centre = UV.fromMeters(4.2 * LIGHT_YEAR, 0, 0)
     const a = UV.translate(centre, vec3(6.371e6, 0, 0))
     const b = UV.translate(centre, vec3(6.371e6, 1, 0))
     // The origin follows the camera, so the ground under the player is always
-    // in the uncompressed near field. That is what makes metre-scale objects
+    // in the uncompressed near field. That is what makes meter-scale objects
     // exact four light-years from anywhere.
     const origin = createRenderOrigin(a)
     const pa = placeAt(origin, a, 1)
@@ -641,8 +641,8 @@ describe('terrain mesh', () => {
       Vec.distance(Vec.toFloat32(pa.position), Vec.toFloat32(pb.position)),
     ).toBeCloseTo(1, 4)
 
-    // Sanity: from an origin at the planet's centre those same two points *are*
-    // compressed, and the metre between them shrinks. Compression is a property
+    // Sanity: from an origin at the planet's center those same two points *are*
+    // compressed, and the meter between them shrinks. Compression is a property
     // of the far field, and the far field is not where gameplay happens.
     const distant = createRenderOrigin(centre)
     expect(placeAt(distant, a, 1).compressed).toBe(true)

@@ -24,7 +24,7 @@ import { separationArcsec } from './build.ts'
 import { chooseCommonName } from './naming.ts'
 
 /*
- * The vendored artefact, checked against reality.
+ * The vendored artifact, checked against reality.
  *
  * `packages/universe` tests the codec and the derivations against a five-star
  * fixture, because it must not need a file to exist. This is the other half:
@@ -45,7 +45,7 @@ const catalog = (): StarCatalog => (cached ??= readCatalog(readFileSync(ASSET)))
 const ROOT = rootSeed('inertialref')
 const GALAXY_SEED = galaxySeedOf(ROOT)
 
-describe('the vendored catalogue', () => {
+describe('the vendored catalog', () => {
   it('covers the volume it claims to', () => {
     const c = catalog()
     expect(c.metadata.radiusLightYears).toBe(150)
@@ -54,7 +54,7 @@ describe('the vendored catalogue', () => {
       expect(star.distanceLightYears).toBeLessThanOrEqual(150.001)
   })
 
-  it('carries the attribution the licence requires', () => {
+  it('carries the attribution the license requires', () => {
     // CC BY-SA 4.0 § 3(a)(1). The notice travels inside the file as well as
     // beside it, so a copy of the asset alone still states its terms.
     const attribution = catalog().metadata.attribution.join(' ')
@@ -116,7 +116,7 @@ describe('the vendored catalogue', () => {
       expect(c.find(query)?.id, query).toBe(id)
   })
 
-  it('keeps almost every id in a catalogue that outlives HYG', () => {
+  it('keeps almost every id in a catalog that outlives HYG', () => {
     // A `HYG…` id is one only HYG's row numbering guarantees, so a rebuild that
     // renumbers moves it — and a save pointing at it points at nothing. 1% is
     // the level it sits at today; a jump means the identity ladder regressed.
@@ -301,7 +301,7 @@ describe('confirmed exoplanets', () => {
     expect(withPlanets.length).toBeGreaterThan(400)
     /*
      * The host index is a position in the star array, so an off-by-one there
-     * puts every planet around its neighbour and nothing throws. Exoplanet names
+     * puts every planet around its neighbor and nothing throws. Exoplanet names
      * are `<host> <letter>`, so a planet naming a star it does not orbit is that
      * bug, visibly. The Solar System is the exception the check has to allow —
      * Neptune is not called "Sol i".
@@ -337,7 +337,7 @@ describe('confirmed exoplanets', () => {
     }
   })
 
-  it('keeps an M sin i lower bound labelled as one', () => {
+  it('keeps an M sin i lower bound labeled as one', () => {
     // Radial velocity gives `M sin i`, not a mass, and most nearby planets were
     // found that way. Presenting it as a mass is quoting a number that is right
     // only for an edge-on system.
@@ -349,11 +349,11 @@ describe('confirmed exoplanets', () => {
   })
 })
 
-describe('the galaxy the catalogue produces', () => {
+describe('the galaxy the catalog produces', () => {
   it('invents no star closer than Proxima Centauri', () => {
     /*
      * The failure this exists for: the density model says how many stars there
-     * are, not how many are *unknown*, so subtracting the catalogue from it and
+     * are, not how many are *unknown*, so subtracting the catalog from it and
      * scattering the difference put a procedural M dwarf 3.4 light-years away.
      * A main-sequence star that close would be the astronomical discovery of the
      * century, and the game claimed one on the first run.
@@ -371,7 +371,7 @@ describe('the galaxy the catalogue produces', () => {
         ).toBeGreaterThanOrEqual(25)
   })
 
-  it('has the right neighbours in the right order out to ten light-years', () => {
+  it('has the right neighbors in the right order out to ten light-years', () => {
     const c = catalog()
     const sol = c.get('SOL' as never)
     if (sol === undefined) throw new Error('no Sol')
@@ -390,10 +390,10 @@ describe('the galaxy the catalogue produces', () => {
     ])
   })
 
-  it('fills the gap beyond the catalogue rather than doubling it', () => {
+  it('fills the gap beyond the catalog rather than doubling it', () => {
     // At 100 ly HYG holds roughly a third of what the density model expects, so
     // there must be procedural stars out there — and more of them than there are
-    // catalogued ones, or the fill is not filling anything.
+    // cataloged ones, or the fill is not filling anything.
     const c = catalog()
     const sol = c.get('SOL' as never)
     if (sol === undefined) throw new Error('no Sol')
@@ -436,7 +436,7 @@ describe('the packed format carries its own UTF-8', () => {
     )
   })
 
-  it('survives the names actually in the catalogue', () => {
+  it('survives the names actually in the catalog', () => {
     // Boötis, α, and every accented proper name in the file. A codec that
     // assumes one byte per character corrupts these and nothing else.
     for (const star of catalog().stars)
@@ -448,7 +448,7 @@ describe('the packed format carries its own UTF-8', () => {
 describe('the CSV reader', () => {
   it('does not shift a row when a field contains a comma', () => {
     // A naive `split(',')` does not fail on this, it silently moves every column
-    // after the quoted one — so a star's spectral type becomes its colour index.
+    // after the quoted one — so a star's spectral type becomes its color index.
     const table = parseCsv('a,b,c\n1,"two, and a half",3\n')
     const row = table.rows[0]
     if (row === undefined) throw new Error('no row')
@@ -496,7 +496,7 @@ describe('cross-matching by sky position', () => {
     ).toBeCloseTo(36, 3)
   })
 
-  it('narrows longitude towards the poles', () => {
+  it('narrows longitude toward the poles', () => {
     // A degree of right ascension is worth cos(dec) of a degree on the sky, so
     // the same RA offset is a smaller separation at high declination.
     const equator = separationArcsec({ ra: 10, dec: 0 }, { ra: 10.1, dec: 0 })
@@ -604,7 +604,7 @@ describe('choosing a common name', () => {
     expect(chooseCommonName(barnard, 'HIP87937')).toBe("Barnard's Star")
   })
 
-  it('walks all the way down to a catalogue number', () => {
+  it('walks all the way down to a catalog number', () => {
     expect(chooseCommonName([component({ hip: 12_345 })], 'HIP12345')).toBe(
       'HIP 12345',
     )

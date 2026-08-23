@@ -218,7 +218,7 @@ status hues that appear a handful of times each.
   so no alpha and no darker ground gets either to 4.5:1. Only a lighter ink
   does. 500 survives in exactly one place, `hud/connection.ts`, where the pip is
   a non-text indicator held to 3:1 and where `checking` and `offline` are two
-  greys that must stay apart.
+  grays that must stay apart.
 - **Panel Graphite 400** (`text-slate-400`): **the floor, and now two roles.**
   Labels — the left column of every readout row — and secondary values: a
   subordinate reading, a stale distance, an axis annotation. The two no longer
@@ -617,7 +617,7 @@ controls and a title is a title with no room left to be read.
 - **The title is the quieter color and the larger size; the section headings
   inside it are the accent and smaller.** That ordering is the fix for every
   panel reading as five equally important shouts: a title says what you are
-  looking at, a heading organises what is in it.
+  looking at, a heading organizes what is in it.
 
 ### Section
 
