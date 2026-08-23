@@ -8,7 +8,7 @@ import type { DockZone } from './layout.ts'
  * Deliberately not a component type. A panel is a *definition* — an identity,
  * a name, a glyph, a default home and a thunk that produces its body — and the
  * thunk is what keeps a hidden panel free: the workspace never calls it, so a
- * catalogue that is closed does not walk the star index eight times a second
+ * catalog that is closed does not walk the star index eight times a second
  * to render into nothing.
  *
  * `id` is the string that ends up in `localStorage`, so it is an identity that

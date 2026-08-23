@@ -53,7 +53,7 @@ export const SITE = {
    * `site.test.ts` holds every page to that bound.
    */
   description:
-    'An open-source spaceflight simulator in a browser tab. The Milky Way is the real one — 7,123 catalogued systems within 150 light years, the rest from a seed.',
+    'An open-source spaceflight simulator in a browser tab. The Milky Way is the real one — 7,123 cataloged systems within 150 light years, the rest from a seed.',
   author: 'Jon Jaques',
   repository: 'https://github.com/jonjaques/inertialref',
   licence: 'Apache-2.0',
@@ -100,7 +100,7 @@ export const PAGES: readonly PageMeta[] = [
     path: PLANETARIUM,
     title: 'Planetarium',
     description:
-      'Fly the real catalogue. 7,123 systems and 702 known planets within 150 light years, derived rather than downloaded — no ship, no fuel, nowhere you cannot go.',
+      'Fly the real catalog. 7,123 systems and 702 known planets within 150 light years, derived rather than downloaded — no ship, no fuel, nowhere you cannot go.',
     index: true,
   },
   {
@@ -200,7 +200,7 @@ const withoutTrailingSlash = (pathname: string): string =>
 /**
  * The absolute URL for a path, for a canonical link or a sitemap entry.
  *
- * Normalised, and that is the whole reason this is a function rather than a
+ * Normalized, and that is the whole reason this is a function rather than a
  * template literal at each call site. `pageMetaFor` already treats a trailing
  * slash as the same page and `sitemap.xml` lists the slash-less form — so a
  * visitor arriving at a shared `/planetarium/` link used to be served a

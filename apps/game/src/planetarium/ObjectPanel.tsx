@@ -17,7 +17,7 @@ export function ObjectPanel({ engine, focus }: PlanetariumContext) {
     return (
       <p className="px-1 py-2 text-slate-400">
         Nothing selected. Click something in the sky, or pick a row in the
-        catalogue.
+        catalog.
       </p>
     )
   }
@@ -96,7 +96,7 @@ export function ObjectPanel({ engine, focus }: PlanetariumContext) {
           }}
         />
         <Action
-          label="Re-centre"
+          label="Re-center"
           title="Reset the orbit angles"
           tone="primary"
           onClick={() => focus(target.address)}

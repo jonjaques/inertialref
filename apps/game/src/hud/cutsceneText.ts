@@ -11,7 +11,7 @@ import type { CinematicTextState } from '../engine/GameEngine.ts'
  * chrome reloads the page, rebuilding the renderer and losing the camera.
  */
 
-/** The measured text colour: RGB ≈ (64,138,230); the logo runs deeper. */
+/** The measured text color: RGB ≈ (64,138,230); the logo runs deeper. */
 const TEXT_BLUE = 'rgb(64,138,230)'
 const LOGO_BLUE = 'rgb(24,120,215)'
 const ACCENT_GOLD = 'rgb(216,180,90)'
@@ -43,8 +43,8 @@ const size = (capFraction: number, face: keyof typeof CAP_RATIO): string =>
  * How far the label's box sits above the name's, in vh.
  *
  * Tuned against the rendered result rather than derived: the reference puts a
- * label's cap centre 0.1056 of the frame height above its name's, and what
- * stands between a CSS margin and a cap centre is two line boxes' worth of two
+ * label's cap center 0.1056 of the frame height above its name's, and what
+ * stands between a CSS margin and a cap center is two line boxes' worth of two
  * fonts' ascent and descent metrics. Measuring the drawn bands and solving for
  * the margin is one round trip; deriving it is several, and wrong again the
  * moment the face changes.

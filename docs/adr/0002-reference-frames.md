@@ -43,7 +43,7 @@ Three frames exist per body, and the distinction is load-bearing:
 
 - **Frames as the precision mechanism.** The conventional design. Unnecessary
   here, and it would have forced every entity to belong to a frame close enough
-  to keep its coordinates small — a constraint on gameplay, not just on maths.
+  to keep its coordinates small — a constraint on gameplay, not just on math.
 - **Absolute positions only, no frames.** Would require recomputing an orbiting
   body's absolute position every tick for everything attached to it, and would
   lose the velocity composition entirely.

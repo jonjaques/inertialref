@@ -164,7 +164,7 @@ describe('who is measured', () => {
     expect(isMeasured({ ...canonical, measurementId: '' })).toBe(false)
   })
 
-  it('honours an explicit opt-out', () => {
+  it('honors an explicit opt-out', () => {
     expect(isMeasured({ ...canonical, optedOut: true })).toBe(false)
   })
 })

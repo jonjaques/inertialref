@@ -93,7 +93,7 @@ export interface RenderScene {
     readonly orientation: Quat
     readonly universePosition: UniverseVector
     /**
-     * Local up in render axes — away from the centre of the nearest body.
+     * Local up in render axes — away from the center of the nearest body.
      *
      * Not the camera's own up: that rotates with the ship, and the question
      * "which way is away from the ground" has to survive the ship pointing
@@ -171,7 +171,7 @@ export function buildScene(
       hasAtmosphere: body.appearance.haze !== null,
       // From the *haze*, not from `atmosphereCeiling`. That ceiling is where the
       // drag model stops integrating, which for a gas giant is a thousand
-      // kilometres of "there is no surface" — drawn as a shell it put a halo on
+      // kilometers of "there is no surface" — drawn as a shell it put a halo on
       // Saturn 3% of its own radius wide.
       atmosphereScale:
         body.appearance.haze === null
@@ -180,7 +180,7 @@ export function buildScene(
       trueRadius: body.radius,
       rotationPeriod: body.rotationPeriod,
       flattening: body.polarRadius / body.radius,
-      // Ring radii arrive in metres from the body's centre and leave as
+      // Ring radii arrive in meters from the body's center and leave as
       // multiples of the drawn sphere — which is not the body's radius, because
       // the datum sphere is sunk by a relief to let terrain sit above it. Doing
       // this conversion here rather than in the renderer keeps that adjustment
@@ -201,7 +201,7 @@ export function buildScene(
   let brightest = 0
   const rawStars = snapshot.stars.map((star) => {
     const placement = placeAt(origin, star.position, star.radius)
-    // Inverse-square apparent brightness; normalised below so the scene always
+    // Inverse-square apparent brightness; normalized below so the scene always
     // has something at full intensity whatever the player is looking at.
     const apparent =
       star.luminosity / Math.max(1, placement.distance * placement.distance)
@@ -212,7 +212,7 @@ export function buildScene(
   // Sorted, because `stars[0]` is what the renderer lights the scene from. The
   // order used to be the snapshot's — the order systems happened to be loaded
   // in — which was invisible while only one system was ever loaded and wrong
-  // the moment travelling between them became ordinary: arriving 40 AU from
+  // the moment traveling between them became ordinary: arriving 40 AU from
   // Proxima left the scene lit by Sol, four light years behind, and the star
   // overhead contributing nothing. Apparent brightness rather than distance,
   // because that is what "which star lights this place" means.
@@ -280,7 +280,7 @@ function upFrom(
   if (nearest === null) return vec3(0, 1, 0)
   const radial = UV.difference(camera, nearest.position)
   const length = Vec.length(radial)
-  // Dead centre of a body has no up. Nothing can be there, but the normalise
+  // Dead center of a body has no up. Nothing can be there, but the normalize
   // would produce NaN and every consumer would inherit it.
   if (length === 0) return vec3(0, 1, 0)
   return directionToRenderSpace(origin, Vec.scale(radial, 1 / length))

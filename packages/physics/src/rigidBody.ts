@@ -97,7 +97,7 @@ export function atmosphericDensity(
  *
  * `ballisticCoefficient` is mass / (dragCoefficient × area) in kg/m²; higher
  * means it punches through. Velocity must be relative to the *air*, which on a
- * rotating planet is not the same as velocity in the planet-centred frame —
+ * rotating planet is not the same as velocity in the planet-centered frame —
  * expressing it in the rotating surface frame is what gets that right for free.
  */
 export function dragAcceleration(

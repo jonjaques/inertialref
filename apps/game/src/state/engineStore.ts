@@ -24,7 +24,7 @@ import type { HarnessStatus } from '@inertialref/devtools'
  *      component reading mutable engine fields — hence `'use no memo'` in
  *      `PerfPanel`. A snapshot read through a selector is a genuinely new value
  *      each time it differs, so the assumption holds and the opt-out is not
- *      needed. Do not read this as licence to point panels at live engine
+ *      needed. Do not read this as license to point panels at live engine
  *      fields; it is the argument for pointing them here instead.
  *
  * zustand rather than a hand-rolled `useSyncExternalStore`: the selector

@@ -2,7 +2,7 @@
 /*
  * Everything the brand is made of, from one drawing.
  *
- *     pnpm brand           re-render every artefact
+ *     pnpm brand           re-render every artifact
  *     pnpm brand --check   fail if any of them has drifted from the source
  *
  * `design/brand/brandmark.svg` is the mark. This script is the only thing that
@@ -28,7 +28,7 @@
  * like, which is the one thing a mark exists to stop.
  *
  * **What `--check` does and does not cover.** It re-derives every *text*
- * artefact and diffs it, so a redrawn mark, a renamed page or a changed
+ * artifact and diffs it, so a redrawn mark, a renamed page or a changed
  * description fails the gate. It does not diff the PNGs: `sharp`'s encoder is
  * not promised to be byte-stable across versions, so a dependency bump would
  * turn into a red gate that means nothing. It asserts they exist and are not
@@ -101,7 +101,7 @@ ${markup(mark.paths, '    ')}
 }
 
 /* ------------------------------------------------------------------------- */
-/* The text artefacts                                                         */
+/* The text artifacts                                                         */
 /* ------------------------------------------------------------------------- */
 
 function faviconSvg(mark, box) {
@@ -279,7 +279,7 @@ function ico(images) {
     entry.writeUInt8(size >= 256 ? 0 : size, 1)
     entry.writeUInt8(0, 2) // palette size — none, this is truecolour
     entry.writeUInt8(0, 3) // reserved
-    entry.writeUInt16LE(1, 4) // colour planes
+    entry.writeUInt16LE(1, 4) // color planes
     entry.writeUInt16LE(32, 6) // bits per pixel
     entry.writeUInt32LE(png.length, 8)
     entry.writeUInt32LE(offset, 12)
@@ -360,7 +360,7 @@ async function main() {
     }
     if (stale.length > 0) {
       console.error(
-        'Brand artefacts have drifted from design/brand/brandmark.svg:',
+        'Brand artifacts have drifted from design/brand/brandmark.svg:',
       )
       for (const { target, missing } of stale) {
         console.error(
@@ -371,7 +371,7 @@ async function main() {
       process.exitCode = 1
       return
     }
-    console.log('brand artefacts match design/brand/brandmark.svg')
+    console.log('brand artifacts match design/brand/brandmark.svg')
     return
   }
 

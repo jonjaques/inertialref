@@ -14,7 +14,7 @@ import {
  * Reference frames.
  *
  * Precision is *not* what frames are for here — UniverseVector already gives
- * sub-millimetre resolution everywhere, so unlike most engines we do not need a
+ * sub-millimeter resolution everywhere, so unlike most engines we do not need a
  * frame hierarchy to rescue floating-point error (ADR-0002). Frames exist for
  * the other two jobs:
  *
@@ -355,7 +355,7 @@ export function canonicalOrientation(
  * This is the frame transition the vertical slice has to prove: entering a
  * planet's frame on approach changes the numbers an entity carries but not
  * where or how fast it actually is. Round-tripping through here is
- * position-exact to well under a millimetre and velocity-exact to floating
+ * position-exact to well under a millimeter and velocity-exact to floating
  * point, which `frame.test.ts` asserts.
  */
 export function reframe(

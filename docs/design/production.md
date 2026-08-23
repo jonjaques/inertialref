@@ -36,7 +36,7 @@ and in a production build, online and offline.
 **M2 + M3 + M4.** The first releasable product, and it is a complete game rather
 than a slice of one.
 
-> **You fly a ship through the real solar neighbourhood. You can go to any star
+> **You fly a ship through the real solar neighborhood. You can go to any star
 > you can see. You can land on nearly anything solid and it looks like a place.
 > You survey what you find, your name goes on what you found first, and the
 > catalog gets better over time because real astronomy does.**

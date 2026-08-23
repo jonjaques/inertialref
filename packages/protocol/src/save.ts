@@ -86,12 +86,12 @@ export interface SaveGame {
   readonly tick: number
   readonly generation: Readonly<Record<string, number>>
   /**
-   * The star catalogue version the universe was generated against.
+   * The star catalog version the universe was generated against.
    *
    * A generation input in its own right (`docs/design/galaxy.md` Rule 1), and
    * not a number, so it cannot live in `generation`. Optional on the wire: saves
-   * written before the catalogue existed decode as `''`, which reads correctly
-   * as "generated against no catalogue".
+   * written before the catalog existed decode as `''`, which reads correctly
+   * as "generated against no catalog".
    */
   readonly catalog: string
   readonly entities: readonly SaveEntity[]

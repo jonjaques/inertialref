@@ -10,7 +10,7 @@
  * from a point at radius r, along zenith-cosine μ, out to space. This is the
  * table that makes sunsets: a grazing ray crosses so much air that the blue
  * coefficient extinguishes first, and everything lit by that ray — cloud,
- * limb, the air itself — reddens with no hand-tuned "sunset colour" anywhere.
+ * limb, the air itself — reddens with no hand-tuned "sunset color" anywhere.
  *
  * **Multiple scattering** Ψ(r, μs): Hillaire's isotropic estimate of every
  * scattering order past the first, as a single lookup. Single scattering
@@ -20,7 +20,7 @@
  * Everything is in **planet radii** — the ground is r = 1 — because that is
  * the one unit that survives the renderer's distance compression: both shell
  * radii are rescaled together every time the LOD tier moves, so anything
- * baked in metres would be wrong by whatever the compressor chose that frame.
+ * baked in meters would be wrong by whatever the compressor chose that frame.
  *
  * Pure arrays in, pure arrays out, no GPU and no three.js: the bake runs
  * identically in a worker, a test, or the main thread, and the *physics* is
@@ -28,10 +28,10 @@
  * consumes these tables cannot be evaluated in Node, but the tables can.
  *
  * Coefficients derive from the authored `HazeLayer`, not from a gas mix: the
- * zenith colour *is* the scattering spectrum (a sky's colour is β, up to
- * normalisation), the limb colour tints the aerosol, and `thickness` scales
+ * zenith color *is* the scattering spectrum (a sky's color is β, up to
+ * normalization), the limb color tints the aerosol, and `thickness` scales
  * the column. Mars therefore keeps its butterscotch sky and its blue sunset
- * — both are in its authored colours — without this file knowing what CO₂ is.
+ * — both are in its authored colors — without this file knowing what CO₂ is.
  */
 
 export interface HazeAuthoring {
@@ -55,7 +55,7 @@ export interface AtmosphereRecipe {
   readonly betaRayleigh: readonly [number, number, number]
   /** Aerosol scattering coefficient per planet radius, RGB (tinted). */
   readonly mieScatter: readonly [number, number, number]
-  /** Aerosol extinction per planet radius, grey — scatter / 0.9. */
+  /** Aerosol extinction per planet radius, gray — scatter / 0.9. */
   readonly mieExtinction: number
 }
 
@@ -74,7 +74,7 @@ export const MULTI_SCATTER_SIZE = 32
  * Earth's vertical Rayleigh optical depth, summed over RGB, at thickness 1.
  *
  * Measured, not chosen: the real column is (0.046, 0.108, 0.265), which sums
- * to 0.42 — and splitting that sum by the authored zenith colour reproduces
+ * to 0.42 — and splitting that sum by the authored zenith color reproduces
  * the real spectrum within a few percent, which is what licenses deriving
  * physics from art direction in the first place.
  */
@@ -132,8 +132,8 @@ export function atmosphereRecipe(
     ((limb.g / limbMean) * tauMie) / hMie,
     ((limb.b / limbMean) * tauMie) / hMie,
   ]
-  // Extinction is deliberately grey: a tinted extinction double-counts the
-  // colour the scattering tint already applied, and drifts white sums.
+  // Extinction is deliberately gray: a tinted extinction double-counts the
+  // color the scattering tint already applied, and drifts white sums.
   const mieExtinction = (tauMie / hMie) * MIE_EXTINCTION_RATIO
 
   return { topRatio, hRayleigh, hMie, betaRayleigh, mieScatter, mieExtinction }
@@ -277,7 +277,7 @@ const transmittanceAt = (
 ): [number, number, number] =>
   sampleLut(lut, (mu + 1) / 2, (radius - 1) / (recipe.topRatio - 1))
 
-/** A Fibonacci sphere: N directions with no axis favoured. */
+/** A Fibonacci sphere: N directions with no axis favored. */
 function fibonacciSphere(count: number): [number, number, number][] {
   const golden = Math.PI * (3 - Math.sqrt(5))
   const out: [number, number, number][] = []

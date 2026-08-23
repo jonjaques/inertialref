@@ -36,7 +36,7 @@ import type { CinematicView } from '../engine/GameEngine.ts'
  * post pass: the budget allows ~3 ms for atmosphere *plus* post, and a
  * handful of quads that are invisible outside a cutscene costs nothing the
  * rest of the time. Same blending discipline as the flare — additive in
- * colour, silent in alpha (`Zero`/`One`), because an alpha-writing additive
+ * color, silent in alpha (`Zero`/`One`), because an alpha-writing additive
  * quad stamps visible rectangles into the extended-range canvas.
  *
  * The "motion blur" here is the smear: a blade stretched between the hull's
@@ -51,9 +51,9 @@ import type { CinematicView } from '../engine/GameEngine.ts'
 const PLANE = 20
 
 /**
- * Nacelle centres in hull axes, as fractions of overall length: port and
+ * Nacelle centers in hull axes, as fractions of overall length: port and
  * starboard, aft of amidships, just above the engineering hull. Approximate
- * on purpose — the glow quads are soft enough that a few metres of error
+ * on purpose — the glow quads are soft enough that a few meters of error
  * disappears inside the bloom, and the alternative is asking the glTF for
  * named nodes it does not have.
  */
@@ -88,7 +88,7 @@ function warpMaterial(kind: WarpKind): WarpElement {
       profile = exp(r.mul(-2.2)).add(exp(r.mul(-0.9)).mul(0.35))
       // Deep blue at the edges, white only in the core. The reference's flash
       // is *blue* — measured around (40, 90, 200) across most of the frame
-      // with a white centre over the nacelles — and a wash whose edges start
+      // with a white center over the nacelles — and a wash whose edges start
       // near white has nowhere to go but a blank page once the tone curve's
       // shoulder gets hold of it.
       colour = mix(vec3(0.05, 0.22, 1.5), vec3(0.9, 1.0, 1.5), exp(r.mul(-2.6)))
@@ -97,7 +97,7 @@ function warpMaterial(kind: WarpKind): WarpElement {
     case 'glow': {
       // A nacelle grille: a tight core in a narrow skirt. The skirt is
       // deliberately leaner than the flare's — two of these sit close
-      // together and wide skirts merge into one blob. Colour comes from the
+      // together and wide skirts merge into one blob. Color comes from the
       // tint uniform alone, applied once at the end.
       profile = exp(r.mul(-9))
         .add(exp(r.mul(-3.2)).mul(0.16))
@@ -275,7 +275,7 @@ export function createWarpEffects(hullLength: () => number): WarpEffects {
         ship.position.z,
       )
 
-      // The wash rides the flash envelope, centred on the ship when it is on
+      // The wash rides the flash envelope, centered on the ship when it is on
       // screen and on the frame when it is not (the second flash peaks after
       // the hull has already streaked out of view).
       const washAnchor = shipScreen.ok
@@ -375,7 +375,7 @@ export function createWarpEffects(hullLength: () => number): WarpEffects {
        * The spark: screen-anchored, not hull-anchored. It outlives the ship
        * that made it — the reference's first spike peaks eighteen frames after
        * the hull has shrunk past tracking — so it takes its position from the
-       * script rather than from a projection, and the anchor is normalised
+       * script rather than from a projection, and the anchor is normalized
        * (origin top-left) because that is how the reference was measured.
        */
       const { drive, x: sparkX, y: sparkY } = effects.spark

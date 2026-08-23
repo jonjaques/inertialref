@@ -2,7 +2,7 @@
   "id": "/",
   "name": "InertialRef",
   "short_name": "InertialRef",
-  "description": "An open-source spaceflight simulator in a browser tab. The Milky Way is the real one — 7,123 catalogued systems within 150 light years, the rest from a seed.",
+  "description": "An open-source spaceflight simulator in a browser tab. The Milky Way is the real one — 7,123 cataloged systems within 150 light years, the rest from a seed.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

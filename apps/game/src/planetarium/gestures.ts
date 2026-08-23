@@ -3,7 +3,7 @@
  *
  * All of it is arithmetic over plain records rather than over `WheelEvent` and
  * `TouchList`, because every one of these has a wrong version that works on the
- * machine it was written on: a wheel normalisation tuned on a mouse makes a
+ * machine it was written on: a wheel normalization tuned on a mouse makes a
  * trackpad useless, a pinch that reads the first two touches breaks when a
  * third finger lands, and a drag that subtracts raw client coordinates jumps a
  * hundred pixels the moment a second finger lifts. Those are testable in Node
@@ -120,7 +120,7 @@ export function pinchFactor(previous: number, current: number): number {
   if (previous <= 1 || current <= 1) return 1
   const ratio = previous / current
   // Bounded, for the same reason the wheel is: a spread measured across a
-  // frame in which a finger was recognised late produces an enormous ratio,
+  // frame in which a finger was recognized late produces an enormous ratio,
   // and one such frame would otherwise cross the entire distance range.
   return Math.max(0.5, Math.min(2, ratio))
 }

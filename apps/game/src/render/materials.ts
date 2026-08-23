@@ -68,7 +68,7 @@ import type { AtmosphereRecipe } from '@inertialref/rendering'
  * expressible as standalone passes so that decision stays available.
  */
 
-/** Scene-linear radiance of a star's disc, in multiples of diffuse white. */
+/** Scene-linear radiance of a star's disk, in multiples of diffuse white. */
 const STAR_RADIANCE = 8
 
 /**
@@ -83,10 +83,10 @@ export interface StarMaterial {
   /** Presentation seconds; the granulation churns against it. */
   readonly time: { value: number }
   /**
-   * Multiplier on the disc's radiance, 1 from afar.
+   * Multiplier on the disk's radiance, 1 from afar.
    *
    * The camera's stop-down when a star fills the frame. At the authored
-   * radiance the whole disc clips to the tone curve's ceiling and every
+   * radiance the whole disk clips to the tone curve's ceiling and every
    * surface feature vanishes into one white circle; a real photograph of a
    * near sun is exposed *for the sun*, which is when the granulation and the
    * limb become the picture. Driven from the star's angular radius by the
@@ -96,28 +96,28 @@ export interface StarMaterial {
 }
 
 /**
- * A star's disc: unlit, above white, limb-darkened — and alive.
+ * A star's disk: unlit, above white, limb-darkened — and alive.
  *
  * This is the material the HDR path exists for. `docs/design/art.md` makes the
  * star the scene's reference white — everything else sits below it — so its
  * radiance is authored well above 1 and the tone curve decides what a given
- * display can do with that. On the sRGB path the disc saturates, which is what
+ * display can do with that. On the sRGB path the disk saturates, which is what
  * a star does; on the extended path it is the one thing in the frame brighter
  * than the HUD.
  *
- * Limb darkening rather than a flat disc because `I(mu)/I(1) = 1 − u(1 − mu)`
+ * Limb darkening rather than a flat disk because `I(mu)/I(1) = 1 − u(1 − mu)`
  * costs one dot product and is the difference between a light source and a hole
  * cut in the sky.
  *
  * The surface itself is two octaves of cellular convection. Worley noise *is*
- * what granulation looks like — bright cell centres draining into dark
+ * what granulation looks like — bright cell centers draining into dark
  * intergranular lanes — and a fractal octave underneath stands in for
  * supergranulation and mottling. Drawn at a scale the eye can read rather than
  * the Sun's true one (a real granule is a thousandth of the radius, sub-pixel
  * from any orbit), and drifted slowly with presentation time so a star held in
  * frame at time warp visibly simmers. Near the limb the lanes warm toward the
- * chromosphere's orange — the same reason eclipse photographs ring the disc in
- * red — keyed to `mu` so it costs nothing at disc centre.
+ * chromosphere's orange — the same reason eclipse photographs ring the disk in
+ * red — keyed to `mu` so it costs nothing at disk center.
  */
 export function createStarMaterial(): StarMaterial {
   const color = uniform(new Color(1, 1, 1))
@@ -126,7 +126,7 @@ export function createStarMaterial(): StarMaterial {
 
   // `abs` because a sphere seen from inside — which happens for exactly one
   // frame if the origin rebases while a star fills the view — otherwise flips
-  // `mu` negative and turns the disc black.
+  // `mu` negative and turns the disk black.
   const mu = abs(
     dot(normalize(normalWorld), normalize(cameraPosition.sub(positionWorld))),
   )
@@ -160,14 +160,14 @@ export function createStarMaterial(): StarMaterial {
 
 export interface AtmosphereMaterial {
   readonly material: MeshBasicNodeMaterial
-  /** Body centre in render space. Written every frame — the planet is orbiting. */
+  /** Body center in render space. Written every frame — the planet is orbiting. */
   readonly centre: { value: Vector3 }
   /** Render-space radius of the shell, and of the ground beneath it. */
   readonly outerRadius: { value: number }
   readonly innerRadius: { value: number }
-  /** Unit vector from the body towards its star, in render space. */
+  /** Unit vector from the body toward its star, in render space. */
   readonly sunDirection: { value: Vector3 }
-  /** The key light's colour; the sky is scattered starlight. */
+  /** The key light's color; the sky is scattered starlight. */
   readonly sunColour: { value: Color }
   /** The body's spin axis in render space; the oblateness is along it. */
   readonly spinAxis: { value: Vector3 }
@@ -191,7 +191,7 @@ const ATMOSPHERE_SAMPLES = 12
 /**
  * Scattered radiance to scene units. The march produces radiance per unit
  * sun irradiance; the scene's convention absorbs a π into every surface
- * (albedo·μ *is* the drawn colour), so the sky gets the same treatment plus
+ * (albedo·μ *is* the drawn color), so the sky gets the same treatment plus
  * a small artistic gain — calibrated against the previous shell's tuned
  * brightness so every body arrived at the same exposure it left.
  */
@@ -243,7 +243,7 @@ const LUT_BLACK = /*@__PURE__*/ lutPixel(0, 0, 0)
  * hardware, inside the budget with the post untouched.
  *
  * What the tables buy over the analytic blend is that nothing here asserts a
- * colour any more: the sunset ring is the transmittance table reddening
+ * color any more: the sunset ring is the transmittance table reddening
  * low-sun light, twilight is Ψ carrying second-order light past the
  * terminator, Mars's butterscotch and its blue dusk both fall out of its
  * authored haze — the same inputs, now interpreted as physics instead of
@@ -274,15 +274,15 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
   const multiScatterLut = texture(LUT_BLACK)
 
   /*
-   * The intersection maths below assumes spheres, and a giant is not one:
+   * The intersection math below assumes spheres, and a giant is not one:
    * Saturn's air follows a surface 9.8% flatter than its equator. Drawn
    * spherical anyway, the shell floats a tenth of a radius above each pole —
    * and worse, the analytic "ground" is a sphere of the *equatorial* radius,
    * so the polar sky is drawn as air over ground the oblate planet never
-   * fills: a detached grey gasket around the whole limb, unmissable on
+   * fills: a detached gray gasket around the whole limb, unmissable on
    * Jupiter and Saturn. So both endpoints are mapped into a space stretched
    * 1/flattening along the spin axis, where the ellipsoid *is* the sphere the
-   * maths assumes, and the mesh itself is scaled oblate to match. Path
+   * math assumes, and the mesh itself is scaled oblate to match. Path
    * lengths in stretched space run up to `flattening` short along the axis —
    * a bounded few percent, spent on air over a pole, against a shell that
    * visibly detaches from the planet.
@@ -302,7 +302,7 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
     const stretchGain = float(1)
       .div(max(flattening, float(1e-3)))
       .sub(1)
-    // Both relative to the centre already, so `centre` drops out below.
+    // Both relative to the center already, so `centre` drops out below.
     const eyeRelative = cameraPosition.sub(centre)
     const eye = eyeRelative.add(
       axis.mul(dot(eyeRelative, axis).mul(stretchGain)),
@@ -422,7 +422,7 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
   material.depthWrite = false
   material.side = BackSide
   /*
-   * Premultiplied compositing: out = L + T̄·background. The colour node is
+   * Premultiplied compositing: out = L + T̄·background. The color node is
    * radiance, not radiance-divided-by-alpha, so the blend must add it whole
    * and use alpha only to extinguish what is behind — which is what
    * (One, OneMinusSrcAlpha) is. Alpha writes are (Zero, One) for the same
@@ -467,10 +467,10 @@ export interface StarfieldMaterial {
    * How prominent each star should be, 0 to 1, computed by the host.
    *
    * Not flux. What a star looks like is its luminosity over the square of its
-   * distance, and a catalogue drawn at uniform brightness looks like a
+   * distance, and a catalog drawn at uniform brightness looks like a
    * screensaver rather than a sky — but *linear* flux is unusable directly: the
    * apparent flux of the stars within 150 ly spans 20 magnitudes, a factor of
-   * 10^8, and normalising against the brightest leaves the median star at 10^-5
+   * 10^8, and normalizing against the brightest leaves the median star at 10^-5
    * and the sky black. The host converts flux to apparent magnitude and maps
    * that onto a perceptual ramp, which is what a magnitude scale is for. See
    * `SceneView`; the distance it needs has been thrown away by the time the
@@ -520,7 +520,7 @@ export function createStarfieldMaterial(capacity: number): StarfieldMaterial {
    * Prominence is spent on *size* as well as intensity, and both keep a floor.
    *
    * A real star is far smaller than a pixel; what makes Sirius look bigger than
-   * its neighbours is the eye's and the lens's response to a brighter point
+   * its neighbors is the eye's and the lens's response to a brighter point
    * source, not its angular diameter. So size carries most of the range — but
    * intensity has to carry some of it too, because a sprite that is only
    * *smaller* stops reading as fainter once it is down to a pixel.
@@ -545,7 +545,7 @@ export function createStarfieldMaterial(capacity: number): StarfieldMaterial {
   // (One, One) too, and twenty thousand sprites stamping alpha into the
   // extended-range canvas is the same compositing artifact the lens flare
   // wore as hard rectangles — see `flare.ts` for the full autopsy. The
-  // colour factors here are exactly the preset's.
+  // color factors here are exactly the preset's.
   material.blending = CustomBlending
   material.blendEquation = AddEquation
   material.blendSrc = SrcAlphaFactor
@@ -558,7 +558,7 @@ export function createStarfieldMaterial(capacity: number): StarfieldMaterial {
 
 /*
  * `createBodyMaterial` used to live here: one `MeshStandardNodeMaterial` and a
- * flat colour per body kind. It is gone. A planet is not a rough dielectric
+ * flat color per body kind. It is gone. A planet is not a rough dielectric
  * sphere — it is a photometric surface with measured maps, an ocean that glints,
  * a cloud deck at its own altitude and, in one case, rings that shadow it. See
  * `render/planet.ts`.

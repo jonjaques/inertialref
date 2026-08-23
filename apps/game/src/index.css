@@ -50,7 +50,7 @@
  *
  * So the vocabulary is kept and the values are the palette already in use. Each
  * line names the Tailwind step it is, because that is the form the rest of the
- * codebase writes these colours in and a bare oklch triple is unreadable
+ * codebase writes these colors in and a bare oklch triple is unreadable
  * against `bg-slate-950/85` in a className three files away.
  *
  * One palette, not two. There is no light mode — `color-scheme: dark` is set
@@ -183,7 +183,7 @@
  * with four of them subtly disagreeing and no way to change the scale that is
  * not a hundred-file edit. A step is a decision made once. `text-slate-*` stays
  * at the call site because *which grade of ink* is a per-element judgement —
- * these carry everything except colour.
+ * these carry everything except color.
  *
  * The optical sizing is the part worth stating, and every one of these three
  * faces is driven off its natural width.
@@ -354,7 +354,7 @@ canvas {
 }
 
 /*
- * The surfaces the browser draws, in the system's own colours.
+ * The surfaces the browser draws, in the system's own colors.
  *
  * Selection, the caret, a placeholder and a scrollbar are chrome nobody in this
  * repository wrote, and they ship as light-mode blue-on-white over a near-black
@@ -418,7 +418,7 @@ a {
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  /* sky-500/60 — the same contact colour every control uses on hover. */
+  /* sky-500/60 — the same contact color every control uses on hover. */
   background: rgb(14 165 233 / 0.6);
 }
 

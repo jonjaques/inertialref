@@ -68,7 +68,7 @@ export function OrbitTraces({ engine }: { engine: GameEngine }) {
         line = new Line(geometry, material)
         // The trace is drawn in the compressed shell along with everything
         // else, so its bounds are meaningless to the culler and a wrong
-        // bounding sphere makes an orbit vanish when its centre leaves the
+        // bounding sphere makes an orbit vanish when its center leaves the
         // frustum — which is most of the time, since the camera is usually
         // inside the orbit it is looking at.
         line.frustumCulled = false

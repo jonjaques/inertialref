@@ -51,7 +51,7 @@ describe('resolveOutputMode', () => {
     )
   })
 
-  it('honours "standard" whatever the browser reports', () => {
+  it('honors "standard" whatever the browser reports', () => {
     fc.assert(
       fc.property(capabilities, (capability) => {
         expect(resolveOutputMode('standard', capability)).toBe('standard')

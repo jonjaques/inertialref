@@ -6,7 +6,7 @@ import {
 } from '@inertialref/universe'
 // `?url` and not an inline import, for two reasons that agree.
 //
-// The licence one is the hard constraint: the packed catalogue is Adapted
+// The license one is the hard constraint: the packed catalog is Adapted
 // Material under CC BY-SA 4.0 (docs/spikes.md §4), so it ships as its own asset
 // with its own notice beside it. A base64 blob compiled into `index.js` invites
 // exactly the argument the separate file forecloses.
@@ -16,7 +16,7 @@ import {
 import catalogUrl from '../../../../data/catalog/stars-150ly.irsc?url'
 
 /*
- * The browser half of the catalogue port.
+ * The browser half of the catalog port.
  *
  * `packages/universe` decodes bytes and knows nothing about where they came
  * from; `apps/headless` reads the same file off disk. See
@@ -26,7 +26,7 @@ import catalogUrl from '../../../../data/catalog/stars-150ly.irsc?url'
 const log = getLogger('game.catalog')
 
 /**
- * Fetch and decode the packed catalogue, or fall back to one star.
+ * Fetch and decode the packed catalog, or fall back to one star.
  *
  * A failed fetch degrades to a smaller galaxy rather than a blank screen: the
  * simulation, the flight model and everything procedural work identically
@@ -40,13 +40,13 @@ export async function loadStarCatalog(): Promise<StarCatalog> {
     if (!response.ok)
       throw new Error(`${response.status} ${response.statusText}`)
     const catalog = readCatalog(new Uint8Array(await response.arrayBuffer()))
-    log.info('catalogue loaded', {
+    log.info('catalog loaded', {
       version: catalog.version,
       systems: catalog.stars.length,
     })
     return catalog
   } catch (cause) {
-    log.warn('no star catalogue; falling back to Sol only', {
+    log.warn('no star catalog; falling back to Sol only', {
       cause: String(cause),
       url: catalogUrl,
     })

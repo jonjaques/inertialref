@@ -11,7 +11,7 @@ import { routeFor } from './routes.ts'
  * The Worker (docs/hosting.md).
  *
  * The server's job is small, and the architecture's job is to keep it small.
- * The universe is a pure function of (seed, catalogue version, address), so a
+ * The universe is a pure function of (seed, catalog version, address), so a
  * server never has to store, serve or simulate a galaxy — it holds only what a
  * client cannot derive, which is other entities and persistent mutations. This
  * file holds neither yet, and that is the point of the milestone: everything

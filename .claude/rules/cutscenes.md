@@ -36,7 +36,7 @@ second scene** — the traps below are the index, not the explanation.
 - **Light is staging.** A key's screen position is a _product_ of two dot products, and
   both must carry the right sign. Whiteouts are honest scene changes, not a fade to hide a
   seam. Ask the font for its cap height rather than guessing it.
-- **`tng-intro` is timed against a frame-analysed reference edit** outside this repository
+- **`tng-intro` is timed against a frame-analyzed reference edit** outside this repository
   at `~/Developer/tng-inertial` — `analysis/timeline.json` is the measured spec,
   `data/frames/` the per-frame imagery. Its measured numbers (credit grid, fade windows,
   the locked camera, the flash envelope) are regression tests in `cutscene.test.ts`.

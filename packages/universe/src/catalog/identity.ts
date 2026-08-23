@@ -1,7 +1,7 @@
 import { type SystemId, systemId } from '../address.ts'
 
 /*
- * Cross-catalogue identity resolution.
+ * Cross-catalog identity resolution.
  *
  * The step where an ingest silently corrupts itself. HIP 71683, HD 128620,
  * HR 5459 and GJ 559 A are one star; α¹ Cen and α² Cen are two stars in one
@@ -18,7 +18,7 @@ import { type SystemId, systemId } from '../address.ts'
  *   permanently.
  *
  *   **What that system is called, forever.** The rule below, in order. It is a
- *   *priority*, not a preference: once a star has an id, later catalogue
+ *   *priority*, not a preference: once a star has an id, later catalog
  *   versions must produce the same one, so the ladder is ordered by how stable
  *   each designation is rather than by how well-known it is.
  */
@@ -26,13 +26,13 @@ import { type SystemId, systemId } from '../address.ts'
 export interface IdentitySource {
   /** Hipparcos number, or 0. */
   readonly hip: number
-  /** Gliese designation exactly as the catalogue writes it, or `''`. */
+  /** Gliese designation exactly as the catalog writes it, or `''`. */
   readonly gliese: string
   /** Henry Draper number, or 0. */
   readonly hd: number
   /** Harvard Revised number, or 0. */
   readonly hr: number
-  /** The source catalogue's own row key. The last resort. */
+  /** The source catalog's own row key. The last resort. */
   readonly sourceKey: string
   /** IAU proper name, or `''`. */
   readonly proper: string
@@ -41,7 +41,7 @@ export interface IdentitySource {
 /**
  * Fold a Gliese designation into an id fragment: `Gl 559A` → `GJ559A`.
  *
- * `Gl` and `GJ` are the same catalogue written two ways and must not produce two
+ * `Gl` and `GJ` are the same catalog written two ways and must not produce two
  * different ids for one star — which they did, until a star that gained a `GJ`
  * spelling in HYG v4.4 came back as a new system.
  */
@@ -59,18 +59,18 @@ export function normaliseGliese(gliese: string): string | null {
  *
  * Order, most stable first:
  *
- *   1. `SOL` — the one hard-coded identity, because the Sun has no catalogue
+ *   1. `SOL` — the one hard-coded identity, because the Sun has no catalog
  *      number in any of these and every other rule would give it an id that
  *      changes when the source does.
  *   2. `HIP…` — Hipparcos. Assigned once in 1997, never reissued, and the
  *      widest coverage of the four (78% within 150 ly).
  *   3. `GJ…` — Gliese. Stable, and the fallback that covers most of what
- *      Hipparcos missed, because the nearby-star catalogue is exactly where the
+ *      Hipparcos missed, because the nearby-star catalog is exactly where the
  *      faint red dwarfs are.
  *   4. `HD…`, then `HR…` — older and brighter-biased, so they only ever catch
  *      stars the first three missed.
  *   5. The source row key, as `HYG…`. Reported by the ingest as a count, because
- *      these are the ids that a catalogue rebuild can change, and a change here
+ *      these are the ids that a catalog rebuild can change, and a change here
  *      is a save file pointing at nothing.
  */
 export function canonicalSystemId(source: IdentitySource): SystemId {
@@ -83,5 +83,5 @@ export function canonicalSystemId(source: IdentitySource): SystemId {
   return systemId(`HYG${source.sourceKey.replace(/[^A-Za-z0-9]/g, '')}`)
 }
 
-/** True for ids that only a catalogue rebuild's row numbering guarantees. */
+/** True for ids that only a catalog rebuild's row numbering guarantees. */
 export const isUnstableId = (id: SystemId): boolean => id.startsWith('HYG')

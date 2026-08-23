@@ -11,17 +11,17 @@ import { buildTextures } from './textures.ts'
  * The ingest.
  *
  * `fetch` → `build` → an asset the game ships. Run it when astronomy publishes
- * something; the artefact it writes is committed, so nobody needs to run it to
+ * something; the artifact it writes is committed, so nobody needs to run it to
  * play the game or to run the tests.
  *
  * Everything it did is printed. An ingest that quietly drops a third of the
- * catalogue looks exactly like one that does not, so the counts are the output
+ * catalog looks exactly like one that does not, so the counts are the output
  * and the file is a side effect.
  */
 
 const RADIUS_LIGHT_YEARS = 150
 /*
- * Inside this radius the catalogue is treated as complete and procedural fill is
+ * Inside this radius the catalog is treated as complete and procedural fill is
  * switched off. See `CellContext.completeRadius` in `packages/universe`.
  *
  * 25 ly is where HYG stops being volume-complete: it holds 166 systems there
@@ -64,7 +64,7 @@ function printReport(report: BuildReport): void {
 
   with a proper name      ${pad(report.withProperName)}   ${percent(report.withProperName, s)}
   with a spectral type    ${pad(report.withSpectralType)}   ${percent(report.withSpectralType, s)}
-  with a colour index     ${pad(report.withColourIndex)}   ${percent(report.withColourIndex, s)}
+  with a color index      ${pad(report.withColourIndex)}   ${percent(report.withColourIndex, s)}
   with a magnitude        ${pad(report.withMagnitude)}   ${percent(report.withMagnitude, s)}
 
   unparsed spectral types ${pad(report.spectralUnparsed)}   had a string the parser could not read
@@ -135,7 +135,7 @@ async function build({ write, refresh }: { write: boolean; refresh: boolean }) {
         name: source.name,
         url: source.url,
         licence: source.licence,
-        // The digest of what was actually read, so a changed artefact can always
+        // The digest of what was actually read, so a changed artifact can always
         // be traced to the input that changed it.
         retrieved: [hyg, exoplanets][i]?.sha256.slice(0, 16) ?? '',
       })),
@@ -226,24 +226,24 @@ async function build({ write, refresh }: { write: boolean; refresh: boolean }) {
 /**
  * The notice that has to sit beside the asset.
  *
- * CC BY-SA 4.0 § 3(a)(1) sets what it must contain: who made it, a licence
+ * CC BY-SA 4.0 § 3(a)(1) sets what it must contain: who made it, a license
  * reference, a warranty disclaimer reference, a link to the source, and a
  * statement that it was modified. § 4(b) is why it attaches to *this file* and
  * not to the code that reads it — the database is Adapted Material, its
  * individual contents are not.
  */
 const licenceText = (attribution: readonly string[], version: string): string =>
-  `# Star catalogue — licence and attribution
+  `# Star catalog — license and attribution
 
 This directory contains a **derived database** built from published astronomical
-catalogues by \`apps/ingest\`. It is not part of the Apache-2.0 licensed source
+catalogs by \`apps/ingest\`. It is not part of the Apache-2.0 licensed source
 code that reads it, and it carries different terms.
 
-**Catalogue version:** \`${version}\`
+**Catalog version:** \`${version}\`
 
 ## Terms
 
-The packed catalogue (\`${OUTPUT_FILE}\`) is a database derived substantially from
+The packed catalog (\`${OUTPUT_FILE}\`) is a database derived substantially from
 the HYG Database and is therefore Adapted Material under CC BY-SA 4.0 § 4(b).
 **It is licensed CC BY-SA 4.0.** The share-alike obligation attaches to this
 database, not to its individual contents and not to the software that reads it.
@@ -253,7 +253,7 @@ ${attribution.map((line) => `- ${line}`).join('\n\n')}
 ## Warranty
 
 These works are provided "as-is" and without warranties of any kind, to the
-extent permitted by the respective licences. Positions, magnitudes and orbital
+extent permitted by the respective licenses. Positions, magnitudes and orbital
 elements are measurements with published uncertainties; the values derived from
 them here (temperature, luminosity, radius, mass) are estimates and are marked as
 such in the game where they are shown.
@@ -271,7 +271,7 @@ Sources and their exact digests are recorded in \`manifest.json\`.
  * Planetary surface maps.
  *
  * Separate from `build` because the two have nothing in common but a manifest
- * convention: the catalogue is 34 MB in and 458 KB out and takes seconds, and
+ * convention: the catalog is 34 MB in and 458 KB out and takes seconds, and
  * this is 600 MB in and ~20 MB out and takes minutes. Bundling them would mean
  * re-downloading half a gigabyte of Voyager imagery every time NASA publishes a
  * new exoplanet.
@@ -298,20 +298,20 @@ async function textures() {
 }
 
 const textureLicence = (attribution: readonly string[]): string =>
-  `# Planetary textures — licence and attribution
+  `# Planetary textures — license and attribution
 
 Surface maps for the Solar System, built by \`apps/ingest\` from published
-imagery. **Not covered by the Apache-2.0 licence on the source code.**
+imagery. **Not covered by the Apache-2.0 license on the source code.**
 
 Most of these are **public domain**: NASA and USGS imagery is not subject to
 copyright. The exceptions are marked \`cc-by-4.0\` in \`manifest.json\` and are
 listed below; CC BY 4.0 requires attribution but imposes no share-alike, so
-unlike the star catalogue these do not make anything downstream of them
+unlike the star catalog these do not make anything downstream of them
 CC-licensed.
 
 ${attribution.map((line) => `- ${line}`).join('\n\n')}
 
-Per-file provenance — source URL, licence and output digest — is in
+Per-file provenance — source URL, license and output digest — is in
 \`manifest.json\`. Rebuild with \`pnpm textures:build\`; see
 \`docs/guides/catalogue.md\`.
 `
@@ -331,7 +331,7 @@ try {
     await textures()
   } else {
     console.error(
-      `unknown command "${command}"\n\n  fetch     download the catalogue sources into .data/raw\n  report    build the catalogue and print, without writing\n  build     build the catalogue and write data/catalog\n  textures  build the planetary surface maps into data/textures\n\n  --refresh  re-download rather than using the cache`,
+      `unknown command "${command}"\n\n  fetch     download the catalog sources into .data/raw\n  report    build the catalog and print, without writing\n  build     build the catalog and write data/catalog\n  textures  build the planetary surface maps into data/textures\n\n  --refresh  re-download rather than using the cache`,
     )
     process.exit(2)
   }

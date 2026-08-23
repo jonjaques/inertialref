@@ -4,7 +4,7 @@
  * The game is offline-first: once the application assets are cached, a
  * single-player universe needs no server at all. Nearly all of the content is a
  * pure function of a seed, so there is very little to download beyond the code —
- * the one exception is the packed star catalogue, which is a content-hashed
+ * the one exception is the packed star catalog, which is a content-hashed
  * asset under /assets and is therefore covered by the cache-first branch below
  * like any other. Saves live in IndexedDB.
  *
@@ -108,7 +108,7 @@ self.addEventListener('activate', (event) => {
        * Rescue the immutable assets before the old caches go. On the first
        * online visit after a deploy the page is still controlled by the
        * *previous* worker, so the new build's hashed chunks — and the star
-       * catalogue — were fetched through it and stored under the previous
+       * catalog — were fetched through it and stored under the previous
        * build's cache name. Deleting that cache outright threw away exactly
        * the files the next offline launch needs, so offline-first only
        * recovered on a second online visit. Content-hashed names cannot be

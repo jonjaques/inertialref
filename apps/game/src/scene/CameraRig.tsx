@@ -21,7 +21,7 @@ export function CameraRig({ engine }: { engine: GameEngine }) {
      * not be applied on top — a director frames shots and an observatory
      * frames bodies, and neither wants a ship 14 m in front of the lens. The
      * flight FOV yields to a script's lens the same way; the observatory uses
-     * the flight lens deliberately, because its framing maths is solved
+     * the flight lens deliberately, because its framing math is solved
      * against whatever the camera panel is set to.
      */
     const cinematic = engine.cinematic
@@ -49,7 +49,7 @@ export function CameraRig({ engine }: { engine: GameEngine }) {
     // were three lines of vector arithmetic here, which is exactly where a rule
     // goes to become untestable: nothing in Node could see that pitching up on
     // the pad put the camera under the crust.
-    // The offset scales with the modelled hull once one is mounted; the
+    // The offset scales with the modeled hull once one is mounted; the
     // hand-tuned 6 m default covers the debug cone. `engine.hull` rather than
     // anything module-scoped here — see the field's comment in `GameEngine`.
     const eye =
@@ -79,7 +79,7 @@ export function CameraRig({ engine }: { engine: GameEngine }) {
 
   return (
     <>
-      {/* decay 0: the star is tens of millions of render-metres away after
+      {/* decay 0: the star is tens of millions of render-meters away after
           compression, so physical falloff would make it useless as a light. */}
       <pointLight ref={light} intensity={4} distance={0} decay={0} />
       <directionalLight position={[0.4, 1, 0.8]} intensity={0.35} />

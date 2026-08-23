@@ -27,9 +27,9 @@ import { type RegionAddress, regionDirection } from '@inertialref/universe'
  *     instant the planet moved — and a planet is always moving. Landed on a
  *     world orbiting at 52 km/s, the ground slid ~865 m *per frame* away from
  *     the ship and snapped back on the next rebase, ten times a second.
- *   - The numbers stay small. Vertices measured from the body's centre are
- *     ~10^6 m, where float32 resolves 0.17 m and metre-scale relief disappears;
- *     measured from the patch anchor they are a few hundred metres.
+ *   - The numbers stay small. Vertices measured from the body's center are
+ *     ~10^6 m, where float32 resolves 0.17 m and meter-scale relief disappears;
+ *     measured from the patch anchor they are a few hundred meters.
  *
  * The pose goes back on at draw time, as a position and a rotation, which is
  * what `patchPlacement` computes and exactly what the datum sphere beside it
@@ -52,7 +52,7 @@ export interface RenderPatch {
   readonly normals: Float32Array
   readonly indices: Uint32Array
   /**
-   * The patch's origin: the datum-sphere point at its centre, in body-fixed
+   * The patch's origin: the datum-sphere point at its center, in body-fixed
    * axes. Every vertex is measured from here, and `patchPlacement` turns it
    * back into a render-space position.
    */
@@ -66,7 +66,7 @@ export function buildPatch(input: PatchInput): RenderPatch {
   const normals = new Float32Array(count * 3)
 
   // The datum point at the middle of the patch. Subtracting it is what keeps
-  // the vertices small enough for float32 to hold metre-scale relief.
+  // the vertices small enough for float32 to hold meter-scale relief.
   const anchor = Vec.scale(regionDirection(region, 0.5, 0.5), bodyRadius)
 
   for (let row = 0; row < resolution; row += 1) {
@@ -163,12 +163,12 @@ export function patchPlacement(
  *
  * This is not a polish detail. Radial normals shade a mountain range exactly
  * like a smooth sphere, so terrain generated at real planetary relief — a few
- * kilometres on a few thousand — is completely invisible. Central differences
- * over the neighbouring vertices cost one extra pass and make the ground
+ * kilometers on a few thousand — is completely invisible. Central differences
+ * over the neighboring vertices cost one extra pass and make the ground
  * actually look like ground.
  *
  * Patch edges use one-sided differences, which leaves a hairline seam between
- * neighbouring patches; stitching needs the neighbours' edge rows and is the
+ * neighboring patches; stitching needs the neighbors' edge rows and is the
  * natural next step.
  */
 function computeNormals(

@@ -98,7 +98,7 @@ export async function probeHealth(
   let response: Response
   try {
     response = await fetchImpl(path, {
-      // Third and last line of defence against a cached health record. The
+      // Third and last line of defense against a cached health record. The
       // service worker skips /api and the Worker sends `no-store`; this covers
       // the HTTP cache in a browser whose service worker never installed.
       cache: 'no-store',

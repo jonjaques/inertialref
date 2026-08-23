@@ -143,7 +143,7 @@ describe('the game engine, headless', () => {
     // invisible within a single origin generation and snapped at the boundary.
     expect(rebases).toBeGreaterThan(0)
     /*
-     * A millimetre, against a measured residual of 83 µm — numerical noise in
+     * A millimeter, against a measured residual of 83 µm — numerical noise in
      * a chain of rotations over a 2,800 km radius, not the planet moving out
      * from under the ship.
      *

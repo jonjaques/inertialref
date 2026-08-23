@@ -50,7 +50,7 @@ import { generateHeightfieldTask, type WorkerPool } from '@inertialref/workers'
 
 const log = getLogger('game.terrain')
 
-/** How many rings of neighbours around the player's own region. */
+/** How many rings of neighbors around the player's own region. */
 const RADIUS = 1
 
 interface CachedField {

@@ -30,7 +30,7 @@ export function AuthCallbackPage() {
     /*
      * `replace`, so the callback URL is not in the history.
      *
-     * A back button that returns to a spent authorisation code is at best a
+     * A back button that returns to a spent authorization code is at best a
      * confusing error and at worst a code replayed from a shared machine.
      */
     const timer = window.setTimeout(() => {

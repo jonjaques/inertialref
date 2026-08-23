@@ -118,7 +118,7 @@ describe('FrameGraph', () => {
     expect(graph.chain(SURFACE)).toEqual([ROOT_FRAME, SYSTEM, PLANET, SURFACE])
   })
 
-  it('places a surface point at the planet radius from the planet centre', () => {
+  it('places a surface point at the planet radius from the planet center', () => {
     const t = 12_345.678
     const surfacePose = graph.pose(SURFACE, t)
     const planetPose = graph.pose(PLANET, t)
@@ -218,7 +218,7 @@ describe('FrameGraph', () => {
     // A bolt an inch from the landing site's origin, on a planet 4.2 ly away.
     const bolt = localToUniverse(pose, vec3(0.0254, 0, 0))
     const recovered = universeToLocal(pose, bolt)
-    // Bounded by the representation's quarter-millimetre, not by the 8 m ULP a
+    // Bounded by the representation's quarter-millimeter, not by the 8 m ULP a
     // double has at 4 light-years: the subtraction happens in universe space.
     expect(Math.abs(recovered.x - 0.0254)).toBeLessThan(
       UV.POSITION_RESOLUTION * 2,
@@ -244,7 +244,7 @@ describe('FrameGraph', () => {
       angularVelocity: V.ZERO,
     }
     const inFarFrame = reframe(graph, nearRoot, SURFACE, t)
-    // 4.2 ly away, so the local vector is ~4e16 m and a double's ULP there is metres.
+    // 4.2 ly away, so the local vector is ~4e16 m and a double's ULP there is meters.
     expect(V.length(inFarFrame.position)).toBeGreaterThan(3e16)
     const back = reframe(graph, inFarFrame, ROOT_FRAME, t)
     const error = V.distance(back.position, nearRoot.position)

@@ -33,10 +33,10 @@ export function SunFlare({ engine }: { engine: GameEngine }) {
       radius: body.placement.scale,
     }))
     // The flare is a lens's response to an unresolved point of glare. Once
-    // the disc is genuinely resolved — the star-orbit arrival subtends ~15°
+    // the disk is genuinely resolved — the star-orbit arrival subtends ~15°
     // — the camera is exposed for the surface and the artifact stack fades,
     // or the flare's core repaints the stopped-down photosphere back to a
-    // clipped white circle. Same ramp as the disc's own exposure.
+    // clipped white circle. Same ramp as the disk's own exposure.
     const filling = Math.min(
       1,
       Math.max(0, (star.placement.angularRadius - 0.015) / 0.085),
@@ -51,7 +51,7 @@ export function SunFlare({ engine }: { engine: GameEngine }) {
       // The cinematic camera is a cleaner lens than the flight one; see the
       // `artifacts` note in `flare.ts`. 0.05 rather than 0 so a scripted shot
       // still has a lens, just not one that argues with the composition: at
-      // 0.12 the iris ghosts were still three visible grey discs marching
+      // 0.12 the iris ghosts were still three visible gray disks marching
       // across an empty half-frame beside Jupiter. Off a script, the host
       // decides — the front door runs a nearly clean lens because its ghosts
       // land on the poster's type. See `GameEngine.flareArtifacts`.

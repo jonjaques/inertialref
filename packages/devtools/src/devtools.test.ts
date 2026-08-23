@@ -30,7 +30,7 @@ function harness(): { harness: GameHarness; session: Session } {
   const session = openSession({
     seed: 'inertialref',
     workers: () => createInlineWorker(registry),
-    // The catalogue is a generation input, so a session without one is a
+    // The catalog is a generation input, so a session without one is a
     // different universe — one containing Sol and nothing else that is real.
     // The fixture is five stars rather than 7,123, which is enough for every
     // assertion here and does not make these tests depend on a built asset.
@@ -327,7 +327,7 @@ describe('travel targets', () => {
    * the generator. `targets()` is the answer, so what it must never do is omit
    * somewhere you can actually go.
    */
-  it('lists the loaded system, its bodies, and the neighbouring stars', () => {
+  it('lists the loaded system, its bodies, and the neighboring stars', () => {
     const { harness: ir } = harness()
     const targets = ir.targets({ lightYears: 6 })
 
@@ -344,7 +344,7 @@ describe('travel targets', () => {
     expect(bodies.some((t) => t.depth === 2)).toBe(true)
     expect(bodies.some((t) => t.landable)).toBe(true)
 
-    // The nearest catalogue neighbours, unloaded but addressable.
+    // The nearest catalog neighbors, unloaded but addressable.
     const proxima = targets.find((t) => t.name === 'Proxima Centauri')
     expect(proxima?.loaded).toBe(false)
     expect(proxima?.address).toBe('g:milky-way/s:HIP70890')
@@ -446,7 +446,7 @@ describe('going places', () => {
     // to be issued first, which is where this used to leave you.
     expect(ir.inspect()?.frame).toBe('s:HIP71683')
 
-    // In a genuine circular orbit of it, close enough that the disc reads as
+    // In a genuine circular orbit of it, close enough that the disk reads as
     // a sun rather than a bright point...
     const star = session.world.system(systemId('HIP71683'))?.star
     if (star === undefined) throw new Error('HIP71683 not loaded')

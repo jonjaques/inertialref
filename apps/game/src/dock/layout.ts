@@ -83,7 +83,7 @@ export function zoneOf(layout: DockLayout, panel: string): DockZone | null {
  * the second of three panels to index 2 of its own zone means "one further
  * down", and inserting into the *original* array would put it back where it
  * started. Removing first makes the index mean the same thing in both cases,
- * which is the behaviour a hand expects and the one a test can state.
+ * which is the behavior a hand expects and the one a test can state.
  *
  * An index past the end appends; a negative one prepends. A drop is a pointer
  * position turned into a number and clamping here is cheaper than clamping at
@@ -167,7 +167,7 @@ export function openPanels<T extends { readonly id: string }>(
 /**
  * Show a panel again, in a zone that suits it.
  *
- * The zone a panel *prefers* is the panel's own business — a catalogue belongs
+ * The zone a panel *prefers* is the panel's own business — a catalog belongs
  * on the left and the thing you are looking at belongs on the right — so the
  * caller passes it. Reopening always appends rather than restoring a remembered
  * slot: the
@@ -207,7 +207,7 @@ export const togglePanel = (
  * visible slot `n` means inserting before the nth rendered panel, wherever
  * that panel actually sits in the full list. Past the end — or with an anchor
  * the layout no longer holds, which a composed gesture can produce — it
- * appends, which is `movePanel`'s own out-of-range behaviour.
+ * appends, which is `movePanel`'s own out-of-range behavior.
  */
 export function slotIndex(
   zoneList: readonly string[],
@@ -231,7 +231,7 @@ export function slotIndex(
  * array is a perfectly valid array.
  *
  * So unknown ids are dropped and unseen ones are placed where they say they
- * belong. The result is a fixpoint: normalising twice changes nothing, which is
+ * belong. The result is a fixpoint: normalizing twice changes nothing, which is
  * the property the test asserts because it is the one that makes this safe to
  * run on every render.
  */

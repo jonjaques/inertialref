@@ -5,7 +5,7 @@
  * is exactly specified by ECMAScript. That matters more than it looks: the same
  * address must generate the same star in Chrome, in a Web Worker, in Node tests
  * and eventually on a server, and floating-point-based hashing does not promise
- * that. No `Math.random`, no `Date`, no host-dependent behaviour.
+ * that. No `Math.random`, no `Date`, no host-dependent behavior.
  */
 
 /** MurmurHash3 32-bit finalizer. Good avalanche, four instructions. */

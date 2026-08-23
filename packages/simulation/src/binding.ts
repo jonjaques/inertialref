@@ -26,7 +26,7 @@ export interface FrameBinding {
   readonly frame: FrameId
   /** Gravitational parameter of the mass at this frame's origin. */
   readonly mu: Mu
-  /** Radius of the attracting body, 0 for a system barycentre. */
+  /** Radius of the attracting body, 0 for a system barycenter. */
   readonly radius: Meters
   /** Beyond this the entity is no longer bound here. Infinity for a system. */
   readonly sphereOfInfluence: Meters

@@ -4,7 +4,7 @@ import type { Seed } from './seed.ts'
 /*
  * Stateless gradient noise.
  *
- * Stateless is the requirement, not an optimisation: terrain patches are
+ * Stateless is the requirement, not an optimization: terrain patches are
  * generated in whatever order workers happen to pick them up, so a noise
  * function that carried a stream would produce a different planet depending on
  * which way the player flew round it. Every sample here is a pure function of
@@ -89,7 +89,7 @@ export const DEFAULT_FBM: FbmOptions = {
   gain: 0.5,
 }
 
-/** Fractional Brownian motion, normalised to roughly [-1, 1]. */
+/** Fractional Brownian motion, normalized to roughly [-1, 1]. */
 export function fbm3(
   seed: Seed,
   x: number,

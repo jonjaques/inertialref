@@ -70,7 +70,7 @@ three signatures and no architecture.
 | -------------------------- | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Gaia DR3** (ESA)         | Astrometry, parallax, photometry, radial velocity         | ~1.8 billion sources [Source: ESA Gaia Data Release 3, June 2022]                                                                                               | ⛔ **CC BY-NC 3.0 IGO — non-commercial.** Verified 2026-08-19. Credit line `Credit: ESA, Gaia DPAC`. See [spike 4](../spikes.md#4--gaia-and-hyg-attribution-terms) — **this keeps Gaia out of the shipped bundle** |
 | **HYG v4.4**               | Merged Hipparcos + Yale + Gliese, pre-cleaned, game-sized | 119,614 rows, 109,390 with usable parallax [Source: `hyg_v44.csv`, measured]                                                                                    | CC BY-SA 4.0 — attribution required, share-alike reaches the packed binary                                                                                                                                         |
-| **NASA Exoplanet Archive** | Confirmed exoplanets, orbital elements, masses, radii     | **6,336** confirmed planets; 861 within 150 ly around 550 hosts [Source: archive TAP service, read 2026-08-19 — the archive updates weekly, never hard-code it] | No license stated. Operated by Caltech under NASA contract; **not confirmed public domain**. Use the requested acknowledgement                                                                                     |
+| **NASA Exoplanet Archive** | Confirmed exoplanets, orbital elements, masses, radii     | **6,336** confirmed planets; 861 within 150 ly around 550 hosts [Source: archive TAP service, read 2026-08-19 — the archive updates weekly, never hard-code it] | No license stated. Operated by Caltech under NASA contract; **not confirmed public domain**. Use the requested acknowledgment                                                                                      |
 | **CNS5 / Gliese**          | Completeness within 25 pc                                 | ~5,900 objects [Source: Golovin et al., _The Fifth Catalog of Nearby Stars_, 2023]                                                                              | Open, attribution                                                                                                                                                                                                  |
 | **Open Exoplanet Catalog** | Cross-check, community corrections                        | —                                                                                                                                                               | MIT                                                                                                                                                                                                                |
 
@@ -98,7 +98,7 @@ Gaia's completeness falls off with distance. Within ~25 parsecs the catalog is
 close to complete; at a few kiloparsecs it holds only the intrinsically bright,
 and the great majority of the Milky Way's estimated 100–400 billion stars
 [Source: standard estimates; see NASA/ESA Milky Way summaries] has never been
-individually catalogued by anyone.
+individually cataloged by anyone.
 
 **The galaxy map draws that boundary.** A visible, irregular shell — the surface
 beyond which everything is projection. Inside it, the sky is a record. Outside
@@ -247,7 +247,7 @@ Worth stating plainly, because it is easy to assume real data is merely flavour.
   moons. Barnard's Star, six light-years away, has nothing confirmed. That
   variance is not a difficulty curve; it is a fact, and it makes arrival
   genuinely uncertain in a way a designed distribution never is.
-- **Routes have real texture.** Class M dwarfs dominate the neighbourhood and
+- **Routes have real texture.** Class M dwarfs dominate the neighborhood and
   scoop slowly, so the good refuelling stars are sparse and their positions are
   not negotiable.
 - **Players can check.** Someone will fly to Tau Ceti, read the panel, and open
@@ -276,11 +276,11 @@ the transition between them is a cross-fade, not a mode switch
 ([pillar 1](charter.md#pillar-1--one-continuous-space) applies to interfaces
 too):
 
-| Tier         | Range           | What is drawn                                                                                                       | Source              |
-| ------------ | --------------- | ------------------------------------------------------------------------------------------------------------------- | ------------------- |
-| **Local**    | 0 – 150 ly      | Every catalogued star individually, at true position, colored by blackbody temperature from its real spectral class | Catalog             |
-| **Regional** | 150 ly – 5 kly  | Catalogued bright stars individually; the rest as a sampled point cloud                                             | Catalog + generated |
-| **Galactic** | 5 kly – 100 kly | A density volume — arms, bar, bulge, halo                                                                           | Generated           |
+| Tier         | Range           | What is drawn                                                                                                      | Source              |
+| ------------ | --------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------- |
+| **Local**    | 0 – 150 ly      | Every cataloged star individually, at true position, colored by blackbody temperature from its real spectral class | Catalog             |
+| **Regional** | 150 ly – 5 kly  | Cataloged bright stars individually; the rest as a sampled point cloud                                             | Catalog + generated |
+| **Galactic** | 5 kly – 100 kly | A density volume — arms, bar, bulge, halo                                                                          | Generated           |
 
 The **horizon of knowledge** shell is drawn across all three as a translucent,
 irregular boundary with a completeness readout: _"catalog completeness at this

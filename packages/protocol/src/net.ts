@@ -16,7 +16,7 @@ import {
  * whether they are allowed to talk at all.
  *
  * The handshake is not a formality. The universe is a pure function of
- * (seed, catalogue version, address), so a client whose `GENERATION_VERSIONS`
+ * (seed, catalog version, address), so a client whose `GENERATION_VERSIONS`
  * differ from the server's derives a *different universe* — different planets,
  * different terrain — and replicating a position into it means nothing. A
  * mismatch is therefore refused with a reason, exactly as the save loader
@@ -116,7 +116,7 @@ export interface Versions {
  * Returns `null` when they agree. The asymmetry is deliberate: an algorithm
  * present on one side and absent on the other is a mismatch, not a default —
  * a new generator is a new universe whether or not the older peer has heard of
- * it. The tempting behaviour, ignoring unknown keys, makes the handshake pass
+ * it. The tempting behavior, ignoring unknown keys, makes the handshake pass
  * in exactly the case it exists to catch.
  *
  * The sentence reads in argument order — `terrain 1≠2` is server 1, client 2 —

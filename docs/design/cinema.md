@@ -35,7 +35,7 @@ Three audiences, and they want the same four buttons.
 | **Anyone sharing** | To send a link that opens on the exact frame they were looking at     |
 
 The middle one is not a nicety. The proving scene is timed against a
-frame-analysed reference edit, and its measured numbers are regression tests —
+frame-analyzed reference edit, and its measured numbers are regression tests —
 so "pause, seek to frame 1150, look" is the verification loop, and a player with
 a scrubber is that loop with buttons on it. `ir.pause()` then
 `ir.seekCutscene(1150)` is exactly what the transport does.

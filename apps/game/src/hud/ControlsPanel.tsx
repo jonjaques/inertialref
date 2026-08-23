@@ -12,7 +12,7 @@ import { Section } from './Section.tsx'
  * on screen whichever tab was showing — a real constraint, and one that stopped
  * existing the moment every readout became a panel that can be open beside
  * another. As its own panel it can sit under the flight strip while the
- * catalogue is on the other side, which is the arrangement it was always
+ * catalog is on the other side, which is the arrangement it was always
  * fighting the tab strip to get.
  *
  * Every control here duplicates a key binding and says which one in its title.

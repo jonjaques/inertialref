@@ -13,8 +13,8 @@ import {
  * whole annulus as one uniform slab at the body's tint — Uranus wore its ring
  * system as a cyan charcoal compact disc four radii across, occluding the
  * starfield. The real thing is the opposite of a slab: Uranus is a dozen
- * threads of near-black rubble a few kilometres wide with thousands of
- * kilometres of nothing between them, and even a gas giant's sheet is banded
+ * threads of near-black rubble a few kilometers wide with thousands of
+ * kilometers of nothing between them, and even a gas giant's sheet is banded
  * with gaps. So a mapless ring gets a strip *generated* from what kind of body
  * owns it, seeded from the body's address — deterministic, like everything
  * else generation does, so the same world always wears the same rings.
@@ -59,7 +59,7 @@ interface Band {
 /**
  * The band list, by what kind of giant owns the ring.
  *
- * Ice giants get threads: narrow, sparse, dark — Uranus's ε ring analogue
+ * Ice giants get threads: narrow, sparse, dark — Uranus's ε ring analog
  * sits wide and bright near the outer edge, the rest are hairlines. Gas
  * giants get a sheet: broad bands separated by gaps, brighter and warmer,
  * the generic reading of Saturn's architecture.
@@ -101,7 +101,7 @@ function bands(kind: string, random: () => number): readonly Band[] {
 /**
  * The strip for one mapless ring system, cached per body.
  *
- * RGBA like the shipped Saturn strip: colour in RGB, coverage in alpha —
+ * RGBA like the shipped Saturn strip: color in RGB, coverage in alpha —
  * the ring shader reads alpha as optical thickness per band, so the space
  * between bands is genuinely empty rather than faintly fogged.
  */

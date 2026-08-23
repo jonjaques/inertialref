@@ -231,8 +231,8 @@ describe('a drop measured among the rendered panels only', () => {
    * arithmetic as it is to the eye.
    */
   it('lands where the line was drawn, past a suppressed resident', () => {
-    // `telemetry` is a suppressed dev panel; the eye sees only catalogue and
-    // time. Dropping catalogue below time drew the line after time — spliced
+    // `telemetry` is a suppressed dev panel; the eye sees only catalog and
+    // time. Dropping catalog below time drew the line after time — spliced
     // by the visible number alone, this composed to a silent no-op.
     const layout: DockLayout = {
       ...EMPTY_LAYOUT,
@@ -256,7 +256,7 @@ describe('a drop measured among the rendered panels only', () => {
       left: ['telemetry', 'catalogue', 'time'],
       right: ['object'],
     }
-    // The line between catalogue and time is visible slot 1; its anchor is
+    // The line between catalog and time is visible slot 1; its anchor is
     // `time`, at full index 2.
     const at = slotIndex(layout.left, ['catalogue', 'time'], 1)
     expect(at).toBe(2)
@@ -274,7 +274,7 @@ describe('a drop measured among the rendered panels only', () => {
     expect(slotIndex(['a', 'b'], ['a', 'b'], 2)).toBe(2)
     // An anchor the zone no longer holds — a composed gesture can produce one
     // — appends rather than guessing, which is `movePanel`'s own out-of-range
-    // behaviour.
+    // behavior.
     expect(slotIndex(['a', 'b'], ['ghost'], 0)).toBe(2)
   })
 
@@ -296,7 +296,7 @@ describe('a drop measured among the rendered panels only', () => {
   })
 })
 
-describe('normalising a stored layout', () => {
+describe('normalizing a stored layout', () => {
   it('drops a panel this build no longer has', () => {
     // The `localStorage` outlives the code problem, in its layout form: a
     // renamed panel leaves a dead string holding a slot forever, rendering

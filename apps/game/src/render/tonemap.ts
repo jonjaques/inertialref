@@ -82,7 +82,7 @@ export interface ToneCurveControls {
  *
  * High enough that skin, terrain and hull sit entirely below it — those must not
  * change between an SDR and an HDR screenshot — and low enough that a star's
- * limb has somewhere to go before the disc saturates.
+ * limb has somewhere to go before the disk saturates.
  */
 const DEFAULT_SHOULDER = 0.72
 
@@ -107,8 +107,8 @@ export function installToneCurve(
     )
 
     // Lift by luminance, not per channel: scaling the channels independently
-    // would pull a saturated highlight towards white as it brightens, which is
-    // the one thing a star's colour must not do — the star is the scene's
+    // would pull a saturated highlight toward white as it brightens, which is
+    // the one thing a star's color must not do — the star is the scene's
     // reference white and its temperature is data, not art direction.
     const lift = smoothstep(shoulderUniform, 1, luminance(graded))
       .mul(headroomUniform.sub(1))

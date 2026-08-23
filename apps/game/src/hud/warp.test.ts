@@ -7,7 +7,7 @@ import { nextWarp, WARP_STEPS } from './warp.ts'
  * The bug this remembers: `+`/`−` were an index step over `WARP_STEPS`, which
  * assumed the clock's time scale was always one of them. It is not — `ir.warp`
  * takes any number — and a scale above the top rung found no index, fell back
- * to 0, and answered "slower" with 1×. Pressing a button labelled one step and
+ * to 0, and answered "slower" with 1×. Pressing a button labeled one step and
  * moving five orders of magnitude is the kind of thing that gets diagnosed as a
  * clock bug.
  */
@@ -16,7 +16,7 @@ const FLOOR = 1
 const CEILING = 100_000
 
 describe('the time-warp ladder', () => {
-  it('steps to a neighbouring detent from every detent', () => {
+  it('steps to a neighboring detent from every detent', () => {
     for (const [index, step] of WARP_STEPS.entries()) {
       expect(nextWarp(step, 1)).toBe(WARP_STEPS[index + 1] ?? CEILING)
       expect(nextWarp(step, -1)).toBe(WARP_STEPS[index - 1] ?? FLOOR)

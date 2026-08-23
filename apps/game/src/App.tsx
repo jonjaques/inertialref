@@ -486,7 +486,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    * — and `docs/design/ux.md` puts the eventual home in the page rather than
    * the dock. Two inline object literals would be two anti-aliasing switches
    * that could drift apart, which is the same argument `hud/Action.tsx` makes
-   * about a label's colour, applied to behaviour.
+   * about a label's color, applied to behavior.
    */
   const graphicsState: GraphicsState = {
     lensFlare,
@@ -631,7 +631,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
        * luminance so it stays legible against a star. The browser already
        * composites the DOM over the canvas — but the dock and the flight strip
        * are `backdrop-blur`, and a backdrop filter samples what is behind it,
-       * which on the extended path includes a star's disc at twice diffuse
+       * which on the extended path includes a star's disk at twice diffuse
        * white. `dynamic-range-limit` inherits, so one declaration on the layer
        * holds for every overlay inside it, and it must not be on the root: the
        * canvas is a sibling and would be clamped with it.
@@ -743,7 +743,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
             bottom of the frame.
 
             `bottom-16` rather than the usual `0.75rem` inset: the IR menu is at
-            the bottom centre now, and a notice at the same inset landed on top
+            the bottom center now, and a notice at the same inset landed on top
             of it — covering the panel toggles for two and a half seconds after
             every command, which is exactly when somebody is most likely to
             reach for one.

@@ -2,7 +2,7 @@ import { Circle, Globe, Star } from 'lucide-react'
 import type { TravelTarget } from '@inertialref/devtools'
 import { FOCUS_RING, releaseFocus } from '../hud/focus.ts'
 
-/** One row of the catalogue: a glyph for what it is, a name, a distance. */
+/** One row of the catalog: a glyph for what it is, a name, a distance. */
 export function CatalogueRow({
   row,
   selected,
@@ -34,7 +34,7 @@ export function CatalogueRow({
           className={`size-3 shrink-0 ${
             // Loaded means the system is generated and its frames installed —
             // the difference between a star you can look at and one that is
-            // still a stub in the catalogue.
+            // still a stub in the catalog.
             row.loaded ? 'text-sky-400/80' : 'text-slate-400'
           }`}
         />

@@ -16,7 +16,7 @@ import { coarsePointer } from '../hud/viewport.ts'
  * mouse events at all.
  *
  * So: choose once, from what the pointer *is*. Deliberately once, in state
- * initialised from the media query rather than re-read: `DndProvider` builds
+ * initialized from the media query rather than re-read: `DndProvider` builds
  * its manager from the backend and cannot be handed a different one, so a
  * change of backend is a remount of the whole subtree — every panel loses its
  * scroll position and any drag in flight is dropped. A user who has just

@@ -82,7 +82,7 @@ export function PanelChrome({
          * The one second elevation step in the system, and it earns it.
          *
          * A floating panel is over the scene with nothing beside it to be read
-         * against, where a docked one sits in a pane among its neighbours. The
+         * against, where a docked one sits in a pane among its neighbors. The
          * accent hairline says which of the two this is at a glance — it is the
          * same information the pin icon carries, in the peripheral vision that
          * actually notices a panel has come loose.
@@ -119,8 +119,8 @@ export function PanelChrome({
            * The panel's name in the neutral ramp, one step brighter and one step
            * larger than the `sky-400/80` headings inside it. Two levels of
            * structure and they read in the right order: a title says what you
-           * are looking at, a heading organises what is in it, and the title
-           * being the *quieter* colour of the two was the thing that made every
+           * are looking at, a heading organizes what is in it, and the title
+           * being the *quieter* color of the two was the thing that made every
            * panel look like five equally important shouts.
            */}
           <h2 className="type-heading truncate text-slate-200">

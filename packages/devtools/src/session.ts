@@ -56,7 +56,7 @@ export interface SessionOptions {
   readonly seed?: string
   readonly system?: string
   /**
-   * The star catalogue. A host that has the packed asset passes it; a test that
+   * The star catalog. A host that has the packed asset passes it; a test that
    * does not gets `SOL_ONLY_CATALOG` and a galaxy that is entirely procedural
    * outside the Solar System.
    */

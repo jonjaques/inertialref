@@ -126,10 +126,10 @@ export interface StarField {
   readonly positions: readonly UniverseVector[]
   readonly names: readonly string[]
   /**
-   * Linear sRGB per star, from the blackbody colour of its temperature.
+   * Linear sRGB per star, from the blackbody color of its temperature.
    *
    * Carried per star rather than picked in the shader because the temperature
-   * comes from a published colour index for the catalogued half of the sky and
+   * comes from a published color index for the cataloged half of the sky and
    * from a mass for the rest, and neither is available to a vertex program.
    */
   readonly colours: readonly [number, number, number][]
@@ -143,7 +143,7 @@ export interface StarField {
 
 export interface GameEngineOptions {
   readonly seed?: string
-  /** The star catalogue this world is generated against. */
+  /** The star catalog this world is generated against. */
   readonly catalog?: StarCatalog
   /**
    * Where worker tasks run. Omit for the browser default; pass `null` to
@@ -191,11 +191,11 @@ export class GameEngine implements PresentationHost {
   snapshot: WorldSnapshot | null = null
 
   /*
-   * Whether to draw the debug ship and the metre-scale reference props.
+   * Whether to draw the debug ship and the meter-scale reference props.
    *
    * Presentation only — nothing canonical moves — which is why it lives here
    * rather than in the harness: the headless runner has no ship to draw. It
-   * exists for the camera bookmarks, where a grey cone parked dead centre of
+   * exists for the camera bookmarks, where a gray cone parked dead center of
    * every composition defeats the point of composing.
    */
   showShip = true
@@ -214,7 +214,7 @@ export class GameEngine implements PresentationHost {
   fov = DEFAULT_FOV
 
   /*
-   * How much of the lens's artefact stack is showing, 0..1 — the ghost chain,
+   * How much of the lens's artifact stack is showing, 0..1 — the ghost chain,
    * not the glow and the streak, which are always the whole point.
    *
    * A field rather than a constant in `SunFlare` because it is a *composition*
@@ -222,9 +222,9 @@ export class GameEngine implements PresentationHost {
    * camera is 1: `docs/design/art.md` § the lens is explicit that the camera
    * admits it is a camera. A scripted shot runs near 0 (`SunFlare` floors the
    * cinematic case). The menu is the third case and the reason this exists —
-   * the ghosts march along the line from the star through frame centre, so a
+   * the ghosts march along the line from the star through frame center, so a
    * sun on the right of the poster puts a red aperture ring squarely over the
-   * paragraph on the left. That is a lens artefact landing on type, which is
+   * paragraph on the left. That is a lens artifact landing on type, which is
    * the one place it is never a photograph.
    *
    * Restored by whoever lowered it, exactly like `showShip`.
@@ -245,7 +245,7 @@ export class GameEngine implements PresentationHost {
   gl: RendererHandle | null = null
 
   /*
-   * The modelled hull the player is flying, once its glTF resolves.
+   * The modeled hull the player is flying, once its glTF resolves.
    *
    * Three scene components need it every frame — `ShipModel` mounts it,
    * `CameraRig` scales the chase distance from its length, `NearFieldProps`
@@ -422,7 +422,7 @@ export class GameEngine implements PresentationHost {
      * Earth, three-quarter lit, from the `gibbous` bookmark — not the session's
      * default target in a 400 km sunward orbit, which opened on a flat
      * full-phase wall of Mercury. The first frame is the one place the game
-     * chooses its own composition, and Earth is the one disc every player can
+     * chooses its own composition, and Earth is the one disk every player can
      * judge at a glance. The galaxy-relative form, because the address resolves
      * against whatever galaxy this seed named; Sol itself is in every world —
      * it is home.
@@ -586,7 +586,7 @@ export class GameEngine implements PresentationHost {
      * `buildScene` is built *around* the player's entity, and terrain, the
      * star survey and the orbit traces all hang off the scene it produces —
      * so a frame without one leaves them as they were and takes the next
-     * frame's. That was always the behaviour; what changed is that the two
+     * frame's. That was always the behavior; what changed is that the two
      * presentation eyes are published before it rather than after.
      */
     if (player === null || camera === undefined) return
@@ -652,7 +652,7 @@ export class GameEngine implements PresentationHost {
     this.#orbitsWorld = this.#starFieldWorld
 
     const all = systems.flatMap((system) => orbitPaths(this.world, system))
-    // The frame the subject itself orbits, so its siblings can be recognised.
+    // The frame the subject itself orbits, so its siblings can be recognized.
     const grandparent =
       focus !== null && this.world.frames.has(focus)
         ? this.world.frames.get(focus).parent
@@ -678,8 +678,8 @@ export class GameEngine implements PresentationHost {
    * is exactly where it goes.
    *
    * Two halves. The worker invents the procedural stars, which is the expensive
-   * part; the catalogued ones are read straight out of the local index, which is
-   * cheaper than serialising them across a thread boundary would be, and means
+   * part; the cataloged ones are read straight out of the local index, which is
+   * cheaper than serializing them across a thread boundary would be, and means
    * the real sky is on screen on the first frame after a jump even if the worker
    * pool is busy or absent.
    */
@@ -702,7 +702,7 @@ export class GameEngine implements PresentationHost {
     const cell = cellOf(centre)
     const catalog = this.world.catalog
 
-    // The worker has no catalogue, so what it needs to know about one travels
+    // The worker has no catalog, so what it needs to know about one travels
     // with the request: how many stars are already in each cell, and the radius
     // inside which it should invent none. Only non-empty cells are listed.
     const catalogued: Record<string, number> = {}
@@ -732,7 +732,7 @@ export class GameEngine implements PresentationHost {
       completeRadius: catalog.completeRadius,
     }
 
-    // The catalogued half goes up *now*, not when the worker answers — that
+    // The cataloged half goes up *now*, not when the worker answers — that
     // is the header's promise about the real sky being on screen on the first
     // frame after a jump. Gated on the survey it waited behind a busy pool,
     // and a single failed survey dropped it entirely, with the hysteresis

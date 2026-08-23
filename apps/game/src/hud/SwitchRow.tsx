@@ -4,7 +4,7 @@ import { Switch } from '@/components/ui/switch'
 import { releaseFocus } from './focus.ts'
 
 /*
- * A labelled on/off row.
+ * A labeled on/off row.
  *
  * One definition for what used to be two: `GraphicsPanel` drew a bordered row
  * with the word `on`/`off` at the end, and the planetarium's view panel drew a

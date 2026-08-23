@@ -1,6 +1,6 @@
-# Ship models — licence and attribution
+# Ship models — license and attribution
 
-glTF hulls for the flyable ships. **Not covered by the Apache-2.0 licence on
+glTF hulls for the flyable ships. **Not covered by the Apache-2.0 license on
 the source code.**
 
 - USS Enterprise NCC-1701-D (`enterprise-d.glb`): “Star Trek Online | USS
@@ -12,7 +12,7 @@ the source code.**
 Star Trek and the starship designs are the property of CBS Studios /
 Paramount; these are fan-made assets, used here non-commercially. CC BY 4.0
 requires attribution but imposes no share-alike, so — unlike the star
-catalogue — nothing downstream of these files becomes CC-licensed.
+catalog — nothing downstream of these files becomes CC-licensed.
 
-Per-file provenance — source URL, licence, and the true overall length used
-to scale the model to render metres — is in `manifest.json`.
+Per-file provenance — source URL, license, and the true overall length used
+to scale the model to render meters — is in `manifest.json`.

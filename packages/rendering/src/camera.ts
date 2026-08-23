@@ -16,8 +16,8 @@ import type { RenderScene } from './scene.ts'
  * Camera offset from the ship, in ship axes: behind and slightly above.
  *
  * A chase view rather than a cockpit, because the point of this milestone is to
- * see the ship, the metre-scale reference objects beside it and the planet in
- * one frame. This is the offset for the 6 m debug hull; a modelled hull
+ * see the ship, the meter-scale reference objects beside it and the planet in
+ * one frame. This is the offset for the 6 m debug hull; a modeled hull
  * derives its own through `chaseOffsetFor`.
  */
 export const CHASE_OFFSET: Vec3 = vec3(0, 2.5, 14)
@@ -27,7 +27,7 @@ export const CHASE_OFFSET: Vec3 = vec3(0, 2.5, 14)
  *
  * The framing is a ratio, not a distance: what makes a chase view read is the
  * hull filling roughly the same fraction of the frame regardless of whether it
- * is six metres long or six hundred. 1.4 lengths behind and 0.28 above keeps
+ * is six meters long or six hundred. 1.4 lengths behind and 0.28 above keeps
  * the whole hull inside the default field of view with sky around it —
  * slightly tighter than the debug cone's hand-tuned offset, because a big ship
  * shot from 2.3 lengths reads as a photograph of a model rather than a ship
@@ -54,7 +54,7 @@ export const CAMERA_GROUND_CLEARANCE: Meters = 2
  *
  * The clearance is measured against the *ship's* altitude, not the ground
  * directly under the camera. At 14 m of separation on terrain whose features are
- * kilometres wide the difference is centimetres, and sampling the heightfield
+ * kilometers wide the difference is centimeters, and sampling the heightfield
  * from here would mean the renderer asking the universe a question mid-frame.
  */
 export function chaseCameraPosition(

@@ -5,9 +5,9 @@ import type { GameEngine } from '../engine/GameEngine.ts'
 import { debugMaterials } from './debugMaterials.ts'
 
 /**
- * Metre-scale reference objects around the player.
+ * Meter-scale reference objects around the player.
  *
- * Milestone requirement 8, made visible: a metre grid and a one-metre cube sat
+ * Milestone requirement 8, made visible: a meter grid and a one-meter cube sat
  * next to the ship, four light-years from the galactic origin, so the precision
  * claim is something you can look at rather than only assert in a test.
  */
@@ -20,9 +20,9 @@ export function NearFieldProps({ engine }: { engine: GameEngine }) {
     if (scene === null || group.current === null) return
     // The props ride the same toggle as the ship: both are debug hardware, and
     // a bookmarked composition wants neither in the middle of it. A cutscene
-    // wants them even less — a metre cube beside a 642 m hero hull is a gag.
+    // wants them even less — a meter cube beside a 642 m hero hull is a gag.
     group.current.visible = engine.showShip && engine.cinematic === null
-    // ±4 m from the origin was beside the debug cone; inside a modelled hull
+    // ±4 m from the origin was beside the debug cone; inside a modeled hull
     // it is somewhere in the saucer's wiring. Slide the rack out past the
     // starboard beam so the cubes stay inspectable next to the hull.
     if (rack.current !== null) {
@@ -47,7 +47,7 @@ export function NearFieldProps({ engine }: { engine: GameEngine }) {
   return (
     <group ref={group}>
       <group ref={rack}>
-        {/* One metre. */}
+        {/* One meter. */}
         <mesh position={[4, 0, 0]} material={debugMaterials.metre}>
           <boxGeometry args={[1, 1, 1]} />
         </mesh>

@@ -8,7 +8,7 @@ import { isOverlayControl, isTyping } from './focus.ts'
  * Held keys are collected into a control vector and pushed at the engine, which
  * stores it on the entity; the fixed-step simulation reads it. Nothing here
  * moves the ship — a keydown handler that nudged a position would make flight
- * behaviour depend on key-repeat rate, which is the input equivalent of tying
+ * behavior depend on key-repeat rate, which is the input equivalent of tying
  * physics to the frame rate.
  */
 
@@ -172,7 +172,7 @@ export function useShipControls(
          * focus is already in the overlay" — and that guard could never open.
          * On load `document.activeElement` is `<body>`, whose
          * `closest('.hud-layer')` is null, so the guard was false, the dock
-         * toggled and `preventDefault` cancelled the browser's focus move.
+         * toggled and `preventDefault` canceled the browser's focus move.
          * Every subsequent Tab did the same, and with no `tabIndex` on the
          * canvas there was no focusable element outside the layer to bootstrap
          * from: focus could never enter the overlay at all, and every focus

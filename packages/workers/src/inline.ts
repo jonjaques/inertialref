@@ -18,7 +18,7 @@ import type { HostPort, WorkerPort } from './transport.ts'
  * for the starfield and no terrain streaming until a pool exists. Saying
  * otherwise here implied a fallback that does not exist.
  *
- * Messages go through `structuredClone`, and `post` honours its transfer list.
+ * Messages go through `structuredClone`, and `post` honors its transfer list.
  * Neither used to be true — the object was passed by reference and `transfer`
  * was dropped — so a payload holding a `Map`, a class instance or a function
  * passed every Node test and threw `DataCloneError` in Chrome, and a transferred

@@ -75,8 +75,8 @@ describe('galaxy', () => {
     )
   })
 
-  it('does not let neighbouring cells influence each other', () => {
-    // Generating the neighbourhood first must not change the cell's contents:
+  it('does not let neighboring cells influence each other', () => {
+    // Generating the neighborhood first must not change the cell's contents:
     // this is the property that makes worker-order irrelevant.
     const cell = { x: 4, y: 1, z: -2 }
     const isolated = stringify(generateCell(GALAXY_SEED, cell))
@@ -122,7 +122,7 @@ describe('galaxy', () => {
     expect(resolveSystem(GALAXY_SEED, CATALOG, SOL.id)?.name).toBe('Sol')
   })
 
-  it('finds the real neighbours of Sol', () => {
+  it('finds the real neighbors of Sol', () => {
     const near = systemsWithin(
       GALAXY_SEED,
       CATALOG,
@@ -259,7 +259,7 @@ describe('cube-sphere terrain', () => {
     )
   })
 
-  it('puts a direction in a region whose centre is nearby', () => {
+  it('puts a direction in a region whose center is nearby', () => {
     const direction = Vec.normalize(vec3(0.3, 0.8, -0.5))
     for (const level of [0, 3, 8]) {
       const region = regionForDirection(direction, level)
@@ -404,7 +404,7 @@ describe('system frames', () => {
   })
 })
 
-describe('catalogue', () => {
+describe('catalog', () => {
   const byId = (id: string) => {
     const star = CATALOG.get(id as never)
     if (star === undefined) throw new Error(`no fixture star ${id}`)
@@ -443,7 +443,7 @@ describe('catalogue', () => {
     ).toBeCloseTo(0.2, 1)
   })
 
-  it('places the Sun 8.178 kpc from the galactic centre', () => {
+  it('places the Sun 8.178 kpc from the galactic center', () => {
     expect(
       UV.distance(byId('SOL').position, UV.UNIVERSE_ORIGIN) /
         (3.085677581491367e16 * 1000),
@@ -542,14 +542,14 @@ describe('observed planets', () => {
 
 describe('the ground has one owner', () => {
   /*
-   * `seaLevel` used to be honoured by `surfaceRadius` — which decides where a
+   * `seaLevel` used to be honored by `surfaceRadius` — which decides where a
    * ship touches down and where `installSurfaceFrame` puts the pad — and
    * ignored by `generateHeightfield`, which decides what gets drawn. It was
    * carried the whole way from the generator to the mesh and then dropped, so
    * on any world with an ocean the pad sat on the water datum and the mesh drew
    * the seabed under it. Roughly 40% of atmosphered rocky planets have one.
    */
-  // Sol has no ocean world at this seed, so the catalogue is scanned rather
+  // Sol has no ocean world at this seed, so the catalog is scanned rather
   // than a system named: which star gets one is a property of the seed, and
   // pinning it here would make this test fail for the wrong reason.
   const oceanWorld = () => {
@@ -560,7 +560,7 @@ describe('the ground has one owner', () => {
       )
       if (wet !== undefined) return wet
     }
-    throw new Error('no ocean world anywhere in the catalogue')
+    throw new Error('no ocean world anywhere in the catalog')
   }
 
   it('draws the mesh at the radius the physics lands on', () => {
@@ -571,7 +571,7 @@ describe('the ground has one owner', () => {
       resolution: HEIGHTFIELD_RESOLUTION,
     })
 
-    // Walk the patch corners and centre: the elevation the mesh will extrude by
+    // Walk the patch corners and center: the elevation the mesh will extrude by
     // has to be the elevation the contact test will stop at, exactly.
     for (const [s, t] of [
       [0, 0],

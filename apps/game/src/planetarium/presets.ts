@@ -39,7 +39,7 @@ export const PHASES: readonly {
   icon: LucideIcon
   why: string
 }[] = [
-  { label: 'Full', deg: 12, tilt: 8, icon: Circle, why: 'the whole lit disc' },
+  { label: 'Full', deg: 12, tilt: 8, icon: Circle, why: 'the whole lit disk' },
   {
     label: 'Gibbous',
     deg: 55,
@@ -52,7 +52,7 @@ export const PHASES: readonly {
     deg: 90,
     tilt: 6,
     icon: PhaseHalf,
-    why: 'the terminator down the middle of the disc',
+    why: 'the terminator down the middle of the disk',
   },
   {
     label: 'Crescent',
@@ -66,12 +66,12 @@ export const PHASES: readonly {
     deg: 171,
     tilt: 4,
     icon: PhaseRim,
-    why: 'the star behind it — an unlit disc inside its own airglow',
+    why: 'the star behind it — an unlit disk inside its own airglow',
   },
 ]
 
 export const RANGES: readonly { label: string; fill: Fill; why: string }[] = [
-  { label: 'Close', fill: 0.95, why: 'the disc overflowing the frame' },
+  { label: 'Close', fill: 0.95, why: 'the disk overflowing the frame' },
   { label: 'Portrait', fill: DEFAULT_FILL, why: 'the whole body, framed' },
   { label: 'Wide', fill: 0.18, why: 'the body small, the sky large' },
 ]
@@ -81,7 +81,7 @@ export const RANGES: readonly { label: string; fill: Fill; why: string }[] = [
  *
  * These replaced a "tour" — five buttons that flew the camera to Sol, Earth,
  * Jupiter, Saturn and Alpha Centauri. Two things were wrong with it. It was a
- * second, worse catalogue sitting next to the real one, which lists every
+ * second, worse catalog sitting next to the real one, which lists every
  * system within sixteen light years and searches; and *where* to look is the
  * one question this panel should never answer, because the panel's whole
  * subject is what to do once you are looking at something.
@@ -92,7 +92,7 @@ export const RANGES: readonly { label: string; fill: Fill; why: string }[] = [
  * without losing your framing is the commonest thing anyone does here.
  *
  * The `fill` values are deliberately not all the same: a crescent wants room
- * around it and a raking terminator wants the disc big enough to see relief in.
+ * around it and a raking terminator wants the disk big enough to see relief in.
  */
 export const COMPOSITIONS: readonly {
   label: string

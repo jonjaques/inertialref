@@ -41,7 +41,7 @@
     <title>InertialRef — A real sky, in a browser tab</title>
     <meta
       name="description"
-      content="An open-source spaceflight simulator in a browser tab. The Milky Way is the real one — 7,123 catalogued systems within 150 light years, the rest from a seed."
+      content="An open-source spaceflight simulator in a browser tab. The Milky Way is the real one — 7,123 cataloged systems within 150 light years, the rest from a seed."
     />
     <link rel="canonical" href="https://inertialref.jonjaques.com" />
     <meta name="author" content="Jon Jaques" />
@@ -70,11 +70,11 @@
     <!--
       Installable. The service worker (`public/sw.js`) is the other half and was
       already here: the game is a pure function of a seed, so once the bundle
-      and the catalogue are cached there is genuinely nothing left to fetch —
+      and the catalog are cached there is genuinely nothing left to fetch —
       which makes an installed copy a real offline application rather than a
       shortcut that shows a dinosaur on a plane.
 
-      `theme-color` is slate-950, the same colour as the page and the icon
+      `theme-color` is slate-950, the same color as the page and the icon
       plate, so the browser's own chrome does not draw a light band above a
       black sky while the bundle loads.
     -->
@@ -100,7 +100,7 @@
     />
     <meta
       property="og:description"
-      content="An open-source spaceflight simulator in a browser tab. The Milky Way is the real one — 7,123 catalogued systems within 150 light years, the rest from a seed."
+      content="An open-source spaceflight simulator in a browser tab. The Milky Way is the real one — 7,123 cataloged systems within 150 light years, the rest from a seed."
     />
     <meta property="og:url" content="https://inertialref.jonjaques.com" />
     <meta
@@ -112,7 +112,7 @@
     <meta property="og:image:height" content="630" />
     <meta
       property="og:image:alt"
-      content="The InertialRef mark and wordmark over a sunlit planet limb, with the figures 7,123 real systems, 150 light years catalogued, and nothing to install."
+      content="The InertialRef mark and wordmark over a sunlit planet limb, with the figures 7,123 real systems, 150 light years cataloged, and nothing to install."
     />
     <meta property="og:locale" content="en" />
     <meta name="twitter:card" content="summary_large_image" />
@@ -135,7 +135,7 @@
 
       Two nodes because they answer two different questions: `WebSite` is "what
       is at this address", and `SoftwareApplication` is "what is the thing".
-      `isAccessibleForFree`, `offers` at zero and the licence are not decoration
+      `isAccessibleForFree`, `offers` at zero and the license are not decoration
       — they are the machine-readable form of the claim this project's front
       page makes in prose, and they are what stops it being classified as a
       demo for something purchasable.
@@ -171,7 +171,7 @@
             "applicationSubCategory": "Space flight simulator",
             "operatingSystem": "Any modern web browser with WebGPU",
             "browserRequirements": "Requires WebGPU",
-            "description": "A spaceflight simulator whose universe is a deterministic function of a seed and a real star catalogue: 7,123 catalogued systems and 702 known planets within 150 light years, and generated content beyond that. Runs offline, with nothing to install.",
+            "description": "A spaceflight simulator whose universe is a deterministic function of a seed and a real star catalog: 7,123 cataloged systems and 702 known planets within 150 light years, and generated content beyond that. Runs offline, with nothing to install.",
             "image": "https://inertialref.jonjaques.com/og.png",
             "screenshot": "https://inertialref.jonjaques.com/og.png",
             "author": { "@id": "https://inertialref.jonjaques.com/#author" },
@@ -194,7 +194,7 @@
     <!--
       What is on screen before the first React commit.
 
-      `main.tsx` awaits the packed catalogue — 460 KB, a generation input rather
+      `main.tsx` awaits the packed catalog — 460 KB, a generation input rather
       than a decoration, so the world cannot be built without it — and until
       that resolves there is no canvas, no HUD and nothing in `#root`. On a fast
       connection that is a flash; on a slow one, or behind a service worker
@@ -226,9 +226,9 @@
         "
       >
         <div style="color: #7dd3fc">InertialRef</div>
-        <div style="color: #64748b">reading the star catalogue…</div>
+        <div style="color: #64748b">reading the star catalog…</div>
         <div id="boot-stall" hidden style="margin-top: 0.5rem; color: #fbbf24">
-          nothing has arrived in 10 s — the bundle or the catalogue is not
+          nothing has arrived in 10 s — the bundle or the catalog is not
           loading.
           <button
             type="button"
@@ -256,7 +256,7 @@
 
       Two of them, and they want the same thing: a person who has scripting off,
       and a crawler that indexes the served HTML rather than the rendered DOM.
-      Both currently get a black page and a boot message about a catalogue,
+      Both currently get a black page and a boot message about a catalog,
       which describes nothing. This is deliberately prose and links rather than
       an apology — the repository and the documentation are the whole product
       for anyone who cannot run it.
@@ -283,8 +283,8 @@
           </p>
           <p>
             InertialRef is an open-source spaceflight simulator whose universe
-            is a deterministic function of a seed and a real star catalogue —
-            7,123 catalogued systems and 702 known planets within 150 light
+            is a deterministic function of a seed and a real star catalog —
+            7,123 cataloged systems and 702 known planets within 150 light
             years, and generated content beyond that. There is nothing to
             download and nothing to ask a server for: every client computes the
             same galaxy.

@@ -19,7 +19,7 @@ export type LodTier =
   | 'point'
   /** A few pixels: a camera-facing impostor. */
   | 'billboard'
-  /** Resolvable disc: an actual sphere. */
+  /** Resolvable disk: an actual sphere. */
   | 'sphere'
   /** Fills a good part of the view: sphere plus streamed terrain patches. */
   | 'surface'
@@ -55,7 +55,7 @@ export function selectLod(radius: Meters, distance: Meters): LodTier {
 }
 
 /**
- * Terrain subdivision level to stream at, from how much of the screen a metre
+ * Terrain subdivision level to stream at, from how much of the screen a meter
  * of ground occupies.
  *
  * Returned as a level rather than a patch count so the caller can ask the
@@ -82,7 +82,7 @@ export function terrainLevelFor(
  * datum sphere — 11 km proud of it on the first planet, since the sphere is
  * sunk a full relief below the datum. The winding fix made that tile visible
  * from orbit for the first time; until the terrain quadtree covers the whole
- * disc, the honest representation up there is the sphere alone.
+ * disk, the honest representation up there is the sphere alone.
  *
  * Full presence starts where `terrainLevelFor` saturates at `maxLevel` —
  * altitude `radius · 2^(4.5 − maxLevel)` — because that is the boundary below
@@ -100,7 +100,7 @@ export function terrainOpacity(
   return Math.min(1, Math.max(0, 2 - altitude / full))
 }
 
-/** Blackbody colour of a star, approximate but monotonic in temperature. */
+/** Blackbody color of a star, approximate but monotonic in temperature. */
 export function starColor(temperature: number): {
   r: number
   g: number

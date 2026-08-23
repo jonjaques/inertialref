@@ -117,14 +117,14 @@ export function nudgeFloat(
 /**
  * Where the nth panel floated in a session goes when it has no remembered spot.
  *
- * Staggered rather than centred. Two panels floated one after the other and
+ * Staggered rather than centered. Two panels floated one after the other and
  * placed at the same point look like one panel, and the top one has to be
  * dragged off the other before either can be read — which is a worse first
  * impression of the gesture than a slightly untidy cascade.
  *
  * Anchored clear of the left pane rather than to the viewport, and that is the
  * point of the constant rather than an aesthetic: a pane is 19rem plus its
- * 0.75rem gutter, so anything left of 316px opens *on top of* the catalogue.
+ * 0.75rem gutter, so anything left of 316px opens *on top of* the catalog.
  * A panel that appeared underneath the thing it was just pulled out of reads
  * as the gesture having failed.
  */

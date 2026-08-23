@@ -94,14 +94,14 @@ export interface WorldOptions {
   readonly startTick?: Tick
   readonly maxSteps?: number
   /**
-   * The star catalogue this world is generated against.
+   * The star catalog this world is generated against.
    *
    * A second generation input alongside the seed, and required to be explicit
-   * for the reason `docs/design/galaxy.md` Rule 1 gives: the catalogue changes
+   * for the reason `docs/design/galaxy.md` Rule 1 gives: the catalog changes
    * when astronomy publishes, and a universe that changed silently underneath a
    * save would invalidate every address in it. Defaults to `SOL_ONLY_CATALOG`,
    * which is one star and no claims — enough for a test, and a working if much
-   * emptier galaxy for a host whose catalogue asset failed to load.
+   * emptier galaxy for a host whose catalog asset failed to load.
    */
   readonly catalog?: StarCatalog
 }
@@ -502,7 +502,7 @@ export class World implements FlightWorld {
     this.entities.update(id, {
       state: {
         ...landedState,
-        // Sit on the surface, not a fraction of a metre inside it: the contact
+        // Sit on the surface, not a fraction of a meter inside it: the contact
         // test fires on the tick that crosses zero, which is usually just past.
         position: vec3(
           landedState.position.x,

@@ -215,7 +215,7 @@ describe('the service worker', () => {
     const sw = loadServiceWorker()
     sw.cacheKeys = ['inertialref-oldbuild', `inertialref-${BUILD}`]
     // What the old worker cached during the visit that fetched the new build:
-    // the new hashed chunks and catalogue went into *its* cache, because it
+    // the new hashed chunks and catalog went into *its* cache, because it
     // was still the controlling worker. Deleting that cache unread is what
     // left the next offline launch with an index.html and none of its code.
     sw.stores.set(

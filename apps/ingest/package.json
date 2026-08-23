@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Turns published star and exoplanet catalogues into the packed asset the game ships.",
+  "description": "Turns published star and exoplanet catalogs into the packed asset the game ships.",
   "scripts": {
     "fetch": "node src/main.ts fetch",
     "build": "node src/main.ts build",

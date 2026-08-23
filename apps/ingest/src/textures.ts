@@ -28,8 +28,8 @@ import {
  * the pole itself, which is why it is clamped — and why the clamp is a named
  * constant rather than a magic number.
  *
- * **Luminance to alpha.** A cloud map published as a greyscale JPEG is a
- * *coverage* mask wearing a colour image's clothes. Drawn as colour it is a grey
+ * **Luminance to alpha.** A cloud map published as a grayscale JPEG is a
+ * *coverage* mask wearing a color image's clothes. Drawn as color it is a gray
  * shell over the whole planet; moved into alpha it is weather.
  */
 
@@ -62,13 +62,13 @@ export interface TextureManifest {
  * when eight bodies stream in at once.
  *
  * Quality 82 is where the belts on Jupiter stop showing ringing. Below about 75
- * they do, and a compression artefact on a planet reads as a real feature —
+ * they do, and a compression artifact on a planet reads as a real feature —
  * which is the one kind of visual error this project cannot tolerate.
  */
 const WEBP = { quality: 82, effort: 6 } as const
 
 /*
- * Normal maps are encoded losslessly, and this is not an optimisation knob.
+ * Normal maps are encoded losslessly, and this is not an optimization knob.
  *
  * Lossy WebP is a *photographic* codec: VP8 quantises per block, and on the
  * smooth slope fields of a normal map that quantisation lands as whole 8-pixel
@@ -79,7 +79,7 @@ const WEBP = { quality: 82, effort: 6 } as const
  * (every full-phase shot) it renders as black latitude-parallel scratches, and
  * the relief exaggeration multiplies it. Quality 82 was tuned on Jupiter's
  * *albedo*, where ringing hides in the clouds; data has nowhere to hide.
- * Lossless VP8L on these maps is a few MB against the artefact that motivated
+ * Lossless VP8L on these maps is a few MB against the artifact that motivated
  * the "cannot tolerate" rule above.
  */
 const WEBP_DATA = { lossless: true, effort: 6 } as const
@@ -138,7 +138,7 @@ async function elevationToNormal(
   /*
    * `grey16`, not `b-w`, and this is the whole reason the Moon was flat.
    *
-   * libvips calls 8-bit greyscale `b-w`, so `toColourspace('b-w')` on LOLA's
+   * libvips calls 8-bit grayscale `b-w`, so `toColourspace('b-w')` on LOLA's
    * 16-bit product *downcasts* it, and a following `raw({depth:'ushort'})`
    * widens the container back to two bytes without restoring the range. The
    * result is a valid file, a plausible-looking pipeline, and every gradient 256
@@ -159,7 +159,7 @@ async function elevationToNormal(
     return sixteen ? data.readUInt16LE(index * 2) : (data[index] as number)
   }
 
-  // The field's own range, so the metres-per-value scale calibrates itself
+  // The field's own range, so the meters-per-value scale calibrates itself
   // against a number that is measured rather than documented.
   let low = Infinity
   let high = -Infinity
@@ -174,7 +174,7 @@ async function elevationToNormal(
       ? -Infinity
       : low + (high - low) * source.oceanBelow
 
-  // Metres per pixel on the ground, north–south. The equirectangular grid is
+  // Meters per pixel on the ground, north–south. The equirectangular grid is
   // uniform in angle, so this is a constant; east–west is this times
   // cos(latitude), which is the whole reason for the correction below.
   const metresPerPixel = (Math.PI * radius) / height
@@ -194,7 +194,7 @@ async function elevationToNormal(
        * Tangent space, +X east, +Y north, +Z out of the surface.
        *
        * The gradients are slopes — rise over run in the same units — so the
-       * normal is `(-dh/deast, -dh/dnorth, 1)` normalised. `south` is the
+       * normal is `(-dh/deast, -dh/dnorth, 1)` normalized. `south` is the
        * gradient going *down* the image, and north is the opposite direction,
        * so `-dh/dnorth` is `+south`. That sign is the difference between craters
        * and domes, and it is invisible until the terminator crosses one.
@@ -205,7 +205,7 @@ async function elevationToNormal(
        * used to be. Alpha is semantic to every codec and canvas in the path:
        * libwebp's lossless encoder "cleans" the RGB under transparent pixels
        * to compress better, which zeroed the *entire* Moon map (no ocean, so
-       * alpha 0 everywhere) and every land normal on Earth. A mask in a colour
+       * alpha 0 everywhere) and every land normal on Earth. A mask in a color
        * channel is just data, and nothing in the pipeline has opinions about
        * data.
        */
@@ -245,7 +245,7 @@ async function luminanceToAlpha(
   for (let i = 0; i < width * height; i += 1) {
     const value = grey[i] as number
     // White cloud, alpha from brightness. Cloud tops are very nearly a perfect
-    // Lambertian white — the brightest natural surface there is — so the colour
+    // Lambertian white — the brightest natural surface there is — so the color
     // channels are constant and only the coverage varies.
     out[i * 4] = 255
     out[i * 4 + 1] = 255
@@ -336,7 +336,7 @@ export async function buildTextures(
     attribution: [
       'Earth and Moon imagery: NASA Earth Observatory (Blue Marble Next ' +
         'Generation, Black Marble) and NASA Scientific Visualization Studio ' +
-        '(LRO LROC colour, LOLA topography). Public domain.',
+        '(LRO LROC color, LOLA topography). Public domain.',
       'Io, Europa, Ganymede and Callisto: NASA / JPL / USGS Astrogeology ' +
         'Science Center global mosaics, from Voyager and Galileo. Public domain.',
       'Mercury, Venus, Mars, Jupiter, Saturn, Uranus, Neptune and Saturn’s ' +

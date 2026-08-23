@@ -10,7 +10,7 @@ import { createStarfieldMaterial } from '../render/materials.ts'
 /** How many stars the instanced sprite buffer has room for. */
 const MAX_STARS = 20_000
 
-/** Fallback colour for a star whose survey predates the colour column. */
+/** Fallback color for a star whose survey predates the color column. */
 const WHITE: readonly [number, number, number] = [1, 1, 1]
 
 /**
@@ -107,14 +107,14 @@ export function Starfield({ engine }: { engine: GameEngine }) {
      *
      * Magnitudes because the range is otherwise unusable: within a 40 ly sweep
      * the apparent flux spans 20 magnitudes — a factor of 10^8 — so a linear
-     * normalisation leaves the median star at 10^-5 of the brightest and the sky
+     * normalization leaves the median star at 10^-5 of the brightest and the sky
      * comes out black. That was the first attempt and it is what a photometer
      * would see; a magnitude scale is the logarithmic one astronomy uses for
      * exactly this reason, and it is also roughly how the eye responds.
      *
      * Relative to the brightest star currently in view rather than an absolute
      * zero point, because that is what adaptation does. An absolute scale would
-     * darken the whole sky on the way out of the neighbourhood, when what really
+     * darken the whole sky on the way out of the neighborhood, when what really
      * happens is that your eyes adjust.
      */
     for (let i = 0; i < written; i += 1) {

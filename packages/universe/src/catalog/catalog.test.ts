@@ -37,8 +37,8 @@ describe('spectral types', () => {
   /*
    * Golden vectors, and every one of them is a real HYG v4.4 string that a
    * `spect[0]` parse gets wrong. Within 150 ly that naive test classifies 87% of
-   * the catalogue and is quietly wrong about the other 13%, which is roughly a
-   * thousand stars rendered the wrong colour.
+   * the catalog and is quietly wrong about the other 13%, which is roughly a
+   * thousand stars rendered the wrong color.
    */
   const VECTORS: readonly [string, string, string | null, number | null][] = [
     // source        canonical  class  subclass
@@ -75,7 +75,7 @@ describe('spectral types', () => {
     expect(type.source).toBe(source)
   })
 
-  it('recognises evolved stars and white dwarfs', () => {
+  it('recognizes evolved stars and white dwarfs', () => {
     expect(isGiant(parseSpectralType('K0III'))).toBe(true)
     expect(isGiant(parseSpectralType('gK5'))).toBe(true)
     expect(isGiant(parseSpectralType('G2V'))).toBe(false)
@@ -83,7 +83,7 @@ describe('spectral types', () => {
     expect(isWhiteDwarf(parseSpectralType('dM4'))).toBe(false)
   })
 
-  it('never throws, whatever the catalogue contains', () => {
+  it('never throws, whatever the catalog contains', () => {
     fc.assert(
       fc.property(fc.string(), (text) => {
         const type = parseSpectralType(text)
@@ -99,7 +99,7 @@ describe('spectral types', () => {
 
 describe('photometry', () => {
   /*
-   * The calibration point everything else hangs off. The Sun's own catalogue
+   * The calibration point everything else hangs off. The Sun's own catalog
    * entry has to come back out as one solar luminosity and one solar radius, or
    * every derived quantity in the file is off by whatever this is off by.
    *
@@ -132,7 +132,7 @@ describe('photometry', () => {
    * good to a few percent, and a luminosity inferred from a V magnitude and a
    * bolometric correction is good to tens of percent — worst at the late-M end,
    * where the correction is steep and the published values themselves disagree.
-   * Proxima Centauri is the worst case in the catalogue at roughly half its
+   * Proxima Centauri is the worst case in the catalog at roughly half its
    * published luminosity, and it is a flare star at the edge of the calibration.
    */
   const REFERENCE: readonly [string, string, number, number, number, number][] =
@@ -165,7 +165,7 @@ describe('photometry', () => {
     },
   )
 
-  it('gives a red star a red colour and a blue star a blue one', () => {
+  it('gives a red star a red color and a blue star a blue one', () => {
     const cool = blackbodyColour(3_000)
     const hot = blackbodyColour(20_000)
     expect(cool.r).toBeGreaterThan(cool.b)
@@ -271,7 +271,7 @@ describe('identity', () => {
 
   it('gives one id to a star written Gl and GJ', () => {
     // HYG v4.4 merged five duplicate pairs that existed precisely because one
-    // spelling was not recognised as the other. A resolver that repeats the
+    // spelling was not recognized as the other. A resolver that repeats the
     // mistake issues two addresses for one star.
     expect(normaliseGliese('Gl 559A')).toBe('GJ559A')
     expect(normaliseGliese('GJ 559 A')).toBe('GJ559A')
@@ -435,11 +435,11 @@ describe('the packed format', () => {
     expect(() => decodeCatalog(bytes.slice(0, 20))).toThrow()
     const wrongMagic = bytes.slice()
     wrongMagic[0] = 0
-    expect(() => decodeCatalog(wrongMagic)).toThrow(/Not a star catalogue/)
+    expect(() => decodeCatalog(wrongMagic)).toThrow(/Not a star catalog/)
   })
 })
 
-describe('the catalogue at runtime', () => {
+describe('the catalog at runtime', () => {
   it('indexes by cell rather than scanning', () => {
     // Same answer as a linear scan, which is the only thing the index owes.
     const centre = TEST_CATALOG.stars[0]?.position

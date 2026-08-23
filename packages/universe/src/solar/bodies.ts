@@ -16,8 +16,8 @@ import type { LinearRgb } from '../catalog/photometry.ts'
  *
  * Everything here is a published value from the NASA/JPL planetary fact sheets
  * and the JPL Solar System Dynamics small-body and satellite tables. It is not a
- * dataset under a licence — these are facts, transcribed — which is why it lives
- * in source rather than in the packed catalogue beside the exoplanets.
+ * dataset under a license — these are facts, transcribed — which is why it lives
+ * in source rather than in the packed catalog beside the exoplanets.
  *
  * It exists because Sol is **home**. Every other system in the game is a real
  * star with projected planets around it; this is the one place where the whole
@@ -29,12 +29,12 @@ import type { LinearRgb } from '../catalog/photometry.ts'
  * Eight planets and twenty moons — every satellite large enough to have pulled
  * itself round, plus Phobos and Deimos because Mars would look empty without
  * them. The rest of the ~300 known moons are irregular captured rubble a
- * kilometre or two across, invisible from anywhere you would fly, and would cost
+ * kilometer or two across, invisible from anywhere you would fly, and would cost
  * more to model than they could ever return.
  *
  * ## Units
  *
- * SI, per the repository convention, converted here from the kilometres, days
+ * SI, per the repository convention, converted here from the kilometers, days
  * and degrees the fact sheets publish. Sidereal rotation periods are **signed**:
  * a negative period is retrograde, which is a fact about Venus, Uranus and
  * Triton and not a bug.
@@ -51,9 +51,9 @@ import type { LinearRgb } from '../catalog/photometry.ts'
 export interface SolarAtmosphere {
   /** Surface pressure, pascals. Zero for a body with no atmosphere. */
   readonly surfacePressure: number
-  /** Scale height, metres. */
+  /** Scale height, meters. */
   readonly scaleHeight: Meters
-  /** Where the model stops integrating, metres above the datum. */
+  /** Where the model stops integrating, meters above the datum. */
   readonly ceiling: Meters
   /** Mass density at the datum, kg/m³. */
   readonly surfaceDensity: number
@@ -67,7 +67,7 @@ export interface SolarRings {
 }
 
 /**
- * The haze you can see, with its published colours.
+ * The haze you can see, with its published colors.
  *
  * Earth's limb is blue and its terminator orange because Rayleigh scattering in
  * nitrogen says so. Mars's is butterscotch because it is suspended dust. Titan's
@@ -118,12 +118,12 @@ export interface SolarBody {
    *
    * Not decoration. The USGS Voyager and Galileo mosaics for Europa, Ganymede
    * and Callisto are **monochrome** — measured: zero saturation across all three
-   * — because that is how those cameras returned them. Rendering them grey would
-   * be a different lie from tinting them: the colours here are the published
+   * — because that is how those cameras returned them. Rendering them gray would
+   * be a different lie from tinting them: the colors here are the published
    * ones, and the map supplies the structure it actually has.
    */
   readonly tint: LinearRgb
-  /** Peak-to-trough relief the elevation map covers, metres. */
+  /** Peak-to-trough relief the elevation map covers, meters. */
   readonly relief: Meters
   readonly roughness: number
   readonly atmosphere: SolarAtmosphere | null
@@ -135,7 +135,7 @@ export interface SolarBody {
   readonly moons: readonly SolarBody[]
 }
 
-/** No tint: the map already carries whatever colour the body has. */
+/** No tint: the map already carries whatever color the body has. */
 const WHITE: LinearRgb = { r: 1, g: 1, b: 1 }
 
 const KM: Meters = 1_000
@@ -212,7 +212,7 @@ const GALILEANS: readonly SolarBody[] = [
     temperature: 110,
     relief: 17_000,
     texture: 'io',
-    // Sulphur and sulphur dioxide frost. The most colourful surface in the
+    // Sulfur and sulfur dioxide frost. The most colorful surface in the
     // system, returned by Galileo as a monochrome mosaic.
     tint: { r: 1, g: 0.82, b: 0.5 },
   }),
@@ -329,7 +329,7 @@ const SATURNIAN: readonly SolarBody[] = [
     relief: 20_000,
     // Two-toned: one hemisphere as dark as asphalt, the other as bright as snow,
     // which no single tint can say. Until a map is vendored this is the dark
-    // side, which is the half that faces the direction it is travelling.
+    // side, which is the half that faces the direction it is traveling.
     tint: { r: 0.4, g: 0.34, b: 0.28 },
   }),
 ]
@@ -556,7 +556,7 @@ export const SOLAR_PLANETS: readonly SolarBody[] = [
       height: 570_000,
       colour: { r: 0.78, g: 0.76, b: 0.8 },
       limb: { r: 0.95, g: 0.78, b: 0.55 },
-      // A giant's tangent haze is thin and high; Cassini and Voyager discs
+      // A giant's tangent haze is thin and high; Cassini and Voyager disks
       // show a whisper of limb line, not Earth's glowing ring.
       thickness: 0.3,
     },
@@ -614,7 +614,7 @@ export const SOLAR_PLANETS: readonly SolarBody[] = [
     },
     clouds: null,
     // C ring inner edge to A ring outer edge: 74,658 to 136,775 km, which is
-    // 1.24 to 2.27 Saturn radii, and about 10 metres thick. The whole system
+    // 1.24 to 2.27 Saturn radii, and about 10 meters thick. The whole system
     // would fit between the Earth and the Moon.
     rings: {
       innerRadius: 74_658 * KM,

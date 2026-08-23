@@ -2,7 +2,7 @@ import { loadCatalog, type StarCatalog } from './starCatalog.ts'
 import { NO_INDEX, type PackedPlanet, type PackedStar } from './format.ts'
 
 /*
- * A five-star catalogue for tests.
+ * A five-star catalog for tests.
  *
  * Not a mock: these are the same records the packed file holds, run through the
  * same decoder and the same photometry, with values transcribed from HYG v4.4.
@@ -38,7 +38,7 @@ const star = (
 })
 
 /*
- * Heliocentric galactic cartesian metres. Computed once from each star's
+ * Heliocentric galactic cartesian meters. Computed once from each star's
  * published right ascension, declination and parallax through
  * `equatorialToGalactic` — written out rather than computed here so that a
  * change to that conversion shows up as a failing distance test instead of
@@ -164,7 +164,7 @@ const PLANETS: readonly PackedPlanet[] = [
 ]
 
 /**
- * The fixture catalogue.
+ * The fixture catalog.
  *
  * `completeRadiusLightYears` is zero on purpose: procedural fill stays on, so a
  * test that generates a cell near Sol still gets stars to generate. The real

@@ -44,7 +44,7 @@ reopening one is a deliberate act rather than a drift.
 | Decision                  | Resolution                                                                                                 |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | Hostile humanoids         | **Environmental threats only through M5.** The largest single scope saving available.                      |
-| Matched-burn combat       | **Deferred past M6.** Opponents engage at rest or on manoeuvre thrust.                                     |
+| Matched-burn combat       | **Deferred past M6.** Opponents engage at rest or on maneuver thrust.                                      |
 | The Hunter through a jump | **Once, with a visible tell.** Followed once is a story; followed forever is a punishment.                 |
 | Rescue                    | **Self-scuttle in solo; distress beacon in the persistent universe.** Degrades gracefully with population. |
 
@@ -127,44 +127,44 @@ its source.
 Terms specific to this design. Engine and architecture terms are in
 [`docs/glossary.md`](../glossary.md).
 
-| Term                      | Meaning                                                                                                                                                                                      |
-| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Almanac**               | The player's permanent, local record of every body personally scanned. [exploration](exploration.md#the-almanac)                                                                             |
-| **Ballistic transfer**    | An impulse, a long coast on a conic, and a capture burn. Nearly free in fuel, measured in weeks of simulated time. ⬜                                                                        |
-| **Brachistochrone**       | The burn profile: accelerate half the distance, flip, decelerate the other half. The fastest transfer under a thrust limit.                                                                  |
-| **Burn, the**             | The [micro loop](loops.md#micro-loop--the-burn-27-minutes): plot, burn, flip, burn, arrive, scan                                                                                             |
-| **Banking**               | Uploading survey data at a station, converting it from provisional to real. Unbanked data is lost on death.                                                                                  |
-| **Catalog revision**      | A published update to the astronomical dataset, delivered in-fiction as a Survey revision. [galaxy](galaxy.md#catalog-revisions)                                                             |
-| **Canopy, the**           | The cockpit view. An image composited from hull sensors with gain, integration and a selectable response — not a window. The fiction that grants artistic license without falsifying data.   |
-| **Composite**             | The Canopy mode that integrates and tone-maps. The default, and the one the game is art-directed in.                                                                                         |
-| **Commission**            | An optional, generated directed goal issued by a research institution                                                                                                                        |
-| **Direct**                | The Canopy mode with no interpretation. Blown highlights, crushed shadows, no license.                                                                                                       |
-| **Flip, the**             | The mid-burn 180° rotation. ~4 s of freefall. The game's signature moment.                                                                                                                   |
-| **Detail scan**           | [Tier 2](exploration.md#tier-2--detail-scan): the scan that converts a projection into a surveyed body                                                                                       |
-| **Discovery credit**      | Permanent attribution of a body to the first player to survey and bank it                                                                                                                    |
-| **Discovery scan**        | [Tier 1](exploration.md#tier-1--discovery-scan): the system-wide reveal on arrival                                                                                                           |
-| **Frontier, the**         | The [meta loop](loops.md#meta-loop--the-frontier-weeks-to-months); also, informally, the edge of surveyed space                                                                              |
-| **Ground truth**          | [Tier 4](exploration.md#tier-4--ground-truth): sampling on foot. The highest-value data in the game.                                                                                         |
-| **Horizon of knowledge**  | The shell in the galaxy map beyond which catalog completeness collapses and everything is projection                                                                                         |
-| **Issue ordinal**         | A body's address index, assigned in the order bodies were _issued_ rather than by orbit. [galaxy](galaxy.md#the-four-rules)                                                                  |
-| **Inertial compensation** | The Reference Drive holding the crew near their original frame, so felt g is a fraction of the ship's proper acceleration. Why burns are minutes rather than days.                           |
-| **Jump**                  | Discrete re-anchoring between star systems                                                                                                                                                   |
-| **Manoeuvre**             | The low-power band: ordinary Newtonian 6-DoF flight. Compensation is weak here, so it is where g is felt.                                                                                    |
-| **Observed**              | A body backed by a published catalog. Drawn solid.                                                                                                                                           |
-| **Pips**                  | The six units of reactor allocation across DRIVE, SYS and PAY                                                                                                                                |
-| **Projected**             | A generated body, presented in-fiction as the ship's prediction. Drawn dashed.                                                                                                               |
-| **Provenance**            | Whether a body is observed, projected or surveyed. Visible everywhere the body appears.                                                                                                      |
-| **Transit**               | The high-power band: superluminal coordinate velocity, comfortable felt g, used to cross a system                                                                                            |
-| **Ratchet**               | One of the three progression axes: capability, knowledge, standing                                                                                                                           |
-| **Reference Drive**       | The ship's drive. Holds the ship near a chosen inertial frame while re-anchoring that frame. Provides manoeuvre thrust, transit acceleration, inertial compensation and the jump — all four. |
-| **Retired**               | A projected body superseded by a confirmed one. Tombstoned, never deleted; its address stays valid forever.                                                                                  |
-| **Silent running**        | Radiators off. Near-invisible, and heat has nowhere to go.                                                                                                                                   |
-| **Survey, the**           | The in-fiction institution that maintains the catalog and issues revisions                                                                                                                   |
-| **Surveyed**              | A body the player has personally detail-scanned                                                                                                                                              |
-| **Relay beacon**          | A one-shot transmitter that banks carried data remotely at full value. Manufactured from banked data and consumed on use.                                                                    |
-| **Surveyor**              | The player's role. The hull the MVP is balanced around is the _Cannon_-class.                                                                                                                |
-| **Thermal wear**          | Slow module degradation from sustained heat. Recovers only partially, and only at refit. A ship's maintenance history.                                                                       |
-| **Tombstone**             | The record left by a retired body                                                                                                                                                            |
+| Term                      | Meaning                                                                                                                                                                                     |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Almanac**               | The player's permanent, local record of every body personally scanned. [exploration](exploration.md#the-almanac)                                                                            |
+| **Ballistic transfer**    | An impulse, a long coast on a conic, and a capture burn. Nearly free in fuel, measured in weeks of simulated time. ⬜                                                                       |
+| **Brachistochrone**       | The burn profile: accelerate half the distance, flip, decelerate the other half. The fastest transfer under a thrust limit.                                                                 |
+| **Burn, the**             | The [micro loop](loops.md#micro-loop--the-burn-27-minutes): plot, burn, flip, burn, arrive, scan                                                                                            |
+| **Banking**               | Uploading survey data at a station, converting it from provisional to real. Unbanked data is lost on death.                                                                                 |
+| **Catalog revision**      | A published update to the astronomical dataset, delivered in-fiction as a Survey revision. [galaxy](galaxy.md#catalog-revisions)                                                            |
+| **Canopy, the**           | The cockpit view. An image composited from hull sensors with gain, integration and a selectable response — not a window. The fiction that grants artistic license without falsifying data.  |
+| **Composite**             | The Canopy mode that integrates and tone-maps. The default, and the one the game is art-directed in.                                                                                        |
+| **Commission**            | An optional, generated directed goal issued by a research institution                                                                                                                       |
+| **Direct**                | The Canopy mode with no interpretation. Blown highlights, crushed shadows, no license.                                                                                                      |
+| **Flip, the**             | The mid-burn 180° rotation. ~4 s of freefall. The game's signature moment.                                                                                                                  |
+| **Detail scan**           | [Tier 2](exploration.md#tier-2--detail-scan): the scan that converts a projection into a surveyed body                                                                                      |
+| **Discovery credit**      | Permanent attribution of a body to the first player to survey and bank it                                                                                                                   |
+| **Discovery scan**        | [Tier 1](exploration.md#tier-1--discovery-scan): the system-wide reveal on arrival                                                                                                          |
+| **Frontier, the**         | The [meta loop](loops.md#meta-loop--the-frontier-weeks-to-months); also, informally, the edge of surveyed space                                                                             |
+| **Ground truth**          | [Tier 4](exploration.md#tier-4--ground-truth): sampling on foot. The highest-value data in the game.                                                                                        |
+| **Horizon of knowledge**  | The shell in the galaxy map beyond which catalog completeness collapses and everything is projection                                                                                        |
+| **Issue ordinal**         | A body's address index, assigned in the order bodies were _issued_ rather than by orbit. [galaxy](galaxy.md#the-four-rules)                                                                 |
+| **Inertial compensation** | The Reference Drive holding the crew near their original frame, so felt g is a fraction of the ship's proper acceleration. Why burns are minutes rather than days.                          |
+| **Jump**                  | Discrete re-anchoring between star systems                                                                                                                                                  |
+| **Maneuver**              | The low-power band: ordinary Newtonian 6-DoF flight. Compensation is weak here, so it is where g is felt.                                                                                   |
+| **Observed**              | A body backed by a published catalog. Drawn solid.                                                                                                                                          |
+| **Pips**                  | The six units of reactor allocation across DRIVE, SYS and PAY                                                                                                                               |
+| **Projected**             | A generated body, presented in-fiction as the ship's prediction. Drawn dashed.                                                                                                              |
+| **Provenance**            | Whether a body is observed, projected or surveyed. Visible everywhere the body appears.                                                                                                     |
+| **Transit**               | The high-power band: superluminal coordinate velocity, comfortable felt g, used to cross a system                                                                                           |
+| **Ratchet**               | One of the three progression axes: capability, knowledge, standing                                                                                                                          |
+| **Reference Drive**       | The ship's drive. Holds the ship near a chosen inertial frame while re-anchoring that frame. Provides maneuver thrust, transit acceleration, inertial compensation and the jump — all four. |
+| **Retired**               | A projected body superseded by a confirmed one. Tombstoned, never deleted; its address stays valid forever.                                                                                 |
+| **Silent running**        | Radiators off. Near-invisible, and heat has nowhere to go.                                                                                                                                  |
+| **Survey, the**           | The in-fiction institution that maintains the catalog and issues revisions                                                                                                                  |
+| **Surveyed**              | A body the player has personally detail-scanned                                                                                                                                             |
+| **Relay beacon**          | A one-shot transmitter that banks carried data remotely at full value. Manufactured from banked data and consumed on use.                                                                   |
+| **Surveyor**              | The player's role. The hull the MVP is balanced around is the _Cannon_-class.                                                                                                               |
+| **Thermal wear**          | Slow module degradation from sustained heat. Recovers only partially, and only at refit. A ship's maintenance history.                                                                      |
+| **Tombstone**             | The record left by a retired body                                                                                                                                                           |
 
 ---
 

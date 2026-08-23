@@ -138,7 +138,7 @@ describe('worker pool', () => {
   })
 
   it('measures queue latency separately from execution time', async () => {
-    // The two fail differently — slow tasks want optimising, a deep queue wants
+    // The two fail differently — slow tasks want optimizing, a deep queue wants
     // more workers — so the pool has to be able to tell them apart.
     const clock = fakeClock()
     const registry = new TaskRegistry()
@@ -219,7 +219,7 @@ describe('terrain task', () => {
   })
 
   it('surveys a system through the same generator the world uses', async () => {
-    // The stub travels, not the id. The worker has no star catalogue and cannot
+    // The stub travels, not the id. The worker has no star catalog and cannot
     // resolve one — see the header of `tasks.ts` — and the caller has already
     // resolved it, so passing the id would be asking for the work twice.
     const sol = TEST_CATALOG.get('SOL' as never)
@@ -234,8 +234,8 @@ describe('terrain task', () => {
     expect(survey.bodies[0]?.address).toMatch(/^g:milky-way\/s:SOL\/b:/)
   })
 
-  it('generates the same cell with and without the catalogue context', async () => {
-    // The context is what stops the worker inventing stars the catalogue has
+  it('generates the same cell with and without the catalog context', async () => {
+    // The context is what stops the worker inventing stars the catalog has
     // already accounted for. A wrong value has to change the answer, or passing
     // it is decorative.
     const cell = { x: 0, y: 0, z: 0 }

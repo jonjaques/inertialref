@@ -11,7 +11,7 @@ import { dirname, join } from 'node:path'
  *   **Pin the URL and check what came back.** HYG's files are git-lfs pointers.
  *   Codeberg's `raw/` path serves the *pointer* — a valid, 133-byte text file
  *   that a downloader reports as a success and a CSV parser reports as a
- *   catalogue with zero usable rows. Only the `media/` path serves the content.
+ *   catalog with zero usable rows. Only the `media/` path serves the content.
  *   A pipeline that does not assert on what it received ingests the pointer and
  *   builds an empty galaxy.
  *
@@ -19,7 +19,7 @@ import { dirname, join } from 'node:path'
  *   and HYG updates when it updates, so a hard-coded hash would break the build
  *   every time astronomy published something — which is the opposite of what
  *   `docs/design/galaxy.md` wants. The digest of what was actually fetched is
- *   written into the manifest beside the artefact, so a rebuild that changes the
+ *   written into the manifest beside the artifact, so a rebuild that changes the
  *   output can always be traced to the input that changed.
  */
 
@@ -93,7 +93,7 @@ export const SOURCES: readonly Source[] = [
       'https://exoplanetarchive.ipac.caltech.edu/TAP/sync?format=csv&query=' +
       encodeURIComponent(EXOPLANET_QUERY),
     file: 'nea_pscomppars.csv',
-    licence: 'No licence stated; acknowledgement requested',
+    licence: 'No license stated; acknowledgment requested',
     minimumBytes: 100_000,
   },
 ]
@@ -109,8 +109,8 @@ export interface Fetched {
 /**
  * The raw downloads live outside the repository.
  *
- * 34 MB of HYG is not something to commit to get a 200 KB artefact out of, and
- * the artefact is what the game needs. `.data/` is gitignored; the manifest
+ * 34 MB of HYG is not something to commit to get a 200 KB artifact out of, and
+ * the artifact is what the game needs. `.data/` is gitignored; the manifest
  * beside the built asset records exactly what produced it.
  */
 export const rawDirectory = (root: string): string => join(root, '.data', 'raw')

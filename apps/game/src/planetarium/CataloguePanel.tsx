@@ -23,16 +23,16 @@ const SURVEY_LIGHT_YEARS = 16
 export function CataloguePanel({ engine, target, focus }: PlanetariumContext) {
   const [query, setQuery] = useState('')
   /*
-   * Centred on the camera, not on the ship.
+   * Centered on the camera, not on the ship.
    *
    * `look` moves a camera and nothing else, which is the planetarium's whole
    * verb — so "you" in this mode is the eye, and it can be four light years
-   * from the hull. Centred on the player, this list opened at Alpha Centauri
+   * from the hull. Centered on the player, this list opened at Alpha Centauri
    * still ordered by distance from Earth: Sol's moons at the top, and the star
    * filling the frame reported as 4.4 ly away, twenty rows down. Sorted from
    * the eye, the thing you are looking at is the first thing in the list and
-   * its neighbours are the next ones — which is what makes a catalogue a way of
-   * travelling rather than a table.
+   * its neighbors are the next ones — which is what makes a catalog a way of
+   * traveling rather than a table.
    */
   const targets = usePolled(
     () =>
@@ -67,7 +67,7 @@ export function CataloguePanel({ engine, target, focus }: PlanetariumContext) {
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Name or address"
-          aria-label="Search the catalogue"
+          aria-label="Search the catalog"
           // `md:type-readout` beside the bare step: the Input base carries
           // `md:text-sm`, which only merges against an equally modified class.
           // `lib/utils.ts` has the whole story.

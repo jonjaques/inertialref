@@ -1,7 +1,7 @@
 /*
  * Names.
  *
- * One star carries as many names as there are catalogues that recorded it, and
+ * One star carries as many names as there are catalogs that recorded it, and
  * none of them is *the* name:
  *
  *   Rigil Kentaurus · Alpha Centauri A · α¹ Cen · HIP 71683 · HD 128620 ·
@@ -11,19 +11,19 @@
  * exactly one of them should appear on the HUD. That makes three separate jobs,
  * and conflating them is how a star ends up displayed as "HIP71683":
  *
- *   1. **Canonicalise** — pick one stable `SystemId` per system, so the address
- *      of a place does not change when the catalogue is rebuilt.
+ *   1. **Canonicalize** — pick one stable `SystemId` per system, so the address
+ *      of a place does not change when the catalog is rebuilt.
  *   2. **Choose a common name** — the one that goes on screen. Almost always the
- *      most familiar, which is almost never the catalogue key.
+ *      most familiar, which is almost never the catalog key.
  *   3. **Keep the alternates** — so search finds the star by any of them, and so
  *      the system panel can cite what it is claiming and from where.
  *
  * The `SystemId` is *not* the display name and the display name is *not*
- * stable — a catalogue revision may give a star an IAU proper name it did not
+ * stable — a catalog revision may give a star an IAU proper name it did not
  * have, and that must change what is on screen without changing any address.
  */
 
-/** Which catalogue or convention a name comes from. */
+/** Which catalog or convention a name comes from. */
 export type DesignationKind =
   | 'proper'
   | 'bayer'
@@ -82,7 +82,7 @@ const GREEK: Readonly<Record<string, readonly [string, string]>> = {
  * and `61 Cyg` into `61 Cygni`. Those are the names players actually know —
  * within 150 ly only 221 stars of 7,529 carry an IAU proper name, while 649
  * carry a Bayer or Flamsteed designation, so this table roughly quadruples the
- * number of stars with a name a human recognises.
+ * number of stars with a name a human recognizes.
  */
 const CONSTELLATIONS: Readonly<Record<string, string>> = {
   And: 'Andromedae',
@@ -236,7 +236,7 @@ export function flamsteedName(
  * `Gl 551` and `GJ 3063` and `NN 3005` → `Gliese 551`, `Gliese 3063`,
  * `NN 3005`.
  *
- * `Gl` and `GJ` are the same catalogue under two prefixes and both expand;
+ * `Gl` and `GJ` are the same catalog under two prefixes and both expand;
  * `NN` and `Wo` are the un-numbered supplements and keep their prefix, because
  * "Gliese NN 3005" is not a thing anybody writes.
  */

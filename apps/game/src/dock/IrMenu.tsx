@@ -17,11 +17,11 @@ import { isOpen, type Workspace } from './useWorkspace.ts'
 /*
  * The IR menu: the one bar that says where you are and what is on screen.
  *
- * Bottom centre, and that is a move rather than an inheritance. This used to be
+ * Bottom center, and that is a move rather than an inheritance. This used to be
  * a bar in the top-left corner carrying three controls, plus a launcher rail
  * down the left edge carrying the panels — two pieces of chrome, in two
  * corners, doing one job between them, and neither of them was where a hand
- * goes. Bottom centre is the shortest travel from anywhere in the frame, it is
+ * goes. Bottom center is the shortest travel from anywhere in the frame, it is
  * the band a transport already occupies in every tool that has one, and it is
  * the only edge the panes do not own.
  *
@@ -30,7 +30,7 @@ import { isOpen, type Workspace } from './useWorkspace.ts'
  * panels), *what else is there* (the settings). Everything between the first
  * separator and the last is a toggle, and every toggle is the same button.
  *
- * The centre of the frame stays empty, which is the rule this bar could most
+ * The center of the frame stays empty, which is the rule this bar could most
  * easily have broken. It is anchored to the bottom edge at the system's own
  * `0.75rem` inset — an edge, like the flight strip and the notice, not the
  * middle distance.

@@ -54,7 +54,7 @@ combat skill that matters most.
 
 | Obstacle                                                                   | Counter                                                                          |
 | -------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| **Transit interlock** — within 5 km of a hostile, transit power is refused | Break to 5 km on manoeuvre thrust, which costs g                                 |
+| **Transit interlock** — within 5 km of a hostile, transit power is refused | Break to 5 km on maneuver thrust, which costs g                                  |
 | **Charge time** — 12 s of holding still-ish and aligned                    | Pips to DRIVE; take the hits; hold alignment under fire                          |
 | **Signature** — heat makes you trackable                                   | Silent running: radiators off, take the heat, vanish                             |
 | **Interdiction** ⬜                                                        | A contested minigame; the escaping ship holds an escape vector against a pursuer |
@@ -71,20 +71,20 @@ The situation [the travel model](flight.md#the-burn) makes possible, and the one
 most worth building well: **an engagement while both ships are under
 acceleration.**
 
-| What changes                      | Why                                                                                                                                      |
-| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| There is a floor, and it is aft   | Manoeuvring is fighting your own thrust vector as well as theirs                                                                         |
-| You cannot simply stop            | Cutting the drive does not slow you; it only stops you gaining                                                                           |
-| Felt g stacks                     | [Combat manoeuvre and transit acceleration compound](flight.md#drive-ratings). A hard turn during a hard burn is 5–7 g through the seat. |
-| Heat is already high              | You arrive at the fight with the thermal budget half spent                                                                               |
-| The flip is a commitment          | Four seconds of freefall, no thrust, and a rotating ship                                                                                 |
-| Anyone not in a seat is in danger | See [onfoot](onfoot.md#during-a-burn)                                                                                                    |
+| What changes                      | Why                                                                                                                                     |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| There is a floor, and it is aft   | Maneuvering is fighting your own thrust vector as well as theirs                                                                        |
+| You cannot simply stop            | Cutting the drive does not slow you; it only stops you gaining                                                                          |
+| Felt g stacks                     | [Combat maneuver and transit acceleration compound](flight.md#drive-ratings). A hard turn during a hard burn is 5–7 g through the seat. |
+| Heat is already high              | You arrive at the fight with the thermal budget half spent                                                                              |
+| The flip is a commitment          | Four seconds of freefall, no thrust, and a rotating ship                                                                                |
+| Anyone not in a seat is in danger | See [onfoot](onfoot.md#during-a-burn)                                                                                                   |
 
 The best encounters in the design are the ones where a pirate matches your burn
 and you have to fight, run and decelerate at the same time, with one drive and
 one thermal budget between the three.
 
-**Resolved:** M6 opponents engage at rest or on manoeuvre thrust only. Matched-burn
+**Resolved:** M6 opponents engage at rest or on maneuver thrust only. Matched-burn
 engagements need AI that can plot, hold and adjust a transit solution under fire,
 and that is the likeliest thing in M6 to overrun. The player can still be
 intercepted mid-burn — they simply have to decide whether to abort, which is
@@ -104,7 +104,7 @@ from a catalog.
 | **Utility** — EMP, disruptor      | No hull damage; disables modules          | —          | —        | Medium   | Hardening, distance         |
 
 **Travel time is the fidelity that matters.** Kinetic rounds cross 3 km in about
-1.2 seconds, which means leading a manoeuvring target at range is a real skill and
+1.2 seconds, which means leading a maneuvering target at range is a real skill and
 a fast, erratic ship is genuinely hard to hit — with no accuracy stat anywhere in
 the system. The physics is already there; the weapon just has to be an entity.
 
@@ -144,7 +144,7 @@ weapon types":
 | Target the…     | To achieve                                                  |
 | --------------- | ----------------------------------------------------------- |
 | Reference Drive | They cannot leave. The pirate's opening move, and yours.    |
-| Thrusters       | They cannot manoeuvre or evade                              |
+| Thrusters       | They cannot maneuver or evade                               |
 | Sensors         | They cannot lock, target subsystems, or see you             |
 | Fuel Tank       | A leak. A countdown they have to solve instead of fighting. |
 | Reactor         | Priority failover starts shedding their modules for you     |
@@ -217,6 +217,6 @@ interesting antagonist. Hostile humanoids, if they arrive at all, arrive with M6
 ## Related
 
 - [ships](ships.md#power) — pips and heat, which are most of this page's depth
-- [flight](flight.md#manoeuvre-and-landing) — flight assist off, which is where combat flying lives
+- [flight](flight.md#maneuver-and-landing) — flight assist off, which is where combat flying lives
 - [onfoot](onfoot.md) — the suit, which is the on-foot health model
 - [modes](modes.md) — PvP consent and where combat can happen at all

@@ -44,7 +44,7 @@ import { SOLAR_PLANETS, type SolarBody } from './bodies.ts'
  * periods, axial tilts, orbits, albedos, ring geometry, atmospheric density
  * profiles. Anything nobody publishes is drawn from the body's own seed exactly as a
  * projected world's would be — where a moon is along its orbit right now, and
- * what its terrain looks like at a hundred metres.
+ * what its terrain looks like at a hundred meters.
  */
 
 export const SOL: SystemId = systemId('SOL')
@@ -52,7 +52,7 @@ export const SOL: SystemId = systemId('SOL')
 const mu = (mass: number): Mu => GRAVITATIONAL_CONSTANT * mass
 
 /**
- * The Sun, from the IAU's defining constants rather than from its own catalogue
+ * The Sun, from the IAU's defining constants rather than from its own catalog
  * row.
  *
  * The photometric pipeline reads Sol's HYG entry back as 0.973 L☉ and 0.987 R☉,
@@ -90,7 +90,7 @@ const appearanceOf = (body: SolarBody): BodyAppearance => ({
   clouds: body.clouds,
   rings: body.rings,
   haze: body.haze,
-  // Tints an albedo map that is greyscale — three of the four Galilean moons
+  // Tints an albedo map that is grayscale — three of the four Galilean moons
   // were mapped in monochrome — and stands in entirely before the texture
   // arrives, so a body reads as itself on the first frame rather than as white.
   colour: body.tint,
@@ -111,7 +111,7 @@ const atmosphereOf = (body: SolarBody): Atmosphere | null =>
  * `relief` is measured — Olympus Mons really is 29 km above Hellas — so
  * `maxElevation` is a fact here rather than a draw. The *shape* at scales below
  * the map's resolution is still generated, because a global map is a few
- * kilometres per pixel and a ship on final approach is looking at metres.
+ * kilometers per pixel and a ship on final approach is looking at meters.
  */
 function surfaceOf(body: SolarBody, seed: Seed, rng: Rng): SurfaceParameters {
   return {
@@ -193,7 +193,7 @@ function buildBody(
       // Not `body.temperature`: that is the mean *surface* (or 1-bar)
       // temperature, and the field's contract is the published equilibrium
       // temperature — for Venus those are 737 K and ~227 K, and a panel
-      // labelling the first as the second would be wrong about the most
+      // labeling the first as the second would be wrong about the most
       // checkable planet in the game. Null until the data table carries the
       // actual equilibrium values.
       equilibriumTemperature: null,
@@ -248,7 +248,7 @@ export function solarSystem(
   }
 }
 
-/** Total bodies in the modelled Solar System, planets and moons. */
+/** Total bodies in the modeled Solar System, planets and moons. */
 export const solarBodyCount = (): number =>
   SOLAR_PLANETS.reduce((n, planet) => n + 1 + planet.moons.length, 0)
 

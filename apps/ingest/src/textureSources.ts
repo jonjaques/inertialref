@@ -1,11 +1,11 @@
 /*
  * Where every planetary texture comes from.
  *
- * Same discipline as the star catalogue: pinned URLs, recorded licences, and a
+ * Same discipline as the star catalog: pinned URLs, recorded licenses, and a
  * manifest beside the output saying exactly what produced each file. A texture
  * with no provenance is a texture nobody can relicense, replace or defend.
  *
- * ## Two licences, and why not one
+ * ## Two licenses, and why not one
  *
  * **NASA and USGS imagery is public domain** and is used wherever a global map
  * exists in a form this pipeline can read. That is the whole of Earth, the Moon
@@ -24,7 +24,7 @@
  * ## What is missing
  *
  * Titan, Enceladus, Iapetus, Triton, Phobos, Deimos and the Uranian moons have
- * no vendored map and fall back to their measured albedo and colour. USGS has
+ * no vendored map and fall back to their measured albedo and color. USGS has
  * mosaics for several; they are large, and the visual return per gigabyte is
  * much lower than for the four Galileans, which are the moons anyone flies to.
  */
@@ -47,24 +47,24 @@ export interface TextureSource {
    * `elevation` turns a height field into a tangent-space normal map, and packs
    * an ocean mask into its alpha where the body has one.
    * `luminance` moves brightness into alpha, for a layer that has to be
-   * transparent where it is dark — a cloud map is a coverage mask, not a colour.
+   * transparent where it is dark — a cloud map is a coverage mask, not a color.
    */
   readonly transform: 'image' | 'elevation' | 'luminance'
   /** Output width. Height is always half, because everything here is equirectangular. */
   readonly width: number
   /**
-   * Elevation only: the peak-to-trough relief the height field spans, in metres.
+   * Elevation only: the peak-to-trough relief the height field spans, in meters.
    *
    * The pipeline finds the field's own minimum and maximum and stretches this
    * across them, rather than trusting a documented unit. That is not laziness,
-   * it is the fix for a real bug: LOLA ships 16-bit half-metres, sharp quietly
+   * it is the fix for a real bug: LOLA ships 16-bit half-meters, sharp quietly
    * downcast it to 8 bits, and the resulting normal map was *perfectly flat*
    * because every gradient was 256 times too small — a failure that produces a
    * valid file and a featureless Moon. A self-calibrating scale cannot have a
    * unit bug, and the relief is a number `solar/bodies.ts` already knows.
    */
   readonly relief?: number
-  /** Elevation only: the body's radius, for metres per pixel on the ground. */
+  /** Elevation only: the body's radius, for meters per pixel on the ground. */
   readonly radius?: number
   /**
    * Elevation only: the fraction of the range at or below which this is ocean.
@@ -155,7 +155,7 @@ export const TEXTURE_SOURCES: readonly TextureSource[] = [
     oceanBelow: 0.008,
   },
 
-  /* --- The Moon. Real LRO colour and real LOLA topography. */
+  /* --- The Moon. Real LRO color and real LOLA topography. */
   {
     body: 'luna',
     map: 'albedo',
@@ -169,7 +169,7 @@ export const TEXTURE_SOURCES: readonly TextureSource[] = [
   {
     body: 'luna',
     map: 'normal',
-    // LOLA global elevation, 16-bit unsigned, half-metres above a 1737.4 km
+    // LOLA global elevation, 16-bit unsigned, half-meters above a 1737.4 km
     // datum. This is a *measurement* of the Moon's shape, not a bump map — the
     // terminator relief it produces is where craters actually are.
     url: 'https://svs.gsfc.nasa.gov/vis/a000000/a004700/a004720/ldem_16_uint.tif',

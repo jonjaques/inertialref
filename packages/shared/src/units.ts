@@ -107,7 +107,7 @@ export function formatDistance(m: Meters, digits = 3): string {
   const a = Math.abs(m)
   if (!Number.isFinite(m)) return `${m}`
   // Light-years rather than parsecs below a kiloparsec: astronomers prefer pc,
-  // but the HUD is read by pilots, and every catalogue name the player sees
+  // but the HUD is read by pilots, and every catalog name the player sees
   // ("4.24 ly to Proxima") is quoted in light-years.
   if (a >= 1e3 * PARSEC) return `${(m / (1e3 * PARSEC)).toFixed(digits)} kpc`
   if (a >= 0.05 * LIGHT_YEAR)

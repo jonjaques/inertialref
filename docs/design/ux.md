@@ -41,7 +41,7 @@ clicking.
 
 A **mode** decides what owns the camera. A **dialog** opens over whichever mode
 is running and leaves it running — which is the same promise this page already
-made about settings, generalised: _the simulation keeps running_.
+made about settings, generalized: _the simulation keeps running_.
 
 **The scene is never a loading screen.** The menu is drawn over the real engine,
 framed on Earth and slowly drifting. That is the one claim about this project a

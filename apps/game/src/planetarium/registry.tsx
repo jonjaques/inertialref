@@ -19,7 +19,7 @@ import { ViewPanel } from './ViewPanel.tsx'
  * The split between the two panes is by *subject*, not by size. Left is the
  * sky: what is out there, and when. Right is the thing you are pointed at and
  * how it is being shown to you. That is the arrangement a session actually
- * uses — pick something from the catalogue on the left, read it on the right —
+ * uses — pick something from the catalog on the left, read it on the right —
  * and it means the two panes are never both about the same question.
  */
 export function planetariumPanels(
@@ -28,7 +28,7 @@ export function planetariumPanels(
   return [
     {
       id: 'catalogue',
-      title: 'Catalogue',
+      title: 'Catalog',
       icon: StellarSpan,
       zone: 'left',
       hint: 'everything within reach, nearest first',

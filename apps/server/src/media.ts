@@ -73,7 +73,7 @@ export function mediaFor(name: string): MediaObject | null {
  * convenience.** The published `R2Range` is a union of three exclusive shapes,
  * so the obvious implementation narrows with `'suffix' in range`. The object
  * workerd actually hands over has *all three keys present*, two of them set to
- * `undefined` — so `in` is true for a range that has no suffix, and the maths
+ * `undefined` — so `in` is true for a range that has no suffix, and the math
  * runs `size - undefined`. Every number came out `NaN`, `Content-Length` was
  * silently replaced by the runtime from the real body length, and the only
  * visible symptom was `Content-Range: bytes NaN-NaN/2747091` on a response that

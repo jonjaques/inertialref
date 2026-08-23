@@ -79,7 +79,7 @@ flowchart LR
 
 A body's properties therefore depend **only on its own address**. Not on
 traversal order, not on worker count, not on how much of the universe happens to
-be loaded, not on what a neighbouring client has visited.
+be loaded, not on what a neighboring client has visited.
 
 The tests assert exactly that, rather than asserting a value:
 

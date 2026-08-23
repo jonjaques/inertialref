@@ -7,7 +7,7 @@ import type { EntityId, UniverseAddress } from '@inertialref/universe'
 /*
  * Entities.
  *
- * An entity is identity + kinematics + a small amount of behaviour, and
+ * An entity is identity + kinematics + a small amount of behavior, and
  * explicitly *not* a rendering object: it exists whether or not anything is
  * drawing it, and its representation (point, sphere, mesh, walkable terrain) is
  * chosen elsewhere from distance. Canonical state lives here and only here —
@@ -28,7 +28,7 @@ export interface Entity {
   /** Position, orientation and motion, expressed in some reference frame. */
   readonly state: FrameState
   readonly mass: Kilograms
-  /** Null for anything that cannot manoeuvre. */
+  /** Null for anything that cannot maneuver. */
   readonly thrusters: ThrusterProfile | null
   readonly control: ControlInput
   /** Rotational damping — "flight assist" — on by default for playability. */
@@ -75,7 +75,7 @@ export function createEntity(init: EntityInit): Entity {
 /** The debug spacecraft the vertical slice flies. */
 export const DEBUG_SHIP_THRUSTERS: ThrusterProfile = {
   // 3 g of main drive, enough to cross a system in minutes under time warp
-  // without being so brisk that manoeuvring near a surface is unmanageable.
+  // without being so brisk that maneuvering near a surface is unmanageable.
   mainThrust: 30,
   rcsThrust: 8,
   torque: 1.2,

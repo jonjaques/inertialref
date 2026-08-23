@@ -35,7 +35,7 @@ flowchart TB
 ```
 
 The inline worker is not a mock. It runs the same host loop against the same
-registry, serialising through the same envelopes — so a bug that only appears
+registry, serializing through the same envelopes — so a bug that only appears
 when something is not structured-cloneable still shows up in a Node test.
 
 It is **not** the browser's fallback, though it used to say so. A browser
@@ -136,7 +136,7 @@ tests are exact rather than flaky.
 
 ## Cancellation
 
-A job can be cancelled whether or not it has started:
+A job can be canceled whether or not it has started:
 
 - **Queued** — removed from the queue, promise rejects immediately.
 - **Running** — a `cancel` envelope is posted; the task polls

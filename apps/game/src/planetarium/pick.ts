@@ -22,7 +22,7 @@ export interface PickCandidate {
 }
 
 /**
- * How far from a candidate's centre a click still counts, in pixels.
+ * How far from a candidate's center a click still counts, in pixels.
  *
  * Generous, and it has to be: most of what is worth clicking in a planetarium
  * is a body a few pixels across, and a hit test against its true radius would
@@ -48,10 +48,10 @@ export const PICK_SLOP = 24
  * all.
  *
  * Say what it costs, because the obvious reading of "largest first" is the
- * wrong way round: a moon *inside its planet's disc* is not reachable by
+ * wrong way round: a moon *inside its planet's disk* is not reachable by
  * clicking it — the pointer is inside both and the planet is larger. A moon is
- * picked by being nearer, which is the case when it sits outside the disc
- * (inside neither, so proximity decides) or when its own disc is the only one
+ * picked by being nearer, which is the case when it sits outside the disk
+ * (inside neither, so proximity decides) or when its own disk is the only one
  * the pointer is in. For one drawn over its planet, the object panel's list of
  * satellites is the way to reach it. Whether that is the right trade is a
  * design question — `docs/design/planetarium.md` — and not something to change

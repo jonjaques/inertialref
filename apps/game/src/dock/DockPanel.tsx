@@ -63,7 +63,7 @@ export function DockPanel({
        * the frame.
        *
        * Two failures, one number. Uncapped, a panel taller than the pane — the
-       * catalogue is seventy-five rows — runs past the bottom and is clipped
+       * catalog is seventy-five rows — runs past the bottom and is clipped
        * mid-row by the pane's own scroll, so the last thing on screen is half a
        * line of type with no rounded corner under it. Capped at the pane's
        * *full* height instead, it fits exactly and pushes every panel below it
