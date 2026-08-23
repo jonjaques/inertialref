@@ -1,6 +1,13 @@
-import { useFrame } from '@react-three/fiber'
-import { useMemo, useRef } from 'react'
-import { BufferAttribute, BufferGeometry, type Group, Mesh } from 'three/webgpu'
+import { useFrame, useThree } from '@react-three/fiber'
+import { useEffect, useMemo, useRef } from 'react'
+import {
+  BufferAttribute,
+  BufferGeometry,
+  type Group,
+  Mesh,
+  type Scene,
+  type WebGPURenderer,
+} from 'three/webgpu'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { createTerrainMaterial } from '../render/materials.ts'
 
@@ -18,6 +25,51 @@ export function TerrainPatches({ engine }: { engine: GameEngine }) {
   const group = useRef<Group>(null)
   const meshes = useMemo(() => new Map<string, Mesh>(), [])
   const material = useMemo(() => createTerrainMaterial(), [])
+  const gl = useThree((state) => state.gl)
+  const camera = useThree((state) => state.camera)
+  const scene = useThree((state) => state.scene)
+
+  /*
+   * Compile this exact material at mount, on a throwaway one-triangle patch,
+   * rather than in the frame the first real patch lands — the same
+   * instance-not-archetype reason `WarpFx` gives: the backend builds shader
+   * source per material instance, so a warm-up of a *different* terrain
+   * material leaves this one's first draw paying the build, synchronously on
+   * the WebGL fallback, in the middle of a descent. The dummy mesh is never
+   * parented; `compileAsync` takes the target scene by argument, and its
+   * traversal is synchronous, so nothing here can reach a drawn frame.
+   */
+  useEffect(() => {
+    const geometry = new BufferGeometry()
+    geometry.setAttribute(
+      'position',
+      new BufferAttribute(new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]), 3),
+    )
+    geometry.setAttribute(
+      'normal',
+      new BufferAttribute(new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1]), 3),
+    )
+    geometry.setIndex([0, 1, 2])
+    const renderer = gl as unknown as WebGPURenderer
+    /*
+     * Both pipeline variants, because the frame loop below flips
+     * `transparent` with the fade — and the *transparent* one is what the
+     * first real patch draws with, mid-descent, since terrain always fades
+     * in. The flag is read during the compile call's synchronous walk, so
+     * flipping it between the two calls compiles one variant each; two
+     * meshes, because a repeated (object, material) pair would hand the
+     * second call the first call's cached render object.
+     */
+    material.transparent = true
+    const fading = renderer
+      .compileAsync(new Mesh(geometry, material), camera, scene as Scene)
+      .catch(() => {})
+    material.transparent = false
+    const opaque = renderer
+      .compileAsync(new Mesh(geometry, material), camera, scene as Scene)
+      .catch(() => {})
+    void Promise.all([fading, opaque]).finally(() => geometry.dispose())
+  }, [gl, camera, scene, material])
 
   useFrame(() => {
     const container = group.current

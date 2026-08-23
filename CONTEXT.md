@@ -2599,6 +2599,69 @@ Also removed: `public/icons.svg`, a starter-template sprite sheet of Bluesky,
 Discord and GitHub glyphs in `#aa3bff` that nothing referenced and the service
 worker had been precaching.
 
+## The first look was the expensive one, so everything loads at boot (23 Aug 2026)
+
+Measured (M-series, WebGPU, dev build, frames driven through R3F's `advance` so
+an occluded window could not suspend the measurement): steady state was never
+the problem — menu, planetarium and cinema all idled at p50 ≤ 0.8 ms of main
+thread per frame, 3.04 ms of GPU at the heaviest view (Saturn, rings, moons,
+22 draw calls / 530 k triangles), a locked 60 fps. Every stutter was a first
+encounter. The first look at a cold body was one 98–119 ms frame — ~50 ms
+atmosphere LUT bake, the rest material-graph construction, first-use pipeline
+work and texture upload — followed by 6–16 ms frames as each surface map's
+decode landed. Saturn arriving with seven moons clustered ~18 new material
+instances into a single ~495 ms frame. A cross-system jump cost 77 ms (26 ms
+of that is `loadSystem`'s synchronous generation, which remains). On the WebGL
+fallback all of the pipeline half is synchronous program linking, which is why
+Safari and Firefox stuttered hardest — confirmed by a hard hitch at `tng-intro`
+f1085, the frame the warp quads first drew.
+
+The shipped set is small enough to stop streaming: 19 maps / 14 bodies / 19 MB
+compressed, a few hundred MB decoded. So boot now pays for everything, behind a
+loading overlay, in `render/preload.ts`: every manifest texture fetched **and**
+`initTexture`d (the upload is the other half of the stutter), every atmosphere
+in the loaded systems baked (`render/preloadPlan.ts` recomputes `buildScene`'s
+sunk-sphere ratio; `preloadPlan.test.ts` holds the two formulas together by
+key equality — a one-rounding-step drift is a silent full cache miss), one
+compile per body-material archetype, and the hull's converted materials via
+the same promise `ShipModel` awaits.
+
+Three things the obvious version of that gets wrong, all hit here:
+
+- **An archetype twin does not warm an instance.** The backend builds shader
+  source per material _instance_ before it can discover the pipeline is
+  cached; with every texture, LUT and pipeline warm, Saturn's arrival still
+  cost 88 ms of instance builds (~5 ms each). The fix is building the real
+  instances ahead of need: `Bodies.tsx` now materialises every body of the
+  loaded systems one per frame — compiled at creation, hidden after — which
+  drains behind the boot overlay at startup and during the flight after a
+  jump. `WarpFx` and `TerrainPatches` compile their own mounted instances the
+  same way (terrain compiles both `transparent` variants, because the fade-in
+  flips the flag and each is its own pipeline).
+- **Three's pipeline cache is refcounted.** `Pipelines.delete` releases a
+  pipeline at zero use, so disposing a warm-up material evicts exactly what
+  was just compiled. The warm meshes are held for the session.
+- **`compileAsync` walks visible objects only, and its traversal is
+  synchronous.** Warm objects toggle visible around the call and never reach
+  a drawn frame.
+
+The overlay (`hud/BootOverlay.tsx`) continues `index.html`'s `#boot` corner
+verbatim and fades only when two facts hold: the warm-up resolved, and pixels
+provably presented. On WebGPU the second fact is the watchdog's probe
+(`onPresented`, new). On WebGL that probe is a lie — `drawImage` of a WebGL
+canvas without `preserveDrawingBuffer` may legally read back black between
+frames, and gating on it left Firefox at "first light…" forever; two visible
+rAFs are that backend's signal instead, and a watchdog that exhausts its
+ladder now releases the fade rather than hide a possibly-fine scene forever.
+
+After: first look at any shipped body is spike-free (worst main-thread frame
+2.3 ms across a warm Saturn approach, zero frames over 8 ms), and the warp
+reveal plays clean. One measurement trap worth keeping: driving frames
+back-to-back through `advance` with no vsync produces 400–800 ms "main
+thread" stalls that are really GPU queue backpressure — the instrumented
+device showed zero shader modules, zero pipelines, zero uploads in those
+frames. Pace with `queue.onSubmittedWorkDone()` before believing any number.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

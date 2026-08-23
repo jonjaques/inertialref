@@ -16,6 +16,7 @@ import {
   type HazeAuthoring,
   type ScatteringLut,
 } from '@inertialref/rendering'
+import { scatteringKey } from './preloadPlan.ts'
 
 /*
  * The scattering tables, as GPU textures, cached per atmosphere.
@@ -68,17 +69,10 @@ export function scatteringFor(
   haze: HazeAuthoring,
   topRatio: number,
 ): AtmosphereScattering {
-  const { colour, limb, thickness } = haze
-  const key = [
-    colour.r,
-    colour.g,
-    colour.b,
-    limb.r,
-    limb.g,
-    limb.b,
-    thickness,
-    topRatio.toFixed(6),
-  ].join(':')
+  const { thickness } = haze
+  // The key lives in `preloadPlan.ts` so the boot prebake and this cache
+  // cannot disagree about what "the same atmosphere" means.
+  const key = scatteringKey(haze, topRatio)
   const cached = cache.get(key)
   if (cached !== undefined) return cached
 

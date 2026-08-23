@@ -11,15 +11,21 @@ import { getLogger } from '@inertialref/shared'
 import manifest from '../../../../data/textures/manifest.json'
 
 /*
- * Planetary surface maps, fetched when a body is worth looking at.
+ * Planetary surface maps: fetched all together at boot, behind the loading
+ * overlay, and kept resident for the session.
  *
- * Twenty-odd megabytes of imagery that must not be in the initial bundle and
- * must not all be resident at once. The rule is the one the terrain streamer
- * already follows: load what the player can see, and let the browser's cache and
- * the service worker keep it. A body's maps are requested the first time it is
- * drawn as more than a few pixels, and are never released — there are
- * twenty-eight bodies in the Solar System and a texture you evict is one you
- * will re-fetch the moment the player turns around.
+ * Twenty-odd megabytes of imagery that must not be in the initial bundle. It
+ * used to stream lazily — a body's maps requested the first time it was drawn
+ * as more than a few pixels — and the measured cost of that was the stutter it
+ * traded for: the fetch was free, but the decode-and-upload landed inside a
+ * render call on the main thread, 6–16 ms per map, in exactly the frame the
+ * player turned to look at something new. The whole set decoded is a few
+ * hundred megabytes of GPU memory, which this game can afford everywhere it
+ * runs, so `preloadAllTextures` front-loads fetch *and* upload into the boot
+ * sequence instead. The lazy path below is unchanged and still real: it is the
+ * fallback for a map that failed at boot, and the retry path after a failed
+ * fetch. Nothing is ever released — a texture you evict is one you will
+ * re-upload the moment the player turns around.
  *
  * `import.meta.glob` rather than a path built at runtime, so the bundler hashes
  * every file, emits it as an asset and rewrites the URL. A hand-built
@@ -74,6 +80,14 @@ const loader = new TextureLoader()
 const loaded = new Map<string, Texture>()
 const announced = new Set<string>()
 const sets = new Map<string, BodyTextures>()
+/**
+ * The in-flight fetches, so the boot preloader can await the lot. Entries are
+ * removed as they settle; resolved either way, because "one map 404'd" must
+ * not hold the loading screen up — the error path below already handles the
+ * retry, and a rejected promise here would surface as a boot failure for a
+ * texture the game can draw without.
+ */
+const pending = new Map<string, Promise<void>>()
 
 /*
  * Colour space is not a detail here.
@@ -98,19 +112,36 @@ function load(entry: Entry, anisotropy: number): Texture | null {
   const url = byFile.get(entry.file)
   if (url === undefined) return null
 
-  const texture = loader.load(url, undefined, undefined, () => {
-    /*
-     * A failed fetch must not stay cached. The loader hands back its Texture
-     * before the image arrives, so on error the object exists, samples as
-     * black, and — being non-null — beats the material's base-colour fallback
-     * for the rest of the session. Evict it, and drop the body's assembled
-     * set a few seconds later so the per-frame ask retries without hammering
-     * a dead network once per frame.
-     */
-    loaded.delete(entry.file)
-    setTimeout(() => sets.delete(entry.body), 5_000)
-    log.warn('surface map failed to load, will retry', { file: entry.file })
-  })
+  let settle: () => void = () => {}
+  pending.set(
+    entry.file,
+    new Promise<void>((resolve) => {
+      settle = resolve
+    }),
+  )
+  const texture = loader.load(
+    url,
+    () => {
+      pending.delete(entry.file)
+      settle()
+    },
+    undefined,
+    () => {
+      /*
+       * A failed fetch must not stay cached. The loader hands back its Texture
+       * before the image arrives, so on error the object exists, samples as
+       * black, and — being non-null — beats the material's base-colour fallback
+       * for the rest of the session. Evict it, and drop the body's assembled
+       * set a few seconds later so the per-frame ask retries without hammering
+       * a dead network once per frame.
+       */
+      loaded.delete(entry.file)
+      setTimeout(() => sets.delete(entry.body), 5_000)
+      log.warn('surface map failed to load, will retry', { file: entry.file })
+      pending.delete(entry.file)
+      settle()
+    },
+  )
   texture.colorSpace = COLOUR_SPACE[entry.map] ?? NoColorSpace
   // Longitude wraps and latitude does not. Clamping longitude leaves a seam down
   // the anti-meridian; repeating latitude mirrors the arctic onto the antarctic.
@@ -175,3 +206,23 @@ export function texturesFor(
 /** True when the manifest has anything at all for this key. */
 export const hasTextures = (key: string | null): boolean =>
   key !== null && entries.some((entry) => entry.body === key)
+
+/**
+ * Start every map in the manifest and resolve when the last byte is decoded.
+ *
+ * Returns the loaded textures so the caller can hand each one to
+ * `renderer.initTexture` — the fetch is only half the stutter, and the upload
+ * half only moves off the first-sight frame if somebody does it now, behind
+ * the loading overlay. Failures resolve rather than reject (see `pending`);
+ * a map that failed simply is not in the returned list.
+ */
+export async function preloadAllTextures(
+  anisotropy: number,
+): Promise<readonly Texture[]> {
+  const keys = new Set<string>()
+  for (const entry of entries) keys.add(entry.body)
+  for (const key of keys) texturesFor(key, anisotropy)
+  // Snapshot: awaiting the live map would race the deletes its entries do.
+  await Promise.all([...pending.values()])
+  return [...loaded.values()]
+}
