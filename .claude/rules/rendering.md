@@ -24,6 +24,15 @@ Reasoning: `AGENTS.md` § "The rules that actually matter",
 - **A headless GPU check is not a real one.** The renderer bug that killed a tab on every
   load reproduced only at `devicePixelRatio` 2.
 - **Terrain is sampled in body-fixed axes** — see `.claude/rules/determinism.md`.
+- **Compile-ahead goes through `render/warmup.ts`.** `warmCompile` owns the visibility
+  toggle (`compileAsync` skips invisible objects, silently), the `WebGPURenderer` cast and
+  the swallowed rejection; producers `register` so the boot progress total is the sum of
+  what registered rather than one step's own count. Registration is idempotent by label
+  because StrictMode does everything twice.
+- **The datum sphere has one definition**, `packages/rendering/src/datum.ts`. `buildScene`
+  and the boot prebake both call it; when they each typed the formula, they agreed only
+  through a three-hop identity nothing asserted, and a rounding step apart is a silent
+  full cache miss at boot.
 - **Look at the perf tab before optimizing anything**, and before believing a performance
   claim in a design document. The first thing it found was that time warp had never worked
   above 5×.

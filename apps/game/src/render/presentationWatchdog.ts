@@ -60,8 +60,21 @@ const STRIPS: readonly { x: number; y: number }[] = [
   { x: 0.55, y: 0.8 },
 ]
 
-function hasLitPixels(
-  canvas: HTMLCanvasElement,
+/**
+ * Whether the canvas has ever put a lit pixel on screen.
+ *
+ * Exported so it can be tested directly. It is pure arithmetic over an
+ * `ImageData` buffer and was reachable only by loading the application — which
+ * matters because the thing its own comment warns about, a starfield averaging
+ * to black, is a false positive that would make the watchdog "fix" a perfectly
+ * healthy sky by rebuilding the renderer under it.
+ *
+ * `probe` is a 2D context to sample through: `drawImage` of a WebGPU canvas
+ * yields its last presented frame, and one that has never presented reads back
+ * pure transparent black.
+ */
+export function hasLitPixels(
+  canvas: { readonly width: number; readonly height: number },
   probe: CanvasRenderingContext2D,
 ): boolean {
   const stripW = Math.min(512, canvas.width)
@@ -76,7 +89,17 @@ function hasLitPixels(
       Math.floor(canvas.height * strip.y),
     )
     probe.clearRect(0, 0, stripW, stripH)
-    probe.drawImage(canvas, sx, sy, stripW, stripH, 0, 0, stripW, stripH)
+    probe.drawImage(
+      canvas as CanvasImageSource,
+      sx,
+      sy,
+      stripW,
+      stripH,
+      0,
+      0,
+      stripW,
+      stripH,
+    )
     const data = probe.getImageData(0, 0, stripW, stripH).data
     for (let i = 0; i < data.length; i += 4) {
       // > 2, not > 0: leave room for dither noise without letting a real
@@ -88,6 +111,34 @@ function hasLitPixels(
     }
   }
   return false
+}
+
+/**
+ * Replay the canvas measurement. One definition, three callers.
+ *
+ * R3F sizes its canvas from a ResizeObserver, and Chrome does not deliver the
+ * *initial* observation to a hidden document — which is what the page is during
+ * every Vite full-reload triggered from the editor in front of it. Becoming
+ * visible again does not replay the lost observation either: the canvas sits at
+ * the default 300×150 with no renderer behind it, a black screen with a healthy
+ * HUD that only a manual window resize could revive. The measurement hook also
+ * listens to window `resize`, so a synthetic one is exactly the kick it is
+ * waiting for; when the measurement already landed, re-measuring the same size
+ * is a no-op. Verified live: dispatching `resize` on the stuck page took the
+ * canvas from 300×150 to full size — even while the document was still hidden,
+ * which is why the kick is unconditional rather than gated on visibility.
+ *
+ * It lives here rather than in `firstLight.ts` because rung 1 of the ladder
+ * below *is* this call, and a module that imported the state machine to reach
+ * its own first rung would be a cycle. `firstLight.ts` calls it for the other
+ * two occasions: mount, and the moment a renderer exists to hand a measurement
+ * to.
+ *
+ * A synthetic `resize` event never fires a ResizeObserver, which is why this is
+ * only rung 1 — rung 2 changes the layout for real.
+ */
+export function replayMeasurement(): void {
+  window.dispatchEvent(new Event('resize'))
 }
 
 export interface PresentationWatch {
@@ -128,7 +179,7 @@ export function watchPresentation(
   const probe = probeCanvas.getContext('2d', { willReadFrequently: true })
 
   const nudge = (): void => {
-    window.dispatchEvent(new Event('resize'))
+    replayMeasurement()
     const wrapper = canvas.parentElement
     if (wrapper === null) return
     // A real layout change, then back: this is what fires the ResizeObserver.
@@ -172,7 +223,7 @@ export function watchPresentation(
     attempts += 1
     if (attempts <= 1) {
       log.warn('canvas has not presented; replaying measurement', { attempts })
-      window.dispatchEvent(new Event('resize'))
+      replayMeasurement()
     } else if (attempts <= 3) {
       log.warn('canvas still black; nudging layout and swap chain', {
         attempts,

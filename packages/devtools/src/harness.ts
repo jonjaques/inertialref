@@ -46,6 +46,7 @@ import {
 import type { RenderScene } from '@inertialref/rendering'
 import type { PoolStats, WorkerPool } from '@inertialref/workers'
 import type { AuthorityPort, AuthorityStatus } from '@inertialref/net'
+import { describeDrift, type VersionDrift } from '@inertialref/protocol'
 import {
   runCapabilityChecks,
   summarizeCapabilities,
@@ -62,13 +63,18 @@ import {
 import {
   currentSystemOf,
   resolveDestination,
+  searchTargets,
   type TravelTarget,
   type TravelTargetOptions,
   travelTargets,
   viewingAltitudeKm,
 } from './travel.ts'
 import { findShot, placeShot, SHOTS } from './shots.ts'
-import { CutsceneDirector, type CutsceneStatus } from './cutscene.ts'
+import {
+  CutsceneDirector,
+  type CutsceneOutcome,
+  type CutsceneStatus,
+} from './cutscene.ts'
 import {
   Observatory,
   type ObserverPose,
@@ -156,6 +162,17 @@ export interface ScenarioResult {
   readonly ticks: number
   readonly detail: string
   readonly status: HarnessStatus
+}
+
+/** What a successful `load` gives back. */
+export interface LoadOutcome {
+  /** The restored world's state hash — the canonical round-trip comparison. */
+  readonly stateHash: string
+  /**
+   * How the save's universe differs from this build's. Empty is the usual case
+   * and the only one where the loaded world is exactly the saved one.
+   */
+  readonly drift: readonly VersionDrift[]
 }
 
 const log = getLogger('devtools.harness')
@@ -274,6 +291,26 @@ export class GameHarness {
       (options.origin === 'observer' ? this.observatory.eye : null) ??
       this.#here()
     return travelTargets(this.world, from, options)
+  }
+
+  /**
+   * Everywhere matching what somebody typed, nearest first — the *whole*
+   * catalog, not the survey.
+   *
+   * Split from `targets` by question rather than by cost: that one asks "what
+   * is near me", which is a star sweep and cannot run per keystroke; this asks
+   * "what is called this", which is an index lookup and must. Filtering the
+   * survey's result — which is what the two panels did — could only ever find
+   * what was already within a few light years of the camera.
+   */
+  search(
+    text: string,
+    options: TravelTargetOptions = {},
+  ): readonly TravelTarget[] {
+    const from =
+      (options.origin === 'observer' ? this.observatory.eye : null) ??
+      this.#here()
+    return searchTargets(this.world, from, text)
   }
 
   /**
@@ -734,17 +771,34 @@ export class GameHarness {
     return serializeSave(captureSave(this.world, this.#host.player()))
   }
 
-  load(text: string): Result<string, string> {
+  /**
+   * Restore a save into this session.
+   *
+   * Restored against *this* world's catalog, not the one the save names: a
+   * save is a set of references, and resolving them needs the catalog the
+   * client actually has. What the save was written against comes back as
+   * `drift`, which used to be computed only while building the message for a
+   * load that had already failed — so the interesting case, a load that
+   * succeeded into a sky that had moved, was silent.
+   */
+  load(text: string): Result<LoadOutcome, string> {
     const parsed = parseSave(text)
     if (!parsed.ok) return parsed
-    // Restored against *this* world's catalog, not the one the save names.
-    // A save is a set of references, and resolving them needs the catalog the
-    // client actually has; `restored.catalog` is what the save was written
-    // against, and comparing the two is how a revision notice gets built.
     const restored = restoreSave(parsed.value, this.world.catalog)
     if (!restored.ok) return restored
     this.#host.replaceWorld(restored.value.world, restored.value.playerEntity)
-    return { ok: true, value: restored.value.world.stateHash() }
+    if (restored.value.drift.length > 0) {
+      log.warn('loaded a save from a different universe', {
+        drift: describeDrift(restored.value.drift),
+      })
+    }
+    return {
+      ok: true,
+      value: {
+        stateHash: restored.value.world.stateHash(),
+        drift: restored.value.drift,
+      },
+    }
   }
 
   /* --------------------------------------------------------------------- */
@@ -857,6 +911,16 @@ export class GameHarness {
   }
 
   /**
+   * How the last cutscene left — ran out, was stopped, or lost its world.
+   *
+   * `cutsceneStatus()` goes null for all three, so this is what distinguishes
+   * an end card from a closed transport.
+   */
+  cutsceneOutcome(): CutsceneOutcome | null {
+    return this.#cutscenes.lastOutcome()
+  }
+
+  /**
    * The frame's cinematic state, for the rendering host. Called once per
    * rendered frame with the snapshot's `renderTime`; null when idle.
    */
@@ -921,6 +985,7 @@ export class GameHarness {
       '  ir.pause() / ir.resume() / ir.timeWarp(x)',
       '  ir.control({translation,rotation}) / ir.hold()',
       '  ir.targets()                  everywhere you can go, nearest first',
+      '  ir.search(text)               the whole catalog, by name, nearest first',
       '  ir.goTo(target)               a system id or a body address; does the right thing',
       '  ir.loadSystem(id)             generate a system without traveling to it',
       '  ir.bodies() / ir.systemsNearby(ly)',

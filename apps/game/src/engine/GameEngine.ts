@@ -52,6 +52,14 @@ import { createBrowserWorkerPort, poolSize } from './browserWorker.ts'
 import type { Camera, Object3D } from 'three/webgpu'
 import { FrameMetrics, usedHeapMb } from './frameMetrics.ts'
 import { IndexedDbSaveStore } from './indexedDbStore.ts'
+import {
+  createCutsceneSession,
+  type CutsceneSession,
+} from '../cinema/session.ts'
+import {
+  createPresentationStack,
+  type PresentationStack,
+} from './presentation.ts'
 import { TerrainStreamer, type TerrainState } from './terrainStreamer.ts'
 
 /*
@@ -172,6 +180,24 @@ export interface GameEngineOptions {
 export class GameEngine implements PresentationHost {
   readonly session: Session
   readonly harness: GameHarness
+  /**
+   * Watching a cutscene, as one object.
+   *
+   * Here rather than in a component because three of them used to poll the
+   * director at three rates and each reach around it into
+   * `world.clock.paused`. It publishes through the engine store's sampler, so
+   * it costs no timer of its own; `cinema/session.ts` is the whole of it.
+   */
+  readonly cutscene: CutsceneSession
+  /**
+   * What is drawn, and who is allowed to say so.
+   *
+   * Modes push a stance on mount and release it on unmount; a panel's override
+   * is another push. `engine/presentation.ts` carries why it is a stack rather
+   * than a table, and what "restored by whoever lowered it" was costing before
+   * anybody owned it.
+   */
+  readonly presentation: PresentationStack
   readonly saves: SaveStore
   readonly terrain: TerrainStreamer
   /** Rolling per-frame samples for the performance overlay. */
@@ -197,6 +223,12 @@ export class GameEngine implements PresentationHost {
    * rather than in the harness: the headless runner has no ship to draw. It
    * exists for the camera bookmarks, where a gray cone parked dead center of
    * every composition defeats the point of composing.
+   *
+   * **Written by `presentation` and by the console, and by nothing else.** It
+   * had three writers, one of them a panel, under a convention this file named
+   * ("restored by whoever lowered it") and assigned to nobody — which is how
+   * leaving the planetarium after arriving from the menu restored it to a value
+   * it had never held. A mode that wants it hidden pushes a stance.
    */
   showShip = true
 
@@ -227,7 +259,7 @@ export class GameEngine implements PresentationHost {
    * paragraph on the left. That is a lens artifact landing on type, which is
    * the one place it is never a photograph.
    *
-   * Restored by whoever lowered it, exactly like `showShip`.
+   * Pushed and released like `showShip`, through `presentation`.
    */
   flareArtifacts = 1
 
@@ -346,13 +378,34 @@ export class GameEngine implements PresentationHost {
       poolSize: poolSize(),
       now: options.now ?? (() => performance.now()),
       store: options.store ?? new IndexedDbSaveStore(),
-      presentation: {
+      host: {
         scene: () => this.#scene,
         frameStats: () => this.frameStats(),
+        onWorldReplaced: () => this.#invalidateDerived(),
       },
-      onWorldReplaced: () => this.#invalidateDerived(),
     })
     this.harness = this.session.harness
+    this.cutscene = createCutsceneSession({
+      status: () => this.harness.cutsceneStatus(),
+      outcome: () => this.harness.cutsceneOutcome(),
+      // The one reader of this field on the presentation side. It used to have
+      // three, in three components, answering the same question.
+      paused: () => this.world.clock.paused,
+      play: (id) => this.harness.play(id),
+      seek: (frame) => void this.harness.seekCutscene(frame),
+      pause: () => this.harness.pause(),
+      resume: () => this.harness.resume(),
+      stop: () => this.harness.stopCutscene(),
+    })
+    this.presentation = createPresentationStack((stance) => {
+      this.showShip = stance.showShip
+      this.showOrbits = stance.showOrbits
+      this.flareArtifacts = stance.flareArtifacts
+      // The observatory's *lifetime*, not the camera: a layer that was holding
+      // a target releases it on the way out, and the camera falls back to the
+      // ship through the precedence in `#step` exactly as it always did.
+      if (!stance.observatory) this.harness.observatory.clear()
+    })
     this.saves = this.session.store
     this.terrain = new TerrainStreamer(this.session.pool())
     this.#start()

@@ -1,6 +1,7 @@
 export * from './atmosphere.ts'
 export * from './camera.ts'
 export * from './cinematic.ts'
+export * from './datum.ts'
 export * from './lod.ts'
 export * from './observer.ts'
 export * from './placement.ts'

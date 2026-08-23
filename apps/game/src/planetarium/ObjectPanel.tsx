@@ -1,4 +1,3 @@
-'use no memo'
 import { formatDistance } from '@inertialref/shared'
 import { compassDegrees } from '@inertialref/rendering'
 import { DEFAULT_FILL } from '@inertialref/devtools'
@@ -6,12 +5,12 @@ import { Badge } from '@/components/ui/badge'
 import { Action } from '../hud/Action.tsx'
 import { Row } from '../hud/Row.tsx'
 import { Section } from '../hud/Section.tsx'
-import { usePolled } from '../hud/usePolled.ts'
+import { useEngine } from '../state/engineStore.ts'
 import type { PlanetariumContext } from './context.ts'
 
 /** What the camera is on, in detail — and the one verb that leaves the mode. */
 export function ObjectPanel({ engine, focus }: PlanetariumContext) {
-  const status = usePolled(() => engine.harness.observerStatus())
+  const status = useEngine((snapshot) => snapshot.observer)
 
   if (status === null || status.target === null) {
     return (

@@ -24,10 +24,13 @@ import {
 import { decodeWorkerRequest } from './worker.ts'
 import {
   decodeServerHealth,
+  describeDrift,
   HEALTH_PATH,
   incompatibility,
   NET_PROTOCOL_VERSION,
   type ServerHealth,
+  type UniverseVersions,
+  versionDrift,
 } from './net.ts'
 import {
   decodeFrameState,
@@ -235,12 +238,14 @@ describe('the network handshake', () => {
     status: 'ok',
     protocol: NET_PROTOCOL_VERSION,
     generation: { galaxy: 1, system: 1, terrain: 1 },
+    catalog: 'hyg-4.4+nea-2b24daf0',
     revision: 'abc1234',
     colo: 'SJC',
   }
   const client = {
     protocol: NET_PROTOCOL_VERSION,
     generation: healthy.generation,
+    catalog: healthy.catalog,
   }
 
   it('agrees with itself', () => {
@@ -278,6 +283,78 @@ describe('the network handshake', () => {
         generation: { ...healthy.generation, weather: 1 },
       }),
     ).toMatch(/weather absent≠1/)
+  })
+
+  it('refuses a peer that ships a different star catalog', () => {
+    // The hole the catalog closed. `Versions` had no notion of it, so this
+    // exact pair — same protocol, same generation, a sky that had moved —
+    // agreed cleanly and then disagreed about where the stars were.
+    expect(incompatibility({ ...healthy, catalog: 'hyg-4.5' }, client)).toMatch(
+      /catalog hyg-4\.5≠hyg-4\.4/,
+    )
+    expect(incompatibility({ ...healthy, catalog: '' }, client)).toMatch(
+      /catalog absent≠/,
+    )
+  })
+
+  it('gives the same verdict to the handshake and to the loader', () => {
+    /*
+     * The property that makes one module worth having over two.
+     *
+     * `incompatibility` is the handshake's reading and `versionDrift` is the
+     * save loader's; if they could ever disagree, a save would load into a
+     * universe a peer would have refused, or the reverse. With the protocol
+     * fixed, one is null exactly when the other is empty — and the sentence is
+     * a rendering of the array, not a second opinion.
+     */
+    const manifests = fc.record({
+      generation: fc.dictionary(
+        fc.constantFrom('galaxy', 'system', 'terrain', 'weather'),
+        fc.integer({ min: 1, max: 3 }),
+      ),
+      catalog: fc.constantFrom('hyg-4.4', 'hyg-4.5', 'sol-only', ''),
+    })
+    fc.assert(
+      fc.property(
+        manifests,
+        manifests,
+        (ours: UniverseVersions, theirs: UniverseVersions) => {
+          const drift = versionDrift(ours, theirs)
+          const verdict = incompatibility(
+            { ...ours, protocol: NET_PROTOCOL_VERSION },
+            { ...theirs, protocol: NET_PROTOCOL_VERSION },
+          )
+          expect(verdict === null).toBe(drift.length === 0)
+          if (verdict !== null) expect(verdict).toContain(describeDrift(drift))
+        },
+      ),
+    )
+  })
+
+  it('reports drift catalog-first and then alphabetically', () => {
+    // A stable order, because the sentence ends up in a HUD row, a log line and
+    // a save-load notice, and three different orderings of the same fact read
+    // as three different facts.
+    const drift = versionDrift(
+      { generation: { terrain: 1, galaxy: 2 }, catalog: 'hyg-4.4' },
+      { generation: { terrain: 9, galaxy: 9 }, catalog: 'hyg-4.5' },
+    )
+    expect(drift.map((one) => one.key)).toEqual([
+      'catalog',
+      'galaxy',
+      'terrain',
+    ])
+    expect(describeDrift(drift)).toBe(
+      'catalog hyg-4.4≠hyg-4.5, galaxy 2≠9, terrain 1≠9',
+    )
+  })
+
+  it('calls an identical pair the same universe', () => {
+    const same: UniverseVersions = {
+      generation: { galaxy: 1 },
+      catalog: 'hyg-4.4',
+    }
+    expect(versionDrift(same, { ...same })).toEqual([])
   })
 
   it('decodes a health record rather than trusting a 200', () => {

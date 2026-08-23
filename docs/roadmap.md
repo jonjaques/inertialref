@@ -77,22 +77,22 @@ The [vision](vision.md) names the eventual inhabitants of the galaxy. Most are
 not built. The important thing is that **none of them need architectural
 change** — they are generators plus representations.
 
-| Thing                    | Status | Seam                                                                                                            |
-| ------------------------ | ------ | --------------------------------------------------------------------------------------------------------------- |
-| Galaxy, systems, stars   | ✅     | Real out to 150 ly, procedural beyond — [catalog guide](guides/catalogue.md)                                    |
-| Planets, moons           | ✅     | Confirmed exoplanets and the Solar System are `observed`; the rest is `projected`                               |
-| Moons of real planets    | ⬜     | `PackedPlanet` needs a moon list; every moon in the game is currently a projection, including Luna              |
-| Catalog revision diff    | ⬜     | Both versions are recorded — in every save and every manifest — and nothing compares them yet                   |
-| Planetary terrain        | 🟡     | Heightfields only; no biomes or materials                                                                       |
-| Ships                    | 🟡     | One modeled hull (a CC-BY Enterprise-D in `data/models/`, debug cone as fallback), no variants or subsystems    |
-| Rings                    | ✅     | Saturn's, with the planet's shadow on them and theirs on the planet; procedural giants get a 1-in-6 chance      |
-| Asteroids / belts        | ⬜     | Wants a _population_ generator: many small bodies from one cell seed, addressed as `o:` objects within a region |
-| Star clusters, nebulae   | ⬜     | Density modulation in the galaxy generator + volumetric rendering                                               |
-| Black holes              | ⬜     | A body kind; the interesting part is rendering, not simulation                                                  |
-| Vegetation, flora, fauna | ⬜     | Region-seeded scatter on terrain — the `o:` address segment exists for this                                     |
-| Structures, settlements  | ⬜     | First real consumer of [persistent mutations](#persistent-mutations)                                            |
-| Humanoids                | ⬜     | Needs a character controller on a surface frame                                                                 |
-| Small physical objects   | 🟡     | Debug cubes render at the right scale; no interaction                                                           |
+| Thing                    | Status | Seam                                                                                                             |
+| ------------------------ | ------ | ---------------------------------------------------------------------------------------------------------------- |
+| Galaxy, systems, stars   | ✅     | Real out to 150 ly, procedural beyond — [catalog guide](guides/catalogue.md)                                     |
+| Planets, moons           | ✅     | Confirmed exoplanets and the Solar System are `observed`; the rest is `projected`                                |
+| Moons of real planets    | ⬜     | `PackedPlanet` needs a moon list; every moon in the game is currently a projection, including Luna               |
+| Catalog revision diff    | ✅     | `versionDrift` in `packages/protocol` — one verdict, read by the handshake, the save loader and the health panel |
+| Planetary terrain        | 🟡     | Heightfields only; no biomes or materials                                                                        |
+| Ships                    | 🟡     | One modeled hull (a CC-BY Enterprise-D in `data/models/`, debug cone as fallback), no variants or subsystems     |
+| Rings                    | ✅     | Saturn's, with the planet's shadow on them and theirs on the planet; procedural giants get a 1-in-6 chance       |
+| Asteroids / belts        | ⬜     | Wants a _population_ generator: many small bodies from one cell seed, addressed as `o:` objects within a region  |
+| Star clusters, nebulae   | ⬜     | Density modulation in the galaxy generator + volumetric rendering                                                |
+| Black holes              | ⬜     | A body kind; the interesting part is rendering, not simulation                                                   |
+| Vegetation, flora, fauna | ⬜     | Region-seeded scatter on terrain — the `o:` address segment exists for this                                      |
+| Structures, settlements  | ⬜     | First real consumer of [persistent mutations](#persistent-mutations)                                             |
+| Humanoids                | ⬜     | Needs a character controller on a surface frame                                                                  |
+| Small physical objects   | 🟡     | Debug cubes render at the right scale; no interaction                                                            |
 
 **Gameplay verbs**: piloting ✅, in-system travel ✅, approach and orbit ✅,
 landing ✅. Interstellar travel is 🟡 — possible but takes hours of

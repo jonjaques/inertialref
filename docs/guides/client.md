@@ -20,10 +20,23 @@ turns pointer events back on. Getting this wrong is silent: the hit target at
 every pixel is the canvas.
 
 Canonical state does not live in React. Components consume snapshots from
-`apps/game/src/state/engineStore.ts` — a zustand store holding the last
-`HarnessStatus`, republished at 8 Hz by one sampler. Subscribe to the
-narrowest slice you need. `useEngine((s) => s.status)` is a new object every
-sample and never bails out of a re-render.
+`apps/game/src/state/engineStore.ts` — a zustand store holding the world
+status, the planetarium's observer, the presentation switches and the cutscene
+playhead, republished at 8 Hz by one sampler. Subscribe to the narrowest slice
+you need. `useEngine((s) => s.status)` is a new object every sample and never
+bails out of a re-render; a selector returning a primitive or a stable slice
+does, and several fields want `useShallow`. A wide snapshot read widely is
+worse than the props it replaced.
+
+Two polls remain outside it, because neither is a field read: the travel survey
+(`hud/useTravelTargets.ts`) is a star sweep, and the sky labels' refresh is
+geometry over the camera and the viewport.
+
+What is _drawn_ goes through `engine.presentation`, a stance stack. A mode
+pushes on mount and releases on unmount, a panel's override is another push, and
+`release()` restores whatever was underneath rather than a literal — see
+`apps/game/src/engine/presentation.ts` for why that is a stack and not a table
+keyed by mode.
 
 A component that reads mutable state (an engine, a metrics buffer) must opt
 out of React Compiler with `'use no memo'`. The compiler assumes derived

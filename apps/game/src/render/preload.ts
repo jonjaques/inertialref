@@ -16,9 +16,15 @@ import {
   createPlanetMaterial,
   createRingMaterial,
 } from './planet.ts'
-import { preloadAllTextures } from './planetTextures.ts'
+import { preloadAllTextures, SHIPPED_TEXTURE_COUNT } from './planetTextures.ts'
 import { scatteringBakes } from './preloadPlan.ts'
 import { DEFAULT_SHIP, loadShipModel } from './shipModels.ts'
+import {
+  beginWarmup,
+  breathe,
+  type BootProgress,
+  warmCompile,
+} from './warmup.ts'
 
 /*
  * Everything a first encounter used to pay for, paid once at boot instead.
@@ -47,21 +53,17 @@ import { DEFAULT_SHIP, loadShipModel } from './shipModels.ts'
  *   warm-up materials would evict exactly what was just compiled. The group
  *   is held in module state for the life of the session; it is never added
  *   to the scene, so it costs memory and nothing else.
+ *
+ * This file used to be the whole warm-up and carried a disclaimer saying so —
+ * "the others warm their own real instances" — because three scene components
+ * compiled their own pipelines at mount and nothing counted them. It is four
+ * registered producers among several now: `warmup.ts` owns the recipe, the
+ * census and the progress total, and this file owns what to warm.
  */
 
 const log = getLogger('game.preload')
 
-export type BootStepId = 'surfaces' | 'atmospheres' | 'pipelines'
-
-export interface BootProgress {
-  readonly step: BootStepId
-  readonly done: number
-  readonly total: number
-}
-
-/** One macrotask of air, so timers and the watchdog stay serviced. */
-const breathe = (): Promise<void> =>
-  new Promise((resolve) => setTimeout(resolve, 0))
+export type { BootProgress }
 
 /**
  * Layout twin of the ring annulus in `Bodies.tsx`: position, normal, index.
@@ -93,13 +95,14 @@ function warmAnnulus(): BufferGeometry {
 }
 
 /**
- * One mesh per body-material archetype. This is the *floor*: it guarantees
- * every planet-class pipeline exists before the overlay lifts, even if the
- * per-body build-ahead in `Bodies.tsx` has not had a frame yet. The others
- * warm their own real instances — the starfield and the lens flare draw from
- * the first frame, and `WarpFx` and `TerrainPatches` compile theirs at mount
- * — because an archetype twin does not cover instance-level shader builds,
- * which is where the measured cost actually lives.
+ * One mesh per body-material archetype.
+ *
+ * The floor, not the whole job: an archetype twin does not cover the
+ * instance-level shader build, which is where the measured cost actually
+ * lives. `Bodies.tsx` warms the real instances one a frame and `WarpFx` and
+ * `TerrainPatches` warm theirs at mount — all three are registered producers
+ * in the same census now, so "what boot warms" is a list rather than a
+ * disclaimer.
  */
 function buildWarmGroup(): Group {
   const group = new Group()
@@ -156,66 +159,115 @@ async function warm(
   const started = performance.now()
   const renderer = handle.renderer
   const anisotropy = renderer.getMaxAnisotropy()
+  const warmup = beginWarmup()
+  let textureCount = 0
+  let bakeCount = 0
 
   /* Every shipped surface map: fetched together, then uploaded one per
    * macrotask — `initTexture` is where the decode-to-GPU copy and the mip
    * chain actually happen, and nineteen of those in one task would stall the
    * overlay's own compositing. */
-  onProgress?.({ step: 'surfaces', done: 0, total: 1 })
-  const textures = await preloadAllTextures(anisotropy)
-  let done = 0
-  for (const texture of textures) {
-    renderer.initTexture(texture)
-    done += 1
-    onProgress?.({ step: 'surfaces', done, total: textures.length })
-    await breathe()
-  }
+  warmup.register({
+    label: 'warming surface maps',
+    units: SHIPPED_TEXTURE_COUNT,
+    run: async (done) => {
+      const textures = await preloadAllTextures(anisotropy)
+      textureCount = textures.length
+      for (const texture of textures) {
+        renderer.initTexture(texture)
+        done()
+        await breathe()
+      }
+    },
+  })
 
   /* Every atmosphere in the loaded systems, ~50 ms of CPU each. The bake
    * cache in `atmosphereLuts.ts` is keyed identically (same function), so the
    * draw-time ask in `Bodies.tsx` becomes a lookup. */
   const bakes = scatteringBakes(engine.world.loadedSystems())
-  done = 0
-  for (const bake of bakes) {
-    const set = scatteringFor(bake.haze, bake.topRatio)
-    renderer.initTexture(set.transmittance)
-    renderer.initTexture(set.multiScatter)
-    done += 1
-    onProgress?.({ step: 'atmospheres', done, total: bakes.length })
-    await breathe()
-  }
+  bakeCount = bakes.length
+  warmup.register({
+    label: 'baking atmospheres',
+    units: bakes.length,
+    run: async (done) => {
+      for (const bake of bakes) {
+        const set = scatteringFor(bake.haze, bake.topRatio)
+        renderer.initTexture(set.transmittance)
+        renderer.initTexture(set.multiScatter)
+        done()
+        await breathe()
+      }
+    },
+  })
 
-  /* One compile per pipeline the scene can ask for. `engine.view` is set by
-   * R3F's onCreated, which has always run by the time the renderer handle
-   * reaches App state — the wait is for the one commit race StrictMode can
-   * manufacture. */
-  onProgress?.({ step: 'pipelines', done: 0, total: 1 })
-  for (let waited = 0; engine.view === null && waited < 100; waited += 1)
-    await breathe()
-  const view = engine.view
-  if (view === null) {
-    log.warn('no scene view arrived; skipping pipeline warm-up')
-    return
-  }
-  warmGroup ??= buildWarmGroup()
-  // The target scene carries the lights, and the light set is part of a
-  // standard material's generated shader — compiled against an empty scene,
-  // the terrain pipeline would be a variant nothing ever draws with.
-  await renderer.compileAsync(warmGroup, view.camera, view.scene as Scene)
+  /* One compile per pipeline the scene can ask for. This is the *floor*: it
+   * guarantees every planet-class pipeline exists before the cover lifts, even
+   * if the per-instance build-ahead in `Bodies.tsx` has not had a frame yet. */
+  warmup.register({
+    label: 'compiling the sky',
+    units: 1,
+    run: async (done) => {
+      const view = await sceneView(engine)
+      if (view === null) return
+      warmGroup ??= buildWarmGroup()
+      await warmCompile(renderer, {
+        object: warmGroup,
+        camera: view.camera,
+        scene: view.scene as Scene,
+      })
+      done()
+    },
+  })
 
-  // The hull the player flies: same promise `ShipModel` awaits, so this adds
-  // no second fetch — only the compile of its converted node materials.
-  const hull = await loadShipModel(DEFAULT_SHIP, anisotropy)
-  if (hull !== null)
-    await renderer.compileAsync(hull.group, view.camera, view.scene as Scene)
-  onProgress?.({ step: 'pipelines', done: 1, total: 1 })
+  /* The hull the player flies: same promise `ShipModel` awaits, so this adds
+   * no second fetch — only the compile of its converted node materials. */
+  warmup.register({
+    label: 'compiling the ship',
+    units: 1,
+    run: async (done) => {
+      const view = await sceneView(engine)
+      if (view === null) return
+      const hull = await loadShipModel(DEFAULT_SHIP, anisotropy)
+      if (hull === null) return
+      await warmCompile(renderer, {
+        object: hull.group,
+        camera: view.camera,
+        scene: view.scene as Scene,
+      })
+      done()
+    },
+  })
+
+  await warmup.run(onProgress)
 
   log.info('scene warmed', {
     ms: Math.round(performance.now() - started),
-    textures: textures.length,
-    atmospheres: bakes.length,
+    textures: textureCount,
+    atmospheres: bakeCount,
     backend: handle.description.backend,
   })
+}
+
+/**
+ * The live camera and scene, once R3F has published them.
+ *
+ * `engine.view` is set by R3F's `onCreated`, which has always run by the time
+ * the renderer handle reaches App state — the wait is for the one commit race
+ * StrictMode can manufacture. A hundred macrotasks is far more than that race
+ * has ever needed and still bounded, because a pipeline warm-up with no scene
+ * to warm against is a slower first frame, not a boot that never lifts.
+ */
+async function sceneView(
+  engine: GameEngine,
+): Promise<GameEngine['view'] | null> {
+  for (let waited = 0; engine.view === null && waited < 100; waited += 1) {
+    await breathe()
+  }
+  if (engine.view === null) {
+    log.warn('no scene view arrived; skipping pipeline warm-up')
+    return null
+  }
+  return engine.view
 }
 
 /**

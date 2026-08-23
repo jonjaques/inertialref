@@ -70,8 +70,42 @@ export interface SessionOptions {
   /** Injected so nothing here reaches for a host clock. */
   readonly now?: () => number
   readonly store?: SaveStore
-  /** Render-side answers, for hosts that have them. Omitted headlessly. */
-  readonly presentation?: PresentationHost
+  /**
+   * The host's render side. Omitted headlessly, where there is none.
+   *
+   * One parameter because it is one thing: what the host can answer about a
+   * frame, and what it needs to be told when the world underneath it changes.
+   * They were two, and they always travelled together.
+   */
+  readonly host?: SessionHost
+  /**
+   * Who owns the part of the simulation this client does not.
+   *
+   * Defaults to a `LocalAuthority` over this session's own world, which is the
+   * single-player case and not a placeholder for one. Passing something else is
+   * how a remote authority arrives — there is deliberately no flag and no
+   * branch, so the local path is the one every host exercises by default and
+   * cannot rot unnoticed.
+   */
+  readonly authority?: AuthorityPort
+}
+
+/**
+ * What a rendering host contributes to a session.
+ *
+ * **Named fields, not a spread**, and that is the whole reason this type
+ * exists rather than `PresentationHost & { onWorldReplaced }`. The
+ * `presentation` option used to be spread into the host object *last*, so a
+ * stray `world` key in it would silently shadow the getter this module exists
+ * to protect — the bug class recorded at the top of this file as having
+ * happened once. Naming what may be supplied makes it unrepresentable rather
+ * than commented against.
+ */
+export interface SessionHost {
+  /** The frame's render description, for `ir.status().render`. */
+  readonly scene?: PresentationHost['scene']
+  /** Frames per second and frame time, for `ir.status().frame`. */
+  readonly frameStats?: PresentationHost['frameStats']
   /**
    * Called after the world is replaced, so a host can drop derived state.
    *
@@ -83,17 +117,6 @@ export interface SessionOptions {
    * from the cache's point of view nothing had.
    */
   readonly onWorldReplaced?: () => void
-  readonly shipName?: string
-  /**
-   * Who owns the part of the simulation this client does not.
-   *
-   * Defaults to a `LocalAuthority` over this session's own world, which is the
-   * single-player case and not a placeholder for one. Passing something else is
-   * how a remote authority arrives — there is deliberately no flag and no
-   * branch, so the local path is the one every host exercises by default and
-   * cannot rot unnoticed.
-   */
-  readonly authority?: AuthorityPort
 }
 
 export interface Session extends SimulationHost {
@@ -130,7 +153,10 @@ export function openSession(options: SessionOptions = {}): Session {
   const target = landingTarget(system)
 
   let player: EntityId | null = world.spawnShip(
-    options.shipName ?? 'Debug One',
+    // Named here rather than through an option nothing ever passed. A session's
+    // ship is the debug ship; a *second* ship is a world write, not a session
+    // parameter, and `world.spawnShip` is already the verb for it.
+    'Debug One',
     bodyFrameId(target.address),
     vec3(target.radius * SPAWN_DISTANCE, 0, 0),
   ).id
@@ -182,10 +208,15 @@ export function openSession(options: SessionOptions = {}): Session {
     replaceWorld: (next, nextPlayer) => {
       world = next
       player = nextPlayer
-      options.onWorldReplaced?.()
+      options.host?.onWorldReplaced?.()
     },
     authority: () => authority,
-    ...(options.presentation ?? {}),
+    // Named, never spread. A spread landing after `world` above would shadow
+    // the getter — see `SessionHost`.
+    ...(options.host?.scene === undefined ? {} : { scene: options.host.scene }),
+    ...(options.host?.frameStats === undefined
+      ? {}
+      : { frameStats: options.host.frameStats }),
   }
 
   const harness = new GameHarness(host)

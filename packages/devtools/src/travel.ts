@@ -8,6 +8,7 @@ import { UV, type UniverseVector } from '@inertialref/spatial'
 import type { World } from '@inertialref/simulation'
 import {
   type Body,
+  type BodyProvenance,
   bodyFrameId,
   type EntityId,
   formatAddress,
@@ -58,6 +59,17 @@ export interface TravelTarget {
   readonly landable: boolean
   /** Whether the system is generated and its frames installed. */
   readonly loaded: boolean
+  /**
+   * Whether this is a place somebody has actually seen, or one this generator
+   * expects to be there.
+   *
+   * The epistemic fact, and it is the one the interface promises to state
+   * (PRODUCT.md). It is not `loaded`: loaded is a streaming fact about this
+   * session, and a real star is real whether or not its frames are installed.
+   * The projection used to drop this, so Alpha Centauri and an invented star
+   * four light years the other way rendered identically.
+   */
+  readonly provenance: BodyProvenance
 }
 
 export interface TravelTargetOptions {
@@ -98,7 +110,12 @@ export function travelTargets(
 
   const stars = new Map<
     SystemId,
-    { name: string; position: UniverseVector; detail: string }
+    {
+      name: string
+      position: UniverseVector
+      detail: string
+      provenance: BodyProvenance
+    }
   >()
   for (const stub of systemsWithin(
     world.galaxySeed,
@@ -110,6 +127,10 @@ export function travelTargets(
       name: stub.name,
       position: stub.position,
       detail: `${stub.spectralType} · ${stub.solarMasses.toFixed(2)} M☉`,
+      // The domain word, not the storage boolean. `catalogued` says which table
+      // the row came out of; `observed` says somebody pointed a telescope at it,
+      // which is what the listing is actually claiming.
+      provenance: stub.catalogued ? 'observed' : 'projected',
     })
   }
   for (const system of loaded.values()) {
@@ -117,6 +138,13 @@ export function travelTargets(
       name: system.name,
       position: system.position,
       detail: `${system.star.spectralType} · ${system.planets.length} planets`,
+      // A loaded system may be outside the survey radius, so this cannot be
+      // inherited from the sweep above. Asked of the catalog directly, which is
+      // the same question `catalogStub` answers with `catalogued: true` — and
+      // not of `observedPlanets`, which is 0 for a real star nobody has found
+      // a planet around yet.
+      provenance:
+        world.catalog.get(system.id) === undefined ? 'projected' : 'observed',
     })
   }
 
@@ -140,6 +168,7 @@ export function travelTargets(
       distanceText: formatDistance(distance),
       landable: false,
       loaded: system !== undefined,
+      provenance: star.provenance,
     })
     if (system === undefined) continue
 
@@ -165,11 +194,61 @@ export function travelTargets(
         distanceText: formatDistance(bodyDistance),
         landable: isLandable(body),
         loaded: true,
+        // The body's own, not its system's: Sol is observed and Ganymede is
+        // observed, but every moon of a catalog star is currently a projection.
+        provenance: body.provenance,
       })
     }
   }
 
   return targets
+}
+
+/**
+ * Search the whole catalog, as rows a listing can render.
+ *
+ * The other half of the split `travelTargets` could not make. That function is
+ * a *survey*: it sweeps stars within a radius, which cannot run per keystroke
+ * and cannot see past its own horizon — so a search box filtering its result
+ * was a search of a 16 light-year bubble against a 150 light-year catalog, and
+ * a star 90 light years out was not merely hard to find but unexpressible.
+ *
+ * `catalog.search` is where the index and the "index it, never scan" contract
+ * already live; this is the projection onto a row, which is this file's job.
+ * The catalog is an argument, exactly like `resolveSystem` — never ambient.
+ */
+export function searchTargets(
+  world: World,
+  from: UniverseVector,
+  text: string,
+  limit = 20,
+): readonly TravelTarget[] {
+  const loaded = new Map<SystemId, StarSystem>(
+    world.loadedSystems().map((s) => [s.id, s]),
+  )
+  return world.catalog.search(text, limit).map((star) => {
+    const system = loaded.get(star.id)
+    const position = system?.position ?? star.position
+    const distance = UV.distance(position, from)
+    return {
+      kind: 'system' as const,
+      address: `g:${world.galaxy}/s:${star.id}`,
+      name: star.designations[0]?.text ?? star.id,
+      system: star.id,
+      depth: 0,
+      detail:
+        system === undefined
+          ? `${star.spectralType} · ${star.physical.solarMasses.toFixed(2)} M☉`
+          : `${system.star.spectralType} · ${system.planets.length} planets`,
+      distance,
+      distanceText: formatDistance(distance),
+      landable: false,
+      loaded: system !== undefined,
+      // Everything the catalog holds is a star somebody has observed. That is
+      // what being in it means.
+      provenance: 'observed' as const,
+    }
+  })
 }
 
 function describeBody(body: Body): string {

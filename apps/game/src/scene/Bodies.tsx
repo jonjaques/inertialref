@@ -1,5 +1,5 @@
 import { useFrame, useThree } from '@react-three/fiber'
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   BufferAttribute,
   BufferGeometry,
@@ -8,11 +8,11 @@ import {
   type Scene,
   SphereGeometry,
   Vector3,
-  type WebGPURenderer,
 } from 'three/webgpu'
 import type { RenderBody } from '@inertialref/rendering'
 import { formatAddress, walkBodies } from '@inertialref/universe'
 import type { GameEngine } from '../engine/GameEngine.ts'
+import { trackAtMount, warmCompile, warmRenderer } from '../render/warmup.ts'
 import {
   type AtmosphereMaterial,
   createAtmosphereMaterial,
@@ -200,6 +200,16 @@ export function Bodies({ engine }: { engine: GameEngine }) {
   /** Bodies whose visuals should exist before anything looks at them. */
   const warmQueue = useRef<WarmTask[]>([])
   const warmedSystems = useRef('')
+  /*
+   * Boot's half of that queue, reported rather than driven.
+   *
+   * The drain is one body a frame and boot cannot await a loop over it — the
+   * frames are what boot is waiting for. So it joins the census instead: the
+   * units count toward the progress total and `finish()` releases the cover.
+   * After boot has lifted this is a no-op ticket and the same code is the
+   * mid-session trickle it always was.
+   */
+  const [ticket] = useState(() => trackAtMount('building bodies'))
   const spheres = useMemo(
     () =>
       SPHERE_TIERS.map((tier) => ({
@@ -718,6 +728,12 @@ export function Bodies({ engine }: { engine: GameEngine }) {
           }
         }
         warmQueue.current = queue
+        // The census. Boot's progress total used to exclude this queue
+        // entirely, so the status line said "compiling the sky…" while the
+        // work measured at 88 ms had not started. Re-declared rather than
+        // added to: a mid-session jump replaces the queue, and by then the
+        // ticket is the idle one and this is a no-op.
+        ticket.expect(queue.length)
       }
 
       let task = warmQueue.current.shift()
@@ -730,25 +746,28 @@ export function Bodies({ engine }: { engine: GameEngine }) {
           task.clouded,
           task.ringed,
         )
-        const parts = [
+        const renderer = warmRenderer(gl)
+        for (const part of [
           visual.mesh,
           visual.atmosphere,
           visual.clouds,
           visual.rings,
-        ]
-        for (const part of parts) if (part !== null) part.visible = true
-        const renderer = gl as unknown as WebGPURenderer
-        for (const part of parts) {
+        ]) {
           if (part === null) continue
           // Fire and forget: the pipelines land whenever the backend is
-          // ready, and a compile failure will resurface on first draw with
-          // a better error than anything worth catching here.
-          renderer
-            .compileAsync(part, defaultCamera, rootScene as Scene)
-            .catch(() => {})
+          // ready. `warmCompile` owns the visibility toggle the compile needs
+          // to see anything, and swallows the rejection.
+          void warmCompile(renderer, {
+            object: part,
+            camera: defaultCamera,
+            scene: rootScene as Scene,
+          })
         }
-        for (const part of parts) if (part !== null) part.visible = false
+        ticket.done()
       }
+      // Every body the loaded systems could put on screen now has a visual.
+      // Boot is waiting on exactly this, so it has to be told.
+      if (warmQueue.current.length === 0) ticket.finish()
     }
   })
 

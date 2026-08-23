@@ -1,4 +1,3 @@
-'use no memo'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import {
@@ -17,6 +16,7 @@ import { FOCUS_RING, isOverlayControl, isTyping } from '../hud/focus.ts'
 import { FrameScrubber } from '../hud/FrameScrubber.tsx'
 import { TransportButton } from '../hud/TransportButton.tsx'
 import { useScrubber } from '../hud/useScrubber.ts'
+import { useEngine } from '../state/engineStore.ts'
 import { CINEMA, cinemaLink, QUERY } from '../pages/paths.ts'
 import { EndCard } from './EndCard.tsx'
 import {
@@ -45,14 +45,6 @@ import {
  * then `ir.seekCutscene(1150)` is what this does, with buttons on it.
  */
 
-interface Playhead {
-  readonly id: string
-  readonly frame: number
-  readonly durationFrames: number
-  readonly fps: number
-  readonly paused: boolean
-}
-
 export function CinemaPlayer({
   engine,
   id,
@@ -65,21 +57,25 @@ export function CinemaPlayer({
 }) {
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
-  const [playhead, setPlayhead] = useState<Playhead | null>(null)
-  const [failed, setFailed] = useState<string | null>(null)
   /*
-   * Whether the scene has run to its end, as distinct from not being open.
+   * One published playhead, and it carries `ended` with it.
    *
-   * The director restores the ship and stops on the final frame, so the only
-   * signal the player gets is `cutsceneStatus()` going null — which is also
-   * what it reads before the scene has started and after `stopCutscene`. This
-   * flag is what tells the end apart from the beginning, and it survives the
-   * re-open below that puts the last frame back on screen.
+   * This component used to poll the director every 100 ms and reconstruct "did
+   * it end or was it stopped?" from a `null` and a half-second window around
+   * the final frame — a heuristic that read `stopCutscene` from the console as
+   * an ending, because it produced identical evidence. The director says which
+   * now (`cutsceneOutcome`), and `cinema/session.ts` is the one place that
+   * reads it. Two other components asked the same question at two other rates;
+   * all three read this.
    */
-  const [ended, setEnded] = useState(false)
-  // The drag latch and the guarded seek, shared with the debug transport in
+  const playhead = useEngine((snapshot) => snapshot.playhead)
+  const session = engine.cutscene
+  const [failed, setFailed] = useState<string | null>(null)
+  // The pointer latch and the guarded seek, shared with the debug transport in
   // `hud/CutsceneOverlay.tsx` — see `hud/useScrubber.ts` for what each is for.
-  const { held: scrubbing, grab, seek: seekFrame } = useScrubber(engine)
+  // The latch's *meaning* — the published frame stands still — is the
+  // session's, so nothing here has to remember to honor it.
+  const { grab, seek: seekFrame } = useScrubber(engine)
 
   /*
    * Start the scene, once per id.
@@ -92,23 +88,10 @@ export function CinemaPlayer({
    */
   const open = useCallback(
     (frame: number, autoplay: boolean) => {
-      try {
-        const status = engine.harness.play(id)
-        const at = Math.min(frame, Math.max(0, status.durationFrames - 1))
-        if (at > 0) engine.harness.seekCutscene(at)
-        // Pausing *after* seeking rather than before: `play` un-pauses the
-        // clock as part of anchoring the reference timing and would undo it.
-        if (!autoplay) engine.harness.pause()
-        setFailed(null)
-      } catch (cause) {
-        setFailed(cause instanceof Error ? cause.message : String(cause))
-      }
+      setFailed(session.open(id, frame, autoplay))
     },
-    [engine, id],
+    [session, id],
   )
-
-  /** The last playhead the poll saw, so it can tell "ended" from "never open". */
-  const seen = useRef<Playhead | null>(null)
 
   const opened = useRef<string | null>(null)
   useEffect(() => {
@@ -146,69 +129,6 @@ export function CinemaPlayer({
     [engine],
   )
 
-  /* The readout, at a human rate. The scrubber owns the value while dragged. */
-  useEffect(() => {
-    const poll = window.setInterval(() => {
-      const status = engine.harness.cutsceneStatus()
-      if (status === null) {
-        /*
-         * The scene ran out, and the picture went with it.
-         *
-         * The director restores the ship and stops on the final frame, which
-         * is correct — a scene that kept the camera after it ended would be a
-         * script nobody could get out of. What it leaves on screen, though, is
-         * whatever the chase camera happens to see: the debug hull in front of
-         * Earth, a composition nobody wrote, arriving as a hard cut on the
-         * last beat of a title sequence. Reopening two frames short of the end
-         * and pausing puts the picture back — `engine.cinematic` is non-null
-         * again, so the camera is the shot's — and it hands back a scrubber
-         * with the end of the scene under it rather than an empty bar.
-         *
-         * Two frames rather than one: the director reports `done` *on* the
-         * final frame, so a seek to it would end the scene again on the next
-         * sample and this would run in a loop.
-         *
-         * Read through a ref rather than the state, because the effect must not
-         * depend on the playhead — it polls it — and a stale closure here is
-         * the difference between "the scene ended" and "no scene was open".
-         *
-         * Only a playhead that was *near the end* means the scene ran out.
-         * `stopCutscene` — the console, the Navigate panel's Stop, now one
-         * disclosure away inside this mode — goes null through the exact same
-         * reading, and reopening then undid the stop within 100 ms. Half a
-         * second of frames is the discriminator because it is the poll gap
-         * with room for the director stepping several frames per sample; a
-         * scene stopped by hand more than that from its end stays stopped.
-         */
-        const previous = seen.current
-        if (previous !== null) {
-          seen.current = null
-          if (previous.frame >= previous.durationFrames - previous.fps / 2) {
-            setEnded(true)
-            open(Math.max(0, previous.durationFrames - 2), false)
-          } else {
-            setPlayhead(null)
-          }
-        }
-        return
-      }
-      if (scrubbing.current) return
-      const next = {
-        id: status.id,
-        frame: status.frame,
-        durationFrames: status.durationFrames,
-        fps: status.fps,
-        paused: engine.world.clock.paused,
-      }
-      seen.current = next
-      setPlayhead(next)
-    }, 100)
-    return () => window.clearInterval(poll)
-    // `scrubbing` is a ref and never changes identity; it is named so the
-    // dependency list can be read as the complete list of what this closes
-    // over rather than as an omission somebody has to re-derive.
-  }, [engine, scrubbing, open])
-
   /*
    * Write the parked frame back into the URL.
    *
@@ -238,33 +158,28 @@ export function CinemaPlayer({
     )
   }, [playhead, params, setParams])
 
+  /*
+   * The verbs, which are the session's.
+   *
+   * `useScrubber`'s guard still runs first — it is the drag latch and the
+   * "is a scene even open" refusal — and the session owns what a seek *means*,
+   * including that it dismisses the end card. `toggle` used to be implemented
+   * twice, identically, in this file and in the debug transport.
+   */
   const seek = useCallback(
     (frame: number) => {
       if (!seekFrame(frame)) return
-      // Using the transport is how someone stops reading the end card, so a
-      // seek dismisses it — without this the card sat over a scene that was
-      // visibly somewhere else.
-      setEnded(false)
-      setPlayhead((current) =>
-        current === null ? current : { ...current, frame },
-      )
+      session.seek(frame)
     },
-    [seekFrame],
+    [seekFrame, session],
   )
 
-  const toggle = useCallback(() => {
-    // Same dismissal as `seek`: pressing play on an ended scene is watching
-    // it again, not reading a card about how it went.
-    setEnded(false)
-    if (engine.world.clock.paused) engine.harness.resume()
-    else engine.harness.pause()
-  }, [engine])
+  const toggle = useCallback(() => session.toggle(), [session])
 
   const replay = useCallback(() => {
     // Play it again through the same verb the URL used, and clear the frame the
     // ended playhead left in the address bar — a replay that opened on the last
     // frame would end immediately.
-    setEnded(false)
     void navigate(cinemaLink(id, { autoplay: true }), { replace: true })
     open(0, true)
   }, [id, navigate, open])
@@ -284,7 +199,7 @@ export function CinemaPlayer({
        * one keystroke seeks twice.
        */
       if (isTyping(event) || isOverlayControl(event)) return
-      const status = engine.harness.cutsceneStatus()
+      const status = engine.cutscene.sample()
       if (status === null) return
       const step = event.shiftKey ? secondStep(status.fps) : 1
       switch (event.key) {
@@ -327,7 +242,7 @@ export function CinemaPlayer({
    * A scene with no picture at all — the player opened and the director never
    * produced a frame, or something outside the player stopped the scene
    * mid-run and the stop was respected. The natural end of a scene no longer
-   * reaches this branch: the poll reopens the final frame, so what is on
+   * reaches this branch: the session reopens the final frame, so what is on
    * screen is the last shot, and the End of Scene card is drawn *over* it.
    */
   if (playhead === null) {
@@ -344,12 +259,12 @@ export function CinemaPlayer({
   const step = secondStep(playhead.fps)
   return (
     <>
-      {ended && (
+      {playhead.ended && (
         <EndCard
           title="End of Scene"
           detail={durationText(playhead.durationFrames, playhead.fps)}
           onReplay={replay}
-          onDismiss={() => setEnded(false)}
+          onDismiss={() => session.seek(playhead.frame)}
         />
       )}
       <div

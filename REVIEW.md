@@ -5,6 +5,14 @@ front door, the shell, the catalog surface — and found twelve places where a
 shallow module can become a deep one: more behavior behind a smaller
 interface, testable in Node through that interface.
 
+> **All twelve landed on 23 Aug 2026.** `CONTEXT.md` § "Twelve shallow modules,
+> deepened" is what implementing them found, including three bugs the plan did
+> not predict and the measurement 4.3 was gated on. Where the built interface
+> differs from the sketch below, the sketch is annotated **Built as** — the
+> differences are small and each one is a fact the sketch could not have known.
+> The phases are kept rather than deleted: the evidence in each is the reason a
+> module is shaped the way it is, and that is worth more than a checklist.
+
 The vocabulary is deliberate. A **module** is anything with an interface and
 an implementation. Its **interface** is everything a caller must know — the
 signature, but also the invariants, ordering constraints, and error modes. A
@@ -82,6 +90,15 @@ function serveMedia(
 ): Promise<Response>
 ```
 
+**Built as** `MediaStores.get(key, options)` with `range` and `onlyIf`
+**required**, not optional. R2's `get` is overloaded and only the overload with
+`onlyIf` present returns the body-less `R2Object` the 304 branch exists for;
+optional options would have quietly selected the other one and deleted that
+branch's reason to exist. `StoredObject` / `StoredObjectBody` are restated
+structurally rather than imported from the generated workerd types, the way
+`media.ts` restates `R2Range` — a fake that had to implement `arrayBuffer`,
+`checksums` and `storageClass` is how a seam ends up existing only on paper.
+
 Everything `media()` decides today moves behind that interface: the
 `servedByAssets` predicate, the four status codes, the conditional-request
 path, the `stored.range` trap that `.claude/rules/server.md` exists for, the
@@ -158,6 +175,11 @@ function ringScales(
 ): { inner: number; outer: number }
 ```
 
+**Built as** `packages/rendering/src/datum.ts`, with the clamp named
+(`MAX_SINK`) and `sunkSphereRadius` made total over a negative relief — the one
+input that would silently draw the sphere _above_ the datum, which is the
+failure it exists to prevent.
+
 `buildScene` calls it. `scatteringBakes` calls it. `preloadPlan.ts` keeps
 what it is genuinely good at: walking loaded systems and deduping by key.
 
@@ -218,6 +240,15 @@ interface VersionDrift {
 /** Empty array = the same universe. */
 function versionDrift(ours: Versions, theirs: Versions): VersionDrift[]
 ```
+
+**Built as** two types rather than one. `UniverseVersions` is
+`{ generation, catalog }` — what a _save_ claims — and `Versions extends` it
+with `protocol`, which answers a different question: whether two peers can talk
+at all, where the universe versions answer whether there is anything worth
+saying. A save has the second and not the first. The Worker states its catalog
+version from `data/catalog/manifest.json`, the artifact the packed file is
+written beside; `apps/headless/src/catalog.test.ts` holds the two together,
+because they are now read by different things.
 
 `incompatibility` becomes a reading of `versionDrift` (any drift on a key
 both sides require). The handshake sends the catalog string. The save
@@ -321,6 +352,15 @@ no HTML-parser dependency for a gate on our own head. If the extraction
 ever misses a tag, the check fails loudly rather than passing silently:
 assert the expected tag count.
 
+**Built as** described, with two corrections the sketch could not have known.
+**Strip the HTML comments before extracting anything**: the head's own
+commentary quotes the tags it explains, so the first `<title>` in the file is
+inside a comment and the first version of the checker read four hundred words of
+prose as the page title. And the 60–160 bound applies to the three tags a search
+result or a card actually shows; a JSON-LD `description` is never rendered as a
+snippet, so it is held to a stated, looser bound whose job is to catch a
+placeholder at one end and an essay at the other.
+
 **Steps.**
 
 1. Write `scripts/brand/checkHead.mjs` reading `index.html`, `sw.js`, and
@@ -383,6 +423,16 @@ interface Warmup {
   run(onProgress: (p: BootProgress) => void): Promise<void>
 }
 ```
+
+**Built as** `warmCompile(renderer, target)` over a one-method `WarmRenderer`
+rather than over `RendererHandle`: the three scene components have R3F's `gl`,
+not a handle, and a handle also carries a tone-curve controller and an output
+description that warming has no business reading. The census gained a second
+verb, `track`, for a producer boot _counts but does not drive_ — the body
+build-ahead runs on the frame loop, and boot cannot await a loop over the frames
+it is waiting for. Both verbs are **idempotent by label**, which the sketch did
+not anticipate and StrictMode requires: see `CONTEXT.md` for the boot that sat
+at `building bodies 62/62` forever.
 
 `preload.ts` becomes one registered producer among several rather than the
 file with a disclaimer in it. The scene components keep their build-ahead
@@ -460,6 +510,14 @@ function createFirstLight(deps: {
 }
 ```
 
+**Built as** `PresentedSignal` with `wait()` / `cancel()` and no `handle`
+argument — the adapter is built against the canvas it will watch, so a watch
+that has been replaced can be recognized and ignored. The state is published
+through a zustand store, the same seam `state/engineStore.ts` uses, rather than
+a bare `subscribe`. `replayMeasurement` lives in `presentationWatchdog.ts`
+because rung 1 of its own ladder _is_ that call, and a module importing the
+state machine to reach its own first rung would be a cycle.
+
 The module owns the conjunction, the latch (`App.tsx:247–251`), the
 exhausted-ladder release (a watchdog that runs out of rungs releases the
 fade rather than hiding a possibly-fine scene forever), the canvas epoch,
@@ -522,6 +580,13 @@ Migrate consumers panel by panel; delete `usePolled` and each ad-hoc timer
 as its caller moves. `DevContext.status` and `ModeRouteProps.status`
 disappear as props.
 
+**Built as** `{ status, cinema, observer, presentation, playhead }`. The world
+clock is _not_ a new field: it is already inside `status.world`, and the fix
+there was the selector, not the shape — `useEngine((s) => s.status?.world.paused)`
+returns a boolean and bails out honestly. The travel survey deliberately stayed
+out: it is a star sweep, not a field read, and sampling two of them eight times
+a second is the cost the snapshot exists to avoid. It collapses in 4.3 instead.
+
 **The guardrail.** The react-shell rule is right: `status` is a fresh
 object every sample and never bails out of a re-render. The wider snapshot
 therefore ships with narrow selectors — `useEngine(s => s.clock.paused)`
@@ -568,6 +633,14 @@ _reading_ it contradicts nothing; a richer status return is the part to
 confirm. If declined, the session owns the single remaining copy of the
 heuristic, which is still one instead of three.
 
+**Taken.** `CutsceneDirector` records how a scene left — `lastOutcome()`
+returning `ended` / `stopped` / `abandoned` — which is purely additive and
+leaves `sample(frame)` exactly as pure as ADR-0010 requires. The heuristic is
+gone rather than reduced to one copy. The session also took the scrubber's hold
+rule: `useScrubber` owns the pointer, and what the hold _means_ — the published
+frame stands still — is the session's, because both transports needed it and
+neither owned it.
+
 **Tests.** Against a fake harness in Node: ended vs stopped; the
 frame-to-URL writeback rule (only while paused); replay clears `t`; seek
 dismisses the end card. `cinema.test.ts` already tests the pure half at
@@ -613,6 +686,13 @@ between producers.
    _is_ the next mode's stance applying. This fits ADR-0011's "mode is
    never held in state" more tightly.
 
+**Settled: the stack.** The table needs an override channel for the toggle and
+then a rule for what happens to that channel when the mode changes — which is a
+restore rule wearing a different hat. `engine/presentation.ts` carries the
+argument in full. One thing the sketch did not say: layers release **by
+identity**, not by position, because React interleaves one route's cleanup with
+the next one's mount and popping the top would take somebody else's layer.
+
 The deciding constraint is `NavPanel`'s in-planetarium ship toggle: a user
 override on top of the mode's stance. The table needs an override channel;
 the stack gets it free (the toggle pushes). Settle this with a short
@@ -656,6 +736,10 @@ seam open. The seam does not move; it narrows. The win is type-level: the
 host object cannot shadow `world`, making the recorded bug class
 unrepresentable rather than commented against.
 
+**Built as** `SessionHost` with `scene`, `frameStats` and `onWorldReplaced`,
+assigned by name rather than spread — naming them is what actually removes the
+shadowing, not folding them into one parameter.
+
 ### 4.2 The registration cliff
 
 **Files.** `apps/game/src/main.tsx:197–232` · `public/sw.js` (well-tested)
@@ -697,10 +781,22 @@ whole sphere per keystroke. `travelTargets` keeps the part that earns its
 keep: the frame-pose-versus-orbital-elements distinction and the
 loaded/unloaded merge.
 
-**The gate:** the index sits in the catalog decode path, which `main.tsx`
-awaits before first render. Measure decode with and without index
-construction before building; if it costs more than a few milliseconds,
-build it lazily on first search instead. Then: Node tests that "α Cen,"
+**The gate, measured (23 Aug 2026):** the exact-name index already existed — the
+decode loop calls `searchKeysFor` for every star — so a _searchable_ one costs
+**0.18 ms** marginal, because the only extra work is keeping the pairs instead
+of discarding all but the first. Decode is 22 ms for 7,123 stars; a query over
+all 16,537 keys is **0.14–0.30 ms**. Built eagerly.
+
+One thing the split bought that the plan did not predict: `α Cen` resolved to
+nothing, though `designations.ts` promises it should. Dropping the superscript
+keys `ζ¹` and `ζ² Reticuli` — two unrelated systems — to one string, so the
+exact map cannot hold it without answering an ambiguous name arbitrarily. That
+is a constraint on `find`, not on a search box, which should offer both stars;
+the un-superscripted forms are in the search index and out of the exact map.
+(`alf cen` below is HYG's own internal abbreviation and is deliberately not
+indexed — nothing in this repository spells alpha that way.)
+
+Then: Node tests that "α Cen,"
 "Alpha Centauri," "alf cen," and "HIP 71683" reach the same star, and that
 a star 90 ly out is findable — a case the survey interface cannot even
 express. The two panels' duplicated poll-and-catch state machines collapse
@@ -736,3 +832,14 @@ interfaces (replacing the tests they obsolete, not layering over them), an
 decision, and — where a phase changes an interface this file describes —
 the corresponding update here. Phase 2 additionally re-verifies the boot
 numbers in the browser before merge.
+
+**As implemented (23 Aug 2026):** `pnpm check` green and `pnpm sim --self-test`
+12/12; the new interfaces carry their own tests and the tests they obsoleted are
+gone rather than layered over; `CONTEXT.md` § "Twelve shallow modules, deepened"
+records the decisions. Phase 2's browser pass confirmed the census live
+(`baking atmospheres 28/62`, then `building bodies 46/62`, then first light onto
+a fully textured scene) and found two bugs Node could not — both fixed, both
+with regression tests. Two items are **outstanding**: the `invariant-auditor`
+pass on each diff, and the Saturn frame-spike re-measurement, which needs a
+composited window — the automation window stays `visibilityState: hidden`, and
+Chrome suspends the frame loop entirely for one.

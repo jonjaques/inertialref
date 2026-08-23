@@ -1,5 +1,6 @@
 import { Canvas } from '@react-three/fiber'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useStore } from 'zustand'
 import { AnimatePresence, motion } from 'motion/react'
 import { useLocation } from 'react-router'
 import type { StarCatalog } from '@inertialref/universe'
@@ -11,7 +12,6 @@ import type {
   HudRenderState,
 } from './hud/controls.ts'
 import { FOV_MAX, FOV_MIN } from './hud/controls.ts'
-import { bootStatusLine } from './hud/boot.ts'
 import { BootOverlay } from './hud/BootOverlay.tsx'
 import { CutsceneOverlay } from './hud/CutsceneOverlay.tsx'
 import { ErrorBoundary } from './hud/ErrorBoundary.tsx'
@@ -31,12 +31,8 @@ import {
   DISCONNECTED,
 } from './net/health.ts'
 import { EXTENDED_RANGE_QUERY, watchDynamicRange } from './render/capability.ts'
-import {
-  type BootProgress,
-  warmScene,
-  watchSystemAtmospheres,
-} from './render/preload.ts'
-import { watchPresentation } from './render/presentationWatchdog.ts'
+import { warmScene, watchSystemAtmospheres } from './render/preload.ts'
+import { createFirstLight } from './render/firstLight.ts'
 import {
   commitToneCurve,
   createRenderer,
@@ -226,79 +222,40 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    * than a degraded one — so this is a readout the HUD shows, in the same sense
    * that altitude is, and its failure path is a sentence rather than a retry.
    */
-  const [monitor] = useState(() => new ConnectionMonitor())
+  // The catalog version rides along because the client's claim about which
+  // universe it derives is not a constant: a failed catalog fetch degrades this
+  // session to Sol alone, and the probe has to say so rather than claim the sky
+  // it meant to load.
+  const [monitor] = useState(
+    () => new ConnectionMonitor({ catalog: catalog.version }),
+  )
   const [connection, setConnection] = useState<Connection>(DISCONNECTED)
   // The renderer itself, for the one thing that has to happen to it after R3F
   // has finished configuring it. Not state: nothing renders differently for it.
   const renderer = useRef<RendererHandle | null>(null)
-  /*
-   * Bumped by the presentation watchdog's last rung, and by nothing else. In
-   * the deepest boot wedge — draws submitted every frame, presentation stuck,
-   * immune even to real resizes — the only recovery is a fresh canvas and
-   * renderer, and folding this into `canvasKey` is the sanctioned way to get
-   * one. See `render/presentationWatchdog.ts` for the measurements.
-   */
-  const [canvasEpoch, setCanvasEpoch] = useState(0)
   /** Guards save and load against each other. See `commands.save`. */
   const storageBusy = useRef(false)
   /*
-   * The boot gate, and the two facts it waits on.
+   * When the cover comes off, and the canvas epoch that a wedged boot bumps.
    *
-   * `warmed` — the preloader has fetched and uploaded every shipped surface
-   * map, baked every atmosphere table the loaded systems can ask for, and
-   * compiled one pipeline per material archetype (`render/preload.ts`). It is
-   * a latch: the HDR toggle rebuilds the renderer and re-runs the warm-up,
-   * but the overlay must not come back mid-session for it.
-   *
-   * `presented` — the presentation watchdog's probe found lit pixels on the
-   * canvas, which is the only signal that survives the blank-boot failure
-   * `render/presentationWatchdog.ts` documents. Fading the overlay out on any
-   * weaker evidence reveals exactly the black frame it exists to hide.
-   *
-   * Both true → `revealing`; the overlay's fade-out completion → `done`, and
-   * the component unmounts for the rest of the session.
+   * Four `useState`s and five effects used to live here: the warm-up latch, the
+   * presented flag, the phase, the epoch, the backend split behind "presented",
+   * and three copies of the measurement replay. `render/firstLight.ts` owns all
+   * of it — including the part that made it worth moving, which is that
+   * "provably presented" means something different on each backend and the
+   * module that says so should be the module that decides it.
    */
-  const [boot, setBoot] = useState<'booting' | 'revealing' | 'done'>('booting')
-  const [bootProgress, setBootProgress] = useState<BootProgress | null>(null)
-  const [warmed, setWarmed] = useState(false)
-  const [presented, setPresented] = useState(false)
+  const [firstLight] = useState(() => createFirstLight())
+  const {
+    phase: boot,
+    status: bootStatus,
+    epoch: canvasEpoch,
+  } = useStore(firstLight.store)
+  useEffect(() => () => firstLight.dispose(), [firstLight])
 
   // The media query is live: a window can be dragged from an EDR display to one
   // without, and reading it once at startup gets that permanently wrong.
   useEffect(() => watchDynamicRange(setDynamicRangeHigh), [])
-
-  /*
-   * Replay the canvas measurement whenever it could have been lost.
-   *
-   * R3F sizes its canvas from a ResizeObserver, and Chrome does not deliver
-   * the *initial* observation to a hidden document — which is what this page
-   * is during every Vite full-reload triggered from the editor in front of
-   * it. Becoming visible again does not replay the lost observation either:
-   * the canvas sits at the default 300×150 with no renderer behind it, a
-   * black screen with a healthy HUD that only a manual window resize could
-   * revive. The measurement hook also listens to window `resize`, so a
-   * synthetic one is exactly the kick it is waiting for; when the measurement
-   * already landed, re-measuring the same size is a no-op. Verified live:
-   * dispatching `resize` on the stuck page took the canvas from 300×150 to
-   * full size — even while the document was still hidden, which is why the
-   * kick is unconditional rather than gated on visibility.
-   *
-   * This mount-time kick is not sufficient on its own: a *focused* fresh load
-   * could still come up black until a manual resize, because the mount kick
-   * races the async renderer build — `createRenderer` awaits a device probe
-   * and `renderer.init()`, and a measurement kicked before R3F has a backend
-   * to hand it to is lost with nothing scheduled to replay it. The second
-   * kick, in the renderer-ready callback below, closes that hole at the one
-   * moment it provably cannot be too early.
-   */
-  useEffect(() => {
-    const kick = (): void => {
-      window.dispatchEvent(new Event('resize'))
-    }
-    kick()
-    document.addEventListener('visibilitychange', kick)
-    return () => document.removeEventListener('visibilitychange', kick)
-  }, [])
 
   useEffect(() => {
     engine.lensFlare = lensFlare
@@ -331,45 +288,19 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
   const canvasKey = `${rendererKey(hdr, dynamicRangeHigh)}:${aaAntialias(aa) ? 'msaa' : 'raw'}:${canvasEpoch}`
 
   /*
-   * Verify that boot actually put pixels on screen, and climb the recovery
-   * ladder if it did not. Keyed on `output` because sampling before the
-   * renderer exists proves nothing, and on `canvasEpoch` so a rebuilt canvas
-   * gets its own verification pass — with the remount lever withheld the
-   * second time, or a genuinely black scene would rebuild forever.
+   * Verify that boot actually put pixels on screen.
+   *
+   * Keyed on `output` because sampling before the renderer exists proves
+   * nothing, and on `canvasEpoch` so a rebuilt canvas gets its own verification
+   * pass. Which evidence counts, whether the remount lever is still available,
+   * and what an exhausted ladder means are all `firstLight`'s.
    */
   useEffect(() => {
     if (output === null) return
     const canvas = renderer.current?.renderer.domElement
     if (canvas === undefined) return
-    const watch = watchPresentation(canvas, {
-      allowRemount: canvasEpoch === 0,
-      remount: () => setCanvasEpoch((epoch) => epoch + 1),
-      onPresented: () => setPresented(true),
-    })
-    return () => watch.cancel()
-  }, [output, canvasEpoch])
-
-  /*
-   * The WebGL half of the `presented` gate.
-   *
-   * The watchdog's pixel probe is only trustworthy on a WebGPU canvas —
-   * `drawImage` of a WebGL canvas without `preserveDrawingBuffer` may
-   * legally read back black between frames, so on the fallback backend the
-   * probe can leave the boot overlay waiting on evidence that will never
-   * come (Firefox sat at "first light…" indefinitely). Two animation frames
-   * are that backend's honest signal instead: rAF only runs while the
-   * document is visible, and by the second callback the first frame has
-   * demonstrably been through the compositor. The blank-boot wedge the
-   * watchdog exists for has only ever been observed on the WebGPU path.
-   */
-  useEffect(() => {
-    if (output === null || output.backend === 'webgpu' || presented) return
-    let raf = 0
-    raf = window.requestAnimationFrame(() => {
-      raf = window.requestAnimationFrame(() => setPresented(true))
-    })
-    return () => window.cancelAnimationFrame(raf)
-  }, [output, presented])
+    firstLight.watch(canvas, output.backend)
+  }, [output, canvasEpoch, firstLight])
 
   /*
    * Warm everything a first encounter would otherwise pay for, behind the
@@ -383,16 +314,12 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
     if (output === null) return
     const handle = renderer.current
     if (handle === null) return
-    void warmScene(handle, engine, setBootProgress).then(() => setWarmed(true))
-  }, [output, engine])
+    void warmScene(handle, engine, firstLight.progress).then(firstLight.warmed)
+  }, [output, engine, firstLight])
 
   // Bake atmosphere tables for systems that load mid-session, off the frame
   // loop, so a jump's first look costs a cache hit. See `render/preload.ts`.
   useEffect(() => watchSystemAtmospheres(engine), [engine])
-
-  useEffect(() => {
-    if (boot === 'booting' && warmed && presented) setBoot('revealing')
-  }, [boot, warmed, presented])
 
   useEffect(() => {
     // Expose the harness for the console and for automated drivers. This is the
@@ -597,12 +524,8 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
           renderer.current = handle
           engine.gl = handle
           setOutput(handle.description)
-          // The second half of the measurement-replay above: the backend now
-          // exists, so a re-measure cannot be lost. A macrotask rather than
-          // requestAnimationFrame, because rAF does not fire in a hidden tab
-          // and a background load must still size its canvas for the frame
-          // that draws the moment the tab is focused.
-          window.setTimeout(() => window.dispatchEvent(new Event('resize')), 0)
+          // The measurement replay that follows a renderer build is
+          // `firstLight.watch`'s, fired from the effect that reads `output`.
         })}
         // A logarithmic depth buffer makes this range workable; a linear one
         // would have no usable precision anywhere in it. The flag itself moved
@@ -830,8 +753,8 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
             >
               <BootOverlay
                 phase={boot === 'revealing' ? 'revealing' : 'booting'}
-                status={bootStatusLine(bootProgress, warmed)}
-                onRevealed={() => setBoot('done')}
+                status={bootStatus}
+                onRevealed={firstLight.revealed}
               />
             </ErrorBoundary>
           </div>

@@ -524,7 +524,64 @@ describe('cutscene director lifecycle', () => {
     // not restore it into the new one — it abandons and goes quiet.
     expect(harness.cutsceneSample(100)).toBeNull()
     expect(harness.cutsceneStatus()).toBeNull()
+    expect(harness.cutsceneOutcome()?.ending).toBe('abandoned')
     // And a stop after the abandonment is a harmless no-op.
     harness.stopCutscene()
+  })
+})
+
+describe('how a scene left', () => {
+  /*
+   * `cutsceneStatus()` goes null for three different reasons and a player has
+   * to tell them apart: one draws an end card and keeps its transport, the
+   * others close it. Before this the only evidence was the null itself, so the
+   * cinema player guessed with a half-second window around the final frame —
+   * and read `stopCutscene` from the console as an ending, because a stop near
+   * the end produces the identical evidence.
+   */
+
+  it('says nothing before a scene has ever played', () => {
+    expect(openSession().harness.cutsceneOutcome()).toBeNull()
+  })
+
+  it('reports a scene that ran past its last frame as ended', () => {
+    const { harness, at } = playing()
+    at(0)
+    expect(harness.cutsceneOutcome()).toBeNull()
+    // One sample past the end is what stops it, from inside `sample`.
+    expect(at(TNG_INTRO.durationFrames + 1)).toBeNull()
+    expect(harness.cutsceneStatus()).toBeNull()
+    expect(harness.cutsceneOutcome()).toEqual({
+      id: 'tng-intro',
+      ending: 'ended',
+      durationFrames: TNG_INTRO.durationFrames,
+      fps: TNG_INTRO.fps,
+    })
+  })
+
+  it('reports a scene stopped by hand as stopped, at any frame', () => {
+    // Including one frame short of the end, which is exactly where the old
+    // heuristic could not tell the two apart.
+    const { harness, at } = playing()
+    at(TNG_INTRO.durationFrames - 1)
+    harness.stopCutscene()
+    expect(harness.cutsceneOutcome()?.ending).toBe('stopped')
+  })
+
+  it('clears the outcome when a new scene starts', () => {
+    const { harness, at } = playing()
+    at(TNG_INTRO.durationFrames + 1)
+    expect(harness.cutsceneOutcome()?.ending).toBe('ended')
+    harness.play('tng-intro')
+    // A scene that is playing has not left yet; a stale ending here would draw
+    // an end card over a scene that had only just started.
+    expect(harness.cutsceneOutcome()).toBeNull()
+  })
+
+  it('keeps saying so until something else happens', () => {
+    const { harness } = playing()
+    harness.stopCutscene()
+    harness.stopCutscene()
+    expect(harness.cutsceneOutcome()?.ending).toBe('stopped')
   })
 })

@@ -1,9 +1,8 @@
-'use no memo'
 import { useParams } from 'react-router'
 import { Workspace } from '../dock/Workspace.tsx'
 import type { DevWorkspace } from '../dock/workspace.ts'
 import type { GameEngine } from '../engine/GameEngine.ts'
-import { usePolled } from '../hud/usePolled.ts'
+import { useEngine } from '../state/engineStore.ts'
 import { CinemaLibrary } from './CinemaLibrary.tsx'
 import { CinemaPlayer } from './CinemaPlayer.tsx'
 import { useTransportIdle } from './useTransportIdle.ts'
@@ -14,10 +13,6 @@ import { useTransportIdle } from './useTransportIdle.ts'
  * One route entry with a branch rather than two components wired separately,
  * because the two share nothing but the path prefix — and the branch is the
  * cheapest place to say which of them a URL means.
- *
- * `'use no memo'`: the running check below reads `engine.harness`, a stable
- * reference whose contents change every frame. The compiler would render the
- * poll once and show that forever.
  */
 export function CinemaMode({
   engine,
@@ -30,14 +25,14 @@ export function CinemaMode({
   /*
    * Is a scene actually playing — running, not merely open?
    *
-   * Off the harness rather than out of the player's state, because both bars
-   * that fade have to agree and only one of them is the player. A paused or
-   * ended scene is one somebody is working with, and its controls stay put.
+   * Off the published playhead rather than out of the player's state, because
+   * both bars that fade have to agree and only one of them is the player. A
+   * paused or ended scene is one somebody is working with, and its controls
+   * stay put. The selector returns a boolean, so this re-renders when that
+   * answer changes rather than eight times a second.
    */
-  const running = usePolled(
-    () =>
-      engine.harness.cutsceneStatus() !== null && !engine.world.clock.paused,
-    4,
+  const running = useEngine(
+    (snapshot) => snapshot.playhead !== null && !snapshot.playhead.paused,
   )
   const idle = useTransportIdle(running)
 

@@ -34,11 +34,12 @@
  * turn into a red gate that means nothing. It asserts they exist and are not
  * empty, and re-rendering them is one command.
  */
-import { readFile, writeFile } from 'node:fs/promises'
+import { readFile, readdir, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { relative } from 'node:path'
 import { format, getFileInfo, resolveConfig } from 'prettier'
 import { PAGES, SITE, canonicalUrl } from '../../apps/game/src/site.ts'
+import { checkPublicSurface } from './checkHead.mjs'
 import { readMark, fit, markup, measure } from './mark.mjs'
 import { composeOgCard, OG_HEIGHT, OG_WIDTH } from './og.mjs'
 
@@ -371,7 +372,31 @@ async function main() {
       process.exitCode = 1
       return
     }
+    /*
+     * The one artifact that is hand-kept rather than generated.
+     *
+     * Checked here rather than in a separate command because it belongs to the
+     * same question — "does the public surface still say what `site.ts` says" —
+     * and a second script is a second thing to remember to run. It cannot be
+     * *fixed* by `pnpm brand`, so its failure names the tag rather than telling
+     * anyone to re-run anything.
+     */
+    const surface = checkPublicSurface({
+      html: await readFile(new URL('apps/game/index.html', ROOT), 'utf8'),
+      sw: await readFile(new URL('sw.js', PUBLIC), 'utf8'),
+      publicFiles: new Set(await readdir(PUBLIC)),
+    })
+    if (surface.length > 0) {
+      console.error('The static head disagrees with apps/game/src/site.ts:')
+      for (const problem of surface) console.error(`  - ${problem}`)
+      console.error(
+        '\nEdit apps/game/index.html to match, or src/site.ts if the head is right.',
+      )
+      process.exitCode = 1
+      return
+    }
     console.log('brand artifacts match design/brand/brandmark.svg')
+    console.log('index.html and sw.js match apps/game/src/site.ts')
     return
   }
 

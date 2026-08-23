@@ -1,6 +1,7 @@
 import { useStore } from 'zustand'
 import { createStore, type StoreApi } from 'zustand/vanilla'
-import type { HarnessStatus } from '@inertialref/devtools'
+import type { HarnessStatus, ObserverStatus } from '@inertialref/devtools'
+import type { Playhead } from '../cinema/session.ts'
 
 /*
  * The seam between the engine and React.
@@ -35,12 +36,46 @@ import type { HarnessStatus } from '@inertialref/devtools'
  * app uses, alongside the engine singleton in `App.tsx`, for the same reason.
  */
 
-/** Everything the overlay reads about the engine, as one immutable value. */
+/** The presentation switches, as a panel reads them. */
+export interface PresentationSnapshot {
+  readonly showShip: boolean
+  readonly showOrbits: boolean
+  /** How much of the lens's artifact stack is showing, 0..1. */
+  readonly flareArtifacts: number
+}
+
+/**
+ * Everything the overlay reads about the engine, as one immutable value.
+ *
+ * Wider than it was, and that is the point: this module's header has always
+ * said panels should subscribe instead of being handed props, and for a while
+ * nothing did, because the snapshot carried two fields and every panel needed a
+ * third. Meanwhile the engine was read by four other mechanisms at four rates —
+ * an 8 Hz sampler, `usePolled` at 6/4/3 Hz, bare `setInterval`s at 100 ms and
+ * 250 ms, and raw animation-frame loops — seven files each owning a timer over
+ * the same singleton, and two of them disagreeing about `showShip` the moment
+ * either acted. `usePolled` is gone; what is left is two polls that are not
+ * field reads at all — the travel survey (a star sweep, `hud/useTravelTargets.ts`)
+ * and the sky labels' projection (geometry over the camera).
+ *
+ * **Read it through a narrow selector.** `status` is a fresh object graph every
+ * sample and never bails out of a re-render, so `useEngine((s) => s.status)`
+ * re-renders at the full sample rate by construction. A selector returning a
+ * primitive or a stable slice bails out with `Object.is`; several fields want
+ * `useShallow`. A wide snapshot read widely is worse than the props it replaced.
+ */
 export interface EngineSnapshot {
   /** `null` until the first sample lands, which is one interval after mount. */
   readonly status: HarnessStatus | null
   /** Whether a cutscene is running. Chrome unmounts while it is. */
   readonly cinema: boolean
+  /** What the planetarium's camera is on. `null` when it is on nothing. */
+  readonly observer: ObserverStatus | null
+  /** What the engine is drawing, so a panel's toggle reads the engine's answer
+   *  rather than its own memory of what it asked for. */
+  readonly presentation: PresentationSnapshot
+  /** The cutscene playhead. `null` when no scene is open. */
+  readonly playhead: Playhead | null
 }
 
 /**
@@ -52,11 +87,37 @@ export interface EngineSnapshot {
  * grow a dependency on the renderer by accident.
  */
 export interface EngineSource {
-  readonly harness: { status(): HarnessStatus }
+  readonly harness: {
+    status(): HarnessStatus
+    observerStatus(): ObserverStatus | null
+  }
   readonly cinematic: object | null
+  readonly showShip: boolean
+  readonly showOrbits: boolean
+  readonly flareArtifacts: number
+  /**
+   * The cutscene session's tick.
+   *
+   * Published through this snapshot rather than through a timer of its own,
+   * which is what makes the playhead cost nothing: three components used to
+   * poll the director at three rates to answer the same question.
+   */
+  readonly cutscene: { sample(): Playhead | null }
 }
 
-const IDLE: EngineSnapshot = { status: null, cinema: false }
+const NOTHING_DRAWN: PresentationSnapshot = {
+  showShip: false,
+  showOrbits: false,
+  flareArtifacts: 0,
+}
+
+const IDLE: EngineSnapshot = {
+  status: null,
+  cinema: false,
+  observer: null,
+  presentation: NOTHING_DRAWN,
+  playhead: null,
+}
 
 export type EngineStore = StoreApi<EngineSnapshot>
 
@@ -69,6 +130,13 @@ export function sampleOnce(store: EngineStore, source: EngineSource): void {
   store.setState({
     status: source.harness.status(),
     cinema: source.cinematic !== null,
+    observer: source.harness.observerStatus(),
+    presentation: {
+      showShip: source.showShip,
+      showOrbits: source.showOrbits,
+      flareArtifacts: source.flareArtifacts,
+    },
+    playhead: source.cutscene.sample(),
   })
 }
 

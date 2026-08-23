@@ -1,20 +1,23 @@
-import { useEffect, useState } from 'react'
-import type { TravelTarget } from '@inertialref/devtools'
+import { useEffect, useRef, useState } from 'react'
 import { Separator } from '@/components/ui/separator'
+import { useEngine } from '../state/engineStore.ts'
 import type { GameEngine } from '../engine/GameEngine.ts'
+import type { StanceHandle } from '../engine/presentation.ts'
 import { Action } from './Action.tsx'
 import { AddressForm } from './AddressForm.tsx'
 import { type Failure, NavFailure } from './NavFailure.tsx'
 import { Section } from './Section.tsx'
 import { TargetActions } from './TargetActions.tsx'
 import { TargetRow } from './TargetRow.tsx'
+import { useTravelTargets } from './useTravelTargets.ts'
 
 /*
  * Going places.
  *
  * The alpha's answer to "I am parked above the first planet of Sol and there is
- * no way to get anywhere else". Everything here is the harness — `ir.targets()`
- * and `ir.goTo()` — with a list drawn around it, which is deliberate: the panel
+ * no way to get anywhere else". Everything here is the harness — `ir.targets()`,
+ * `ir.search()` and `ir.goTo()` — with a list drawn around it, which is
+ * deliberate: the panel
  * must not be able to reach somewhere the console and the headless runner
  * cannot, or the thing an author demonstrates in the browser stops being the
  * thing a test can replay.
@@ -30,8 +33,6 @@ import { TargetRow } from './TargetRow.tsx'
  * without four hundred lines of buttons around it.
  */
 
-/** How often the listing re-reads distances. A survey is not free; 1 Hz is plenty. */
-const REFRESH_MS = 1_000
 /** Survey radius for the star listing. Holds the nearest half-dozen systems. */
 const SURVEY_LIGHT_YEARS = 8
 
@@ -42,55 +43,77 @@ export function NavPanel({
   engine: GameEngine
   onNotice: (message: string) => void
 }) {
-  const [targets, setTargets] = useState<readonly TravelTarget[]>([])
   const [selected, setSelected] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [failure, setFailure] = useState<Failure | null>(null)
-  /*
-   * Whether the survey has completed once.
-   *
-   * "surveying…" and "there is nothing here" are different answers and the
-   * panel used to give the first one for both — so flying out past the survey
-   * radius produced a list that looked permanently mid-load. Only one of the
-   * two has a next step, and it is the one that was being hidden.
-   */
-  const [surveyed, setSurveyed] = useState(false)
   /*
    * The scenario currently running, if any. The scenarios are seconds long and
    * their buttons had no busy state at all, so ten impatient clicks were ten
    * concurrent scenarios racing to teleport the same ship.
    */
   const [pending, setPending] = useState<string | null>(null)
-  // Mirrors `engine.showShip`, which is a plain field on purpose — this state
-  // exists only so the button's label re-renders when it is clicked.
-  const [shipShown, setShipShown] = useState(engine.showShip)
+  /*
+   * The engine's answer, not this panel's memory of what it asked for.
+   *
+   * This used to be a `useState` mirroring `engine.showShip`, and it disagreed
+   * with `PlanetariumMode` the moment either acted: the mode's effect restored
+   * the field on the way out and nothing told the button. A published boolean
+   * bails out of the re-render with `Object.is`, so subscribing costs less than
+   * the mirror did.
+   */
+  const shipShown = useEngine((snapshot) => snapshot.presentation.showShip)
+  /*
+   * The user's override, on top of whatever the mode asked for.
+   *
+   * This is the case that decided the stance's shape (`engine/presentation.ts`):
+   * a *panel* wanting a different answer than its mode. As a push it composes
+   * for free and needs no channel of its own — the mode below is untouched, and
+   * releasing this hands the answer straight back to it.
+   */
+  const override = useRef<StanceHandle | null>(null)
+  useEffect(() => () => override.current?.release(), [])
+  const toggleShip = (): void => {
+    if (override.current !== null) {
+      override.current.release()
+      override.current = null
+      return
+    }
+    override.current = engine.presentation.push({ showShip: !shipShown })
+  }
   // Bumped by every action, so the listing refreshes on the spot rather than
   // showing where you used to be until the next poll.
   const [generation, setGeneration] = useState(0)
 
+  /*
+   * The listing, which this panel and the planetarium's catalog share
+   * (`hud/useTravelTargets.ts`).
+   *
+   * Both owned a copy of the same poll, try/catch and empty-state flag, and
+   * they had drifted to two radii and two rates. The address field doubles as
+   * the search box now: typing goes to `StarCatalog.search` over the whole
+   * catalog rather than filtering the survey, so a star ninety light years out
+   * is reachable by name instead of only by address.
+   */
+  const {
+    rows: targets,
+    ready: surveyed,
+    failure: surveyFailure,
+  } = useTravelTargets(engine, {
+    lightYears: SURVEY_LIGHT_YEARS,
+    query,
+    generation,
+  })
+
   useEffect(() => {
-    const read = (): void => {
-      try {
-        setTargets(engine.harness.targets({ lightYears: SURVEY_LIGHT_YEARS }))
-        setSurveyed(true)
-        // Identical state bails out of the re-render, so this is free on the
-        // ordinary path — every second, forever, with nothing wrong.
-        setFailure((current) =>
-          current?.action === 'the survey' ? null : current,
-        )
-      } catch (cause) {
-        const detail = message(cause)
-        setFailure((current) =>
-          current !== null && current.message === detail
-            ? current
-            : { action: 'the survey', message: detail },
-        )
+    setFailure((current) => {
+      if (surveyFailure === null) {
+        return current?.action === 'the survey' ? null : current
       }
-    }
-    read()
-    const timer = window.setInterval(read, REFRESH_MS)
-    return () => window.clearInterval(timer)
-  }, [engine, generation])
+      return current !== null && current.message === surveyFailure
+        ? current
+        : { action: 'the survey', message: surveyFailure }
+    })
+  }, [surveyFailure])
 
   const target =
     targets.find((candidate) => candidate.address === selected) ?? null
@@ -158,9 +181,11 @@ export function NavPanel({
           ))}
           {targets.length === 0 && (
             <div className="px-2 py-1 text-slate-400">
-              {surveyed
-                ? `no systems within ${SURVEY_LIGHT_YEARS} ly — fly somewhere, or type an address above`
-                : 'surveying…'}
+              {!surveyed
+                ? 'surveying…'
+                : query.trim() !== ''
+                  ? 'no cataloged star is called that — an address still works'
+                  : `no systems within ${SURVEY_LIGHT_YEARS} ly — fly somewhere, or type an address above`}
             </div>
           )}
         </div>
@@ -221,10 +246,7 @@ export function NavPanel({
           <Action
             label={shipShown ? 'Hide Ship' : 'Show Ship'}
             title="Draw the debug ship and reference props, or keep them out of the frame"
-            onClick={() => {
-              engine.showShip = !engine.showShip
-              setShipShown(engine.showShip)
-            }}
+            onClick={toggleShip}
           />
         </div>
       </Section>

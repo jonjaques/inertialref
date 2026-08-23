@@ -2,10 +2,14 @@ import { getLogger } from '@inertialref/shared'
 import {
   decode,
   decodeServerHealth,
+  describeDrift,
   HEALTH_PATH,
   incompatibility,
   NET_PROTOCOL_VERSION,
   type ServerHealth,
+  type VersionDrift,
+  type Versions,
+  versionDrift,
 } from '@inertialref/protocol'
 import { GENERATION_VERSIONS } from '@inertialref/universe'
 
@@ -51,6 +55,8 @@ export interface Connection {
   /** One sentence, when the state is not `online`. */
   readonly detail: string | null
   readonly health: ServerHealth | null
+  /** Which universe keys the server and this client disagree about. */
+  readonly drift: readonly VersionDrift[]
   /** `performance.now()` of the last completed probe; null before the first. */
   readonly checkedAt: number | null
   /** Consecutive failed probes, so the HUD can distinguish a blip from an outage. */
@@ -61,15 +67,34 @@ export const DISCONNECTED: Connection = {
   state: 'checking',
   detail: null,
   health: null,
+  drift: [],
   checkedAt: null,
   failures: 0,
 }
 
-/** What this build derives, and therefore what it can be talked to about. */
+/**
+ * What this build *compiles in*, and therefore what it can be talked to about.
+ *
+ * Not the whole claim: the catalog version is loaded at runtime and can degrade
+ * to `sol-only` when the asset fails to fetch, so it cannot be a constant here.
+ * It is passed to the probe instead — see `clientVersions`.
+ */
 export const CLIENT_VERSIONS = {
   protocol: NET_PROTOCOL_VERSION,
   generation: GENERATION_VERSIONS,
 } as const
+
+/**
+ * The full claim, with the catalog this session actually loaded.
+ *
+ * A client that fell back to `SOL_ONLY_CATALOG` derives a different galaxy —
+ * procedural stars where the real catalog has observed ones — and saying so is
+ * the difference between "we disagree about the sky" and a mystery.
+ */
+export const clientVersions = (catalog: string): Versions => ({
+  ...CLIENT_VERSIONS,
+  catalog,
+})
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
 
@@ -80,6 +105,12 @@ export interface ProbeOutcome {
   >
   readonly detail: string | null
   readonly health: ServerHealth | null
+  /**
+   * How the server's universe differs from ours, when a health record came
+   * back. Empty on `online`, and empty on the failures where nothing answered
+   * with a manifest to compare.
+   */
+  readonly drift: readonly VersionDrift[]
 }
 
 /**
@@ -92,7 +123,16 @@ export interface ProbeOutcome {
  */
 export async function probeHealth(
   fetchImpl: FetchLike,
-  options: { readonly path?: string; readonly timeoutMs?: number } = {},
+  options: {
+    /**
+     * The catalog version this session loaded. Required, not defaulted: a
+     * client that cannot say which sky it has cannot ask whether the server
+     * shares it, and a default would answer the question with a guess.
+     */
+    readonly catalog: string
+    readonly path?: string
+    readonly timeoutMs?: number
+  },
 ): Promise<ProbeOutcome> {
   const path = options.path ?? HEALTH_PATH
   let response: Response
@@ -112,6 +152,7 @@ export async function probeHealth(
       state: 'unreachable',
       detail: cause instanceof Error ? cause.message : String(cause),
       health: null,
+      drift: [],
     }
   }
 
@@ -120,6 +161,7 @@ export async function probeHealth(
       state: 'unreachable',
       detail: `server answered ${response.status}`,
       health: null,
+      drift: [],
     }
   }
 
@@ -131,21 +173,39 @@ export async function probeHealth(
       state: 'incompatible',
       detail: `not a health record: ${cause instanceof Error ? cause.message : String(cause)}`,
       health: null,
+      drift: [],
     }
   }
 
   const decoded = decode(decodeServerHealth, body)
   if (!decoded.ok) {
-    return { state: 'incompatible', detail: decoded.error, health: null }
+    return {
+      state: 'incompatible',
+      detail: decoded.error,
+      health: null,
+      drift: [],
+    }
   }
 
-  const mismatch = incompatibility(decoded.value, CLIENT_VERSIONS)
+  /*
+   * One verdict, two readings.
+   *
+   * `incompatibility` decides; `versionDrift` says which keys, so the panel can
+   * show the disagreement key by key rather than parsing the sentence back
+   * apart. They are the same comparison — the sentence is a rendering of the
+   * array — which is the property `protocol.test.ts` asserts.
+   */
+  const ours = clientVersions(options.catalog)
+  const mismatch = incompatibility(decoded.value, ours)
+  const drift = versionDrift(decoded.value, ours)
   return mismatch === null
-    ? { state: 'online', detail: null, health: decoded.value }
-    : { state: 'incompatible', detail: mismatch, health: decoded.value }
+    ? { state: 'online', detail: null, health: decoded.value, drift }
+    : { state: 'incompatible', detail: mismatch, health: decoded.value, drift }
 }
 
 export interface ConnectionMonitorOptions {
+  /** The catalog version this session loaded. See `probeHealth`. */
+  readonly catalog: string
   /** How often to re-probe while the tab is visible and the probe is succeeding. */
   readonly intervalMs?: number
   readonly timeoutMs?: number
@@ -167,6 +227,7 @@ export interface ConnectionMonitorOptions {
 export class ConnectionMonitor {
   #connection: Connection = DISCONNECTED
   readonly #listeners = new Set<(connection: Connection) => void>()
+  readonly #catalog: string
   readonly #intervalMs: number
   readonly #timeoutMs: number
   readonly #fetch: FetchLike
@@ -175,7 +236,8 @@ export class ConnectionMonitor {
   #inFlight = false
   #started = false
 
-  constructor(options: ConnectionMonitorOptions = {}) {
+  constructor(options: ConnectionMonitorOptions) {
+    this.#catalog = options.catalog
     this.#intervalMs = options.intervalMs ?? 30_000
     this.#timeoutMs = options.timeoutMs ?? 5_000
     this.#fetch =
@@ -233,6 +295,7 @@ export class ConnectionMonitor {
         state: 'offline',
         detail: 'the browser reports no network',
         health: null,
+        drift: [],
         checkedAt: performance.now(),
         failures: this.#connection.failures,
       })
@@ -241,6 +304,7 @@ export class ConnectionMonitor {
     this.#inFlight = true
     try {
       const outcome = await probeHealth(this.#fetch, {
+        catalog: this.#catalog,
         timeoutMs: this.#timeoutMs,
       })
       const failures =
@@ -250,6 +314,7 @@ export class ConnectionMonitor {
           from: this.#connection.state,
           to: outcome.state,
           detail: outcome.detail,
+          drift: describeDrift(outcome.drift),
         })
       }
       this.#publish({
@@ -271,6 +336,7 @@ export class ConnectionMonitor {
       state: 'offline',
       detail: 'the browser reports no network',
       health: null,
+      drift: [],
       checkedAt: performance.now(),
       failures: this.#connection.failures,
     })

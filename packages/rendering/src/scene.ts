@@ -19,6 +19,7 @@ import type {
   WorldSnapshot,
 } from '@inertialref/simulation'
 import type { BodyAppearance, EntityId } from '@inertialref/universe'
+import { atmosphereShellRatio, ringScales, sunkSphereRadius } from './datum.ts'
 import { type LodTier, starColor } from './lod.ts'
 import { placeAt, type RenderPlacement } from './placement.ts'
 
@@ -155,13 +156,17 @@ export function buildScene(
 
   const bodies: RenderBody[] = []
   for (const body of snapshot.bodies) {
-    // The datum sphere is drawn a full relief below the datum. Terrain dips
-    // below the datum as often as it rises above it, and a sphere at exactly
-    // the datum radius hides every valley on the planet — which, with only a
-    // few patches streamed, means hiding most of the terrain.
-    const sphereRadius = Math.max(body.radius * 0.9, body.radius - body.relief)
+    // `datum.ts` owns why the sphere is sunk and by how much. It is a
+    // function rather than a subtraction here because the boot preloader has
+    // to predict this exact number to prebake against it.
+    const sphereRadius = sunkSphereRadius(body.radius, body.relief)
     const placement = placeAt(origin, body.position, sphereRadius)
     if (placement.angularRadius < CULL_ANGLE) continue
+    // Ring radii are authored in meters from the body's center and leave as
+    // multiples of the drawn sphere, which is not the body's radius.
+    const rings = body.appearance.rings
+    const ringSpan =
+      rings === null ? null : ringScales(body.radius, body.relief, rings)
     bodies.push({
       address: body.address,
       name: body.name,
@@ -176,23 +181,22 @@ export function buildScene(
       atmosphereScale:
         body.appearance.haze === null
           ? 1
-          : (body.radius + body.appearance.haze.height) / sphereRadius,
+          : atmosphereShellRatio(
+              body.radius,
+              body.relief,
+              body.appearance.haze.height,
+            ),
       trueRadius: body.radius,
       rotationPeriod: body.rotationPeriod,
       flattening: body.polarRadius / body.radius,
-      // Ring radii arrive in meters from the body's center and leave as
-      // multiples of the drawn sphere — which is not the body's radius, because
-      // the datum sphere is sunk by a relief to let terrain sit above it. Doing
-      // this conversion here rather than in the renderer keeps that adjustment
-      // in the one place that knows about it.
       rings:
-        body.appearance.rings === null
+        rings === null || ringSpan === null
           ? null
           : {
-              innerScale: body.appearance.rings.innerRadius / sphereRadius,
-              outerScale: body.appearance.rings.outerRadius / sphereRadius,
-              opticalDepth: body.appearance.rings.opticalDepth,
-              texture: body.appearance.rings.texture,
+              innerScale: ringSpan.inner,
+              outerScale: ringSpan.outer,
+              opticalDepth: rings.opticalDepth,
+              texture: rings.texture,
             },
       appearance: body.appearance,
     })

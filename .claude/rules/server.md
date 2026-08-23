@@ -32,4 +32,11 @@ Reasoning: `docs/guides/development.md`, ADR-0007, ADR-0008.
   number comes out `NaN` — silently. `routes.test.ts` has the regression.
 - **`stored.range` is populated with or without a `Range` header.** Key the 206 off the
   request, or every plain GET is a partial response.
+- **The media path's decisions live behind `MediaStores`, not behind `env`.** `index.ts`
+  routes and passes bindings; `serveMedia.ts` owns which store answers and which of the
+  four status codes says so, so all of it is reachable from a Node test.
+- **One verdict on "is this the same universe?"** `versionDrift` in
+  `packages/protocol/src/net.ts` compares both manifests — the generation versions and the
+  catalog version — and the handshake, the save loader and the health panel all read it.
+  An absent key is a mismatch, never a default.
 - **A save stores references and mutations, never regenerable content.**

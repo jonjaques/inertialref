@@ -1,3 +1,4 @@
+import { atmosphereShellRatio } from '@inertialref/rendering'
 import type { StarSystem } from '@inertialref/universe'
 import { walkBodies } from '@inertialref/universe'
 
@@ -56,11 +57,11 @@ export function scatteringKey(haze: HazeLike, topRatio: number): string {
 /**
  * Every distinct atmosphere bake the loaded systems can ask for.
  *
- * `sphereRadius` and `topRatio` mirror `buildScene` in
- * `packages/rendering/src/scene.ts` — the datum sphere is sunk below the
- * terrain's peaks, and the shell ratio is measured against that sunk radius.
- * `preloadPlan.test.ts` holds the two formulas together by comparing against a
- * real scene build; change one and that test says so.
+ * `topRatio` is `buildScene`'s own `atmosphereScale`, from
+ * `@inertialref/rendering`'s `datum.ts` rather than recomputed here. It used to
+ * be recomputed, and the two agreed only through a three-hop identity nothing
+ * asserted — `relief` is assigned from `surface.maxElevation` in
+ * `snapshot.ts`, which is the hop this call now makes explicit.
  */
 export function scatteringBakes(
   systems: readonly StarSystem[],
@@ -70,11 +71,11 @@ export function scatteringBakes(
     for (const body of walkBodies(system)) {
       const haze = body.appearance.haze
       if (haze === null) continue
-      const sphereRadius = Math.max(
-        body.radius * 0.9,
-        body.radius - body.surface.maxElevation,
+      const topRatio = atmosphereShellRatio(
+        body.radius,
+        body.surface.maxElevation,
+        haze.height,
       )
-      const topRatio = (body.radius + haze.height) / sphereRadius
       const key = scatteringKey(haze, topRatio)
       if (!out.has(key)) out.set(key, { haze, topRatio })
     }

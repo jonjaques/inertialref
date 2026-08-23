@@ -1,10 +1,9 @@
-'use no memo'
 import { FastForward, Pause, Play, Rewind } from 'lucide-react'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { Action } from '../hud/Action.tsx'
 import { TransportButton } from '../hud/TransportButton.tsx'
-import { usePolled } from '../hud/usePolled.ts'
 import { nextWarp } from '../hud/warp.ts'
+import { useEngine, useShallow } from '../state/engineStore.ts'
 import type { PlanetariumContext } from './context.ts'
 import { localZone, simulationInstant } from './simulationTime.ts'
 
@@ -28,7 +27,23 @@ import { localZone, simulationInstant } from './simulationTime.ts'
  * readout it will replace.
  */
 export function TimePanel({ engine }: PlanetariumContext) {
-  const world = usePolled(() => engine.harness.status().world)
+  /*
+   * Four numbers out of the snapshot, not the snapshot.
+   *
+   * `status` is a fresh object graph every sample and never bails out, so a
+   * selector over the whole thing re-renders this eight times a second on a
+   * paused clock. Four scalars behind `useShallow` re-render it when one of
+   * them moves — which, on a paused clock, is never. The `'use no memo'` this
+   * file carried is gone with the mutable read that needed it.
+   */
+  const world = useEngine(
+    useShallow((snapshot) => ({
+      time: snapshot.status?.world.time ?? 0,
+      timeScale: snapshot.status?.world.timeScale ?? 1,
+      achievedTimeScale: snapshot.status?.world.achievedTimeScale ?? 1,
+      paused: snapshot.status?.world.paused ?? false,
+    })),
+  )
   const at = simulationInstant(world.time)
   const normal = world.timeScale === 1
 

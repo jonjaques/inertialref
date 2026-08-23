@@ -1,10 +1,9 @@
-'use no memo'
 import { AU, LIGHT_YEAR } from '@inertialref/shared'
 import { Button } from '@/components/ui/button'
 import { Action } from '../hud/Action.tsx'
 import { FOCUS_RING, releaseFocus } from '../hud/focus.ts'
 import { Section } from '../hud/Section.tsx'
-import { usePolled } from '../hud/usePolled.ts'
+import { useEngine } from '../state/engineStore.ts'
 import type { PlanetariumContext } from './context.ts'
 import { COMPOSITIONS, PHASES, RANGES } from './presets.ts'
 
@@ -22,7 +21,7 @@ import { COMPOSITIONS, PHASES, RANGES } from './presets.ts'
  */
 export function PresetsPanel({ engine }: PlanetariumContext) {
   const observatory = engine.harness.observatory
-  const status = usePolled(() => engine.harness.observerStatus(), 3)
+  const status = useEngine((snapshot) => snapshot.observer)
   const disabled = status?.target == null
   const isStar = status?.target?.kind === 'star'
 

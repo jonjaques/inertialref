@@ -125,6 +125,14 @@ export function SkyLabels({
       )
     }
     refresh()
+    /*
+     * The one poll in the overlay that is not the engine store's, and it stays
+     * one on purpose: this re-projects the render scene and re-runs a declutter
+     * — geometry over the camera and the viewport, not a field read off the
+     * engine — so it belongs to the render loop's cadence rather than to a
+     * snapshot panels subscribe to. Which labels exist changes slowly; *where*
+     * they are changes every frame, which is the rAF loop below.
+     */
     const timer = window.setInterval(refresh, 250)
     return () => window.clearInterval(timer)
   }, [engine, enabled])
