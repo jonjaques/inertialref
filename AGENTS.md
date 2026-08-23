@@ -112,9 +112,23 @@ Violating one of these is a rewrite later, not a refactor.
   order is **cutscene, then observatory, then the ship.** No arm of that
   order may depend on a later one resolving. Only the last needs a player.
 - **Never let the planetarium write canonical state.** The observatory
-  resolves an address, asks the world where that is this tick, and returns a
-  pose. No teleport, no clock, no entity write, no save.
+  resolves an address, asks the world where that is at `renderTime`, and
+  returns a pose. No teleport, no clock, no entity write, no save.
   [Planetarium](docs/design/planetarium.md).
+- **Never ask where something is at `clock.time` in order to put it in a
+  frame.** Presentation happens at `SimulationClock.renderTime` — one tick
+  back, plus the interpolation alpha — and `clock.time` is the _tick_, which
+  moves in 1/64 s steps. Anything that places, points at, aims at or measures
+  against a body for the picture uses the same instant the picture is drawn at,
+  or it is aiming at where that body used to be by its velocity times up to
+  15.6 ms, sawtoothing as alpha resets. The cost is that error in units of the
+  thing's own radius, so it is invisible on a planet and enormous on a small
+  fast moon: at `clock.time` the observatory vibrated Phobos and Deimos by 11
+  and 19 pixels in the planetarium at 1×, while Mars and Luna held inside a
+  twentieth of a pixel. Three sites have now had to learn this — the terrain
+  streamer, the observatory, and the orbit traces — and nothing mechanical
+  catches a fourth, so it is a rule rather than three comments.
+  [ADR-0006](docs/adr/0006-simulation-clock.md).
 - **Never give a mode its chrome without `pointer-events-auto`.**
   `.hud-layer` is `pointer-events: none` so the scene stays reachable.
 - **Never give `AnimatePresence` `mode="wait"` over the overlay routes,** and

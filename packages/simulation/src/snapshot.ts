@@ -17,7 +17,6 @@ import {
   formatAddress,
   type UniverseAddress,
 } from '@inertialref/universe'
-import { TICK_DURATION } from './clock.ts'
 import type { EntityKind } from './entity.ts'
 import type { World, WorldEvent } from './world.ts'
 
@@ -130,7 +129,10 @@ export function snapshot(
 ): WorldSnapshot {
   const status = world.clock.status()
   // Present one tick behind so there is always a pair to interpolate between.
-  const renderTime = status.time - (1 - alpha) * TICK_DURATION
+  // The arithmetic belongs to the clock: anything else that places something in
+  // a frame has to arrive at the same number, and a second copy of it here is
+  // how the observatory came to be placing its camera at the tick instead.
+  const renderTime = world.clock.renderTimeAt(alpha)
 
   const entities: EntitySnapshot[] = []
   for (const entity of world.entities.ordered()) {

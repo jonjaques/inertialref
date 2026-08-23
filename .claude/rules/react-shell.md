@@ -97,5 +97,10 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", ADR-0011.
   not — a `title`, an `aria-label`, a screen reader, a copied string — so `'PLAYABLE'` in a
   constant is a shout nothing can turn off.
 - **The planetarium never writes canonical state.** It resolves an address, asks where
-  that is this tick, returns a pose. `observatory.test.ts` compares `world.stateHash()`
+  that is at `renderTime`, returns a pose. `observatory.test.ts` compares `world.stateHash()`
   across a session of flying around — that test is the design promise.
+- **Presentation asks at `clock.renderTime`, never `clock.time`.** The latter is the tick
+  and moves in 1/64 s steps; the scene draws at the former. A camera placed against the
+  tick aims at where the body was, by its velocity times up to 15.6 ms, sawtoothing as
+  alpha resets — 11 and 19 pixels of vibration on Phobos and Deimos at 1×, nothing
+  measurable on anything larger.

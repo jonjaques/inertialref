@@ -49,7 +49,7 @@ every touch of its directory, and the thing it is competing with for attention i
 | `packages.md`    | anything in `packages/*`                                      |
 | `determinism.md` | the simulation, procedural, universe, spatial or physics core |
 | `react-shell.md` | any `.tsx` in the client                                      |
-| `rendering.md`   | `render/`, `scene/`, or `packages/rendering`                  |
+| `rendering.md`   | `render/`, `scene/`, `packages/rendering`, or the observatory |
 | `cutscenes.md`   | the cinematic director, its scripts, or `cinema/`             |
 | `dock.md`        | `apps/game/src/dock`                                          |
 | `catalogue.md`   | the star catalog or the ingest app                            |

@@ -1,5 +1,5 @@
 ---
-globs: apps/game/src/render/**,apps/game/src/scene/**,packages/rendering/**
+globs: apps/game/src/render/**,apps/game/src/scene/**,packages/rendering/**,packages/devtools/src/observatory.ts
 alwaysApply: false
 ---
 
