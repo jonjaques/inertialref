@@ -8,3 +8,14 @@ apps/server/worker-configuration.d.ts
 # filesystem, so `pnpm check` went red the first time it ran while a dev
 # server's leftovers were on disk.
 apps/server/.wrangler/
+
+# Throwaway probes (see .gitignore). Git-ignored already, but prettier walks
+# the filesystem, so `pnpm check` goes red on someone else's scratch file —
+# the same way it did once on wrangler's leftovers above.
+.scratch/
+
+# The reference edit's per-frame subject track, exported by
+# `tng-inertial/scripts/export_track.py`. One frame per line on purpose, so a
+# re-export diffs as "these frames changed" rather than as one 288 KB line.
+# Prettier would reflow it into exactly the shape that property exists to avoid.
+data/reference/

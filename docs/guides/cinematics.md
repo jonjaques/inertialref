@@ -31,6 +31,24 @@ Choreograph in the frame. A hull's beats are
 tracked bounding box reports. `screenRoutePosition` interpolates range in
 log space so a four-decade approach does not overshoot through the lens.
 
+**Derive orientation from the path; author attitude as an overlay.** A
+straight pass has one attitude — `orientationAlong(path, up)` is
+`lookAlong(direction, up)` and does not depend on the frame — so a hull on a
+fitted line cannot slide, by construction. Do **not** finite-difference the
+_screen_ spline to get a heading: near the lens, sub-pixel wobble becomes
+large angular velocity. `withAttitude(base, bankDeg, pitchDeg)` is the sparse
+overlay for the places the ship really does maneuver, and for the places its
+attitude and its flight path genuinely differ — `tng-intro`'s cruise flies
+nose-down along a climbing track, which is why the camera sees the saucer's
+top through the approach.
+
+`linePath` is the trajectory type that goes with it: an anchor, a unit
+direction, and an `advance` profile splined in **log-range along the line**.
+Its advance must stay strictly on one side of the anchor — log space has no
+zero crossing — and the fix for a pass that crosses it is to move the anchor,
+which is free, because `anchor + t·direction` is invariant under sliding the
+anchor and re-basing every `t`.
+
 An effect is staging. It belongs in `CinematicEffects`, where a shot turns
 it on, and it is 0 everywhere else. Do not derive a cinematic look from
 geometry alone (for example an eclipse corona from occlusion). At
@@ -57,8 +75,60 @@ spec and `data/frames/` holds the per-frame imagery; read the timeline's
 regression tests in `cutscene.test.ts`. Change those numbers only to make the
 recreation more faithful, and say so in the commit.
 
+---
+
+## The iteration loop
+
+Two rungs, and the cheap one answers most questions.
+
+**Sample the director in Node.** `openSession()` builds the world,
+`harness.play('tng-intro')` prepares the script, and
+`harness.cutsceneSample(epoch + frame / fps)` returns the frame — camera pose,
+hull pose, texts, effects — with no browser and no dev server. A throwaway
+script in a git-ignored `.scratch/` that prints a body's standoff in radii, its
+angular radius, where its centre and limb land on screen, where the star lands,
+and the elongation, converges a camera knot in a second where a capture costs a
+minute. **The first sample anchors frame 0 to its epoch**, so sample frame 0
+first or every later frame is offset by the one you asked for.
+
+**Then capture, because only a GPU can answer exposure.** Per shot, not the
+whole piece:
+
+```bash
+cd ~/Developer/tng-inertial
+node scripts/capture_render.mjs --out .data/shot --from 1755 --to 2100   # ~45 s
+uv run scripts/compare_render.py .data/shot --out /tmp/shot-diff.csv
+```
+
+`--port` attaches to a Chrome that is already up, and keys that Chrome's
+profile directory, so two agents capturing at once must use different ports.
+There is **no `--help`**: passing it starts a full 2742-frame capture. Never
+write to `analysis/render-diff.csv` from a partial capture — it is the
+committed baseline the whole comparison is against.
+
+Read the **signed** per-band table, not the mean-absolute one. Two large errors
+of opposite sign average to a small number: the Saturn pass scored a
+respectable +3.1 of exposure error across f413–470 while running −26.5 through
+its entry and +18.7 through its exit, and the flat summary is what hid it.
+
+Three things the reference's `subj_*` channel is not, and each has produced a
+wrong beat table: it is **truncated** when the box touches a frame edge,
+**saturated** when the subject fills the frame, and **inflated** when a second
+lit component crosses the tracker's area floor. Where any of those hold, the
+width is not a range. The channel that survives all three is a rigid landmark
+on the subject itself — for the hull, the pair of Bussard collectors.
+
 The reference audio is not in git and must not be. Publishing a full-sequence
 render needs a rights check first. See [development](development.md).
+
+`data/reference/tng-subject-track.json` is committed and is the one thing here
+derived from that video: 1639 frames of bounding box, centroid and principal
+axis for whatever the reference has lit in each frame. **Measurements, not
+media** — there is no imagery in it and none should be added — and it is here
+so `pnpm vitest` can hold a line fit or a beat table to the reference without a
+frame dump. Regenerate it with `scripts/export_track.py` in the analysis
+repository; the same rights care that applies to a render applies to anything
+that would carry pixels.
 
 ---
 

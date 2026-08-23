@@ -312,6 +312,32 @@ export class CutsceneDirector {
     }
     return active.prepared.sample(Math.max(0, frame))
   }
+
+  /**
+   * Sample a frame without moving the playhead.
+   *
+   * `sample` is the host's per-frame ask and it *owns* the playhead: it anchors
+   * the epoch on its first call and records `lastRenderTime`, which is the
+   * instant `seek` re-bases against. So a second caller wanting a *different*
+   * frame cannot go through it — the picture would chase whatever the last
+   * asker wanted. The track overlay is that second caller: it takes a central
+   * difference of the hull's camera-relative offset half a frame either side of
+   * the one on screen, which is a velocity that stays correct while paused and
+   * while seeking, where differencing consecutive rendered frames gives zero
+   * and then a spike.
+   *
+   * The script's `sample` is pure by contract (see `PreparedCutscene`), so this
+   * is only as expensive as the arithmetic and touches no state at all.
+   *
+   * Frames outside the scene are clamped rather than declined: a central
+   * difference at frame 0 legitimately asks for −0.5.
+   */
+  peek(frame: number): CinematicSample | null {
+    const active = this.#active
+    if (active === null || !Number.isFinite(frame)) return null
+    const last = active.script.durationFrames - 1
+    return active.prepared.sample(Math.max(0, Math.min(frame, last)))
+  }
 }
 
 /** Guard against a script emitting a non-finite pose; used by tests. */

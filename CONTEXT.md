@@ -3278,6 +3278,112 @@ one: at f2397 the reference still shows the hull at w 0.68 mid-streak; the
 render has hurled it to a dot and drawn a lens line where a stretching ship
 should be.
 
+## The plan met the frames, and half of it was wrong (23 Aug 2026)
+
+[`TNG-PLAN.md`](TNG-PLAN.md) was written from measurements and then implemented
+against the same frames. Its timings and its structure held. A good deal of its
+_causation_ did not, and the corrections are worth more than the work they
+interrupted — they are collected in the plan's own §10 and summarized here.
+
+**The instrument was reading the wrong thing, in three separate places.**
+`compare_render.py`'s subject box is truncated wherever it touches a frame edge,
+saturated wherever the subject fills the frame — 84 frames of the close pass sit
+at w ≥ 0.995 against all four edges — and inflated wherever a second lit
+component crosses its 400-pixel floor, which is the whole of the f752 → f754 →
+f756 width step that looked like closing and was a filter threshold. In those
+bands its width is not a range. What survives all three is a rigid landmark on
+the subject: the pair of Bussard collectors, 265.5 m apart, whose separation is
+immune to clipping and whose centroids are immune to glow. Every refit beat in
+this pass is measured on that channel and spliced to the box only where the box
+is interior.
+
+The same class of error produced the plan's Earth "contradiction". Its claim
+that the reference is physically self-contradictory — sun in frame beside a
+broadly lit planet — rested on a 7.2° sun-to-limb clearance measured to the lit
+mask's bounding-box _corner_, which sits at mid height rather than on the limb.
+Fitting the visible limb as a cone gives 16.7°, recovers the standoff on every
+frame instead of the one unclipped one, and predicts the reference's own frame
+luminance to ±2.6 across f140–200. There was nothing to stage around. The shot
+is now derived — fix the star's mark and the disk's and the phase follows — and
+its orientation error fell from 50.3° to 12.7°, its limb from 0.056 to 0.013,
+with the star inside 0.010 of its measured mark where it used to be off-frame.
+
+**And §4's line fits were fits to the script's own beats.** Refitting them
+against the reference gives a cruise path of ~730 m rather than 4.0 km at a 9.5%
+residual, a descent of ~800 m rather than 6.9 km at 5.0% and strictly monotone,
+a wipe of ~9.5 km at **0.13%** — and a skim that is not measurable at all, 217
+of its 282 frames saturated and 273 touching an edge. So the plan's instruction
+to prove `linePath` on the cruise "because it is already near-perfect" is
+backwards; the wipe is the clean case by two orders of magnitude.
+
+**Orientation was the largest single defect and nobody had measured it.** The
+credit descent's hull was authored at `vec3(-0.02, 0.30, 0.95)` and fits
+`vec3(-0.039, -0.605, 0.796)` — 57° out, with the wrong sign in y. The hull
+descended 0.6 of the frame over 340 frames with its nose tipped up: flying
+backwards down its own track, which is exactly the "sliding" the plan describes
+and which no channel in the diff could see. The cruise was 24° out and the wipes
+were authored nose-down where all three fit level to within 0.22° of each other.
+Fitted directions replace them, and `withAttitude` carries the two places the
+attitude genuinely differs from the flight path — a nose-down cruise, and the
+banks the reference really does roll.
+
+**Fixing the attitude moved the lighting bug into view.** With the hull pointing
+the right way, the credit descent's camera sits on the face the star lights, and
+the "camera underneath the key" defect a fill rig was being built for turned out
+to be an artifact of the wrong attitude. What was left was smaller and worse:
+`CameraRig`'s fill light had been a hardcoded world-space constant
+`[0.4, 1, 0.8]` while `SceneView`'s comment called it camera-mounted, for its
+whole life. Whether the near field was readable came down to which way a shot
+happened to face. Aimed — back down the lens minus 0.85 of the key, so its `N·L`
+is negative wherever the key already reaches and positive only where it does not
+— it is provably a no-op on anything already lit, and 205 missing hull frames
+became 4.
+
+**Two smaller findings of the same shape.** The mirrored fly-through wipe's
+offset is **126, not 128**: reference against reference, mirrored in x, the
+second wipe's boxes agree with the first's to a thousandth on every frame at 126
+and are two frames early at 128 — a perfect mirror on the wrong beat, which
+reads as a bad mirror. And the titles shot had **no warp-out beats at all**:
+from the f1092 cut the hull held at the first wipe's entry knot, a 0.012-wide
+dot, and did not move for twenty-six frames, because `SHIP_CRUISE`'s exit beats
+belong to a shot that has already ended.
+
+**The camera was inside the ship, and no channel could see it.** Through the
+skim the beats put the camera 125–170 m from the hull's origin — inside a
+saucer 467 m across. Decoding the glTF's vertex positions in Node and reducing
+them to a per-column height field in hull axes puts it _within the surface
+envelope_ for forty-eight frames, f2234–2281, by up to 3.5 m, and within a
+metre either side of that; at f2188 the shot is the inside of the saucer with
+the engineering hull's battle bridge showing through the plating. The reference
+diff is structurally blind to this — its subject channel scores the largest lit
+mass, and an interior wall is a large lit mass — so it was found by eye and is
+now held by `apps/headless/src/hullClearance.test.ts`, which walks every frame
+the hull is on stage and asserts 15 m of daylight. Deliberately a test rather
+than a runtime clamp: a director that quietly pushed the camera out would make
+an authoring mistake invisible. The skim's ranges open from 125–170 m to
+190–220 m, which is the least that clears it, and a knot at f2355 stops a
+log-range spline undershoot that had put the camera back within 11 m of the rim
+in the middle of a stretch whose authored knots were all clear.
+
+**Read the signed table, not the mean-absolute one.** Two large errors of
+opposite sign average to a small one. The Saturn pass scored a respectable +3.1
+of exposure error across f413–470 while running −26.5 through its entry and
++18.7 through its exit: the whole pass was arriving eight frames late and then
+not leaving. Re-fit as a flyby — closest approach 2.4 radii at f425, a straight
+line at a varying throttle, 0.17 radii per frame closing and 0.09 opening — it
+now runs −14.4 and −1.1. The residual entry error is physics: Saturn is at 9.5
+AU against Jupiter's 5.2 and receives 30% of the light, while the reference lit
+its Saturn like its Jupiter.
+
+**Clipped is not bright, it is shapeless.** The eclipse corona was driven so
+hard its ring saturated at 250 of 255 and read as a uniform cream annulus out to
+the quad's edge; metered down and given a sunward bias that vanishes at
+alignment, its window went from +29.8 of exposure error to +4.6. Both warp
+flashes were the same story and had the same fix, plus one the titles already
+knew: f1085 and f2382 are _threshold crossings_, not the frames the light
+begins, so the envelope now opens before its start frame and its top is round
+rather than flat — a constant carries nothing for a host to shape.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

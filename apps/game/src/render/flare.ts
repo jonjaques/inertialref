@@ -8,15 +8,19 @@ import {
   OneFactor,
   type PerspectiveCamera,
   PlaneGeometry,
+  Vector2,
   Vector3,
   ZeroFactor,
 } from 'three/webgpu'
 import {
   abs,
+  clamp,
+  dot,
   exp,
   float,
   length,
   mix,
+  normalize,
   oneMinus,
   pow,
   smoothstep,
@@ -106,6 +110,18 @@ interface FlareElement {
 }
 
 /**
+ * Which way the star lies from the occluder, in the corona quad's own axes,
+ * and how one-sided that makes the ring.
+ *
+ * Only the corona reads these; the other kinds never put them in their node
+ * graph, so their WGSL is unchanged and the pipeline count does not move.
+ */
+interface CoronaAim {
+  readonly sunward: { value: Vector2 }
+  readonly asymmetry: { value: number }
+}
+
+/**
  * One element's material: a radial profile carried entirely in `colorNode`,
  * added onto the frame. Every element of a kind generates the same WGSL, so
  * the seven quads compile at most four pipelines.
@@ -114,9 +130,12 @@ function elementMaterial(kind: ElementKind): {
   material: MeshBasicNodeMaterial
   tint: { value: Color }
   intensity: { value: number }
+  aim: CoronaAim
 } {
   const tint = uniform(new Color(1, 1, 1))
   const intensity = uniform(0)
+  const sunward = uniform(new Vector2(1, 0))
+  const asymmetry = uniform(0)
 
   const centred = uv().sub(0.5).mul(2)
   const r = length(centred)
@@ -184,6 +203,29 @@ function elementMaterial(kind: ElementKind): {
        * is what makes the silhouette read.
        */
       const outside = r.sub(CORONA_LIMB).max(0)
+      /*
+       * One-sided until the alignment closes, and that is the shot.
+       *
+       * A ring drawn evenly all the way round is only right at *exact*
+       * totality. Measured on the reference's own frames, its glow is plainly
+       * banked toward the star through the whole approach — spilling over the
+       * upper-left limb at f264, still brightest there at f272 — and a uniform
+       * annulus reads as a graphic rather than as light bending past a body.
+       * `asymmetry` is how far off-centre the star sits as a fraction of the
+       * occluder's own radius, so this term vanishes on its own at alignment
+       * and no script has to remember to turn it off.
+       *
+       * The floor is 0.18 rather than 0: the far limb of a real eclipse is not
+       * black, and a term that reaches zero puts a hard seam across the ring
+       * exactly where the eye is looking for the silhouette's edge.
+       */
+      const banked = mix(
+        float(1),
+        clamp(dot(normalize(centred), sunward), float(0), float(1))
+          .mul(0.82)
+          .add(0.18),
+        clamp(asymmetry, float(0), float(1)),
+      )
       profile = smoothstep(
         float(CORONA_LIMB - 0.035),
         float(CORONA_LIMB + 0.006),
@@ -191,6 +233,7 @@ function elementMaterial(kind: ElementKind): {
       )
         .mul(exp(outside.mul(-11)).add(exp(outside.mul(-3.4)).mul(0.42)))
         .mul(oneMinus(smoothstep(float(0.82), float(1), r)))
+        .mul(banked)
       colour = tint
       break
     }
@@ -222,7 +265,7 @@ function elementMaterial(kind: ElementKind): {
   material.blendDstAlpha = OneFactor
   material.depthTest = false
   material.depthWrite = false
-  return { material, tint, intensity }
+  return { material, tint, intensity, aim: { sunward, asymmetry } }
 }
 
 export interface LensFlare {
@@ -356,7 +399,49 @@ export function createLensFlare(): LensFlare {
           Math.atan(eclipse.radius / Math.max(eclipse.distance, 1e-6)) * PLANE
         const span = discRadius * 2 * CORONA_SPAN
         corona.scale.set(span, span, 1)
-        coronaParts.intensity.value = coronaStrength * 1.9
+        /*
+         * Where the star sits relative to the limb, in the quad's own axes.
+         *
+         * NDC spans −1..1 on both axes while the frame is `aspect` wider than
+         * tall, so the x component has to be stretched before the direction
+         * means anything on screen — the same correction `warpEffects.ts` makes
+         * for its streak angle. Expressed in occluder radii, so `asymmetry`
+         * reads 0 at alignment and 1 when the star is a full radius off, which
+         * is what makes the banking fade out on its own.
+         */
+        const offX = (projected.x - occluderNdc.x) * aspect
+        const offY = projected.y - occluderNdc.y
+        const offset = Math.hypot(offX, offY)
+        const radiusNdc = discRadius / (tanHalf * PLANE)
+        if (offset > 1e-6) {
+          coronaParts.aim.sunward.value.set(offX / offset, offY / offset)
+        }
+        coronaParts.aim.asymmetry.value = Math.min(
+          1,
+          offset / Math.max(radiusNdc, 1e-6),
+        )
+        /*
+         * 0.34, not 1.9.
+         *
+         * The ring was clipping. Captured against the reference at totality the
+         * render meant 27.0 across the whole frame where the reference means
+         * 8.1, and the ring's own pixels sat at 250 of 255 — a saturated cream
+         * annulus, uniformly bright right out to the quad's edge, where the
+         * reference is a warm gold band that falls off within half a disk
+         * radius. The profile was never the problem: driven past the tone
+         * curve's shoulder every radius in it reads the same, so the *shape*
+         * only becomes visible once the peak comes back down onto the curve.
+         * A clipped effect is not a bright effect; it is a shapeless one.
+         *
+         * Metered on `tng-intro`'s eclipse in three windows, because one mean
+         * over the shot hides the answer — the ring is only on for a third of
+         * it, and the dark frames either side average its excess away. Whole
+         * frame, render minus reference: before, f240–247 −3.2 / f248–276
+         * **+29.8** / f280–300 −3.5; at 0.62, +10.1 in the ring window; at
+         * 0.34, **+4.6**, with the other two windows unmoved because the ring
+         * is not lit in them.
+         */
+        coronaParts.intensity.value = coronaStrength * 0.34
         /*
          * A corona is the star's light bent past a limb, so it carries the
          * star's color warmed the way a grazing sight line always is — and

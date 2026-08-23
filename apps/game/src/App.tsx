@@ -16,6 +16,7 @@ import { BootOverlay } from './hud/BootOverlay.tsx'
 import { CutsceneOverlay } from './hud/CutsceneOverlay.tsx'
 import { ErrorBoundary } from './hud/ErrorBoundary.tsx'
 import { isTyping } from './hud/focus.ts'
+import { TrackOverlay } from './hud/TrackOverlay.tsx'
 import { useCoarsePointer } from './hud/viewport.ts'
 import {
   isBoolean,
@@ -651,6 +652,15 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
               engine={engine}
               transport={debug && mode !== 'cinema'}
             />
+          </ErrorBoundary>
+          {/* The reference edit's tracked subject over the render, behind
+              `ir.trackOverlay(true)` and drawn by nothing else. After the
+              overlay above and so above its blackout, which is the point: the
+              boxes have to be readable through a fade. Its own boundary,
+              because a debug surface that throws must not take the titles with
+              it. */}
+          <ErrorBoundary what="the track overlay">
+            <TrackOverlay engine={engine} />
           </ErrorBoundary>
         </div>
         {/*

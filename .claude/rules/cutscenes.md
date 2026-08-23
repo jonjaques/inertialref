@@ -5,6 +5,8 @@ paths:
   - 'packages/rendering/src/cinematic.ts'
   - 'apps/game/src/cinema/**'
   - 'apps/game/src/hud/CutsceneOverlay.tsx'
+  - 'apps/game/src/hud/TrackOverlay.tsx'
+  - 'apps/headless/src/hullClearance.test.ts'
 ---
 
 # The cinematic director
@@ -27,6 +29,18 @@ second scene** — the traps below are the index, not the explanation.
 - **Choreograph in the frame.** A hull's beats are `(frame, screen x, screen y, range)` via
   `screenOffset` — the same terms a tracked bounding box reports. `screenRoutePosition`
   interpolates range in log space so a four-decade approach does not overshoot the lens.
+- **A scripted camera must clear the prop it is staging.** Screen beats say nothing about
+  how close the camera comes to the _geometry_, and a diff against a reference cannot tell
+  you — the inside of a hull is as large and as lit as the outside. `tng-intro`'s skim flew
+  through the saucer for forty-eight frames on beats whose every number looked reasonable.
+  `apps/headless/src/hullClearance.test.ts` reads the shipped glTF in Node and walks every
+  frame the hull is on stage. A **test, not a clamp** — a director that pushed the camera
+  out on its own would hide the mistake.
+- **Derive orientation from the path; author attitude as an overlay.** A straight pass has
+  one attitude, so `orientationAlong(path, up)` cannot slide. Never finite-difference the
+  _screen_ spline for a heading: near the lens, sub-pixel wobble is large angular velocity.
+  `withAttitude(base, bank, pitch)` carries the places the ship really maneuvers and the
+  places its attitude and its flight path genuinely differ.
 - **Camera-relative choreography is offset beats, never absolute beats off a moving
   camera.** Never per-frame look-at a hull near the lens.
 - **An effect is staging, so a script turns it on.** Anything screen-space belongs in
