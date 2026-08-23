@@ -102,9 +102,12 @@ Violating one of these is a rewrite later, not a refactor.
   [ADR-0003](docs/adr/0003-render-coordinates.md).
 - **Never size or position chrome against the viewport.** No `100vh`, no
   `100vw`, no `env(safe-area-inset-*)` at a call site. `.hud-layer` spends the
-  four insets as padding, so an `absolute` child is already inside them; a
-  surface that is _picture_ and must reach the display's own edges says so with
-  `hud-bleed`. The document itself is `100dvh` and cannot scroll.
+  four insets as **offsets** — padding cannot do it, because an absolutely
+  positioned child resolves against the padding _edge_ — so an `absolute` child
+  is already inside them; a surface that is _picture_ and must reach the
+  display's own edges says so with `hud-bleed`, and a corner readout inside one
+  of those is laid out in flow so the padding can reach it. The document itself
+  is `100dvh` and cannot scroll.
 - **Never add a second producer of the camera.** In `GameEngine.#step` the
   order is **cutscene, then observatory, then the ship.** No arm of that
   order may depend on a later one resolving. Only the last needs a player.

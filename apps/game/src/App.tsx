@@ -633,7 +633,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
        * composited over a star at twice diffuse white. See
        * `components/ui/tooltip.tsx`.
        */}
-      <div className="hud-layer pointer-events-none absolute inset-0">
+      <div className="hud-layer pointer-events-none absolute">
         {/* Renders nothing at all when no cutscene is running. While one is,
             every other piece of chrome below unmounts — Esc skips, and the
             dock comes straight back. */}

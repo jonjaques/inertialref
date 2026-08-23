@@ -55,10 +55,13 @@ export const useCompact = (): boolean => useMediaQuery(COMPACT_QUERY)
  * Live, and it has one subscriber: `App` uses it to pick the ceiling on the
  * drawing buffer's pixel ratio (`render/output.ts`), because a handheld GPU
  * runs out of fragment budget on this scene long before a laptop's does. It is
- * live rather than read once because a tablet that gains a trackpad genuinely
- * becomes a fine-pointer device, and the answer is a *quality* setting rather
- * than a structural one — re-reading it costs a resize of the drawing buffer,
- * which R3F does anyway on every window resize.
+ * live rather than read once because a detachable — a Surface, an Android
+ * tablet in a dock — genuinely becomes a fine-pointer device when a mouse is
+ * plugged in, and Chromium re-evaluates the query when it is. (iPadOS does not:
+ * WebKit reports the primary pointer and on an iPad that is always the finger.)
+ * The answer is a *quality* setting rather than a structural one, so re-reading
+ * it costs a resize of the drawing buffer, which R3F does anyway on every
+ * window resize.
  *
  * This hook was deleted once for having no callers, and the note that replaced
  * it said to reach for `coarsePointer` below instead. That is still right for

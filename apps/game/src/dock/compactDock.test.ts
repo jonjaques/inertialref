@@ -109,11 +109,22 @@ describe('the compact dock', () => {
      * The bar is navigation and the sheet is the picker, which is the division
      * that fixed the old strip: eleven panel names cannot share one row across
      * a 390 px screen, and the row that tried scrolled the last of them off the
-     * edge with nothing to say it had. The bar names the *open* panel, or the
-     * affordance that opens one.
+     * edge with nothing to say it had.
+     *
+     * The toggle is called *Panels* whether the sheet is open or shut. It used
+     * to take the open panel's title, which reads as a different control:
+     * press a button marked *Panels* and the button you pressed is now marked
+     * *Catalog*, so the way back is a control that was never on screen when
+     * the decision to press it was made. What belongs on the bar is this
+     * control's own open/shut state, which is `aria-expanded` and the chevron.
+     *
+     * A static render only ever sees the shut state — there is no interaction
+     * here — so the honest assertion is the name and the state, not the
+     * absence of a panel title the closed markup could not contain anyway.
      */
     const markup = render()
     expect(markup).toContain('>Panels</span>')
+    expect(markup).toContain('aria-expanded="false"')
     expect(markup).not.toContain('>catalog</span>')
     expect(markup).not.toContain('overflow-x-auto')
   })
@@ -170,21 +181,6 @@ describe('the compact dock', () => {
     // chrome clear of the safe areas, so a band pinned to the screen edge has
     // to say that it is one.
     expect(render()).toContain('hud-bleed-bottom')
-  })
-
-  it('never renames the control that opens the sheet', () => {
-    /*
-     * It used to take the open panel's title, so pressing a button marked
-     * *Panels* left a button marked *Catalog* where it had been — a toggle
-     * whose label is the state it produced rather than the thing it toggles,
-     * and no label anywhere for the way back. Which panel is open is answered
-     * by the picker inside the sheet; what belongs on the bar is this control's
-     * own open/shut state, which the chevron and `aria-expanded` carry.
-     */
-    const markup = render()
-    expect(markup).toContain('>Panels</span>')
-    expect(markup).toContain('aria-expanded="false"')
-    expect(markup).not.toContain('>catalogue</span>')
   })
 
   it('gives every tab a thumb-sized target', () => {

@@ -120,12 +120,27 @@ export function CompactDock({
      * does. `.hud-layer` pads every piece of chrome clear of the safe areas —
      * right for a readout floating over the scene, wrong for this, which would
      * otherwise leave a strip of live sky under it and a gutter down each side
-     * in landscape. The *contents* are padded back inside on the `nav` below.
+     * in landscape. The *contents* come back inside on their own — the `nav`
+     * below with padding, the sheet above with margins. Both, not just the one
+     * that draws the ground: the sheet is a card and would otherwise be the
+     * thing sitting under the notch.
      */
     <div className="hud-bleed-bottom pointer-events-none absolute inset-x-0 bottom-0 flex flex-col">
       {open !== null && (
         <section
-          className={`pointer-events-auto mx-2 flex ${SHEET_HEIGHT} type-readout min-h-0 flex-col overflow-hidden rounded-t-lg border border-b-0 border-slate-700/60 bg-slate-950/90 text-slate-300 shadow-xl backdrop-blur`}
+          className={`pointer-events-auto flex ${SHEET_HEIGHT} type-readout min-h-0 flex-col overflow-hidden rounded-t-lg border border-b-0 border-slate-700/60 bg-slate-950/90 text-slate-300 shadow-xl backdrop-blur`}
+          /*
+           * The sheet's half of `hud-bleed-bottom`, and it is not optional.
+           * The wrapper is pulled out to the physical edges so the *bar's*
+           * ground reaches them; the sheet is a card and has to come back in,
+           * or in landscape its picker and body sit in the 44 px the OS keeps
+           * down each side. `max`, like the bar below: the inset replaces the
+           * design's 0.5 rem rather than adding to it.
+           */
+          style={{
+            marginLeft: 'max(0.5rem, var(--safe-left))',
+            marginRight: 'max(0.5rem, var(--safe-right))',
+          }}
         >
           {/*
            * The grabber: what a sheet on this platform looks like when it can

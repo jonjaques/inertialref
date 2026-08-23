@@ -33,8 +33,11 @@ export function BootOverlay({
     <motion.div
       // `hud-bleed`: this is the whole screen going black before first light,
       // so it has to reach past the safe areas `.hud-layer` holds its chrome
-      // inside. The readout below it does not, and does not ask to.
-      className={`hud-bleed absolute z-50 bg-black ${
+      // inside. The readout below it does not, and `flex items-end` is what
+      // says so: `hud-bleed` pads the insets back, and padding only reaches a
+      // child that is *in flow* — an `absolute bottom-3 left-3` readout would
+      // resolve against the bled-out edge and sit on the home indicator.
+      className={`hud-bleed absolute z-50 flex items-end bg-black ${
         phase === 'booting' ? 'pointer-events-auto' : 'pointer-events-none'
       }`}
       initial={false}
@@ -44,7 +47,7 @@ export function BootOverlay({
         if (phase === 'revealing') onRevealed()
       }}
     >
-      <div className="absolute bottom-3 left-3">
+      <div className="m-3">
         <Logomark className="mb-3 h-6 w-auto" />
         <div className="type-readout text-sky-300">InertialRef</div>
         <div

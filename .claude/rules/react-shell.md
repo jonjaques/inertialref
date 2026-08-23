@@ -42,9 +42,11 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", ADR-0011.
   every pixel becomes the canvas.
 - **Never size or position chrome against the viewport.** No `100vh`, no `100vw`, and no
   `env(safe-area-inset-*)` written at a call site. `index.css` names the four insets once
-  and spends them as padding on `.hud-layer`, whose padding box is the containing block of
-  every absolutely positioned piece of chrome in the interface — so a readout written next
-  year is clear of the notch without being told. A surface that is _picture_ rather than
+  and spends them as _offsets_ on `.hud-layer` — offsets, not padding: an absolutely
+  positioned descendant resolves against its ancestor's padding **edge**, which is outside
+  the padding, so padding there moves nothing. Insetting the layer makes it the containing
+  block of every absolutely positioned piece of chrome in the interface, so a readout
+  written next year is clear of the notch without being told. A surface that is _picture_ rather than
   chrome and has to reach the display's edges (a blackout, a scrim, the boot cover, a
   mode's drag surface) carries `hud-bleed`, which offsets back out and pads back in;
   it sets all four offsets, so do not also give it `inset-0`. Percentages resolve against

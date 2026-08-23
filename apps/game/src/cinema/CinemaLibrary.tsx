@@ -25,7 +25,20 @@ export function CinemaLibrary({ engine }: { engine: GameEngine }) {
     // frame, where flex centering overflows it symmetrically — and the half
     // above the scroll origin, the heading first, is unreachable by any
     // scroll.
-    <div className="pointer-events-auto absolute inset-0 flex overflow-y-auto bg-slate-950/70 p-6">
+    // `hud-bleed`, for the same reason the settings scrim carries it: a dimmed
+    // screen with an undimmed band along an edge reads as a rendering fault.
+    // The padding is spelled out rather than left to `p-6` because the class
+    // and the utility would both be setting `padding` in the same cascade
+    // layer; `max` keeps the design's 1.5 rem wherever the OS has spent less.
+    <div
+      className="hud-bleed pointer-events-auto absolute flex overflow-y-auto bg-slate-950/70"
+      style={{
+        paddingTop: 'max(1.5rem, var(--safe-top))',
+        paddingRight: 'max(1.5rem, var(--safe-right))',
+        paddingBottom: 'max(1.5rem, var(--safe-bottom))',
+        paddingLeft: 'max(1.5rem, var(--safe-left))',
+      }}
+    >
       <div className="m-auto w-full max-w-2xl">
         <header className="mb-7 border-b border-slate-800 pb-4">
           {/* The display face, at the size a place gets. `Cinema` is a mode —

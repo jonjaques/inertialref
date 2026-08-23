@@ -44,17 +44,24 @@ export function OrbitTraces({ engine }: { engine: GameEngine }) {
 
   useFrame(() => {
     const parent = group.current
-    const origin = engine.origin
-    // The same eye `buildScene` placed the bodies from. Without it the trace is
-    // compressed about the render origin while the planet on it is compressed
-    // about the camera, and the two part company by the very error that made
-    // the small moons vibrate — see `placement.ts`.
-    const eye = engine.scene()?.camera.position
+    /*
+     * The origin *and* the eye off the same scene, never one of each.
+     *
+     * The eye is a render-space vector, so it only means anything paired with
+     * the origin it was measured against. `engine.origin` is the live one and
+     * runs ahead of `engine.scene()` on any frame `#step` returns early from —
+     * a load, a save being applied — so reading one from each would compress
+     * the trace about a point up to `REBASE_THRESHOLD` from the camera, which
+     * is the very error that made the small moons vibrate. See `placement.ts`.
+     */
+    const scene = engine.scene()
     if (parent === null) return
-    if (!engine.showOrbits || origin === null || eye === undefined) {
+    if (!engine.showOrbits || scene === null) {
       parent.visible = false
       return
     }
+    const origin = scene.origin
+    const eye = scene.camera.position
     parent.visible = true
 
     const live = new Set<string>()

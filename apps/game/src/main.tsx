@@ -67,7 +67,7 @@ function reportFatal(cause: unknown): void {
     'position:fixed',
     'bottom:max(0.75rem, env(safe-area-inset-bottom, 0px))',
     'left:max(0.75rem, env(safe-area-inset-left, 0px))',
-    'max-width:calc(100vw - 1.5rem)',
+    'max-width:calc(100vw - max(1.5rem, env(safe-area-inset-left, 0px) + env(safe-area-inset-right, 0px)))',
     'border:1px solid rgb(251 113 133 / 0.4)',
     'border-radius:0.5rem',
     'background:rgb(2 6 23 / 0.85)',

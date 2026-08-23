@@ -33,10 +33,20 @@
       pinch as a camera zoom; with the page scalable, iOS races it with its own
       and the result is a camera that zooms while the whole interface scales
       out from under it, leaving parts of the HUD off-screen with no way to
-      scroll back — the page does not scroll, by design. The accessibility
-      trade is real and this is the case the rule exists to allow: the interface
-      has no reflowable text to enlarge, and every readout scales with the
-      browser's *font* size rather than with a pinch.
+      scroll back — the page does not scroll, by design.
+
+      **The accessibility cost is real and is not zero.** It is easy to tell
+      the flattering version — a HUD over a simulation has nothing to reflow —
+      and that is false of three routes in this same document: the about page,
+      the settings dialog and the cinema library are ordinary prose, and a
+      reader who needs them larger cannot pinch them. What they have instead is
+      that every type step is sized in `rem`, so the browser's own font-size
+      setting scales the whole interface; and iOS Safari ignores
+      `user-scalable=no` in a tab anyway, so the loss is real only in an
+      installed copy and on Android. WCAG 1.4.4 is not met on those routes
+      until they can be reached without this meta tag — splitting the
+      document-shaped routes out of the simulator's viewport is the fix, and it
+      is not this change.
 
       `interactive-widget=resizes-content` keeps the soft keyboard — the
       address field in the planetarium, the search box in the catalog — from

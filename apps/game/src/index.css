@@ -377,14 +377,18 @@ body,
  * is unreadable three times over. One name, four values, defined to zero
  * everywhere the concept does not exist.
  *
- * `.hud-layer` is where they are spent. It is the padding box of every piece of
- * chrome in the interface (an absolutely positioned child resolves `inset-0`
- * against its ancestor's *padding* box), so one declaration insets the dock, the
- * flight strip, the notices, the menu and every dialog off the notch and the
- * home indicator at once — and a piece of chrome written next year is inside it
- * without being told. The canvas is a sibling of the layer and gets none of it:
- * the sky is meant to run under the notch, which is the whole point of
- * `viewport-fit=cover`.
+ * `.hud-layer` is where they are spent, and it spends them as *offsets* rather
+ * than as padding. The distinction is the whole mechanism and it is easy to get
+ * backwards: the containing block an absolutely positioned descendant resolves
+ * `inset-0` against is the ancestor's **padding edge**, which is the outside of
+ * the padding — the border box. Padding on the layer would therefore shrink its
+ * content box and move no piece of chrome at all, because every piece of chrome
+ * in here is absolutely positioned. Insetting the layer itself is what puts the
+ * dock, the flight strip, the notices, the menu and every dialog clear of the
+ * notch and the home indicator at once — and a piece of chrome written next
+ * year is inside it without being told. The canvas is a sibling of the layer and
+ * gets none of it: the sky is meant to run under the notch, which is the whole
+ * point of `viewport-fit=cover`.
  */
 :root {
   --safe-top: env(safe-area-inset-top, 0px);
@@ -497,13 +501,17 @@ a {
  */
 .hud-layer {
   dynamic-range-limit: standard;
-  /* See `:root` above: this is the one place the safe-area insets are spent,
-     and it works because an absolutely positioned descendant resolves against
-     the padding box. */
-  padding-top: var(--safe-top);
-  padding-right: var(--safe-right);
-  padding-bottom: var(--safe-bottom);
-  padding-left: var(--safe-left);
+  /* See `:root` above: this is the one place the safe-area insets are spent.
+     Offsets, not padding — an absolutely positioned descendant resolves against
+     this element's padding *edge*, which is outside the padding, so padding
+     here would move nothing. This sets all four offsets, so the element must
+     not also carry `inset-0`: the two rules are the same specificity and only
+     the cascade layer separates them, which is a version bump away from being
+     the other way round. Same rule as `hud-bleed` below. */
+  top: var(--safe-top);
+  right: var(--safe-right);
+  bottom: var(--safe-bottom);
+  left: var(--safe-left);
 }
 
 /**
@@ -517,11 +525,18 @@ a {
  * the 44 px the OS keeps at the side of a landscape phone and never arrived.
  *
  * The padding is the second half and is what stops this being a footgun. The
- * offsets alone would put a `hud-bleed` element's children back under the
+ * offsets alone would put a `hud-bleed` element's contents back under the
  * notch, undoing `.hud-layer`'s work one level down — so the insets are spent
  * again here, which leaves the *box* covering the display and its contents
- * exactly where they were. The boot overlay's readout and the dialog card
- * inside the scrim both land in the safe area without either of them saying so.
+ * exactly where they were. The dialog card centered in the scrim lands in the
+ * safe area without saying so.
+ *
+ * The padding only reaches **in-flow** children, for the same reason
+ * `.hud-layer` spends its own insets as offsets rather than as padding: an
+ * absolutely positioned child of a `hud-bleed` box resolves against the box's
+ * padding *edge*, which is the bled-out rectangle. A corner readout inside one
+ * of these has to inset itself, or be laid out in flow so the padding can reach
+ * it — `hud/BootOverlay.tsx` is the worked example.
  *
  * Offsets rather than negative margins because every one of these is an
  * inset-stretched box already, and a margin on one of those changes its size in
@@ -533,6 +548,17 @@ a {
  * blackout back inside the notch. Every element that carries this drops
  * `inset-0` and keeps `absolute`.
  */
+@utility hud-bleed {
+  top: calc(-1 * var(--safe-top));
+  right: calc(-1 * var(--safe-right));
+  bottom: calc(-1 * var(--safe-bottom));
+  left: calc(-1 * var(--safe-left));
+  padding-top: var(--safe-top);
+  padding-right: var(--safe-right);
+  padding-bottom: var(--safe-bottom);
+  padding-left: var(--safe-left);
+}
+
 /**
  * The same escape, for a band pinned to the bottom of the screen.
  *
@@ -543,23 +569,13 @@ a {
  * stretched by `inset-0`, and this is a flow-laid band whose height is its
  * contents. So it is margins, and unlike `hud-bleed` it deliberately does *not*
  * pad the insets back — the band's own children do that, because the padding
- * has to land on the row that draws the ground rather than on the wrapper.
+ * has to land on the row that draws the ground rather than on the wrapper, and
+ * *every* child has to, not only the one that draws it.
  */
 @utility hud-bleed-bottom {
   margin-right: calc(-1 * var(--safe-right));
   margin-bottom: calc(-1 * var(--safe-bottom));
   margin-left: calc(-1 * var(--safe-left));
-}
-
-@utility hud-bleed {
-  top: calc(-1 * var(--safe-top));
-  right: calc(-1 * var(--safe-right));
-  bottom: calc(-1 * var(--safe-bottom));
-  left: calc(-1 * var(--safe-left));
-  padding-top: var(--safe-top);
-  padding-right: var(--safe-right);
-  padding-bottom: var(--safe-bottom);
-  padding-left: var(--safe-left);
 }
 
 /*

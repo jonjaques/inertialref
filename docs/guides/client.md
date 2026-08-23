@@ -31,12 +31,23 @@ nothing in the interface is sized in `vh` or `vw`.
 
 `viewport-fit=cover` hands the insets back as `env(safe-area-inset-*)`, which
 `index.css` names once as `--safe-top/right/bottom/left` and spends in exactly
-one place: as padding on `.hud-layer`. An absolutely positioned element resolves
-`inset-0` against its ancestor's _padding_ box, so every readout, panel, dialog
-and menu in the interface is already clear of the notch and the home indicator,
-including one written later that never heard of any of this. Percentages inside
-the layer therefore mean "of the safe area", which is what the `calc(100% − …)`
-width caps are.
+one place: as the four **offsets** on `.hud-layer`. The layer is therefore the
+containing block of every absolutely positioned piece of chrome in the
+interface, so every readout, panel, dialog and menu is already clear of the
+notch and the home indicator — including one written later that never heard of
+any of this. Percentages inside the layer therefore mean "of the safe area",
+which is what the `calc(100% − …)` width caps are.
+
+**Offsets, not padding, and the difference is the whole mechanism.** The first
+version of this used padding, on the reading that an absolutely positioned
+element resolves `inset-0` against its ancestor's padding box. It does — but the
+padding _box_ is the border box minus the border, so its edge is the **outside**
+of the padding, not the inside. Padding on the layer shrinks its content box,
+which nothing here uses, and moves no absolutely positioned child by a pixel.
+The same trap applies one level down: `hud-bleed` pads the insets back so its
+contents land in the safe area, and that reaches an in-flow child only — the
+boot overlay's corner readout is laid out with `flex items-end` and a margin
+rather than `absolute bottom-3 left-3` for exactly this reason.
 
 Surfaces that are _picture_ rather than chrome opt back out with `hud-bleed`: a
 cutscene's blackout, a dialog's scrim, the boot cover, and the transparent

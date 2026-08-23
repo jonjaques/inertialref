@@ -46,7 +46,12 @@ export function EndCard({
        * settings dialog is read *instead* of the scene, and this is read
        * *beside* it.
        */}
-      <div className="pointer-events-auto flex max-w-[min(26rem,calc(100%-3rem))] flex-col items-center gap-3 rounded-lg border border-slate-700/60 bg-slate-950/85 px-6 py-5 text-center shadow-2xl shadow-black/60 backdrop-blur">
+      {/* `max-w-[26rem]` and nothing else. The frame inset used to be spelled
+          out here as `calc(100vw - 3rem)`; as a percentage it would resolve
+          against the parent's *content* box, which the `p-6` above has already
+          taken the same 3 rem out of — so the card came out 3 rem narrower than
+          it is meant to on exactly the phone the cap exists for. */}
+      <div className="pointer-events-auto flex max-w-[26rem] flex-col items-center gap-3 rounded-lg border border-slate-700/60 bg-slate-950/85 px-6 py-5 text-center shadow-2xl shadow-black/60 backdrop-blur">
         <div>
           <p className="type-title text-slate-100">{title}</p>
           <p className="type-micro mt-1 text-slate-400">{detail}</p>
