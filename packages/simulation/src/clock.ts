@@ -147,6 +147,41 @@ export class SimulationClock {
     return this.#paused ? 0 : Math.min(1, this.#accumulator / TICK_DURATION)
   }
 
+  /**
+   * The instant presentation is drawn at — one tick behind, plus the alpha.
+   *
+   * **Everything that places something in a frame must agree on this number**,
+   * and it lives here because the clock owns both halves of it. It was
+   * previously written out only inside `snapshot`, so anything else that wanted
+   * "now" for presentation reached for `time` instead — which is the *tick*, a
+   * quantity that only moves in 1/64 s steps.
+   *
+   * The gap between the two is at most one tick, which sounds harmless and is
+   * not. A body drawn at `renderTime` while the camera pointed at it is placed
+   * at `time` disagree by that body's velocity times up to 15.6 ms, and the gap
+   * sawtooths as alpha sweeps and resets — so the error is not a constant
+   * offset, it is a vibration at the beat between the frame rate and the tick
+   * rate. What that costs is the error in units of the thing's own radius, and
+   * Phobos and Deimos are 11.3 km and 6.2 km of radius carried around the Sun
+   * at 24 km/s: 400 m of it, which is 3.5% and 6.6% of their own radius. Framed
+   * in the planetarium they vibrated by 11 and 19 pixels while Mars, Luna and Io
+   * — three orders of magnitude larger against the same 400 m — held still
+   * inside a twentieth of a pixel.
+   *
+   * `terrainStreamer` already had to learn this ("terrain that disagrees with
+   * the ship about what time it is drifts from under it"). This is the same
+   * mistake in the camera, and having one definition is what stops it being
+   * made a third time.
+   */
+  get renderTime(): Seconds {
+    return this.renderTimeAt(this.alpha)
+  }
+
+  /** `renderTime` for an alpha the caller supplies. `snapshot` takes one. */
+  renderTimeAt(alpha: number): Seconds {
+    return this.time - (1 - alpha) * TICK_DURATION
+  }
+
   setPaused(paused: boolean): void {
     this.#paused = paused
     if (paused) this.#accumulator = 0

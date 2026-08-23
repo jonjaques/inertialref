@@ -33,6 +33,7 @@ only the imperative. If a copy disagrees, `AGENTS.md` wins.
 | Chrome is not sized or positioned against the viewport | [Client](../guides/client.md) · [`DESIGN.md`](../../DESIGN.md)                              |
 | One producer of the camera                             | [Client](../guides/client.md) · [ADR-0011](../adr/0011-application-shell-and-modes.md)      |
 | The planetarium does not write canonical state         | [Planetarium](../design/planetarium.md)                                                     |
+| Presentation asks at `renderTime`, not `clock.time`    | [ADR-0006](../adr/0006-simulation-clock.md) · [Planetarium](../design/planetarium.md)       |
 | Mode chrome needs `pointer-events-auto`                | [Client](../guides/client.md)                                                               |
 | Overlay presence is not `mode="wait"`                  | [Client](../guides/client.md)                                                               |
 | Do not latch a "run once" effect with a ref            | [Client](../guides/client.md)                                                               |

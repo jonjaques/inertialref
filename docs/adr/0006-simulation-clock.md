@@ -50,6 +50,18 @@ the previous tick and the current one. Bodies are _not_ lerped: their frames are
 analytic, so they are evaluated exactly at the fractional render time and have
 no interpolation error at any time warp.
 
+**That fractional instant is `SimulationClock.renderTime`, and everything that
+puts something in a frame must use it.** It is `time − (1 − alpha)·TICK`, it
+lives on the clock because the clock owns both halves of it, and the alternative
+— `clock.time`, the tick — is wrong by up to 15.6 ms in a way that _sawtooths_
+as alpha sweeps and resets. That is not a constant offset a viewer would never
+notice; it is a vibration at the beat between the frame rate and the tick rate,
+and its size is the subject's velocity times that gap, measured in the subject's
+own radius. Phobos and Deimos are 11.3 km and 6.2 km of radius carried around the
+Sun at 24 km/s, which is 3.5% and 6.6% of themselves per tick against 0.01% for
+Mars — so a camera placed at `clock.time` left them visibly vibrating while every
+larger body in the system held still.
+
 ## Alternatives considered
 
 - **60 Hz.** Conventional, and matches the most common display. Rejected for the

@@ -351,6 +351,13 @@ again in a neighboring system.
   took. Simulated time then advanced per frame rather than per second and every
   determinism test still passed, because determinism is a claim about the tick
   and this is a claim about the wall clock between ticks. See the entry below.
+- **The observatory placed its camera at `clock.time` while the scene drew every
+  body at `renderTime`** (23 Aug 2026). Up to one tick apart, and sawtoothing —
+  so the camera aimed at where the target used to be, by a different amount every
+  frame. `observatory.test.ts` already asserted the standoff, and passed, because
+  its own helper asked at `clock.time` too: the test and the code were wrong
+  together. Two assertions agreeing is not two pieces of evidence when they share
+  a mistake.
 
 ## The five spikes, measured (19 Aug 2026)
 
@@ -3161,6 +3168,75 @@ onto ticks — a dimension the suite had no assertion in. The second is that
 `droppedTicks` was reporting the fault loudly the whole time (39.8M of them in
 the browser session above) and nothing connected a drop count to a visual
 symptom.
+
+## The moons of Mars were vibrating because the camera was a tick behind (23 Aug 2026)
+
+Third attempt at this one, and the first two were both real bugs that were not
+_the_ bug. Worth recording in that order, because the wrong turns are the useful
+part.
+
+The rebase-parallax fix (#12) was correct: compression must be measured from the
+eye. The time-warp ceiling fix earlier today was correct: a saturated clock
+delivered simulated time per frame rather than per second. Neither was what was
+being reported, and the tell was there from the beginning — **it happened at 1×**,
+where Phobos takes 7.65 hours to go round and is therefore, for rendering
+purposes, standing still. A stationary object cannot be jittered by a defect in
+how fast time runs. That should have ended the warp theory before it started.
+
+The actual fault is one line. `Observatory.#targetPosition` asked
+
+```ts
+world.frames.pose(target.frame, world.clock.time).position
+```
+
+while `snapshot` places every body at `renderTime` — `time − (1 − alpha)·TICK`.
+The camera was therefore anchored to the target's position _at the tick_, and the
+target was drawn at a fractional instant up to one tick later. Worse than a fixed
+offset: alpha sweeps 0→1 between ticks and resets, so the gap sawtooths, and at
+60 fps against a 64 Hz tick it beats. The camera aimed at where the moon used to
+be, by a different amount every frame.
+
+Magnitude, and why only two bodies. The error is the target's **universe**
+velocity times up to 15.6 ms — for anything riding Mars around the Sun, a flat
+~377 m. What decides visibility is that distance in units of the body's own
+radius, because the planetarium frames every subject to the same fraction of the
+viewport:
+
+| Body   | radius   | error / radius | vibration at 55% fill |
+| ------ | -------- | -------------- | --------------------- |
+| Deimos | 6.2 km   | 6.6%           | 19 px                 |
+| Phobos | 11.3 km  | 3.5%           | 11 px                 |
+| Mimas  | 198 km   | 0.2%           | 0.5 px                |
+| Luna   | 1,737 km | 0.03%          | 0.11 px               |
+| Mars   | 3,396 km | 0.01%          | 0.04 px               |
+
+Measured by replaying `GameEngine.#step` headlessly and projecting through a
+65° FOV at 1970 device px, framing each body in turn. After the fix every row is
+**bit-exactly zero** — once both sides name the same instant the framing vector
+is the constant standoff, so the projected position is identical frame to frame.
+
+Confirmed in the real client through the path that was reported: Planetarium →
+catalog → Phobos, 1×, drawn at 448 px of radius, real rAF frames from 1.2 ms to
+47.3 ms. Worst standoff error 0.1 mm, which is 4e-6 px. The same geometry before
+the fix: 377 m, 15 px.
+
+`renderTime` now lives on `SimulationClock` rather than inside `snapshot`, which
+is the actual repair — the arithmetic had exactly one writer and no _reader_, so
+anything else wanting "now" for presentation found `clock.time` instead and took
+it. `terrainStreamer` had already been bitten by this and carries a comment about
+it ("terrain that disagrees with the ship about what time it is drifts from under
+it by 800 m at orbital speed"); the cutscene director gets it right because it is
+handed `shot.renderTime` explicitly. The observatory was the third consumer and
+the one nobody wired up. It is now an invariant in `AGENTS.md`.
+
+The test lesson is sharper than the code lesson. `observatory.test.ts` had
+**two** assertions that the camera sits at its stated standoff, and both passed
+throughout, because the helper they measured against — `originOf` — also asked at
+`clock.time`. The test was wrong in exactly the way the code was wrong, so they
+agreed, and the agreement read as confirmation. Both now say `renderTime`, and
+both fail if the bug returns. The new test adds what neither could see: it runs
+sixty frames so alpha wraps four times, because a single sample cannot detect a
+sawtooth no matter which instant it asks about.
 
 ## Known gaps
 
