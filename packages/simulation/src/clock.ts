@@ -36,25 +36,50 @@ export const timeOfTick = (tick: Tick): Seconds => tick / TICK_RATE
 export const DEFAULT_MAX_STEPS = 8
 
 /**
- * The ceiling on ticks per frame at any time warp.
+ * The ceiling on time warp, as simulated seconds per second of wall clock.
  *
- * A fixed budget of 8 is the right guard against a *stalled* frame and the wrong
- * one for a *deliberate* one, and for a long time this class could not tell the
- * difference. The measurement: at 60 fps a budget of 8 delivers 480 ticks per
- * second, which is 7.5× real time — so of the seven detents the dev dock offers,
- * from 1× to 100,000×, everything past 5× was identical and every tick above it
- * went straight into `droppedTicks`. Silently: the clock was scrupulous about
- * reporting the drops and nothing displayed them next to the number they
- * contradicted.
+ * A fixed budget of 8 ticks per frame is the right guard against a *stalled*
+ * frame and the wrong one for a *deliberate* one, and for a long time this class
+ * could not tell the difference. The measurement: at 60 fps a budget of 8
+ * delivers 480 ticks per second, which is 7.5× real time — so of the seven
+ * detents the dev dock offers, from 1× to 100,000×, everything past 5× was
+ * identical and every tick above it went straight into `droppedTicks`. Silently:
+ * the clock was scrupulous about reporting the drops and nothing displayed them
+ * next to the number they contradicted.
  *
- * Warp therefore gets a budget proportional to what was asked for, bounded here.
- * 2048 ticks is ~1.6 ms at the ~1.25M ticks/s measured in-browser for one entity
- * — inside a 16.6 ms frame with room for a machine several times slower — and
- * buys about 1,920× at 60 fps. It is a measured number and not a principled one;
- * when the benchmark harness can say what a tick costs *here*, this should
- * become a time budget rather than a count.
+ * 1,920× is 2048 ticks in a 60 Hz frame, which is ~1.6 ms at the ~1.25M ticks/s
+ * measured in-browser for one entity — inside a 16.6 ms frame with room for a
+ * machine several times slower. It is a measured number and not a principled
+ * one; when the benchmark harness can say what a tick costs *here*, this should
+ * be derived from a share of the frame rather than pinned.
+ *
+ * **A rate, and not a count per frame, and that is load-bearing.** The budget
+ * used to be a flat 2048 ticks per frame, which meant that once warp saturated
+ * it — anything past ~1,920×, so both of the top two detents, always — the
+ * clock delivered a *constant* 32 simulated seconds every frame however long
+ * the frame took. Simulated time then advanced per frame instead of per second,
+ * so its rate was modulated by frame-time noise: ±2 ms of jitter at 60 fps is
+ * ±12% of the sim rate, every frame. Everything in the scene inherits that, but
+ * what makes it *visible* is a body's speed measured in its own radii, and
+ * Phobos and Deimos cover 0.19 and 0.22 of their own radius per second against
+ * 0.072 for the next worst (Mimas) and 0.0006 for Luna. They vibrated by a full
+ * body width at 10,000× while every other moon in the Solar System held still.
  */
-export const MAX_WARP_STEPS = 2048
+export const MAX_WARP_RATE = 1_920
+
+/**
+ * The longest frame the warp rate is honored across, in wall-clock seconds.
+ *
+ * Past this a frame is a *stall* — a backgrounded tab, a shader compile — not a
+ * slow frame, and buying 1,920× of it would be the spiral of death with extra
+ * steps. 100 ms keeps the rate honest down to 10 fps, which is below any frame
+ * rate worth warping at, and caps a stalled frame's catch-up at
+ * `MAX_WARP_STEPS` ticks (~10 ms of work at the rate measured above).
+ */
+export const MAX_WARP_FRAME: Seconds = 0.1
+
+/** The absolute per-frame ceiling. Derived: the rate, over the longest frame. */
+export const MAX_WARP_STEPS = MAX_WARP_RATE * MAX_WARP_FRAME * TICK_RATE
 
 export interface ClockStatus {
   readonly tick: Tick
@@ -122,6 +147,41 @@ export class SimulationClock {
     return this.#paused ? 0 : Math.min(1, this.#accumulator / TICK_DURATION)
   }
 
+  /**
+   * The instant presentation is drawn at — one tick behind, plus the alpha.
+   *
+   * **Everything that places something in a frame must agree on this number**,
+   * and it lives here because the clock owns both halves of it. It was
+   * previously written out only inside `snapshot`, so anything else that wanted
+   * "now" for presentation reached for `time` instead — which is the *tick*, a
+   * quantity that only moves in 1/64 s steps.
+   *
+   * The gap between the two is at most one tick, which sounds harmless and is
+   * not. A body drawn at `renderTime` while the camera pointed at it is placed
+   * at `time` disagree by that body's velocity times up to 15.6 ms, and the gap
+   * sawtooths as alpha sweeps and resets — so the error is not a constant
+   * offset, it is a vibration at the beat between the frame rate and the tick
+   * rate. What that costs is the error in units of the thing's own radius, and
+   * Phobos and Deimos are 11.3 km and 6.2 km of radius carried around the Sun
+   * at 24 km/s: 400 m of it, which is 3.5% and 6.6% of their own radius. Framed
+   * in the planetarium they vibrated by 11 and 19 pixels while Mars, Luna and Io
+   * — three orders of magnitude larger against the same 400 m — held still
+   * inside a twentieth of a pixel.
+   *
+   * `terrainStreamer` already had to learn this ("terrain that disagrees with
+   * the ship about what time it is drifts from under it"). This is the same
+   * mistake in the camera, and having one definition is what stops it being
+   * made a third time.
+   */
+  get renderTime(): Seconds {
+    return this.renderTimeAt(this.alpha)
+  }
+
+  /** `renderTime` for an alpha the caller supplies. `snapshot` takes one. */
+  renderTimeAt(alpha: number): Seconds {
+    return this.time - (1 - alpha) * TICK_DURATION
+  }
+
   setPaused(paused: boolean): void {
     this.#paused = paused
     if (paused) this.#accumulator = 0
@@ -150,7 +210,7 @@ export class SimulationClock {
     }
     this.#accumulator += realDelta * this.#timeScale
     const wanted = Math.floor(this.#accumulator / TICK_DURATION)
-    const steps = Math.min(wanted, this.#stepBudget())
+    const steps = Math.min(wanted, this.#stepBudget(realDelta))
     // Ratio rather than a rate, so a frame that wanted one tick and ran one
     // reports 1× and not 0.94× — the accumulator carries the remainder and a
     // sampled rate would oscillate around the truth instead of stating it.
@@ -168,13 +228,29 @@ export class SimulationClock {
   /**
    * Ticks this frame may run.
    *
-   * At 1× this is the stall guard and nothing else, so a backgrounded tab
-   * behaves exactly as it always has. Above 1× the player has asked for more
-   * simulation per frame and gets it, up to `MAX_WARP_STEPS`.
+   * At 1× this is the stall guard and nothing else — a count, unchanged, so a
+   * backgrounded tab behaves exactly as it always has and the minute it was
+   * away is honestly reported as dropped rather than simulated.
+   *
+   * Above 1× the player has asked for more simulation per frame and gets it,
+   * bounded two ways. `maxSteps × timeScale` is the same stall guard scaled by
+   * what was asked for, so a stall at 1.5× catches up like a stall at 1×. The
+   * second bound is the throughput ceiling, and it is `MAX_WARP_RATE` *times
+   * this frame's duration*: a rate rather than a count, so that a saturated
+   * clock delivers simulated seconds in proportion to wall-clock seconds. A
+   * count would fix the delivery per frame and let frame-time noise modulate
+   * the rate — see `MAX_WARP_RATE` for what that looked like.
+   *
+   * At least one tick, so a frame too short to buy one does not instead drop
+   * everything the accumulator is holding and freeze the simulation.
    */
-  #stepBudget(): number {
+  #stepBudget(realDelta: Seconds): number {
     if (this.#timeScale <= 1) return this.#maxSteps
-    return Math.min(MAX_WARP_STEPS, Math.ceil(this.#maxSteps * this.#timeScale))
+    const usable = Math.min(realDelta, MAX_WARP_FRAME)
+    return Math.min(
+      Math.ceil(this.#maxSteps * this.#timeScale),
+      Math.max(1, Math.floor((MAX_WARP_RATE * usable) / TICK_DURATION)),
+    )
   }
 
   /** Called by the world once per completed tick. */

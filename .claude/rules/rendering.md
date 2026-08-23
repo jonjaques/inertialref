@@ -3,12 +3,18 @@ paths:
   - 'apps/game/src/render/**'
   - 'apps/game/src/scene/**'
   - 'packages/rendering/**'
+  - 'packages/devtools/src/observatory.ts'
 ---
 
 # Rendering
 
 Reasoning: `AGENTS.md` § "The rules that actually matter",
 `docs/guides/testing.md`, ADR-0003.
+
+- **Anything you put in a frame is asked for at `clock.renderTime`.** `clock.time` is the
+  integer tick. The two differ by up to one tick and the gap sawtooths, so measuring
+  against the wrong one is a vibration at the frame/tick beat, scaled by the subject's own
+  radius. `terrainStreamer` and the observatory each learned this the hard way.
 
 - **Never import from `three` in `apps/game`.** It is `three/webgpu` and `three/tsl`. Both
   share `three.core.js`, so `Mesh` is the same class either way and nothing breaks loudly

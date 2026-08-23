@@ -26,7 +26,12 @@ import {
   systemId,
   walkBodies,
 } from '@inertialref/universe'
-import { MAX_WARP_STEPS, TICK_DURATION, TICK_RATE } from './clock.ts'
+import {
+  MAX_WARP_RATE,
+  MAX_WARP_STEPS,
+  TICK_DURATION,
+  TICK_RATE,
+} from './clock.ts'
 import { snapshot } from './snapshot.ts'
 import { World } from './world.ts'
 
@@ -211,22 +216,65 @@ describe('simulation clock', () => {
 
     const capped = solarWorld()
     capped.clock.setTimeScale(100_000)
-    expect(capped.advance(frame)).toBe(MAX_WARP_STEPS)
+    // The ceiling is a rate, so what a frame buys is the rate times the frame —
+    // 2048 ticks at 60 fps. Stated that way rather than as the constant, because
+    // the constant being a count per frame is exactly the bug below.
+    expect(capped.advance(frame)).toBe(MAX_WARP_RATE * frame * TICK_RATE)
     const status = capped.clock.status()
     expect(status.achievedTimeScale).toBeLessThan(100_000)
 
-    // MAX_WARP_STEPS ticks per frame at 60 fps, as a multiple of the 64 Hz tick
-    // rate — the ceiling stated where it comes from rather than as a number that
-    // happens to pass.
-    const ceiling = MAX_WARP_STEPS / frame / TICK_RATE
     // The ratio's denominator is floored to a whole tick, so it can be short by
     // one out of the ~107,000 this frame wanted. That, and not a chosen
     // tolerance, is the entire width of this bound.
     const wanted = Math.floor((100_000 * frame) / TICK_DURATION)
-    expect(status.achievedTimeScale).toBeGreaterThanOrEqual(ceiling)
+    expect(status.achievedTimeScale).toBeGreaterThanOrEqual(MAX_WARP_RATE)
     expect(status.achievedTimeScale).toBeLessThanOrEqual(
-      ceiling * (1 + 1 / wanted),
+      MAX_WARP_RATE * (1 + 1 / wanted),
     )
+  })
+
+  it('delivers simulated time in proportion to wall time when warp saturates', () => {
+    /*
+     * The regression that stopped Phobos and Deimos vibrating.
+     *
+     * The warp budget was a flat count of ticks per frame, so a saturated clock
+     * ran the same 2048 ticks whether the frame took 14 ms or 19 ms — 32
+     * simulated seconds per *frame* rather than per second. Frame-time noise
+     * therefore became time-base noise, and the two bodies whose orbital speed
+     * is largest in units of their own radius jumped a full body width every
+     * frame. Nothing else in the Solar System is close: Phobos and Deimos cover
+     * 0.19 and 0.22 of their own radius per second, Mimas 0.072, Luna 0.0006.
+     *
+     * The claim is about the *rate*, not the total: an equal number of ticks
+     * over unequal frames is precisely the defect, so this measures each frame.
+     */
+    const rng = new Rng(rootSeed('warp-rate'))
+    const world = solarWorld()
+    world.clock.setTimeScale(100_000)
+
+    let worst = 0
+    let shortest = Infinity
+    for (let i = 0; i < 300; i += 1) {
+      // 60 fps with the jitter a real compositor delivers, plus the occasional
+      // doubled frame. Every one of these is far above the ~1,920x ceiling, so
+      // the budget is saturated on all of them.
+      const delta =
+        (rng.range(0, 1) < 1 / 15 ? 2 : 1) / 60 + rng.range(-2e-3, 2e-3)
+      shortest = Math.min(shortest, delta)
+      const before = world.clock.time
+      world.advance(delta)
+      const rate = (world.clock.time - before) / delta
+      worst = Math.max(worst, Math.abs(rate / MAX_WARP_RATE - 1))
+    }
+
+    // The budget is floored to a whole tick, so a frame can come up one tick
+    // short of its share and no more. The tightest that bound gets is on the
+    // *shortest* frame, which buys the fewest ticks for it to be one of — which
+    // is where the limit comes from rather than from a chosen tolerance. Before
+    // the fix `worst` reached 0.53: ±2 ms of compositor jitter passed through
+    // undamped is ±12%, and a doubled frame ran the same 2048 ticks over twice
+    // the wall clock and so delivered half the rate.
+    expect(worst).toBeLessThan(TICK_DURATION / (MAX_WARP_RATE * shortest))
   })
 
   it('never runs more ticks in one frame than the ceiling allows', () => {

@@ -39,10 +39,20 @@ function posed(pose: ObserverPose | null): ObserverPose {
   return pose
 }
 
-/** Where a frame's origin is right now. */
+/**
+ * Where a frame's origin is at the instant the frame being drawn depicts.
+ *
+ * `renderTime`, not `clock.time`. This helper used to say the tick, which made
+ * every standoff assertion below agree with the camera only because the camera
+ * was making the same mistake — the two were wrong together and the suite was
+ * green. `renderTime` is what `snapshot` places bodies at, so it is what "where
+ * is it, in the picture" means.
+ */
 function originOf(session: Session, frame: string): UniverseVector {
-  return session.world.frames.pose(frame as FrameId, session.world.clock.time)
-    .position
+  return session.world.frames.pose(
+    frame as FrameId,
+    session.world.clock.renderTime,
+  ).position
 }
 
 describe('the observatory', () => {
@@ -69,6 +79,61 @@ describe('the observatory', () => {
     const centre = originOf(session, status.target?.frame ?? '')
     const range = UV.distance(posed(ir.observerSample(0)).position, centre)
     expect(range / status.state.distance).toBeCloseTo(1, 6)
+  })
+
+  it('holds its standoff every frame, not on average', () => {
+    /*
+     * The regression that stopped Phobos and Deimos vibrating in the
+     * planetarium — at 1x, which is what took so long to believe.
+     *
+     * `#targetPosition` asked the world where the target was at
+     * `clock.time`, while `snapshot` draws every body at `renderTime`. Those
+     * differ by up to one tick, and — this is the part a single sample cannot
+     * see — the gap *sawtooths*, because alpha sweeps 0→1 between ticks and
+     * resets. So the camera was placed against a point the drawn body had
+     * already left, by a different amount every frame.
+     *
+     * The error is the target's velocity times up to 15.6 ms, which is a fixed
+     * ~400 m for anything riding Mars around the Sun. What decides whether you
+     * see it is that distance in units of the body's own radius, and Phobos and
+     * Deimos are 11.3 km and 6.2 km: 3.5% and 6.6%, against 0.01% for Mars.
+     * Framed to fill the view they vibrated by 11 and 19 pixels while Mars,
+     * Luna and Io held still inside a twentieth of a pixel.
+     *
+     * Sixty frames at 60 fps against a 64 Hz tick, so alpha wraps four times
+     * and every phase of the sawtooth is sampled.
+     */
+    const { harness: ir, session } = harness()
+    for (const address of ['s:SOL/b:3.0', 's:SOL/b:3.1', 's:SOL/b:3']) {
+      ir.look(address)
+      const frame = ir.observatory.target?.frame ?? ''
+      // Let the fly-to arrive: while it is easing the standoff is *meant* to
+      // be changing, and this is a claim about a settled camera.
+      for (let i = 0; i < 240; i += 1) {
+        session.world.advance(1 / 60)
+        ir.observerSample(1 / 60)
+      }
+
+      const standoff = ir.observatory.state.distance
+      let worst = 0
+      for (let i = 0; i < 60; i += 1) {
+        session.world.advance(1 / 60)
+        const eye = posed(ir.observerSample(1 / 60)).position
+        // Against the body as *drawn*, which is the whole point.
+        const range = UV.distance(eye, originOf(session, frame))
+        worst = Math.max(worst, Math.abs(range - standoff))
+      }
+
+      /*
+       * A millimeter. Not a tolerance chosen to pass: the two positions are
+       * built from the same `UniverseVector` at the same instant, so the only
+       * thing between them is the frame graph's own arithmetic, and
+       * `POSITION_RESOLUTION` is a quarter of a millimeter anywhere in the
+       * galaxy. Before the fix this reached 409 m on Phobos — Mars's orbital
+       * speed times one tick.
+       */
+      expect(worst).toBeLessThan(1e-3)
+    }
   })
 
   it('follows a body as it moves, rather than orbiting where it was', () => {

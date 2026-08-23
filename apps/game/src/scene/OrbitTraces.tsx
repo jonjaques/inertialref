@@ -92,9 +92,19 @@ export function OrbitTraces({ engine }: { engine: GameEngine }) {
       // built. `frames.pose` rather than a search through the scene: a trace
       // exists for bodies the render culled, and losing the anchor would leave
       // the curve behind while the planet moved on.
+      //
+      // `renderTime`, because "now" here means the instant the frame depicts
+      // and the bodies this ring is drawn around came off a snapshot taken at
+      // that instant. At `clock.time` the ring hangs off its primary by that
+      // primary's velocity times up to a tick — 375 m for anything riding Mars
+      // — and sawtooths as alpha resets. Negligible seen whole, and not
+      // negligible at all where the ring passes near the camera: framed on
+      // Phobos, the near segment is ~37 km away and 375 m of it is 15 pixels.
+      // `path.anchor` is built at a fixed instant and cancels out of the
+      // difference, so only this lookup has to move.
       const shift = engine.world.frames.has(path.parent)
         ? UV.difference(
-            engine.world.frames.pose(path.parent, engine.world.clock.time)
+            engine.world.frames.pose(path.parent, engine.world.clock.renderTime)
               .position,
             path.anchor,
           )

@@ -393,10 +393,20 @@ export class Observatory {
     )
   }
 
+  /**
+   * Where the thing being looked at is, at the instant it is *drawn*.
+   *
+   * `renderTime`, never `clock.time`. The scene places every body at the
+   * snapshot's render time, so a camera anchored to the tick sits at a point
+   * the drawn body has already left — by the body's velocity times up to one
+   * tick, sawtoothing as alpha sweeps and resets. See `SimulationClock.
+   * renderTime`; the short version is that it made Phobos and Deimos vibrate by
+   * 11 and 19 pixels in the planetarium while everything larger held still.
+   */
   #targetPosition(target: ObserverTarget): UniverseVector | null {
     const world = this.#host.world
     try {
-      return world.frames.pose(target.frame, world.clock.time).position
+      return world.frames.pose(target.frame, world.clock.renderTime).position
     } catch {
       // The frame belongs to a system that was unloaded, or to a world that
       // has been replaced under us by a save load. Losing the pose for a frame
@@ -413,9 +423,12 @@ export class Observatory {
     const centre = this.#targetPosition(target)
     if (centre === null) return null
     try {
+      // Same instant as `#targetPosition`, for the same reason: the lighting
+      // direction is measured between two points that must both be sampled at
+      // the moment the frame depicts.
       const star = world.frames.pose(
         systemFrameId(target.system),
-        world.clock.time,
+        world.clock.renderTime,
       ).position
       const toStar = UV.difference(star, centre)
       return Vec.length(toStar) > 0 ? Vec.normalize(toStar) : null
