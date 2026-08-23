@@ -251,7 +251,10 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
     status: bootStatus,
     epoch: canvasEpoch,
   } = useStore(firstLight.store)
-  useEffect(() => () => firstLight.dispose(), [firstLight])
+  // `start` rather than the factory, because a `useState` initializer is
+  // double-invoked under StrictMode and a factory with side effects in it leaks
+  // one of every two. It returns its own teardown.
+  useEffect(() => firstLight.start(), [firstLight])
 
   // The media query is live: a window can be dragged from an EDR display to one
   // without, and reading it once at startup gets that permanently wrong.

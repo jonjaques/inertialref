@@ -5,9 +5,8 @@ behind that URL before the persistent universe is possible.
 
 > **H0, H1, H3, H7 and H8 are built and deployed; H2 is half done. Everything from
 > H4 onward is still a plan.** The client is live at
-> <https://inertialref.jonjaques.com> — a Cloudflare custom domain — and also at
-> <https://inertialrefd.jaquers.workers.dev>, which is the same deployment and
-> is deliberately not canonical. It is served by `apps/server`: one Worker, the
+> <https://inertialref.jonjaques.com> — a Cloudflare custom domain, and the only
+> one it answers on. It is served by `apps/server`: one Worker, the
 > static bundle, `/api/health`, and `/ws` reserved behind a deliberate 501. `packages/net` holds the authority port and the local
 > implementation of it that every solo player runs. There is no Durable Object,
 > no D1 and no socket yet, and the sections below still describe those in the
@@ -403,10 +402,11 @@ gate, and the one asset the repository will not carry.
 
 **One canonical hostname.** `inertialref.jonjaques.com` is what
 `<link rel="canonical">` names, what `sitemap.xml` lists, and the only host
-`src/analytics.ts` will load a tag on. `inertialrefd.jaquers.workers.dev` and
-every Wrangler preview URL are the same deployment under a different name —
-useful for checking a deploy, and wrong to count as visits or to let a crawler
-index as a duplicate site.
+`src/analytics.ts` will load a tag on. Every Wrangler preview URL is the same
+deployment under a different name — useful for checking a build, and wrong to
+count as visits or to let a crawler index as a duplicate site. The Worker's own
+`workers.dev` route is off (`workers_dev: false` in `wrangler.jsonc`), so there
+is no second address that tracks the tip; a preview URL names one version.
 
 **The static head is the card, and it is hand-kept.** `not_found_handling` is
 `single-page-application`, so one document is served for every path — and no
@@ -832,7 +832,7 @@ H4 is the milestone the request actually asks for: everything stood up, nothing
 load-bearing.
 
 **Where this actually stands.** H0 and H3 are done. H1 is done apart from the
-custom domain — the client is live on `workers.dev`, the SPA fallback works, and the
+custom domain — the client is live, the SPA fallback works, and the
 service worker excludes both live paths. H2 is half done from the other end than
 planned: `wrangler types` output is committed and the fourth tsconfig project is
 green, but the endpoint that exists is `/api/health` rather than `/api/version`,
@@ -889,8 +889,8 @@ is why it won out over a deploy workflow in Actions.
 
 | Concern         | Approach                                                                                                                                                                                                                                                                                                                                                                                                    |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Production      | Push to `main` → `wrangler deploy`. One Worker, `inertialrefd`, on the `inertialref.jonjaques.com` custom domain; the `*.workers.dev` address keeps answering and is deliberately not canonical.                                                                                                                                                                                                            |
-| Review apps     | Any other branch → `wrangler versions upload`, which uploads a version and its assets without promoting it. Its own URL, its own origin.                                                                                                                                                                                                                                                                    |
+| Production      | Push to `main` → `wrangler deploy`. One Worker, `inertialrefd`, on the `inertialref.jonjaques.com` custom domain and nowhere else — `workers_dev` is `false`, so there is no second address tracking the tip.                                                                                                                                                                                               |
+| Review apps     | Any other branch → `wrangler versions upload`, which uploads a version and its assets without promoting it. `preview_urls` is `true`, so each version answers on its own generated `<version>-inertialrefd.<subdomain>.workers.dev` — its own URL, its own origin, naming one build rather than the latest. No `--preview-alias`: a readable alias outlives the reason it was minted.                       |
 | The gate        | `pnpm check` stays in `.github/workflows/check.yml`. **Cloudflare cannot see a GitHub status check**, so branch protection on `main` is what actually prevents a red merge from deploying.                                                                                                                                                                                                                  |
 | Build command   | `pnpm build` — an optional R2 media pull, typecheck across five projects, then `vite build` into `apps/game/dist`, which is what `assets.directory` points at. See [H-8](#h-8--r2-holds-what-the-repository-will-not-carry).                                                                                                                                                                                |
 | Node version    | `.node-version`, read by Cloudflare's build image _and_ by the Actions workflow, so the two cannot disagree about the runtime.                                                                                                                                                                                                                                                                              |

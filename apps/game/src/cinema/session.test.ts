@@ -45,6 +45,8 @@ class Director {
   status: CutsceneStatus | null = null
   outcome: CutsceneOutcome | null = null
   paused = false
+  /** Makes `play` throw, for the reopen that cannot succeed. */
+  refusePlay = false
   readonly calls: string[]
 
   constructor(calls: string[]) {
@@ -53,7 +55,9 @@ class Director {
 
   play(id: string): CutsceneStatus {
     this.calls.push(`play:${id}`)
-    if (id === 'nothing') throw new Error(`Unknown cutscene "${id}"`)
+    if (id === 'nothing' || this.refusePlay) {
+      throw new Error(`Unknown cutscene "${id}"`)
+    }
     this.status = { id, frame: 0, durationFrames: DURATION, fps: FPS }
     this.outcome = null
     this.paused = false
@@ -131,6 +135,26 @@ describe('a cutscene session', () => {
     expect(calls.filter((one) => one === 'play:tng-intro')).toHaveLength(2)
   })
 
+  it('does not retry a reopen that will never work', () => {
+    /*
+     * The loop the old `restored === outcome.id` guard was really protecting
+     * against, restated against the new one. A reopen that throws leaves the
+     * director ended, so without a marker the next sample would try again, and
+     * the one after that, for the rest of the session.
+     */
+    const { host, director, calls } = fake()
+    const session = createCutsceneSession(host)
+    session.open('tng-intro', 0, true)
+    director.finish('ended')
+    director.refusePlay = true
+
+    calls.length = 0
+    expect(session.sample()?.ended).toBe(true)
+    session.sample()
+    session.sample()
+    expect(calls.filter((one) => one.startsWith('play:'))).toHaveLength(1)
+  })
+
   it('dismisses the end card on a seek, and keeps the scene', () => {
     // Using the transport is how somebody stops reading the card. Without this
     // it sat over a scene that was visibly somewhere else.
@@ -144,6 +168,42 @@ describe('a cutscene session', () => {
     const after = session.sample()
     expect(after?.ended).toBe(false)
     expect(after).not.toBeNull()
+  })
+
+  it('shows the end card after a scene that was paused and resumed on the way', () => {
+    /*
+     * THE REGRESSION the review found. `dismissed` conflated two things: "hide
+     * the card that is up" and "suppress any future card". Pausing mid-scene is
+     * an ordinary act — the debug transport exists for it — and it silently
+     * cost the ending its card, and with it the Replay button that lives there.
+     */
+    const { host, director } = fake()
+    const session = createCutsceneSession(host)
+    session.open('tng-intro', 0, true)
+    session.toggle() // pause, part way through
+    session.toggle() // and carry on
+
+    director.finish('ended')
+    expect(session.sample()?.ended).toBe(true)
+  })
+
+  it('shows the card again when a dismissed scene is played to its end once more', () => {
+    // The other half of the same conflation: the reopen was guarded on the
+    // scene's *id*, so a second genuine ending of the same scene neither
+    // restored the last frame nor raised the card.
+    const { host, director, calls } = fake()
+    const session = createCutsceneSession(host)
+    session.open('tng-intro', 0, true)
+    director.finish('ended')
+    expect(session.sample()?.ended).toBe(true)
+
+    session.seek(100) // dismiss the card and go back into the scene
+    expect(session.sample()?.ended).toBe(false)
+
+    calls.length = 0
+    director.finish('ended')
+    expect(session.sample()?.ended).toBe(true)
+    expect(calls).toContain(`seek:${DURATION - 2}`)
   })
 
   it('dismisses the end card on play, because that is watching it again', () => {

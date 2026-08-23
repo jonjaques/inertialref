@@ -20,13 +20,20 @@ import { hasLitPixels } from './presentationWatchdog.ts'
  * DOM it touches when its adapters are injected.
  */
 
+/** Every `visibilitychange` handler currently on the fake document. */
+let listeners: (() => void)[] = []
+
 beforeEach(() => {
-  const listeners: Record<string, (() => void)[]> = {}
+  listeners = []
   vi.stubGlobal('document', {
     addEventListener: (kind: string, fn: () => void) => {
-      ;(listeners[kind] ??= []).push(fn)
+      if (kind === 'visibilitychange') listeners.push(fn)
     },
-    removeEventListener: () => {},
+    removeEventListener: (kind: string, fn: () => void) => {
+      if (kind !== 'visibilitychange') return
+      const at = listeners.indexOf(fn)
+      if (at !== -1) listeners.splice(at, 1)
+    },
   })
 })
 
@@ -191,6 +198,43 @@ describe('first light', () => {
     pending.resolve?.()
     await settled()
     expect(light.store.getState().phase).toBe('booting')
+  })
+
+  it('builds without touching the document, because StrictMode builds it twice', () => {
+    /*
+     * THE REGRESSION the review found. This is constructed in a `useState`
+     * initializer, which StrictMode double-invokes — so a factory that
+     * registered a listener on its way out registered two, and only the
+     * instance React kept could ever remove its own. Every mount cycle leaked a
+     * handler that dispatched a resize on each visibility change, for the rest
+     * of the session. The same shape as the boot census's double registration.
+     */
+    harness()
+    harness()
+    expect(listeners).toHaveLength(0)
+  })
+
+  it('registers on start and hands back the teardown that removes it', () => {
+    const replayed: number[] = []
+    const light = createFirstLight({
+      replay: () => replayed.push(1),
+      signal: () => ({
+        wait: () => new Promise<void>(() => {}),
+        cancel: () => {},
+      }),
+    })
+
+    const stop = light.start()
+    expect(listeners).toHaveLength(1)
+    // The mount replay: a page that loaded hidden never got its initial
+    // ResizeObserver observation, and becoming visible does not replay it.
+    expect(replayed).toHaveLength(1)
+
+    listeners[0]?.()
+    expect(replayed).toHaveLength(2)
+
+    stop()
+    expect(listeners).toHaveLength(0)
   })
 
   it('reports what boot is doing as it goes', () => {

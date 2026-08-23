@@ -49,6 +49,12 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", ADR-0011.
   `slate-950` panel and 3.2:1 with a star behind it, so no alpha rescues it. The one
   exception is the connection pip, a non-text indicator held to 3:1. DESIGN.md § Neutral
   has the measurements.
+- **A `useState` initializer is a factory, not a constructor.** StrictMode double-invokes
+  them, and React keeps one of the two — so a factory that registers a listener, starts a
+  timer or opens a subscription leaks one of every pair, and only the survivor can ever
+  clean up after itself. Return the object; register from a `useEffect`, and have the
+  starter hand back its own teardown so the two cannot be called in different places.
+  `render/firstLight.ts` is the worked example.
 - **Never guard a "run once" effect with a ref.** React re-runs effects while refs
   survive, so a latch plus a cleanup means the cleanup wins and the effect never fires
   again. Reconcile against the state's actual owner instead —

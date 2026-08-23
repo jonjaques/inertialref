@@ -102,10 +102,29 @@ export interface CutsceneSession {
 const REOPEN_MARGIN = 2
 
 export function createCutsceneSession(host: CutsceneHost): CutsceneSession {
-  /** The scene whose ending has already been handled, so it is handled once. */
-  let restored: string | null = null
-  /** Suppresses the end card without stopping the scene. */
-  let dismissed = false
+  /*
+   * Whether an end card is up.
+   *
+   * A state, not a suppression. It was a `dismissed` flag that transport verbs
+   * set and only `open` cleared — which conflated "hide the card that is
+   * showing" with "suppress any future card", so pausing part way through a
+   * scene silently cost its ending the card, and with it the Replay button
+   * that lives there. A card is raised by an ending and lowered by the person
+   * reading it; nothing else has an opinion.
+   */
+  let carded = false
+  /*
+   * Whether this session has already reacted to the ending it can see.
+   *
+   * Reset when a scene *starts* — the director clears its outcome in `play`,
+   * so an open scene with no outcome is one whose next ending is a new one.
+   * That is what lets the same scene end twice: dismiss the card, seek back,
+   * play on, and the second ending raises a second card.
+   *
+   * It also bounds `restoreFinalFrame`: a reopen that throws leaves the
+   * director ended, and without this the next sample would try again forever.
+   */
+  let handled = false
   /** A pointer owns a scrubber; the published frame stands still. */
   let held = false
   /** The last playhead published, which is what a hold freezes. */
@@ -123,8 +142,8 @@ export function createCutsceneSession(host: CutsceneHost): CutsceneSession {
       // Pausing *after* seeking rather than before: `play` un-pauses the clock
       // as part of anchoring the reference timing and would otherwise undo it.
       if (!autoplay) host.pause()
-      restored = null
-      dismissed = false
+      carded = false
+      handled = false
       return null
     } catch (cause) {
       return cause instanceof Error ? cause.message : String(cause)
@@ -149,8 +168,6 @@ export function createCutsceneSession(host: CutsceneHost): CutsceneSession {
    * arrangement this module replaced.
    */
   const restoreFinalFrame = (outcome: CutsceneOutcome): void => {
-    if (restored === outcome.id) return
-    restored = outcome.id
     try {
       host.play(outcome.id)
       host.seek(Math.max(0, outcome.durationFrames - REOPEN_MARGIN))
@@ -168,16 +185,18 @@ export function createCutsceneSession(host: CutsceneHost): CutsceneSession {
       const ended = outcome !== null && outcome.ending === 'ended'
 
       if (status !== null) {
+        // An open scene the director has no outcome for was started fresh, so
+        // whatever it does next is a new ending. `restoreFinalFrame` reopens
+        // through `play`, which is what clears the director's outcome — so the
+        // re-opened final frame arrives here and keeps its card up.
+        if (outcome === null) handled = false
         last = {
           id: status.id,
           frame: status.frame,
           durationFrames: status.durationFrames,
           fps: status.fps,
           paused: host.paused(),
-          // `restored` names the scene whose ending was handled, so the
-          // re-opened final frame still reads as ended rather than as a scene
-          // somebody started at the last second.
-          ended: !dismissed && restored !== null && restored === status.id,
+          ended: carded,
         }
         return last
       }
@@ -187,17 +206,22 @@ export function createCutsceneSession(host: CutsceneHost): CutsceneSession {
       // playhead to compare against.
       if (!ended || outcome === null) {
         last = null
+        carded = false
         return null
       }
 
-      restoreFinalFrame(outcome)
+      if (!handled) {
+        handled = true
+        carded = true
+        restoreFinalFrame(outcome)
+      }
       last = {
         id: outcome.id,
         frame: outcome.durationFrames,
         durationFrames: outcome.durationFrames,
         fps: outcome.fps,
         paused: host.paused(),
-        ended: !dismissed,
+        ended: carded,
       }
       return last
     },
@@ -210,8 +234,9 @@ export function createCutsceneSession(host: CutsceneHost): CutsceneSession {
 
     toggle() {
       // Pressing play on an ended scene is watching it again, not reading a
-      // card about how it went.
-      dismissed = true
+      // card about how it went. Lowering a card that is not up is a no-op,
+      // which is what makes an ordinary mid-scene pause cost nothing.
+      carded = false
       if (host.paused()) host.resume()
       else host.pause()
     },
@@ -219,7 +244,7 @@ export function createCutsceneSession(host: CutsceneHost): CutsceneSession {
     seek(frame) {
       // Using the transport is how somebody stops reading the end card. Without
       // this the card sat over a scene that was visibly somewhere else.
-      dismissed = true
+      carded = false
       host.seek(frame)
     },
 
@@ -230,8 +255,8 @@ export function createCutsceneSession(host: CutsceneHost): CutsceneSession {
     },
 
     stop() {
-      dismissed = true
-      restored = null
+      carded = false
+      handled = false
       host.stop()
     },
   }

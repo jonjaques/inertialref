@@ -2863,6 +2863,35 @@ than by position, because React interleaves one route's cleanup with the next
 one's mount and popping the top would take somebody else's layer. The whole
 round trip is a Node test with no React, no renderer and no world.
 
+### Two the review caught
+
+An `ultrareview` on the PR found two things the tests did not, both worth the
+shape of the finding rather than just the fix.
+
+**The end card was suppressed by an ordinary pause.** `dismissed` in
+`cinema/session.ts` conflated two meanings — "hide the card that is showing"
+and "suppress any future card" — because transport verbs set it and only `open`
+cleared it. Pausing part way through a scene and carrying on therefore cost that
+scene's ending its card, and with it the Replay button that lives there. The
+same conflation had a second head: the reopen was guarded on the scene's _id_,
+so a card that was dismissed and then played to the end again neither restored
+the final frame nor came back. It is two states now — `carded` is whether a card
+is up, raised by an ending and lowered by the person reading it; `handled` is
+whether this session has reacted to the ending it can see, reset when a scene
+starts, which is what lets one scene end twice and what bounds a reopen that
+throws.
+
+**A `useState` initializer is a factory, not a constructor.** `createFirstLight`
+registered a `visibilitychange` listener on its way out, and it is called from
+`useState(() => …)` — which StrictMode double-invokes. Two instances, two
+listeners, and only the one React kept could remove its own, so every mount
+cycle leaked a handler that dispatched a resize on each visibility change. The
+same root cause as the boot census two sections up, arriving through a different
+door: there the answer was idempotence, here it is that the factory does nothing
+and `start()` returns its own teardown. Dev-only — StrictMode does not
+double-invoke initializers in production — and worth fixing anyway, because the
+rule had just been written down.
+
 ### Width, edges, and the measurement
 
 `openSession` was accreting width: `presentation` and `onWorldReplaced` folded

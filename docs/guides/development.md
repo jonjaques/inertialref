@@ -49,8 +49,11 @@ built-in. After any change to `wrangler.jsonc`, regenerate
 `pnpm check` is the gate. Do not report a task complete without it passing.
 
 The site deploys to the `inertialrefd` Worker. Canonical URL:
-<https://inertialref.jonjaques.com>. The `workers.dev` address is a deploy
-check only; analytics and `<link rel="canonical">` name the custom domain.
+<https://inertialref.jonjaques.com>, and the only address it answers on. To
+check a build before trusting DNS, `pnpm --filter @inertialref/server run
+versions:upload` uploads a version without promoting it and prints its own
+preview URL; analytics and `<link rel="canonical">` name the custom domain, so a
+preview never counts as a visit.
 
 ---
 

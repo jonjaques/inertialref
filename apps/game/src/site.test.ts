@@ -145,11 +145,19 @@ describe('who is measured', () => {
   })
 
   it('measures nothing anywhere else', () => {
-    // Each of these is a real address this exact bundle answers on.
+    /*
+     * Each of these is a real address this exact bundle answers on. The
+     * versioned forms are the ones that still arrive: `workers_dev` is `false`
+     * so the Worker has no shared `workers.dev` route, but `preview_urls` is
+     * `true` and every uploaded version gets its own hostname on that subdomain.
+     * The bare and aliased spellings stay listed because the gate is a
+     * canonical-host allow-list, not a preview-shaped denylist.
+     */
     for (const hostname of [
       'localhost',
       '127.0.0.1',
       'inertialrefd.jaquers.workers.dev',
+      '1a2b3c4d-inertialrefd.jaquers.workers.dev',
       'preview-branch.inertialrefd.workers.dev',
     ]) {
       expect(isMeasured({ ...canonical, hostname })).toBe(false)

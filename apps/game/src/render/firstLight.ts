@@ -187,8 +187,15 @@ export interface FirstLight {
   ): void
   /** The cover's fade-out finished; it may unmount for the rest of the session. */
   revealed(): void
-  /** Drop the watch and the listener. */
-  dispose(): void
+  /**
+   * Begin watching the document, and return the teardown.
+   *
+   * Separate from the factory so that building one has no side effects: this is
+   * constructed in a `useState` initializer, which StrictMode double-invokes.
+   * Returning the teardown rather than exposing a `dispose` is what stops the
+   * two from being called in different places.
+   */
+  start(): () => void
 }
 
 export function createFirstLight(
@@ -229,21 +236,38 @@ export function createFirstLight(
     store.setState({ ...store.getState(), phase: 'revealing' })
   }
 
-  /*
-   * The measurement replay, on the two occasions that are not a watchdog rung.
-   *
-   * Mount, because a page that loaded hidden never got its initial
-   * ResizeObserver observation; and every return to visibility, because
-   * becoming visible does not replay it either. The third occasion — a renderer
-   * has just been built — is in `watch` below, at the one moment a measurement
-   * provably cannot be too early.
-   */
   const onVisibility = (): void => replay()
-  replay()
-  document.addEventListener('visibilitychange', onVisibility)
 
   return {
     store,
+
+    /*
+     * The measurement replay, on the two occasions that are not a watchdog rung.
+     *
+     * Mount, because a page that loaded hidden never got its initial
+     * ResizeObserver observation; and every return to visibility, because
+     * becoming visible does not replay it either. The third occasion — a
+     * renderer has just been built — is in `watch` below, at the one moment a
+     * measurement provably cannot be too early.
+     *
+     * A method rather than something the factory does on its way out, because
+     * the factory is called from a `useState` initializer and **StrictMode
+     * double-invokes those**. Two instances were built, both registered a
+     * listener, and only the one React kept could ever remove its own — so
+     * every mount cycle leaked a listener that dispatched a resize on every
+     * visibility change for the rest of the session. The same class of bug the
+     * boot census hit; there the answer was idempotence, and here it is that a
+     * factory returns an object and does nothing else.
+     */
+    start() {
+      replay()
+      document.addEventListener('visibilitychange', onVisibility)
+      return () => {
+        watching?.cancel()
+        watching = null
+        document.removeEventListener('visibilitychange', onVisibility)
+      }
+    },
 
     progress(next) {
       progress = next
@@ -294,12 +318,6 @@ export function createFirstLight(
     revealed() {
       if (store.getState().phase !== 'revealing') return
       store.setState({ ...store.getState(), phase: 'done' })
-    },
-
-    dispose() {
-      watching?.cancel()
-      watching = null
-      document.removeEventListener('visibilitychange', onVisibility)
     },
   }
 }
