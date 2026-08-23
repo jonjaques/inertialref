@@ -2559,7 +2559,16 @@ Verified against a local workerd with the bundled copy removed: 200 for a plain
 GET, 206 with a correct `Content-Range` for explicit / suffix / open-ended
 ranges, 304 on `If-None-Match`, 404 for an unlisted name and for `/media/../`,
 405 for a POST — and the first 1024 and last 500 bytes byte-identical to the
-source. The service worker treats `/media/` as immutable for a second reason:
+source.
+
+A third thing turned up on the deployed review app rather than locally:
+**`env.ASSETS` does not serve ranges.** `Range: bytes=0-1023` came back 200 with
+all 2.7 MB. A browser copes by buffering the whole track and seeking locally,
+but the overlay drives `currentTime` against a reference clock, so on a slow
+connection every seek waits for a download a 206 would have avoided. The handler
+now treats "a range was asked for and the asset store answered 200" as a miss
+and lets R2 answer — the one case where the second transport is better rather
+than a fallback. The service worker treats `/media/` as immutable for a second reason:
 stale-while-revalidate would re-fetch 2.7 MB in the background on every load.
 
 **The GA measurement id is not in the repository.** It is not a credential — it

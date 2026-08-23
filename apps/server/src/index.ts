@@ -110,15 +110,27 @@ export default {
  * code to test. Nothing under `/media/` is ever HTML, so an HTML answer to a
  * request for an `.mp3` is unambiguous — and the alternative, trusting the 200,
  * hands an `<audio>` element a page of markup.
+ *
+ * **`env.ASSETS` does not serve ranges**, which is the second reason R2 is
+ * here. Measured against the deployed review app: a `Range: bytes=0-1023` for
+ * this file comes back `200` with all 2.7 MB of it. A browser copes — it
+ * buffers the whole track and then seeks locally — but the cutscene overlay
+ * drives `currentTime` against a reference clock, so on a slow connection every
+ * seek waits for a download that a 206 would have made unnecessary. When a
+ * range is asked for and the asset store ignores it, the bucket answers
+ * instead.
  */
 async function media(
   request: Request,
   env: Env,
   object: MediaObject,
 ): Promise<Response> {
+  const wantsRange = request.headers.has('range')
   const asset = await env.ASSETS.fetch(request)
   const type = asset.headers.get('content-type') ?? ''
-  if (!type.startsWith('text/html')) return asset
+  const servedByAssets =
+    !type.startsWith('text/html') && !(wantsRange && asset.status === 200)
+  if (servedByAssets) return asset
 
   /*
    * `range` and `onlyIf` are handed the request's own headers: R2 parses
@@ -164,7 +176,7 @@ async function media(
    * breaks is every cache in between, which is entitled to treat a partial
    * response as one it must not reuse as a whole one.
    */
-  const range = request.headers.has('range')
+  const range = wantsRange
     ? resolveRange(stored.range ?? {}, stored.size)
     : null
   if (range === null) {

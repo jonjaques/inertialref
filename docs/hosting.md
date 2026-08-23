@@ -480,6 +480,15 @@ test: `not_found_handling: single-page-application` means the asset store
 answers what it does not have with a 200. Nothing under `/media/` is ever HTML,
 so an HTML answer to a request for an `.mp3` is unambiguous.
 
+**`env.ASSETS` does not serve ranges**, which is the second reason the binding
+is here rather than only the fallback one. Measured against a deployed review
+app: `Range: bytes=0-1023` on this file comes back **200 with all 2.7 MB**. A
+browser copes — it buffers the whole track and seeks locally — but the cutscene
+overlay drives `currentTime` against a reference clock, so on a slow connection
+every seek waits for a download a 206 would have made unnecessary. So when a
+range is asked for and the asset store ignores it, R2 answers instead. That is
+the one case where the second transport is not a fallback but the better path.
+
 **An allow-list, not a key prefix.** `inertialrefd-storage` is the site's general
 storage, not a public directory. Mapping `/media/*` onto a prefix would make
 everything under it world-readable and would turn `/media/../` into a bucket
