@@ -2571,6 +2571,21 @@ and lets R2 answer — the one case where the second transport is better rather
 than a fallback. The service worker treats `/media/` as immutable for a second reason:
 stale-while-revalidate would re-fetch 2.7 MB in the background on every load.
 
+**The service worker was never registering on a first visit, and that is older
+than this change.** `main.tsx` awaits the packed catalogue at module scope, and
+that await resolves _after_ the load event — measured on a cold visit to a
+review app: load at 761 ms, the 460 KB catalogue at 969 ms. The registration was
+inside `window.addEventListener('load', …)`, so it was a listener for an event
+that had already been and gone.
+
+It looked fine because a registration persists across visits: the _second_ visit
+to an origin serves the catalogue out of the HTTP cache, the await resolves
+before load, and a worker is registered for good. What was broken was the first
+visit to any origin — precisely the visit where "install it and it works on a
+plane" has to be true. It surfaced now only because a review app is the one
+origin nobody had ever opened twice. `document.readyState === 'complete'` is
+checked first now.
+
 **The GA measurement id is not in the repository.** It is not a credential — it
 ships in the bundle and is visible in every request the tag makes — but this
 repository is public, and an id committed in it is an id every fork measures
