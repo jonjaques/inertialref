@@ -5,10 +5,13 @@ import {
   BufferGeometry,
   type Group,
   Mesh,
+  type Scene,
   SphereGeometry,
   Vector3,
+  type WebGPURenderer,
 } from 'three/webgpu'
 import type { RenderBody } from '@inertialref/rendering'
+import { formatAddress, walkBodies } from '@inertialref/universe'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import {
   type AtmosphereMaterial,
@@ -172,6 +175,18 @@ function tuningFor(body: RenderBody): PlanetTuning {
   }
 }
 
+/**
+ * A body visual waiting to be built ahead of need. Everything the creation
+ * block reads, captured at enqueue time so the frame loop never walks a
+ * system twice.
+ */
+interface WarmTask {
+  readonly key: string
+  readonly star: boolean
+  readonly clouded: boolean
+  readonly ringed: boolean
+}
+
 /** Planets, moons and stars, placed from the scene description. */
 export function Bodies({ engine }: { engine: GameEngine }) {
   const group = useRef<Group>(null)
@@ -179,6 +194,12 @@ export function Bodies({ engine }: { engine: GameEngine }) {
   const anisotropy = useThree(
     (state) => state.gl.capabilities?.getMaxAnisotropy?.() ?? 8,
   )
+  const gl = useThree((state) => state.gl)
+  const defaultCamera = useThree((state) => state.camera)
+  const rootScene = useThree((state) => state.scene)
+  /** Bodies whose visuals should exist before anything looks at them. */
+  const warmQueue = useRef<WarmTask[]>([])
+  const warmedSystems = useRef('')
   const spheres = useMemo(
     () =>
       SPHERE_TIERS.map((tier) => ({
@@ -276,6 +297,60 @@ export function Bodies({ engine }: { engine: GameEngine }) {
       return false
     }
 
+    const materialise = (
+      key: string,
+      star: boolean,
+      clouded: boolean,
+      ringed: boolean,
+    ): BodyVisual => {
+      const starMaterial = star ? createStarMaterial() : null
+      const planet = star ? null : createPlanetMaterial()
+      const atmosphereMaterial = createAtmosphereMaterial()
+      const mesh = new Mesh(
+        spheres[0]!.geometry,
+        starMaterial?.material ?? planet!.material,
+      )
+      const atmosphere = new Mesh(
+        spheres[1]!.geometry,
+        atmosphereMaterial.material,
+      )
+      atmosphere.visible = false
+      container.add(mesh)
+      container.add(atmosphere)
+
+      let clouds: Mesh | null = null
+      let cloudMaterial: CloudMaterial | null = null
+      if (clouded) {
+        cloudMaterial = createCloudMaterial()
+        clouds = new Mesh(spheres[0]!.geometry, cloudMaterial.material)
+        clouds.renderOrder = 1
+        container.add(clouds)
+      }
+
+      let ringMesh: Mesh | null = null
+      let ringMaterial: RingMaterial | null = null
+      if (ringed) {
+        ringMaterial = createRingMaterial()
+        ringMesh = new Mesh(rings, ringMaterial.material)
+        ringMesh.renderOrder = 2
+        container.add(ringMesh)
+      }
+
+      const visual: BodyVisual = {
+        mesh,
+        planet,
+        atmosphere,
+        atmosphereMaterial,
+        clouds,
+        cloudMaterial,
+        rings: ringMesh,
+        ringMaterial,
+        star: starMaterial,
+      }
+      visuals.set(key, visual)
+      return visual
+    }
+
     const draw = (
       key: string,
       body: RenderBody,
@@ -286,51 +361,12 @@ export function Bodies({ engine }: { engine: GameEngine }) {
       let visual = visuals.get(key)
       if (visual === undefined) {
         if (visuals.size >= MAX_BODIES && !evictStale()) return
-        const starMaterial = star === null ? null : createStarMaterial()
-        const planet = star === null ? createPlanetMaterial() : null
-        const atmosphereMaterial = createAtmosphereMaterial()
-        const mesh = new Mesh(
-          spheres[0]!.geometry,
-          starMaterial?.material ?? planet!.material,
+        visual = materialise(
+          key,
+          star !== null,
+          appearance.clouds !== null,
+          body.rings !== null,
         )
-        const atmosphere = new Mesh(
-          spheres[1]!.geometry,
-          atmosphereMaterial.material,
-        )
-        atmosphere.visible = false
-        container.add(mesh)
-        container.add(atmosphere)
-
-        let clouds: Mesh | null = null
-        let cloudMaterial: CloudMaterial | null = null
-        if (appearance.clouds !== null) {
-          cloudMaterial = createCloudMaterial()
-          clouds = new Mesh(spheres[0]!.geometry, cloudMaterial.material)
-          clouds.renderOrder = 1
-          container.add(clouds)
-        }
-
-        let ringMesh: Mesh | null = null
-        let ringMaterial: RingMaterial | null = null
-        if (body.rings !== null) {
-          ringMaterial = createRingMaterial()
-          ringMesh = new Mesh(rings, ringMaterial.material)
-          ringMesh.renderOrder = 2
-          container.add(ringMesh)
-        }
-
-        visual = {
-          mesh,
-          planet,
-          atmosphere,
-          atmosphereMaterial,
-          clouds,
-          cloudMaterial,
-          rings: ringMesh,
-          ringMaterial,
-          star: starMaterial,
-        }
-        visuals.set(key, visual)
       }
 
       const { placement, orientation } = body
@@ -636,6 +672,83 @@ export function Bodies({ engine }: { engine: GameEngine }) {
       visual.atmosphere.visible = false
       if (visual.clouds !== null) visual.clouds.visible = false
       if (visual.rings !== null) visual.rings.visible = false
+    }
+
+    /*
+     * Build ahead of need: one body visual per frame, for every body the
+     * loaded systems could put on screen, compiled the moment it is built.
+     *
+     * `render/preload.ts` warms the *archetype* pipelines, but the backend
+     * still generates WGSL per material instance to discover that the
+     * pipeline is already cached — measured 2026-08-23 at ~5 ms per material,
+     * which for Saturn arriving with seven moons was an 88 ms frame with
+     * every texture, LUT and pipeline already warm. Draining that work here,
+     * one body a frame, spends it behind the boot overlay at startup and
+     * during the flight after a mid-session jump — long before anything is
+     * close enough to look at. Paused during a cutscene, where a scripted
+     * frame has nowhere to hide a ten-millisecond task.
+     *
+     * The compile has to see visible objects — `compileAsync` walks the tree
+     * exactly as a render would — and its traversal is synchronous (only the
+     * backend's pipeline promises are awaited), so the toggle around it never
+     * lets a unit sphere at the origin reach a real frame.
+     */
+    if (engine.cinematic === null) {
+      const systems = engine.world.loadedSystems()
+      const systemsKey = systems.map((system) => system.id).join(',')
+      if (systemsKey !== warmedSystems.current) {
+        warmedSystems.current = systemsKey
+        const queue: WarmTask[] = []
+        for (const system of systems) {
+          queue.push({
+            key: `star:${system.id}`,
+            star: true,
+            clouded: false,
+            ringed: false,
+          })
+          for (const body of walkBodies(system)) {
+            queue.push({
+              // The same formatting the snapshot applies, or the key misses
+              // the visual the draw loop will look up.
+              key: formatAddress(body.address),
+              star: false,
+              clouded: body.appearance.clouds !== null,
+              ringed: body.appearance.rings !== null,
+            })
+          }
+        }
+        warmQueue.current = queue
+      }
+
+      let task = warmQueue.current.shift()
+      while (task !== undefined && visuals.has(task.key))
+        task = warmQueue.current.shift()
+      if (task !== undefined && visuals.size < MAX_BODIES) {
+        const visual = materialise(
+          task.key,
+          task.star,
+          task.clouded,
+          task.ringed,
+        )
+        const parts = [
+          visual.mesh,
+          visual.atmosphere,
+          visual.clouds,
+          visual.rings,
+        ]
+        for (const part of parts) if (part !== null) part.visible = true
+        const renderer = gl as unknown as WebGPURenderer
+        for (const part of parts) {
+          if (part === null) continue
+          // Fire and forget: the pipelines land whenever the backend is
+          // ready, and a compile failure will resurface on first draw with
+          // a better error than anything worth catching here.
+          renderer
+            .compileAsync(part, defaultCamera, rootScene as Scene)
+            .catch(() => {})
+        }
+        for (const part of parts) if (part !== null) part.visible = false
+      }
     }
   })
 

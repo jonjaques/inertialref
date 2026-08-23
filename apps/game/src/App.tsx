@@ -11,6 +11,8 @@ import type {
   HudRenderState,
 } from './hud/controls.ts'
 import { FOV_MAX, FOV_MIN } from './hud/controls.ts'
+import { bootStatusLine } from './hud/boot.ts'
+import { BootOverlay } from './hud/BootOverlay.tsx'
 import { CutsceneOverlay } from './hud/CutsceneOverlay.tsx'
 import { ErrorBoundary } from './hud/ErrorBoundary.tsx'
 import { isTyping } from './hud/focus.ts'
@@ -29,6 +31,11 @@ import {
   DISCONNECTED,
 } from './net/health.ts'
 import { EXTENDED_RANGE_QUERY, watchDynamicRange } from './render/capability.ts'
+import {
+  type BootProgress,
+  warmScene,
+  watchSystemAtmospheres,
+} from './render/preload.ts'
 import { watchPresentation } from './render/presentationWatchdog.ts'
 import {
   commitToneCurve,
@@ -234,6 +241,27 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
   const [canvasEpoch, setCanvasEpoch] = useState(0)
   /** Guards save and load against each other. See `commands.save`. */
   const storageBusy = useRef(false)
+  /*
+   * The boot gate, and the two facts it waits on.
+   *
+   * `warmed` — the preloader has fetched and uploaded every shipped surface
+   * map, baked every atmosphere table the loaded systems can ask for, and
+   * compiled one pipeline per material archetype (`render/preload.ts`). It is
+   * a latch: the HDR toggle rebuilds the renderer and re-runs the warm-up,
+   * but the overlay must not come back mid-session for it.
+   *
+   * `presented` — the presentation watchdog's probe found lit pixels on the
+   * canvas, which is the only signal that survives the blank-boot failure
+   * `render/presentationWatchdog.ts` documents. Fading the overlay out on any
+   * weaker evidence reveals exactly the black frame it exists to hide.
+   *
+   * Both true → `revealing`; the overlay's fade-out completion → `done`, and
+   * the component unmounts for the rest of the session.
+   */
+  const [boot, setBoot] = useState<'booting' | 'revealing' | 'done'>('booting')
+  const [bootProgress, setBootProgress] = useState<BootProgress | null>(null)
+  const [warmed, setWarmed] = useState(false)
+  const [presented, setPresented] = useState(false)
 
   // The media query is live: a window can be dragged from an EDR display to one
   // without, and reading it once at startup gets that permanently wrong.
@@ -316,9 +344,55 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
     const watch = watchPresentation(canvas, {
       allowRemount: canvasEpoch === 0,
       remount: () => setCanvasEpoch((epoch) => epoch + 1),
+      onPresented: () => setPresented(true),
     })
     return () => watch.cancel()
   }, [output, canvasEpoch])
+
+  /*
+   * The WebGL half of the `presented` gate.
+   *
+   * The watchdog's pixel probe is only trustworthy on a WebGPU canvas —
+   * `drawImage` of a WebGL canvas without `preserveDrawingBuffer` may
+   * legally read back black between frames, so on the fallback backend the
+   * probe can leave the boot overlay waiting on evidence that will never
+   * come (Firefox sat at "first light…" indefinitely). Two animation frames
+   * are that backend's honest signal instead: rAF only runs while the
+   * document is visible, and by the second callback the first frame has
+   * demonstrably been through the compositor. The blank-boot wedge the
+   * watchdog exists for has only ever been observed on the WebGPU path.
+   */
+  useEffect(() => {
+    if (output === null || output.backend === 'webgpu' || presented) return
+    let raf = 0
+    raf = window.requestAnimationFrame(() => {
+      raf = window.requestAnimationFrame(() => setPresented(true))
+    })
+    return () => window.cancelAnimationFrame(raf)
+  }, [output, presented])
+
+  /*
+   * Warm everything a first encounter would otherwise pay for, behind the
+   * boot overlay. Keyed on `output` rather than run once: an HDR or MSAA
+   * change rebuilds the renderer, whose pipeline and texture caches die with
+   * it, and a re-warm against the new handle is what keeps the first frame
+   * after the rebuild from paying the whole bill again. `warmScene` itself
+   * de-duplicates per handle, which also absorbs StrictMode's double effect.
+   */
+  useEffect(() => {
+    if (output === null) return
+    const handle = renderer.current
+    if (handle === null) return
+    void warmScene(handle, engine, setBootProgress).then(() => setWarmed(true))
+  }, [output, engine])
+
+  // Bake atmosphere tables for systems that load mid-session, off the frame
+  // loop, so a jump's first look costs a cache hit. See `render/preload.ts`.
+  useEffect(() => watchSystemAtmospheres(engine), [engine])
+
+  useEffect(() => {
+    if (boot === 'booting' && warmed && presented) setBoot('revealing')
+  }, [boot, warmed, presented])
 
   useEffect(() => {
     // Expose the harness for the console and for automated drivers. This is the
@@ -585,6 +659,9 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
        *   10 the cutscene layer — blackout and titles: picture, not UI
        *   30 notices, and the cinema player
        *   40 dialogs            — over all of it, which is what a dialog is
+       *   50 the boot overlay   — over even those, until first light: nothing
+       *      below is usable before the scene exists, and it unmounts forever
+       *      once its fade completes
        *
        * The band that used to sit at 20 was the dev dock, a fixed panel in the
        * top-right corner that `App` drew over whichever mode was running. There
@@ -735,6 +812,26 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
                 graphics={graphicsState}
                 camera={cameraState}
                 render={renderState}
+              />
+            </ErrorBoundary>
+          </div>
+        )}
+
+        {/* The loading screen. Mounted from the first commit — it is what
+            keeps React's clearing of the index.html placeholder from flashing
+            an unlit canvas — and gone for good once its fade completes. A
+            boundary of its own: a throw in here must cost the cover, never
+            the session under it. */}
+        {boot !== 'done' && (
+          <div className="pointer-events-none absolute inset-0 z-50">
+            <ErrorBoundary
+              what="the loading screen"
+              className="type-readout pointer-events-auto absolute bottom-3 left-3"
+            >
+              <BootOverlay
+                phase={boot === 'revealing' ? 'revealing' : 'booting'}
+                status={bootStatusLine(bootProgress, warmed)}
+                onRevealed={() => setBoot('done')}
               />
             </ErrorBoundary>
           </div>

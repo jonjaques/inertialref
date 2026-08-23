@@ -102,6 +102,19 @@ export function watchPresentation(
     readonly remount: () => void
     /** Whether this instance may still pull the remount lever. */
     readonly allowRemount: boolean
+    /**
+     * Called once, when this watch has nothing more to say: a sample came
+     * back lit, or the ladder is exhausted. The boot overlay's fade waits on
+     * it — fading out over a canvas that has not presented reveals black —
+     * and the exhausted case releases the fade too, deliberately: at that
+     * point the probe may simply be unreadable, and an overlay hiding a
+     * possibly-fine scene forever is strictly worse than revealing the black
+     * one the log has already warned about. Only trustworthy where the probe
+     * is — a WebGPU canvas; `drawImage` of a WebGL canvas without
+     * `preserveDrawingBuffer` may legally read back black between frames, so
+     * a host on that backend must not gate anything solely on this.
+     */
+    readonly onPresented?: () => void
   },
 ): PresentationWatch {
   let cancelled = false
@@ -152,6 +165,7 @@ export function watchPresentation(
         log.info('presentation recovered', { attempts })
       }
       standDown()
+      options.onPresented?.()
       return
     }
 
@@ -187,6 +201,8 @@ export function watchPresentation(
        */
       log.warn('presentation watchdog giving up; reload if the scene is black')
       standDown()
+      // Exhausted counts as settled — see `onPresented`'s contract above.
+      options.onPresented?.()
       return
     }
     timer = window.setTimeout(check, RETRY_MS)
