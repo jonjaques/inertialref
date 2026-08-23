@@ -168,7 +168,10 @@ Violating one of these is a rewrite later, not a refactor.
 
 The repository-managed environment is `.cursor/environment.json`. Its Debian
 image pins Node 26 and pnpm 11, then a Build runs the frozen-lockfile install.
-Do not install dependencies in `start`; Builds preserve files, not processes.
+The image also ships `git`, `git-lfs`, `tmux`, and `en_US.UTF-8` — Cursor clones
+and runs terminals inside the container, and a POSIX locale is how a custom
+image builds then fails to open. Do not install dependencies in `start`; Builds
+preserve files, not processes.
 
 `pnpm dev` starts automatically in the **Game and Worker** terminal. It serves
 Vite on port 5173 and the local Cloudflare Worker on 8787. Inspect that terminal
