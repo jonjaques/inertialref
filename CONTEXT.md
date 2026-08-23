@@ -3063,6 +3063,31 @@ and the atmosphere marches twelve samples with two table reads each — but the
 number is a judgement, not a profile. `render/measure.ts` on the device is what
 would turn it into one.
 
+## The cloud image shipped Node 26 and forgot the rest (23 Aug 2026)
+
+This morning's Cursor Cloud Dockerfile pinned Node 26.7 and pnpm 11, which is
+the whole reason it exists — type stripping fails on the Node 20–22 images
+Cursor otherwise ships. It did not install what Cursor actually runs _inside_
+the container. A local `docker build` of that image is green and `node -v` is
+right, so the next failures look like product bugs.
+
+Three things were missing, each with a different symptom:
+
+- **`tmux`.** `environment.json` starts `pnpm dev` as a named terminal. Those
+  terminals run in a tmux session Cursor shares with the agent. The binary was
+  not on the image.
+- **`git-lfs`.** `*.glb` is LFS. Git itself is on `node:bookworm`, so clone
+  succeeds; without the smudge filter the hull is a 133-byte pointer and the
+  renderer silently falls back to the debug cone. `git lfs install --system`
+  is what makes the checkout real.
+- **`locales`.** `LANG` was empty and the locale was POSIX. Cursor's session
+  init expects `en_US.UTF-8`; a custom image missing the `locales` package is
+  a documented way to build successfully and then fail to open.
+
+`xz-utils` was already on the fat bookworm image. It is declared anyway, next
+to `git`, so a later `-slim` tag cannot drop them quietly. The image still
+does not `COPY` the repository.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

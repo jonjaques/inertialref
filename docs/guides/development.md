@@ -183,9 +183,10 @@ key prefix. See [hosting](../hosting.md) H-8 for the two workerd traps around
 that half.
 
 **Node 26** is required. Cursor Cloud gets it from
-[`.cursor/Dockerfile`](../../.cursor/Dockerfile). Claude cloud environments
-that still ship Node 20–22 use
-[`scripts/cloud-setup.sh`](../../scripts/cloud-setup.sh); until the correct
+[`.cursor/Dockerfile`](../../.cursor/Dockerfile), which also installs `git`,
+`git-lfs`, `tmux`, and a UTF-8 locale — Cursor clones and runs terminals inside
+that image, not beside it. Claude cloud environments that still ship Node 20–22
+use [`scripts/cloud-setup.sh`](../../scripts/cloud-setup.sh); until the correct
 runtime is installed, type stripping fails at the first import.
 
 ---

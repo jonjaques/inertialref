@@ -22,3 +22,7 @@ The Dockerfile is ordinary OCI input. OrbStack can build it on macOS through
 its Docker-compatible CLI, while Cursor Cloud builds and runs it on Linux.
 OrbStack itself is not installed in the Cloud VM and no nested Docker daemon is
 needed by this repository.
+
+Cursor clones, smudges LFS, and starts `terminals` inside the image. The
+Dockerfile therefore installs `git`, `git-lfs`, `tmux`, and a UTF-8 locale —
+not just Node 26. A successful `docker build` is not a working Cloud Agent.
