@@ -9,10 +9,10 @@ paths:
 
 # The cinematic director
 
-Reasoning: ADR-0010, `AGENTS.md` § "Scripted scenes", and the hard-won authoring rules in
-`CONTEXT.md` § "The cinematic director" and § "The title sequence, re-cut against its own
-frames". **Reread both before authoring a second scene** — the traps below are the index,
-not the explanation.
+Reasoning: ADR-0010, `docs/guides/cinematics.md`, and the hard-won authoring rules in
+`CONTEXT.md` § "The cinematic director, and a title sequence as a test target" and
+§ "The title sequence, re-cut against its own frames". **Reread both before authoring a
+second scene** — the traps below are the index, not the explanation.
 
 - **Pure arithmetic lives in `packages/rendering/src/cinematic.ts`** and is property-tested
   in Node. The director and scripts live in `packages/devtools`. A script's

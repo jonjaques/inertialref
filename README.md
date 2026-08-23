@@ -113,7 +113,7 @@ Neither is needed to run the game, the tests or the build.
   in at build time (`pnpm media:pull`), never committed. Without it the cutscene
   plays silent, which is what a fork gets and is a supported outcome rather than
   a failure. `scripts/media.mjs` has the reasoning.
-- **Raw catalog downloads.** 34 MB of HYG to produce a 460 KB asset, and the
+- **Raw catalog downloads.** 34 MB of HYG to produce a 458 KB asset, and the
   asset is committed. `pnpm catalog:fetch` re-downloads them if you want to
   rebuild.
 
@@ -133,8 +133,9 @@ ir.status() // full structured state
 ```
 
 **Start with `ir.targets()`** — every other verb takes an address and none of them
-will tell you one. The same verbs are on the dev dock in the top right of the
-browser, so anything you can do by clicking is reproducible in a test.
+will tell you one. The same verbs are on the author's instruments, opened from
+the IR menu at the bottom center, so anything you can do by clicking is
+reproducible in a test.
 
 The harness object also drives the headless runner, so a scenario that reproduces
 a bug in Chrome can be replayed without a browser:
@@ -156,7 +157,7 @@ pnpm sim --help                # all flags
 - A galaxy centered on the **real galactic center**, with **7,123 real star
   systems out to 150 light-years** — HYG v4.4 converted through ICRS → galactic
   coordinates — and procedural stars filling the gap the catalog leaves.
-- **702 confirmed exoplanets** around 444 of them, with their published orbits,
+- **702 confirmed exoplanets** around 443 of them, with their published orbits,
   masses and radii, plus the eight planets of the Solar System. Every body says
   whether it is `observed` or `projected`; the game never claims a generated
   planet is real.
@@ -178,9 +179,9 @@ pnpm sim --help                # all flags
 - **Genuinely offline** — a service worker caches the app, and with the server
   stopped the game still loads, streams terrain from its workers, and passes all
   twelve capability checks.
-- A **dev dock** in the browser — `navigate` for destinations, `telemetry` for
-  inspection — that calls the harness and nothing else, so anything you can do by
-  clicking is reproducible in a test.
+- Six **dockable authoring panels** in the browser — `navigate`, `controls`,
+  `telemetry`, `perf`, `graphics`, and `camera` — that call the harness and
+  nothing else, so anything you can do by clicking is reproducible in a test.
 
 ### The twelve capabilities, proven
 

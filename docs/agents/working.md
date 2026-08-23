@@ -40,8 +40,9 @@ Not "the browser rendered something." Done means:
 
 - The implementation is correct.
 - The architectural boundaries still hold (`pnpm graph`).
-- Determinism is still determinism (`world.stateHash()` covers any new
-  canonical field).
+- Determinism is still determinism. Add every new canonical field to
+  `world.stateHash()`; coverage is manual, not automatic. See
+  [determinism](../concepts/determinism.md#determinism-in-the-simulation-not-just-generation).
 - Tests exist and pass, including a regression test when a defect exposed a
   missing invariant.
 - `pnpm check` is green.

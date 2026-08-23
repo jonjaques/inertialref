@@ -429,14 +429,14 @@ deliberate and is called out at both ends.
 
 **Installable, because offline was already true.** The service worker predates
 this; what was missing was the manifest that lets a browser act on it. The game
-is a pure function of a seed, so once the bundle and the 460 KB catalog are
+is a pure function of a seed, so once the bundle and the 458 KB catalog are
 cached there is nothing left to fetch — an installed copy is a real offline
 application rather than a shortcut with a dinosaur behind it.
 
 **The brand is generated.** `design/brand/brandmark.svg` is the mark, and
 `pnpm brand` renders the favicon, the `.ico`, the apple-touch and PWA icons, the
 maskable variant, the 1200×630 share card, the manifest, `robots.txt`,
-`sitemap.xml` and the `<Logomark>` module from it. `pnpm brand --check` is in
+`sitemap.xml` and the `<Logomark>` module from it. `pnpm brand:check` is in
 `pnpm check`. The card is _drawn_ rather than screenshotted: a screenshot
 pipeline would need a GPU in the build and would produce a different picture
 every time, where this one is byte-stable enough to be checked.

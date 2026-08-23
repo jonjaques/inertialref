@@ -522,7 +522,7 @@ calls; 66–74 MB heap.
   counter. `autoReset` is off and `GameEngine.frame` resets it after sampling.
 - **React Compiler froze the entire overlay on its first render.** Every input to
   the panel is a `GameEngine` that never changes identity, so
-  `metrics.period.summarize()` looks like a pure call on a stable object and is
+  `metrics.period.summarise()` looks like a pure call on a stable object and is
   computed once. It is not pure — it reads a ring buffer the frame loop is still
   writing to. The panel showed its first frame's numbers for the rest of the
   session, reporting `starting…` for a renderer that had been live for minutes.
@@ -1519,7 +1519,7 @@ dark-adapted interface.
 
 Not built — recorded so the archaeology is not repeated. `SystemStub`
 (`packages/universe/src/galaxy.ts`) already carries `temperature`, a computed
-blackbody `color`, `catalogued` (which is provenance) and the confirmed
+blackbody `colour`, `catalogued` (which is provenance) and the confirmed
 `planets`. **`TravelTarget` in `packages/devtools/src/travel.ts` carries none of
 it** — the destination list gets a pre-formatted `detail` string and a boolean.
 
@@ -2472,7 +2472,7 @@ one place instead of two.
 mark; `pnpm brand` renders `favicon.svg`, `favicon.ico` (hand-written ICO
 container around three PNGs), `apple-touch-icon.png`, `icon-192`, `icon-512`,
 `icon-maskable-512`, the 1200×630 `og.png`, `manifest.webmanifest`,
-`robots.txt`, `sitemap.xml` and `src/icons/brandmark.ts`. `pnpm brand --check`
+`robots.txt`, `sitemap.xml` and `src/icons/brandmark.ts`. `pnpm brand:check`
 is in `pnpm check`. Before this there were three hand-kept copies of the same
 three paths with comments on each asking the next person to keep them in step.
 
@@ -2581,7 +2581,7 @@ stale-while-revalidate would re-fetch 2.7 MB in the background on every load.
 **The service worker was never registering on a first visit, and that is older
 than this change.** `main.tsx` awaits the packed catalog at module scope, and
 that await resolves _after_ the load event — measured on a cold visit to a
-review app: load at 761 ms, the 460 KB catalog at 969 ms. The registration was
+review app: load at 761 ms, the 458 KB catalog at 969 ms. The registration was
 inside `window.addEventListener('load', …)`, so it was a listener for an event
 that had already been and gone.
 

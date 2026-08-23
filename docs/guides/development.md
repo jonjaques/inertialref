@@ -28,6 +28,7 @@ pnpm sim --self-test           # headless run plus the twelve capability checks
 pnpm vitest run <substring>    # a single test file
 
 # Star catalog. data/catalog/ is committed; these rebuild it.
+pnpm catalog:fetch
 pnpm catalog:report
 pnpm catalog:build
 pnpm catalog:build --refresh
@@ -56,8 +57,8 @@ check only; analytics and `<link rel="canonical">` name the custom domain.
 ## Five TypeScript projects, no project references
 
 A referenced project may not disable emit. Emitting declarations for twelve
-source-only packages to satisfy `tsc -b` buys nothing. Four independent
-tsconfig projects type-check the four real environments (ingest is the fifth):
+source-only packages to satisfy `tsc -b` buys nothing. Five independent
+tsconfig projects type-check the portable core and four host environments:
 
 | Project                       | Covers            | Environment                                                               |
 | ----------------------------- | ----------------- | ------------------------------------------------------------------------- |
@@ -92,7 +93,10 @@ by an in-process fake in Node tests.
 - **Imports carry their `.ts` extension.** `allowImportingTsExtensions` is on
   and Node runs the sources directly. The exception is `@/` in `apps/game`,
   which resolves to `apps/game/src` because the shadcn registry writes
-  `@/lib/utils`. Hand-written code still imports relatively.
+  `@/lib/utils`. Its definitions in `apps/game/vite.config.ts`,
+  `apps/game/tsconfig.json`, and the root `vitest.config.ts` must agree.
+  TypeScript 6 rejects `baseUrl`, so the tsconfig uses `paths` without it.
+  Hand-written code still imports relatively.
 - **No `enum`, no parameter properties, no runtime namespaces** —
   `erasableSyntaxOnly` is on. Use `const` objects plus union types.
 - **`import type` for type-only imports** — `verbatimModuleSyntax` is on.
@@ -115,9 +119,10 @@ stable Three.js object is a different thing and is fine.
 are off. `react/no-multi-comp` is an error. Both that rule and
 `react/only-export-components` are off for `apps/game/src/components/ui/*.tsx`.
 
-**Prettier** formats on write via hooks. Do not run `pnpm format` or
-`pnpm lint` by hand during an agent turn; you would be re-reading output the
-hooks suppress.
+**Prettier** formats files written through the edit hooks. Do not run
+`pnpm format` or `pnpm lint` merely to duplicate those hooks. Commands that
+write files outside the hooks, including the shadcn CLI, still need
+`pnpm format`.
 
 **Three typefaces**, self-hosted from `@fontsource`: Archivo Variable
 (condensed display), Instrument Sans Variable (structure and prose), Martian
@@ -133,11 +138,14 @@ The backend is chosen once at mount from `(pointer: coarse)` because
 
 **shadcn/ui** is the overlay control set. Do not hand-roll a control the
 registry has. Go through `hud/Action.tsx`, `hud/SwitchRow.tsx`, or
-`hud/TransportButton.tsx`, which carry focus-return and the accent-as-material
-rule. `ScrollArea` is installed and unused: its `display: table` viewport
-breaks `truncate`. Add a component with `pnpm dlx shadcn@latest add <name>`
-**from `apps/game`**, then format — the registry writes double quotes and
-semicolons. Do not run `shadcn init`; it would overwrite `src/index.css`.
+`hud/TransportButton.tsx`. They call `releaseFocus` after a pointer click so
+flight controls regain the keyboard, and they enforce the accent-as-material
+rule: `Button`'s solid `default` variant is wrong for the primary tone; use
+`outline` plus the `sky-500/15` wash. `ScrollArea` is installed and unused:
+its `display: table` viewport breaks `truncate`. Add a component with
+`pnpm dlx shadcn@latest add <name>` **from `apps/game`**, then run
+`pnpm format` — the registry writes double quotes and semicolons. Do not run
+`shadcn init`; it would overwrite `src/index.css`.
 
 **Brand** is generated from `design/brand/brandmark.svg` via `pnpm brand`.
 Never hand-edit `favicon.svg`, the `.ico`, the apple-touch and PWA icons, the
@@ -145,13 +153,20 @@ share card, the web manifest, `robots.txt`, `sitemap.xml`, or
 `src/icons/brandmark.ts`. `pnpm brand:check` is in `pnpm check`.
 
 **Site metadata** is duplicated on purpose: `src/site.ts` for the running
-client, `index.html` for scrapers that do not run JavaScript. Change both.
+client, `index.html` for scrapers that do not run JavaScript, and
+`pages/DocumentMeta.tsx` for per-route title, description, and canonical URL.
+Change all affected copies together.
 [`docs/hosting.md`](../hosting.md) records why they are not a single Worker
 render.
 
 **Analytics** loads from `src/analytics.ts`, only in a production build, only
 on the canonical host, and only without Global Privacy Control. The
 measurement id is `VITE_GA_MEASUREMENT_ID` and is **not in the repository**.
+Workers Builds supplies it as a build variable. A deploy from this machine
+reads the same name from gitignored `apps/game/.env.production`; a real
+environment variable wins over the file. `apps/game/.env.example` documents
+the setup. Nothing secret may go in either place because every `VITE_*` value
+ships in the bundle.
 
 **Reference audio** is not in git. It lives in R2 and reaches the browser
 from one table, `apps/server/src/media.ts`: `pnpm media:pull` copies it into

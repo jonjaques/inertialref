@@ -4,9 +4,8 @@ A single object that can drive and interrogate the whole simulation without
 touching the UI. It is exposed as `window.ir` in the browser and used directly
 by the Node runner and the tests.
 
-> `ir.help()` in the console is the quickest list, but it is hand-maintained and
-> already omits `snapshot`, `flightAssist` and `scenarios`. This page is the
-> check on it.
+> `ir.help()` in the console is the quickest list. This page explains the
+> supported vocabulary and the distinctions that the one-line help cannot.
 >
 > Code: `packages/devtools/src/harness.ts`
 
@@ -51,6 +50,20 @@ pixels.
 ir.summary()
 // tick 2590 (40.47 s, 1x) | hash fdf43017 | Debug One in sf:g:milky-way/s:SOL/b:0@0.350000,-1.100000 | 51849.8 m/s alt 0.000 mm | systems 1, frames 19
 ```
+
+---
+
+## Finding and loading destinations
+
+| Call                | Effect                                                        |
+| ------------------- | ------------------------------------------------------------- |
+| `ir.targets()`      | destinations near the player, with addresses — start here     |
+| `ir.goTo(target)`   | resolve a human form and move the ship to that system or body |
+| `ir.loadSystem(id)` | generate a system without moving the ship                     |
+
+`goTo` is the only verb that accepts all the forms a person types: `SOL`,
+`s:SOL/b:2`, or `b:2` relative to the current system. Everywhere else,
+`parseAddress` remains strict.
 
 ---
 
@@ -107,6 +120,52 @@ Two notes worth internalising:
 - **`ir.flightAssist(enabled)`** exists and is absent from `ir.help()`. It is
   control input and it is in the state hash, so a test comparing hashes has to
   know it is there. `ir.scenarios()` lists the four scenario names.
+
+---
+
+## Moving only the camera
+
+`ir.look(target, options?)` moves the observatory camera without moving the
+ship or changing canonical state. That distinction is deliberate:
+`ir.look('s:SOL/b:5')` and `ir.goTo('s:SOL/b:5')` can both fill the frame with
+Jupiter, but only `goTo` leaves the ship there.
+
+`ir.observatory` exposes the camera itself for repeated interaction:
+
+```js
+ir.observatory.drag(dx, dy)
+ir.observatory.zoom(delta)
+ir.observatory.setPhase(angle)
+ir.observatory.frameTarget()
+ir.observatory.clear()
+```
+
+Camera bookmarks stage known views:
+
+```js
+ir.shots() // names and descriptions
+ir.shot('crescent', address)
+```
+
+The built-in names include `full-face`, `gibbous`, `half`, `crescent`,
+`glint`, `sunset`, and `oblique`.
+
+---
+
+## Scripted scenes
+
+```js
+ir.cutscenes() // scenes with descriptions and durations
+ir.play('tng-intro')
+ir.pause()
+ir.seekCutscene(1150)
+ir.cutsceneStatus()
+ir.stopCutscene()
+```
+
+Pause before seeking for a frame-exact still. The browser needs to render
+after the seek before the sampled cinematic state is current; follow the
+capture procedure in [Driving](../agents/driving.md#browser-gotchas).
 
 ---
 

@@ -27,7 +27,7 @@ only the imperative. If a copy disagrees, `AGENTS.md` wins.
 | The canvas is not inside a route                      | [Client](../guides/client.md) · [ADR-0011](../adr/0011-application-shell-and-modes.md)      |
 | Mode is a function of the path                        | [Client](../guides/client.md)                                                               |
 | Overlays resolve location through one helper          | [Client](../guides/client.md)                                                               |
-| One producer of the camera                            | [Client](../guides/client.md) · [ADR-0010](../adr/0010-cinematic-director.md)               |
+| One producer of the camera                            | [Client](../guides/client.md) · [ADR-0011](../adr/0011-application-shell-and-modes.md)      |
 | The planetarium does not write canonical state        | [Planetarium](../design/planetarium.md)                                                     |
 | Mode chrome needs `pointer-events-auto`               | [Client](../guides/client.md)                                                               |
 | Overlay presence is not `mode="wait"`                 | [Client](../guides/client.md)                                                               |

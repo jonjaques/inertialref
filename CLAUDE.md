@@ -37,8 +37,8 @@ Most of `.claude/` runs without being asked.
 
 - **Rules load themselves.** Each file has `paths:` globs and enters context
   only when a matching file does. They exist because `AGENTS.md` holds the
-  invariants and nothing loads it. `AGENTS.md` stays canonical and carries the
-  reasoning; the rules carry only the imperative. The contract is
+  invariants but Claude Code does not auto-load it. `AGENTS.md` stays canonical
+  and carries the reasoning; the rules carry only the imperative. The contract is
   [`.claude/rules/README.md`](.claude/rules/README.md).
 - **The Stop hook runs the gate.** After a turn that touched a
   `.ts` / `.tsx` / `.mjs` / `.json` file, `graph → lint → typecheck → test`

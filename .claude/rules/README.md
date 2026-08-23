@@ -12,10 +12,11 @@ matching one of its globs enters context** — so an agent editing `dock/layout.
 about the one-panel-one-zone invariant at the moment it opens the file, and an agent
 editing the catalog is not.
 
-This exists because of a measurable gap. `AGENTS.md` holds thirty invariants, each one
-there because violating it is a rewrite rather than a refactor — and nothing loads it.
-`CLAUDE.md` says "read AGENTS.md first", which is a request, not a mechanism. A session
-that never reads it operates with none of them.
+This exists because of a measurable gap. `AGENTS.md` holds the invariants, each one
+there because violating it is a rewrite rather than a refactor. Cursor and some
+other tools auto-load it; Claude Code does not. There, `CLAUDE.md` saying "read
+AGENTS.md first" is a request, not a mechanism. A session that never reads it
+operates with none of them.
 
 **A rule with no `paths:` loads at session start**, like `CLAUDE.md` — which is why this
 file has them too, pointed at the two sides of the contract it describes. It loads when
@@ -23,11 +24,11 @@ you open a rule or `AGENTS.md`, and costs nothing the rest of the time.
 
 ## The maintenance contract
 
-**`AGENTS.md` stays canonical.** It is vendor-neutral and it is what tools
-auto-load. [`docs/agents/`](../../docs/agents/README.md) is the rest of the
-agent handbook. These files carry only the _imperative_ — the one line that
-has to be in context to prevent the mistake — and point at the technical page
-or ADR that says why. The map from rule to technical page is
+**`AGENTS.md` stays canonical.** It is vendor-neutral and is auto-loaded by
+tools that support the convention. [`docs/agents/`](../../docs/agents/README.md)
+is the rest of the agent handbook. These files carry only the _imperative_ —
+the one line that has to be in context to prevent the mistake — and point at
+the technical page or ADR that says why. The map from rule to technical page is
 [`docs/agents/invariants.md`](../../docs/agents/invariants.md).
 
 That split is what keeps the duplication from rotting: the imperatives are the stable

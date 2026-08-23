@@ -113,8 +113,9 @@ Violating one of these is a rewrite later, not a refactor.
   `three/tsl`. `packages/*` may not import Three.js at all.
 - **Never edit a file `pnpm brand` writes.** The mark is
   `design/brand/brandmark.svg`. `pnpm brand:check` is in `pnpm check`.
-- **Never change what the site says about itself in only one of two places.**
-  `src/site.ts` is the running client; `index.html` is what a scraper reads.
+- **Never change what the site says about itself in only one place.**
+  `src/site.ts` supplies shared values, `index.html` is what a scraper reads,
+  and `pages/DocumentMeta.tsx` applies route-specific browser metadata.
 - **Never load a third-party tag from `index.html`.** `src/analytics.ts` is
   the gate: production build, canonical host, no Global Privacy Control.
 

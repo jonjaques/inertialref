@@ -7,7 +7,8 @@ paths:
 
 # Rendering
 
-Reasoning: `AGENTS.md` § "The rules that actually matter" and § "Testing", ADR-0003.
+Reasoning: `AGENTS.md` § "The rules that actually matter",
+`docs/guides/testing.md`, ADR-0003.
 
 - **Never import from `three` in `apps/game`.** It is `three/webgpu` and `three/tsl`. Both
   share `three.core.js`, so `Mesh` is the same class either way and nothing breaks loudly

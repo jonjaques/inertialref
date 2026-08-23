@@ -53,17 +53,22 @@ front of Vite and turn every edit into a caching investigation. See
 | `Space`     | pause                              |
 | `[` / `]`   | time warp down / up                |
 | `F5` / `F9` | save / load                        |
-| `Tab`       | hide the debug panel               |
+| `G`         | open the navigate panel            |
+| `P`         | open the perf panel                |
+| `H`         | hide or restore both dock panes    |
+| `Tab`       | move between on-screen controls    |
 
 Flight is full 6-DoF with no artificial "space mode" — the same controls fly
 between stars, into orbit, and down to a landing.
 
 ---
 
-## The debug panel
+## The author's instruments
 
-The panel on the right is the architecture made visible. Four sections worth
-understanding on day one:
+Press the bug in the IR menu at the bottom center, or `` ` ``, to reveal six
+dockable panels: navigate, controls, telemetry, perf, graphics, and camera.
+Open telemetry to see the architecture made visible. Four groups repay
+attention on day one:
 
 ```mermaid
 flowchart TB

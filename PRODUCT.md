@@ -216,7 +216,7 @@ than a tick, run by CI on every pull request alongside `pnpm check`.
 
 **Real data**, in `data/catalog/`: 7,123 real star systems out to 150 light-years
 from HYG v4.4 converted through ICRS → galactic coordinates; 702 confirmed
-exoplanets around 444 of them with published orbits, masses and radii; the eight
+exoplanets around 443 of them with published orbits, masses and radii; the eight
 Solar System planets and twenty moons with measured radii, oblateness, axial
 tilts, rotation periods, albedos and ring geometry, drawn from NASA and USGS
 surface, elevation, cloud and ring maps.

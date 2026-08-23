@@ -50,10 +50,12 @@ limb; a cinema-authored halo is not.
 - Ask the font for its cap height rather than guessing it.
 
 The proving scene (`tng-intro`) is timed against a frame-analyzed reference
-edit that lives outside this repository. Measured numbers (credit grid, fade
-windows, the locked camera, the flash envelope) are regression tests in
-`cutscene.test.ts`. Change those numbers only to make the recreation more
-faithful, and say so in the commit.
+edit at `~/Developer/tng-inertial`. `analysis/timeline.json` is the measured
+spec and `data/frames/` holds the per-frame imagery; read the timeline's
+`corrections` block before trusting its motion narrative. Measured numbers
+(credit grid, fade windows, the locked camera, the flash envelope) are
+regression tests in `cutscene.test.ts`. Change those numbers only to make the
+recreation more faithful, and say so in the commit.
 
 The reference audio is not in git and must not be. Publishing a full-sequence
 render needs a rights check first. See [development](development.md).

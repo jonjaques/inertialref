@@ -42,12 +42,21 @@ frame with Jupiter; only one leaves you in orbit of it.
 
 These are the browser, not bugs in the clock:
 
-- Chrome throttles `requestAnimationFrame` in a background tab. A freshly
-  reloaded page that is not focused sits at tick 0 until it is.
-- After a hard reload the renderer takes on the order of 18 seconds to come
-  up. Do not screenshot the first black frame.
-- After a cutscene seek, take the screenshot twice. The first capture is often
-  the outgoing frame.
+1. **Hard-reload after a source edit, then wait about 18 seconds.** HMR does
+   not reliably rebuild the renderer. A spinner on black is boot, not failure;
+   wait for the renderer-ready log before judging a capture.
+2. **Activate the page before reading state.** Chrome suspends
+   `requestAnimationFrame` while an automation window is occluded. After a
+   cutscene seek, capture once to activate and render, wait 2–4 seconds for
+   asynchronous textures, then capture again. The second frame is the evidence.
+3. **Open a new tab when a tab wedges.** Reloading the existing tab is not
+   always enough to recover its GPU state.
+4. **Shrink width when window height will not grow.** Browser automation can
+   refuse a requested `innerHeight`; a 1509×992 window produces a 1509×849
+   16:9 viewport without depending on a height increase.
+
+A freshly reloaded page that is not focused can remain at tick 0. Focus it
+before diagnosing the clock.
 
 ---
 
@@ -57,6 +66,8 @@ Press the bug in the IR menu at the bottom center of the frame, or `` ` ``.
 Six panels appear, all closed: navigate, controls, telemetry, perf, graphics,
 camera. Every panel calls the harness and nothing else, so anything you can
 do by clicking is reproducible in a test.
+
+`G` opens navigate, `P` opens perf, and `H` hides or restores both panes.
 
 Look at the perf panel before optimizing anything, and before believing a
 performance claim in a design document.

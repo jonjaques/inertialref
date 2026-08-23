@@ -11,16 +11,16 @@ every visual decision in [art](art.md).
 
 ## What exists
 
-|                       |                                                                                                                         |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| Simulation core       | 11 layered TypeScript packages, ~13,700 lines, framework-free below `apps/`                                             |
-| Renderer              | Three.js 0.182 `WebGPURenderer` with TSL, via React Three Fiber 9. WebGL 2 backend retained as the fallback             |
-| Build                 | Vite 8 with the Oxc transform; React Compiler on                                                                        |
-| Runtime               | Node 26, pnpm 11; Node runs the TypeScript sources directly                                                             |
-| Bundle                | 1.90 MB, **541.4 KB gzip / 412.7 KB brotli**, dominated by Three.js, **no code splitting**                              |
-| Simulation throughput | ~1.25M ticks/s in-browser for one entity; ~100–105k ticks/s headless including frame resolution                         |
-| Offline               | Service worker + IndexedDB + a migration chain, verified with the server stopped                                        |
-| Gate                  | `pnpm check` — graph, lint, typecheck, test, build. Runs in CI on every pull request, alongside `pnpm sim --self-test`. |
+|                       |                                                                                                             |
+| --------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Simulation core       | 12 layered TypeScript packages, framework-free below `apps/`                                                |
+| Renderer              | Three.js 0.182 `WebGPURenderer` with TSL, via React Three Fiber 9. WebGL 2 backend retained as the fallback |
+| Build                 | Vite 8 with the Oxc transform; React Compiler on                                                            |
+| Runtime               | Node 26, pnpm 11; Node runs the TypeScript sources directly                                                 |
+| Bundle                | 1.90 MB, **541.4 KB gzip / 412.7 KB brotli**, dominated by Three.js, **no code splitting**                  |
+| Simulation throughput | ~1.25M ticks/s in-browser for one entity; ~100–105k ticks/s headless including frame resolution             |
+| Offline               | Service worker + IndexedDB + a migration chain, verified with the server stopped                            |
+| Gate                  | `pnpm check` — graph, brand, format, lint, typecheck, test, build. CI also runs `pnpm sim --self-test`.     |
 
 ---
 
