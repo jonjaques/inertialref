@@ -137,10 +137,28 @@ async function media(
    * `Range`, `If-None-Match` and the rest itself, which is the only way to get
    * this right without reimplementing RFC 9110 in a Worker.
    */
-  const stored = await env.MEDIA.get(object.key, {
-    range: request.headers,
-    onlyIf: request.headers,
-  })
+  /*
+   * `R2Object | R2ObjectBody`, because a conditional `get` that fails its
+   * precondition returns the metadata without a body. `'body' in stored` below
+   * is what tells the two apart, and it is why this is not inferred: the
+   * overload picked for a `get` with options resolves to the body-carrying type
+   * alone, which is exactly the case the 304 branch exists for.
+   */
+  let stored: R2ObjectBody | R2Object | null
+  try {
+    stored = await env.MEDIA.get(object.key, {
+      range: request.headers,
+      onlyIf: request.headers,
+    })
+  } catch {
+    /*
+     * A `Range` header is client input, and R2 throws on one it cannot satisfy.
+     * The answer to bad client input is a 4xx naming the constraint, not a 500
+     * — and a 500 here would also be indistinguishable in the logs from the
+     * bucket being down.
+     */
+    return unsatisfiable()
+  }
   if (stored === null) {
     return new Response('not in storage', {
       status: 404,
@@ -179,6 +197,7 @@ async function media(
   const range = wantsRange
     ? resolveRange(stored.range ?? {}, stored.size)
     : null
+  if (wantsRange && range === null) return unsatisfiable(stored.size)
   if (range === null) {
     headers.set('content-length', String(stored.size))
     return new Response(request.method === 'HEAD' ? null : stored.body, {
@@ -191,6 +210,27 @@ async function media(
   return new Response(request.method === 'HEAD' ? null : stored.body, {
     status: 206,
     headers,
+  })
+}
+
+/**
+ * 416, for a `Range` that names bytes this object does not have.
+ *
+ * The alternative — answering 200 — is the bug this replaced: with a range
+ * requested, `stored.body` is the *slice*, so a 200 carrying `content-length:
+ * <whole object>` describes a body that is not there. A player reading that
+ * waits forever for bytes nobody is going to send.
+ */
+function unsatisfiable(size?: number): Response {
+  return new Response('range not satisfiable', {
+    status: 416,
+    headers: {
+      'content-type': 'text/plain; charset=utf-8',
+      'accept-ranges': 'bytes',
+      // RFC 9110: the `*` form is what says "here is the length you should have
+      // asked within", and it is the only thing that makes a retry informed.
+      ...(size === undefined ? {} : { 'content-range': `bytes */${size}` }),
+    },
   })
 }
 
