@@ -1,0 +1,26 @@
+{
+  "name": "InertialRef",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "user": "node",
+  "install": "pnpm install --frozen-lockfile --prefer-offline",
+  "ports": [
+    {
+      "name": "Game",
+      "port": 5173
+    },
+    {
+      "name": "Worker",
+      "port": 8787
+    }
+  ],
+  "terminals": [
+    {
+      "name": "Game and Worker",
+      "command": "pnpm dev",
+      "description": "Vite on 5173 and the local Cloudflare Worker on 8787."
+    }
+  ]
+}

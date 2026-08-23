@@ -1,0 +1,8 @@
+---
+globs: packages/devtools/src/cutscene.ts,packages/devtools/src/cutscenes/**,packages/rendering/src/cinematic.ts,apps/game/src/cinema/**,apps/game/src/hud/CutsceneOverlay.tsx
+alwaysApply: false
+---
+
+Apply the canonical cinematic-director rule:
+
+@.claude/rules/cutscenes.md

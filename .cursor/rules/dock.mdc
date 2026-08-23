@@ -1,0 +1,8 @@
+---
+globs: apps/game/src/dock/**
+alwaysApply: false
+---
+
+Apply the canonical workspace rule:
+
+@.claude/rules/dock.md

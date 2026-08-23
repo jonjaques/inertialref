@@ -35,10 +35,11 @@ reading the technical docs is not walking through session instructions.
 | Match the written voice             | [Style](../STYLE.md)                                                    |
 
 Executable machinery — path-scoped rules, skills, hooks, subagents — lives in
-[`.claude/`](../../.claude/rules/README.md). Those files are not documentation.
-They are the mechanism that puts a one-line rule in context when you open a
-matching file. The rule's reasoning stays in `AGENTS.md` and the technical
-docs.
+[`.claude/`](../../.claude/rules/README.md). Cursor's
+[adapters](../../.cursor/README.md) reference those files rather than copying
+their contents. This machinery is not documentation: it puts a one-line rule
+in context when you open a matching file. The rule's reasoning stays in
+`AGENTS.md` and the technical docs.
 
 ---
 

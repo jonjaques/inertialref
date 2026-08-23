@@ -1,0 +1,8 @@
+---
+globs: apps/game/src/**/*.tsx,apps/game/src/pages/**,apps/game/src/state/**
+alwaysApply: false
+---
+
+Apply the canonical client-shell rule:
+
+@.claude/rules/react-shell.md

@@ -1,0 +1,8 @@
+---
+globs: "**/*.test.ts,**/*.test.tsx"
+alwaysApply: false
+---
+
+Apply the canonical testing rule:
+
+@.claude/rules/testing.md

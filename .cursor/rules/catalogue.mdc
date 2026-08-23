@@ -1,0 +1,8 @@
+---
+globs: packages/universe/src/catalog/**,apps/ingest/**
+alwaysApply: false
+---
+
+Apply the canonical star-catalog rule:
+
+@.claude/rules/catalogue.md

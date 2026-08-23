@@ -1,0 +1,8 @@
+---
+globs: apps/server/**,packages/net/**,packages/protocol/**,packages/persistence/**
+alwaysApply: false
+---
+
+Apply the canonical Worker and wire rule:
+
+@.claude/rules/server.md

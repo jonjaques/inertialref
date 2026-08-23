@@ -1,0 +1,8 @@
+---
+globs: apps/game/src/render/**,apps/game/src/scene/**,packages/rendering/**
+alwaysApply: false
+---
+
+Apply the canonical rendering rule:
+
+@.claude/rules/rendering.md
