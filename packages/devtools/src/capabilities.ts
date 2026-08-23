@@ -333,8 +333,21 @@ function checkMeterScaleRendering(world: World): CapabilityResult {
   const frame = installSurfaceFrame(world.frames, planet, 0.1, 0.1)
   const pose = world.frames.pose(frame, world.clock.time)
   const origin = createRenderOrigin(pose.position)
-  const a = placeAt(origin, UV.translate(pose.position, vec3(0, 1.8, 0)), 0.5)
-  const b = placeAt(origin, UV.translate(pose.position, vec3(1, 1.8, 0)), 0.5)
+  // The eye is the origin here, exactly: this check builds the origin at the
+  // observer's own feet, which is the one case where `Vec.ZERO` is the truth
+  // rather than the approximation `placeAt` warns about.
+  const a = placeAt(
+    origin,
+    UV.translate(pose.position, vec3(0, 1.8, 0)),
+    0.5,
+    Vec.ZERO,
+  )
+  const b = placeAt(
+    origin,
+    UV.translate(pose.position, vec3(1, 1.8, 0)),
+    0.5,
+    Vec.ZERO,
+  )
   const separation = Vec.distance(
     Vec.toFloat32(a.position),
     Vec.toFloat32(b.position),

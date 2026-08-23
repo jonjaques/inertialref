@@ -135,7 +135,11 @@ export function OverlayPage({
        * diffuse white and the scrim barely registers. A scrim over this scene
        * has to be read against what is behind it, not against a swatch.
        */
-      className="pointer-events-auto absolute inset-0 flex items-center justify-center bg-slate-950/70"
+      // `hud-bleed` on the scrim alone. A dimmed screen with an undimmed band
+      // above the notch reads as a rendering fault; the card it centers is
+      // chrome and stays inside the safe area, which the flex centering does
+      // for free because the scrim's own padding box is unchanged.
+      className="hud-bleed pointer-events-auto absolute flex items-center justify-center bg-slate-950/70"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -153,7 +157,7 @@ export function OverlayPage({
         role="dialog"
         aria-modal="false"
         aria-label={title}
-        className="type-body flex max-h-[calc(100vh-4rem)] w-[34rem] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-lg border border-slate-700/60 bg-slate-950/85 text-slate-300 shadow-xl"
+        className="type-body flex max-h-[calc(100%-4rem)] w-[34rem] max-w-[calc(100%-2rem)] flex-col overflow-hidden rounded-lg border border-slate-700/60 bg-slate-950/85 text-slate-300 shadow-xl"
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: 8 }}

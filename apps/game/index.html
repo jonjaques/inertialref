@@ -12,7 +12,40 @@
 <html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      THE VIEWPORT, LOCKED.
+
+      Four clauses and none of them is boilerplate.
+
+      `viewport-fit=cover` is the one that fixes the reported bug. Without it
+      iOS insets the page by the safe areas and paints the letterbox in the
+      body's own color — so in an installed PWA on a notched iPhone the canvas
+      stopped short of the top and bottom of the screen and the sky had black
+      bands above and below it. With it the document is the whole display and
+      the insets arrive as `env(safe-area-inset-*)` instead, which
+      `src/index.css` turns into padding on `.hud-layer` so the chrome stays
+      clear of the notch and the home indicator while the scene runs under
+      them. It is also what makes `apple-mobile-web-app-status-bar-style:
+      black-translucent`, set below, mean anything.
+
+      `maximum-scale=1, user-scalable=no` because this is a simulator with its
+      own pinch gesture, not a document. The planetarium reads a two-finger
+      pinch as a camera zoom; with the page scalable, iOS races it with its own
+      and the result is a camera that zooms while the whole interface scales
+      out from under it, leaving parts of the HUD off-screen with no way to
+      scroll back — the page does not scroll, by design. The accessibility
+      trade is real and this is the case the rule exists to allow: the interface
+      has no reflowable text to enlarge, and every readout scales with the
+      browser's *font* size rather than with a pinch.
+
+      `interactive-widget=resizes-content` keeps the soft keyboard — the
+      address field in the planetarium, the search box in the catalog — from
+      sliding a fixed, unscrollable layout up out of the viewport.
+    -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content"
+    />
     <meta name="color-scheme" content="dark" />
 
     <!--

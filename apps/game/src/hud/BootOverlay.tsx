@@ -31,7 +31,10 @@ export function BootOverlay({
 }) {
   return (
     <motion.div
-      className={`absolute inset-0 z-50 bg-black ${
+      // `hud-bleed`: this is the whole screen going black before first light,
+      // so it has to reach past the safe areas `.hud-layer` holds its chrome
+      // inside. The readout below it does not, and does not ask to.
+      className={`hud-bleed absolute z-50 bg-black ${
         phase === 'booting' ? 'pointer-events-auto' : 'pointer-events-none'
       }`}
       initial={false}

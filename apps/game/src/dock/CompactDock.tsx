@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router'
 import { ChevronDown, ChevronUp, Rows3, SlidersHorizontal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -55,8 +55,13 @@ import type { DockPanelDefinition } from './panels.ts'
  * panel: at 42 the tab rows left about 120 px of body, which is four rows of a
  * catalog. Still comfortably under two thirds, and it is one tap to put the
  * sky back.
+ *
+ * `dvh`, not `vh`. On iOS Safari `vh` is the height the page would have with
+ * the toolbars hidden, so 58vh of a 100vh layout inside a viewport that is
+ * really 88% of that put the bottom of the sheet — and the nav bar under it —
+ * behind the browser's own chrome.
  */
-const SHEET_HEIGHT = 'max-h-[58vh]'
+const SHEET_HEIGHT = 'max-h-[58dvh]'
 
 export function CompactDock({
   panels,
@@ -82,12 +87,70 @@ export function CompactDock({
   const [openId, setOpenId] = useState<string | null>(null)
   const open = available.find((panel) => panel.id === openId) ?? null
 
+  /*
+   * The panel the toggle reopens, remembered for this mount and no longer.
+   *
+   * Not persisted — the paragraph above is still the rule, and a sheet restored
+   * on arrival puts a panel over the sky before anyone has asked for anything.
+   * But *within* one visit, closing the sheet to look at something and pressing
+   * the toggle again landed on `available[0]` rather than on the panel that was
+   * just being read, which for every mode whose first panel is not the one you
+   * wanted is the wrong panel every time.
+   *
+   * A ref, written from the event handlers and never during render: nothing
+   * renders from it, so a write must not re-render — and a write during render
+   * is a write React is entitled to throw away.
+   */
+  const lastId = useRef<string | null>(null)
+  const show = (id: string | null): void => {
+    if (id !== null) lastId.current = id
+    setOpenId(id)
+  }
+  /** Close, keeping the memory of what was open. */
+  const hide = (): void => setOpenId(null)
+  const reopen = (): string | null =>
+    available.find((panel) => panel.id === lastId.current)?.id ??
+    available[0]?.id ??
+    null
+
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col">
+    /*
+     * `hud-bleed-bottom`: the bar is a band pinned to the bottom of the screen,
+     * so its ground has to reach the physical edges the way a native tab bar's
+     * does. `.hud-layer` pads every piece of chrome clear of the safe areas —
+     * right for a readout floating over the scene, wrong for this, which would
+     * otherwise leave a strip of live sky under it and a gutter down each side
+     * in landscape. The *contents* are padded back inside on the `nav` below.
+     */
+    <div className="hud-bleed-bottom pointer-events-none absolute inset-x-0 bottom-0 flex flex-col">
       {open !== null && (
         <section
           className={`pointer-events-auto mx-2 flex ${SHEET_HEIGHT} type-readout min-h-0 flex-col overflow-hidden rounded-t-lg border border-b-0 border-slate-700/60 bg-slate-950/90 text-slate-300 shadow-xl backdrop-blur`}
         >
+          {/*
+           * The grabber: what a sheet on this platform looks like when it can
+           * be dismissed, and a second way to dismiss it.
+           *
+           * Redundant with the toggle in the bar, deliberately. The toggle is
+           * where a thumb goes to *open* the sheet; once it is open the thumb
+           * is up in the panel body, and reaching back down past the picker to
+           * a control whose label has not changed is a worse close than the one
+           * every other sheet on the device has. It is a button rather than a
+           * drag target because a drag here would have to compete with the
+           * panel scrolling underneath it.
+           */}
+          <button
+            type="button"
+            onClick={(event) => {
+              releaseFocus(event)
+              hide()
+            }}
+            aria-label="Hide panels"
+            className={`flex w-full shrink-0 items-center justify-center py-2 ${FOCUS_RING}`}
+          >
+            <span className="h-1 w-9 rounded-full bg-slate-700" />
+          </button>
+
           {/*
            * The picker, inside the sheet and wrapping.
            *
@@ -108,9 +171,7 @@ export function CompactDock({
                 key={panel.id}
                 panel={panel}
                 active={panel.id === open.id}
-                onClick={() =>
-                  setOpenId(panel.id === open.id ? null : panel.id)
-                }
+                onClick={() => (panel.id === open.id ? hide() : show(panel.id))}
               />
             ))}
           </div>
@@ -129,13 +190,25 @@ export function CompactDock({
        * The nav bar: where you are, what you can see, what else there is —
        * the IR menu's three questions, at thumb scale.
        *
-       * `pb-[env(safe-area-inset-bottom)]` keeps it off the home indicator on a
-       * notched device, where the bottom 34 px belong to the OS and anything
-       * drawn there is both dimmed and un-tappable.
+       * The four `max(…, var(--safe-…))` paddings are the other half of the
+       * `hud-bleed-bottom` above: the ground reaches the edges of the display
+       * and the controls stay out of the corners the OS keeps. On a notched
+       * phone the bottom 34 px belong to the home indicator, and in landscape
+       * the 44 px down each side belong to the notch and the rounded corners —
+       * anything drawn in either is dimmed and un-tappable, which for a tab bar
+       * means the whole interface appears broken on exactly the devices it was
+       * built for. `max` rather than a sum: the inset *replaces* the ordinary
+       * padding rather than adding to it, so a device with no safe area gets
+       * the design's own spacing and nothing else.
        */}
       <nav
         aria-label="Workspace"
-        className="pointer-events-auto flex items-center gap-1 border-t border-slate-700/60 bg-slate-950/90 px-2 py-1.5 pb-[max(0.375rem,env(safe-area-inset-bottom))] backdrop-blur"
+        className="pointer-events-auto flex items-center gap-1 border-t border-slate-700/60 bg-slate-950/90 py-1.5 backdrop-blur"
+        style={{
+          paddingLeft: 'max(0.5rem, var(--safe-left))',
+          paddingRight: 'max(0.5rem, var(--safe-right))',
+          paddingBottom: 'max(0.375rem, var(--safe-bottom))',
+        }}
       >
         <Link
           to={HOME}
@@ -152,6 +225,20 @@ export function CompactDock({
          * Disabled rather than hidden when a workspace has nothing open —
          * `DESIGN.md` keeps a disabled control on screen because its presence
          * is information, and here the information is "this mode has panels".
+         *
+         * **The label is "Panels" whether the sheet is open or shut**, and it
+         * used to be the open panel's title instead. That reads as a different
+         * control: press a button marked *Panels*, and the button you pressed
+         * is now marked *Catalog* — so the way back is a control that was never
+         * on screen when the decision to press it was made, and nothing on the
+         * bar says what it does any more. A toggle names what it toggles.
+         *
+         * Which panel is open is answered where the panel is: the picker in the
+         * sheet marks it, and the body under it is the thing itself. What
+         * belongs here is the *state* of this control, and that is what the
+         * chevron and the accent ground carry — the same open/shut vocabulary
+         * every disclosure in this interface uses, plus `aria-expanded` for a
+         * reader that cannot see either.
          */}
         <Button
           variant="ghost"
@@ -159,7 +246,8 @@ export function CompactDock({
           disabled={available.length === 0}
           onClick={(event) => {
             releaseFocus(event)
-            setOpenId(open === null ? (available[0]?.id ?? null) : null)
+            if (open === null) show(reopen())
+            else hide()
           }}
           className={`mx-auto min-h-11 gap-1.5 rounded px-3 disabled:opacity-35 ${FOCUS_RING} ${
             open === null
@@ -168,7 +256,7 @@ export function CompactDock({
           }`}
         >
           <Rows3 className="size-4" />
-          <span className="type-label">{open?.title ?? 'Panels'}</span>
+          <span className="type-label">Panels</span>
           {open === null ? (
             <ChevronUp className="size-3 opacity-60" />
           ) : (

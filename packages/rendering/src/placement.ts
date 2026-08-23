@@ -23,6 +23,11 @@ import { type LodTier, selectLod } from './lod.ts'
  * radius are scaled together, the *angular* size is preserved exactly — the
  * image is correct, only the depth is a lie. The compression is monotonic in
  * distance, so occlusion ordering survives, which a single far shell would not.
+ *
+ * Radial *from the eye*, which is why every entry point here takes one. The
+ * render origin is a nearby grid point, not the camera, and compressing about
+ * it is the difference between an image that is exactly right and one that
+ * jitters — see `placeAt`.
  */
 
 /*
@@ -49,12 +54,12 @@ export interface RenderPlacement {
   readonly position: Vec3
   /** Multiplier for unit-radius geometry. */
   readonly scale: number
-  /** True distance from the render origin, meters. */
+  /** True distance from the eye, meters — never the compressed one. */
   readonly distance: Meters
   readonly tier: LodTier
   /** True when the position is compressed and depth is no longer metric. */
   readonly compressed: boolean
-  /** Angular radius as seen from the origin, radians. */
+  /** Angular radius as seen from the eye, radians. */
   readonly angularRadius: number
 }
 
@@ -81,12 +86,40 @@ export function compressDistance(distance: Meters): Meters {
   )
 }
 
+/**
+ * Place a body, as seen from `eye`.
+ *
+ * `eye` is the camera's position **in render space** — `toRenderSpace(origin,
+ * cameraPosition)`, which `buildScene` has already computed. It is a required
+ * argument rather than a defaulted one because getting it wrong is silent, and
+ * the symptom shows up somewhere else entirely.
+ *
+ * The reason it cannot be the origin: compression is radial, so the point it is
+ * measured *from* is the one place in the image that stays honest. The origin
+ * is not the eye — it is a power-of-two grid point within `REBASE_THRESHOLD`
+ * of the camera, so it lags the camera by up to 4 km and then snaps. Measuring
+ * compression from there gives every compressed object a parallax that is wrong
+ * by `eyeOffset · (1/compressed − 1/true)` and, worse, *sawtooths*: the error
+ * ramps as the camera drifts across the rebase window and resets when it
+ * snaps.
+ *
+ * That error is scale-free in meters, so what decides whether it is visible is
+ * how big the object is on screen. Mars from 25,000 km absorbs it a thousand
+ * times over. Phobos, at 11 km of radius from the same place, moved by 0.8× its
+ * own angular radius every time the origin rebased, and Deimos by 1.6× — the
+ * two smallest bodies in the Solar System model, vibrating in their orbits
+ * while everything around them held still. `rendering.test.ts` pins the
+ * property that fixes it: the drawn direction from the eye is the true
+ * direction from the eye, at any separation.
+ */
 export function placeAt(
   origin: RenderOrigin,
   position: UniverseVector,
   radius: Meters,
+  eye: Vec3,
 ): RenderPlacement {
-  const offset = toRenderSpace(origin, position)
+  const fromOrigin = toRenderSpace(origin, position)
+  const offset = Vec.sub(fromOrigin, eye)
   const distance = Vec.length(offset)
   const tier = selectLod(radius, distance)
   const angle =
@@ -106,8 +139,12 @@ export function placeAt(
   // boundary the factor is exactly 1, so a planet does not pop as you arrive.
   const surfaceDistance = Math.max(0, distance - radius)
   if (surfaceDistance <= NEAR_LIMIT || distance === 0) {
+    // `fromOrigin`, not `eye + offset`: the near field is untouched by any of
+    // this, and reconstructing it through the eye would round a value that is
+    // currently exact. Terrain patches are placed straight off the origin
+    // (`terrainMesh.patchPlacement`) and have to agree with this to the meter.
     return {
-      position: offset,
+      position: fromOrigin,
       scale: radius,
       distance,
       tier,
@@ -118,9 +155,9 @@ export function placeAt(
 
   const factor = (radius + compressDistance(surfaceDistance)) / distance
   return {
-    // Same direction, and position and radius scale together — so the object
-    // subtends exactly the angle it should. Only depth becomes a lie.
-    position: Vec.scale(offset, factor),
+    // Same direction *from the eye*, and position and radius scale together —
+    // so the object subtends exactly the angle it should. Only depth is a lie.
+    position: Vec.add(eye, Vec.scale(offset, factor)),
     scale: radius * factor,
     distance,
     tier,
@@ -133,7 +170,8 @@ export function placeAt(
 export const placePoint = (
   origin: RenderOrigin,
   position: UniverseVector,
-): RenderPlacement => placeAt(origin, position, 0)
+  eye: Vec3,
+): RenderPlacement => placeAt(origin, position, 0, eye)
 
 /** Radius of the shell distant stars are drawn on. */
 export const STAR_SHELL_RADIUS: Meters = 8e7

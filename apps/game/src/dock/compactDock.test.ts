@@ -155,7 +155,36 @@ describe('the compact dock', () => {
     // The bottom 34 px of a notched phone belong to the OS: anything drawn
     // there is dimmed and un-tappable, which for a tab bar means the whole
     // interface appears broken on exactly the devices it was built for.
-    expect(render()).toContain('env(safe-area-inset-bottom)')
+    //
+    // `var(--safe-bottom)` rather than `env(safe-area-inset-bottom)` written
+    // out: `index.css` names the four insets once, at `:root`, so that the
+    // fallback to zero exists in one place and a `calc` has something to hold.
+    // The same file is what puts `viewport-fit=cover`'s insets in play at all.
+    expect(render()).toContain('var(--safe-bottom)')
+  })
+
+  it('bleeds its ground to the edge of the display', () => {
+    // The other half of the same rule: the *padding* keeps the controls off the
+    // home indicator, and this keeps the bar's ground from stopping short of it
+    // and leaving a strip of live sky under a tab bar. `.hud-layer` pads its
+    // chrome clear of the safe areas, so a band pinned to the screen edge has
+    // to say that it is one.
+    expect(render()).toContain('hud-bleed-bottom')
+  })
+
+  it('never renames the control that opens the sheet', () => {
+    /*
+     * It used to take the open panel's title, so pressing a button marked
+     * *Panels* left a button marked *Catalog* where it had been — a toggle
+     * whose label is the state it produced rather than the thing it toggles,
+     * and no label anywhere for the way back. Which panel is open is answered
+     * by the picker inside the sheet; what belongs on the bar is this control's
+     * own open/shut state, which the chevron and `aria-expanded` carry.
+     */
+    const markup = render()
+    expect(markup).toContain('>Panels</span>')
+    expect(markup).toContain('aria-expanded="false"')
+    expect(markup).not.toContain('>catalogue</span>')
   })
 
   it('gives every tab a thumb-sized target', () => {

@@ -29,6 +29,13 @@ Reasoning: `AGENTS.md` § "The rules that actually matter",
   the swallowed rejection; producers `register` so the boot progress total is the sum of
   what registered rather than one step's own count. Registration is idempotent by label
   because StrictMode does everything twice.
+- **Render compression is radial about the eye, never about the origin.** `placeAt` takes
+  the eye in render space; `buildScene` computes it once and every caller outside it —
+  `scene/OrbitTraces.tsx` is the only one — has to be given the same one. The origin is
+  mechanism 1's snapped grid point: it lags the camera by up to 4096 m and then jumps, so
+  compressing about it leaves a parallax error that sawtooths at the rebase cadence.
+  Invisible on a planet filling the frame, and 0.8× its own angular radius on Phobos —
+  the small moons appeared to vibrate in their orbits for exactly this reason.
 - **The datum sphere has one definition**, `packages/rendering/src/datum.ts`. `buildScene`
   and the boot prebake both call it; when they each typed the formula, they agreed only
   through a three-hop identity nothing asserted, and a rounding step apart is a silent

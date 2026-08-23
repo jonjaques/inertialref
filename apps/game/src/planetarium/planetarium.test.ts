@@ -6,8 +6,11 @@ import {
   DELTA_PAGE,
   DELTA_PIXEL,
   delta,
+  GESTURE_START,
+  gestureStep,
   keyAction,
   pinchFactor,
+  type Point,
   spread,
   wheelNotches,
 } from './gestures.ts'
@@ -142,6 +145,83 @@ describe('drag', () => {
     expect(delta(null, { x: 900, y: 400 })).toEqual({ x: 0, y: 0 })
     expect(delta({ x: 900, y: 400 }, null)).toEqual({ x: 0, y: 0 })
     expect(delta({ x: 10, y: 10 }, { x: 14, y: 7 })).toEqual({ x: 4, y: -3 })
+  })
+})
+
+describe('one step of a gesture', () => {
+  /** Feed a sequence of touch states through, collecting what the camera got. */
+  const play = (frames: readonly (readonly Point[])[]) => {
+    let phase = GESTURE_START
+    let orbited = 0
+    let zoom = 1
+    for (const points of frames) {
+      const step = gestureStep(phase, points)
+      orbited += Math.hypot(step.orbit.x, step.orbit.y)
+      zoom *= step.zoom
+      phase = step
+    }
+    return { orbited, zoom }
+  }
+
+  it('orbits with one finger', () => {
+    const { orbited, zoom } = play([[{ x: 100, y: 100 }], [{ x: 160, y: 100 }]])
+    expect(orbited).toBeCloseTo(60, 9)
+    expect(zoom).toBe(1)
+  })
+
+  it('does not orbit while a pinch is anchored on one finger', () => {
+    /*
+     * The regression. A pinch that holds one finger still and drags the other —
+     * which is the pinch a thumb and forefinger actually make — moves the
+     * centroid by half the travel, and that used to reach the orbit. A 200 px
+     * pinch swung the camera through half a radian of azimuth it was never
+     * asked for.
+     */
+    const { orbited, zoom } = play([
+      [
+        { x: 100, y: 300 },
+        { x: 140, y: 300 },
+      ],
+      [
+        { x: 100, y: 300 },
+        { x: 340, y: 300 },
+      ],
+    ])
+    expect(orbited).toBe(0)
+    // Fingers apart means the camera comes in, and the ratio is bounded.
+    expect(zoom).toBeLessThan(1)
+  })
+
+  it('still reports the travel a click test needs', () => {
+    // `travelled` is about "did the hand move", which is true however many
+    // fingers moved — the caller uses it to tell a tap from a drag.
+    const step = gestureStep({ centre: { x: 0, y: 0 }, spread: 40 }, [
+      { x: 30, y: 40 },
+      { x: 30, y: 40 },
+    ])
+    expect(step.travelled).toBeCloseTo(50, 9)
+    expect(step.orbit).toEqual({ x: 0, y: 0 })
+  })
+
+  it('contributes nothing on the first move of a gesture (property)', () => {
+    // Whatever the fingers are, the frame that seeds the phase must move
+    // nothing: there is no previous sample to measure against.
+    fc.assert(
+      fc.property(
+        fc.array(
+          fc.record({
+            x: fc.double({ min: -2000, max: 2000, noNaN: true }),
+            y: fc.double({ min: -2000, max: 2000, noNaN: true }),
+          }),
+          { minLength: 1, maxLength: 5 },
+        ),
+        (points) => {
+          const step = gestureStep(GESTURE_START, points)
+          expect(step.orbit).toEqual({ x: 0, y: 0 })
+          expect(step.zoom).toBe(1)
+        },
+      ),
+    )
   })
 })
 

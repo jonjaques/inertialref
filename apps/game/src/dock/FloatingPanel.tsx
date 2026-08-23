@@ -108,7 +108,7 @@ export function FloatingPanel({
        * content until that would run off the bottom of the frame, at which
        * point its body scrolls — the same rule a pane applies to its stack.
        */
-      className="pointer-events-auto absolute z-10 max-h-[calc(100vh-8rem)] w-[19rem] max-w-[calc(100vw-1.5rem)]"
+      className="pointer-events-auto absolute z-10 max-h-[calc(100%-8rem)] w-[19rem] max-w-[calc(100%-1.5rem)]"
       style={{ left: at.x, top: at.y }}
     >
       {definition.render()}

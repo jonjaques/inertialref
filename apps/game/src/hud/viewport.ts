@@ -49,15 +49,23 @@ function useMediaQuery(query: string): boolean {
 /** Too narrow for docked columns beside the scene. */
 export const useCompact = (): boolean => useMediaQuery(COMPACT_QUERY)
 
-/*
- * There is deliberately no `useCoarsePointer` hook beside this one.
+/**
+ * Whether this machine is pointed at with a finger.
  *
- * There was, and nothing ever called it: the one thing in this build that asks
- * about the pointer is `DockProvider`, choosing a drag-and-drop backend once at
- * mount, and it needs the answer *outside* React — see `coarsePointer` below.
- * A live hook that nothing subscribes to is a media query listener nobody
- * removes and a second way to ask a question that already has one.
+ * Live, and it has one subscriber: `App` uses it to pick the ceiling on the
+ * drawing buffer's pixel ratio (`render/output.ts`), because a handheld GPU
+ * runs out of fragment budget on this scene long before a laptop's does. It is
+ * live rather than read once because a tablet that gains a trackpad genuinely
+ * becomes a fine-pointer device, and the answer is a *quality* setting rather
+ * than a structural one — re-reading it costs a resize of the drawing buffer,
+ * which R3F does anyway on every window resize.
+ *
+ * This hook was deleted once for having no callers, and the note that replaced
+ * it said to reach for `coarsePointer` below instead. That is still right for
+ * `DockProvider`, which must not re-read the answer at all; it is wrong here.
  */
+export const useCoarsePointer = (): boolean => useMediaQuery(COARSE_QUERY)
+
 /**
  * The same question, answered once and outside React.
  *

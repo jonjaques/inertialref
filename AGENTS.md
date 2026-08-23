@@ -94,6 +94,17 @@ Violating one of these is a rewrite later, not a refactor.
 - **Never read the raw pathname when a dialog could be open over a mode.**
   Use `resolvedLocation`. Links that stay inside a dialog, and controls that
   close one, go through `pages/useOverlay.ts`.
+- **Never place a compressed body about the render origin.** `placeAt` takes
+  the eye in render space and compresses radially about _that_. The origin is a
+  snapped grid point that lags the camera and jumps; compressing about it gives
+  every far object a parallax error that sawtooths at the rebase cadence, which
+  is small bodies visibly vibrating in their orbits.
+  [ADR-0003](docs/adr/0003-render-coordinates.md).
+- **Never size or position chrome against the viewport.** No `100vh`, no
+  `100vw`, no `env(safe-area-inset-*)` at a call site. `.hud-layer` spends the
+  four insets as padding, so an `absolute` child is already inside them; a
+  surface that is _picture_ and must reach the display's own edges says so with
+  `hud-bleed`. The document itself is `100dvh` and cannot scroll.
 - **Never add a second producer of the camera.** In `GameEngine.#step` the
   order is **cutscene, then observatory, then the ship.** No arm of that
   order may depend on a later one resolving. Only the last needs a player.

@@ -60,7 +60,7 @@ export function IrMenu({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-      className="pointer-events-auto absolute bottom-3 left-1/2 flex max-w-[calc(100vw-1.5rem)] -translate-x-1/2 items-center gap-1 overflow-x-auto rounded-lg border border-slate-700/60 bg-slate-950/90 px-1.5 py-1 shadow-xl backdrop-blur"
+      className="pointer-events-auto absolute bottom-3 left-1/2 flex max-w-[calc(100%-1.5rem)] -translate-x-1/2 items-center gap-1 overflow-x-auto rounded-lg border border-slate-700/60 bg-slate-950/90 px-1.5 py-1 shadow-xl backdrop-blur"
     >
       {/*
        * A real anchor rather than a click handler that navigates, so

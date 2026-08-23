@@ -277,7 +277,7 @@ export function CinemaPlayer({
           idle ? 'invisible opacity-0' : 'visible opacity-100'
         }`}
       >
-        <div className="pointer-events-auto mx-auto flex w-[min(56rem,calc(100vw-1.5rem))] flex-col gap-2 rounded-lg border border-slate-700/60 bg-slate-950/80 px-3 py-2 backdrop-blur">
+        <div className="pointer-events-auto mx-auto flex w-[min(56rem,calc(100%-1.5rem))] flex-col gap-2 rounded-lg border border-slate-700/60 bg-slate-950/80 px-3 py-2 backdrop-blur">
           {/* The scrubber, full width and first: it is the control this bar
             exists for, and putting it above the buttons is what stops a
             transport from reading as a toolbar. */}

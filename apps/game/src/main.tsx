@@ -57,10 +57,16 @@ function reportFatal(cause: unknown): void {
   const panel = document.createElement('div')
   panel.id = 'fatal'
   panel.setAttribute('role', 'alert')
+  // Positioned off the safe insets rather than off the viewport edges. This
+  // panel is outside `.hud-layer` by construction — the tree it would have
+  // inherited the padding from is the tree that just failed — so it is the one
+  // place in the application that spends `env()` itself. `viewport-fit=cover`
+  // means the bottom-left corner of the viewport is under the home indicator on
+  // a phone, which is where the message nobody can afford to miss would be.
   panel.style.cssText = [
     'position:fixed',
-    'bottom:0.75rem',
-    'left:0.75rem',
+    'bottom:max(0.75rem, env(safe-area-inset-bottom, 0px))',
+    'left:max(0.75rem, env(safe-area-inset-left, 0px))',
     'max-width:calc(100vw - 1.5rem)',
     'border:1px solid rgb(251 113 133 / 0.4)',
     'border-radius:0.5rem',

@@ -45,8 +45,13 @@ export function OrbitTraces({ engine }: { engine: GameEngine }) {
   useFrame(() => {
     const parent = group.current
     const origin = engine.origin
+    // The same eye `buildScene` placed the bodies from. Without it the trace is
+    // compressed about the render origin while the planet on it is compressed
+    // about the camera, and the two part company by the very error that made
+    // the small moons vibrate — see `placement.ts`.
+    const eye = engine.scene()?.camera.position
     if (parent === null) return
-    if (!engine.showOrbits || origin === null) {
+    if (!engine.showOrbits || origin === null || eye === undefined) {
       parent.visible = false
       return
     }
@@ -99,6 +104,7 @@ export function OrbitTraces({ engine }: { engine: GameEngine }) {
           origin,
           UV.translate(point, shift),
           path.radius,
+          eye,
         ).position
         array[i * 3] = placed.x
         array[i * 3 + 1] = placed.y
