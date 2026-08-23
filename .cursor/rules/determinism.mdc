@@ -1,0 +1,8 @@
+---
+globs: packages/simulation/**,packages/procedural/**,packages/universe/**,packages/spatial/**,packages/physics/**
+alwaysApply: false
+---
+
+Apply the canonical determinism and addressing rule:
+
+@.claude/rules/determinism.md

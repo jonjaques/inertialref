@@ -1,0 +1,8 @@
+---
+globs: packages/**/*.ts,packages/*/package.json
+alwaysApply: false
+---
+
+Apply the canonical portable-core rule:
+
+@.claude/rules/packages.md

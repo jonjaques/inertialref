@@ -3,9 +3,10 @@
 Working card for anyone changing this repository — human or coding agent.
 
 Human documentation lives in [`docs/`](docs/README.md). The agent handbook is
-[`docs/agents/`](docs/agents/README.md). Claude Code machinery is
-[`CLAUDE.md`](CLAUDE.md) and [`.claude/`](.claude/rules/README.md). The build
-log is [`CONTEXT.md`](CONTEXT.md).
+[`docs/agents/`](docs/agents/README.md). Agent machinery is in
+[`.claude/`](.claude/rules/README.md), with Cursor adapters in
+[`.cursor/`](.cursor/README.md). Claude-specific orientation is
+[`CLAUDE.md`](CLAUDE.md). The build log is [`CONTEXT.md`](CONTEXT.md).
 
 ---
 
@@ -21,9 +22,11 @@ How to start and finish work: [working](docs/agents/working.md).
 Where each invariant is explained: [invariant map](docs/agents/invariants.md).
 
 Each invariant below is mirrored as a path-scoped one-liner in
-[`.claude/rules/`](.claude/rules/README.md). **This file is canonical.** If you
-change a rule here, grep `.claude/rules/` for its imperative. A drifted mirror
-is worse than none: it fires with authority and states the previous rule.
+[`.claude/rules/`](.claude/rules/README.md), with thin Cursor path adapters in
+`.cursor/rules/`. **This file is canonical.** If you change a rule here, grep
+`.claude/rules/` for its imperative and keep the matching Cursor glob in step.
+A drifted mirror is worse than none: it fires with authority and states the
+previous rule.
 
 ---
 
@@ -118,6 +121,24 @@ Violating one of these is a rewrite later, not a refactor.
   and `pages/DocumentMeta.tsx` applies route-specific browser metadata.
 - **Never load a third-party tag from `index.html`.** `src/analytics.ts` is
   the gate: production build, canonical host, no Global Privacy Control.
+
+---
+
+## Cursor Cloud specific instructions
+
+The repository-managed environment is `.cursor/environment.json`. Its Debian
+image pins Node 26 and pnpm 11, then a Build runs the frozen-lockfile install.
+Do not install dependencies in `start`; Builds preserve files, not processes.
+
+`pnpm dev` starts automatically in the **Game and Worker** terminal. It serves
+Vite on port 5173 and the local Cloudflare Worker on 8787. Inspect that terminal
+before starting another copy. The application and full test suite need no
+Docker daemon, database, secret, or production credential.
+
+The reference cutscene audio and production analytics are deliberately absent.
+`pnpm build` may report that R2 credentials and `VITE_GA_MEASUREMENT_ID` are
+missing; it must continue successfully, producing a silent, non-measuring
+build. Never add production credentials merely to silence those messages.
 
 ---
 

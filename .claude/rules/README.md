@@ -1,6 +1,7 @@
 ---
 paths:
   - '.claude/rules/*.md'
+  - '.cursor/rules/*.mdc'
   - 'AGENTS.md'
   - 'CLAUDE.md'
 ---
@@ -35,6 +36,10 @@ That split is what keeps the duplication from rotting: the imperatives are the s
 half. When you change a rule, change it in `AGENTS.md` and grep here for the one-liner.
 When you add one, ask whether an agent could violate it without ever opening `AGENTS.md`;
 if so it belongs here too.
+
+Cursor's path-scoped files in `.cursor/rules/*.mdc` contain only its `globs:` metadata
+and an `@` reference back to these canonical bodies. Keep those globs in step with the
+matching `paths:` list; never copy the body into a second rule.
 
 Do not paste reasoning into these files. A rule that grows past ~30 lines is being read on
 every touch of its directory, and the thing it is competing with for attention is the code.

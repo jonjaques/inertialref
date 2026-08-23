@@ -22,10 +22,11 @@
 //   * It only runs when a source file actually moved this turn. format-edited.sh
 //     leaves the marker; a turn that answered a question or edited Markdown pays
 //     nothing. A Stop hook has no other way to know what the turn did.
-//   * It blocks at most MAX_BLOCKS times per user prompt. Exit 2 on Stop means "do not
-//     stop, here is why", which is exactly the feedback loop wanted — and exactly the
-//     shape of an infinite loop if the failure is something the agent cannot fix, such
-//     as a red test that was already red. After the cap it reports and lets go.
+//   * It blocks at most MAX_BLOCKS times per user prompt. Claude uses exit 2; Cursor uses
+//     a followup_message. Both mean "do not stop, here is why", which is exactly the
+//     feedback loop wanted — and exactly the shape of an infinite loop if the failure is
+//     something the agent cannot fix, such as a red test that was already red. After the
+//     cap it reports and lets go.
 //   * It runs in the session's own cwd, which inside a worktree is not
 //     $CLAUDE_PROJECT_DIR. Running the gate against the main checkout while an agent
 //     edits a worktree would test the wrong tree and pass for the wrong reason.
@@ -37,6 +38,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   writeFileSync,
 } from 'node:fs'
@@ -68,45 +70,66 @@ try {
 }
 
 const cwd = input.cwd && existsSync(input.cwd) ? input.cwd : process.cwd()
-const session = input.session_id ?? 'nosession'
-const prompt = input.prompt_id ?? 'noprompt'
+const cursorHook = typeof input.conversation_id === 'string'
+const counterSession = input.session_id ?? input.conversation_id ?? 'nosession'
+const prompt = input.prompt_id ?? input.generation_id ?? 'noprompt'
 const projectDir = process.env.CLAUDE_PROJECT_DIR ?? cwd
 
-if (process.env.IR_SKIP_GATE) process.exit(0)
-
 const cache = join(projectDir, '.claude', '.cache')
-const dirty = join(cache, `dirty-${session}`)
-const counter = join(cache, `gate-${session}.json`)
+const dirty = join(cache, 'dirty-source')
+const active = join(cache, 'gate-source')
+const counter = join(cache, `gate-${counterSession}.json`)
+let markerClaimed = false
+
+if (process.env.IR_SKIP_GATE) finish()
 
 // Nothing that `pnpm check` reads was touched this turn.
-if (!existsSync(dirty)) process.exit(0)
+if (!existsSync(dirty)) finish()
+
+// Cursor can run its native hook and the imported Claude hook for the same event. Rename
+// the shared marker before doing work: only one invocation can claim it, and an edit that
+// arrives while the gate runs creates a fresh marker for the next stop.
+try {
+  renameSync(dirty, active)
+  markerClaimed = true
+} catch {
+  finish()
+}
 
 // A checkout with no dependencies fails every stage for a reason that is not the
 // agent's change. session-start.sh normally prevents this; if it did not, saying so is
 // more useful than four identical "command not found" reports.
 if (!existsSync(join(cwd, 'node_modules'))) {
+  restoreMarker()
   process.stderr.write(
     `Skipped the ${cwd} gate: no node_modules. Run \`pnpm install --frozen-lockfile\` there before trusting any result.\n`,
   )
-  process.exit(0)
+  finish()
 }
 
 const failure = run()
 
 if (!failure) {
-  rmSync(dirty, { force: true })
+  rmSync(active, { force: true })
+  markerClaimed = false
   rmSync(counter, { force: true })
-  process.exit(0)
+  finish()
 }
 
 // --- blocked -------------------------------------------------------------------------
 
+restoreMarker()
+
 let blocks = 0
-try {
-  const prior = JSON.parse(readFileSync(counter, 'utf8'))
-  if (prior.prompt === prompt) blocks = prior.blocks ?? 0
-} catch {
-  /* first failure for this session, or the file was cleared by a passing run */
+if (cursorHook) {
+  blocks = input.loop_count ?? 0
+} else {
+  try {
+    const prior = JSON.parse(readFileSync(counter, 'utf8'))
+    if (prior.prompt === prompt) blocks = prior.blocks ?? 0
+  } catch {
+    /* first failure for this session, or the file was cleared by a passing run */
+  }
 }
 
 if (blocks >= MAX_BLOCKS) {
@@ -114,18 +137,25 @@ if (blocks >= MAX_BLOCKS) {
     `pnpm ${failure.name} is still failing after ${MAX_BLOCKS} attempts. Not blocking again — ` +
       `say plainly in your reply that the gate is red and what is failing, rather than reporting the task complete.\n`,
   )
-  process.exit(0)
+  finish()
 }
 
-mkdirSync(cache, { recursive: true })
-writeFileSync(counter, JSON.stringify({ prompt, blocks: blocks + 1 }))
+if (!cursorHook) {
+  mkdirSync(cache, { recursive: true })
+  writeFileSync(counter, JSON.stringify({ prompt, blocks: blocks + 1 }))
+}
 
-process.stderr.write(
+const report =
   `Definition of done not met: \`pnpm ${failure.name}\` failed (${failure.why}).\n\n` +
-    `${failure.output}\n\n` +
-    `Fix this before finishing. If the failure predates your change, say so instead of working around it. ` +
-    `Set IR_SKIP_GATE=1 to suppress this gate.\n`,
-)
+  `${failure.output}\n\n` +
+  `Fix this before finishing. If the failure predates your change, say so instead of working around it. ` +
+  `Set IR_SKIP_GATE=1 to suppress this gate.`
+
+if (cursorHook) {
+  finish({ followup_message: report })
+}
+
+process.stderr.write(`${report}\n`)
 process.exit(2)
 
 // --- helpers -------------------------------------------------------------------------
@@ -152,4 +182,19 @@ function run() {
     }
   }
   return null
+}
+
+function finish(output = {}) {
+  if (cursorHook) process.stdout.write(`${JSON.stringify(output)}\n`)
+  process.exit(0)
+}
+
+function restoreMarker() {
+  if (!markerClaimed) return
+  if (existsSync(dirty)) {
+    rmSync(active, { force: true })
+  } else {
+    renameSync(active, dirty)
+  }
+  markerClaimed = false
 }
