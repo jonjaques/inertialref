@@ -77,8 +77,10 @@ describe('the routed dialogs', () => {
     // The panels are the workspace's own components rather than a second copy,
     // so their own strings are the proof that the page reached them.
     expect(markup).toContain('Lens Flare')
+    // Title case in source — `type-title` does not shout for us.
+    expect(markup).toContain('>Settings</h1>')
     // The design's claim about this page, stated on the page.
-    expect(markup).toContain('the simulation keeps running')
+    expect(markup).toContain('The simulation keeps running')
     // shadcn/ui's Button and a lucide icon, both resolved through `@/`.
     expect(markup).toContain('data-slot="button"')
     expect(markup).toContain('lucide-x')
@@ -102,7 +104,12 @@ describe('the routed dialogs', () => {
   })
 
   it('renders the informational and account pages', () => {
-    expect(at(ABOUT)).toContain('7,123')
+    const about = at(ABOUT)
+    expect(about).toContain('>About</h1>')
+    expect(about).toContain('7,123')
+    expect(about).toContain('Pre-alpha')
+    expect(about).toContain('Source on GitHub')
+    expect(about).toContain('href="https://github.com/jonjaques/inertialref"')
     // The account pages must say they are unbuilt and must never render a
     // credential field that goes nowhere — people reuse passwords, and a form
     // that looks real is one they will type a real one into.
