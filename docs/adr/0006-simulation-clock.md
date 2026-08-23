@@ -25,10 +25,25 @@ Canonical state depends only on the integer tick count.
 tick duration. Warped time is therefore bit-identical to real time run for
 longer, which is what makes a warped session replayable.
 
-**A step budget of 8 ticks per frame.** Without it, a tab backgrounded for a
-minute returns and tries to run 3,840 ticks in one frame, freezes, and tries
+**A step budget of 8 ticks per frame at 1×.** Without it, a tab backgrounded for
+a minute returns and tries to run 3,840 ticks in one frame, freezes, and tries
 again next frame — the spiral of death. Excess ticks are dropped and counted,
 and the count is on the debug overlay so the drop is visible rather than felt.
+
+**Above 1× the ceiling is a rate — 1,920 simulated seconds per wall second —
+and not a count per frame.** A count is the right shape for a stall, where the
+frame has already gone wrong and dropping is the honest answer, and the wrong
+shape for a throughput limit. Spent as a count, a saturated clock delivers the
+same simulated interval however long the frame took, so simulated time advances
+per _frame_ instead of per _second_ and frame-time noise becomes time-base
+noise. What that costs is proportional to a body's speed measured in its own
+radii, which is why it was invisible on everything in the Solar System except
+Phobos and Deimos: they cover 0.19 and 0.22 of their own radius per second
+against 0.072 for the next worst and 0.0006 for Luna, and at 10,000× they
+vibrated by a full body width while every other moon held still. A frame longer
+than 100 ms is a stall rather than a slow frame and is capped there, so the rate
+stays honest down to 10 fps and a backgrounded tab still cannot buy the minute
+it was away.
 
 **Interpolation renders one tick in the past.** Entity states are lerped between
 the previous tick and the current one. Bodies are _not_ lerped: their frames are

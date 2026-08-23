@@ -346,6 +346,11 @@ again in a neighboring system.
   fix is not to relax that rule: it is a constraint on an _exact_ lookup, and a
   search box handed an ambiguous name should offer both stars. Splitting `find`
   from `search` is what made the two answerable separately.
+- **The time-warp ceiling was a count of ticks per frame** (23 Aug 2026), so a
+  saturated clock delivered the same 32 simulated seconds however long the frame
+  took. Simulated time then advanced per frame rather than per second and every
+  determinism test still passed, because determinism is a claim about the tick
+  and this is a claim about the wall clock between ticks. See the entry below.
 
 ## The five spikes, measured (19 Aug 2026)
 
@@ -3062,6 +3067,100 @@ full-screen shells, blending defeats a tile-based GPU's hidden-surface removal,
 and the atmosphere marches twelve samples with two table reads each — but the
 number is a judgement, not a profile. `render/measure.ts` on the device is what
 would turn it into one.
+
+## The cloud image shipped Node 26 and forgot the rest (23 Aug 2026)
+
+This morning's Cursor Cloud Dockerfile pinned Node 26.7 and pnpm 11, which is
+the whole reason it exists — type stripping fails on the Node 20–22 images
+Cursor otherwise ships. It did not install what Cursor actually runs _inside_
+the container. A local `docker build` of that image is green and `node -v` is
+right, so the next failures look like product bugs.
+
+Three things were missing, each with a different symptom:
+
+- **`tmux`.** `environment.json` starts `pnpm dev` as a named terminal. Those
+  terminals run in a tmux session Cursor shares with the agent. The binary was
+  not on the image.
+- **`git-lfs`.** `*.glb` is LFS. Git itself is on `node:bookworm`, so clone
+  succeeds; without the smudge filter the hull is a 133-byte pointer and the
+  renderer silently falls back to the debug cone. `git lfs install --system`
+  is what makes the checkout real.
+- **`locales`.** `LANG` was empty and the locale was POSIX. Cursor's session
+  init expects `en_US.UTF-8`; a custom image missing the `locales` package is
+  a documented way to build successfully and then fail to open.
+
+`xz-utils` was already on the fat bookworm image. It is declared anyway, next
+to `git`, so a later `-slim` tag cannot drop them quietly. The image still
+does not `COPY` the repository.
+
+## Phobos and Deimos, still vibrating — and the clock was the second cause (23 Aug 2026)
+
+The rebase-parallax fix on 22 Aug was real and is not the whole story. Both moons
+still jittered, and the remaining cause was not in `packages/rendering` at all.
+
+`SimulationClock.advance` capped time warp at `MAX_WARP_STEPS = 2048` ticks per
+frame. Above about 1,920× that cap is always reached, so the clock ran 2048 ticks
+— exactly 32 simulated seconds — on every frame regardless of whether the frame
+took 14 ms or 19 ms, and dropped the rest. Simulated time therefore advanced per
+_frame_ instead of per _second_, and frame-time noise became time-base noise:
+±2 ms at 60 fps is ±12% of the delivered rate, every frame. The warp ladder is
+`1, 5, 25, 100, 1000, 10000, 100000`, so both of the top two detents sat in that
+regime permanently.
+
+Why only two bodies. The visible amplitude is the time-base error times a body's
+speed **in units of its own radius**, and that quantity is not close to uniform:
+
+| Body      | v/R (own radii per second) |
+| --------- | -------------------------- |
+| Deimos    | 0.218                      |
+| Phobos    | 0.190                      |
+| Mimas     | 0.072                      |
+| Enceladus | 0.050                      |
+| Miranda   | 0.028                      |
+| Io        | 0.0095                     |
+| Luna      | 0.00059                    |
+
+Measured in Node against the real clock and the real `buildScene`, camera 30,000
+km from Mars, 60 fps with ±2 ms of jitter and one doubled frame in fifteen,
+angular error against a local quadratic fit so genuine orbital curvature is not
+counted, in units of each body's own angular radius:
+
+| Body   | 1×     | 10,000× before | 10,000× after |
+| ------ | ------ | -------------- | ------------- |
+| Phobos | 3.3e-7 | 0.42           | 8.4e-4        |
+| Deimos | 1.5e-6 | 0.42           | 8.9e-4        |
+| Luna   | 3.6e-4 | 0.015          | 2.6e-5        |
+| Mars   | 3.4e-8 | 2.4e-8         | 2.4e-8        |
+
+At 1× nothing moves — the delivered rate is exact to 1.3e-14, and it always was.
+The two smallest bodies in the model were being thrown most of a body width back
+and forth at frame rate while everything around them held still, which is exactly
+the report.
+
+The fix is to make the warp ceiling a **rate** rather than a count:
+`MAX_WARP_RATE = 1920` simulated seconds per wall second, spent as
+`rate × this frame's duration`. A count fixes the delivery per frame; a rate
+makes it proportional to the wall clock, which is the property the renderer
+actually depends on. The 1× path is untouched and still a count — there the cap
+is a stall guard, the frame has already gone wrong, and dropping the minute a
+backgrounded tab was away is the honest answer rather than a throughput
+question. Above 1× a frame longer than `MAX_WARP_FRAME = 100 ms` is likewise
+treated as a stall, which keeps the rate honest down to 10 fps and bounds a
+stalled frame's catch-up at 12,288 ticks (~10 ms of work at the 1.25M ticks/s
+measured in-browser).
+
+Confirmed in Chrome at 10,000× with the frame callback instrumented. Frame
+durations ranged from 9.7 ms to 93.5 ms — a 9.6× spread — and the delivered rate
+held between 1918.5× and 1920.0×, a spread of 0.078%. The same frames under the
+old code would have run from 342× to 3,299×.
+
+Two things are worth keeping from how long this took to find. The first is that
+every determinism test passed throughout, and correctly: determinism is a claim
+about state at a given tick, and this was a defect in how wall-clock time maps
+onto ticks — a dimension the suite had no assertion in. The second is that
+`droppedTicks` was reporting the fault loudly the whole time (39.8M of them in
+the browser session above) and nothing connected a drop count to a visual
+symptom.
 
 ## Known gaps
 
