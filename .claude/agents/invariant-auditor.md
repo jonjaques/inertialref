@@ -6,6 +6,7 @@ model: opus
 effort: high
 memory: project
 color: purple
+readonly: true
 ---
 
 You audit changes against the invariants this repository has already paid for. Each one is

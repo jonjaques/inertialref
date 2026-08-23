@@ -20,7 +20,6 @@ set -uo pipefail
 payload=$(cat)
 file=$(printf '%s' "$payload" | jq -r '.tool_input.file_path // .file_path // empty' 2>/dev/null)
 cwd=$(printf '%s' "$payload" | jq -r '.cwd // empty' 2>/dev/null)
-session=$(printf '%s' "$payload" | jq -r '.session_id // "cursor"' 2>/dev/null)
 
 [ -n "$file" ] && [ -f "$file" ] || exit 0
 if [ -z "$cwd" ]; then
@@ -43,7 +42,9 @@ esac
 case "$file" in
   *.ts | *.tsx | *.mjs | *.json)
     cache="${CLAUDE_PROJECT_DIR:-$cwd}/.claude/.cache"
-    mkdir -p "$cache" 2>/dev/null && : >>"$cache/dirty-$session"
+    # Cursor can load both hooks.json and the imported Claude settings. Both events refer
+    # to the same checkout, so one shared marker makes the formatter and gate idempotent.
+    mkdir -p "$cache" 2>/dev/null && : >>"$cache/dirty-source"
     ;;
 esac
 

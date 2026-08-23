@@ -38,6 +38,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   writeFileSync,
 } from 'node:fs'
@@ -70,24 +71,36 @@ try {
 
 const cwd = input.cwd && existsSync(input.cwd) ? input.cwd : process.cwd()
 const cursorHook = typeof input.conversation_id === 'string'
-const session = input.session_id ?? (cursorHook ? 'cursor' : 'nosession')
 const counterSession = input.session_id ?? input.conversation_id ?? 'nosession'
 const prompt = input.prompt_id ?? input.generation_id ?? 'noprompt'
 const projectDir = process.env.CLAUDE_PROJECT_DIR ?? cwd
 
-if (process.env.IR_SKIP_GATE) finish()
-
 const cache = join(projectDir, '.claude', '.cache')
-const dirty = join(cache, `dirty-${session}`)
+const dirty = join(cache, 'dirty-source')
+const active = join(cache, 'gate-source')
 const counter = join(cache, `gate-${counterSession}.json`)
+let markerClaimed = false
+
+if (process.env.IR_SKIP_GATE) finish()
 
 // Nothing that `pnpm check` reads was touched this turn.
 if (!existsSync(dirty)) finish()
+
+// Cursor can run its native hook and the imported Claude hook for the same event. Rename
+// the shared marker before doing work: only one invocation can claim it, and an edit that
+// arrives while the gate runs creates a fresh marker for the next stop.
+try {
+  renameSync(dirty, active)
+  markerClaimed = true
+} catch {
+  finish()
+}
 
 // A checkout with no dependencies fails every stage for a reason that is not the
 // agent's change. session-start.sh normally prevents this; if it did not, saying so is
 // more useful than four identical "command not found" reports.
 if (!existsSync(join(cwd, 'node_modules'))) {
+  restoreMarker()
   process.stderr.write(
     `Skipped the ${cwd} gate: no node_modules. Run \`pnpm install --frozen-lockfile\` there before trusting any result.\n`,
   )
@@ -97,12 +110,15 @@ if (!existsSync(join(cwd, 'node_modules'))) {
 const failure = run()
 
 if (!failure) {
-  rmSync(dirty, { force: true })
+  rmSync(active, { force: true })
+  markerClaimed = false
   rmSync(counter, { force: true })
   finish()
 }
 
 // --- blocked -------------------------------------------------------------------------
+
+restoreMarker()
 
 let blocks = 0
 if (cursorHook) {
@@ -171,4 +187,14 @@ function run() {
 function finish(output = {}) {
   if (cursorHook) process.stdout.write(`${JSON.stringify(output)}\n`)
   process.exit(0)
+}
+
+function restoreMarker() {
+  if (!markerClaimed) return
+  if (existsSync(dirty)) {
+    rmSync(active, { force: true })
+  } else {
+    renameSync(active, dirty)
+  }
+  markerClaimed = false
 }
