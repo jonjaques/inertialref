@@ -16,7 +16,7 @@
 Most engines that span large scales use nested frames to _rescue_ floating-point
 precision — coordinates stay small because they are relative to something
 nearby. InertialRef does not need that, because
-[coordinates](coordinates.md) are already sub-millimetre everywhere.
+[coordinates](coordinates.md) are already sub-millimeter everywhere.
 
 That changes what frames are for. Here they exist for two jobs:
 
@@ -34,10 +34,10 @@ re-expression**. The numbers an entity carries change; where it is does not.
 
 ```mermaid
 flowchart TB
-    ROOT["<b>universe</b><br/><i>root · galactic centre · identity axes</i>"]
+    ROOT["<b>universe</b><br/><i>root · galactic center · identity axes</i>"]
     SYS["<b>s:SOL</b><br/><i>system · fixed at an absolute position</i>"]
     SYS2["<b>s:HIP71683</b><br/><i>4.365 ly away</i>"]
-    BODY["<b>b:…/b:0</b><br/><i>body-centred inertial</i><br/>translates along the orbit,<br/>does not spin"]
+    BODY["<b>b:…/b:0</b><br/><i>body-centered inertial</i><br/>translates along the orbit,<br/>does not spin"]
     BF["<b>bf:…/b:0</b><br/><i>body-fixed</i><br/>spins with the planet"]
     SF["<b>sf:…@0.350000,-1.100000</b><br/><i>surface</i><br/>east / up / south at one lat-lon"]
     MOON["<b>b:…/b:0.0</b><br/><i>moon, orbiting the planet</i>"]
@@ -57,9 +57,9 @@ Three frames exist per body, and the distinction is load-bearing:
 
 | Prefix | Frame                                           | Spins?        | Who lives here                                      |
 | ------ | ----------------------------------------------- | ------------- | --------------------------------------------------- |
-| `b:`   | body-centred **inertial**                       | no            | satellites, approaching ships, anything integrating |
+| `b:`   | body-centered **inertial**                       | no            | satellites, approaching ships, anything integrating |
 | `bf:`  | body-**fixed**                                  | yes           | terrain, anything bolted to the ground              |
-| `sf:`  | **surface** tangent plane at one lat/lon, +Y up | with the body | landed ships, metre-scale gameplay                  |
+| `sf:`  | **surface** tangent plane at one lat/lon, +Y up | with the body | landed ships, meter-scale gameplay                  |
 
 A ship's frame chain reads top-down in the debug overlay, which is often the
 fastest way to understand what the simulation thinks is happening:
@@ -185,16 +185,16 @@ b:g:milky-way/s:SOL/b:0 → s:SOL (left sphere of influence)
 Integrating in a rotating frame without Coriolis and centrifugal terms is simply
 wrong, and adding those terms is a lot of subtle code to support one case. So a
 landed ship is **attached kinematically** to a surface frame and not integrated
-at all. Lifting off hands it back to the body-centred inertial frame, and
+at all. Lifting off hands it back to the body-centered inertial frame, and
 `reframe` supplies the ground speed it inherits.
 
 That is the machinery paying for itself: the ship leaves the pad already doing
-several hundred metres per second, and no line of code computes that.
+several hundred meters per second, and no line of code computes that.
 
 ### Local coordinates are only meaningful near their frame
 
 A frame-local `Vec3` is a double. Express a point in a frame four light-years
-away and it degrades to metres. This is documented by a test rather than hidden:
+away and it degrades to meters. This is documented by a test rather than hidden:
 
 > `frame.test.ts` → _"degrades predictably when a position is expressed in a
 > far-away frame"_ — asserts the error is **greater than** the coordinate
@@ -221,7 +221,7 @@ Two bugs came from violating it:
    restored at all.
 2. The frame's _geometry_ was built from unrounded angles while its id was
    rounded, and the ground elevation was passed in by the caller. A restored
-   landing site sat half a metre — then 21 mm — from the original.
+   landing site sat half a meter — then 21 mm — from the original.
 
 Both are fixed by the same principle: quantise the angles, derive the elevation
 from the quantised direction, and let the entity's local position absorb the

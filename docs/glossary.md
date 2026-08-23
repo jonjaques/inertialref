@@ -8,18 +8,18 @@ elsewhere in games or astronomy, the entry says what it means _here_.
 ## Spatial
 
 **UniverseVector** — the only representation allowed to claim it is an absolute
-position: an int32 sector index per axis plus a float64 offset in metres inside
-that sector. Sub-millimetre anywhere within 249,000 ly of the origin — that is
+position: an int32 sector index per axis plus a float64 offset in meters inside
+that sector. Sub-millimeter anywhere within 249,000 ly of the origin — that is
 the _half_-extent, so the addressable cube is twice that on a side.
 → [coordinates](concepts/coordinates.md)
 
 **Sector** — a 2^40 m (≈7.35 AU) cube. A power of two so that carrying an offset
 into the sector index is exact in IEEE-754.
 
-**Offset** — the position inside a sector, normalised to `[0, SECTOR_SIZE)` by
+**Offset** — the position inside a sector, normalized to `[0, SECTOR_SIZE)` by
 every constructor.
 
-**`Vec3`** — a displacement or a frame-local coordinate in metres. **Never** an
+**`Vec3`** — a displacement or a frame-local coordinate in meters. **Never** an
 absolute position.
 
 **Frame** — a node in the reference-frame tree. Its pose is either a fixed
@@ -29,17 +29,17 @@ absolute position or a pure function of simulation time.
 **Frame chain** — the path from the root to a frame, e.g.
 `universe › s:SOL › b:… › bf:… › sf:…`. Shown in the debug overlay.
 
-**Body-centred inertial frame** (`b:`) — translates along a body's orbit but
+**Body-centered inertial frame** (`b:`) — translates along a body's orbit but
 does not rotate. Where satellites and approaching ships live.
 
 **Body-fixed frame** (`bf:`) — rotates with the body. Terrain is sampled in
 these axes; sampling in inertial axes leaves the mountains behind.
 
 **Surface frame** (`sf:`) — a local tangent plane at one latitude/longitude,
-axes east / up / south, +Y up. Where metre-scale gameplay happens.
+axes east / up / south, +Y up. Where meter-scale gameplay happens.
 
 **Body-fixed direction** (`BodyFixedDirection`) — a unit direction from a body's
-centre, in that body's _rotating_ axes, as a branded type. `surfaceRadius` and
+center, in that body's _rotating_ axes, as a branded type. `surfaceRadius` and
 the region functions accept nothing else, so terrain cannot be sampled with an
 inertial direction — the bug the body-fixed frame entry above warns about, which
 shipped twice before the brand existed. Produced only by `bodyFixedDirection`,
@@ -98,7 +98,7 @@ worlds.
 the value is right; testing that it never changes.
 
 **Stub** — the minimal description of a system (id, name, position, spectral
-type, mass in solar masses, and whether it came from the catalogue) before its
+type, mass in solar masses, and whether it came from the catalog) before its
 bodies are generated.
 
 **Cube-sphere** — the surface addressing scheme: six cube faces, each a
@@ -151,7 +151,7 @@ scaling position and radius together so angular size is preserved exactly and
 only depth is fictional.
 
 **Near limit** — the distance to a body's _surface_ below which nothing is
-compressed. Keying this off the centre instead of the surface is what once made
+compressed. Keying this off the center instead of the surface is what once made
 terrain invisible.
 
 **Patch** — one region's terrain mesh, in render space, tagged with the origin
@@ -172,7 +172,7 @@ capability it must not depend on. `WorkerPort`, `SaveStore`.
 by the worker pool or called directly. Both sides import the same definition.
 
 **Inline worker** — an in-process implementation of `WorkerPort` that runs the
-real host loop on a microtask. Not a mock: same envelopes, same serialisation.
+real host loop on a microtask. Not a mock: same envelopes, same serialization.
 
 **Envelope** — the message shape crossing a worker boundary: request, success,
 failure, cancel, ready.
@@ -203,7 +203,7 @@ coupling. → [ADR-0008](adr/0008-multiplayer-partitions.md)
 
 ## Units and conventions
 
-**SI everywhere internally** — metres, seconds, kilograms, radians. Presentation
+**SI everywhere internally** — meters, seconds, kilograms, radians. Presentation
 units (AU, light-years, parsecs, feet, inches) are branded types that exist only
 for display.
 

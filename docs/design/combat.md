@@ -22,7 +22,7 @@ livelihood. It has exactly three jobs:
 | **Sport**                          | Consensual PvP in the [persistent universe](modes.md), opt-in, no reward |
 
 **Escape is a legitimate and usually correct outcome.** The design should make
-running away skilful and satisfying rather than a failure state — because a
+running away skillful and satisfying rather than a failure state — because a
 player carrying four hours of data _should_ run, and a design that punishes them
 for it is a design that punishes correct play.
 
@@ -36,7 +36,7 @@ for it is a design that punishes correct play.
 
 ```
    [ contact ]──→[ assess ]──→┬──→[ ESCAPE ]───→ mass-lock break → charge → jump
-                              │      the usual, and the skilful, answer
+                              │      the usual, and the skillful, answer
                               │
                               └──→[ ENGAGE ]──→[ disable ]──→[ disengage ]
                                      pips · heat · subsystems
@@ -94,13 +94,13 @@ already a good decision.
 
 Four classes. Deliberately few — depth comes from
 [subsystem targeting](ships.md#sensors-and-targeting) and heat management, not
-from a catalogue.
+from a catalog.
 
-| Class                             | Behaviour                                 | vs Shields | vs Hull  | Heat     | Counter                     |
+| Class                             | Behavior                                 | vs Shields | vs Hull  | Heat     | Counter                     |
 | --------------------------------- | ----------------------------------------- | ---------- | -------- | -------- | --------------------------- |
 | **Kinetic** — railgun, autocannon | Projectile, real travel time, must be led | 0.6×       | **1.4×** | Low      | Range, evasion              |
 | **Thermal** — beam, pulse         | Effectively instant inside 3 km           | **1.5×**   | 0.7×     | **High** | Shields, distance, heat war |
-| **Guided** — missiles, torpedoes  | Lock required, limited magazine           | 1.0×       | 1.2×     | Medium   | Point defence, chaff        |
+| **Guided** — missiles, torpedoes  | Lock required, limited magazine           | 1.0×       | 1.2×     | Medium   | Point defense, chaff        |
 | **Utility** — EMP, disruptor      | No hull damage; disables modules          | —          | —        | Medium   | Hardening, distance         |
 
 **Travel time is the fidelity that matters.** Kinetic rounds cross 3 km in about
@@ -127,7 +127,7 @@ game's input latency and a solo team's netcode lose to the competition.
 | ----------------- | ------------- | --------------------------------------------------------- |
 | **Shields**       | Optional      | Rechargeable buffer, recharges from SYS. Not mandatory.   |
 | **Armour**        | Hull property | Flat damage reduction; heavy, so it costs jump range      |
-| **Point defence** | Utility       | Automatic; engages missiles inside 800 m                  |
+| **Point defense** | Utility       | Automatic; engages missiles inside 800 m                  |
 | **Chaff**         | Utility       | Breaks missile and subsystem locks for 6 s; 20 s cooldown |
 | **Heat sinks**    | Utility       | Dumps 40% of current heat; 20 s cooldown                  |
 | **ECM** ⬜        | Utility       | Degrades a pursuer's lock quality; contested              |
@@ -152,16 +152,16 @@ weapon types":
 
 **Destroying a ship yields nothing.** Disabling one ends the encounter. The
 design should make disabling the obvious, satisfying resolution and destruction
-the wasteful one, because that is the behaviour a non-commercial persistent
+the wasteful one, because that is the behavior a non-commercial persistent
 universe wants.
 
 ### Opponents
 
 Honest scoping: a solo pipeline cannot produce great AI, so the design targets
 **readable** AI rather than clever AI. Every opponent's intent must be legible
-from its behaviour within three seconds.
+from its behavior within three seconds.
 
-| Type          | Behaviour                                               | Count |
+| Type          | Behavior                                               | Count |
 | ------------- | ------------------------------------------------------- | ----- |
 | **Scavenger** | Opportunistic; disengages below 40% hull                | 1–2   |
 | **Pirate**    | Targets your drive first, demands cargo, will accept it | 1–3   |

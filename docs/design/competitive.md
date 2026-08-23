@@ -49,7 +49,7 @@ best thing in the genre.
 Physical interaction with objects that have mass.
 
 **What we do differently.** Galaxy scale rather than set scale. Six hulls
-assembled from parts rather than hundreds hand-modelled. A browser tab rather
+assembled from parts rather than hundreds hand-modeled. A browser tab rather
 than a 120 GB install. And a defined, shippable MVP.
 
 **The lesson.** Star Citizen's scope has no floor, and it is the clearest
@@ -78,7 +78,7 @@ take the solutions and spend the saved effort elsewhere.
 
 |                    | Elite                                                                       | InertialRef                                                                |
 | ------------------ | --------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| Galaxy             | Synthetic beyond the local bubble; ~150,000 real stars in a synthetic frame | Catalogue-first, procedurally filled, **and it updates as astronomy does** |
+| Galaxy             | Synthetic beyond the local bubble; ~150,000 real stars in a synthetic frame | Catalog-first, procedurally filled, **and it updates as astronomy does** |
 | Atmospheric worlds | Expansion content, still limited                                            | The base case                                                              |
 | On foot            | _Odyssey_ — built as a shooter, to a mixed reception                        | Built as a survey and hazard layer                                         |
 | Economy            | Credits, grind, engineering RNG                                             | Data only; no grind, no RNG                                                |
@@ -99,7 +99,7 @@ made it good.
 redemption stories, having launched incomplete and improved continuously for
 years.
 
-**What it does better than anything.** The joy of naming things. Colour and
+**What it does better than anything.** The joy of naming things. Color and
 strangeness. A generator whose outputs surprise its own creators.
 
 **What we take.** Discovery-as-reward. Naming as the emotional payoff. The
@@ -122,12 +122,12 @@ evidence that this project's shape is viable at this project's size.
 
 **The most important comparable, and the one usually left off the list.**
 
-**What it is.** A real-astronomy universe simulator: real catalogues, procedural
+**What it is.** A real-astronomy universe simulator: real catalogs, procedural
 fill, seamless scale from intergalactic to surface. Everything this project
 claims as its technical differentiator, done first and done well.
 
 **What we take.** Proof that the approach works, and a great deal of prior art on
-catalogue-plus-procedural hybridisation.
+catalog-plus-procedural hybridisation.
 
 **What we do differently.** It is a **planetarium, not a game.** There is no
 loop, no reward, no ship you operate as a machine, no reason to be anywhere in
@@ -162,7 +162,7 @@ audience noticed immediately and loudly. That is strong evidence that
 
 |                            | **InertialRef**      | Star Citizen | Elite Dangerous | No Man's Sky | Space Engine | Starfield |
 | -------------------------- | -------------------- | ------------ | --------------- | ------------ | ------------ | --------- |
-| Real star catalogue        | ✅ **and versioned** | ❌           | Partial         | ❌           | ✅           | ❌        |
+| Real star catalog        | ✅ **and versioned** | ❌           | Partial         | ❌           | ✅           | ❌        |
 | Updates with new astronomy | ✅                   | ❌           | ❌              | ❌           | Manual       | ❌        |
 | Seamless orbit → surface   | ✅                   | ✅           | ✅              | Partial      | ✅           | ❌        |
 | Seamless ship → on foot    | ✅                   | ✅           | Partial         | ✅           | ❌           | Partial   |
@@ -192,11 +192,11 @@ honestly.
 
 **Market gap:** there is no space simulator in a browser at any level of
 seriousness, and there is no game — as opposed to a planetarium — built on real
-catalogue data. The second gap is the defensible one; the first is the
+catalog data. The second gap is the defensible one; the first is the
 distribution advantage that makes anyone look.
 
 **Why now:** WebGPU makes browser rendering of this kind viable for the first
-time; Gaia DR3 makes a real catalogue of a useful size freely available for the
+time; Gaia DR3 makes a real catalog of a useful size freely available for the
 first time; and a solo maintainer working with coding agents can produce
 foundational systems work at a rate that was not previously possible — which is
 the only reason a project of this shape is attemptable at this size.

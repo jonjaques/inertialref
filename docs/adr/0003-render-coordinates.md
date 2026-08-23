@@ -5,7 +5,7 @@ Status: accepted · 2026-08-19
 ## Context
 
 The GPU works in float32 and a depth buffer has finite precision. A scene can
-contain a bolt one metre away and a star four light-years away, which is 1e16:1.
+contain a bolt one meter away and a star four light-years away, which is 1e16:1.
 Canonical positions (ADR-0001) cannot be handed to Three.js directly.
 
 ## Decision
@@ -36,8 +36,8 @@ preserved exactly** — the image is correct and only depth is a lie. With
 `shellSpan = nearLimit` the mapping is C¹ at the boundary, so a planet neither
 pops nor changes its apparent rate of approach as you arrive.
 
-Compression keys off distance to the **surface**, not to the centre. Keying off
-the centre was a real bug: in a 400 km orbit a 2,864 km planet's centre is well
+Compression keys off distance to the **surface**, not to the center. Keying off
+the center was a real bug: in a 400 km orbit a 2,864 km planet's center is well
 beyond the near limit, so it was compressed, while its streamed terrain patches
 400 km away were in the uncompressed near field — the datum sphere and the
 ground it represents ended up 30 km apart and no terrain was visible at all.
@@ -62,7 +62,7 @@ ground it represents ended up 30 km apart and no terrain was visible at all.
   space; `placement.distance` carries the true value for anything that needs it.
 - The mapping is non-decreasing everywhere but only _strictly_ increasing while
   the separation survives double precision. Past ~1e17 m two objects a hundred
-  metres apart compress to the same depth. They are also the same pixel.
+  meters apart compress to the same depth. They are also the same pixel.
 - A rebase invalidates built geometry, so terrain patches record the origin
   generation they were built against and are rebuilt when it changes. The
   heightfields — the expensive half — are cached across rebases.

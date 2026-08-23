@@ -25,7 +25,7 @@ behind that URL before the persistent universe is possible.
 
 > **The server's job is small, and the architecture's job is to keep it small.**
 
-Because the universe is a pure function of `(seed, catalogue version, address)`,
+Because the universe is a pure function of `(seed, catalog version, address)`,
 a server never has to store, serve or simulate the galaxy. It holds exactly what
 a client cannot derive — **other entities and persistent mutations** — which is
 the same set a 696-byte save file holds. That is
@@ -70,7 +70,7 @@ flowchart TB
         DO1["<b>DO</b> partition s:SOL<br/>SQLite · hibernating sockets"]
         DO2["<b>DO</b> partition s:HIP71683"]
         DO3["<b>DO</b> partition c:12,-3,7"]
-        D1["<b>D1</b><br/>accounts · discovery credit<br/>catalogue revisions · sync"]
+        D1["<b>D1</b><br/>accounts · discovery credit<br/>catalog revisions · sync"]
         R2["<b>R2</b><br/>inertialrefd-storage<br/><i>reference audio · material sets later</i>"]
     end
 
@@ -104,13 +104,13 @@ have sidestepped one real problem for free.
 
 | Primitive              | Holds                                                                         | Why this one and not another                                                                                                                                                                                |
 | ---------------------- | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Workers**            | The client bundle, the API, WebSocket upgrade routing                         | Static asset requests are free and never reach the script. One deploy, one origin, one artefact.                                                                                                            |
+| **Workers**            | The client bundle, the API, WebSocket upgrade routing                         | Static asset requests are free and never reach the script. One deploy, one origin, one artifact.                                                                                                            |
 | **Durable Objects**    | One authority per partition: connected players, live entity states, mutations | A DO is a single-threaded, addressable, consistent island with its own SQLite. That is precisely the shape of a star system under patched conics.                                                           |
 | **DO SQLite**          | Per-partition durable state, co-located with the authority                    | Transactional with the code that owns it. No network round trip. 10 GB per object, which is four orders of magnitude more than a partition will ever need.                                                  |
 | **D1**                 | Account-scoped and globally-unique data                                       | Cross-partition queries and global uniqueness — "who discovered this first" — need one writer for the whole galaxy, not one per system.                                                                     |
 | **R2** ✅              | What the repository will not carry; biome material sets later                 | Zero egress fees. Today one bucket, `inertialrefd-storage`, holding the cutscene's reference audio ([H-8](#h-8--r2-holds-what-the-repository-will-not-carry)). Material sets are the planned second tenant. |
-| **Workers KV**         | ⛔ nothing                                                                    | The catalogue is 159 KB brotli and ships in the bundle ([spike 3](spikes.md#3--catalogue-bundle-size)). There is no eventually-consistent read tier to fill.                                                |
-| **Queues / Workflows** | ⛔ nothing yet                                                                | No asynchronous fan-out exists. Revisit if catalogue revision publishing becomes a batch job.                                                                                                               |
+| **Workers KV**         | ⛔ nothing                                                                    | The catalog is 159 KB brotli and ships in the bundle ([spike 3](spikes.md#3--catalog-bundle-size)). There is no eventually-consistent read tier to fill.                                                |
+| **Queues / Workflows** | ⛔ nothing yet                                                                | No asynchronous fan-out exists. Revisit if catalog revision publishing becomes a batch job.                                                                                                               |
 | **Cloudflare Pages**   | ⛔ nothing                                                                    | Workers static assets is the same capability inside the Worker that already has to exist. Two deploy targets for one site is one too many.                                                                  |
 
 ### Numbers, with their source
@@ -209,7 +209,7 @@ first:
 const stub = env.PARTITION.getByName(partitionKey) // "s:SOL", "c:12,-3,7"
 ```
 
-**Hibernation is not an optimisation here, it is the cost model.** With
+**Hibernation is not an optimization here, it is the cost model.** With
 `ctx.acceptWebSocket()` instead of `ws.accept()`, Cloudflare keeps the client
 sockets attached to its network while evicting the object from memory, and
 **duration charges stop accruing**. That is the property
@@ -266,12 +266,12 @@ There is exactly one question, and it is not "which is faster":
 | Which players are connected                  | DO SQLite | Same                                                                                |
 | **First-discovery claims**                   | **D1**    | "First in the galaxy" is a global uniqueness claim. One writer, one unique index.   |
 | Accounts, tokens                             | D1        | Cross-partition by definition                                                       |
-| Catalogue revisions                          | D1        | Read by every client, written by nobody at runtime                                  |
+| Catalog revisions                          | D1        | Read by every client, written by nobody at runtime                                  |
 | Almanac / bookmark sync                      | D1        | Per player, not per place                                                           |
 
 Discovery credit is the interesting one because it is tempting to put it in the
 DO that witnessed it. It cannot live there: two players in two different systems
-can claim the same address if the catalogue ever lets one system's contents be
+can claim the same address if the catalog ever lets one system's contents be
 referenced from another, and more importantly the _query_ — "show me everything
 I discovered first" — spans every partition a player has ever visited. In D1 it
 is `INSERT … ON CONFLICT DO NOTHING` against a unique index on the address, which
@@ -367,7 +367,7 @@ worth keeping:
 ### H-5 · The wire protocol is versioned, and the handshake refuses a mismatch
 
 [modes](design/modes.md) states it as a design constraint: _all clients in a
-partition must run the same catalogue version; it becomes a protocol handshake._
+partition must run the same catalog version; it becomes a protocol handshake._
 It is stronger than that. A client whose `GENERATION_VERSIONS` differ derives a
 **different universe** — different planets, different terrain — so replicating a
 position into it is meaningless.
@@ -429,7 +429,7 @@ deliberate and is called out at both ends.
 
 **Installable, because offline was already true.** The service worker predates
 this; what was missing was the manifest that lets a browser act on it. The game
-is a pure function of a seed, so once the bundle and the 460 KB catalogue are
+is a pure function of a seed, so once the bundle and the 460 KB catalog are
 cached there is nothing left to fetch — an installed copy is a real offline
 application rather than a shortcut with a dinosaur behind it.
 
@@ -563,7 +563,7 @@ apps/server/                    ✅ the only place Cloudflare appears
   src/routes.ts                 ✅ pure routing, so it is testable in plain Node
   worker-configuration.d.ts     ✅ generated by `wrangler types`, committed
   src/partition.ts              ⬜ class PartitionAuthority extends DurableObject
-  src/api/                      ⬜ discovery, catalogue, sync
+  src/api/                      ⬜ discovery, catalog, sync
   migrations/                   ⬜ D1 schema, one file per change
 
 packages/protocol/src/net.ts    🟡 paths, NET_PROTOCOL_VERSION, ServerHealth,
@@ -717,7 +717,7 @@ real latency and real player density**, not decisions.
 
 ### A Durable Object lives in one place, and never moves
 
-Cloudflare creates an object in a data centre near the **first** `get()` for that
+Cloudflare creates an object in a data center near the **first** `get()` for that
 name and states plainly that "Durable Objects do not currently change locations
 after they are created". `locationHint` biases creation only, and is best-effort.
 
@@ -1003,7 +1003,7 @@ messages/s, which is free to bill and impossible to execute. The levers are
 aggregation (one snapshot per tick carrying every entity, not one message per
 input) and interest management (replicate only what is near you). With both,
 the honest expectation is **order 100–200 concurrent players in one partition**,
-and that number wants measuring at H4, not modelling here.
+and that number wants measuring at H4, not modeling here.
 
 #### Wide — 500 players in 500 different systems
 
@@ -1095,7 +1095,7 @@ client prediction, reconciliation, lag compensation and partition handoff of liv
 authority is a different project, with a different cost curve and a different
 skill requirement.
 
-The design has already decided in favour of the cheap one, and for a good reason
+The design has already decided in favor of the cheap one, and for a good reason
 rather than a budgetary one: [modes](design/modes.md) observes that _the universe
 is derivable, so a client knows everything anyway — there are no secrets to
 protect. What must be authoritative is mutation writes._ That is a genuinely

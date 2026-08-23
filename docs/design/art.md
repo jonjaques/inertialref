@@ -1,7 +1,7 @@
 # Art direction
 
 The Canopy, HDR output, the two camera modes, and a precise line between where
-artistic licence is granted and where it is forbidden.
+artistic license is granted and where it is forbidden.
 
 > **Changed in v0.2.** The previous edition said "physically grounded, not
 > photoreal" and treated beauty with suspicion — _"if a red dwarf system feels
@@ -25,7 +25,7 @@ fiction rather than a convenient one:
 
 | Problem                                                 | How the sensor fiction resolves it                                                                                                                                                                                                                                                                                          |
 | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Beauty vs honesty**                                   | Almost everything that would make space more beautiful is _already true_ and merely below the threshold of dark-adapted human vision. A sensor integrating over seconds sees the galactic plane, the zodiacal light, the airglow layer and a nebula's real colour. Rendering them is not licence — it is a longer exposure. |
+| **Beauty vs honesty**                                   | Almost everything that would make space more beautiful is _already true_ and merely below the threshold of dark-adapted human vision. A sensor integrating over seconds sees the galactic plane, the zodiacal light, the airglow layer and a nebula's real color. Rendering them is not license — it is a longer exposure. |
 | **Eleven orders of magnitude of luminance**             | A camera has gain and a response curve, and both are things a pilot adjusts. Exposure becomes a _control_ rather than an invisible automatic that fights the player.                                                                                                                                                        |
 | **The flip problem**                                    | After the flip you are pointed backwards, engine-toward-destination — and the emotional core of the game is looking at the thing you are approaching. A composited view can face any direction without breaking first person, because you are looking at a screen, not out of a hole.                                       |
 | **[Pillar 4](charter.md#pillar-4--you-are-one-person)** | Still one person, one seat, one viewpoint. The camera moves; the head does not.                                                                                                                                                                                                                                             |
@@ -60,7 +60,7 @@ The sensor behaves like a real imaging system with no interpretation.
 | Shadows          | **Crush.** An unlit surface is black, not "dark".                       |
 | Glare            | The sensor's true point-spread function and aperture diffraction spikes |
 | Faint structure  | Invisible, unless you dwell long enough to integrate it                 |
-| Artistic licence | **None.**                                                               |
+| Artistic license | **None.**                                                               |
 
 Direct is what the simulation-literate half of the audience will fly in, and it
 is the mode in which the game's claim about physical correctness is checkable.
@@ -76,8 +76,8 @@ human can read.
 | Highlights       | Roll off; a star has structure rather than a white disc                                            |
 | Shadows          | Lifted to the sensor's noise floor, with real noise                                                |
 | Faint structure  | **Integrated and visible** — the galactic plane, zodiacal light, airglow, nebulosity, ring shadows |
-| Colour           | Mapped, not invented; saturation follows the sensor's response, not a mood                         |
-| Artistic licence | **Granted, within the boundary below**                                                             |
+| Color           | Mapped, not invented; saturation follows the sensor's response, not a mood                         |
+| Artistic license | **Granted, within the boundary below**                                                             |
 
 Composite is the default and it is the mode the game is art-directed in.
 
@@ -85,21 +85,21 @@ Composite is the default and it is the mode the game is art-directed in.
 
 ---
 
-## Where licence is granted, and where it is not
+## Where license is granted, and where it is not
 
 The whole point of the sensor fiction is that this line can be drawn precisely
 rather than argued case by case.
 
 ### Never — the data is not negotiable
 
-Anything a player can check against a catalogue. If it is wrong, the game has
+Anything a player can check against a catalog. If it is wrong, the game has
 lied and [pillar 2](charter.md#pillar-2--the-sky-is-real) is gone.
 
 `position` · `parallax and distance` · `spectral class` · `effective temperature`
 · `mass` · `radius` · `luminosity` · `orbital elements` · `confirmed exoplanet
 parameters` · `which stars are scoopable` · `body count and provenance`
 
-A star's **colour** is on this list, because it is computed from its effective
+A star's **color** is on this list, because it is computed from its effective
 temperature. A K dwarf is orange. It does not get to be a nicer orange.
 
 ### Granted — the image is photographed, not measured
@@ -111,8 +111,8 @@ making choices:
 | ------------------------------------------- | ----------------------------------------------------------------------------------- |
 | Exposure, tone curve, highlight rolloff     | It is a camera. There is no "correct" curve.                                        |
 | Integration time — making the faint visible | The structure must actually be there                                                |
-| Saturation and colour mapping               | Hue is fixed by physics; how vividly it is rendered is a sensor choice              |
-| Atmospheric scattering coefficients         | Tuned within the real range for the modelled composition                            |
+| Saturation and color mapping               | Hue is fixed by physics; how vividly it is rendered is a sensor choice              |
+| Atmospheric scattering coefficients         | Tuned within the real range for the modeled composition                            |
 | Aurora intensity and occurrence             | Requires a magnetic field and an atmosphere, both of which are generated properties |
 | Ring particle albedo and phase function     | Within the range Cassini actually measured                                          |
 | Dust, nebulosity, zodiacal light brightness | Present where it is present; brightness is integration                              |
@@ -135,7 +135,7 @@ rendered properly and integrated long enough to see.
 
 |                                    | Why it is spectacular                                                                                   | Real?                                                                  |
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| **Multiple-scattering atmosphere** | Twilight, the blue hour, godrays through terrain, the colour of the sky from inside and from above      | ✅ Bruneton-style precomputed transmittance and scattering             |
+| **Multiple-scattering atmosphere** | Twilight, the blue hour, godrays through terrain, the color of the sky from inside and from above      | ✅ Bruneton-style precomputed transmittance and scattering             |
 | **Aurora**                         | Curtains of green and crimson over a night-side pole, visible from orbit                                | ✅ Needs a magnetosphere and an atmosphere — both generated properties |
 | **Ring systems**                   | Forward scattering makes rings _blaze_ when backlit; shadow bands across the planet; spokes             | ✅ Cassini measured the phase function                                 |
 | **Zodiacal light and gegenschein** | A vast faint cone along the ecliptic. Almost never rendered in a game.                                  | ✅ Sunlight on interplanetary dust                                     |
@@ -143,7 +143,7 @@ rendered properly and integrated long enough to see.
 | **Planetshine**                    | A moon's night side lit blue by the planet it orbits                                                    | ✅ Earthshine; computable from the geometry                            |
 | **Eclipses and transits**          | A moon's shadow crossing a cloud deck below you                                                         | ✅ Falls out of real orbits, for free                                  |
 | **Limb effects**                   | Limb darkening on a star; atmospheric refraction and the green flash at a planet's edge                 | ✅                                                                     |
-| **Terminator detail**              | Kilometre-long shadows at the day–night line, which is why every good orbital photograph is taken there | ✅                                                                     |
+| **Terminator detail**              | Kilometer-long shadows at the day–night line, which is why every good orbital photograph is taken there | ✅                                                                     |
 | **Noctilucent clouds, airglow**    | A thin green band above the limb at night                                                               | ✅                                                                     |
 | **Ice and water**                  | Subsurface scattering in ice, specular sun-glint off a sea                                              | ✅                                                                     |
 | **Sensor glare**                   | Diffraction spikes, ghosting, and a real point-spread function around a star                            | ✅ It is a lens                                                        |
@@ -151,11 +151,11 @@ rendered properly and integrated long enough to see.
 **None of that requires a single falsified number.** It requires a good
 atmosphere shader, a good phase function, and the willingness to integrate.
 
-**Resolved: narrowband composite, declared.** Nebulae render as a false-colour
+**Resolved: narrowband composite, declared.** Nebulae render as a false-color
 narrowband composite, the canopy readout says so, and **the filter is selectable**
 — switch to broadband and watch the nebula almost vanish into the noise floor.
 
-This is exactly what a real observatory does, it makes the largest licence in the
+This is exactly what a real observatory does, it makes the largest license in the
 design into a mechanic and a teaching moment, and it is entirely consistent with
 [the sensor fiction](#the-canopy-is-a-sensor-not-a-window). The player is never
 shown something untrue; they are shown something _processed_, and told which
@@ -223,7 +223,7 @@ implementation notes:
    can produce them. Firefox fails the second and passes nothing else, so the
    probe is the load-bearing half.
 2. **The tone curve must be headroom-agnostic.** It cannot be tuned to a peak
-   luminance the page is not allowed to know. Design for graceful behaviour across
+   luminance the page is not allowed to know. Design for graceful behavior across
    2×–16× rather than a mapping that assumes one of them.
 3. **The three-state override stops being a nicety.** Auto will be wrong for
    somebody on every one of these browsers, in both directions.
@@ -274,7 +274,7 @@ camera the player can actually operate is the natural expression of the
 | Free camera                      | **Bounded to a tether from the ship** — pillar 4 survives, because the camera is a drone you deployed |
 | Exposure, integration time, gain | The same controls the canopy has, at finer resolution                                                 |
 | Aperture and focal length        | Real depth of field and real diffraction                                                              |
-| Filters                          | Broadband, narrowband, and the false-colour composites the nebula question hangs on                   |
+| Filters                          | Broadband, narrowband, and the false-color composites the nebula question hangs on                   |
 | Time                             | Pause and step; the simulation is deterministic, so a stepped frame is exact                          |
 | Export                           | Full HDR and tonemapped SDR, with the location's address stamped in the metadata                      |
 
@@ -335,7 +335,7 @@ position = lerp(fine, coarse, morph)
 
 **5. Edge stitching and cube-face wrapping.** The
 [roadmap](../roadmap.md#terrain) names both: `buildPatch` uses one-sided
-differences at edges and needs its neighbours' rows, and the streamer skips
+differences at edges and needs its neighbors' rows, and the streamer skips
 patches at face boundaries rather than crossing.
 
 **6. Predictive streaming with a per-frame generation budget.** Also named in the
@@ -370,14 +370,14 @@ known in advance — the nav computer already computed it.
 
 ## Palette
 
-Physics decides the world's colour. This palette is for the **interface**, which
+Physics decides the world's color. This palette is for the **interface**, which
 must stay legible against everything from interstellar black to a star at display
 peak luminance.
 
 | Token        | Hex       | Used for                                                                                                                   |
 | ------------ | --------- | -------------------------------------------------------------------------------------------------------------------------- |
 | `instrument` | `#7FD4E8` | Primary HUD readouts, reticles, the burn plan. Pale cyan reads as projected light and never occurs naturally in the scene. |
-| `observed`   | `#4C9AFF` | Catalogue-backed bodies and data                                                                                           |
+| `observed`   | `#4C9AFF` | Catalog-backed bodies and data                                                                                           |
 | `projected`  | `#8A94A6` | Generated bodies — desaturated, because a projection should look provisional                                               |
 | `surveyed`   | `#4ADE80` | Your own observations and discoveries                                                                                      |
 | `caution`    | `#F5A623` | Heat above 80%, fuel reserve, a burn solution that will not close                                                          |
@@ -390,7 +390,7 @@ one. The HUD is composited at a specified absolute luminance, and the requiremen
 is 4.5:1 against a fully blown-out background — verified with the tonemapper in
 the loop.
 
-**No information is carried by colour alone** — provenance uses dash pattern,
+**No information is carried by color alone** — provenance uses dash pattern,
 scan state uses glyphs, all three colourblind palettes tested against the
 star-glare case. See [ux](ux.md#accessibility).
 

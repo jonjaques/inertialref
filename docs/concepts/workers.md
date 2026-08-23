@@ -43,7 +43,7 @@ without module workers gets _no pool at all_: the starfield survey runs on the
 main thread and terrain streaming stops until a pool exists, because
 `TerrainStreamer` returns early without one. The inline worker's four callers are
 all Node — the headless runner and three test files. It does go through
-`structuredClone` and honour its transfer list, so a payload that a real `Worker`
+`structuredClone` and honor its transfer list, so a payload that a real `Worker`
 could not clone fails here too.
 
 ---
@@ -116,7 +116,7 @@ exists for exactly this, and now the boundary uses it.
 ```mermaid
 flowchart LR
     Q["<b>queue latency</b><br/>enqueued → dispatched"] --> QF["a deep queue wants<br/>more workers or fewer requests"]
-    R["<b>execution time</b><br/>dispatched → returned"] --> RF["a slow task wants<br/>optimising"]
+    R["<b>execution time</b><br/>dispatched → returned"] --> RF["a slow task wants<br/>optimizing"]
 
     classDef note fill:none,stroke:none,color:#64748b,font-style:italic
     class QF,RF note

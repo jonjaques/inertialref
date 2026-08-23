@@ -39,7 +39,7 @@ two better ones.
 **A simulation's difficulty should come from the situation, not from a
 multiplier.** If a level-30 pilot lands more gently than a level-1 pilot, the
 landing is not a simulation. Every skill in this game is a real skill the player
-has, exercised through equipment whose behaviour is transparent. A player who
+has, exercised through equipment whose behavior is transparent. A player who
 comes back after a year is exactly as good as they were.
 
 **Statistics fight the physics that already exists.** The engine computes real
@@ -111,16 +111,16 @@ and turn death into an errand.
 ## Ratchet 2 — Knowledge
 
 The [Almanac](exploration.md#the-almanac). Every body personally scanned, stamped
-with when and under which catalogue version.
+with when and under which catalog version.
 
 It is never lost, it works offline, it is not a power curve, and it is the thing
 most likely to still matter to a player after two hundred hours. It is also the
 only progression that survives everything: a destroyed ship, a wiped save
-restored from a 696-byte reference, a catalogue revision that retires a world you
+restored from a 696-byte reference, a catalog revision that retires a world you
 found.
 
 **Milestones exist but are not rewards.** _1,000 bodies. Every planet in Sol.
-A body of every class. 10,000 light-years travelled. A confirmed exoplanet
+A body of every class. 10,000 light-years traveled. A confirmed exoplanet
 ground-truthed._ They are recorded, they are displayed, and they unlock nothing —
 because the moment they unlock something they become a checklist, and a checklist
 is a different game.
@@ -137,7 +137,7 @@ page. There is a number — how many bodies carry your name — and there are th
 bodies themselves, which anyone arriving will see.
 
 **Resolved: personal statistics, no ranking.** Bodies surveyed, light-years
-travelled, firsts, worlds walked on — displayed for you, compared against nobody.
+traveled, firsts, worlds walked on — displayed for you, compared against nobody.
 A galaxy-wide ranking would reward volume over curiosity and push players toward
 efficient scan-and-move rather than the slow ground-truth surveys this design
 values most. Per-body attribution stays the social layer; it is social without
@@ -183,7 +183,7 @@ Three timelines, for pacing the curve. All three assume the
 | Week 1   | Sol, the Moon, first jump        | Sol fully surveyed, 4 systems      | 20 systems, first 100 ly             |
 | Month 1  | ~12 systems, _Cannon_ hull       | ~50 systems, grade D fit           | ~200 systems, grade B fit            |
 | Month 3  | ~40 systems, still in the bubble | Grade A drive, 400 ly out          | 1,000+ ly out, capability curve flat |
-| Month 6  | Beyond the catalogue horizon     | Deep frontier; Almanac is the game | Somewhere nobody has been            |
+| Month 6  | Beyond the catalog horizon     | Deep frontier; Almanac is the game | Somewhere nobody has been            |
 | The wall | Never hits one                   | ~month 4, when capability flattens | ~month 2, same                       |
 
 **"The wall" is not a failure.** When capability flattens, the game becomes

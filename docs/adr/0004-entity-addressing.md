@@ -54,7 +54,7 @@ Dynamic ids come from a counter stored in the save rather than a UUID: a random
 id would make two replays of the same session disagree, and the counter is
 exactly as unique while staying deterministic.
 
-System ids are either a real catalogue designation (`HIP71683`) or an encoded
+System ids are either a real catalog designation (`HIP71683`) or an encoded
 cell coordinate plus index (`P2s_1e_3_7`), so a procedural star's id decodes
 back to the cell that generates it — resolution is one cell generation rather
 than a lookup in a galaxy-wide index that would have to exist somewhere.

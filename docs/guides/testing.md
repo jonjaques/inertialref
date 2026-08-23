@@ -104,7 +104,7 @@ and the assertion was `now <= start`, which equality satisfies.
 ### 5. Example tests for boundaries
 
 Malformed JSON, a save from a newer schema, a frame that cannot be rebuilt, an
-unknown worker task, a version mismatch. These are the paths where behaviour is
+unknown worker task, a version mismatch. These are the paths where behavior is
 a _decision_ (refuse? default? migrate?) and the test documents the decision.
 
 ---
@@ -196,3 +196,4 @@ pnpm check                      # the gate: graph, lint, typecheck, test, build
 - [Observability](../concepts/observability.md) — the structures tests assert on
 - [Determinism](../concepts/determinism.md) — what the golden vectors protect
 - [AGENTS.md](../../AGENTS.md) — the rules a test is defending
+- [Agent handbook](../agents/README.md)

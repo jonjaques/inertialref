@@ -12,22 +12,24 @@ makes twelve capability claims that are supposed to be executable.
 
 ## What you are checking, and against what
 
-| Document             | Must still be true of                                 |
-| -------------------- | ----------------------------------------------------- |
-| `AGENTS.md`          | the invariants the code actually enforces             |
-| `.claude/rules/*.md` | `AGENTS.md` — it is downstream, never the source      |
-| `docs/adr/`          | the decision as implemented, or explicitly superseded |
-| `CONTEXT.md`         | what exists, what was measured, what must not return  |
-| `README.md`          | the twelve capability claims — `pnpm sim --self-test` |
-| `docs/roadmap.md`    | what is genuinely not built yet                       |
-| `CLAUDE.md`          | the commands and toolchain facts                      |
+| Document                     | Must still be true of                                 |
+| ---------------------------- | ----------------------------------------------------- |
+| `AGENTS.md`                  | the invariants the code actually enforces             |
+| `docs/agents/`               | the agent handbook — still describes how to work here |
+| `.claude/rules/*.md`         | `AGENTS.md` — it is downstream, never the source      |
+| `docs/adr/`                  | the decision as implemented, or explicitly superseded |
+| `CONTEXT.md`                 | what exists, what was measured, what must not return  |
+| `README.md`                  | the twelve capability claims — `pnpm sim --self-test` |
+| `docs/roadmap.md`            | what is genuinely not built yet                       |
+| `docs/guides/development.md` | the commands and toolchain facts                      |
+| `docs/STYLE.md`              | still describes the voice the docs actually use       |
 
 ## The specific checks that catch real drift
 
 - **Run the claims rather than reading them.** `pnpm sim --self-test` executes the twelve
   capabilities. If `README.md` claims something the self-test does not cover, that is a gap
   to name, not a sentence to trust.
-- **Verify every command in `CLAUDE.md` and `AGENTS.md` still exists** in `package.json`.
+- **Verify every command in `docs/guides/development.md` still exists** in `package.json`.
   A renamed script leaves a document that fails silently for the next reader.
 - **Check file paths named in prose.** `AGENTS.md` and `CONTEXT.md` cite specific modules;
   a rename leaves a dangling reference that reads as authoritative.
@@ -40,7 +42,7 @@ makes twelve capability claims that are supposed to be executable.
 
 ## House style, which is not optional here
 
-Read the surrounding file before writing a line into it. The voice is consistent and
+Read [`docs/STYLE.md`](../../docs/STYLE.md) and the surrounding file before writing a line into it. The voice is consistent and
 deliberate:
 
 - **Comments and documents explain _why_, and specifically why the obvious thing does not
@@ -49,12 +51,13 @@ deliberate:
 - Things tried and rejected get written down, along with the reason.
 - `CONTEXT.md` headings carry the finding, not a summary — "The horizon gap (resolved
   20 Aug 2026 — it was the triangle winding)".
+- Prose is American English, in the voice in `docs/STYLE.md`.
 - Dates are absolute.
 - Never create a documentation file that was not asked for. Prefer editing the existing one.
 
 ## What not to do
 
-Do not rewrite a document because you would have organised it differently. Do not soften a
+Do not rewrite a document because you would have organized it differently. Do not soften a
 rule you disagree with — report the disagreement instead. Do not delete a record of a bug
 because it is fixed; "worth not reintroducing" is the point of that section.
 

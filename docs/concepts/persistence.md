@@ -39,7 +39,7 @@ travels. So a save contains:
 | which systems were loaded | anything with an address  |
 | mutations                 |                           |
 
-A test asserts the shape of that claim rather than trusting it: the serialised
+A test asserts the shape of that claim rather than trusting it: the serialized
 save must be **under 2 KB** and must not contain the string `elevations`.
 
 ---

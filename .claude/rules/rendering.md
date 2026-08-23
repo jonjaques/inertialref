@@ -23,6 +23,6 @@ Reasoning: `AGENTS.md` § "The rules that actually matter" and § "Testing", ADR
 - **A headless GPU check is not a real one.** The renderer bug that killed a tab on every
   load reproduced only at `devicePixelRatio` 2.
 - **Terrain is sampled in body-fixed axes** — see `.claude/rules/determinism.md`.
-- **Look at the perf tab before optimising anything**, and before believing a performance
+- **Look at the perf tab before optimizing anything**, and before believing a performance
   claim in a design document. The first thing it found was that time warp had never worked
   above 5×.

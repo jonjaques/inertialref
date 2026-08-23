@@ -106,7 +106,7 @@ await ir.scenario('surface')
 
 Puts the ship on the ground. Watch the `chain` field gain two levels, `state`
 become `landed`, and local speed drop to zero while universe speed stays at tens
-of kilometres per second.
+of kilometers per second.
 
 ### 3. Watch a frame transition
 
@@ -171,9 +171,10 @@ time if you do not know it.
 
 ## Where to go next
 
-|                       |                                                             |
-| --------------------- | ----------------------------------------------------------- |
-| Understand the system | [Architecture](../architecture.md)                          |
-| Drive it properly     | [The harness](harness.md)                                   |
-| Change it safely      | [AGENTS.md](../../AGENTS.md) then [Extending](extending.md) |
-| Know what is missing  | [Roadmap](../roadmap.md)                                    |
+|                       |                                                              |
+| --------------------- | ------------------------------------------------------------ |
+| Understand the system | [Architecture](../architecture.md)                           |
+| Drive it properly     | [The harness](harness.md)                                    |
+| Change it safely      | [AGENTS.md](../../AGENTS.md), then [Extending](extending.md) |
+| Agent handbook        | [docs/agents/](../agents/README.md)                          |
+| Know what is missing  | [Roadmap](../roadmap.md)                                     |

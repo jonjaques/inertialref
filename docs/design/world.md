@@ -14,7 +14,7 @@ Setting, tone, and the diegetic frame that holds the real-data premise together.
 Humanity has the Reference Drive and has had it for about sixty years. That is
 long enough to have put outposts across a few hundred light-years and nowhere
 near long enough to have looked at any of it properly. **The Survey** is the
-distributed institution that maintains the catalogue — the record of what is
+distributed institution that maintains the catalog — the record of what is
 actually out there — and it is chronically, structurally behind, because the
 galaxy is large and there are not many people. You are a surveyor. Your job is to
 go and look.
@@ -30,9 +30,9 @@ its own:
 
 | Mechanic                                                     | The premise explains it                                         |
 | ------------------------------------------------------------ | --------------------------------------------------------------- |
-| Real astronomy is the catalogue                              | The Survey's record is humanity's record, which is the real one |
+| Real astronomy is the catalog                              | The Survey's record is humanity's record, which is the real one |
 | Procedural bodies are **projections**                        | The ship's computer models what should be there; it says so     |
-| [Catalogue revisions](galaxy.md#catalogue-revisions)         | The Survey publishes. That is what it does.                     |
+| [Catalog revisions](galaxy.md#catalog-revisions)         | The Survey publishes. That is what it does.                     |
 | [Discovery credit](exploration.md#discovery-credit)          | The record names who filed it, because records do               |
 | [Data is the only currency](exploration.md#the-data-economy) | The institution pays in access, because that is what it has     |
 | Inhabited space is tiny                                      | Sixty years is not long                                         |
@@ -80,7 +80,7 @@ All text in the game is one of three registers, and they never mix:
 | Register           | Used for                             | Example                                                                                                                             |
 | ------------------ | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
 | **Instrument**     | HUD, gauges, readouts                | `THERMAL 84% · VENT ADVISED`                                                                                                        |
-| **Record**         | Almanac, catalogue panels, revisions | `b:3 · rocky · 1.09 M⊕ · thin CO₂ · surveyed 2026-09-14 · hyg-4.1`                                                                  |
+| **Record**         | Almanac, catalog panels, revisions | `b:3 · rocky · 1.09 M⊕ · thin CO₂ · surveyed 2026-09-14 · hyg-4.1`                                                                  |
 | **Correspondence** | Survey messages, commissions         | _"Third request. The Anselm group still needs sub-2-Earth-mass confirmations and they are still not being fussy about which ones."_ |
 
 Correspondence is the only place with a human voice, it arrives rarely, and it is
@@ -147,7 +147,7 @@ paying out, which is honest about what it is.
 
 ## Related
 
-- [galaxy](galaxy.md) — the catalogue the Survey maintains
+- [galaxy](galaxy.md) — the catalog the Survey maintains
 - [exploration](exploration.md) — the job
 - [audio](audio.md) — how the silence is handled
 - [ux](ux.md) — the three registers, on screen

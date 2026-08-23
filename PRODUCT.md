@@ -94,7 +94,7 @@ and is not real.
 Two supporting claims, both load-bearing:
 
 - **The hard part is done and provable.** One inch resolves to 9.4 µm at
-  8.18 kpc from the galactic centre; 500 floating-origin rebases across 2,560 km
+  8.18 kpc from the galactic center; 500 floating-origin rebases across 2,560 km
   produce zero drift; the same tick count produces the same state hash at 60 Hz,
   144 Hz and 100× warp. Projects with this ambition usually die on exactly these
   problems, years in, when they are a rewrite rather than a refactor.
@@ -169,7 +169,7 @@ enforced by `pnpm graph`, not documented. `pnpm check` is the gate.
 | One person plus coding agents | Every system must be generated or simulated, never hand-authored at volume. A feature needing 200 hand-made assets is not a feature. |
 | Browser, ~10 W of laptop GPU  | Geometric fidelity sits well below the comparables; the budget goes to light transport and HDR output instead.                       |
 | Non-commercial                | No revenue funds servers, so solo must be the complete experience and the persistent universe an addition.                           |
-| No content pipeline           | Ships, stations and interiors are procedurally assembled from parts, not modelled.                                                   |
+| No content pipeline           | Ships, stations and interiors are procedurally assembled from parts, not modeled.                                                   |
 | Real data, forever changing   | Address stability and generation purity are non-negotiable.                                                                          |
 
 **Deliberately not built, with the seam named for each** — multiplayer, n-body
@@ -222,11 +222,11 @@ tilts, rotation periods, albedos and ring geometry, drawn from NASA and USGS
 surface, elevation, cloud and ring maps.
 
 **Attribution obligations, verified rather than assumed.** `data/catalog/` is a
-derived database under **CC BY-SA 4.0**, not the Apache licence that covers the
+derived database under **CC BY-SA 4.0**, not the Apache license that covers the
 code. The NASA Exoplanet Archive's requested acknowledgement is carried. Gaia is
 **deliberately unused** because ESA releases it CC BY-NC 3.0 IGO, and a
-non-commercial clause is not an open source licence. See `NOTICE` and
-[the catalogue guide](docs/guides/catalogue.md).
+non-commercial clause is not an open source license. See `NOTICE` and
+[the catalog guide](docs/guides/catalogue.md).
 
 **Absences that future work must not fabricate.** There are no users, no
 release, no testimonials, no press, no adoption numbers, and no benchmarks on
@@ -268,7 +268,7 @@ a game about looking at things rather than compliance boxes:
   plausible background — which here is a star filling the canopy. That is the
   design case, not a corner case. _Whether the current dev dock meets it has
   never been measured._
-- **No information by colour alone.** Provenance carries a dash pattern as well
+- **No information by color alone.** Provenance carries a dash pattern as well
   as opacity; scan state uses glyphs. Protanopia, deuteranopia and tritanopia
   palettes.
 - **Three text sizes** scaling all UI including the HUD; minimum body text 16 px

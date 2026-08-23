@@ -16,7 +16,7 @@ costs. The planetarium removes the ship entirely. There is no fuel, no heat, no
 something and look at it.
 
 That sounds like a sandbox and it is not. It is a **reading room for the same
-data the game is built on** — the real catalogue, the real orbits, the real
+data the game is built on** — the real catalog, the real orbits, the real
 physical parameters — and it exists because this project has one asset no
 competitor has: a sky that is derived from measurements rather than painted, and
 which is therefore worth examining rather than merely flying through.
@@ -27,7 +27,7 @@ running world**: you can leave a ship in orbit of Mars, spend ten minutes on
 Saturn's rings, and come back to find the ship exactly where it was with the
 same state hash. There is no "load a different mode".
 
-✅ **Built.** Camera, catalogue, orbit traces, labels, presets, dockable panels,
+✅ **Built.** Camera, catalog, orbit traces, labels, presets, dockable panels,
 touch. What is not built is listed at the bottom.
 
 ---
@@ -77,7 +77,7 @@ free-fly space browser has: being lost, at an unknown scale, pointed at nothing.
 | `Home`                | Back to Earth                  |
 
 **Distance is logarithmic everywhere.** The range this camera covers is from a
-kilometre above a moon to a hundred light years — nineteen decades. Interpolated
+kilometer above a moon to a hundred light years — nineteen decades. Interpolated
 linearly, a fly-to spends 99.9% of its time in the last decade and reads as a
 cut; every zoom is a multiply and every transition eases over `log(distance)`.
 The same trap [ADR-0010](../adr/0010-cinematic-director.md) documents for a
@@ -105,7 +105,7 @@ Everything is a **panel**, and every panel is dockable — see
 
 | Panel         | Answers                                                         |
 | ------------- | --------------------------------------------------------------- |
-| **Catalogue** | Where can I go? Search by name or designation, browse by system |
+| **Catalog** | Where can I go? Search by name or designation, browse by system |
 | **Object**    | What is this? Real data, provenance, orbit, and its address     |
 | **View**      | Names, orbit traces, the ship, the lens                         |
 | **Presets**   | Lighting, framing, and a short tour                             |
@@ -190,7 +190,7 @@ get to and what will it cost". The planetarium answers "what is out there and
 what does it look like", has no route planner and no notion of range, and is not
 drawn on any surface inside the ship because there is no ship.
 
-They will share a catalogue index and nothing else.
+They will share a catalog index and nothing else.
 
 **It is not photo mode.** [Photo mode](art.md#photo-mode) is entered from the
 Canopy console during play, keeps the ship, and exports an image stamped with the
@@ -203,7 +203,7 @@ address. The planetarium has no ship to be in.
 | Thing                        | Note                                                                                     |
 | ---------------------------- | ---------------------------------------------------------------------------------------- |
 | Bookmarks                    | ⬜ The address is already the whole record; the store is what is missing                 |
-| Filters over the catalogue   | ⬜ [galaxy](galaxy.md#interactions) lists the fields; the planetarium wants the same set |
+| Filters over the catalog   | ⬜ [galaxy](galaxy.md#interactions) lists the fields; the planetarium wants the same set |
 | Measure between two objects  | ⬜ Shift-click two things, get a distance                                                |
 | Surface-level free look      | ⬜ The observatory's floor is the datum sphere; standing on the ground is a flight mode  |
 | Export a still               | ⬜ Photo mode's export, without the ship                                                 |

@@ -1,4 +1,4 @@
-# ADR-0001: Universe coordinates are sectorised fixed-point plus a double offset
+# ADR-0001: Universe coordinates are sectorized fixed-point plus a double offset
 
 Status: accepted · 2026-08-19
 
@@ -13,15 +13,15 @@ The obvious representations all fail somewhere in that range:
 
 | Representation            | Fails how                                                                                                                                            |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `float64` absolute metres | 52-bit mantissa: at the galactic rim an ULP is ~100 km.                                                                                              |
-| `float32` absolute metres | Useless past a few kilometres.                                                                                                                       |
-| `int64` millimetres       | 2^63 mm is 0.97 ly. The galaxy needs ~100,000.                                                                                                       |
-| `int64` metres            | 975 ly. Still two orders short.                                                                                                                      |
-| `BigInt` / int128         | Works, but BigInt arithmetic is roughly an order of magnitude slower than double math in the inner loop of a 64 Hz simulation, and serialises badly. |
+| `float64` absolute meters | 52-bit mantissa: at the galactic rim an ULP is ~100 km.                                                                                              |
+| `float32` absolute meters | Useless past a few kilometers.                                                                                                                       |
+| `int64` millimeters       | 2^63 mm is 0.97 ly. The galaxy needs ~100,000.                                                                                                       |
+| `int64` meters            | 975 ly. Still two orders short.                                                                                                                      |
+| `BigInt` / int128         | Works, but BigInt arithmetic is roughly an order of magnitude slower than double math in the inner loop of a 64 Hz simulation, and serializes badly. |
 
 ## Decision
 
-A position is an **int32 sector index per axis plus a float64 offset in metres
+A position is an **int32 sector index per axis plus a float64 offset in meters
 within that sector**, where the sector edge is **2^40 m** (≈ 7.35 AU).
 
 ```ts
@@ -31,11 +31,11 @@ interface UniverseVector {
   sz: number // int32 sector index
   ox
   oy
-  oz: number // metres, normalised into [0, 2^40)
+  oz: number // meters, normalized into [0, 2^40)
 }
 ```
 
-The invariant — offsets normalised into `[0, SECTOR_SIZE)` — is maintained by
+The invariant — offsets normalized into `[0, SECTOR_SIZE)` — is maintained by
 every constructor. Nothing else in the codebase may claim to be an absolute
 position.
 
@@ -54,7 +54,7 @@ what makes this safe to use as canonical state rather than as a rendering trick.
 | Addressable half-extent         | 2^71 m ≈ 2.36e21 m ≈ 249,000 ly |
 | Worst-case resolution, anywhere | 2^40 × 2^-52 m ≈ 0.24 mm        |
 
-Measured: an inch-scale displacement 8.18 kpc from the galactic centre resolves
+Measured: an inch-scale displacement 8.18 kpc from the galactic center resolves
 to within 9.4 µm (capability check 7). The naive double representation cannot
 resolve it at all — `8000 * PARSEC + 0.0254 === 8000 * PARSEC` is `true`.
 
@@ -73,14 +73,14 @@ resolve it at all — `8000 * PARSEC + 0.0254 === 8000 * PARSEC` is `true`.
 
 ## Consequences
 
-- Positions are 6 numbers, JSON-serialisable, structured-cloneable, and cost
+- Positions are 6 numbers, JSON-serializable, structured-cloneable, and cost
   nothing to send to a worker.
-- Differences between two positions come back as an ordinary `Vec3` in metres,
+- Differences between two positions come back as an ordinary `Vec3` in meters,
   so all downstream maths is plain double arithmetic.
-- The 0.24 mm floor is a hard limit. Sub-millimetre gameplay (assembling
-  machinery from millimetre parts) would need a smaller sector, which costs
+- The 0.24 mm floor is a hard limit. Sub-millimeter gameplay (assembling
+  machinery from millimeter parts) would need a smaller sector, which costs
   range. Nothing planned needs it.
 - `fromMeters` is limited by the double it is handed, not by this scheme: a
   galactic-scale literal has already lost precision before it arrives. It is
-  used for placing catalogue stars, whose published positions are uncertain by
+  used for placing catalog stars, whose published positions are uncertain by
   far more, and is the wrong tool for anything else.

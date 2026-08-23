@@ -16,7 +16,7 @@ always tell which.
 
 ```mermaid
 flowchart TB
-    OBS["<b>Observed</b> ✅<br/>from a published catalogue<br/><i>truth, with a citation</i>"]
+    OBS["<b>Observed</b> ✅<br/>from a published catalog<br/><i>truth, with a citation</i>"]
     PRJ["<b>Projected</b> 🟡<br/>generated from observed properties<br/><i>what the ship's computer expects</i>"]
     SUR["<b>Surveyed</b> ⬜<br/>you flew there and scanned it<br/><i>your own observation</i>"]
 
@@ -42,23 +42,23 @@ Every body carries `provenance`, and the UI shows it everywhere the body appears
 
 | Provenance  | Drawn as                      | Panel shows                                         |
 | ----------- | ----------------------------- | --------------------------------------------------- |
-| `observed`  | Solid, full colour            | Catalogue name, designation, source, release        |
+| `observed`  | Solid, full color            | Catalog name, designation, source, release        |
 | `projected` | Dashed outline, 60% opacity   | "Projected from stellar parameters — not confirmed" |
-| `surveyed`  | Solid, with your survey stamp | Your scan date, tick, and catalogue version         |
+| `surveyed`  | Solid, with your survey stamp | Your scan date, tick, and catalog version         |
 
 > 🎮 Designer's Note: This is the single highest-leverage idea in the bible.
 > Every procedural space game has to choose between claiming its content is real
 > (dishonest, and it breaks the moment a player checks) and admitting it is fake
 > (which deflates it). The third option — _it is a stated prediction, and going
 > to look is the game_ — turns the seam into the premise. It also means the
-> project can ship with a thin catalogue and get better forever without a single
+> project can ship with a thin catalog and get better forever without a single
 > design change.
 
 ---
 
 ## Data sources
 
-The catalogue is an **ingest**, not a hand-transcription. ✅ **Built** — see
+The catalog is an **ingest**, not a hand-transcription. ✅ **Built** — see
 [`docs/guides/catalogue.md`](../guides/catalogue.md) for how to operate it.
 `data/catalog/stars-150ly.irsc` holds **7,123 systems and 702 confirmed
 planets**, 179 KB brotli, built by `apps/ingest` from HYG v4.4 and the NASA
@@ -66,17 +66,17 @@ Exoplanet Archive and committed. It replaced 18 hand-entered stars, which is the
 swap that file's comment promised would change nothing downstream — it changed
 three signatures and no architecture.
 
-| Dataset                      | Provides                                                  | Scale                                                                                                                                                           | Licence posture                                                                                                                                                                                                    |
+| Dataset                      | Provides                                                  | Scale                                                                                                                                                           | License posture                                                                                                                                                                                                    |
 | ---------------------------- | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Gaia DR3** (ESA)           | Astrometry, parallax, photometry, radial velocity         | ~1.8 billion sources [Source: ESA Gaia Data Release 3, June 2022]                                                                                               | ⛔ **CC BY-NC 3.0 IGO — non-commercial.** Verified 2026-08-19. Credit line `Credit: ESA, Gaia DPAC`. See [spike 4](../spikes.md#4--gaia-and-hyg-attribution-terms) — **this keeps Gaia out of the shipped bundle** |
 | **HYG v4.4**                 | Merged Hipparcos + Yale + Gliese, pre-cleaned, game-sized | 119,614 rows, 109,390 with usable parallax [Source: `hyg_v44.csv`, measured]                                                                                    | CC BY-SA 4.0 — attribution required, share-alike reaches the packed binary                                                                                                                                         |
-| **NASA Exoplanet Archive**   | Confirmed exoplanets, orbital elements, masses, radii     | **6,336** confirmed planets; 861 within 150 ly around 550 hosts [Source: archive TAP service, read 2026-08-19 — the archive updates weekly, never hard-code it] | No licence stated. Operated by Caltech under NASA contract; **not confirmed public domain**. Use the requested acknowledgement                                                                                     |
-| **CNS5 / Gliese**            | Completeness within 25 pc                                 | ~5,900 objects [Source: Golovin et al., _The Fifth Catalogue of Nearby Stars_, 2023]                                                                            | Open, attribution                                                                                                                                                                                                  |
-| **Open Exoplanet Catalogue** | Cross-check, community corrections                        | —                                                                                                                                                               | MIT                                                                                                                                                                                                                |
+| **NASA Exoplanet Archive**   | Confirmed exoplanets, orbital elements, masses, radii     | **6,336** confirmed planets; 861 within 150 ly around 550 hosts [Source: archive TAP service, read 2026-08-19 — the archive updates weekly, never hard-code it] | No license stated. Operated by Caltech under NASA contract; **not confirmed public domain**. Use the requested acknowledgement                                                                                     |
+| **CNS5 / Gliese**            | Completeness within 25 pc                                 | ~5,900 objects [Source: Golovin et al., _The Fifth Catalog of Nearby Stars_, 2023]                                                                            | Open, attribution                                                                                                                                                                                                  |
+| **Open Exoplanet Catalog** | Cross-check, community corrections                        | —                                                                                                                                                               | MIT                                                                                                                                                                                                                |
 
 **Start with HYG.** It is the right size to ship in a browser, it is already
 merged and cleaned, and it covers exactly the volume where players will spend
-their first hundred hours. It is also the only one of the three whose licence is
+their first hundred hours. It is also the only one of the three whose license is
 unambiguous.
 
 > **The dataset moved.** HYG now lives at
@@ -86,7 +86,7 @@ unambiguous.
 > `media/` path. ✅ The ingest pins the URL and asserts on the decompressed size,
 > so this fails loudly rather than silently ingesting a pointer.
 
-**Gaia is not a "later, larger ingest".** Its licence forbids commercial use,
+**Gaia is not a "later, larger ingest".** Its license forbids commercial use,
 which is a restriction this project deliberately chose not to carry — see
 [sustainability](sustainability.md#data-licensing-is-the-constraint-that-bites).
 Until ESA answers a written request, Gaia is a source the ingest may _consult_ for
@@ -94,7 +94,7 @@ verification, not one it ships.
 
 ### The horizon of knowledge
 
-Gaia's completeness falls off with distance. Within ~25 parsecs the catalogue is
+Gaia's completeness falls off with distance. Within ~25 parsecs the catalog is
 close to complete; at a few kiloparsecs it holds only the intrinsically bright,
 and the great majority of the Milky Way's estimated 100–400 billion stars
 [Source: standard estimates; see NASA/ESA Milky Way summaries] has never been
@@ -111,29 +111,29 @@ rendering its own coverage.
 
 ---
 
-## Catalogue revisions
+## Catalog revisions
 
 The hard problem the whole three-layer model exists to solve.
 
 **The problem.** Generation is a pure function of seed and address, which is what
 makes the universe reproducible, streamable and 696 bytes to save. But the
-catalogue is an _input_ to generation, and the catalogue changes. A star with no
+catalog is an _input_ to generation, and the catalog changes. A star with no
 known planets today may have three confirmed next year. If that shifts every
 generated body around it, then every save, every Almanac entry and every
 discovery record referring to those bodies is silently wrong.
 
 ### The four rules
 
-**Rule 1 — the catalogue version is an explicit generation input.**
+**Rule 1 — the catalog version is an explicit generation input.**
 
 ```
 bodies(system, seed, catalogueVersion) → BodyManifest
 ```
 
-Same seed and same catalogue version produce the same universe, forever, on any
+Same seed and same catalog version produce the same universe, forever, on any
 machine, offline. Determinism is completely preserved; it simply now has two
 inputs instead of one. `packages/procedural` already versions generation
-algorithms through `algorithm()` and `manifest()` — the catalogue version joins
+algorithms through `algorithm()` and `manifest()` — the catalog version joins
 that manifest and rides the same machinery.
 
 **Rule 2 — address indices are issue ordinals, not orbital ordinals.**
@@ -200,7 +200,7 @@ The mechanic. A revision is a **diegetic event**, not a patch note.
 
 **Discovery credit is never revoked.** You were the first to survey what was
 believed to be there, and that remains true. The Almanac keeps the historical
-entry with its catalogue version stamped on it, and adds the new body as a fresh,
+entry with its catalog version stamped on it, and adds the new body as a fresh,
 unsurveyed target — which is a reason to go back.
 
 **What this buys, for free:**
@@ -209,7 +209,7 @@ unsurveyed target — which is a reason to go back.
 | --------------------------- | ---------------------------------------------------------------------------------------------------- |
 | Recurring content           | Real astronomy publishes continuously, forever, at no cost to this project                           |
 | A reason to revisit         | A surveyed system can become unsurveyed again, honestly                                              |
-| A defence against staleness | The galaxy improves without anyone authoring anything                                                |
+| A defense against staleness | The galaxy improves without anyone authoring anything                                                |
 | Something genuinely novel   | It requires the universe to be a versioned pure function, which is precisely what milestone 1 proved |
 
 **Resolved: continuous ingest, event-shaped delivery.**
@@ -226,7 +226,7 @@ versions is not a nicety — it is the thing standing between continuous ingest 
 silently corrupting a hundred thousand saves. It needs to fail loudly on any
 identity change and it needs to run on every single ingest, automatically.
 
-**Resolved: the persistent universe runs one global catalogue version, advanced
+**Resolved: the persistent universe runs one global catalog version, advanced
 on an announced schedule.**
 
 Ingest stays continuous behind it. Solo modes are therefore the bleeding edge —
@@ -254,7 +254,7 @@ Worth stating plainly, because it is easy to assume real data is merely flavour.
   Wikipedia. If the numbers match, the game has earned a kind of trust that no
   amount of art direction buys.
 - **Multiple-star systems are real and currently simplified.** α Cen, Sirius,
-  Procyon, 61 Cyg and 40 Eridani are all multiples and are modelled as single
+  Procyon, 61 Cyg and 40 Eridani are all multiples and are modeled as single
   stars today; `components` records the truth so the simplification is visible
   rather than hidden. Binaries are a [content](content.md) item, not an
   architectural one — a binary is two bodies in one system frame.
@@ -278,12 +278,12 @@ too):
 
 | Tier         | Range           | What is drawn                                                                                                        | Source                |
 | ------------ | --------------- | -------------------------------------------------------------------------------------------------------------------- | --------------------- |
-| **Local**    | 0 – 150 ly      | Every catalogued star individually, at true position, coloured by blackbody temperature from its real spectral class | Catalogue             |
-| **Regional** | 150 ly – 5 kly  | Catalogued bright stars individually; the rest as a sampled point cloud                                              | Catalogue + generated |
+| **Local**    | 0 – 150 ly      | Every catalogued star individually, at true position, colored by blackbody temperature from its real spectral class | Catalog             |
+| **Regional** | 150 ly – 5 kly  | Catalogued bright stars individually; the rest as a sampled point cloud                                              | Catalog + generated |
 | **Galactic** | 5 kly – 100 kly | A density volume — arms, bar, bulge, halo                                                                            | Generated             |
 
 The **horizon of knowledge** shell is drawn across all three as a translucent,
-irregular boundary with a completeness readout: _"catalogue completeness at this
+irregular boundary with a completeness readout: _"catalog completeness at this
 distance: 4%"_.
 
 ### Interactions
@@ -294,7 +294,7 @@ distance: 4%"_.
 | Select system      | Click a star             | Info panel: real data, provenance, citation, your survey status  |
 | Plot route         | Select destination       | Route computed; see below                                        |
 | Bookmark           | `B` on a selected system | Saved to a personal list, syncs online, works offline            |
-| Search             | `/` then type            | Name, designation (HIP/HD/Gliese/2MASS), or catalogue id         |
+| Search             | `/` then type            | Name, designation (HIP/HD/Gliese/2MASS), or catalog id         |
 | Filter             | Panel, multi-select      | See table below                                                  |
 | Measure            | Shift-click two systems  | Straight-line distance and minimum jump count                    |
 
@@ -303,7 +303,7 @@ distance: 4%"_.
 `spectral class` · `scoopable` · `has confirmed planets` · `has projected planets`
 · `distance from here` · `distance from Sol` · `visited by me` · `surveyed by me` ·
 `first-discovered by me` · `first-discovered by anyone` · `within jump range` ·
-`within N jumps` · `binary/multiple` · `catalogue completeness`
+`within N jumps` · `binary/multiple` · `catalog completeness`
 
 `first-discovered by anyone` is the one that will matter most socially. Turning it
 on beyond a few hundred light-years should render the map almost entirely dark,
@@ -388,7 +388,7 @@ under 200 ms.
 **Resolved: two tiers of the same overlay.** Both keep the cockpit running behind
 them — the map is a HUD layer, never a place you go.
 
-| Tier         | For                                                          | Behaviour                                                                                                                                               |
+| Tier         | For                                                          | Behavior                                                                                                                                               |
 | ------------ | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Compact**  | Routine target selection; the common case                    | A strip over the lower canopy at 70% opacity. Bodies, scan state, distance. One click plots a burn and it closes. Must be under 200 ms open-to-plotted. |
 | **Planning** | Long routes, multi-leg expeditions, cargo and passenger runs | Expands to fill the canopy. Full orrery, filters, route comparison, multi-leg sequencing, fuel and time projected across the whole itinerary.           |
@@ -409,7 +409,7 @@ critical path for everything above.
 
 ```mermaid
 flowchart LR
-    RAW["raw dataset<br/>HYG csv · NASA archive"] --> NORM["normalise<br/>ICRS → galactic<br/>units → SI"]
+    RAW["raw dataset<br/>HYG csv · NASA archive"] --> NORM["normalize<br/>ICRS → galactic<br/>units → SI"]
     NORM --> RES["resolve identity<br/>HIP/HD/Gliese/2MASS<br/>→ one SystemId"]
     RES --> DIFF["diff vs previous<br/>version"]
     DIFF --> PACK["pack<br/>binary, chunked<br/>by galactic cell"]
@@ -419,7 +419,7 @@ flowchart LR
     style DIFF fill:#0369a1,stroke:#0c4a6e,color:#fff
 ```
 
-The red box is the hard one. **Cross-catalogue identity resolution** — deciding
+The red box is the hard one. **Cross-catalog identity resolution** — deciding
 that HIP 71683, HD 128620, GJ 559 A and a 2MASS designation are one system — is
 the step where an ingest silently corrupts itself, and it is what
 [Rule 2](#the-four-rules) depends on. ✅ It lives in
@@ -428,7 +428,7 @@ no rebuild can move, and has golden vectors covering every rung of the ladder.
 The remaining 0.7% — 50 systems whose only identifier is HYG's own row key — are
 counted by every ingest and asserted on by a test.
 
-The blue box is the one still open. ⬜ A **structured diff** between catalogue
+The blue box is the one still open. ⬜ A **structured diff** between catalog
 versions is the input to the revision notice, and it must be generated by the
 pipeline rather than reconstructed at runtime. Both sides of it exist: every save
 records `catalog`, and every build records its version and its sources' digests
@@ -436,7 +436,7 @@ in `manifest.json`. Nothing yet compares two of them.
 
 ### Measured: the local tier is cheap
 
-[Spike 3](../spikes.md#3--catalogue-bundle-size) packed HYG v4.4 into a 16-byte
+[Spike 3](../spikes.md#3--catalog-bundle-size) packed HYG v4.4 into a 16-byte
 record and measured it. The worry was misplaced by an order of magnitude.
 
 | Radius     | Stars     | HYG rows as JSON | Packed   | **+ ids + names, brotli** |
@@ -461,7 +461,7 @@ The record layout, because it is the whole answer:
 | 0–8   | position, 3 × int24            | 1.13 AU per step at 150 ly — four orders below the parallax error, so the quantiser is free |
 | 9     | spectral class                 | class × subclass × giant flag                                                               |
 | 10–11 | absolute magnitude, int16 ×100 | luminosity is `10^((4.85 − M)/2.5)`; **storing both is storing it twice**                   |
-| 12–13 | colour index B−V, int16 ×1000  | `-32768` for unknown                                                                        |
+| 12–13 | color index B−V, int16 ×1000  | `-32768` for unknown                                                                        |
 | 14–15 | flags, reserved                | component count, has-name, provenance                                                       |
 
 Store it **columnar, not interleaved** — the same fields structure-of-arrays
@@ -510,4 +510,4 @@ use Yale-style prefixes (`dM4`, `sdK7`, `gK5`). A naive `spect[0]` test classifi
 - [content](content.md) — what generation puts in the gaps
 - [ADR-0004](../adr/0004-entity-addressing.md) — the addressing rules Rule 2 extends
 - [ADR-0005](../adr/0005-procedural-seeds.md) — the seed derivation Rule 1 rides on
-- [`docs/concepts/determinism.md`](../concepts/determinism.md) — why the catalogue version has to be an explicit input
+- [`docs/concepts/determinism.md`](../concepts/determinism.md) — why the catalog version has to be an explicit input

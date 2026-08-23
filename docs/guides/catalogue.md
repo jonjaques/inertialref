@@ -1,9 +1,9 @@
-# The star catalogue
+# The star catalog
 
 How real astronomy gets into the game, how to rebuild it when astronomy
 publishes something, and the things that will bite you if you change it.
 
-> [galaxy](../design/galaxy.md) is _why_ the catalogue is shaped this way —
+> [galaxy](../design/galaxy.md) is _why_ the catalog is shaped this way —
 > the three-layer body model, the revision rules, the horizon of knowledge.
 > This page is _how to operate it_.
 
@@ -42,7 +42,7 @@ pnpm catalog:build --refresh   # ...re-downloading rather than using the cache
 `report` is the one to run first. Everything the ingest did is printed —
 how many rows it dropped, how many ids it could only derive from HYG's own row
 numbering, how many planets it failed to match and why. **An ingest that quietly
-drops a third of the catalogue looks exactly like one that does not**, so the
+drops a third of the catalog looks exactly like one that does not**, so the
 counts are the output and the file is a side effect.
 
 ---
@@ -51,7 +51,7 @@ counts are the output and the file is a side effect.
 
 ```mermaid
 flowchart LR
-    RAW["<b>fetch</b><br/>HYG csv.gz · NASA TAP"] --> NORM["<b>normalise</b><br/>ICRS → galactic<br/>units → SI"]
+    RAW["<b>fetch</b><br/>HYG csv.gz · NASA TAP"] --> NORM["<b>normalize</b><br/>ICRS → galactic<br/>units → SI"]
     NORM --> RES["<b>resolve identity</b><br/>HIP/HD/HR/Gliese<br/>→ one SystemId"]
     RES --> MERGE["<b>merge planets</b><br/>+ the Solar System"]
     MERGE --> PACK["<b>pack</b><br/>columnar binary"]
@@ -63,7 +63,7 @@ flowchart LR
 | Stage                                 | Lives in                                        |
 | ------------------------------------- | ----------------------------------------------- |
 | fetch, with pinned URLs and a digest  | `apps/ingest/src/sources.ts`                    |
-| CSV, normalise, group, match          | `apps/ingest/src/build.ts`                      |
+| CSV, normalize, group, match          | `apps/ingest/src/build.ts`                      |
 | choosing the name that goes on screen | `apps/ingest/src/naming.ts`                     |
 | the Solar System, by hand             | `apps/ingest/src/solarSystem.ts`                |
 | **the codec, both halves**            | `packages/universe/src/catalog/format.ts`       |
@@ -80,7 +80,7 @@ the first.
 
 ## The sources
 
-| Source                                                                            | Provides                                                                       | Licence                                                    |
+| Source                                                                            | Provides                                                                       | License                                                    |
 | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------- |
 | [HYG v4.4](https://codeberg.org/astronexus/hyg)                                   | 119,614 stars: positions, parallaxes, magnitudes, spectral types, designations | **CC BY-SA 4.0**                                           |
 | [NASA Exoplanet Archive](https://exoplanetarchive.ipac.caltech.edu/) `pscomppars` | confirmed planets with published orbits, masses and radii                      | none stated; acknowledgement requested                     |
@@ -88,14 +88,14 @@ the first.
 
 **Gaia is deliberately absent.** Its data are CC BY-NC 3.0 IGO, and a
 non-commercial clause on the data the game cannot run without would attach that
-restriction to the shipped artefact. [Spike 4](../spikes.md#4--gaia-and-hyg-attribution-terms)
+restriction to the shipped artifact. [Spike 4](../spikes.md#4--gaia-and-hyg-attribution-terms)
 has the verbatim terms.
 
 ### Two things about HYG that cost an afternoon each
 
 **The files are git-lfs pointers.** Codeberg's `raw/` path serves the _pointer_ —
 a valid, 133-byte text file that a downloader reports as a success and a CSV
-parser reports as a catalogue with zero rows. Use the `media/` path. The fetcher
+parser reports as a catalog with zero rows. Use the `media/` path. The fetcher
 asserts on the decompressed size for exactly this reason.
 
 **`dist >= 100000` is a sentinel, not a distance.** 10,224 rows carry it, meaning
@@ -132,9 +132,9 @@ Rung 5 is the one to watch. Those ids move if HYG renumbers, and a moved id is a
 save pointing at nothing. `pnpm catalog:report` prints the count; a test asserts
 it stays under 1%.
 
-`Gl` and `GJ` fold to one prefix. They are the same catalogue written two ways,
+`Gl` and `GJ` fold to one prefix. They are the same catalog written two ways,
 and HYG v4.4 itself merged five duplicate pairs that existed because one spelling
-had not been recognised as the other.
+had not been recognized as the other.
 
 ---
 
@@ -144,7 +144,7 @@ Three separate jobs, and conflating them is how a star ends up displayed as
 `HIP71683`:
 
 - **`id`** — stable forever, never shown.
-- **`name`** — the one that goes on the HUD. **Not stable**: a catalogue revision
+- **`name`** — the one that goes on the HUD. **Not stable**: a catalog revision
   can give a star an IAU proper name it did not have, and that must change what is
   on screen without changing any address.
 - **`designations`** — every alternate, so search finds the star by any of them
@@ -190,12 +190,12 @@ recognises.
 
 **Store measurements, derive everything else.** HYG ships a `lum` column that is
 exactly `10^((4.85 − absmag)/2.5)` — the absolute magnitude restated, in V band,
-labelled as if it were bolometric. Packing it would spend bytes to repeat the
+labeled as if it were bolometric. Packing it would spend bytes to repeat the
 file and would freeze the V-band error in place.
 
-So the file carries a position, an absolute magnitude, a colour index, a spectral
-string and a handful of catalogue numbers. Temperature, bolometric luminosity,
-radius, mass and blackbody colour are computed at load by
+So the file carries a position, an absolute magnitude, a color index, a spectral
+string and a handful of catalog numbers. Temperature, bolometric luminosity,
+radius, mass and blackbody color are computed at load by
 `catalog/photometry.ts`. Same for names: a Bayer designation is a Greek letter
 plus a constellation, both small integers, and `Alpha Centauri` is reconstructed
 from tables the client already contains.
@@ -224,15 +224,15 @@ Measured against seventeen stars with published values:
 
 The luminosity error concentrates in late-M dwarfs, where the bolometric
 correction is steep and the published values themselves disagree; Proxima
-Centauri is the worst case in the catalogue at roughly half its catalogued
+Centauri is the worst case in the catalog at roughly half its catalogued
 luminosity, and it is a flare star at the edge of the calibration.
 
 Two findings worth keeping:
 
-- **The spectral classification beats the colour index** as a temperature source —
+- **The spectral classification beats the color index** as a temperature source —
   2.8% against 4.7%, and 5% at the worst case against 18%. B−V is a photometric
   proxy whose fit bends badly at the red end, where most of the neighbourhood
-  lives. The exception, also measured: for giants the colour index is better.
+  lives. The exception, also measured: for giants the color index is better.
 - **The two tables must come from one source.** An early version paired a
   Pecaut & Mamajek bolometric correction with an older temperature scale. Both are
   individually defensible and they are not interchangeable inputs to the same
@@ -267,8 +267,8 @@ supply` against `data/catalog/manifest.json` from the previous build. A large
    noise. It rides in every save (`SaveGame.catalog`) and is what a future
    revision notice will diff against.
 
-> **Not yet built:** the structured diff between two catalogue versions, which is
-> what [galaxy § catalogue revisions](../design/galaxy.md#catalogue-revisions)
+> **Not yet built:** the structured diff between two catalog versions, which is
+> what [galaxy § catalog revisions](../design/galaxy.md#catalog-revisions)
 > needs to turn an ingest into an in-game event. The version is recorded on both
 > sides; nothing yet compares them.
 
@@ -276,10 +276,10 @@ supply` against `data/catalog/manifest.json` from the previous build. A large
 
 ## Things that will bite you
 
-**The catalogue is an argument, never a global.** Every function that can produce
+**The catalog is an argument, never a global.** Every function that can produce
 a catalogued system takes it explicitly — `resolveSystem`, `systemsWithin`,
 `new World({ catalog })`. A module-level singleton would be smaller and would make
-the catalogue version a hidden input to generation, which
+the catalog version a hidden input to generation, which
 [Rule 1](../design/galaxy.md#the-four-rules) exists to prevent.
 
 **Workers do not have it.** Shipping a 458 KB table to every worker so it can
@@ -289,7 +289,7 @@ catalogued _count_, or a whole resolved stub. See the header of
 
 **Procedural fill subtracts, and stops.** The density model says how many stars
 there _are_, not how many are _unknown_. Generating the full expected count on top
-of the catalogue would double the solar neighbourhood; generating none would leave
+of the catalog would double the solar neighbourhood; generating none would leave
 it five times too sparse. So the fill is the difference — and it is switched off
 entirely inside `completeRadiusLightYears` (25 ly), because the first version
 without that put an invented M dwarf 3.4 light-years away, closer than Proxima
@@ -305,13 +305,13 @@ the system and every save pointing at them.
 **Spectral types are not MK strings.** `dM4` is an M dwarf, `sdM4` is a subdwarf,
 `DA2` is a white dwarf, `A0m...` is an A0 with a peculiarity, and 571 entries
 within 150 ly are the single lowercase letter `m`. A `spect[0]` parse classifies
-87% of the catalogue and is quietly wrong about the rest. `catalog.test.ts` has a
+87% of the catalog and is quietly wrong about the rest. `catalog.test.ts` has a
 golden vector for every one of those shapes.
 
-**The procedural fill's IMF does not know what the catalogue is missing.** It
+**The procedural fill's IMF does not know what the catalog is missing.** It
 draws B stars at their true frequency, so a sweep can put an invented 5,000 L☉ B
 star in the sky brighter than anything real in it — and real B stars that close do
-not exist, which is exactly why the catalogue has none. Conditioning the fill on
+not exist, which is exactly why the catalog has none. Conditioning the fill on
 per-spectral-class completeness is the fix, and it is the same curve the
 [horizon of knowledge](../design/galaxy.md#the-horizon-of-knowledge) wants.
 
@@ -334,8 +334,8 @@ and the star map is supposed to draw it.
 
 ## Planetary surface maps
 
-The same app, a different artefact, and deliberately a separate command:
-the catalogue is 34 MB in and 458 KB out and takes seconds; this is 600 MB in
+The same app, a different artifact, and deliberately a separate command:
+the catalog is 34 MB in and 458 KB out and takes seconds; this is 600 MB in
 and 11 MB out and takes minutes. Bundling them would re-download the Voyager
 archive every time NASA publishes an exoplanet.
 
@@ -371,7 +371,7 @@ at all, because Jupiter's belts move and every "map of Jupiter" is a mosaic from
 one particular week.
 
 Titan, Enceladus, Iapetus, Triton, Phobos, Deimos and the Uranian moons have no
-vendored map and render from their measured albedo and colour.
+vendored map and render from their measured albedo and color.
 
 ### Two transforms that are not a resize
 
@@ -385,7 +385,7 @@ so it silently downcast LOLA's 16-bit product and every gradient came out 256
 times too small. `grey16` is the one that preserves it.
 
 **Luminance to alpha.** A cloud map published as a greyscale JPEG is a coverage
-mask wearing a colour image's clothes. Drawn as colour it is a grey shell over
+mask wearing a color image's clothes. Drawn as color it is a gray shell over
 the whole planet; moved into alpha it is weather.
 
 Earth's ocean mask rides in the **alpha of its normal map** — one bit per texel,
@@ -401,5 +401,5 @@ Measured, and the mask comes out at 69% ocean coverage against a true 71%.
 - [galaxy](../design/galaxy.md) — the design this implements
 - [rendering](../concepts/rendering.md) — what the maps are used for
 - [spikes 3 and 4](../spikes.md) — the measurements that chose HYG and ruled out Gaia
-- [determinism](../concepts/determinism.md) — why the catalogue version is a generation input
+- [determinism](../concepts/determinism.md) — why the catalog version is a generation input
 - [ADR-0004](../adr/0004-entity-addressing.md), [ADR-0009](../adr/0009-issue-ordinal-addressing.md) — the addressing rules the issue ordinals extend

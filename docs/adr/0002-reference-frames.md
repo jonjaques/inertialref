@@ -6,7 +6,7 @@ Status: accepted · 2026-08-19
 
 Most engines that span large scales use a hierarchy of reference frames to
 rescue floating-point precision: coordinates are kept small by being relative to
-a nearby parent. Having chosen sectorised coordinates (ADR-0001), precision is
+a nearby parent. Having chosen sectorized coordinates (ADR-0001), precision is
 already solved everywhere in the universe, which changes what frames are _for_.
 
 Something still has to answer: what does "3 m above the launch pad" mean while
@@ -33,11 +33,11 @@ into a planet frame mid-flight.
 
 Three frames exist per body, and the distinction is load-bearing:
 
-| Prefix | Frame                                                             | Used by                       |
-| ------ | ----------------------------------------------------------------- | ----------------------------- |
-| `b:`   | body-centred inertial — translates along the orbit, does not spin | satellites, approaching ships |
-| `bf:`  | body-fixed — spins with the body                                  | terrain, anything bolted down |
-| `sf:`  | local tangent at one lat/lon, +Y up                               | metre-scale gameplay, landing |
+| Prefix | Frame                                                              | Used by                       |
+| ------ | ------------------------------------------------------------------ | ----------------------------- |
+| `b:`   | body-centered inertial — translates along the orbit, does not spin | satellites, approaching ships |
+| `bf:`  | body-fixed — spins with the body                                   | terrain, anything bolted down |
+| `sf:`  | local tangent at one lat/lon, +Y up                                | meter-scale gameplay, landing |
 
 ## Alternatives considered
 
@@ -52,7 +52,7 @@ Three frames exist per body, and the distinction is load-bearing:
 
 - Frame-local `Vec3` coordinates are precise **near their own frame** and lossy
   far from it, because a `Vec3` is a double. Expressing a point in a frame four
-  light-years away degrades to metres. There is a test that documents this limit
+  light-years away degrades to meters. There is a test that documents this limit
   rather than hiding it; it is why canonical state is a `UniverseVector` and why
   approaching ships are re-framed.
 - Ships integrate **only in non-rotating frames**. Integrating in a rotating

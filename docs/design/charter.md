@@ -45,7 +45,7 @@ empty.
 graphics demo; it was twelve executable claims about precision, determinism,
 addressing and frame-rate independence
 ([the list, with measurements](../vision.md#what-is-proven-today)). One inch
-resolves to 9.4 µm at 8.18 kpc from the galactic centre. Five hundred floating-origin
+resolves to 9.4 µm at 8.18 kpc from the galactic center. Five hundred floating-origin
 rebases across 2,560 km produce zero drift. The same tick count produces the same
 state hash at 60 Hz, 144 Hz and 100× warp. Most projects with this ambition die
 on exactly these problems, years in, when it is a rewrite rather than a
@@ -100,10 +100,10 @@ _Still required:_ LOD cross-fade and terrain geomorphing — see
 
 ### Pillar 2 — The Sky Is Real
 
-The catalogue is truth. Procedure is what we do where truth is silent, and it
+The catalog is truth. Procedure is what we do where truth is silent, and it
 **defers** when truth arrives. A star's spectral class, mass, and position come
 from published data wherever published data exists, and every derived property —
-luminosity, habitable zone, colour on screen — follows from it physically rather
+luminosity, habitable zone, color on screen — follows from it physically rather
 than aesthetically.
 
 _What this forbids:_ inventing a nicer sky. If Barnard's Star is a dim red dwarf
@@ -120,7 +120,7 @@ below the threshold of human vision. See [art](art.md#the-canopy-is-a-sensor-not
 
 _Consequence:_ the dataset changes underneath us, permanently and forever. That is
 not a bug to be managed but the source of a mechanic — see
-[galaxy](galaxy.md#catalogue-revisions).
+[galaxy](galaxy.md#catalog-revisions).
 
 ### Pillar 3 — Momentum Is Law
 
@@ -200,7 +200,7 @@ see [sustainability](sustainability.md).
 
 **Explicitly not the target:** players who want a match to start, a lobby, a
 score, or a session that resolves in ten minutes. Nothing in this design is
-optimised for them and attempts to serve them will damage pillars 3 and 4.
+optimized for them and attempts to serve them will damage pillars 3 and 4.
 
 **Session assumption:** 45–120 minutes typical, and the design must tolerate a
 30-minute session ending mid-flight. The save is 696 bytes and restores an
@@ -214,7 +214,7 @@ a hard requirement rather than a nicety.
 Open source, non-commercial, no monetisation of any kind. No purchases, no
 cosmetics, no subscription, no ads, no engagement metrics.
 
-This is a design constraint before it is a business one, and a favourable one:
+This is a design constraint before it is a business one, and a favorable one:
 with no revenue to protect there is no reason to build a grind, a timer, or a
 scarcity that exists to be relieved. Every reward in this game can be given for
 the reason it should be given — because the player did something interesting.
@@ -251,7 +251,7 @@ Stated here so no page below has to relitigate them.
 | One person and coding agents                     | Every system must be _generated or simulated_, never authored by hand at volume. A feature requiring 200 hand-made assets is not a feature.                                  |
 | Browser, WebGPU, ~10 W of GPU budget on a laptop | Geometric fidelity is well below Star Citizen. [art](art.md) spends the budget on light transport and HDR output instead, which is where this subject matter actually lives. |
 | Non-commercial                                   | No revenue to fund servers, so [modes](modes.md) must make solo the complete experience and the persistent universe an addition.                                             |
-| No content pipeline                              | Ships, stations and interiors must be procedurally assembled from parts, not modelled. See [content](content.md).                                                            |
+| No content pipeline                              | Ships, stations and interiors must be procedurally assembled from parts, not modeled. See [content](content.md).                                                            |
 | Real data, forever changing                      | Address stability and generation purity are non-negotiable. See [galaxy](galaxy.md).                                                                                         |
 
 > 🎮 Designer's Note: The largest risk in this document is not technical. It is

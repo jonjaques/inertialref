@@ -10,7 +10,7 @@ paths:
 Path-scoped instructions. A rule with `paths:` frontmatter loads **only when a file
 matching one of its globs enters context** — so an agent editing `dock/layout.ts` is told
 about the one-panel-one-zone invariant at the moment it opens the file, and an agent
-editing the catalogue is not.
+editing the catalog is not.
 
 This exists because of a measurable gap. `AGENTS.md` holds thirty invariants, each one
 there because violating it is a rewrite rather than a refactor — and nothing loads it.
@@ -23,9 +23,12 @@ you open a rule or `AGENTS.md`, and costs nothing the rest of the time.
 
 ## The maintenance contract
 
-**`AGENTS.md` stays canonical.** It is vendor-neutral, it carries the reasoning, and it is
-what a human reads. These files carry only the _imperative_ — the one line that has to be
-in context to prevent the mistake — and point at the section or ADR that says why.
+**`AGENTS.md` stays canonical.** It is vendor-neutral and it is what tools
+auto-load. [`docs/agents/`](../../docs/agents/README.md) is the rest of the
+agent handbook. These files carry only the _imperative_ — the one line that
+has to be in context to prevent the mistake — and point at the technical page
+or ADR that says why. The map from rule to technical page is
+[`docs/agents/invariants.md`](../../docs/agents/invariants.md).
 
 That split is what keeps the duplication from rotting: the imperatives are the stable
 half. When you change a rule, change it in `AGENTS.md` and grep here for the one-liner.
@@ -43,7 +46,7 @@ every touch of its directory, and the thing it is competing with for attention i
 | `rendering.md`   | `render/`, `scene/`, or `packages/rendering`                  |
 | `cutscenes.md`   | the cinematic director, its scripts, or `cinema/`             |
 | `dock.md`        | `apps/game/src/dock`                                          |
-| `catalogue.md`   | the star catalogue or the ingest app                          |
+| `catalogue.md`   | the star catalog or the ingest app                          |
 | `server.md`      | the Worker, net, protocol or persistence                      |
 | `testing.md`     | any `*.test.ts`                                               |
 | `site.md`        | the document head, `public/`, the brand pipeline, analytics   |

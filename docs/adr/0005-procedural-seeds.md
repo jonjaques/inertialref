@@ -17,7 +17,7 @@ rng.next()
 ```
 
 Inserting one planet shifts every value drawn afterwards, so adding a body to a
-system silently rewrites its neighbours, and two workers generating regions in
+system silently rewrites its neighbors, and two workers generating regions in
 different orders produce two different universes.
 
 ## Decision
@@ -32,7 +32,7 @@ rootSeed("inertialref") → "g:milky-way" → "s:SOL" → "b:2" → "b:0" → "s
 
 A region's content therefore depends only on its own address. Traversal order,
 worker count, async scheduling and how much of the universe is loaded are all
-irrelevant, which is asserted directly: the whole catalogue is generated in
+irrelevant, which is asserted directly: the whole catalog is generated in
 shuffled order and compared against sequential order.
 
 **PRNG: xoshiro128\*\*.** 32-bit state, 2^128 period, expressible entirely in

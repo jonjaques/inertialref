@@ -28,7 +28,7 @@ run before this will fail for a reason that has nothing to do with your task.**
    the invariants for the code you are about to touch.
 2. Read the ADR for the area you are changing, from `docs/adr/`. These decisions are not
    yours to relitigate inside a fan-out.
-3. Find the test that covers the behaviour you are about to change. If there is not one,
+3. Find the test that covers the behavior you are about to change. If there is not one,
    that is the first thing to write.
 
 ## Stay inside your brief
