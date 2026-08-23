@@ -147,12 +147,12 @@ This is an observatory console at night. The subject is outside the window — a
 real starfield rendered from real astronomy — and the interface is the panel of
 readouts beside it, built so that reading it never costs you the sky. Nothing on
 screen is brighter than it needs to be, type sits at the smallest size that
-stays legible rather than the largest that fits, and colour is spent only where
+stays legible rather than the largest that fits, and color is spent only where
 state changes meaning. The standing test is the one the product already sets for
 itself: **would this still be readable with a star filling the frame behind it?**
 
 The system is deliberately narrow. Three typefaces with one job each, one accent
-family, one neutral family, two corner radii, four status colours. That
+family, one neutral family, two corner radii, four status colors. That
 narrowness is not minimalism as a style — it is what lets an 11px readout hold
 its own against a dynamic-range image that can reach twice diffuse white. The interface earns its
 place by being complete and quiet at the same time: every number the simulation
@@ -169,10 +169,10 @@ defined by what it commits to, not by what it refuses.
 - Three faces, three registers: a condensed grotesque names places and labels,
   a humanist sans carries prose, a wide mono carries every reading
 - A workspace, not a dock: two panes at the edges, panels that float, and one
-  menu at the bottom centre that says what is on screen
-- Near-black translucent panels; the centre of the frame stays empty
+  menu at the bottom center that says what is on screen
+- Near-black translucent panels; the center of the frame stays empty
 - One accent (Instrument Blue) doing every job that isn't status
-- Status colour as readout, never as alarm
+- Status color as readout, never as alarm
 - Hairline borders instead of shadows; two elevation steps, and the second one
   means "this panel has come loose"
 - All chrome unmounts entirely while a cutscene plays
@@ -188,16 +188,16 @@ status hues that appear a handful of times each.
 - **Instrument Blue 300** (`text-sky-300`): the system's speaking voice. The
   product name in the dock header, the ship name on the flight strip, the
   resolved value on a cycled setting, an active toggle's `on`. If something is
-  the answer to what you were looking at, it is this colour.
+  the answer to what you were looking at, it is this color.
 - **Instrument Blue 400** (`text-sky-400/80`, `border-sky-400`): structural
   accent — collapsible section headings at 80% opacity, and the underline on the
-  active tab. Dimmer than 300 on purpose: headings organise, they don't announce.
+  active tab. Dimmer than 300 on purpose: headings organize, they don't announce.
 - **Instrument Blue 500** (`border-sky-500/50`, `bg-sky-500/15…/25`,
   `accent-sky-500`): the accent as _material_ rather than ink. Only ever used at
   low alpha — control fills, focus borders, the selected row's wash, native range
-  accents. It is never a text colour.
+  accents. It is never a text color.
 - **Instrument Blue 200** (`text-sky-200`): contact state. What a control's label
-  becomes on hover, and the colour of a transient notice.
+  becomes on hover, and the color of a transient notice.
 
 ### Neutral
 
@@ -210,7 +210,7 @@ status hues that appear a handful of times each.
   section borders, and the resting fill of a control.
 - **Panel Graphite 700** (`border-slate-700`, `/60`): the hairline that defines a
   panel edge or a control edge.
-- **Panel Graphite 600 and 500**: **not text colours.** They were "the faintest
+- **Panel Graphite 600 and 500**: **not text colors.** They were "the faintest
   legible text" and "labels" until the standing test below was actually
   measured, and neither is legible: against the Sun filling the frame a 500
   label on the dock is 3.2:1 and a 600 is 2.0:1. Nor is this tunable — on a
@@ -226,11 +226,11 @@ status hues that appear a handful of times each.
   are separated by position and by case, which is what the Case Rule was
   already doing.
 - **Panel Graphite 300** (`text-slate-300`): the primary readout value, and the
-  dock's base text colour.
+  dock's base text color.
 - **Panel Graphite 200** (`text-slate-200`): the flight strip and the app's root
-  text colour. The brightest neutral in the system.
+  text color. The brightest neutral in the system.
 - **Void Black** (`#000`): the page ground behind the canvas, set on
-  `html, body, #root`. Not a surface colour — nothing draws on it.
+  `html, body, #root`. Not a surface color — nothing draws on it.
 
 ### Tertiary
 
@@ -248,18 +248,18 @@ that scarcity is what makes them legible as status at all.
 
 ### Named Rules
 
-**The Instrument Speaks, It Does Not Shout.** Status colour is a readout in the
+**The Instrument Speaks, It Does Not Shout.** Status color is a readout in the
 same sense that altitude is. Being offline is a supported way to play, so the
 offline pip is `text-slate-400` and not amber — the four ways of not being online
-get four different colours because they want four different reactions, not
+get four different colors because they want four different reactions, not
 because any of them is an error.
 
 **The One Accent Rule.** Instrument Blue is the only non-status hue in the
-system. A new colour family is a design change, not a detail; if something needs
+system. A new color family is a design change, not a detail; if something needs
 to stand out and isn't status, it earns it with weight, position or the accent —
 never with a new hue.
 
-**The Scarcity Rule.** No status colour may appear in more than a few places at
+**The Scarcity Rule.** No status color may appear in more than a few places at
 once. If a screen shows amber in five locations, amber has stopped meaning
 anything and the problem is the screen, not the palette.
 
@@ -331,7 +331,7 @@ Nine steps, each defined once as a `@utility` in `apps/game/src/index.css` and
 named at the call site. They exist because the alternative is what this
 interface had: `text-[10px] tracking-widest uppercase text-sky-400/80` written
 out at ninety call sites, four of them subtly disagreeing, with no way to change
-the scale that is not a hundred-file edit. Colour stays at the call site,
+the scale that is not a hundred-file edit. Color stays at the call site,
 because which grade of ink is a per-element judgement; everything else is here.
 
 | Step           | Face  | Size    | Weight | Job                                            |
@@ -386,20 +386,20 @@ draws a **workspace** (`apps/game/src/dock/Workspace.tsx`):
   holding a column of panels and scrolling internally
 - the **float field**, `inset-0`, which is the scene treated as a place a panel
   can be put down
-- the **IR menu**, bottom centre at the system's `0.75rem` inset — the mark, the
+- the **IR menu**, bottom center at the system's `0.75rem` inset — the mark, the
   place, the pane toggles, one glyph per panel, and the settings
 
 Everything else still hangs off a corner or an edge at the same inset: the
 flight strip bottom left, a transient notice at `bottom-16` so it clears the
-menu, the cutscene scrubber bottom centre while a scene runs.
+menu, the cutscene scrubber bottom center while a scene runs.
 
-**The centre is reserved.** The only element at screen centre is a small
+**The center is reserved.** The only element at screen center is a small
 crosshair ring (`border-sky-300/40`). Nothing else may occupy the middle of the
 frame, because the middle of the frame is the subject. The menu is at the bottom
 _edge_, not in the middle distance.
 
 **A panel is `19rem` and never taller than 60% of the frame.** The cap is two
-failures avoided with one number: uncapped, a seventy-five-row catalogue runs
+failures avoided with one number: uncapped, a seventy-five-row catalog runs
 past the bottom of its pane and is clipped mid-row; capped at the pane's full
 height it fits exactly and pushes every panel below it off the bottom, where the
 menu still reports them open. At 60vh the next panel's header stays visible.
@@ -435,7 +435,7 @@ minimum for a thumb — and the bar clears the home indicator with
 ### Named Rules
 
 **The Edge Rule.** Chrome anchors to an edge or a corner at a `0.75rem` inset.
-Nothing but the crosshair enters the centre of the frame. A _floating panel_ is
+Nothing but the crosshair enters the center of the frame. A _floating panel_ is
 the one thing allowed in the middle distance, and only because a hand put it
 there — its position is a user preference, it is clamped inside the frame, and
 it is never where anything opens by default.
@@ -568,7 +568,7 @@ Two nested levels, and no more.
 
 ### Navigation
 
-**One bar, bottom centre — the IR menu.** It replaced two pieces of chrome that
+**One bar, bottom center — the IR menu.** It replaced two pieces of chrome that
 were doing one job between them: a shell bar in the top-left corner carrying the
 place and the settings, and a launcher rail down the left edge carrying the
 panels. Read left to right it answers three questions in the order they are
@@ -614,7 +614,7 @@ controls and a title is a title with no room left to be read.
   glyphs in interface history, and three popovers appearing over a running scene
   every time a hand crosses a panel it was only trying to drag is noise standing
   in for a label. `aria-label` names all three.
-- **The title is the quieter colour and the larger size; the section headings
+- **The title is the quieter color and the larger size; the section headings
   inside it are the accent and smaller.** That ordering is the fix for every
   panel reading as five equally important shouts: a title says what you are
   looking at, a heading organises what is in it.
@@ -632,7 +632,7 @@ A label/value pair, and **the two halves are set in two different faces**: a
 `type-ui` sans label in `slate-400` that never shrinks, a `type-readout` mono
 value in `slate-300` that truncates or breaks, `gap-3` between. The whole
 readout surface of the interface is this component repeated, which is exactly
-why face rather than colour carries the distinction — forty rows in one face
+why face rather than color carries the distinction — forty rows in one face
 have one texture and the eye has nothing to catch on.
 
 ### Flight Strip (signature)
@@ -662,7 +662,7 @@ itself through a `title` rather than a label.
 
 The title-sequence overlay is the one place in the codebase with its own
 palette and typefaces — two display faces (`TNG Title`, `TNG Credits`, both
-`font-display: block`) and three literal colours: `rgb(64,138,230)`,
+`font-display: block`) and three literal colors: `rgb(64,138,230)`,
 `rgb(24,120,215)` and `rgb(216,180,90)`, with soft text glows. **None of it is
 part of this system.** It is a demonstration that the cinematic director and
 shot system work, its faces are placeholder, and nothing outside the cutscene
@@ -723,7 +723,7 @@ Rules that follow:
 
 ### Pages (overlay routes)
 
-A routed page is a scrim plus one panel, centred, over a live simulation —
+A routed page is a scrim plus one panel, centered, over a live simulation —
 `docs/design/ux.md` is explicit that settings open as an overlay and that
 nothing stops the world. The panel is the standard surface (`slate-950/85`,
 `0.5rem`, hairline `slate-700/60`) at `34rem` rather than a pane's `19rem`,
@@ -750,7 +750,7 @@ addressable, and both Escape and the browser's back button leave it.
   the interface at standard range over an extended-range canvas.
 - **Do** reach for a named step from the type scale — `type-readout`,
   `type-label`, `type-title` — rather than writing a size, a weight and a
-  tracking at the call site. Colour stays at the call site; nothing else does.
+  tracking at the call site. Color stays at the call site; nothing else does.
 - **Do** give every control a `title` that names both the action and its keyboard
   equivalent, and pair every clickable action with a harness verb — a panel that
   can reach somewhere `ir.*` and the headless runner cannot breaks the guarantee
@@ -761,7 +761,7 @@ addressable, and both Escape and the browser's back button leave it.
 - **Do** keep disabled controls visible at 35% opacity. Their presence is
   information. The exception is a control that is _also_ a readout — the time
   panel's `1×` is both the rate and the way back to it, and disabling it at 1×
-  hid the number in order to grey out a no-op.
+  hid the number in order to gray out a no-op.
 - **Do** write every label in title case and let the step's `text-transform`
   decide the case on screen. A label is read in four places the CSS never
   reaches: a `title`, an `aria-label`, a screen reader, and a copied string.
@@ -780,9 +780,9 @@ addressable, and both Escape and the browser's back button leave it.
   would be clamped with the chrome.
 - **Don't** use two reds for one idea. Fault is `rose-400`, everywhere. The perf
   chart's budget rule drew in `#f87171` (red-400) for a while and has converged;
-  its three plot colours now live in one named `CHART` constant in
+  its three plot colors now live in one named `CHART` constant in
   `hud/PerfPanel.tsx`, which is where a future palette move should find them.
-- **Don't** put anything but the crosshair at screen centre.
+- **Don't** put anything but the crosshair at screen center.
 - **Don't** set the display face at `type-title` or above on anything that is
   not a place, and never
   below `type-title`. It names the product, a mode, a page and the body in
@@ -821,7 +821,7 @@ addressable, and both Escape and the browser's back button leave it.
 - **Don't** re-derive the mark. It is three sheared bars in `sky-100`, `sky-300`
   and `sky-500`, drawn once in `icons/Logomark.tsx` and reproduced path-for-path
   in `public/favicon.svg`. The violet lightning glyph it replaced shared no
-  colour with the running interface.
+  color with the running interface.
 - **Don't** polish the author's instruments toward the cockpit specified in
   `docs/design/ux.md`. They are scaffolding on purpose — that is what the
   disclosure in the menu is saying — and the cockpit starts from the question of

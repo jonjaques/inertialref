@@ -108,7 +108,7 @@ _plan_ rather than a continuous correction.
 **Rationale.** The v0.1 design used an Elite-style cruise in which a gravity
 gradient throttled your top speed and the skill was a throttle correction against
 an overshoot. Two things were wrong with it. The fiction had to be _told_ to
-produce the behaviour — a drive that mysteriously weakens in a well — where a
+produce the behavior — a drive that mysteriously weakens in a well — where a
 burn produces it from Newton and needs no explanation at all. And
 throttle-correction is a weak verb: it is fiddly, it is continuous, and Elite
 itself shipped a Supercruise Assist module because players found it tedious.
@@ -245,12 +245,12 @@ creates a genuine, self-imposed obligation to come back and land it. Deliberatel
 not a mechanic — no expiry, no decay. The pressure is entirely the player's own,
 which is why it works.
 
-**3. Catalogue revisions.** New astronomy is published continuously. When a
+**3. Catalog revisions.** New astronomy is published continuously. When a
 revision lands, systems you have surveyed can genuinely change — a confirmed
 planet appears where an inferred one stood, and your record of the inferred one
 becomes a historical citation. This is recurring content that costs the project
 nothing to author, and no other game can do it. Full design in
-[galaxy](galaxy.md#catalogue-revisions).
+[galaxy](galaxy.md#catalog-revisions).
 
 **4. Something seen and not reached.** A ringed giant noted in passing, a body the
 discovery scan flagged as anomalous, a moon whose survey was interrupted. The

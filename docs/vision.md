@@ -37,10 +37,10 @@ continuous universe rather than appearing to gameplay as separate worlds.
 ### The gameplay it is being built for
 
 1. Piloting spacecraft with full 6-DoF movement — **works**
-2. Travelling within star systems — **works**
-3. Travelling between star systems — _possible but slow; wants a warp mechanic_
+2. Traveling within star systems — **works**
+3. Traveling between star systems — _possible but slow; wants a warp mechanic_
 4. Approaching and orbiting planets — **works**
-5. Atmospheric entry — _drag and atmosphere modelled; no heating or stress_
+5. Atmospheric entry — _drag and atmosphere modeled; no heating or stress_
 6. Landing — **works**
 7. Surface exploration — _you can land and fly; there is nothing to find yet_
 
@@ -66,7 +66,7 @@ the browser (`await ir.selfTest()`):
 | 5   | Approach a planet                                              | fell 18.74 m in 60 s — within 0.03% of free fall |
 | 6   | Transition into increasingly local frames                      | entered a planet frame mid-flight                |
 | 7   | Preserve precision near the surface                            | 1 inch resolved to 9.4 µm, 8.18 kpc out          |
-| 8   | Render metre-scale objects near the player                     | 1 m survives float32 at 8.18 kpc                 |
+| 8   | Render meter-scale objects near the player                     | 1 m survives float32 at 8.18 kpc                 |
 | 9   | Rebase render origins without moving entities                  | 500 rebases, 2,560 km, zero drift                |
 | 10  | Run a meaningful procedural task in a worker                   | 4,225 terrain samples, identical to local        |
 | 11  | Serialize and restore world/player state                       | 696 bytes → identical state hash                 |
@@ -79,8 +79,8 @@ fail informatively converts an unknown into a false assurance.
 
 ## Principles
 
-These are charter-level. Day-to-day rules live in
-[AGENTS.md](../AGENTS.md); these are the reasons those rules exist.
+These are charter-level. Day-to-day rules live in [AGENTS.md](../AGENTS.md); the agent handbook is
+[docs/agents/](agents/README.md). These principles are why those rules exist.
 
 ### Build a platform, not a demo
 
@@ -89,7 +89,7 @@ of visual demos second**. Every early decision should make the eventual galaxy
 easier to build rather than quietly placing a ceiling on it.
 
 Concretely: when a shortcut would make the current milestone easier and the
-eventual scale harder, take the harder path now. Sectorised coordinates cost
+eventual scale harder, take the harder path now. Sectorized coordinates cost
 more than a `Vector3` and were never optional, because retrofitting precision
 into a codebase that assumed doubles is a rewrite.
 
@@ -102,7 +102,7 @@ when it would work fine at today's scale.
 
 ### Correct abstractions over feature breadth
 
-Favour determinism, testability, automation, observability and incremental
+Favor determinism, testability, automation, observability and incremental
 evolution over breadth. A shallow system with the right seams beats a deep one
 with the wrong ones, because the first grows and the second gets replaced.
 
@@ -124,7 +124,7 @@ and should wait until it can.
 
 ### Assume it will be built by agents
 
-The repository is optimised so that someone — human or coding agent — who has
+The repository is optimized so that someone — human or coding agent — who has
 never seen it can understand, modify, test and verify the system without tribal
 knowledge. That means: deterministic non-interactive commands with useful exit
 codes, documentation that explains _why_, decision records for what is expensive
@@ -137,9 +137,9 @@ reverse-engineer. If a choice has consequences beyond the file it lives in, it
 gets an [ADR](adr/README.md). If it is a fact learned the hard way, it goes in
 [CONTEXT.md](../CONTEXT.md).
 
-### Measure before optimising
+### Measure before optimizing
 
-Performance matters, and blind pre-optimisation does not. Design so that object
+Performance matters, and blind pre-optimization does not. Design so that object
 pooling, typed arrays, instancing, spatial indexes, worker pools, transferable
 buffers, WASM, WebGPU and shared memory all remain _possible_ — then apply them
 when a measurement says to.
@@ -156,7 +156,7 @@ A task is not done because the browser renders something. It is done when the
 implementation is correct, the architectural boundaries hold, determinism
 remains determinism, tests exist and pass, `pnpm check` is green, the
 documentation reflects any meaningful architectural change, and the debug
-tooling can inspect the new behaviour.
+tooling can inspect the new behavior.
 
 When a defect exposes a missing invariant, add the regression test rather than
 patching the symptom. [CONTEXT.md](../CONTEXT.md) lists the ones found so far —
@@ -182,3 +182,4 @@ each of which was invisible in a running browser.
 - [Roadmap](roadmap.md) — what is next, and what is deliberately absent
 - [ADRs](adr/README.md) — the decisions that shaped it
 - [AGENTS.md](../AGENTS.md) — the rules for changing it
+- [Agent handbook](agents/README.md) — how agents should work here

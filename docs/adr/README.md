@@ -6,11 +6,11 @@ Twelve decisions that are expensive to reverse. Each records the **context**, th
 
 > These were written after the implementations, from the measurements those
 > implementations produced. That makes them less a plan and more a record of
-> what each decision actually cost, which is the more useful artefact.
+> what each decision actually cost, which is the more useful artifact.
 
 | #                                           | Decision                    | Status       | One-line summary                                                                                                                                           |
 | ------------------------------------------- | --------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [0001](0001-universe-coordinates.md)        | Universe coordinates        | accepted     | Int32 sector index + float64 offset in a 2^40 m sector. Sub-millimetre anywhere in 249,000 ly.                                                             |
+| [0001](0001-universe-coordinates.md)        | Universe coordinates        | accepted     | Int32 sector index + float64 offset in a 2^40 m sector. Sub-millimeter anywhere in 249,000 ly.                                                             |
 | [0002](0002-reference-frames.md)            | Reference frames            | accepted     | Frames carry the semantics of motion, not precision — the coordinates already handle that.                                                                 |
 | [0003](0003-render-coordinates.md)          | Render coordinates          | accepted     | Floating origin on a power-of-two grid, plus logarithmic depth compression that preserves angular size.                                                    |
 | [0004](0004-entity-addressing.md)           | Entity addressing           | accepted     | Identity is a path through containment, and that path is also the seed path.                                                                               |
@@ -52,7 +52,7 @@ flowchart TB
     A2 -->|"gravitational coupling<br/>bounds authority"| A8
     A7 -->|"replicate what a client<br/>cannot derive"| A8
     A4 -->|"amended: orbital order<br/>is not identity"| A9
-    A5 -->|"the catalogue version<br/>joins the manifest"| A9
+    A5 -->|"the catalog version<br/>joins the manifest"| A9
     A3 -->|"the scene is built<br/>around one eye"| A10
     A6 -->|"scene time derives<br/>from the tick"| A10
     A10 -->|"a second producer<br/>of the same eye"| A11

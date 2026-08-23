@@ -31,13 +31,13 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", ADR-0001..0009.
   planet rotates — it has shipped twice.
 - **Never persist anything regenerable.** A save stores references and mutations. If you
   want to store generated content you want a cache, and it is not a save.
-- **Never make the star catalogue ambient.** It is a generation input alongside the seed
-  and is passed as an argument everywhere. A singleton would make the catalogue _version_
+- **Never make the star catalog ambient.** It is a generation input alongside the seed
+  and is passed as an argument everywhere. A singleton would make the catalog _version_
   a hidden input, which invalidates every save the next time astronomy publishes.
 - **Never sort a system's planets by orbit and call it order.** `b:2` is the third body
   _issued_, not the third one out. `orbitalOrder` is for display — ADR-0009.
 - **Axes are right-handed, +Y up**, reference plane XZ, forward −Z. Textbook orbital
   mechanics is +Z up; `physics/frameConvention.ts` converts once, at that boundary and
-  nowhere else. Units are SI — metres, seconds, kilograms, radians.
+  nowhere else. Units are SI — meters, seconds, kilograms, radians.
 - **If you add a field to canonical state, add it to `world.stateHash()`.** The fields it
   omitted were exactly the ones a shipped bug lived in.

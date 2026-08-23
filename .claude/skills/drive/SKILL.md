@@ -7,7 +7,7 @@ allowed-tools: Bash(pnpm dev) Bash(pnpm dev:*) Bash(pnpm preview) Bash(pnpm prev
 
 # Driving InertialRef
 
-Named for `AGENTS.md` § "Driving the game", and named `drive` rather than `run` because a
+Named for [`docs/agents/driving.md`](../../../docs/agents/driving.md), and named `drive` rather than `run` because a
 project skill called `run` collides with the bundled `/run` — which looks for a project
 skill covering app launch and defers to this one.
 
@@ -79,11 +79,12 @@ page that is not focused sits at tick 0 until it is focused. That is the browser
 
 ## The dev dock
 
-Top right in the browser, and it calls the harness and nothing else — so anything you can
-do by clicking is reproducible in a test. `H` collapses it, `G` opens navigation, `P`
-opens perf. **Look at the perf tab before optimising anything**, and before believing a
-performance claim in a design document: the first thing it found was that time warp had
-never worked above 5×.
+Open it from the IR menu at the bottom center of the browser, or with `` ` ``. It calls
+the harness and nothing else, so anything you can do by clicking is reproducible in a
+test. `H` hides or restores both panes, `G` opens navigation, and `P` opens perf.
+**Look at the perf tab before optimizing anything**, and before believing a performance
+claim in a design document: the first thing it found was that time warp had never worked
+above 5×.
 
 ## The cutscene reference
 

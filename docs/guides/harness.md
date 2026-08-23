@@ -4,9 +4,8 @@ A single object that can drive and interrogate the whole simulation without
 touching the UI. It is exposed as `window.ir` in the browser and used directly
 by the Node runner and the tests.
 
-> `ir.help()` in the console is the quickest list, but it is hand-maintained and
-> already omits `snapshot`, `flightAssist` and `scenarios`. This page is the
-> check on it.
+> `ir.help()` in the console is the quickest list. This page explains the
+> supported vocabulary and the distinctions that the one-line help cannot.
 >
 > Code: `packages/devtools/src/harness.ts`
 
@@ -29,7 +28,7 @@ flowchart LR
     style H fill:#0369a1,stroke:#0c4a6e,color:#fff
 ```
 
-Everything it returns is JSON-serialisable, for exactly that reason: an agent
+Everything it returns is JSON-serializable, for exactly that reason: an agent
 driving a browser over the debug protocol gets structured state back, not
 pixels.
 
@@ -44,13 +43,27 @@ pixels.
 | `ir.inspect(id?)`      | one entity in full — frames, canonical + local coords, velocities |
 | `ir.snapshot(alpha?)`  | the raw presentation snapshot                                     |
 | `ir.bodies(system?)`   | flat listing of a system's bodies with addresses                  |
-| `ir.systemsNearby(ly)` | nearest star systems, catalogue and procedural                    |
+| `ir.systemsNearby(ly)` | nearest star systems, catalog and procedural                      |
 | `ir.logs(n)`           | recent structured log records                                     |
 
 ```js
 ir.summary()
 // tick 2590 (40.47 s, 1x) | hash fdf43017 | Debug One in sf:g:milky-way/s:SOL/b:0@0.350000,-1.100000 | 51849.8 m/s alt 0.000 mm | systems 1, frames 19
 ```
+
+---
+
+## Finding and loading destinations
+
+| Call                | Effect                                                        |
+| ------------------- | ------------------------------------------------------------- |
+| `ir.targets()`      | destinations near the player, with addresses — start here     |
+| `ir.goTo(target)`   | resolve a human form and move the ship to that system or body |
+| `ir.loadSystem(id)` | generate a system without moving the ship                     |
+
+`goTo` is the only verb that accepts all the forms a person types: `SOL`,
+`s:SOL/b:2`, or `b:2` relative to the current system. Everywhere else,
+`parseAddress` remains strict.
 
 ---
 
@@ -99,7 +112,7 @@ Two notes worth internalising:
   surface frame _is_ the ground — and the contact test makes it landed on the
   next tick, so `ir.land(...).player.landed` is `false` and one `ir.step()`
   fixes it. `ir.scenario('surface')` hides this because it steps 64 ticks. The
-  previous version asserted landedness directly while sitting three metres up;
+  previous version asserted landedness directly while sitting three meters up;
   because `stepFlight` short-circuits for an entity that is already landed, the
   contact test never ran and the ship hovered there for the whole session while
   the overlay reported an altitude of zero. Landedness is now only ever a
@@ -107,6 +120,52 @@ Two notes worth internalising:
 - **`ir.flightAssist(enabled)`** exists and is absent from `ir.help()`. It is
   control input and it is in the state hash, so a test comparing hashes has to
   know it is there. `ir.scenarios()` lists the four scenario names.
+
+---
+
+## Moving only the camera
+
+`ir.look(target, options?)` moves the observatory camera without moving the
+ship or changing canonical state. That distinction is deliberate:
+`ir.look('s:SOL/b:5')` and `ir.goTo('s:SOL/b:5')` can both fill the frame with
+Jupiter, but only `goTo` leaves the ship there.
+
+`ir.observatory` exposes the camera itself for repeated interaction:
+
+```js
+ir.observatory.drag(dx, dy)
+ir.observatory.zoom(delta)
+ir.observatory.setPhase(angle)
+ir.observatory.frameTarget()
+ir.observatory.clear()
+```
+
+Camera bookmarks stage known views:
+
+```js
+ir.shots() // names and descriptions
+ir.shot('crescent', address)
+```
+
+The built-in names include `full-face`, `gibbous`, `half`, `crescent`,
+`glint`, `sunset`, and `oblique`.
+
+---
+
+## Scripted scenes
+
+```js
+ir.cutscenes() // scenes with descriptions and durations
+ir.play('tng-intro')
+ir.pause()
+ir.seekCutscene(1150)
+ir.cutsceneStatus()
+ir.stopCutscene()
+```
+
+Pause before seeking for a frame-exact still. The browser needs to render
+after the seek before the sampled cinematic state is current; follow the
+capture procedure in [Driving](../agents/driving.md#browser-gotchas).
 
 ---
 
@@ -152,7 +211,7 @@ than one. Worth knowing before using the self-test as a mid-session probe.
 ## Persistence
 
 ```js
-const text = ir.save() // serialised save, ~700 bytes
+const text = ir.save() // serialized save, ~700 bytes
 ir.load(text) // → Result<stateHash, error>
 ```
 
@@ -186,7 +245,7 @@ rendered; `ir.status()` tells you _what_.
 ## Extending the harness
 
 Add a method when a sequence is one you keep retyping — that is the signal it is
-part of the vocabulary rather than a one-off. Keep the return JSON-serialisable
+part of the vocabulary rather than a one-off. Keep the return JSON-serializable
 and add the line to `help()`, which is what people actually read.
 
 If a set-up sequence is shared with the app or the runner, it belongs in

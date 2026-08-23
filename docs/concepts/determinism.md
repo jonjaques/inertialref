@@ -83,9 +83,9 @@ be loaded, not on what a neighbouring client has visited.
 
 The tests assert exactly that, rather than asserting a value:
 
-- Generate the whole star catalogue sequentially, then again in **shuffled
+- Generate the whole star catalog sequentially, then again in **shuffled
   order**, and compare.
-- Generate a galactic cell's contents; generate its nine neighbours; regenerate
+- Generate a galactic cell's contents; generate its nine neighbors; regenerate
   the original and compare.
 - Sample noise at 200 points in order, then in shuffled order, and compare.
 
@@ -135,7 +135,7 @@ flowchart LR
     N3 --> SUM(("+"))
     MIX --> SUM
     N1 --> SUM
-    SUM --> OUT["groundElevation, metres"]
+    SUM --> OUT["groundElevation, meters"]
 
     MIX -.- NOTE["continents modulate the mountains,<br/>so ranges sit on landmasses instead of<br/>marching across the ocean floor"]
     classDef note fill:none,stroke:none,color:#64748b,font-style:italic

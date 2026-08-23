@@ -5,7 +5,7 @@ Status: accepted · 2026-08-22
 ## Context
 
 The [planetarium](../design/planetarium.md) is a tool rather than a screen: a
-catalogue, an inspector, view switches, presets and a clock, all of which a
+catalog, an inspector, view switches, presets and a clock, all of which a
 person wants in different places depending on whether they are hunting for a
 system, composing a shot, or watching a moon transit. The dev dock's answer —
 one fixed panel of tabs, top right — is right for a debug overlay and wrong for
@@ -68,7 +68,7 @@ which in a planetarium is the entire content. Zones keep the middle of the frame
 clear by construction.
 
 **A fixed layout with no docking at all.** Cheapest, and it fails the actual
-use: a catalogue wants a tall column, a transport wants a wide bar, and which of
+use: a catalog wants a tall column, a transport wants a wide bar, and which of
 those is on screen depends on what you are doing.
 
 **Layout in a store rather than a value plus a pure reducer.** A store would
@@ -95,7 +95,7 @@ than one appearing at the end.
 
 **Costs, honestly.**
 
-- Two React DnD backends means two behaviours to keep in mind: `HTML5Backend`
+- Two React DnD backends means two behaviors to keep in mind: `HTML5Backend`
   gives a native drag image and `TouchBackend` does not, and the touch path needs
   a `delayTouchStart` so a scroll inside a panel is not claimed as a drag.
 - Choosing the backend once means a device whose primary pointer changes

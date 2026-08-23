@@ -6,7 +6,7 @@
 galactic distances down to inch-scale interaction on a planetary surface, with no
 loading screens and no scale seams.
 
-[![Licence: Apache-2.0](https://img.shields.io/badge/licence-Apache--2.0-blue.svg)](LICENSE)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Node 26+](https://img.shields.io/badge/node-26%2B-brightgreen.svg)](#prerequisites)
 [![pnpm 11](https://img.shields.io/badge/pnpm-11-orange.svg)](#prerequisites)
 [![12/12 capabilities](https://img.shields.io/badge/capabilities-12%2F12%20proven-success.svg)](#the-twelve-capabilities-proven)
@@ -29,7 +29,7 @@ primitives; the point is what is underneath them.**
 
 The hard problems in a game at this scale are precision, determinism and
 identity, and all three are solved and demonstrated here rather than asserted. You
-can fly from the galactic centre to a mountainside, resolve an inch, save the
+can fly from the galactic center to a mountainside, resolve an inch, save the
 whole universe in under 700 bytes, and get the same answer twice.
 
 > **Status: pre-alpha, single maintainer, no release.** There is no gameplay yet.
@@ -113,7 +113,7 @@ Neither is needed to run the game, the tests or the build.
   in at build time (`pnpm media:pull`), never committed. Without it the cutscene
   plays silent, which is what a fork gets and is a supported outcome rather than
   a failure. `scripts/media.mjs` has the reasoning.
-- **Raw catalogue downloads.** 34 MB of HYG to produce a 460 KB asset, and the
+- **Raw catalog downloads.** 34 MB of HYG to produce a 458 KB asset, and the
   asset is committed. `pnpm catalog:fetch` re-downloads them if you want to
   rebuild.
 
@@ -133,8 +133,9 @@ ir.status() // full structured state
 ```
 
 **Start with `ir.targets()`** — every other verb takes an address and none of them
-will tell you one. The same verbs are on the dev dock in the top right of the
-browser, so anything you can do by clicking is reproducible in a test.
+will tell you one. The same verbs are on the author's instruments, opened from
+the IR menu at the bottom center, so anything you can do by clicking is
+reproducible in a test.
 
 The harness object also drives the headless runner, so a scenario that reproduces
 a bug in Chrome can be replayed without a browser:
@@ -153,16 +154,16 @@ pnpm sim --help                # all flags
 
 ## What it does today
 
-- A galaxy centred on the **real galactic centre**, with **7,123 real star
+- A galaxy centered on the **real galactic center**, with **7,123 real star
   systems out to 150 light-years** — HYG v4.4 converted through ICRS → galactic
-  coordinates — and procedural stars filling the gap the catalogue leaves.
-- **702 confirmed exoplanets** around 444 of them, with their published orbits,
+  coordinates — and procedural stars filling the gap the catalog leaves.
+- **702 confirmed exoplanets** around 443 of them, with their published orbits,
   masses and radii, plus the eight planets of the Solar System. Every body says
   whether it is `observed` or `projected`; the game never claims a generated
   planet is real.
 - **Stars named the way people name them** — `Sirius`, `Alpha Centauri`,
   `Tau Ceti`, `61 Cygni` — with every alternate designation searchable, and one
-  stable address per system whatever the catalogue calls it next year.
+  stable address per system whatever the catalog calls it next year.
 - **The real Solar System** — eight planets and twenty moons with measured
   radii, oblateness, axial tilts, rotation periods, albedos and ring geometry,
   drawn from NASA and USGS surface, elevation, cloud and ring maps. Earth has its
@@ -178,9 +179,9 @@ pnpm sim --help                # all flags
 - **Genuinely offline** — a service worker caches the app, and with the server
   stopped the game still loads, streams terrain from its workers, and passes all
   twelve capability checks.
-- A **dev dock** in the browser — `navigate` for destinations, `telemetry` for
-  inspection — that calls the harness and nothing else, so anything you can do by
-  clicking is reproducible in a test.
+- Six **dockable authoring panels** in the browser — `navigate`, `controls`,
+  `telemetry`, `perf`, `graphics`, and `camera` — that call the harness and
+  nothing else, so anything you can do by clicking is reproducible in a test.
 
 ### The twelve capabilities, proven
 
@@ -196,8 +197,8 @@ PASS  2. Stable addressing — 8 bodies addressed and round-tripped
 PASS  3. Astronomical distances — Sol to Alpha Centauri: 4.3650 ly
 PASS  4. Movement within a system — 6.81 km under thrust in 10 s
 PASS  5. Approach a planet — fell 18.74 m in 60 s at 0.0104 m/s², within 0.03% of free fall
-PASS  6. Frame transitions — entered b:g:milky-way/s:SOL/b:0 after travelling 8 Mm
-PASS  7. Precision near the surface — 1 inch resolved to 9.4 µm, 8.18 kpc from the galactic centre
+PASS  6. Frame transitions — entered b:g:milky-way/s:SOL/b:0 after traveling 8 Mm
+PASS  7. Precision near the surface — 1 inch resolved to 9.4 µm, 8.18 kpc from the galactic center
 PASS  8. Meter-scale rendering — 1 m separation survives float32 at 8.18 kpc
 PASS  9. Origin rebasing — 500 rebases, 2560 km of origin travel, zero drift
 PASS 10. Worker task — 4225 terrain samples generated in a worker, identical to local generation
@@ -212,7 +213,7 @@ CI runs this on every pull request, alongside `pnpm check`.
 ## Architecture in one page
 
 ```
-UniverseVector (sector + offset)      canonical position, sub-millimetre anywhere
+UniverseVector (sector + offset)      canonical position, sub-millimeter anywhere
         ↓ reference frames             semantics of motion; identity-preserving
 frame-local Vec3                       what gameplay and physics work in
         ↓ floating origin              rebased on a 1024 m grid, exactly
@@ -223,8 +224,8 @@ Three.js
 
 Five decisions carry most of the weight:
 
-1. **Positions are sectorised**, not doubles — an int32 sector index per axis plus
-   a double offset inside a 2⁴⁰ m sector. Sub-millimetre everywhere within
+1. **Positions are sectorized**, not doubles — an int32 sector index per axis plus
+   a double offset inside a 2⁴⁰ m sector. Sub-millimeter everywhere within
    249,000 ly of the origin, and crossing a sector boundary is _exact_.
 2. **Frames are not a precision mechanism**; the coordinates already are. They
    carry the semantics of motion, and re-framing provably does not move anything.
@@ -245,13 +246,13 @@ Full reasoning, alternatives and consequences are in [`docs/adr/`](docs/adr/).
 apps/
   game               React + React Three Fiber client, WebGPU/TSL renderer
   headless           Node runner — no DOM, no React, no WebGL
-  ingest             turns published catalogues into the packed star asset
+  ingest             turns published catalogs into the packed star asset
 packages/
   shared             units, invariants, structured logging          (layer 0)
   spatial            UniverseVector, frame graph, floating origin    (1)
   procedural         PRNG, hierarchical seeds, noise                 (1)
   physics            Kepler, rigid body, atmosphere, thrusters       (2)
-  universe           addressing, catalogue, generation, terrain      (3)
+  universe           addressing, catalog, generation, terrain      (3)
   simulation         clock, entities, flight, streaming, snapshots   (4)
   protocol           versioned, validated wire and save schemas      (4)
   workers            typed tasks, transport ports, job pool          (5)
@@ -259,7 +260,7 @@ packages/
   net                authority port, local authority                 (5)
   rendering          canonical→render bridge, LOD, terrain meshing   (5)
   devtools           inspection, capability checks, harness          (6)
-data/catalog/        the packed star catalogue, committed, CC BY-SA 4.0
+data/catalog/        the packed star catalog, committed, CC BY-SA 4.0
 docs/                concepts, ADRs, guides, and the design bible
 scripts/             the dependency-graph checker
 ```
@@ -296,18 +297,18 @@ that command, so there is no separate list of CI stages to drift out of step.
 
 ### Things that will otherwise surprise you
 
-- **There are three tsconfig projects, not one, and no project references.** They
-  type-check the three real environments: `tsconfig.json` covers `packages/*` with
-  **no DOM lib** (the core must run in a browser, a worker and Node),
+- **There are five tsconfig projects, not one, and no project references.** They
+  type-check the real environments: `tsconfig.json` covers `packages/*` with
+  **no DOM lib** (the core must run in a browser, a worker, and Node),
   `apps/game/tsconfig.json` adds DOM/WebWorker/JSX, `apps/headless/tsconfig.json`
-  adds Node types. [AGENTS.md](AGENTS.md#layout-and-layering) explains why
-  references were rejected.
+  adds Node types, plus the Worker and the catalog ingest. Why references were
+  rejected is in [development](docs/guides/development.md).
 - **`strict`, `noUncheckedIndexedAccess`, `erasableSyntaxOnly` and
   `verbatimModuleSyntax` are all on.** So: no `enum`, no parameter properties,
   `import type` for type-only imports, and **local imports carry their `.ts`
   extension** — Node runs the sources directly.
 - **Vite 8 with the Oxc transform, and React Compiler is on.** Do not hand-write
-  `useMemo`/`useCallback` memoisation. (`useMemo` for a stable Three.js object is
+  `useMemo`/`useCallback` memoization. (`useMemo` for a stable Three.js object is
   a different thing and is fine.)
 - **Tests live beside the code and run in plain Node.** That is the check that the
   core stays free of DOM, React and WebGL. Reach for
@@ -319,8 +320,8 @@ that command, so there is no separate list of CI stages to drift out of step.
 
 ### The rules that actually matter
 
-[AGENTS.md](AGENTS.md) is the working guide and it is short. Each rule in it exists
-because violating it is a rewrite later rather than a refactor — for example:
+[AGENTS.md](AGENTS.md) is the working card. Each rule in it exists because
+violating it is a rewrite later rather than a refactor — for example:
 
 - Never put an absolute position in a `Vec3`. `UniverseVector` is the only thing
   that may claim to be one.
@@ -330,15 +331,16 @@ because violating it is a rewrite later rather than a refactor — for example:
 - Never persist anything regenerable. If you want to store generated content, you
   want a cache, and it is not a save.
 
-Read it before changing anything. It is written for humans and coding agents
-alike.
+Read it before changing anything. Agents should continue in
+[docs/agents/](docs/agents/README.md). Humans should continue in
+[docs/](docs/README.md).
 
 ---
 
 ## Documentation
 
-[`docs/`](docs/) is explanatory documentation — interlinked concept pages,
-diagrams and decision records, not generated API reference.
+[`docs/`](docs/README.md) is the map. Voice and where each audience should look
+are in [`docs/STYLE.md`](docs/STYLE.md).
 
 |                                                   |                                                                          |
 | ------------------------------------------------- | ------------------------------------------------------------------------ |
@@ -346,13 +348,15 @@ diagrams and decision records, not generated API reference.
 | [Vision and scope](docs/vision.md)                | What this is for, and the principles behind it                           |
 | [Architecture](docs/architecture.md)              | The system in one sitting                                                |
 | [Concepts](docs/README.md#concepts)               | How each mechanism works, and why                                        |
-| [ADRs](docs/adr/README.md)                        | Nine decisions that are expensive to reverse                             |
+| [ADRs](docs/adr/README.md)                        | Twelve decisions that are expensive to reverse                           |
+| [Development](docs/guides/development.md)         | Commands, toolchain, conventions                                         |
 | [The harness](docs/guides/harness.md)             | The scriptable API, in full                                              |
 | [Testing](docs/guides/testing.md)                 | Property tests, golden vectors, state hashes                             |
 | [Extending](docs/guides/extending.md)             | Adding a body type, a task, a save field                                 |
 | [Roadmap](docs/roadmap.md)                        | What is deliberately not built yet, and the seam for each                |
 | [Spikes](docs/spikes.md)                          | Five questions that needed a measurement, and the numbers that came back |
 | [Design bible](docs/design/README.md)             | What the game is, and why each mechanic is shaped that way               |
+| [Agent handbook](docs/agents/README.md)           | How coding agents should work here                                       |
 | [CONTEXT.md](CONTEXT.md)                          | Build log: what exists, what was decided, which bugs must not return     |
 
 ---
@@ -364,7 +368,7 @@ Stated plainly, because discovering these by surprise is worse than reading them
 - **Multiplayer is not implemented** and is a later phase. The seams exist
   (partition mapping, no vendor imports) and the design sketch is
   [ADR-0008](docs/adr/0008-multiplayer-partitions.md).
-- **Multiple-star systems are modelled as single stars.** The catalogue records
+- **Multiple-star systems are modeled as single stars.** The catalog records
   the true component count, so the simplification is visible rather than hidden.
 - **Gravity is patched-conic** — no n-body perturbation.
 - **Collision is ground contact only** — no hull, no entity-to-entity.
@@ -389,11 +393,12 @@ Stated plainly, because discovering these by surprise is worse than reading them
 Contributions are welcome, and the design's shape makes some kinds much easier
 than others.
 
-1. **Read [AGENTS.md](AGENTS.md) first.** It is the working guide for humans and
-   coding agents alike, and its rules are not stylistic.
+1. **Read [AGENTS.md](AGENTS.md) first.** It is the working card, and its rules
+   are not stylistic. The rest of the agent handbook is
+   [docs/agents/](docs/agents/README.md).
 2. **Read the ADR for the area you are touching.** They are short, and they exist
    because those decisions are expensive to reverse.
-3. **Find the test that covers the behaviour you are changing.** If there isn't
+3. **Find the test that covers the behavior you are changing.** If there is not
    one, that is the first thing to write.
 4. **`pnpm check` must be green**, and any meaningful architectural change should
    be reflected in the ADRs and in [CONTEXT.md](CONTEXT.md).
@@ -409,34 +414,34 @@ There is no `CONTRIBUTING.md` or `CODE_OF_CONDUCT.md` yet; both are
 
 ---
 
-## Licence
+## License
 
 **[Apache-2.0](LICENSE).**
 
 The project is non-commercial, but it is deliberately **not** licensed with a
-non-commercial clause — such a clause is not an open source licence under the OSI
+non-commercial clause — such a clause is not an open source license under the OSI
 definition and would make the project ineligible for most package ecosystems. The
-right way to be non-commercial is a genuine open licence and simply not
-commercialising it. The reasoning is in
+right way to be non-commercial is a genuine open license and simply not
+commercializing it. The reasoning is in
 [sustainability](docs/design/sustainability.md#licensing).
 
 ### Astronomical data
 
 `data/catalog/` is a **derived database** and is not covered by the Apache
-licence. It is CC BY-SA 4.0. The terms were verified rather than assumed
+license. It is CC BY-SA 4.0. The terms were verified rather than assumed
 ([spike 4](docs/spikes.md#4--gaia-and-hyg-attribution-terms)):
 
-| Source                     | Terms                                                                                                    |
-| -------------------------- | -------------------------------------------------------------------------------------------------------- |
-| **HYG database** v4.4      | CC BY-SA 4.0. Share-alike reaches the packed catalogue, which ships as its own asset with its own notice |
-| **NASA Exoplanet Archive** | No licence stated; operated by Caltech under NASA contract. Its requested acknowledgement is carried     |
-| **Gaia** (ESA)             | **CC BY-NC 3.0 IGO — non-commercial.** Deliberately unused, for exactly that reason                      |
+| Source                     | Terms                                                                                                  |
+| -------------------------- | ------------------------------------------------------------------------------------------------------ |
+| **HYG database** v4.4      | CC BY-SA 4.0. Share-alike reaches the packed catalog, which ships as its own asset with its own notice |
+| **NASA Exoplanet Archive** | No license stated; operated by Caltech under NASA contract. Its requested acknowledgement is carried   |
+| **Gaia** (ESA)             | **CC BY-NC 3.0 IGO — non-commercial.** Deliberately unused, for exactly that reason                    |
 
 Share-alike attaches to the database and not to the software that reads it —
 CC BY-SA 4.0 § 4(b) says "but not its individual contents" — so Apache-2.0 on
-`packages/*` and CC BY-SA 4.0 on the catalogue cover different works and do not
+`packages/*` and CC BY-SA 4.0 on the catalog cover different works and do not
 conflict. See [`NOTICE`](NOTICE), `data/catalog/LICENSE.md`, and
-[the catalogue guide](docs/guides/catalogue.md).
+[the catalog guide](docs/guides/catalogue.md).
 
 ---
 

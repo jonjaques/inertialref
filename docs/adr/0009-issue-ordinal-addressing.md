@@ -10,7 +10,7 @@ the orbital index: bodies are generated in order of semi-major axis and numbered
 as they come out.
 
 That works for a universe generated from a seed alone. It does not survive the
-[catalogue](../design/galaxy.md) becoming a second generation input.
+[catalog](../design/galaxy.md) becoming a second generation input.
 
 Real astronomy changes. A star with no known planets today may have three
 confirmed next year; an orbit gets refined; a candidate is retracted. When a
@@ -29,7 +29,7 @@ the one place it does:
 
 It treated that as acceptable because a rename would be deliberate and detectable
 through algorithm versioning. That reasoning holds for _our_ changes to the
-generator. It does not hold for the catalogue, because the catalogue changes on
+generator. It does not hold for the catalog, because the catalog changes on
 someone else's schedule, continuously, forever, and a version bump that renames
 half the galaxy every few weeks is not a version bump anybody can act on.
 
@@ -59,10 +59,10 @@ A system therefore carries an ordered, **append-only** body manifest:
 
 Four rules govern it:
 
-1. **The catalogue version is an explicit generation input.** `bodies(system,
+1. **The catalog version is an explicit generation input.** `bodies(system,
 seed, catalogueVersion)` — same three inputs, same universe, forever, on any
    machine, offline. Determinism is unchanged; it now has three inputs instead of
-   two, and the catalogue version joins `algorithm()` in the generation manifest
+   two, and the catalog version joins `algorithm()` in the generation manifest
    ([ADR-0005](0005-procedural-seeds.md)).
 2. **Indices are never reused and never reordered.** A new body takes the next
    free index, wherever it sits in the orbital sequence.
@@ -79,11 +79,11 @@ seed, catalogueVersion)` — same three inputs, same universe, forever, on any
 
 ## Alternatives considered
 
-- **Keep orbital indices, and version the whole catalogue as an algorithm bump.**
+- **Keep orbital indices, and version the whole catalog as an algorithm bump.**
   Honest and already implemented. But it renames bodies on a schedule set by the
   astronomical community rather than by us, and a save-breaking bump every few
   weeks is indistinguishable from having no stable identity at all.
-- **Address bodies by their catalogue designation instead** (`b:Proxima-b`).
+- **Address bodies by their catalog designation instead** (`b:Proxima-b`).
   Works beautifully for the ~6,000 confirmed exoplanets and not at all for the
   millions of generated ones, which have no designation to use. It also makes
   identity depend on a name that gets revised.
@@ -126,6 +126,6 @@ seed, catalogueVersion)` — same three inputs, same universe, forever, on any
 ## Related
 
 - [ADR-0004](0004-entity-addressing.md) — the addressing model this amends
-- [ADR-0005](0005-procedural-seeds.md) — the versioning machinery the catalogue version rides on
+- [ADR-0005](0005-procedural-seeds.md) — the versioning machinery the catalog version rides on
 - [ADR-0007](0007-persistence.md) — why a save is a reference, and what a tombstone protects
-- [Design: galaxy](../design/galaxy.md#catalogue-revisions) — the mechanic this enables
+- [Design: galaxy](../design/galaxy.md#catalog-revisions) — the mechanic this enables

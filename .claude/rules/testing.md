@@ -6,7 +6,7 @@ paths:
 
 # Tests
 
-Reasoning: `AGENTS.md` § "Testing".
+Reasoning: `docs/guides/testing.md`.
 
 - **Tests run in plain Node.** That is the check that the core stays free of DOM, React
   and WebGL — nothing registers a browser environment, and nothing should start.

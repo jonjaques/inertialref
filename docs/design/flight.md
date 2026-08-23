@@ -8,7 +8,7 @@ The Reference Drive, the burn, and the fuel that gates everything.
 > **Changed in v0.2.** The previous edition had an Elite-style cruise mode in
 > which a gravity gradient throttled your maximum speed, and the skill was
 > managing a throttle against an overshoot. That was a contrivance — the fiction
-> had to be told to produce the behaviour — and throttle-correction is not a
+> had to be told to produce the behavior — and throttle-correction is not a
 > compelling verb. It is replaced by **honest brachistochrone burns**: accelerate,
 > flip, decelerate. Deceleration is still required, because you are going fast
 > and must arrive at rest, which is Newton rather than a rule we invented.
@@ -131,7 +131,7 @@ the trip to be a trip.
 | Class 4 | 38 g          | 0.095 c/s   | 1.8 g                 | 5.2 g                   |
 | Class 5 | 52 g          | 0.170 c/s   | 2.4 g                 | 6.8 g                   |
 
-**Transit is comfortable. Manoeuvre is not.** Compensation is optimised for
+**Transit is comfortable. Manoeuvre is not.** Compensation is optimized for
 sustained, straight-line, high-power running; it is much less effective against
 the short, hard, off-axis accelerations of combat and atmospheric flight. A
 Class 5 pulling maximum manoeuvre puts nearly 7 g through the seat, which is
@@ -319,7 +319,7 @@ everything else draws from. No second fuel, no consumables, no ammunition.
 ### Scooping
 
 Fuel is taken from a star's outer atmosphere. **Which stars are scoopable is real
-data** — the spectral class from the catalogue, not a flag we assign.
+data** — the spectral class from the catalog, not a flag we assign.
 
 | Class                    | Scoopable | Rate multiplier | Real-world basis                                   |
 | ------------------------ | --------- | --------------- | -------------------------------------------------- |

@@ -68,5 +68,6 @@ Status: accepted · <D Mon YYYY>
 - Add it to `docs/adr/README.md`.
 - If the ADR creates an invariant an agent could violate without reading it, add the
   one-line imperative to `AGENTS.md` § "The rules that actually matter" **and** to the
-  matching `.claude/rules/*.md` — see the contract in `.claude/rules/README.md`.
+  matching `.claude/rules/*.md`, plus a row in `docs/agents/invariants.md` — see the
+  contract in `.claude/rules/README.md`.
 - Record the decision in `CONTEXT.md` with `/context-log`.

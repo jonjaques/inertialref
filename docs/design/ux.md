@@ -162,11 +162,11 @@ silently correcting.
 
 | Element            | Position              | Why it is permanent                                                                                 |
 | ------------------ | --------------------- | --------------------------------------------------------------------------------------------------- |
-| Pips               | Bottom centre         | Changed constantly; must be readable in peripheral vision                                           |
-| **g-meter**        | Bottom centre         | Felt acceleration, and the compensation margin. The cost of being in a hurry, on your body.         |
+| Pips               | Bottom center         | Changed constantly; must be readable in peripheral vision                                           |
+| **g-meter**        | Bottom center         | Felt acceleration, and the compensation margin. The cost of being in a hurry, on your body.         |
 | Thermal            | Bottom right          | The gauge that kills you — and a hard burn is [the largest routine load in the game](ships.md#heat) |
 | Fuel               | Bottom right          | The gauge that strands you                                                                          |
-| Attitude / horizon | Bottom centre, subtle | Only near a body; fades in interstellar space                                                       |
+| Attitude / horizon | Bottom center, subtle | Only near a body; fades in interstellar space                                                       |
 
 ### What appears contextually
 
@@ -200,7 +200,7 @@ and its controls are physical, on the console, always reachable.
 | **Integration** | How long the sensor accumulates. Longer reveals faint structure and smears anything moving.                                                                                  |
 | **Response**    | Composite only — the tone curve's shoulder, from near-linear to fully filmic                                                                                                 |
 | **View**        | Which direction the composite is assembled from. **This is what lets you watch your destination through the second half of a burn**, when the ship is pointed the other way. |
-| **Filter**      | Broadband, narrowband, false-colour composites                                                                                                                               |
+| **Filter**      | Broadband, narrowband, false-color composites                                                                                                                                |
 
 Two design rules. **The composited view never rotates the cockpit** — the ship's
 attitude indicator and the physical window always tell you where the hull
@@ -325,7 +325,7 @@ not punish having one.
 
 | Scheme               | Assumption         | Notes                                                                                                                                                    |
 | -------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Mouse + keyboard** | Default            | Relative mouse for pitch/yaw with a configurable deadzone and return-to-centre. This has to be _good_, not tolerated — it is what most players will use. |
+| **Mouse + keyboard** | Default            | Relative mouse for pitch/yaw with a configurable deadzone and return-to-center. This has to be _good_, not tolerated — it is what most players will use. |
 | **Gamepad**          | Full parity        | Dual sticks for rotation and translation; pips on the d-pad                                                                                              |
 | **HOTAS / HOSAS**    | Full 6-DoF binding | Direct axis binding, no emulation layer, per-device profiles. **Chromium only** — see below                                                              |
 
@@ -400,7 +400,7 @@ looking at things.
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Motion sickness** | Configurable FOV 60–110°; head-bob off by default; roll-compensation option that keeps the horizon level; a "reduce camera shake" toggle that affects all shake. **The flip is the highest-risk moment in the game** — a 180° rotation under freefall — so it gets its own option: assist-flip, which is slower and smoother, and a fixed-horizon option through the rotation. |
 | **Text size**       | Three sizes, scaling all UI including HUD. Minimum body text 16 px at 1080p.                                                                                                                                                                                                                                                                                                   |
-| **Colour**          | No information conveyed by colour alone. Provenance uses **dash pattern** as well as opacity; scan state uses **glyphs**. Protanopia, deuteranopia and tritanopia palettes.                                                                                                                                                                                                    |
+| **Color**           | No information conveyed by color alone. Provenance uses **dash pattern** as well as opacity; scan state uses **glyphs**. Protanopia, deuteranopia and tritanopia palettes.                                                                                                                                                                                                     |
 | **Contrast**        | HUD elements meet 4.5:1 against the brightest plausible background — which, in this game, is a star filling the canopy. That is the design case, not a corner case.                                                                                                                                                                                                            |
 | **Subtitles**       | All correspondence is text already. Audio cues that convey information — heat warning, lock warning, scan complete — have visual equivalents, always.                                                                                                                                                                                                                          |
 | **Remapping**       | Everything, including modifiers. No fixed keys.                                                                                                                                                                                                                                                                                                                                |

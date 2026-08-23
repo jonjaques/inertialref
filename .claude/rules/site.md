@@ -18,7 +18,7 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", `docs/hosting.md`, A
   `icon-*.png`, `og.png`, `manifest.webmanifest`, `robots.txt`, `sitemap.xml` and
   `src/icons/brandmark.ts` are all generated from `design/brand/brandmark.svg` and
   `src/site.ts`. Edit the source, run `pnpm brand`, commit the result.
-  `pnpm brand --check` is in `pnpm check`.
+  `pnpm brand:check` is in `pnpm check`.
 - **`index.html`'s head and `src/site.ts` are duplicated on purpose and change together.**
   No social scraper runs JavaScript, so the static head is the only card the site has;
   `DocumentMeta.tsx` covers only readers that execute scripts.

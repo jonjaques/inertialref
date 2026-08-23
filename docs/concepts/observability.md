@@ -145,7 +145,7 @@ Twelve executable assertions about the architecture, runnable against the live
 build:
 
 ```
-PASS  7. Precision near the surface — 1 inch resolved to 9.4 µm, 8.18 kpc from the galactic centre
+PASS  7. Precision near the surface — 1 inch resolved to 9.4 µm, 8.18 kpc from the galactic center
 PASS  9. Origin rebasing — 500 rebases, 2560 km of origin travel, zero drift
 PASS 10. Worker task — 4225 terrain samples generated in a worker, identical to local generation
 ```
