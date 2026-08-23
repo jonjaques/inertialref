@@ -156,8 +156,13 @@ async function media(
      * The answer to bad client input is a 4xx naming the constraint, not a 500
      * — and a 500 here would also be indistinguishable in the logs from the
      * bucket being down.
+     *
+     * The extra `head` buys the one thing that makes a 416 actionable: the
+     * length the caller should have asked within. It is a second round trip on
+     * a path nothing reaches unless it asked for bytes that do not exist.
      */
-    return unsatisfiable()
+    const meta = await env.MEDIA.head(object.key).catch(() => null)
+    return unsatisfiable(meta?.size)
   }
   if (stored === null) {
     return new Response('not in storage', {
