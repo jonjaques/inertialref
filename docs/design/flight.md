@@ -125,11 +125,11 @@ the trip to be a trip.
 ### Drive ratings
 
 | Drive   | Max maneuver | Max transit | Felt g at max transit | Felt g at max maneuver |
-| ------- | ------------- | ----------- | --------------------- | ----------------------- |
-| Class 2 | 18 g          | 0.020 c/s   | 1.1 g                 | 3.0 g                   |
-| Class 3 | 26 g          | 0.050 c/s   | 1.4 g                 | 3.9 g                   |
-| Class 4 | 38 g          | 0.095 c/s   | 1.8 g                 | 5.2 g                   |
-| Class 5 | 52 g          | 0.170 c/s   | 2.4 g                 | 6.8 g                   |
+| ------- | ------------ | ----------- | --------------------- | ---------------------- |
+| Class 2 | 18 g         | 0.020 c/s   | 1.1 g                 | 3.0 g                  |
+| Class 3 | 26 g         | 0.050 c/s   | 1.4 g                 | 3.9 g                  |
+| Class 4 | 38 g         | 0.095 c/s   | 1.8 g                 | 5.2 g                  |
+| Class 5 | 52 g         | 0.170 c/s   | 2.4 g                 | 6.8 g                  |
 
 **Transit is comfortable. Maneuver is not.** Compensation is optimized for
 sustained, straight-line, high-power running; it is much less effective against

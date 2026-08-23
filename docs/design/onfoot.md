@@ -177,13 +177,13 @@ and a layout grammar.
 where [the travel model](flight.md#the-burn) and the on-foot layer meet, and it
 is one of the better consequences of the v0.2 redesign.
 
-| Felt acceleration                    | What it is like inside                                               |
-| ------------------------------------ | -------------------------------------------------------------------- |
-| 0 g — coast, or **the flip**         | Freefall. Handholds, and everything unsecured is floating.           |
-| 0.1–1.4 g — transit                  | Normal. There is a floor and it is aft. You can work.                |
+| Felt acceleration                   | What it is like inside                                               |
+| ----------------------------------- | -------------------------------------------------------------------- |
+| 0 g — coast, or **the flip**        | Freefall. Handholds, and everything unsecured is floating.           |
+| 0.1–1.4 g — transit                 | Normal. There is a floor and it is aft. You can work.                |
 | 1.5–3 g — hard transit, or maneuver | Heavy. Movement is slow and expensive; the suit warns.               |
-| 3–5 g — combat maneuvering           | **Secure yourself or be injured.** Unsecured objects become hazards. |
-| > 5 g                                | Crew stations only. Egress from the seat is refused.                 |
+| 3–5 g — combat maneuvering          | **Secure yourself or be injured.** Unsecured objects become hazards. |
+| > 5 g                               | Crew stations only. Egress from the seat is refused.                 |
 
 Two consequences worth having. **"Down" is the direction the drive is not** — so
 during a burn the ship's floor is aft, and after the flip it is forward, which

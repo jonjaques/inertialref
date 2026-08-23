@@ -824,7 +824,7 @@ put it on the debug overlay, and look at it for a phase before trusting it.
 | **H0** ✅ | Fix the coincidence                  | `inspect.ts` calls `partitionForAddress`; a renamed frame grammar breaks a test rather than production                                                                      |
 | **H1** ✅ | The client is on a URL               | `apps/server` exists, serves `apps/game/dist`, SPA fallback works, service worker excludes `/api` and `/ws`, custom domain live, 12/12 capability checks pass in production |
 | **H2** 🟡 | The API exists and is empty          | `/api/version` returns seed, galaxy and `GENERATION_VERSIONS`; D1 bound with one migration; `wrangler types` output committed; fourth tsconfig project green                |
-| **H3** ✅ | The port exists, still offline       | `packages/net` with `AuthorityPort` + `LocalAuthority`; `openSession` takes one and defaults to local; **no behavioral change**, proven by an unchanged `stateHash`        |
+| **H3** ✅ | The port exists, still offline       | `packages/net` with `AuthorityPort` + `LocalAuthority`; `openSession` takes one and defaults to local; **no behavioral change**, proven by an unchanged `stateHash`         |
 | **H4**    | The socket exists, carrying presence | One DO per partition with hibernating sockets; two browser tabs in Sol see each other's ship; closing one drops presence within the timeout; state survives an eviction     |
 | **H5**    | The first real mutation              | A `discovered` claim written through the API, atomic in D1, visible to the other tab, and present in a save round trip                                                      |
 

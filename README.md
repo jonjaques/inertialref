@@ -434,7 +434,7 @@ license. It is CC BY-SA 4.0. The terms were verified rather than assumed
 | Source                     | Terms                                                                                                  |
 | -------------------------- | ------------------------------------------------------------------------------------------------------ |
 | **HYG database** v4.4      | CC BY-SA 4.0. Share-alike reaches the packed catalog, which ships as its own asset with its own notice |
-| **NASA Exoplanet Archive** | No license stated; operated by Caltech under NASA contract. Its requested acknowledgment is carried   |
+| **NASA Exoplanet Archive** | No license stated; operated by Caltech under NASA contract. Its requested acknowledgment is carried    |
 | **Gaia** (ESA)             | **CC BY-NC 3.0 IGO — non-commercial.** Deliberately unused, for exactly that reason                    |
 
 Share-alike attaches to the database and not to the software that reads it —

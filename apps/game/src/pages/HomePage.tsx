@@ -240,8 +240,7 @@ export function HomePage({ engine }: { engine: GameEngine }) {
             could pick up, with nothing to load in between.
           </p>
           <p className="type-body mt-2 max-w-[38ch] text-slate-400">
-            It is early. What runs today is the sky, the catalog and the
-            camera.
+            It is early. What runs today is the sky, the catalog and the camera.
           </p>
 
           {/*

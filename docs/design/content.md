@@ -160,20 +160,20 @@ the reason the frontier means something.
 For the [MVP](production.md#the-mvp-the-explorer), the numbers that have to be
 true:
 
-|                                | Target                                | How it is met                       |
-| ------------------------------ | ------------------------------------- | ----------------------------------- |
+|                                | Target                                | How it is met                      |
+| ------------------------------ | ------------------------------------- | ---------------------------------- |
 | Star systems reachable         | Effectively unbounded                 | Generated; ~119k cataloged via HYG |
-| Systems with real catalog data | ~119,000                              | HYG ingest                          |
-| Confirmed exoplanets           | ~6,000 `[Assumption: read at ingest]` | NASA Exoplanet Archive              |
-| Landable bodies                | Millions                              | Generated                           |
-| Biomes                         | 8                                     | Authored material sets              |
-| Ship hulls                     | 6                                     | Parts-assembled                     |
-| Ship modules                   | ~60 across 12 lines × 5 grades        | Parametric                          |
-| Suit modules                   | ~18                                   | Parametric                          |
-| Room modules                   | 12                                    | Authored parts                      |
-| Rock / scatter meshes          | ~20                                   | Authored parts                      |
-| Weapons                        | 12 across 4 classes                   | Post-MVP                            |
-| Structures                     | 3 kinds, parts-assembled              | Post-MVP                            |
+| Systems with real catalog data | ~119,000                              | HYG ingest                         |
+| Confirmed exoplanets           | ~6,000 `[Assumption: read at ingest]` | NASA Exoplanet Archive             |
+| Landable bodies                | Millions                              | Generated                          |
+| Biomes                         | 8                                     | Authored material sets             |
+| Ship hulls                     | 6                                     | Parts-assembled                    |
+| Ship modules                   | ~60 across 12 lines × 5 grades        | Parametric                         |
+| Suit modules                   | ~18                                   | Parametric                         |
+| Room modules                   | 12                                    | Authored parts                     |
+| Rock / scatter meshes          | ~20                                   | Authored parts                     |
+| Weapons                        | 12 across 4 classes                   | Post-MVP                           |
+| Structures                     | 3 kinds, parts-assembled              | Post-MVP                           |
 
 **The authored column totals roughly 40 meshes and 8 material sets.** That is the
 number that has to be affordable, and it is. Everything else in the table is a

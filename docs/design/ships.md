@@ -170,11 +170,11 @@ Six pips, three subsystems, redistributable at any moment.
            2 pips             1 pip             0 pips     ← 3 unassigned
 ```
 
-| Bank      | Feeds                                     | Starved effect                                                                                                                                                                                           |
-| --------- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Bank      | Feeds                                     | Starved effect                                                                                                                                                                                          |
+| --------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **DRIVE** | Thrusters, Reference Drive                | Maneuver thrust, transit acceleration and inertial compensation all scale with allocation; at 0 pips, 45% of rated. **Starving DRIVE mid-burn raises felt g**, which is a real and unpleasant surprise. |
-| **SYS**   | Shields, sensors, life support, radiators | Shield recharge stops; sensor range halves                                                                                                                                                               |
-| **PAY**   | Weapons, scanners, fuel scoop             | Weapons will not fire; scoop rate scales linearly                                                                                                                                                        |
+| **SYS**   | Shields, sensors, life support, radiators | Shield recharge stops; sensor range halves                                                                                                                                                              |
+| **PAY**   | Weapons, scanners, fuel scoop             | Weapons will not fire; scoop rate scales linearly                                                                                                                                                       |
 
 Total reactor output is a module property, and a fitted ship can easily demand
 more than it produces — which is the constraint that makes the pips matter. A
@@ -260,14 +260,14 @@ impact and thermal wear, specified below. A module at 0% impact is **offline, no
 destroyed**, and can be repaired. Losing individual modules produces the
 situations worth having:
 
-| Module lost     | Consequence                                                                                                                                   |
-| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Module lost     | Consequence                                                                                                                                  |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | Reference Drive | Cannot jump, and transit power is gone. Maneuver thrust remains, so you are not stranded — you are _hours_ from anywhere instead of minutes. |
-| Sensors         | No targeting, no scanning, no contacts list. Fly on the window.                                                                               |
-| Life Support    | A countdown, measured in the oxygen in the cockpit.                                                                                           |
-| Fuel Tank       | Leaking. The countdown is the tank.                                                                                                           |
-| Thrusters       | Partial attitude authority; one axis may be dead.                                                                                             |
-| Reactor         | Priority failover sheds modules in order until draw fits output.                                                                              |
+| Sensors         | No targeting, no scanning, no contacts list. Fly on the window.                                                                              |
+| Life Support    | A countdown, measured in the oxygen in the cockpit.                                                                                          |
+| Fuel Tank       | Leaking. The countdown is the tank.                                                                                                          |
+| Thrusters       | Partial attitude authority; one axis may be dead.                                                                                            |
+| Reactor         | Priority failover sheds modules in order until draw fits output.                                                                             |
 
 **Shields** are an optional module: a rechargeable buffer that absorbs damage
 before the hull and recharges from SYS. They are not mandatory, and an explorer

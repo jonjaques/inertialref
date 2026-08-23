@@ -28,9 +28,9 @@ export function AboutPage() {
       <div className="flex flex-col gap-3">
         <p className="text-slate-300">
           InertialRef is a space flight simulator whose universe is a
-          deterministic function of a seed and a star catalog. There is
-          nothing to download and nothing to ask a server for: the galaxy is
-          derived, so every client computes the same one.
+          deterministic function of a seed and a star catalog. There is nothing
+          to download and nothing to ask a server for: the galaxy is derived, so
+          every client computes the same one.
         </p>
 
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 border-y border-slate-800 py-2">

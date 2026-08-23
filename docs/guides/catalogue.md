@@ -83,7 +83,7 @@ the first.
 | Source                                                                            | Provides                                                                       | License                                                    |
 | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------- |
 | [HYG v4.4](https://codeberg.org/astronexus/hyg)                                   | 119,614 stars: positions, parallaxes, magnitudes, spectral types, designations | **CC BY-SA 4.0**                                           |
-| [NASA Exoplanet Archive](https://exoplanetarchive.ipac.caltech.edu/) `pscomppars` | confirmed planets with published orbits, masses and radii                      | none stated; acknowledgment requested                     |
+| [NASA Exoplanet Archive](https://exoplanetarchive.ipac.caltech.edu/) `pscomppars` | confirmed planets with published orbits, masses and radii                      | none stated; acknowledgment requested                      |
 | `apps/ingest/src/solarSystem.ts`                                                  | the eight planets of the Solar System                                          | J2000 elements from JPL fact sheets — facts, not a dataset |
 
 **Gaia is deliberately absent.** Its data are CC BY-NC 3.0 IGO, and a
