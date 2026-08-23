@@ -4,6 +4,7 @@ import { MotionConfig } from 'motion/react'
 import { BrowserRouter } from 'react-router'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { createConsoleSink, logHub } from '@inertialref/shared'
+import { startAnalytics } from './analytics.ts'
 import App from './App.tsx'
 import { BUILD_ID } from './build.ts'
 import { loadStarCatalog } from './engine/catalogAsset.ts'
@@ -19,6 +20,19 @@ import './index.css'
  * hub.
  */
 logHub.addSink(createConsoleSink(console, 'info'))
+
+/*
+ * Analytics, wired here for the same reason the log sink is: loading a third
+ * party tag is a process-wide side effect and belongs to the process's entry
+ * point, not to a component that might mount twice.
+ *
+ * It is a no-op unless this is a production build on the canonical host with no
+ * Global Privacy Control set, so a dev server, `pnpm preview`, a Wrangler
+ * preview URL and a fork all measure nothing. `analytics.ts` has the argument.
+ * Individual page views come from `pages/DocumentMeta.tsx`, which is inside the
+ * router and therefore knows when the address changed.
+ */
+startAnalytics()
 
 /*
  * The last resort, when there is no React left to draw one.

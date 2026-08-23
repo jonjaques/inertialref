@@ -46,3 +46,4 @@ every touch of its directory, and the thing it is competing with for attention i
 | `catalogue.md`   | the star catalogue or the ingest app                          |
 | `server.md`      | the Worker, net, protocol or persistence                      |
 | `testing.md`     | any `*.test.ts`                                               |
+| `site.md`        | the document head, `public/`, the brand pipeline, analytics   |

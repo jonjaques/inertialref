@@ -44,6 +44,7 @@ import {
   type OutputPreference,
   type RendererDescription,
 } from './render/output.ts'
+import { DocumentMeta } from './pages/DocumentMeta.tsx'
 import { ModeRoutes } from './pages/ModeRoutes.tsx'
 import { OverlayRoutes } from './pages/OverlayRoutes.tsx'
 import { modeForPath, resolvedLocation } from './pages/paths.ts'
@@ -508,6 +509,10 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
 
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-black text-slate-200">
+      {/* Renders nothing; keeps the tab, the canonical link and the analytics
+          page view in step with the address bar. Inside the shell rather than
+          in `main.tsx` because it needs the router's location. */}
+      <DocumentMeta />
       <Canvas
         key={canvasKey}
         // Not renderer *settings* — the renderer itself. `createRenderer` probes

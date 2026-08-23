@@ -2,7 +2,7 @@
 name: drive
 description: Launch, drive and screenshot InertialRef — the dev server, the window.ir harness, the headless runner, and the browser gotchas (hard reload, ~18s renderer boot, double screenshot after a seek) that otherwise cost an hour. Use whenever asked to run the game, verify a change in the real app, capture a still, or step a cutscene. This is the project skill the built-in /run defers to.
 argument-hint: '[what to verify]'
-allowed-tools: Bash(pnpm dev:*) Bash(pnpm dev:server) Bash(pnpm sim:*) Bash(pnpm vitest:*)
+allowed-tools: Bash(pnpm dev:*) Bash(pnpm dev:client) Bash(pnpm dev:server) Bash(pnpm preview:*) Bash(pnpm sim:*) Bash(pnpm vitest:*)
 ---
 
 # Driving InertialRef
@@ -31,9 +31,12 @@ what only a GPU can prove: shading, LOD, framing, the cutscene, presentation.
 ## The browser
 
 ```bash
-pnpm dev          # vite, http://localhost:5173
-pnpm dev:server   # wrangler on 127.0.0.1:8787 — without it the client correctly
-                  # reports "no server"; that is not a client bug to fix
+pnpm dev          # BOTH: vite on http://localhost:5173, wrangler on 8787
+pnpm dev:client   # vite alone — the client then correctly reports "no server",
+                  # which is the offline path and not a client bug to fix
+pnpm preview      # build, then serve through the real Worker on 8787. Reach for
+                  # this when the question is about how something is *served* —
+                  # asset headers, the SPA fallback, the service worker
 ```
 
 Drive it from the console on `window.ir`. `ir.help()` prints the whole API.

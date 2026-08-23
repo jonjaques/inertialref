@@ -4,6 +4,7 @@ import {
   type ServerHealth,
 } from '@inertialref/protocol'
 import { GENERATION_VERSIONS } from '@inertialref/universe'
+import { type MediaObject, resolveRange } from './media.ts'
 import { routeFor } from './routes.ts'
 
 /*
@@ -74,6 +75,18 @@ export default {
       case 'api-not-found':
         return api({ error: 'no such endpoint' }, 404)
 
+      case 'media':
+        if (request.method !== 'GET' && request.method !== 'HEAD') {
+          return api({ error: 'media is a GET' }, 405)
+        }
+        return media(request, env, route.object)
+
+      case 'media-not-found':
+        return new Response('no such media object', {
+          status: 404,
+          headers: { 'content-type': 'text/plain; charset=utf-8' },
+        })
+
       case 'asset':
         // Unreachable under the current `run_worker_first`, and handled anyway
         // so that changing that config cannot silently turn the site into 404s.
@@ -81,6 +94,93 @@ export default {
     }
   },
 } satisfies ExportedHandler<Env>
+
+/**
+ * One media object, from the bundle if it is there and from R2 if it is not.
+ *
+ * The order is not a preference, it is a cost: an asset request is free, never
+ * leaves the asset store, and gets `Range` right without any of the code below.
+ * R2 is the guarantee behind it — a build that ran without credentials produces
+ * a bundle with no audio, and this is what makes that a slower first byte
+ * rather than a missing feature. `media.ts` has the whole arrangement.
+ *
+ * **The miss is detected by content type, and that is not a heuristic.**
+ * `not_found_handling: single-page-application` means the asset store answers a
+ * path it does not have with `index.html` and a **200**, so there is no status
+ * code to test. Nothing under `/media/` is ever HTML, so an HTML answer to a
+ * request for an `.mp3` is unambiguous — and the alternative, trusting the 200,
+ * hands an `<audio>` element a page of markup.
+ */
+async function media(
+  request: Request,
+  env: Env,
+  object: MediaObject,
+): Promise<Response> {
+  const asset = await env.ASSETS.fetch(request)
+  const type = asset.headers.get('content-type') ?? ''
+  if (!type.startsWith('text/html')) return asset
+
+  /*
+   * `range` and `onlyIf` are handed the request's own headers: R2 parses
+   * `Range`, `If-None-Match` and the rest itself, which is the only way to get
+   * this right without reimplementing RFC 9110 in a Worker.
+   */
+  const stored = await env.MEDIA.get(object.key, {
+    range: request.headers,
+    onlyIf: request.headers,
+  })
+  if (stored === null) {
+    return new Response('not in storage', {
+      status: 404,
+      headers: { 'content-type': 'text/plain; charset=utf-8' },
+    })
+  }
+
+  const headers = new Headers()
+  stored.writeHttpMetadata(headers)
+  headers.set('etag', stored.httpEtag)
+  headers.set('accept-ranges', 'bytes')
+  /*
+   * Immutable, and it is true rather than optimistic: the name is an
+   * allow-listed constant in `media.ts`, so a *different* track is a different
+   * entry and a different URL. This is also what keeps the invocation cost of
+   * `run_worker_first` on this path down to roughly one per client.
+   */
+  headers.set('cache-control', 'public, max-age=31536000, immutable')
+  if (!headers.has('content-type')) headers.set('content-type', object.type)
+
+  // No body means R2 answered a conditional request: the client already has it.
+  if (!('body' in stored) || stored.body === null) {
+    return new Response(null, { status: 304, headers })
+  }
+
+  /*
+   * A 206 only when one was asked for.
+   *
+   * `stored.range` is populated whether or not the request carried a `Range`
+   * header — an unranged get reports the whole object as its range — so keying
+   * the status off it alone answers every plain GET with 206 Partial Content.
+   * Nothing errors: the bytes are right, and a browser mostly copes. What it
+   * breaks is every cache in between, which is entitled to treat a partial
+   * response as one it must not reuse as a whole one.
+   */
+  const range = request.headers.has('range')
+    ? resolveRange(stored.range ?? {}, stored.size)
+    : null
+  if (range === null) {
+    headers.set('content-length', String(stored.size))
+    return new Response(request.method === 'HEAD' ? null : stored.body, {
+      status: 200,
+      headers,
+    })
+  }
+  headers.set('content-range', range.contentRange)
+  headers.set('content-length', String(range.length))
+  return new Response(request.method === 'HEAD' ? null : stored.body, {
+    status: 206,
+    headers,
+  })
+}
 
 /**
  * A JSON response that nothing is allowed to cache.

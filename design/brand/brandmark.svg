@@ -1,0 +1,44 @@
+<!--
+  THE MARK. This file is the source; every other copy is generated from it.
+
+  Three sheared bars, descending, narrowing and dimming — a vector still
+  carrying the momentum of the one before it, which is the only idea in the
+  product's name.
+
+  Everything about the construction is a consequence of it having to survive a
+  16 px browser tab:
+
+    - Three parts, no strokes. Filled shapes hold their weight at any size; a
+      hairline outline at 16 px is either invisible or the whole mark.
+    - The gaps are wider than they look right at 32 px. 3.75 units of 32 is just
+      under 2 px in a favicon, which is the floor at which a gap still reads as
+      a gap rather than as a smudge.
+    - The three tones are three steps of the accent ramp (sky-100, sky-300,
+      sky-500), not an opacity fade. Opacity composites against whatever is
+      behind the mark, and the surfaces it is drawn on — a tab strip, a menu
+      bar, a share card — are different shades of dark on every platform.
+
+  WHAT READS THIS FILE. `scripts/brand/build.mjs` parses it for the `d` and
+  `fill` of each `<path>`, in order, and writes:
+
+      apps/game/public/favicon.svg          the mark on its slate-950 plate
+      apps/game/public/icon-*.png           the PWA icons and apple-touch-icon
+      apps/game/public/favicon.ico          for clients that still ask for it
+      apps/game/public/og.png               the share card
+      apps/game/src/icons/brandmark.ts      the paths, for <Logomark>
+
+  So the parse is deliberately dumb and the file has to stay simple: one
+  `<svg viewBox>`, some number of `<path d fill>`, nothing else. Redraw the mark
+  here, run `pnpm brand`, and the tab, the home screen, the share card and the
+  running interface all change together. `pnpm brand --check` is in `pnpm check`
+  and fails if they have drifted apart.
+
+  The bounding box is x 3–30, y 2.5–29.5 — 27 units square inside a 32 unit
+  viewBox. `build.mjs` reads that box rather than assuming it, so a redraw that
+  changes the extents still centres correctly.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
+  <path d="M12 2.5H30L25 9H7Z" fill="#e0f2fe" />
+  <path d="M10 12.75H25.5L20.5 19.25H5Z" fill="#7dd3fc" />
+  <path d="M8 23H21L16 29.5H3Z" fill="#0ea5e9" />
+</svg>

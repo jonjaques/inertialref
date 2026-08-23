@@ -187,6 +187,29 @@ authority at the moment of the edit, and states the previous rule.
   a material taken from `three` is a classic material the renderer has to convert
   behind your back. `packages/*` may not import Three.js at all; `pnpm graph`
   enforces that half.
+- **Never edit a file `pnpm brand` writes.** The mark is
+  `design/brand/brandmark.svg`, and one generator turns it into the favicon, the
+  `.ico`, the apple-touch and PWA icons, the share card, the web manifest,
+  `robots.txt`, `sitemap.xml` and `icons/brandmark.ts`. Before it there were
+  three hand-kept copies of the same drawing, each with a comment asking the
+  next person to keep them in step — which is a drawing that is about to be two
+  drawings, and the moment it is, the tab, the home screen and the running
+  interface disagree about what the product looks like. `pnpm brand --check` is
+  in `pnpm check`.
+- **Never change what the site says about itself in only one of the two
+  places.** `src/site.ts` is what the running client puts in the tab and the
+  canonical link; `index.html`'s static head is what a _scraper_ reads, and no
+  scraper runs JavaScript. An Open Graph tag written by React is a tag no card
+  has ever seen, so the two are duplicated on purpose and change together. Both
+  files carry the pointer, and `docs/hosting.md` records what it would cost to
+  make them one — the Worker on every navigation, which is a billed invocation
+  in place of a free static asset request.
+- **Never load a third-party tag from `index.html`.** Google's own snippet has
+  no condition in it, and this needs three: a production build, the canonical
+  host, and no Global Privacy Control. `src/analytics.ts` is that gate, and
+  `site.test.ts` states it — because the failure is silent in both directions,
+  and a preview URL quietly measuring the maintainer's own testing is
+  indistinguishable in the numbers from real visitors.
 
 ## Conventions
 

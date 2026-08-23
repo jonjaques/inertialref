@@ -6,15 +6,15 @@
 # Almost nothing passes it, which is the point — a worktree that silently carries state
 # the main checkout has is a worktree that passes tests the branch would fail.
 
-# The cutscene's reference audio track. A local copy of copyrighted music that must never
-# enter the repository, and that no command can fetch — so a worktree doing cutscene work
-# has no way to get it back. `CutsceneOverlay` discovers it at this path when present and
-# plays without it when not, so its absence is silent rather than a failure.
-apps/game/public/tng-intro.*
-
-# Local vite / wrangler environment overrides, if any exist.
+# Build-time and local environment. `apps/game/.env.production` carries the GA
+# measurement id for a deploy run from this machine and is gitignored because the
+# repository is public — so a worktree that did not carry it would produce a
+# bundle that silently measures nothing. `.env.example` is committed and arrives
+# with git like any other file.
 .env
-.env.local
+.env.*
+**/.env
+**/.env.*
 *.local
 
 # Deliberately NOT here:
@@ -27,3 +27,8 @@ apps/game/public/tng-intro.*
 #   .data/         — 34 MB of raw HYG downloads that exist only to produce
 #                    data/catalog (committed). `pnpm catalog:fetch` re-downloads them.
 #   apps/server/.wrangler/ — local Worker state; a fresh one is correct.
+#   apps/game/public/media/ — the cutscene's reference audio. It used to be listed here on
+#                    the grounds that no command could fetch it back. `pnpm media:pull`
+#                    now can — it comes out of the site's own R2 bucket, and Wrangler's
+#                    credentials are machine-global rather than per-checkout — so by this
+#                    file's own test it no longer belongs. `pnpm build` pulls it anyway.

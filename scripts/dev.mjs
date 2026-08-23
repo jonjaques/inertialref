@@ -1,0 +1,116 @@
+#!/usr/bin/env node
+/*
+ * `pnpm dev` — the client and the Worker, in one terminal.
+ *
+ * The two-process split is deliberate and is explained at `server.proxy` in
+ * `apps/game/vite.config.ts`: `@cloudflare/vite-plugin` would run the Worker
+ * inside the Vite dev server on real workerd, and it would also take over the
+ * client build — which here is Vite 8 with the Oxc transform, a Babel pass for
+ * the React Compiler, and Tailwind. That build is tuned and load-bearing, and a
+ * proxy is not. What was wrong was not the split; it was that it cost a second
+ * terminal and a thing to remember, so `/api` came back "no server" for anyone
+ * who forgot — a failure that looks exactly like a bug in the client.
+ *
+ * So: one command, two children, one lifetime. Nothing here changes what either
+ * process does.
+ *
+ *     pnpm dev        vite on 5173, wrangler on 8787, /api and /ws proxied
+ *     pnpm dev:client just vite — raw stdio, so its `r`/`o`/`q` keys work
+ *     pnpm dev:server just wrangler
+ *     pnpm preview    the built bundle served by the real Worker, on 8787
+ *
+ * `preview` is the one that answers "as close to production as possible": the
+ * same workerd, the same static asset store, the same `run_worker_first` and
+ * SPA fallback, and the service worker actually registers because the build is
+ * a production build. `dev` is the fast loop and is a *proxy* — the assets come
+ * from Vite, so asset headers and the SPA fallback are Vite's, not
+ * Cloudflare's. When a bug is about how something is *served*, reach for
+ * `preview`.
+ */
+import { spawn } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
+
+const ROOT = fileURLToPath(new URL('../', import.meta.url))
+
+const ESC = '\u001b'
+const RESET = `${ESC}[0m`
+const DIM = `${ESC}[2m`
+
+/*
+ * Prefixes, so two streams in one terminal stay legible.
+ *
+ * The cost of piping rather than inheriting is Vite's interactive keys — `r` to
+ * restart, `o` to open, `q` to quit — which need a TTY it no longer has. That
+ * is the reason `dev:client` still exists rather than being a leftover.
+ */
+const CHILDREN = [
+  {
+    label: 'client',
+    colour: `${ESC}[36m`, // cyan, the accent
+    argv: ['--filter', '@inertialref/game', 'run', 'dev'],
+  },
+  {
+    label: 'server',
+    colour: `${ESC}[35m`, // magenta — distinct from anything either tool prints
+    argv: ['--filter', '@inertialref/server', 'run', 'dev'],
+  },
+]
+
+/** One prefixed writer per stream, holding a partial line between chunks. */
+function prefixer(label, colour, stream) {
+  let pending = ''
+  const head = `${colour}${label.padEnd(6)}${RESET} ${DIM}|${RESET} `
+  return (chunk) => {
+    pending += chunk
+    const lines = pending.split('\n')
+    // The last element is whatever came after the final newline: either '' or
+    // half a line still being written. Either way it waits for the next chunk,
+    // which is what stops a progress line being split across two prefixes.
+    pending = lines.pop() ?? ''
+    for (const line of lines) stream.write(`${head}${line}\n`)
+  }
+}
+
+const running = new Map()
+let stopping = false
+
+function stop(signal) {
+  if (stopping) return
+  stopping = true
+  for (const child of running.values()) child.kill(signal)
+}
+
+for (const { label, colour, argv } of CHILDREN) {
+  const child = spawn('pnpm', argv, {
+    cwd: ROOT,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: { ...process.env, FORCE_COLOR: '1' },
+  })
+  child.stdout.on('data', prefixer(label, colour, process.stdout))
+  child.stderr.on('data', prefixer(label, colour, process.stderr))
+  child.on('error', (cause) => {
+    console.error(`${label} failed to start: ${cause.message}`)
+    process.exitCode = 1
+    stop('SIGTERM')
+  })
+  child.on('close', (code, signal) => {
+    running.delete(label)
+    if (stopping) return
+    /*
+     * One down means both down. Leaving the survivor running is the worse
+     * outcome by a distance: the client keeps serving and every `/api` call
+     * fails, which is indistinguishable from the client being broken — the
+     * exact confusion this script exists to remove.
+     */
+    console.error(
+      `\n${label} exited (${signal ?? `code ${code}`}); stopping the other.`,
+    )
+    process.exitCode = code ?? 1
+    stop('SIGTERM')
+  })
+  running.set(label, child)
+}
+
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  process.on(signal, () => stop(signal))
+}

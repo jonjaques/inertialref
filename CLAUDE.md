@@ -31,13 +31,15 @@ pnpm here.
 
 ```bash
 pnpm install
-pnpm dev          # vite dev server for apps/game
+pnpm dev          # ONE command: vite on 5173 AND wrangler on 8787
+pnpm preview      # build, then the real Worker over the real dist on 8787
 pnpm test         # vitest, node environment only
 pnpm typecheck    # five tsconfig projects — see AGENTS.md for why
 pnpm lint         # oxlint — NOT eslint; oxlint --fix applies autofixes
 pnpm graph        # dependency layering + cycle check
-pnpm build        # typecheck, then vite build
-pnpm check        # graph, lint, typecheck, test, build
+pnpm brand        # re-render every brand artefact from design/brand/brandmark.svg
+pnpm build        # media pull, typecheck, then vite build
+pnpm check        # graph, brand, lint, typecheck, test, build
 
 pnpm sim --self-test           # headless Node run + the twelve capability checks
 pnpm vitest run <substring>    # a single test file
@@ -49,16 +51,25 @@ pnpm catalog:build             # ...and write data/catalog
 pnpm catalog:build --refresh   # re-download rather than using .data/raw
 pnpm textures:build            # planetary surface maps into data/textures
 
-# The Cloudflare Worker (apps/server). `pnpm dev` proxies /api and /ws to 8787,
-# so without dev:server running the client correctly reports "no server".
-pnpm dev:server                # wrangler dev on 127.0.0.1:8787
+# The Cloudflare Worker (apps/server). `pnpm dev` now starts it for you;
+# these are the halves, for when you want one without the other.
+pnpm dev:client                # just vite — keeps its interactive r/o/q keys
+pnpm dev:server                # just wrangler dev on 127.0.0.1:8787
 pnpm run deploy:worker         # pnpm build, then wrangler deploy
+
+# The reference audio, which is not in the repository (see below).
+pnpm media:pull                # from r2://inertialrefd-storage/dropbox/
+pnpm media:push                # back up a local copy to the same place
 ```
 
 **`pnpm run deploy:worker`, not `pnpm deploy:worker`** — `deploy` is a pnpm
 built-in, and the `:worker` suffix keeps the two from being confused. It
-deploys to the `inertialrefd` Worker, live at
-<https://inertialrefd.jaquers.workers.dev>. Regenerate
+deploys to the `inertialrefd` Worker. The site is
+<https://inertialref.jonjaques.com> — a Cloudflare _custom domain_, declared in
+`wrangler.jsonc` — and <https://inertialrefd.jaquers.workers.dev> keeps
+answering as the address a deploy can be checked on before DNS is trusted. Only
+the custom domain is canonical: it is what `<link rel="canonical">` names and
+the only hostname analytics measures. Regenerate
 `apps/server/worker-configuration.d.ts` with
 `pnpm --filter @inertialref/server run types` after any change to
 `wrangler.jsonc`, and commit it.
@@ -120,7 +131,46 @@ deploys to the `inertialrefd` Worker, live at
   `vitest.config.ts`. It exists for the registry's hard-coded imports; hand
   written code still imports relatively, with extensions.
 - Node 26, pnpm 11. Node runs the TypeScript sources directly (type stripping),
-  which is how `pnpm sim` works with no build step.
+  which is how `pnpm sim` works with no build step — and it is also why the
+  build scripts under `scripts/` can `import` from `apps/game/src/site.ts`
+  rather than keeping a second copy of the site's own description.
+- **The brand is generated, all of it.** `design/brand/brandmark.svg` is the
+  mark; `pnpm brand` renders `favicon.svg`, `favicon.ico`, `apple-touch-icon`,
+  the two PWA icons, the maskable one, `og.png`, `manifest.webmanifest`,
+  `robots.txt`, `sitemap.xml` and `src/icons/brandmark.ts` from it and from
+  `src/site.ts`. **Never hand-edit any of those** — `pnpm brand --check` is in
+  `pnpm check` and will say so. The share card's type is real Archivo, Instrument
+  Sans and Martian Mono outlined by `fontkit` from the same `@fontsource` files
+  the site loads; `scripts/brand/type.mjs` documents the three approaches that
+  do not work, including that sharp's `text` input silently ignores `fontfile`
+  for a WOFF2 and renders in whatever the machine happens to have.
+- **`src/site.ts` and `index.html`'s head say the same things twice, on
+  purpose.** No social scraper runs JavaScript, so the static head is the card
+  the whole site gets; `pages/DocumentMeta.tsx` updates the title, description
+  and canonical link per route for the readers that _do_ execute scripts.
+  Change one, change the other — `site.test.ts` covers the parts a test can
+  reach.
+- **Analytics is a module, not the snippet.** `src/analytics.ts` loads GA4 only
+  in a production build, only on `inertialref.jonjaques.com`, and only without
+  Global Privacy Control — so localhost, `pnpm preview`, a Wrangler preview URL
+  and the `workers.dev` address all measure nothing. The measurement id is
+  `VITE_GA_MEASUREMENT_ID`, and **it is not in the repository**: this repo is
+  public, and an id committed here is an id every fork measures into. It is a
+  Workers Builds _build variable_ in Cloudflare, and `apps/game/.env.production`
+  (gitignored) for a deploy run from this machine — a real environment variable
+  wins over the file. `apps/game/.env.example` is the committed documentation,
+  and nothing secret may ever go in either: it all ships in the bundle.
+- **The cutscene's reference audio is not in the repository and never may be.**
+  It lives in `r2://inertialrefd-storage/dropbox/` and reaches the browser two
+  ways from **one table**, `apps/server/src/media.ts`: `pnpm media:pull` (which
+  `pnpm build` runs with `--optional`) copies it into the gitignored
+  `apps/game/public/media/` so it ships as a static asset, and the Worker's
+  `MEDIA` R2 binding serves it when a credential-less build did not. Two
+  transports, one object. `/media/*` is an **allow-list**, never a key prefix —
+  that bucket is the site's general storage. `docs/hosting.md` H-8 carries the
+  two workerd traps: `R2Range` must be narrowed on the _value_ (every key is
+  present, two of them `undefined`), and `stored.range` is populated even with
+  no `Range` header, so a plain GET answers 206 if you key the status off it.
 
 ## The machinery in `.claude/`
 

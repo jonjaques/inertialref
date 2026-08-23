@@ -12,6 +12,16 @@ dist
 dist-ssr
 *.local
 
+# Build-time environment. `apps/game/.env.production` carries the GA measurement
+# id for a deploy run from a developer's machine; in Workers Builds the same
+# variable is set as a build variable in Cloudflare. Neither is a secret — the id
+# ships in the bundle and is readable in any request — but this repository is
+# public, and an id committed here is an id every fork measures into.
+# `apps/game/.env.example` is the committed documentation of what may be set.
+.env
+.env.*
+!.env.example
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -48,7 +58,13 @@ coverage
 # `data/catalog/manifest.json` records the digest of exactly what was used.
 .data/
 
-# The reference edit's audio track, for the cutscene's optional sync. A local
-# copy of copyrighted music: it must never enter the repository. The overlay
-# discovers it at this path when present and plays without it when not.
-apps/game/public/tng-intro.*
+# Media the build pulls out of the site's own R2 bucket rather than carrying —
+# today, the reference edit's audio track. A local copy of copyrighted music
+# whose use here is a fair-use claim this project is willing to make in a
+# deployment and not in a git history, which is permanent and mirrored by every
+# fork. `pnpm media:pull` fetches it, `scripts/media.mjs` explains the whole
+# arrangement, and the overlay plays the scene silent when it is absent.
+#
+# Ignored as a directory, not as a filename: the next thing that has to arrive
+# this way should not need a second rule and a second thing to remember.
+apps/game/public/media/

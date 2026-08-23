@@ -41,7 +41,8 @@ not the explanation.
   `data/frames/` the per-frame imagery. Its measured numbers (credit grid, fade windows,
   the locked camera, the flash envelope) are regression tests in `cutscene.test.ts`.
   **Change them only to make the recreation more faithful, and say so.**
-- **The reference audio and any full-sequence render carry third-party rights.** The audio
-  path is gitignored on purpose; publishing a render needs a rights check first.
+- **The reference audio and any full-sequence render carry third-party rights.** The track
+  is never committed: it lives in R2 and `pnpm media:pull` fetches it into the gitignored
+  `apps/game/public/media/`. Publishing a render needs a rights check first.
 - Drive it with `ir.play('tng-intro')`, `ir.pause()`, and `ir.seekCutscene(1150)` for
   frame-exact stills against the reference.

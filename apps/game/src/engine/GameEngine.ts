@@ -308,9 +308,12 @@ export class GameEngine implements PresentationHost {
    * URL of an audio track the cutscene overlay should sync to the playhead.
    *
    * The reference edit is timed against a piece of music this repository does
-   * not carry. Set from the console (`engine.cutsceneAudio = '/tng-intro.m4a'`
-   * after dropping a local file into `apps/game/public/`) and the overlay
-   * keeps the element within a lip-sync tolerance of the reference clock.
+   * not carry; `scripts/media.mjs` pulls it out of the site's R2 bucket at
+   * build time into `apps/game/public/media/`, and `hud/CutsceneOverlay.tsx`
+   * probes for it and adopts it when it is there. Set from the console
+   * (`engine.cutsceneAudio = '/media/other.m4a'` after dropping a local file
+   * into `apps/game/public/media/`) and the overlay keeps the element within a
+   * lip-sync tolerance of the reference clock.
    */
   cutsceneAudio: string | null = null
 

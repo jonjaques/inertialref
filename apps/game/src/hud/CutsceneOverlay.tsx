@@ -1,5 +1,6 @@
 'use no memo'
 import { useEffect, useRef, useState } from 'react'
+import { mediaPath } from '@inertialref/protocol'
 import type { CinematicTextState, GameEngine } from '../engine/GameEngine.ts'
 import { CutsceneTransport } from './CutsceneTransport.tsx'
 import { labelStyle, textStyle } from './cutsceneText.ts'
@@ -24,6 +25,17 @@ import { useScrubber } from './useScrubber.ts'
 
 /** How closely the audio element tracks the reference clock, seconds. */
 const AUDIO_TOLERANCE = 0.08
+
+/**
+ * Where the reference track is served from, when it is served at all.
+ *
+ * `/media/` is the site's object storage, not the bundle: the file is
+ * copyrighted music that never enters the repository, so the build pulls it out
+ * of R2 and the Worker falls back to the same bucket when a build could not.
+ * `apps/server/src/media.ts` is the arrangement; the path is spelled by
+ * `mediaPath` so this file, the router and `run_worker_first` cannot drift.
+ */
+const CUTSCENE_AUDIO = mediaPath('tng-intro.mp3')
 
 export function CutsceneOverlay({
   engine,
@@ -98,18 +110,35 @@ export function CutsceneOverlay({
   }, [engine])
 
   /*
-   * Adopt a local copy of the reference audio when one is present. The track
-   * is copyrighted music and never ships in the repository — the path is
-   * gitignored — so this probes rather than assumes, and the cutscene plays
-   * silent when the file is absent. `engine.cutsceneAudio` stays writable
-   * from the console for a differently named file.
+   * Adopt the reference audio when this deployment has it.
+   *
+   * The track is copyrighted music and never enters the repository — the path
+   * is gitignored, and `scripts/media.mjs` pulls it out of the site's R2 bucket
+   * at build time — so a fork, a checkout without credentials and a local build
+   * before the first pull all legitimately have no file there. Hence a probe
+   * rather than an assumption: the cutscene plays silent when it is absent,
+   * which is a scene without music rather than a broken one.
+   *
+   * `engine.cutsceneAudio` stays writable from the console for a differently
+   * named local file.
    */
   useEffect(() => {
     if (engine.cutsceneAudio !== null) return
     let cancelled = false
-    void fetch('/tng-intro.mp3', { method: 'HEAD' })
+    void fetch(CUTSCENE_AUDIO, { method: 'HEAD' })
       .then((response) => {
-        if (!cancelled && response.ok) engine.cutsceneAudio = '/tng-intro.mp3'
+        /*
+         * `ok` is not enough, and the reason is the same one the Worker's own
+         * media handler carries: a single-page fallback answers a path it does
+         * not have with the document and a **200**. In production the Worker
+         * now 404s an unlisted name, but Vite's dev server does not — so
+         * without the content-type check, a developer who has never run
+         * `pnpm media:pull` hands an `<audio>` element `index.html` and gets a
+         * decode error instead of a silent cutscene.
+         */
+        const type = response.headers.get('content-type') ?? ''
+        if (!cancelled && response.ok && type.startsWith('audio/'))
+          engine.cutsceneAudio = CUTSCENE_AUDIO
       })
       .catch(() => {})
     return () => {

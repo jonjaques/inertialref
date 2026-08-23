@@ -40,7 +40,17 @@
 const BUILD = new URL(self.location.href).searchParams.get('build') ?? 'dev'
 const CACHE_PREFIX = 'inertialref-'
 const CACHE = `${CACHE_PREFIX}${BUILD}`
-const PRECACHE = ['/', '/index.html', '/favicon.svg', '/icons.svg']
+/*
+ * The handful of unhashed files a cold offline launch cannot start without.
+ *
+ * Deliberately short. Every other unhashed file in `public/` — the icons, the
+ * share card, robots.txt, llms.txt — is reached by something that is already
+ * online when it asks, and the stale-while-revalidate branch below covers them
+ * the first time they are. Precaching them would trade a slower install for
+ * nothing. `/manifest.webmanifest` is in, because an installed application is
+ * launched *from* the manifest and that launch may be the offline one.
+ */
+const PRECACHE = ['/', '/index.html', '/favicon.svg', '/manifest.webmanifest']
 
 /*
  * Paths that are state rather than content, kept in step by hand with
@@ -61,8 +71,17 @@ const PRECACHE = ['/', '/index.html', '/favicon.svg', '/icons.svg']
 const isLive = (pathname) =>
   pathname === '/api' || pathname.startsWith('/api/') || pathname === '/ws'
 
-/** Vite emits content-hashed filenames here, so these are immutable by name. */
-const isImmutable = (pathname) => pathname.startsWith('/assets/')
+/**
+ * Cache-first, because the content at these paths cannot change under the name.
+ *
+ * `/assets/` is Vite's content-hashed output, immutable by construction.
+ * `/media/` is the build-time pull from R2 (`scripts/media.mjs`) — a fixed
+ * reference track, not a hashed name, and it is here for a second reason:
+ * stale-while-revalidate would re-fetch 2.7 MB of audio in the background on
+ * every single load of the site to discover it had not changed.
+ */
+const isImmutable = (pathname) =>
+  pathname.startsWith('/assets/') || pathname.startsWith('/media/')
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

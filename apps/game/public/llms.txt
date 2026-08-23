@@ -1,0 +1,74 @@
+# InertialRef
+
+> An open-source spaceflight simulator that runs in a browser tab. Its Milky Way
+> is the real one: 7,123 catalogued star systems and 702 known planets within
+> 150 light years, with everything beyond that generated from a seed. There is
+> nothing to download and nothing to ask a server for — the universe is a pure
+> function of (seed, catalogue version, address), so every client derives the
+> same one.
+
+Written for a reader that is not a person. `robots.txt` allows agents; this is
+the short version of what they would otherwise have to infer from a WebGPU
+canvas. It is hand-written and kept short deliberately — the linked documents
+are the detail, and a summary that tries to replace them goes stale.
+
+## Status, stated plainly
+
+**Pre-alpha. Single maintainer. No release, and no gameplay yet.** What runs
+today is the sky, the star catalogue, the camera and the simulation underneath
+them. The flight modes exist and are deliberately not offered from the menu.
+Anything that reads this as a finished game is reading it wrong, and the site
+says so on its own front page.
+
+## What is unusual about it
+
+- **The galaxy is derived, not downloaded.** Real astronomy (HYG — Hipparcos,
+  Yale and Gliese — plus the NASA Exoplanet Archive) is packed into a 460 KB
+  asset that ships with the client; everything past the catalogue's reach is
+  generated deterministically from a seed. Two clients compute the same galaxy
+  without talking to each other.
+- **Offline is the base case, not a degraded mode.** A service worker caches the
+  application; saves live in IndexedDB. A whole universe saves in under 700
+  bytes, because a save stores references and mutations rather than content.
+- **Positions are a sector index plus an offset**, which holds sub-millimetre
+  resolution out to 249,000 light years — no floating-point seams between
+  galactic and hand scale.
+- **The simulation is a 64 Hz fixed tick, deterministic and replayable.** Orbits
+  are analytic rather than integrated, so there is no drift at any time warp.
+- **Measured and modelled data are never blurred.** A body is `observed` or
+  `projected`, and the interface always says which.
+
+## Pages
+
+- [Home](https://inertialref.jonjaques.com/): a menu over a live scene.
+- [Planetarium](https://inertialref.jonjaques.com/planetarium): free navigation
+  of the catalogue. No ship, no fuel. This is the mode worth trying first.
+- [Cinema](https://inertialref.jonjaques.com/cinema): scripted scenes staged
+  over the live world, playable frame by frame.
+- [About](https://inertialref.jonjaques.com/about): what it is and where the
+  astronomy comes from.
+
+Every addressable thing is a URL — a mode, a scene at a frame
+(`/cinema/{scene}?t={frame}`), a body in the planetarium (`/planetarium?at={address}`),
+a settings section. Nothing reachable by clicking is unreachable by link.
+
+## Source and documentation
+
+The repository is Apache-2.0 and is the authoritative source for all of the
+above. It is written to be read.
+
+- [Repository](https://github.com/jonjaques/inertialref)
+- `README.md` — the overview and the twelve proven capabilities
+- `AGENTS.md` — the working guide, including the thirty invariants that a change
+  to this codebase must not break
+- `docs/architecture.md` — the system in one sitting
+- `docs/adr/` — the twelve foundational decisions, with their alternatives
+- `docs/design/` — the game design bible
+- `docs/guides/catalogue.md` — how the star catalogue is built and what it stores
+- `CONTEXT.md` — the build log
+
+## Attribution
+
+Astronomical data: the HYG database (Hipparcos, Yale Bright Star and Gliese
+catalogues) and the NASA Exoplanet Archive. See `NOTICE` in the repository for
+the full attribution. Code is Apache-2.0, © Jon Jaques.

@@ -12,10 +12,183 @@
 <html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="dark" />
-    <title>InertialRef</title>
+
+    <!--
+      THE STATIC HEAD, AND WHY IT IS HAND-KEPT.
+
+      Everything from here to the JSON-LD block is duplicated from
+      `src/site.ts`, on purpose, and the two have to be changed together. The
+      reason is the one thing about a single-page application that no amount of
+      client-side care fixes: **a social scraper does not run JavaScript.**
+      Slack, iMessage, Discord, Bluesky and every other unfurler read the
+      document as it arrives off the wire, so an `og:title` written by React is
+      an `og:title` no card has ever seen.
+
+      Because `not_found_handling` is `single-page-application`, this exact
+      document is served for *every* path — so what is written here is the
+      card for the whole site, and it is therefore written for the home page.
+      `pages/DocumentMeta.tsx` updates `<title>`, the description and the
+      canonical link per route, which covers the readers that *do* execute
+      scripts: the browser, Googlebot, an agent driving a headless browser.
+
+      Making the Open Graph tags per-route means running the Worker on every
+      navigation so `HTMLRewriter` can rewrite four tags — which turns a free
+      static asset request into a billed invocation on every page load.
+      `docs/hosting.md` records that as a deliberate seam, not an oversight.
+    -->
+    <title>InertialRef — A real sky, in a browser tab</title>
+    <meta
+      name="description"
+      content="An open-source spaceflight simulator in a browser tab. The Milky Way is the real one — 7,123 catalogued systems within 150 light years, the rest from a seed."
+    />
+    <link rel="canonical" href="https://inertialref.jonjaques.com" />
+    <meta name="author" content="Jon Jaques" />
+    <!-- `max-image-preview:large` is what lets the share card be the card in a
+         search result rather than a thumbnail. The rest is the default, stated
+         because a missing robots tag and an explicit one read the same to a
+         person and only one of them is a decision. -->
+    <meta
+      name="robots"
+      content="index, follow, max-image-preview:large, max-snippet:-1"
+    />
+
+    <!--
+      The mark, at every size a platform asks for. All of it is generated from
+      `design/brand/brandmark.svg` by `pnpm brand`; `pnpm brand --check` is in
+      `pnpm check` and fails if this list and that drawing have drifted apart.
+
+      `favicon.ico` is listed *after* the SVG so a browser that understands both
+      prefers the vector. It is here at all because `/favicon.ico` is the path a
+      crawler, a feed reader and a bookmark importer ask for without being told.
+    -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!--
+      Installable. The service worker (`public/sw.js`) is the other half and was
+      already here: the game is a pure function of a seed, so once the bundle
+      and the catalogue are cached there is genuinely nothing left to fetch —
+      which makes an installed copy a real offline application rather than a
+      shortcut that shows a dinosaur on a plane.
+
+      `theme-color` is slate-950, the same colour as the page and the icon
+      plate, so the browser's own chrome does not draw a light band above a
+      black sky while the bundle loads.
+    -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#020617" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="InertialRef" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
+
+    <!-- The share card. 1200x630, drawn — not screenshotted — by
+         `scripts/brand/og.mjs`, which explains why. `og:image` must be an
+         absolute URL: a relative one resolves against the scraper, not the
+         site, and simply produces a card with no picture. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="InertialRef" />
+    <meta
+      property="og:title"
+      content="InertialRef — A real sky, in a browser tab"
+    />
+    <meta
+      property="og:description"
+      content="An open-source spaceflight simulator in a browser tab. The Milky Way is the real one — 7,123 catalogued systems within 150 light years, the rest from a seed."
+    />
+    <meta property="og:url" content="https://inertialref.jonjaques.com" />
+    <meta
+      property="og:image"
+      content="https://inertialref.jonjaques.com/og.png"
+    />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="The InertialRef mark and wordmark over a sunlit planet limb, with the figures 7,123 real systems, 150 light years catalogued, and nothing to install."
+    />
+    <meta property="og:locale" content="en" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta
+      name="twitter:title"
+      content="InertialRef — A real sky, in a browser tab"
+    />
+    <meta
+      name="twitter:description"
+      content="An open-source spaceflight simulator that runs in a browser tab. The Milky Way is the real one, derived rather than downloaded."
+    />
+    <meta
+      name="twitter:image"
+      content="https://inertialref.jonjaques.com/og.png"
+    />
+
+    <!--
+      Structured data, for search engines and for the agents that read a page
+      instead of looking at it.
+
+      Two nodes because they answer two different questions: `WebSite` is "what
+      is at this address", and `SoftwareApplication` is "what is the thing".
+      `isAccessibleForFree`, `offers` at zero and the licence are not decoration
+      — they are the machine-readable form of the claim this project's front
+      page makes in prose, and they are what stops it being classified as a
+      demo for something purchasable.
+
+      `/llms.txt` is the long-form version of the same, written for a reader
+      that is not a person.
+    -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "https://inertialref.jonjaques.com/#website",
+            "url": "https://inertialref.jonjaques.com",
+            "name": "InertialRef",
+            "description": "An open-source spaceflight simulator that runs in a browser tab.",
+            "inLanguage": "en",
+            "publisher": { "@id": "https://inertialref.jonjaques.com/#author" }
+          },
+          {
+            "@type": "Person",
+            "@id": "https://inertialref.jonjaques.com/#author",
+            "name": "Jon Jaques",
+            "url": "https://github.com/jonjaques"
+          },
+          {
+            "@type": ["SoftwareApplication", "VideoGame"],
+            "@id": "https://inertialref.jonjaques.com/#app",
+            "name": "InertialRef",
+            "url": "https://inertialref.jonjaques.com",
+            "applicationCategory": "GameApplication",
+            "applicationSubCategory": "Space flight simulator",
+            "operatingSystem": "Any modern web browser with WebGPU",
+            "browserRequirements": "Requires WebGPU",
+            "description": "A spaceflight simulator whose universe is a deterministic function of a seed and a real star catalogue: 7,123 catalogued systems and 702 known planets within 150 light years, and generated content beyond that. Runs offline, with nothing to install.",
+            "image": "https://inertialref.jonjaques.com/og.png",
+            "screenshot": "https://inertialref.jonjaques.com/og.png",
+            "author": { "@id": "https://inertialref.jonjaques.com/#author" },
+            "codeRepository": "https://github.com/jonjaques/inertialref",
+            "license": "https://www.apache.org/licenses/LICENSE-2.0",
+            "isAccessibleForFree": true,
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "USD"
+            },
+            "genre": ["Simulation", "Space flight"],
+            "gamePlatform": "Web browser"
+          }
+        ]
+      }
+    </script>
   </head>
   <body>
     <!--
@@ -77,6 +250,63 @@
         </div>
       </div>
     </div>
+
+    <!--
+      The page for a reader that will not run the application.
+
+      Two of them, and they want the same thing: a person who has scripting off,
+      and a crawler that indexes the served HTML rather than the rendered DOM.
+      Both currently get a black page and a boot message about a catalogue,
+      which describes nothing. This is deliberately prose and links rather than
+      an apology — the repository and the documentation are the whole product
+      for anyone who cannot run it.
+    -->
+    <noscript>
+      <div
+        style="
+          position: absolute;
+          inset: 0;
+          overflow: auto;
+          padding: 3rem 1.5rem;
+          background: #020617;
+          color: #cbd5e1;
+          font-family: ui-sans-serif, system-ui, sans-serif;
+          line-height: 1.6;
+        "
+      >
+        <div style="max-width: 40rem; margin: 0 auto">
+          <h1 style="color: #f8fafc; font-size: 2rem; margin: 0 0 0.5rem">
+            InertialRef
+          </h1>
+          <p style="color: #94a3b8; margin: 0 0 1.5rem">
+            A real sky, in a browser tab.
+          </p>
+          <p>
+            InertialRef is an open-source spaceflight simulator whose universe
+            is a deterministic function of a seed and a real star catalogue —
+            7,123 catalogued systems and 702 known planets within 150 light
+            years, and generated content beyond that. There is nothing to
+            download and nothing to ask a server for: every client computes the
+            same galaxy.
+          </p>
+          <p>
+            It needs JavaScript and WebGPU to run, because it is a simulation
+            rather than a page. With scripting turned off there is nothing here
+            to show you — but the source, the architecture decision records and
+            the design bible are all public.
+          </p>
+          <p>
+            <a
+              href="https://github.com/jonjaques/inertialref"
+              style="color: #7dd3fc"
+              >github.com/jonjaques/inertialref</a
+            >
+            · <a href="/llms.txt" style="color: #7dd3fc">/llms.txt</a>
+          </p>
+        </div>
+      </div>
+    </noscript>
+
     <script>
       /*
        * The one failure the page cannot report on its own.

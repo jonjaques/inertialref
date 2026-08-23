@@ -11,22 +11,29 @@ pnpm install
 pnpm dev          # → http://localhost:5173
 ```
 
+One command starts both halves — Vite on 5173 and the Cloudflare Worker on 8787,
+with `/api` and `/ws` proxied to it. `pnpm dev:client` is Vite alone, which is
+also how you get the offline path deliberately: with no Worker, the client
+correctly reports `no server`, and that is the normal case for a game whose
+universe is derived rather than fetched.
+
 The client opens on Earth, three-quarter lit, with the ship — a CC-BY
 USS Enterprise-D hull, or the debug cone while it loads — framed in the
 foreground of a procedurally generated Sol.
 
 ```mermaid
 flowchart LR
-    A["pnpm install"] --> B["pnpm dev"] --> C["localhost:5173"]
+    A["pnpm install"] --> B["pnpm dev<br/><i>vite + wrangler</i>"] --> C["localhost:5173"]
     C --> D["fly with WASD / arrows"]
     C --> E["drive it from the console<br/><code>ir.help()</code>"]
     C --> F["prove it works<br/><code>await ir.selfTest()</code>"]
     style F fill:#065f46,stroke:#064e3b,color:#fff
 ```
 
-In a **production** build (`pnpm build && pnpm preview`) no server is required
-after the first load — a service worker caches the app and content comes from the
-seed. It is deliberately not registered under `pnpm dev`, where it would sit in
+In a **production** build (`pnpm preview`, which builds and then serves the
+result through the real Worker on 8787) no server is required after the first
+load — a service worker caches the app and content comes from the seed. The
+worker is deliberately not registered under `pnpm dev`, where it would sit in
 front of Vite and turn every edit into a caching investigation. See
 [persistence](../concepts/persistence.md#offline-first).
 
@@ -136,13 +143,15 @@ The same core in Node — no DOM, no React, no WebGL — at ~110,000 ticks/s.
 ## Commands
 
 ```bash
-pnpm dev          # vite dev server
+pnpm dev          # vite on 5173 and wrangler on 8787, in one terminal
+pnpm preview      # build, then serve it through the real Worker on 8787
 pnpm test         # vitest, node environment only
-pnpm typecheck    # three tsconfig projects
+pnpm typecheck    # five tsconfig projects
 pnpm lint         # oxlint
 pnpm graph        # dependency layering + cycle check
+pnpm brand        # re-render the icons, the share card and the crawler files
 pnpm build
-pnpm check        # graph → lint → typecheck → test → build — the gate
+pnpm check        # the gate — graph → brand → format → lint → typecheck → test → build
 
 pnpm sim --self-test          # headless run + capability checks
 pnpm sim --scenario surface --ticks 2526    # also: --seed, --system, --quiet
