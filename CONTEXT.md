@@ -3461,7 +3461,13 @@ ships a 130-byte file where the hero ship should be. This is the second time LFS
 has cost something: 6dea1c7 fixed the same gap in the Cloud Agent image, where
 the symptom was the renderer silently falling back to the debug cone. Every
 environment that checks this repository out needs the smudge filter, and the
-failure looks different in each one. Production was verified unaffected — the
+failure looks different in each one — GitHub Actions threw during test
+collection, and Workers Builds, which `vite.config.ts` already reads
+`WORKERS_CI_COMMIT_SHA` from, would not have complained at all. So rather than
+fix them one CI at a time, the build itself now declines: a `buildStart` hook
+reads the first four bytes of every `data/models/*.glb` and fails unless they
+are the ASCII magic `glTF`. Verified by building against a pointer — the build
+stops and names `git lfs pull`. Production was checked and is unaffected: the
 deployed `enterprise-d-ByumsAL0.glb` begins `glTF` and its length field reads
 13,928,924, matching the local asset byte for byte.
 
