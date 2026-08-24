@@ -1,5 +1,14 @@
+import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { Quaternion as Q, UV } from '@inertialref/spatial'
+import {
+  Quaternion as Q,
+  type Quat,
+  UV,
+  Vec,
+  type Vec3,
+  vec3,
+} from '@inertialref/spatial'
+import { systemFrameId, systemId } from '@inertialref/universe'
 import { apparentWidth } from '@inertialref/rendering'
 import { openSession } from './session.ts'
 import { sampleIsFinite } from './cutscene.ts'
@@ -9,6 +18,10 @@ import {
   TNG_HULL_LENGTH,
   TNG_INTRO,
   TNG_LENS,
+  TNG_CRUISE_PITCH_DEG,
+  TNG_SHIP_BEATS,
+  TNG_WIPE_OCCLUSIONS,
+  TNG_WIPE_OFFSETS,
 } from './cutscenes/tngIntro.ts'
 
 /*
@@ -142,7 +155,7 @@ describe('tng-intro timing', () => {
   it('fires the two lens spikes on the measured 24-frame envelope', () => {
     const { at } = playing()
     for (const [start, x, y] of [
-      [1118, 0.645, 0.665],
+      [1118, 0.655, 0.695],
       [2412, 0.688, 0.43],
     ] as const) {
       expect(at(start - 1)!.effects.spark.drive).toBe(0)
@@ -154,13 +167,24 @@ describe('tng-intro timing', () => {
     }
   })
 
-  it('runs both warp flashes on the measured 4/7/4 envelope', () => {
+  it('runs both warp flashes on one rounded envelope, opening early', () => {
     const { at } = playing()
+    /*
+     * f1085 and f2382 are the shot detector's threshold crossings, not the
+     * frames the light starts — the reference is already a third of the way up
+     * at t=0 — so the assertion is that the wash is well underway on the
+     * measured frame and dark a few frames before it. `warpFlashEnvelope`'s own
+     * test carries the shape; this one carries the *script's* use of it, which
+     * is that both flashes share it and neither has a flat top.
+     */
     for (const start of [1085, 2382]) {
-      expect(at(start - 1)!.effects.flash).toBe(0)
-      for (let f = start + 4; f <= start + 11; f += 1)
-        expect(at(f)!.effects.flash).toBe(1)
-      expect(at(start + 16)!.effects.flash).toBe(0)
+      expect(at(start - 4)!.effects.flash).toBe(0)
+      expect(at(start)!.effects.flash).toBeGreaterThan(0.25)
+      expect(at(start + 7)!.effects.flash).toBe(1)
+      expect(at(start + 17)!.effects.flash).toBe(0)
+      // Round, not flat: the reference's mean moves 17% across these frames.
+      expect(at(start + 4)!.effects.flash).toBeLessThan(1)
+      expect(at(start + 11)!.effects.flash).toBeLessThan(1)
     }
   })
 })
@@ -200,11 +224,18 @@ describe('tng-intro ship choreography', () => {
     expect(entry.x).toBeLessThan(0.16)
     expect(entry.y).toBeGreaterThan(0.9)
 
-    // Box centers and widths at the frames where the box is unclipped.
+    /*
+     * Box centers and widths at frames where the box is unclipped — and
+     * "unclipped" is now checked rather than assumed. Re-measuring the
+     * reference with a per-side frame-edge flag found that most of this pass's
+     * boxes are truncated by an edge, saturated, or inflated by the far
+     * Bussard cap flickering across the tracker's 400-pixel floor; the f872
+     * width is 0.664 on the clean channel where the first pass read 0.695.
+     */
     for (const [frame, x, y, width] of [
       [760, 0.203, 0.757, 0.401],
       [824, 0.278, 0.635, 0.438],
-      [872, 0.354, 0.512, 0.695],
+      [872, 0.353, 0.512, 0.664],
     ] as const) {
       const hull = track(at(frame)!)
       expect(hull.x, `f${frame} x`).toBeCloseTo(x, 2)
@@ -214,8 +245,14 @@ describe('tng-intro ship choreography', () => {
 
     // It pulls away up-right rather than passing behind the lens — which is
     // what lets the camera hold still through the whole pass.
+    /*
+     * The exit mark is the reference's **area centroid** at f1080, 0.489 — not
+     * its box centre, 0.63. The two disagree by 0.15 of the frame here because
+     * the lit mass is not centred on the hull, and `compare_render.py` scores
+     * the centroid, so that is the one the beats are authored against.
+     */
     const leaving = track(at(1080)!)
-    expect(leaving.x).toBeCloseTo(0.617, 2)
+    expect(leaving.x).toBeCloseTo(0.489, 2)
     expect(leaving.range).toBeGreaterThan(track(at(976)!).range)
   })
 
@@ -250,21 +287,85 @@ describe('tng-intro ship choreography', () => {
 
   it('reuses one wipe three times, the middle one mirrored', () => {
     const { at } = playing()
-    // Wipes one and three are the same animation 247 frames apart: their
-    // tracked boxes agree to three decimal places in the reference.
-    const first = track(at(1292)!)
-    const third = track(at(1292 + 247)!)
-    expect(first.x).toBeCloseTo(0.239, 2)
-    expect(first.y).toBeCloseTo(0.591, 2)
-    expect(third.x).toBeCloseTo(first.x, 4)
-    expect(third.y).toBeCloseTo(first.y, 4)
-    expect(third.range).toBeCloseTo(first.range, 3)
-
-    // The middle one is its mirror in x, and only in x.
-    const second = track(at(1292 + 128)!)
-    expect(second.x).toBeCloseTo(1 - first.x, 3)
-    expect(second.y).toBeCloseTo(first.y, 3)
-    expect(second.range).toBeCloseTo(first.range, 3)
+    /*
+     * One recipe, three uses — as a property over every frame of the pass
+     * rather than a spot check, because the reuse is itself a *measurement*:
+     * aligning the reference's own tracked boxes for wipe two against wipe
+     * one's, mirrored, they agree to a thousandth on every frame at an offset
+     * of 126, and wipes one and three agree at 247. The offsets come from
+     * `TNG_WIPE_OFFSETS`; a test carrying its own copy of them cannot notice
+     * when the measurement changes, which is why the table is shared.
+     *
+     * The span is the *shared* one, f1292–f1319 — second knot to
+     * second-to-last. The three wipes are concatenated into one Catmull-Rom,
+     * so the first and last segment of each sees different neighbouring
+     * knots: wipe one opens on a clamped end, wipe three opens on wipe two's
+     * exit at (2.1, −0.5), and wipe one's exit runs into wipe two's entry
+     * where wipe three's simply holds. Inside the shared span the reuse is
+     * exact; at the seams it is not, by 0.035 of the frame's width at the
+     * entry (f1286, on a hull 0.012 wide) and 3.5 m of 277 at the exit
+     * (f1321). Named rather than asserted away — it is the size of the dot it
+     * moves, and it is what "one animation, three times" currently costs.
+     */
+    const [, mirrorOffset, repeatOffset] = TNG_WIPE_OFFSETS
+    const tanHalf = Math.tan((TNG_LENS.fov * Math.PI) / 360)
+    for (let frame = 1292; frame <= 1319; frame += 1) {
+      const first = track(at(frame)!)
+      const second = track(at(frame + mirrorOffset)!)
+      const third = track(at(frame + repeatOffset)!)
+      /*
+       * The bound is the universe's own position floor, not a decimal place.
+       * The hull's place is a `UniverseVector` — a double offset inside a
+       * 2^40 m sector — so a camera-relative offset survives `translate` and
+       * `difference` to `POSITION_RESOLUTION`, 0.24 mm, which at this frame's
+       * range is this much of the frame's width. Two of them covers the
+       * rounding at both ends of the round trip; the worst frame in the span
+       * measures 0.41 of one.
+       */
+      const slackX =
+        (2 * UV.POSITION_RESOLUTION) /
+        (first.range * 2 * tanHalf * TNG_LENS.aspect)
+      const slackY = (2 * UV.POSITION_RESOLUTION) / (first.range * 2 * tanHalf)
+      const slackRange = 2 * UV.POSITION_RESOLUTION
+      expect(
+        Math.abs(third.x - first.x),
+        `f${frame} against +${repeatOffset}, x`,
+      ).toBeLessThan(slackX)
+      expect(
+        Math.abs(third.y - first.y),
+        `f${frame} against +${repeatOffset}, y`,
+      ).toBeLessThan(slackY)
+      expect(
+        Math.abs(third.range - first.range),
+        `f${frame} against +${repeatOffset}, range`,
+      ).toBeLessThan(slackRange)
+      // The middle one is its mirror, and only in x: `1 - x` on screen is
+      // exactly what negating the offset's lateral component does in camera
+      // axes, so y and range have to come through untouched.
+      expect(
+        Math.abs(second.x - (1 - first.x)),
+        `f${frame} against +${mirrorOffset} mirrored, x`,
+      ).toBeLessThan(slackX)
+      expect(
+        Math.abs(second.y - first.y),
+        `f${frame} against +${mirrorOffset} mirrored, y`,
+      ).toBeLessThan(slackY)
+      expect(
+        Math.abs(second.range - first.range),
+        `f${frame} against +${mirrorOffset} mirrored, range`,
+      ).toBeLessThan(slackRange)
+    }
+    // The measured entry mark itself, so the shared animation is also the
+    // right one: the reference's box is at (0.239, 0.591) at f1292.
+    const entry = track(at(1292)!)
+    expect(entry.x).toBeCloseTo(0.239, 2)
+    expect(entry.y).toBeCloseTo(0.591, 2)
+    // And the occlusion the effects fire on is that same offset applied to the
+    // first wipe's, so the streak burst cannot drift off the frame it covers.
+    const [firstOcclusion, mirrorOcclusion, repeatOcclusion] =
+      TNG_WIPE_OCCLUSIONS
+    expect(mirrorOcclusion - firstOcclusion).toBe(mirrorOffset)
+    expect(repeatOcclusion - firstOcclusion).toBe(repeatOffset)
   })
 
   it('brings the hull down through the credits from the top edge', () => {
@@ -278,6 +379,448 @@ describe('tng-intro ship choreography', () => {
     expect(late.y).toBeGreaterThan(early.y)
     expect(late.width).toBeGreaterThan(early.width)
     expect(late.width).toBeCloseTo(0.672, 1)
+  })
+})
+
+describe('tng-intro flight dynamics', () => {
+  /*
+   * TNG-PLAN §7.4's properties, against the script's *sampled output*.
+   *
+   * The straight passes are not `LinePath`s yet. Each one's facing is a
+   * constant fitted direction composed through `lookAlong` + `withAttitude`,
+   * which is `orientationAlong` for a straight line — so the questions the
+   * plan asks are answerable anyway, and answering them here rather than
+   * against a path object is what keeps them true after §5.1 lands.
+   *
+   * Every window a *heading* is taken over is inside one shot. Measured on
+   * the sample, the camera holds to the bit across all of them — 0 m and 0°
+   * per frame through f700–870, f1292–1562 and f1800–2081 — so the difference
+   * of two camera-relative offsets is the hull's own displacement and not the
+   * camera's. The range windows may cross a cut (f948 does), because the
+   * length of a camera-relative offset is not something a camera move can
+   * change, and the shot either side of f948 flies the same beat list.
+   */
+  type Sample = NonNullable<ReturnType<ReturnType<typeof playing>['at']>>
+  type At = ReturnType<typeof playing>['at']
+
+  /** The hull's offset from the lens, in camera axes — the beats' own terms. */
+  const offsetOf = (sample: Sample): Vec3 =>
+    Q.rotate(
+      Q.conjugate(sample.camera.orientation),
+      UV.difference(sample.ship.position, sample.camera.position),
+    )
+
+  /** Where the nose points, in those same axes. */
+  const noseOf = (sample: Sample): Vec3 =>
+    Q.rotate(
+      Q.multiply(
+        Q.conjugate(sample.camera.orientation),
+        sample.ship.orientation,
+      ),
+      vec3(0, 0, -1),
+    )
+
+  const degreesBetween = (a: Vec3, b: Vec3): number =>
+    (Math.acos(Math.min(1, Math.max(-1, Vec.dot(a, b)))) * 180) / Math.PI
+
+  const swingDegrees = (a: Quat, b: Quat): number =>
+    (2 *
+      Math.acos(
+        Math.min(1, Math.abs(a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w)),
+      ) *
+      180) /
+    Math.PI
+
+  /** The hull's attitude in camera axes — what a screen measurement sees. */
+  const facingOf = (sample: Sample): Quat =>
+    Q.multiply(Q.conjugate(sample.camera.orientation), sample.ship.orientation)
+
+  /** The direction the hull moved over `span` frames, in camera axes. */
+  const heading = (at: At, frame: number, span = 1): Vec3 =>
+    Vec.normalize(Vec.sub(offsetOf(at(frame + span)!), offsetOf(at(frame)!)))
+
+  const rangeAt = (at: At, frame: number): number =>
+    Vec.length(offsetOf(at(frame)!))
+
+  /**
+   * What a fitted direction is worth, per pass: the spread between the two
+   * landmark channels it was fitted from. 6.8° on the cruise and 15.0° on the
+   * credit descent are the fits' own figures — they are reported with the
+   * refit that produced `FACING_CRUISE` and `FACING_TITLES` rather than
+   * written beside the vectors, which is a gap worth closing. 0.22° is in the
+   * script: it is the three wipes' separate fits agreeing with each other.
+   */
+  const FIT_SPREAD_DEG = { cruise: 6.8, descent: 15, wipe: 0.22 } as const
+
+  /**
+   * `PITCH_CRUISE`, read from the script rather than restated — the magnitude,
+   * because an angle between two directions has no sign.
+   *
+   * The nose-down attitude the reference flies against its own climbing track,
+   * solved against `dot(toCamera, dorsal)` over f700–930. It is an *attitude*,
+   * deliberately not along the velocity, so the cruise's nose-versus-heading
+   * angle is measured against this and not against zero. `withAttitude`
+   * pitches about the derived frame's right axis, which is perpendicular to
+   * the derived forward, and a bank turns about the nose itself — so the
+   * overlay contributes exactly its own angle and the bank contributes none.
+   */
+  const CRUISE_PITCH_DEG = Math.abs(TNG_CRUISE_PITCH_DEG)
+
+  it('flies each straight pass with its nose on its own chord', () => {
+    const { at } = playing()
+    /*
+     * The pass-scale form of the nose-along-velocity property, and the tight
+     * one. Over a whole straight pass the hull covers hundreds of meters to
+     * tens of kilometers, so its direction of travel is known far better than
+     * the direction it was aimed by, and the honest bound is the fit's own
+     * uncertainty rather than anything about the spline.
+     */
+    expect(
+      Math.abs(
+        degreesBetween(noseOf(at(700)!), heading(at, 700, 170)) -
+          CRUISE_PITCH_DEG,
+      ),
+      'cruise f700–870: nose off its chord by other than the authored PITCH_CRUISE',
+    ).toBeLessThan(FIT_SPREAD_DEG.cruise) // measures 1.06°
+    /*
+     * The descent passes at 14.16° against its own 15.0°, which is inside the
+     * fit and only just: the authored beats' chord and the direction they were
+     * fitted to are not the same line. TNG-PLAN §5.3 — project the fitted line
+     * back to the screen beats and assert the residual — is the check that
+     * would tighten this, and it does not exist yet.
+     */
+    expect(
+      degreesBetween(noseOf(at(1800)!), heading(at, 1800, 280)),
+      'credit descent f1800–2080: nose off its chord',
+    ).toBeLessThan(FIT_SPREAD_DEG.descent)
+    /*
+     * The wipes are the pass this can be asserted to a fifth of a degree on,
+     * because the three fits agree with each other to 0.22° and the pass is
+     * 35.9 km of approach with 19 m of perpendicular residual. Wipes one and
+     * three measure 0.07°.
+     *
+     * All three, including the mirrored one — which is the point. This
+     * property was written while the middle wipe measured 43.33°: the same
+     * animation mirrored in x, flown on the *unmirrored* heading, because
+     * `mirrored()` reflected the beats and `FACING_TITLES` gave all three
+     * passes one forward vector. The hull crabbed sideways across the frame by
+     * exactly the angle between the fitted wipe direction and its own mirror
+     * for thirty-five frames. The facing is mirrored with the beats now, so the
+     * middle pass is held to the same fifth of a degree as the other two, and
+     * the assertion below is what fails if anyone unmirrors it again.
+     */
+    for (const offset of TNG_WIPE_OFFSETS) {
+      expect(
+        degreesBetween(
+          noseOf(at(1292 + offset)!),
+          heading(at, 1292 + offset, 22),
+        ),
+        `wipe +${offset}: nose off its chord`,
+      ).toBeLessThan(FIT_SPREAD_DEG.wipe)
+    }
+  })
+
+  it('keeps the nose on the frame-by-frame heading through all three wipes', () => {
+    const { at } = playing()
+    /*
+     * The frame-scale form, on the one pass that can carry it tightly. The
+     * wipe's straight-line fit leaves 19 m of perpendicular residual over a
+     * 35.9 km path, and the hull covers at least 276 m in any single frame of
+     * f1292–1314, so a residual excursion of that size can tilt one frame's
+     * heading by atan(19 / 276) = 3.9°. That is the bound, and it is the
+     * measurement that sets it rather than a decimal place: the worst frame in
+     * the window measures 1.97°.
+     */
+    const WIPE_FRAME_DEG = 3.9
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 1292, max: 1314 }),
+        fc.constantFrom(...TNG_WIPE_OFFSETS),
+        (frame, offset) => {
+          const f = frame + offset
+          expect(
+            degreesBetween(noseOf(at(f)!), heading(at, f)),
+            `f${f} (wipe +${offset})`,
+          ).toBeLessThan(WIPE_FRAME_DEG)
+        },
+      ),
+    )
+  })
+
+  it('keeps the nose within the fit on the cruise and the descent, where the beats are a track', () => {
+    const { at } = playing()
+    /*
+     * The same property frame by frame on the two passes whose beats are
+     * hand-read boxes rather than a line, and it has to be stated loosely for
+     * a reason that is worth writing down: a *frame* of one of these passes is
+     * 2–15 m of travel, and the straight-line fits the directions come from
+     * leave 109 m of perpendicular residual over the cruise's 4.0 km path and
+     * 134 m over the descent's 6.9 km. Beat to beat that is atan(109 / ~450 m)
+     * ≈ 13.6° of heading wander on top of the cruise fit's own 6.8°, and about
+     * the same again on the descent's 15.0°. Worst measured: 12.54° on the
+     * cruise (f870) and 27.59° on the descent (f1976).
+     *
+     * Two windows are cut out, both authored rather than accidental:
+     *
+     *  - **f730–824 of the cruise.** The reference holds range across
+     *    f760–792 — both beats measure the same width, 0.401 and 0.395, so the
+     *    hull *recedes* 1.52% — while the knots either side close hard. The
+     *    log-range Catmull-Rom therefore overshoots inside the segment, and
+     *    across it the frame-to-frame displacement is a sub-percent range
+     *    wobble whose direction is not a flight direction at all: it peaks at
+     *    142.8° from the nose at f778. A Catmull-Rom segment is shaped by the
+     *    knots either side of it, so the exclusion is the reversing pair's two
+     *    neighbouring knots, not just the pair.
+     *  - **f2036–2080 of the descent.** The authored x jags by 0.126 of the
+     *    frame's width between f2065 and f2075 (0.483 → 0.357) where the refit
+     *    splices the box channel to the Bussard-cap channel. No straight line
+     *    contains that, and the heading swings 82.0° off the nose at f2068.
+     *    That is TNG-PLAN §3(b)'s late-descent refit, not a property failure —
+     *    when it lands, widen this window to f2080 and the bound should hold.
+     */
+    const CRUISE_FRAME_DEG = 20
+    const DESCENT_FRAME_DEG = 30
+    fc.assert(
+      fc.property(fc.integer({ min: 700, max: 870 }), (f) => {
+        fc.pre(f <= 730 || f >= 824)
+        expect(
+          Math.abs(
+            degreesBetween(noseOf(at(f)!), heading(at, f)) - CRUISE_PITCH_DEG,
+          ),
+          `cruise f${f}: nose off its heading by other than PITCH_CRUISE`,
+        ).toBeLessThan(CRUISE_FRAME_DEG)
+      }),
+    )
+    fc.assert(
+      fc.property(fc.integer({ min: 1800, max: 2035 }), (f) => {
+        expect(
+          degreesBetween(noseOf(at(f)!), heading(at, f)),
+          `descent f${f}: nose off its heading`,
+        ).toBeLessThan(DESCENT_FRAME_DEG)
+      }),
+    )
+  })
+
+  it('never swings the hull faster than 2°/frame outside an authored maneuver', () => {
+    const { at } = playing()
+    /*
+     * TNG-PLAN §9's orientation criterion, in the channel a screen measurement
+     * would read it in: the angle between one frame's hull attitude and the
+     * next's, in camera axes, which is what the principal-axis channel sees.
+     * The whole quaternion, not a component — a swing about the sight line and
+     * a swing across it are the same failure and only one of them shows up in
+     * a single Euler term.
+     *
+     * The maneuvers the reference actually performs, from the measured census,
+     * are excluded because they are the point: the bank-away, the two
+     * warp-outs, and the skim. Everything else is a hull holding an attitude,
+     * so the bound is the plan's and the margin is large — the worst
+     * maneuver-free frame in the piece measures 0.265°/frame at f2128, going
+     * into the skim.
+     *
+     * Being on stage is asked of the sample rather than restated from
+     * `SHIP_WINDOWS`, which is not exported: a window that moves takes this
+     * test with it.
+     */
+    const MANEUVERS: readonly (readonly [number, number])[] = [
+      [880, 1120], // the bank-away — roll to −25.5° at up to 0.656°/frame
+      [1085, 1125], // the first warp-out
+      [2130, 2420], // the skim, which rolls +11.3° over f2315–2380
+      [2382, 2420], // the second warp-out
+    ]
+    const staged: number[] = []
+    let onStage = 0
+    let worst = { frame: 0, swing: 0 }
+    for (let f = 600; f < 2440; f += 1) {
+      if (!at(f)!.ship.visible || !at(f + 1)!.ship.visible) continue
+      onStage += 1
+      if (MANEUVERS.some(([from, to]) => f + 1 >= from && f <= to)) continue
+      staged.push(f)
+      const swing = swingDegrees(facingOf(at(f)!), facingOf(at(f + 1)!))
+      if (swing > worst.swing) worst = { frame: f, swing }
+    }
+    // Five visibility windows less four maneuvers still leaves more than half
+    // the hull's screen time; if it does not, the census has moved and the
+    // exclusions below are covering the piece rather than its maneuvers.
+    expect(staged.length).toBeGreaterThan(onStage / 2)
+    // Every staged frame, so the worst one is the one that gets named...
+    expect(
+      worst.swing,
+      `worst maneuver-free swing is ${worst.swing.toFixed(3)}°/frame at f${worst.frame}→f${worst.frame + 1}`,
+    ).toBeLessThan(2)
+    // ...and again as a property, which shrinks a *pattern* of failures to its
+    // earliest frame rather than reporting only the largest.
+    fc.assert(
+      fc.property(fc.constantFrom(...staged), (f) => {
+        const swing = swingDegrees(facingOf(at(f)!), facingOf(at(f + 1)!))
+        expect(
+          swing,
+          `f${f}→f${f + 1} swings ${swing.toFixed(3)}°/frame`,
+        ).toBeLessThan(2)
+      }),
+      { numRuns: 400 },
+    )
+  })
+
+  it('authors both approaches as closing, with one measured hold', () => {
+    /*
+     * The knot-level half of "range is monotone through the approaches", and
+     * the tolerance-free one: no interpolation is involved, so this is a
+     * statement about the authoring. The cruise contains exactly one
+     * recession and it is the reference's own hold — f760 and f792 measure
+     * w 0.401 and 0.395, so the beats put the hull 1.52% *further* away at the
+     * end of it. The descent contains none at all, which matches the
+     * reference's track: zero backsteps over f1775–2100.
+     *
+     * This is what licenses the frame-level tolerance in the next test. If a
+     * refit adds a second recession, the tolerance there stops being honest
+     * and this names the beat that made it so.
+     */
+    const recessions = (
+      beats: readonly { frame: number; range: number }[],
+      from: number,
+      to: number,
+    ) =>
+      beats
+        .filter((beat) => beat.frame >= from && beat.frame <= to)
+        .filter(
+          (beat, i, list) =>
+            i > 0 && beat.range > (list[i - 1] as { range: number }).range,
+        )
+    const cruise = recessions(TNG_SHIP_BEATS.cruise, 676, 952)
+    expect(cruise.map((beat) => beat.frame)).toEqual([792])
+    const hold = TNG_SHIP_BEATS.cruise.find((beat) => beat.frame === 760)!
+    expect((cruise[0] as { range: number }).range / hold.range).toBeCloseTo(
+      0.401 / 0.395,
+      6,
+    )
+    expect(recessions(TNG_SHIP_BEATS.return, 1758, 2085)).toEqual([])
+  })
+
+  it('closes monotonically frame by frame, within each approach’s stated slack', () => {
+    const { at } = playing()
+    /*
+     * The frame-level half. "Non-increasing within a stated tolerance" rather
+     * than strictly decreasing, and the tolerance is different for the two
+     * passes because what allows it is different:
+     *
+     *  - **Cruise, 0.5%/frame.** The pass is not authored monotone at all —
+     *    the hold above recedes 1.52% between two beats 32 frames apart, and
+     *    both bracketing knots are closing hard, so the log-range Catmull-Rom
+     *    concentrates that rise into part of the segment instead of spreading
+     *    it. 21 of the 276 frames rise; the worst is +0.245% at f778.
+     *  - **Descent, 0.05%/frame.** Nothing here is authored to recede, so the
+     *    only rise permitted is the spline's own overshoot inside the
+     *    near-hold f2065–2075 (w 0.666 → 0.673 — barely closing between two
+     *    faster segments). Three frames rise; the worst is +0.0225% at f2070.
+     *
+     * And the overshoot is bounded by the knots either side rather than by
+     * taste: the sampled range never exceeds the larger of its two bracketing
+     * beats by more than 0.5%, which is the log-space spline staying inside
+     * the envelope its authored beats describe. Measured: +0.178% on the
+     * cruise, +0.000% on the descent.
+     */
+    const OVERSHOOT = 0.005
+    for (const [label, beats, from, to, slack] of [
+      ['cruise', TNG_SHIP_BEATS.cruise, 676, 952, 0.005],
+      ['descent', TNG_SHIP_BEATS.return, 1758, 2085, 0.0005],
+    ] as const) {
+      const knots = beats.filter(
+        (beat) => beat.frame >= from - 200 && beat.frame <= to + 200,
+      )
+      let worstRise = { frame: from, value: 0 }
+      let worstOvershoot = { frame: from, value: 0 }
+      for (let f = from; f < to; f += 1) {
+        const rise = rangeAt(at, f + 1) / rangeAt(at, f) - 1
+        if (rise > worstRise.value) worstRise = { frame: f, value: rise }
+        let i = 0
+        while (
+          i + 1 < knots.length &&
+          f >= (knots[i + 1] as { frame: number }).frame
+        )
+          i += 1
+        const bracket = Math.max(
+          (knots[i] as { range: number }).range,
+          (knots[Math.min(i + 1, knots.length - 1)] as { range: number }).range,
+        )
+        const overshoot = rangeAt(at, f) / bracket - 1
+        if (overshoot > worstOvershoot.value)
+          worstOvershoot = { frame: f, value: overshoot }
+      }
+      // Both worsts, so a regression names the frame it happens at rather than
+      // the first frame that happens to breach.
+      expect(
+        worstRise.value,
+        `${label} backsteps ${(worstRise.value * 100).toFixed(4)}% at f${worstRise.frame}`,
+      ).toBeLessThan(slack)
+      expect(
+        worstOvershoot.value,
+        `${label} runs ${(worstOvershoot.value * 100).toFixed(4)}% past its bracketing beats at f${worstOvershoot.frame}`,
+      ).toBeLessThan(OVERSHOOT)
+    }
+  })
+
+  it('hands the cruise over to the warp-out without flying it twice', () => {
+    const { at } = playing()
+    /*
+     * A Catmull-Rom segment is shaped by the knot past its far end, so beats
+     * after a shot's last frame are not dead — which is the thing that made
+     * this a defect nothing was watching for.
+     *
+     * `SHIP_CRUISE` used to carry three exit beats hurling the hull to
+     * `atWidth(0.0008)` by f1120, on the reasoning that `cruise-close` ends at
+     * f1091 so they are never read. They set the tangent of the f1080–1092
+     * segment, which that shot renders in full: the hull went 431.9 m → 17.4 km
+     * across f1080–1091, in the clear, with the wash already at zero — and then
+     * the titles stage's own f1092 knot put it back at 568.0 m. A whole warp-out
+     * twelve frames early, and a 30x pop out of it.
+     *
+     * Both halves are asserted, because either alone can be satisfied by a
+     * shot that is wrong in the other direction:
+     *
+     *  - **Continuity at the cut.** The two shots must agree about where the
+     *    hull is on the frame they hand over on. 1% is a spline sampling two
+     *    routes that share an endpoint, not a tolerance for disagreement;
+     *    measured, f1091 → f1092 is 555.1 m → 568.0 m, +2.3%, which is one
+     *    frame of the recede either side of a knot they both hold.
+     *  - **No excursion before it.** The cruise's last twelve frames recede at
+     *    the pass's own rate, not a warp's. The worst measured step over
+     *    f1080–1091 is +2.44%/frame; the reverted script's is +41.4%.
+     *
+     * Change `SHIP_CRUISE`'s handover knot and `SHIP_TITLES`' f1092 entry
+     * together, or this names the frame where they stopped agreeing.
+     */
+    const HANDOVER = 1092
+    let worst = { frame: 1080, step: 0 }
+    for (let f = 1080; f < HANDOVER - 1; f += 1) {
+      const step = rangeAt(at, f + 1) / rangeAt(at, f) - 1
+      if (step > worst.step) worst = { frame: f, step }
+    }
+    expect(
+      worst.step,
+      `cruise exit opens ${(worst.step * 100).toFixed(2)}%/frame at f${worst.frame} — a warp-out inside a shot that has not cut yet`,
+    ).toBeLessThan(0.05)
+    const across = rangeAt(at, HANDOVER) / rangeAt(at, HANDOVER - 1) - 1
+    expect(
+      Math.abs(across),
+      `the cut at f${HANDOVER} jumps the hull ${(across * 100).toFixed(1)}%`,
+    ).toBeLessThan(0.05)
+    // The attitude has to survive the cut too: `routeOrientation` holds its
+    // first beat before that beat's frame, so a `FACING_TITLES` starting at
+    // f1280 pinned the now-visible hull to the *wipes'* heading — 164° away,
+    // in one frame, pointing back down the lens. Its first two beats are
+    // `FACING_CRUISE`'s last two verbatim; slerp is segment-local, so the two
+    // lists agree exactly over f1035–1120 and the bound here is a spline's
+    // own smoothness rather than a fudge. Measured worst: 0.350°/frame.
+    let worstSwing = { frame: 1076, swing: 0 }
+    for (let f = 1076; f <= 1107; f += 1) {
+      const swing = swingDegrees(facingOf(at(f)!), facingOf(at(f + 1)!))
+      if (swing > worstSwing.swing) worstSwing = { frame: f, swing }
+    }
+    expect(
+      worstSwing.swing,
+      `hull swings ${worstSwing.swing.toFixed(3)}°/frame at f${worstSwing.frame}→f${worstSwing.frame + 1}, across the f${HANDOVER} cut`,
+    ).toBeLessThan(2)
   })
 })
 
@@ -583,5 +1126,86 @@ describe('how a scene left', () => {
     harness.stopCutscene()
     harness.stopCutscene()
     expect(harness.cutsceneOutcome()?.ending).toBe('stopped')
+  })
+})
+
+describe('tng-intro lighting geometry', () => {
+  /*
+   * Why there is a camera-mounted light in `scene/CameraRig.tsx` at all.
+   *
+   * The hull's beats are camera-relative, so which face the camera is looking
+   * at is fixed by the beat tables and cannot be changed by re-aiming a shot:
+   * rotating the camera carries the hull with it. A shot's key is the star,
+   * which does not move. So if any beat in a shot turns the hull's unlit side
+   * to the lens, no choice of camera orientation rescues it, and the face on
+   * screen falls back to `ambientLight` 0.16 — 1/255 through the ACES toe, a
+   * silhouette. That is what `STAGE_FILL_INTENSITY` exists to cover.
+   *
+   * These assert the *condition*, not a frame's numbers, because the authored
+   * attitudes are still being fitted against the reference's tracked landmarks
+   * and move from pass to pass. Read a failure as news, not as a bug:
+   *
+   *  - the first failing means every beat is now keyed, so the staged fill has
+   *    no remaining job and should drop back to `FILL_INTENSITY`;
+   *  - the second failing means one distant key could serve the whole shot
+   *    after all, and the light belongs in `tngIntro.ts` rather than the rig.
+   */
+  const visibleFaceAndKey = (frames: readonly number[]) => {
+    const session = openSession()
+    const world = session.world
+    const system = world.loadSystem(systemId('SOL'))
+    const sun = world.frames.pose(
+      systemFrameId(system.id),
+      world.clock.time,
+    ).position
+    session.harness.play('tng-intro')
+    const at = (f: number) =>
+      session.harness.cutsceneSample(100 + f / TNG_INTRO.fps)
+    at(0)
+    return frames.map((frame) => {
+      const s = at(frame)!
+      const dorsal = Q.rotate(s.ship.orientation, vec3(0, 1, 0))
+      const toCamera = Vec.normalize(
+        UV.difference(s.camera.position, s.ship.position),
+      )
+      const face = Vec.dot(toCamera, dorsal) >= 0 ? dorsal : Vec.negate(dorsal)
+      const toStar = Vec.normalize(UV.difference(sun, s.camera.position))
+      // Both in camera axes for the second test: re-aiming a shot is exactly a
+      // rotation of the star relative to a hull that turns with the camera.
+      const inverse = Q.conjugate(s.camera.orientation)
+      return {
+        frame,
+        keyOnFace: Vec.dot(toStar, face),
+        faceInCamera: Q.rotate(inverse, face),
+      }
+    })
+  }
+
+  // Every hull beat of the one locked title shot, wipes through skim.
+  const TITLE_BEATS = [
+    1290, 1300, 1420, 1440, 1540, 1560, 1770, 1800, 1850, 1920, 2000, 2085,
+    2100, 2200, 2300,
+  ]
+
+  it('shows the camera a face the star cannot light, somewhere in the title shot', () => {
+    const worst = Math.min(
+      ...visibleFaceAndKey(TITLE_BEATS).map((r) => r.keyOnFace),
+    )
+    // Grazing or worse. A Lambert face at 0.2 of full key is already down in
+    // the toe, and the detector in `compare_render.py` keeps pixels above
+    // grey 45 — which such a face does not reach.
+    expect(worst).toBeLessThan(0.2)
+  })
+
+  it('cannot be served by one distant key, whatever the shot is aimed at', () => {
+    const faces = visibleFaceAndKey(TITLE_BEATS).map((r) => r.faceInCamera)
+    // Any key is a unit vector, so what it can deliver to two faces at once is
+    // bounded by how far apart they are. Two visible faces more than 90° apart
+    // cannot both be lit; the star would have to be in two places.
+    let worstPair = 1
+    for (const a of faces) {
+      for (const b of faces) worstPair = Math.min(worstPair, Vec.dot(a, b))
+    }
+    expect(worstPair).toBeLessThan(0)
   })
 })

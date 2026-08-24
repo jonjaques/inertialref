@@ -1,5 +1,5 @@
 ---
-globs: packages/devtools/src/cutscene.ts,packages/devtools/src/cutscenes/**,packages/rendering/src/cinematic.ts,apps/game/src/cinema/**,apps/game/src/hud/CutsceneOverlay.tsx
+globs: packages/devtools/src/cutscene.ts,packages/devtools/src/cutscenes/**,packages/rendering/src/cinematic.ts,apps/game/src/cinema/**,apps/game/src/hud/CutsceneOverlay.tsx,apps/game/src/hud/TrackOverlay.tsx,apps/headless/src/hullClearance.test.ts
 alwaysApply: false
 ---
 

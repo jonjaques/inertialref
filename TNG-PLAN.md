@@ -311,3 +311,101 @@ reference itself is a fan recreation — where it contradicts physics (Earth
 key light, §3e) the plan follows the script's existing policy of staging the
 shot the reference is _trying_ to be. Publishing any full-sequence render
 still requires the rights check in `docs/guides/cinematics.md`.
+
+---
+
+## 10. Corrections, from building it
+
+Written after the implementation pass, in the form
+`analysis/timeline.json`'s own `corrections` block takes: every claim below
+was checked against a number, and each says what to measure to check it. The
+plan's timings and its structure held. Several of its _motion_ and _cause_
+claims did not — which is the reference pipeline's own lesson, met again.
+
+**§3(f), the outro accent, was the wrong culprit.** The accent is already gold
+and has never been inside the blue mask. Splitting the mask by row band shows
+the 0.778 right edge sitting in the _label's_ rows (0.370–0.434), not the
+name's (0.467–0.541): the caption "After The Recreation By" runs 2.8× the
+width of the reference's "Video By", and a label rides its name's element flush
+left, so its length is extent added to the right of the block. Shortening it
+and putting the name on the reference's mark took the blue centroid from 0.495
+to **0.373** against the reference's 0.371.
+
+**§4's fit table is a fit to `tngIntro.ts`'s own beats, not to the reference.**
+Refitting the same lines to the authored splines reproduces all four of its
+numbers to within a few percent, including the skim's non-monotonicity.
+Against the reference the real figures are: cruise approach ~730 m of path
+(not 4.0 km) with a 9.5% perpendicular residual; credit descent ~800 m (not
+6.9 km) at 5.0%, strictly monotone with zero backsteps; wipe ~9.5 km at
+**0.13%**; and the skim is **not measurable at all** — 217 of its 282 tracked
+frames are saturated and 273 touch a frame edge. So §8's advice to prove
+`linePath` on the cruise "because it is already near-perfect" is backwards: the
+wipe is the clean case, by two orders of magnitude.
+
+**The mirrored wipe's offset is 126, not 128.** Reference against reference,
+mirrored in x, the second wipe's own tracked boxes agree with the first's to a
+thousandth on every frame at 126 and are two frames early at 128.
+
+**§3(e)'s "physically self-contradictory" Earth was a bad ruler.** The 7.2°
+sun–limb clearance came from measuring to the lit mask's bounding-box corner,
+which sits at mid height rather than on the limb. Fitting the visible limb as a
+cone gives **16.7°**, recovers the standoff on every frame rather than the one
+unclipped one, and predicts the reference's own frame luminance to ±2.6 across
+f140–200. There was no contradiction to stage around; the shot is
+self-consistent and is now derived rather than tuned.
+
+**The bank-away starts at f880–900, not f976** — cap-pair roll angle and cap
+area ratio both break there, 76–96 frames earlier than the plan's window.
+
+**`ref_subj_w` is not a range measurement in most of the bands the plan reads
+it in.** It is truncated where the box touches a frame edge, saturated where
+the hull fills the frame (84 frames at w ≥ 0.995 in the close pass alone), and
+inflated where a second lit component crosses the tracker's 400-pixel floor.
+The channel that survives all three is the pair of Bussard collectors.
+
+**The reference's hull is nose-on or bow-quarter in every pass, never
+broadside**, so its box width is the saucer's disc (463.7 m) rather than the
+ship's length. `atWidth` still divides by `HULL` because the render's own
+effective width is 618 m — two errors that have been cancelling, and correcting
+either alone breaks the best stretch in the piece. Both are now written down in
+the source.
+
+**The titles shot had no warp-out beats at all.** From the f1092 cut the hull
+held at the first wipe's entry knot — a 0.012-wide dot — and did not move for
+twenty-six frames; `SHIP_CRUISE`'s exit beats belong to a shot that has already
+ended. That is why §6's f1106 anchor was unreachable.
+
+**§9's "flashes on the measured 81–100 peak" is one flash's peak.** The first
+peaks at 100.0 and the second at 117.2, a constant ×1.17 in output mean at
+every matched frame. And both start about two frames before their measured
+start: f1085 and f2382 are threshold crossings in the shot detector, not the
+frames the light begins — the same distinction `THRESHOLD_FRACTION` already
+draws for the titles.
+
+**The ~215 missing-subject frames are entirely in descent-_early_** (f1765–1990,
+205 of them). Descent-late has none; its defect was purely growth rate.
+
+**The camera was inside the ship, and no channel could see it.** Through the
+skim the beats put the camera 125–170 m from the hull's origin — inside a
+saucer 467 m across. Decoding the glTF's vertex positions in Node and reducing
+them to a per-column height field in hull axes puts it _within the surface
+envelope_ for forty-eight frames, f2234–2281, by up to 3.5 m, and within a
+meter either side of that; at f2188 the shot is the inside of the saucer with
+the engineering hull's battle bridge showing through the plating. The reference
+diff is structurally blind to this — its subject channel scores the largest lit
+mass, and an interior wall is a large lit mass — so it was found by eye and is
+now held by `apps/headless/src/hullClearance.test.ts`, which walks every frame
+the hull is on stage and asserts 15 m of daylight. Deliberately a test rather
+than a runtime clamp: a director that quietly pushed the camera out would make
+an authoring mistake invisible. The skim's ranges open from 125–170 m to
+190–220 m, which is the least that clears it, and a knot at f2355 stops a
+log-range spline undershoot that had put the camera back within 11 m of the rim
+in the middle of a stretch whose authored knots were all clear.
+
+**The skim star-streak interpretation (§6, §8.7) is dropped**, on the evidence
+§6 asked for. The render is already +12 of exposure brighter than the reference
+across the skim band, and +30 through f2378–2381; the reference's speed there
+reads as motion blur on a saucer that fills the frame, not as background stars,
+which are barely visible behind it. Adding a light-emitting effect to a band
+that is already too bright would be reproducing a look by making a measured
+number worse.

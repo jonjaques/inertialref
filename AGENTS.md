@@ -146,6 +146,24 @@ Violating one of these is a rewrite later, not a refactor.
 - **Never let a cinematic effect fire off a script.** An effect is staging.
   It belongs in `CinematicEffects`, where a shot turns it on, and it is 0
   everywhere else. [Cinematics](docs/guides/cinematics.md).
+- **Never fly a scripted camera through the prop it is staging.** Beats are
+  authored in screen terms, so nothing in them says how close the camera comes
+  to the _geometry_ — and a frame-diff against a reference cannot tell you,
+  because the inside of a hull is as large and as lit as the outside. It is
+  checked against the shipped asset, headlessly, by
+  `apps/headless/src/hullClearance.test.ts`, and it is a **test rather than a
+  clamp**: a director that quietly pushed the camera out would make an
+  authoring mistake invisible and put a conditional inside the one thing a
+  scripted scene has to be, which is reproducible.
+  [Cinematics](docs/guides/cinematics.md).
+- **Never treat a beat past a shot's last frame as dead.** A Catmull-Rom
+  segment is shaped by the knot beyond its far end, so exit beats authored
+  "after the cut" set the tangent of the segment the shot still renders.
+  `tng-intro`'s cruise flew an entire warp-out across its own last twelve
+  frames this way — 432 m to 17.4 km in the clear — and the next shot's
+  entry knot snapped the hull back. Where two shots hand a prop over, they
+  share the knot: change one and change the other.
+  [Cinematics](docs/guides/cinematics.md).
 - **Never write a label in the case you want to see it in.** Source strings
   are title case; `text-transform` on the type step decides what is shouted.
 - **Never import from `three` in `apps/game`.** Import `three/webgpu` and

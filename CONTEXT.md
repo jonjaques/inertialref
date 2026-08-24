@@ -3278,6 +3278,209 @@ one: at f2397 the reference still shows the hull at w 0.68 mid-streak; the
 render has hurled it to a dot and drawn a lens line where a stretching ship
 should be.
 
+## The plan met the frames, and half of it was wrong (23 Aug 2026)
+
+[`TNG-PLAN.md`](TNG-PLAN.md) was written from measurements and then implemented
+against the same frames. Its timings and its structure held. A good deal of its
+_causation_ did not, and the corrections are worth more than the work they
+interrupted — they are collected in the plan's own §10 and summarized here.
+
+**The instrument was reading the wrong thing, in three separate places.**
+`compare_render.py`'s subject box is truncated wherever it touches a frame edge,
+saturated wherever the subject fills the frame — 84 frames of the close pass sit
+at w ≥ 0.995 against all four edges — and inflated wherever a second lit
+component crosses its 400-pixel floor, which is the whole of the f752 → f754 →
+f756 width step that looked like closing and was a filter threshold. In those
+bands its width is not a range. What survives all three is a rigid landmark on
+the subject: the pair of Bussard collectors, 265.5 m apart, whose separation is
+immune to clipping and whose centroids are immune to glow. Every refit beat in
+this pass is measured on that channel and spliced to the box only where the box
+is interior.
+
+The same class of error produced the plan's Earth "contradiction". Its claim
+that the reference is physically self-contradictory — sun in frame beside a
+broadly lit planet — rested on a 7.2° sun-to-limb clearance measured to the lit
+mask's bounding-box _corner_, which sits at mid height rather than on the limb.
+Fitting the visible limb as a cone gives 16.7°, recovers the standoff on every
+frame instead of the one unclipped one, and predicts the reference's own frame
+luminance to ±2.6 across f140–200. There was nothing to stage around. The shot
+is now derived — fix the star's mark and the disk's and the phase follows — and
+its orientation error fell from 50.3° to 12.7°, its limb from 0.056 to 0.013,
+with the star inside 0.010 of its measured mark where it used to be off-frame.
+
+**And §4's line fits were fits to the script's own beats.** Refitting them
+against the reference gives a cruise path of ~730 m rather than 4.0 km at a 9.5%
+residual, a descent of ~800 m rather than 6.9 km at 5.0% and strictly monotone,
+a wipe of ~9.5 km at **0.13%** — and a skim that is not measurable at all, 217
+of its 282 frames saturated and 273 touching an edge. So the plan's instruction
+to prove `linePath` on the cruise "because it is already near-perfect" is
+backwards; the wipe is the clean case by two orders of magnitude.
+
+**Orientation was the largest single defect and nobody had measured it.** The
+credit descent's hull was authored at `vec3(-0.02, 0.30, 0.95)` and fits
+`vec3(-0.039, -0.605, 0.796)` — 57° out, with the wrong sign in y. The hull
+descended 0.6 of the frame over 340 frames with its nose tipped up: flying
+backwards down its own track, which is exactly the "sliding" the plan describes
+and which no channel in the diff could see. The cruise was 24° out and the wipes
+were authored nose-down where all three fit level to within 0.22° of each other.
+Fitted directions replace them, and `withAttitude` carries the two places the
+attitude genuinely differs from the flight path — a nose-down cruise, and the
+banks the reference really does roll.
+
+**Fixing the attitude moved the lighting bug into view.** With the hull pointing
+the right way, the credit descent's camera sits on the face the star lights, and
+the "camera underneath the key" defect a fill rig was being built for turned out
+to be an artifact of the wrong attitude. What was left was smaller and worse:
+`CameraRig`'s fill light had been a hardcoded world-space constant
+`[0.4, 1, 0.8]` while `SceneView`'s comment called it camera-mounted, for its
+whole life. Whether the near field was readable came down to which way a shot
+happened to face. Aimed — back down the lens minus 0.85 of the key, so its `N·L`
+is negative wherever the key already reaches and positive only where it does not
+— it is provably a no-op on anything already lit, and 205 missing hull frames
+became 4.
+
+**Two smaller findings of the same shape.** The mirrored fly-through wipe's
+offset is **126, not 128**: reference against reference, mirrored in x, the
+second wipe's boxes agree with the first's to a thousandth on every frame at 126
+and are two frames early at 128 — a perfect mirror on the wrong beat, which
+reads as a bad mirror. And the titles shot had **no warp-out beats at all**:
+from the f1092 cut the hull held at the first wipe's entry knot, a 0.012-wide
+dot, and did not move for twenty-six frames, because `SHIP_CRUISE`'s exit beats
+belong to a shot that has already ended.
+
+**The camera was inside the ship, and no channel could see it.** Through the
+skim the beats put the camera 125–170 m from the hull's origin — inside a
+saucer 467 m across. Decoding the glTF's vertex positions in Node and reducing
+them to a per-column height field in hull axes puts it _within the surface
+envelope_ for forty-eight frames, f2234–2281, by up to 3.5 m, and within a
+meter either side of that; at f2188 the shot is the inside of the saucer with
+the engineering hull's battle bridge showing through the plating. The reference
+diff is structurally blind to this — its subject channel scores the largest lit
+mass, and an interior wall is a large lit mass — so it was found by eye and is
+now held by `apps/headless/src/hullClearance.test.ts`, which walks every frame
+the hull is on stage and asserts 15 m of daylight. Deliberately a test rather
+than a runtime clamp: a director that quietly pushed the camera out would make
+an authoring mistake invisible. The skim's ranges open from 125–170 m to
+190–220 m, which is the least that clears it, and a knot at f2355 stops a
+log-range spline undershoot that had put the camera back within 11 m of the rim
+in the middle of a stretch whose authored knots were all clear.
+
+**Read the signed table, not the mean-absolute one.** Two large errors of
+opposite sign average to a small one. The Saturn pass scored a respectable +3.1
+of exposure error across f413–470 while running −26.5 through its entry and
++18.7 through its exit: the whole pass was arriving eight frames late and then
+not leaving. Re-fit as a flyby — closest approach 2.4 radii at f425, a straight
+line at a varying throttle, 0.17 radii per frame closing and 0.09 opening — it
+now runs −14.4 and −1.1. The residual entry error is physics: Saturn is at 9.5
+AU against Jupiter's 5.2 and receives 30% of the light, while the reference lit
+its Saturn like its Jupiter.
+
+**Clipped is not bright, it is shapeless.** The eclipse corona was driven so
+hard its ring saturated at 250 of 255 and read as a uniform cream annulus out to
+the quad's edge; metered down and given a sunward bias that vanishes at
+alignment, its window went from +29.8 of exposure error to +4.6. Both warp
+flashes were the same story and had the same fix, plus one the titles already
+knew: f1085 and f2382 are _threshold crossings_, not the frames the light
+begins, so the envelope now opens before its start frame and its top is round
+rather than flat — a constant carries nothing for a host to shape.
+
+## The ship warped out twice, and a review found it (23 Aug 2026)
+
+The fidelity pass shipped with three defects its own tests could not see, and a
+`/code-review` pass over the branch is what surfaced them. Two share a cause
+worth writing down, and it is now an invariant.
+
+**A shot's exit beats are not dead.** `SHIP_CRUISE` carried three beats past
+f1091 — the shot's last frame — hurling the hull to `atWidth(0.0008)` by f1120,
+on the reasoning that a shot that has ended cannot render them. It does not
+render them; it renders the segment they _shape_. A Catmull-Rom reads the knot
+past a segment's far end to set its tangent, so those beats flew an entire
+warp-out across f1080–1091 while `cruise-close` was still on screen: 431.9 m and
+w 1.010 at f1080, 17.4 km and w 0.025 by f1091 — with `effects.flash` at 0.009,
+so it happened in the clear — and then the titles stage's own f1092 knot put the
+hull back at 568.0 m, thirty times larger, in one frame. Two warp-outs twelve
+frames apart. It is one handover knot now, repeating `WARP_OUT_1`'s own f1092
+entry, and f1076–1092 is the continuous recede the reference measures. The two
+shots share the knot: change one and change the other.
+
+**And the same cut had no attitude carried across it.** `routeOrientation`
+holds its first beat before that beat's frame, so a `FACING_TITLES` beginning at
+f1280 pinned the now-visible warp-out hull to the _wipes'_ fitted heading, which
+points back down the lens. The attitude snapped 164.40° in the single frame
+f1091→f1092 — 0.32°/frame either side of it — and the nose then sat 146.1° off
+its own velocity at f1092 on a hull 0.768 of the frame wide. The ship flew
+tail-first out of its own warp point, which is the defect the pass before it
+existed to remove, one shot along. Its first two beats are `FACING_CRUISE`'s
+last two verbatim; slerp is segment-local, so the two lists agree exactly over
+f1035–1120 and the worst swing across the handover is now 0.350°/frame.
+
+Neither was visible to anything. The chord test never samples the warp-out, and
+the 2°/frame swing test excludes [1085, 1125] as an authored maneuver — the
+exclusion that was covering it. `cutscene.test.ts` now asserts the handover
+directly, in both channels, and the assertion names the frame: reverting the
+script fails it with "cruise exit opens 47.54%/frame at f1085".
+
+**The hull height field aliased outside ±32.8 km.** `hullField`'s packed column
+key, `(floor(x/cell)+4096)*8192 + floor(z/cell)+4096`, is injective only for
+|x|,|z| under 32.8 km, and the clearance sweep queries it with camera positions
+up to 968 km out in hull axes. Against the shipped `enterprise-d.glb`,
+`depthInside({z: 65536})` returned +32.77 — "the camera is 32.8 m inside the
+hull" — for a point 65.5 km astern. 39 frames of the current sweep already fall
+outside the key's domain; the test passed only because no aliased key happened
+to land on an occupied column. `columnKey()` returns null outside its domain
+now, and the test asserts far-field points read clear. The clearance test also
+passed vacuously when the sweep found no frame at all — `-Infinity` satisfies
+`toBeLessThan(-15)` — and now asserts it staged some.
+
+Smaller, same review: `normalize` of the zero vector wrote a NaN into the
+framebuffer at the exact center of the eclipse corona (`mix(1, NaN, 0)` is NaN,
+so perfect alignment did not save it, and additive blend put it on screen);
+`cutscenePeek` answered from a world the host had already replaced, because it
+was copied from `sample`'s preamble minus the world-identity check; and the
+warp stretch rasterized 13–24% of the frame with additive blend for ~2,600
+frames it should have been invisible for.
+
+And CI went red on the one finding the review had deferred as a policy call.
+`hullClearance.test.ts` is the first test here to read git-lfs content, and
+`.github/workflows/check.yml` checked out with `actions/checkout@v5` and no
+`lfs: true` — so `enterprise-d.glb` arrived as a 130-byte pointer, `readHullField`
+threw "is not a binary glTF" while vitest was still collecting, and the run
+reported one failed _suite_ with no test names. The policy call is fail, not
+skip: the asset is in the repo and the invariant is the whole point of the file,
+so a skip would leave "a scripted camera clears the prop it stages" unchecked in
+the only place it is checked automatically. Three things changed. The workflow
+fetches LFS. `readHullField` recognizes a pointer and says `run \`git lfs pull\``rather than blaming the model, the courtesy`ingest/sources.ts`already extends
+to a pointer served over HTTP. And the decode moved out of the`describe` body
+behind a memo, so a missing asset fails three named tests instead of erasing the
+suite.
+
+The quieter half is the build. `shipModels.ts` pulls the hull in through
+`import.meta.glob`, so `pnpm build` bundles whatever is on disk and Vite does not
+care whether it is a glTF — a pointer checkout produces a _green_ build that
+ships a 130-byte file where the hero ship should be. This is the second time LFS
+has cost something: 6dea1c7 fixed the same gap in the Cloud Agent image, where
+the symptom was the renderer silently falling back to the debug cone. Every
+environment that checks this repository out needs the smudge filter, and the
+failure looks different in each one — GitHub Actions threw during test
+collection, and Workers Builds, which `vite.config.ts` already reads
+`WORKERS_CI_COMMIT_SHA` from, would not have complained at all. So rather than
+fix them one CI at a time, the build itself now declines: a `buildStart` hook
+reads the first four bytes of every `data/models/*.glb` and fails unless they
+are the ASCII magic `glTF`. Verified by building against a pointer — the build
+stops and names `git lfs pull`. Production was checked and is unaffected: the
+deployed `enterprise-d-ByumsAL0.glb` begins `glTF` and its length field reads
+13,928,924, matching the local asset byte for byte.
+
+Two things were left as they are, deliberately. `warpFlashEnvelope` still has a
+flat top — `min` of two saturating smoothsteps is exactly 1.0 for t in
+[5.5, 9] — which three comments and a test title claim it does not; reshaping it
+moves output this pass tuned against the reference, so the comments were
+corrected to the truth instead. And `hullWidth` divides by the live
+`camera.aspect` while every threshold around it was metered at 16:9, so the
+stretch's on and off frames move with the window's shape. That one is a real
+reproducibility hole in a pipeline built on reference diffs, and it is a design
+change rather than a repair.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).
