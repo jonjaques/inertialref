@@ -3353,7 +3353,7 @@ skim the beats put the camera 125–170 m from the hull's origin — inside a
 saucer 467 m across. Decoding the glTF's vertex positions in Node and reducing
 them to a per-column height field in hull axes puts it _within the surface
 envelope_ for forty-eight frames, f2234–2281, by up to 3.5 m, and within a
-metre either side of that; at f2188 the shot is the inside of the saucer with
+meter either side of that; at f2188 the shot is the inside of the saucer with
 the engineering hull's battle bridge showing through the plating. The reference
 diff is structurally blind to this — its subject channel scores the largest lit
 mass, and an interior wall is a large lit mass — so it was found by eye and is
@@ -3383,6 +3383,72 @@ flashes were the same story and had the same fix, plus one the titles already
 knew: f1085 and f2382 are _threshold crossings_, not the frames the light
 begins, so the envelope now opens before its start frame and its top is round
 rather than flat — a constant carries nothing for a host to shape.
+
+## The ship warped out twice, and a review found it (23 Aug 2026)
+
+The fidelity pass shipped with three defects its own tests could not see, and a
+`/code-review` pass over the branch is what surfaced them. Two share a cause
+worth writing down, and it is now an invariant.
+
+**A shot's exit beats are not dead.** `SHIP_CRUISE` carried three beats past
+f1091 — the shot's last frame — hurling the hull to `atWidth(0.0008)` by f1120,
+on the reasoning that a shot that has ended cannot render them. It does not
+render them; it renders the segment they _shape_. A Catmull-Rom reads the knot
+past a segment's far end to set its tangent, so those beats flew an entire
+warp-out across f1080–1091 while `cruise-close` was still on screen: 431.9 m and
+w 1.010 at f1080, 17.4 km and w 0.025 by f1091 — with `effects.flash` at 0.009,
+so it happened in the clear — and then the titles stage's own f1092 knot put the
+hull back at 568.0 m, thirty times larger, in one frame. Two warp-outs twelve
+frames apart. It is one handover knot now, repeating `WARP_OUT_1`'s own f1092
+entry, and f1076–1092 is the continuous recede the reference measures. The two
+shots share the knot: change one and change the other.
+
+**And the same cut had no attitude carried across it.** `routeOrientation`
+holds its first beat before that beat's frame, so a `FACING_TITLES` beginning at
+f1280 pinned the now-visible warp-out hull to the _wipes'_ fitted heading, which
+points back down the lens. The attitude snapped 164.40° in the single frame
+f1091→f1092 — 0.32°/frame either side of it — and the nose then sat 146.1° off
+its own velocity at f1092 on a hull 0.768 of the frame wide. The ship flew
+tail-first out of its own warp point, which is the defect the pass before it
+existed to remove, one shot along. Its first two beats are `FACING_CRUISE`'s
+last two verbatim; slerp is segment-local, so the two lists agree exactly over
+f1035–1120 and the worst swing across the handover is now 0.350°/frame.
+
+Neither was visible to anything. The chord test never samples the warp-out, and
+the 2°/frame swing test excludes [1085, 1125] as an authored maneuver — the
+exclusion that was covering it. `cutscene.test.ts` now asserts the handover
+directly, in both channels, and the assertion names the frame: reverting the
+script fails it with "cruise exit opens 47.54%/frame at f1085".
+
+**The hull height field aliased outside ±32.8 km.** `hullField`'s packed column
+key, `(floor(x/cell)+4096)*8192 + floor(z/cell)+4096`, is injective only for
+|x|,|z| under 32.8 km, and the clearance sweep queries it with camera positions
+up to 968 km out in hull axes. Against the shipped `enterprise-d.glb`,
+`depthInside({z: 65536})` returned +32.77 — "the camera is 32.8 m inside the
+hull" — for a point 65.5 km astern. 39 frames of the current sweep already fall
+outside the key's domain; the test passed only because no aliased key happened
+to land on an occupied column. `columnKey()` returns null outside its domain
+now, and the test asserts far-field points read clear. The clearance test also
+passed vacuously when the sweep found no frame at all — `-Infinity` satisfies
+`toBeLessThan(-15)` — and now asserts it staged some.
+
+Smaller, same review: `normalize` of the zero vector wrote a NaN into the
+framebuffer at the exact center of the eclipse corona (`mix(1, NaN, 0)` is NaN,
+so perfect alignment did not save it, and additive blend put it on screen);
+`cutscenePeek` answered from a world the host had already replaced, because it
+was copied from `sample`'s preamble minus the world-identity check; and the
+warp stretch rasterized 13–24% of the frame with additive blend for ~2,600
+frames it should have been invisible for.
+
+Two things were left as they are, deliberately. `warpFlashEnvelope` still has a
+flat top — `min` of two saturating smoothsteps is exactly 1.0 for t in
+[5.5, 9] — which three comments and a test title claim it does not; reshaping it
+moves output this pass tuned against the reference, so the comments were
+corrected to the truth instead. And `hullWidth` divides by the live
+`camera.aspect` while every threshold around it was metered at 16:9, so the
+stretch's on and off frames move with the window's shape. That one is a real
+reproducibility hole in a pipeline built on reference diffs, and it is a design
+change rather than a repair.
 
 ## Known gaps
 

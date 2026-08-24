@@ -18,6 +18,7 @@ import {
   TNG_HULL_LENGTH,
   TNG_INTRO,
   TNG_LENS,
+  TNG_CRUISE_PITCH_DEG,
   TNG_SHIP_BEATS,
   TNG_WIPE_OCCLUSIONS,
   TNG_WIPE_OFFSETS,
@@ -452,7 +453,8 @@ describe('tng-intro flight dynamics', () => {
   const FIT_SPREAD_DEG = { cruise: 6.8, descent: 15, wipe: 0.22 } as const
 
   /**
-   * `PITCH_CRUISE` in `tngIntro.ts`, which does not export it.
+   * `PITCH_CRUISE`, read from the script rather than restated — the magnitude,
+   * because an angle between two directions has no sign.
    *
    * The nose-down attitude the reference flies against its own climbing track,
    * solved against `dot(toCamera, dorsal)` over f700–930. It is an *attitude*,
@@ -461,9 +463,8 @@ describe('tng-intro flight dynamics', () => {
    * pitches about the derived frame's right axis, which is perpendicular to
    * the derived forward, and a bank turns about the nose itself — so the
    * overlay contributes exactly its own angle and the bank contributes none.
-   * If that constant moves, this moves with it.
    */
-  const CRUISE_PITCH_DEG = 34
+  const CRUISE_PITCH_DEG = Math.abs(TNG_CRUISE_PITCH_DEG)
 
   it('flies each straight pass with its nose on its own chord', () => {
     const { at } = playing()
@@ -757,6 +758,69 @@ describe('tng-intro flight dynamics', () => {
         `${label} runs ${(worstOvershoot.value * 100).toFixed(4)}% past its bracketing beats at f${worstOvershoot.frame}`,
       ).toBeLessThan(OVERSHOOT)
     }
+  })
+
+  it('hands the cruise over to the warp-out without flying it twice', () => {
+    const { at } = playing()
+    /*
+     * A Catmull-Rom segment is shaped by the knot past its far end, so beats
+     * after a shot's last frame are not dead — which is the thing that made
+     * this a defect nothing was watching for.
+     *
+     * `SHIP_CRUISE` used to carry three exit beats hurling the hull to
+     * `atWidth(0.0008)` by f1120, on the reasoning that `cruise-close` ends at
+     * f1091 so they are never read. They set the tangent of the f1080–1092
+     * segment, which that shot renders in full: the hull went 431.9 m → 17.4 km
+     * across f1080–1091, in the clear, with the wash already at zero — and then
+     * the titles stage's own f1092 knot put it back at 568.0 m. A whole warp-out
+     * twelve frames early, and a 30x pop out of it.
+     *
+     * Both halves are asserted, because either alone can be satisfied by a
+     * shot that is wrong in the other direction:
+     *
+     *  - **Continuity at the cut.** The two shots must agree about where the
+     *    hull is on the frame they hand over on. 1% is a spline sampling two
+     *    routes that share an endpoint, not a tolerance for disagreement;
+     *    measured, f1091 → f1092 is 555.1 m → 568.0 m, +2.3%, which is one
+     *    frame of the recede either side of a knot they both hold.
+     *  - **No excursion before it.** The cruise's last twelve frames recede at
+     *    the pass's own rate, not a warp's. The worst measured step over
+     *    f1080–1091 is +2.44%/frame; the reverted script's is +41.4%.
+     *
+     * Change `SHIP_CRUISE`'s handover knot and `SHIP_TITLES`' f1092 entry
+     * together, or this names the frame where they stopped agreeing.
+     */
+    const HANDOVER = 1092
+    let worst = { frame: 1080, step: 0 }
+    for (let f = 1080; f < HANDOVER - 1; f += 1) {
+      const step = rangeAt(at, f + 1) / rangeAt(at, f) - 1
+      if (step > worst.step) worst = { frame: f, step }
+    }
+    expect(
+      worst.step,
+      `cruise exit opens ${(worst.step * 100).toFixed(2)}%/frame at f${worst.frame} — a warp-out inside a shot that has not cut yet`,
+    ).toBeLessThan(0.05)
+    const across = rangeAt(at, HANDOVER) / rangeAt(at, HANDOVER - 1) - 1
+    expect(
+      Math.abs(across),
+      `the cut at f${HANDOVER} jumps the hull ${(across * 100).toFixed(1)}%`,
+    ).toBeLessThan(0.05)
+    // The attitude has to survive the cut too: `routeOrientation` holds its
+    // first beat before that beat's frame, so a `FACING_TITLES` starting at
+    // f1280 pinned the now-visible hull to the *wipes'* heading — 164° away,
+    // in one frame, pointing back down the lens. Its first two beats are
+    // `FACING_CRUISE`'s last two verbatim; slerp is segment-local, so the two
+    // lists agree exactly over f1035–1120 and the bound here is a spline's
+    // own smoothness rather than a fudge. Measured worst: 0.350°/frame.
+    let worstSwing = { frame: 1076, swing: 0 }
+    for (let f = 1076; f <= 1107; f += 1) {
+      const swing = swingDegrees(facingOf(at(f)!), facingOf(at(f + 1)!))
+      if (swing > worstSwing.swing) worstSwing = { frame: f, swing }
+    }
+    expect(
+      worstSwing.swing,
+      `hull swings ${worstSwing.swing.toFixed(3)}°/frame at f${worstSwing.frame}→f${worstSwing.frame + 1}, across the f${HANDOVER} cut`,
+    ).toBeLessThan(2)
   })
 })
 

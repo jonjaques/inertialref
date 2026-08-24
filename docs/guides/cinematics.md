@@ -59,6 +59,16 @@ limb; a cinema-authored halo is not.
 
 ## Authoring rules
 
+- **A shot's exit beats are not dead, and two shots hand a prop over on a
+  shared knot.** A Catmull-Rom segment's tangent comes from the knot past its
+  far end, so beats authored after the cut shape the segment the shot still
+  renders. `tng-intro`'s cruise carried three of them and flew a whole warp-out
+  across its own last twelve frames — 432 m to 17.4 km, in the clear, before
+  the next shot's entry knot snapped the hull back thirty times larger. The
+  handover is one knot now, repeated in both lists. Attitude works the same
+  way in the other direction: `routeOrientation` holds its first beat before
+  that beat's frame, so a facing list that begins at the _next_ shot's beats
+  pins the handed-over prop to the wrong heading for every frame before it.
 - Camera-relative choreography is **offset beats**, never absolute beats off
   a moving camera.
 - Do not per-frame look-at a hull near the lens.
@@ -86,7 +96,7 @@ Two rungs, and the cheap one answers most questions.
 `harness.cutsceneSample(epoch + frame / fps)` returns the frame — camera pose,
 hull pose, texts, effects — with no browser and no dev server. A throwaway
 script in a git-ignored `.scratch/` that prints a body's standoff in radii, its
-angular radius, where its centre and limb land on screen, where the star lands,
+angular radius, where its center and limb land on screen, where the star lands,
 and the elongation, converges a camera knot in a second where a capture costs a
 minute. **The first sample anchors frame 0 to its epoch**, so sample frame 0
 first or every later frame is offset by the one you asked for.

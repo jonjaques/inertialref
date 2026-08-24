@@ -536,10 +536,27 @@ const SHIP_CRUISE: readonly ScreenBeat[] = [
   { frame: 1064, x: 0.5, y: 0.442, range: atWidth(1.2) },
   { frame: 1072, x: 0.49, y: 0.452, range: atWidth(1.12) },
   { frame: 1080, x: 0.489, y: 0.454, range: atWidth(1.01) },
-  // The warp-out: hurled down its own axis under the flash.
-  { frame: 1092, x: 0.63, y: 0.39, range: atWidth(0.02) },
-  { frame: 1108, x: 0.64, y: 0.39, range: atWidth(0.004) },
-  { frame: 1120, x: 0.645, y: 0.39, range: atWidth(0.0008) },
+  /*
+   * The handover to `WARP_OUT_1`, not a warp-out of its own — and it is a beat
+   * of *this* list because a Catmull-Rom segment is shaped by the knot past
+   * its far end.
+   *
+   * This used to be three knots hurling the hull down its own axis to
+   * `atWidth(0.0008)` by f1120, on the reasoning that the shot ends at f1091
+   * so they are never read. They are: they set the tangent of the f1080–1092
+   * segment, which `cruise-close` renders in full. Sampled, that put the hull
+   * at 432 m and w 1.010 at f1080 and at 17.4 km and w 0.025 by f1091 — an
+   * entire warp-out flown in the clear, the first two frames of it before the
+   * wash has left zero — and then the titles stage's own f1092 knot snapped it
+   * back to 568 m and w 0.768. The ship warped out twice, twelve frames apart.
+   *
+   * One knot instead, and it is `WARP_OUT_1`'s own first beat repeated: the
+   * two shots then agree about where the hull is on the frame they hand over
+   * on, and f1081–1091 is the gentle recede from w 1.010 to w 0.768 the
+   * reference measures rather than a collapse. Change one of the two and
+   * change the other.
+   */
+  { frame: 1092, x: 0.365, y: 0.497, range: atWidth(0.768) },
 ]
 
 /*
@@ -550,10 +567,15 @@ const SHIP_CRUISE: readonly ScreenBeat[] = [
  * hull is driven by the titles shot's own route, and that route used to begin
  * at the first wipe's f1288 knot — so for the twenty-six frames of the
  * warp-out the hull simply held at the wipe's entry mark, a 0.012-wide dot at
- * (0.236, 0.593), motionless. `SHIP_CRUISE`'s own f1092/f1108/f1120 exit beats
- * were never read: they belong to a shot that has already ended. Verified in
- * the browser — `view.ship.position` was byte-identical at f1092, f1096,
- * f1100, f1106 and f1120.
+ * (0.236, 0.593), motionless. Verified in the browser — `view.ship.position`
+ * was byte-identical at f1092, f1096, f1100, f1106 and f1120.
+ *
+ * `SHIP_CRUISE`'s own exit beats were *not* the other half of this. They
+ * belong to a shot that ends at f1091 — but a Catmull-Rom reads the knot past
+ * the far end of a segment, so they flew a second, earlier warp-out across
+ * f1081–1091 with `cruise-close` still on screen. They are one handover knot
+ * now, and it is this list's own first beat repeated: change one and change
+ * the other.
  *
  * The track is the reference's, frame by frame: centred and still under the
  * whiteout, then thrown to the lower right over eight frames and gone by
@@ -615,7 +637,19 @@ const WIPE: readonly ScreenBeat[] = [
  * of the recipe was already right.
  */
 const WIPE_OFFSETS = [0, 126, 247] as const
-const WIPE_OCCLUSIONS = [1317, 1443, 1564] as const
+/**
+ * The first wipe's measured occlusion frame. The other two are it plus their
+ * own offsets — derived rather than retyped, because it is the same frame of
+ * the same animation and the two tables must not be able to disagree. Moving
+ * the second offset 128 → 126 meant moving 1445 → 1443 with it, by hand, which
+ * is the failure this removes.
+ */
+const WIPE_OCCLUSION = 1317
+const WIPE_OCCLUSIONS = [
+  WIPE_OCCLUSION + WIPE_OFFSETS[0],
+  WIPE_OCCLUSION + WIPE_OFFSETS[1],
+  WIPE_OCCLUSION + WIPE_OFFSETS[2],
+] as const
 
 const shifted = (beat: ScreenBeat, offset: number): ScreenBeat => ({
   ...beat,
@@ -829,6 +863,26 @@ const FACING_CRUISE: readonly FacingBeat[] = [
 ]
 
 const FACING_TITLES: readonly FacingBeat[] = [
+  /*
+   * The cruise's exit attitude, carried across the f1092 cut.
+   *
+   * `routeOrientation` holds its first beat before that beat's frame, so a
+   * list starting at f1280 pinned the warp-out hull to the *wipes'* heading —
+   * which points back down the lens. Measured: the attitude snapped 164.40° in
+   * the single frame f1091→f1092 and the nose then sat 87°–169° off its own
+   * velocity for every frame of `WARP_OUT_1`, on a hull three-quarters of the
+   * frame wide. A ship flying tail-first out of its own warp point is the
+   * defect this pass exists to remove, one shot along.
+   *
+   * These two beats are `FACING_CRUISE`'s last two, repeated verbatim.
+   * `routeOrientation` slerps inside a segment and takes nothing from the
+   * neighbours, so the same pair of endpoints gives the same attitude at every
+   * frame of f1035–1120 in either list, and the cut is exact rather than
+   * close. The swing from here to the wipes' heading happens across
+   * f1120–1280, with the hull off stage from f1108.
+   */
+  { frame: 1035, forward: vec3(-0.62, -0.15, -0.77), bankDeg: -20 },
+  { frame: 1120, forward: vec3(-0.6, -0.14, -0.79) },
   /*
    * The wipes' fitted heading — and the middle one's is mirrored, because its
    * *track* is.
@@ -1454,7 +1508,7 @@ function buildStage(world: World): Stage {
    * reframing moved it, because the problem was never the framing.
    *
    * So it relights, which is what the reference must itself have done. The cut
-   * sits at f938 — the first frame where the hull is wider than the lens, and
+   * sits at f948 — the first frame where the hull is wider than the lens, and
    * the frame by which the reference has already swung its key under the
    * ship — the same place this piece hides every other cut. Camera position and hull choreography are
    * identical across it; only the key swings from 0.9 poleward to 0.9 the
@@ -1571,7 +1625,7 @@ function buildStage(world: World): Stage {
     // all of them, and the direction that comes closest points back down the
     // lens. One shot showing both faces of a hull cannot be lit by one distant
     // source. The reference relights; so does `cruiseShot`, across its own cut
-    // at f938. This shot has no cut to hide one in, so the light that covers
+    // at f948. This shot has no cut to hide one in, so the light that covers
     // whichever face the star misses is mounted on the camera and lives in
     // `scene/CameraRig.tsx` — see `STAGE_FILL_INTENSITY`. It contributes
     // nothing to a face the key already reaches, so it costs the beats nothing
@@ -1586,11 +1640,10 @@ function buildStage(world: World): Stage {
       ),
       POLE,
     )
-    const pitch = (deg: number): Quat =>
-      Q.multiply(
-        orientation,
-        Q.fromAxisAngle(vec3(1, 0, 0), (deg * Math.PI) / 180),
-      )
+    // `withAttitude`'s pitch overlay, which is what this was a second copy of.
+    // The composition order is the thing that must not drift, so there is one
+    // of it.
+    const pitch = (deg: number): Quat => withAttitude(orientation, 0, deg)
     return {
       id,
       from,

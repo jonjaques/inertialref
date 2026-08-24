@@ -335,6 +335,12 @@ export class CutsceneDirector {
   peek(frame: number): CinematicSample | null {
     const active = this.#active
     if (active === null || !Number.isFinite(frame)) return null
+    // The same gate `sample` opens with, and for the same reason: a prepared
+    // stage is resolved against one world, so once the host has replaced it
+    // every pose here is from a scene that no longer exists. `sample` abandons
+    // on this; a reader must not answer from it in the frames before that
+    // happens.
+    if (active.world !== this.#host.world) return null
     const last = active.script.durationFrames - 1
     return active.prepared.sample(Math.max(0, Math.min(frame, last)))
   }

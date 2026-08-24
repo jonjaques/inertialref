@@ -13,7 +13,7 @@ import { readHullField } from './hullField.ts'
  * in the frame; a camera *inside* the saucer still produces a large lit mass —
  * the inside of the plating — and it scores about as well as the shot that was
  * intended. `tng-intro`'s skim flew through the disc for forty-eight frames,
- * f2234–2281, by up to 3.5 m, and grazed within a metre either side of that,
+ * f2234–2281, by up to 3.5 m, and grazed within a meter either side of that,
  * while every number in the band looked reasonable. It was found by eye.
  *
  * So the check is geometric, headless, and reads the shipped asset rather than
@@ -48,7 +48,7 @@ const manifest = JSON.parse(
  * an 8 m grid, so a large flat triangle bulges above the highest vertex in its
  * column by up to about half a cell — 4 m of surface the field cannot see. And
  * the hull is a prop with a near clip plane in front of it: a camera that
- * misses the plating by a metre still slices it open. Fifteen meters is a
+ * misses the plating by a meter still slices it open. Fifteen meters is a
  * little under two cells, which is the resolution this instrument has.
  *
  * The staged skim clears by 22.7 m at its tightest (f2277), so this is not a
@@ -95,10 +95,12 @@ describe('cutscene camera against the hero hull', () => {
     // The first sample anchors frame 0 to its epoch.
     at(0)
 
+    let staged = 0
     let worst = { frame: -1, depth: -Infinity }
     for (let frame = 0; frame < TNG_INTRO.durationFrames; frame += 1) {
       const sample = at(frame)
       if (sample === null || !sample.ship.visible) continue
+      staged += 1
       // The camera, in the hull's own axes.
       const inHull = Q.rotate(
         Q.conjugate(sample.ship.orientation),
@@ -108,6 +110,17 @@ describe('cutscene camera against the hero hull', () => {
       if (depth > worst.depth) worst = { frame, depth }
     }
 
+    /*
+     * The sweep found frames to look at.
+     *
+     * `depthInside` answers `-Infinity` for a column with no geometry and
+     * `worst` starts there, so `expect(-Infinity).toBeLessThan(-15)` passes a
+     * sweep that examined nothing at all — a `SHIP_WINDOWS` edit that hid the
+     * hull, a transform drift that put every camera outside the field, or an
+     * epoch that never anchored. An instrument whose failure mode is silence
+     * has to say how much it looked at.
+     */
+    expect(staged, 'no frame put the hull on stage').toBeGreaterThan(1000)
     expect(
       worst.depth,
       `f${worst.frame} puts the camera ${(-worst.depth).toFixed(1)} m from the ` +
@@ -134,5 +147,15 @@ describe('cutscene camera against the hero hull', () => {
     expect(field.depthInside({ x: 0, y: 400, z: 0 })).toBeLessThan(
       -CLEARANCE_MARGIN_M,
     )
+    /*
+     * So is one kilometers away, which the packed column key used to get
+     * wrong: `(i + 4096) * 8192 + (j + 4096)` aliases the moment either index
+     * leaves ±4096, and this point — 65.5 km astern — read as 32.8 m *inside*
+     * the hull. The sweep already asks about camera positions up to 968 km out
+     * in hull axes, so the domain is crossed on real frames and only luck kept
+     * the aliased keys off occupied columns.
+     */
+    for (const z of [65536, 131072, -65536, 968472])
+      expect(field.depthInside({ x: 0, y: 0, z }), `z=${z}`).toBe(-Infinity)
   })
 })

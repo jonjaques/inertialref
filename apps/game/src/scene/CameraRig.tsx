@@ -62,8 +62,9 @@ const FILL_INTENSITY = 0.35
  *
  * A shot can put the camera on the side of the hull the star does not reach,
  * and a title sequence cannot answer that with "space is high-contrast" — the
- * subject of the piece has to read. `AGENTS.md` says light is staging; this is
- * the staged half of the same rig, sized so a face with no key at all comes out
+ * subject of the piece has to read. `.claude/rules/cutscenes.md` says light is
+ * staging; this is the staged half of the same rig, sized so a face with no
+ * key at all comes out
  * near a face with one (4.2 × 0.68 ≈ 2.9 against the key's 4 × 0.9 ≈ 3.6).
  *
  * It is not a general brightening and cannot become one: `FILL_OFF_AXIS` zeroes
@@ -101,8 +102,6 @@ export function CameraRig({ engine }: { engine: GameEngine }) {
 
   useFrame(() => {
     const scene = engine.scene()
-    if (scene === null) return
-
     /*
      * Whoever owns the pose this frame owns all of it.
      *
@@ -115,6 +114,24 @@ export function CameraRig({ engine }: { engine: GameEngine }) {
      * against whatever the camera panel is set to.
      */
     const cinematic = engine.cinematic
+
+    /*
+     * The fill's *strength* is settled before the guard below, and its aim
+     * after it, because only the aim needs a scene.
+     *
+     * `engine.scene()` is null at boot before the first present and again
+     * after any `replaceWorld`. The light this replaced was a static
+     * `<directionalLight>` with nothing to go stale; this one is written every
+     * frame, and behind an early return it holds whatever the last scene left
+     * — which, if a cutscene was running when the world went away, is
+     * `STAGE_FILL_INTENSITY`: 4.6x the flight value, on flight geometry, until
+     * a scene comes back.
+     */
+    if (fill.current !== null)
+      fill.current.intensity =
+        cinematic === null ? FILL_INTENSITY : STAGE_FILL_INTENSITY
+    if (scene === null) return
+
     const override = cinematic ?? engine.observer
 
     // The camera panel's field of view, applied here rather than pushed at
@@ -200,8 +217,6 @@ export function CameraRig({ engine }: { engine: GameEngine }) {
         FILL.addScaledVector(VIEW, -FILL_OFF_AXIS)
       }
       fill.current.position.copy(FILL.normalize())
-      fill.current.intensity =
-        cinematic === null ? FILL_INTENSITY : STAGE_FILL_INTENSITY
     }
   })
 

@@ -20,7 +20,6 @@ import {
   float,
   length,
   mix,
-  normalize,
   oneMinus,
   pow,
   smoothstep,
@@ -219,11 +218,15 @@ function elementMaterial(kind: ElementKind): {
        * black, and a term that reaches zero puts a hard seam across the ring
        * exactly where the eye is looking for the silhouette's edge.
        */
+      // `centred / max(r, eps)` rather than `normalize(centred)`: the quad's
+      // exact centre is the zero vector, `normalize` of that is 0/0, and the
+      // NaN is not killed by the radial gate below — `0 * NaN` is NaN, and
+      // `mix(1, NaN, 0)` is NaN too, so an additive quad would stamp it into
+      // the frame at the middle of the silhouette.
+      const sunDot = dot(centred.div(r.max(1e-6)), sunward)
       const banked = mix(
         float(1),
-        clamp(dot(normalize(centred), sunward), float(0), float(1))
-          .mul(0.82)
-          .add(0.18),
+        clamp(sunDot, float(0), float(1)).mul(0.82).add(0.18),
         clamp(asymmetry, float(0), float(1)),
       )
       profile = smoothstep(

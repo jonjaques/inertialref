@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { TNG_LENS } from '@inertialref/devtools'
+import { TNG_CUTS, TNG_LENS } from '@inertialref/devtools'
 import { Vec } from '@inertialref/spatial'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { useEngine } from '../state/engineStore.ts'
@@ -55,10 +55,11 @@ import {
  *
  * ## Cost when it is off
  *
- * The component is mounted only while a scene is open — `playhead !== null`, a
- * primitive selector, so the 8 Hz sampler does not re-render it — and its loop
- * reads one boolean off the harness and returns. The 288 KB reference export is
- * not fetched until the flag is first turned on; see `referenceTrack.ts`.
+ * The component renders nothing and its rAF loop does not start unless a scene
+ * is open — `playhead !== null`, a primitive selector, so the 8 Hz sampler does
+ * not re-render it — and while one is, the loop reads one boolean off the
+ * harness and returns. The 288 KB reference export is not fetched until the
+ * flag is first turned on; see `referenceTrack.ts`.
  */
 
 /** Hull colours: the reference is warm, the render is cold, and never both. */
@@ -130,6 +131,11 @@ export function TrackOverlay({ engine }: { engine: GameEngine }) {
   }, [open])
 
   useEffect(() => {
+    // Gated on `open`, which is what makes the note above true: the component
+    // is mounted unconditionally by `App.tsx` and only its *render* returns
+    // null, so without this the loop ran in the menu, in flight and in the
+    // planetarium for the whole session.
+    if (!open) return
     let handle = 0
     const tick = (): void => {
       handle = window.requestAnimationFrame(tick)
@@ -206,9 +212,24 @@ export function TrackOverlay({ engine }: { engine: GameEngine }) {
        * clamp rather than the one that was asked for.
        */
       const last = status.durationFrames - 1
+      /*
+       * Clipped to the shot, not just to the scene.
+       *
+       * Two shots have two stage anchors, so a window that straddles a cut
+       * differences two unrelated places: measured at f1092 — the warp-out
+       * this overlay exists to inspect — the half-frame window read 1.9e4 m
+       * per frame against 3.14 the frame after. The vector is normalized
+       * before it is drawn, so what that produces is a nose-and-velocity fan
+       * pointing along an inter-shot jump, with a `v` readout to match.
+       */
+      const shot = TNG_CUTS.find(
+        (one) => Math.round(frame) >= one.from && Math.round(frame) <= one.to,
+      )
+      const lo = shot === undefined ? 0 : shot.from
+      const hi = shot === undefined ? last : Math.min(shot.to, last)
       const difference = (half: number) => {
-        const from = Math.max(0, Math.min(frame - half, last))
-        const to = Math.max(0, Math.min(frame + half, last))
+        const from = Math.max(lo, Math.min(frame - half, hi))
+        const to = Math.max(lo, Math.min(frame + half, hi))
         const before = engine.harness.cutscenePeek(from)
         const after = engine.harness.cutscenePeek(to)
         const span = to - from
@@ -341,7 +362,7 @@ export function TrackOverlay({ engine }: { engine: GameEngine }) {
     }
     handle = window.requestAnimationFrame(tick)
     return () => window.cancelAnimationFrame(handle)
-  }, [engine])
+  }, [engine, open])
 
   if (!open) return null
 

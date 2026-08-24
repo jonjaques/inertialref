@@ -28,8 +28,26 @@ import { readFileSync } from 'node:fs'
  * bulges between them, which is what `CLEARANCE_MARGIN_M` in the test is for.
  */
 
-/** A column of the hull's XZ plane: the lowest and highest surface in it. */
-type Column = readonly [low: number, high: number]
+/**
+ * The column a point falls in, packed into one integer, or null when it falls
+ * outside the range that packing can represent.
+ *
+ * `(i + HALF) * SPAN + (j + HALF)` is only injective while both indices are
+ * inside ±`HALF`; past that the j term borrows into the i term and the key
+ * aliases onto a different column. That is not hypothetical here — the
+ * clearance sweep asks about camera positions up to 968 km out in hull axes,
+ * and `depthInside({ x: 0, y: 0, z: 65536 })` used to answer "32.8 m inside the
+ * hull" for a point 65 km astern. Refusing the key is what turns that back into
+ * the honest answer, which is that there is no geometry out there at all.
+ */
+const HALF = 4096
+const SPAN = 8192
+function columnKey(x: number, z: number, cell: number): number | null {
+  const i = Math.floor(x / cell)
+  const j = Math.floor(z / cell)
+  if (i < -HALF || i >= HALF || j < -HALF || j >= HALF) return null
+  return (i + HALF) * SPAN + (j + HALF)
+}
 
 export interface HullField {
   /** Column size, meters. */
@@ -240,10 +258,13 @@ export function readHullField(
     extent.x = Math.max(extent.x, Math.abs(x) * 2)
     extent.y = Math.max(extent.y, Math.abs(y) * 2)
     extent.z = Math.max(extent.z, Math.abs(z) * 2)
-    // One integer key rather than a string: 46,000 lookups per frame of a
-    // 2742-frame sweep is the whole cost of the test.
-    const key =
-      (Math.floor(x / cell) + 4096) * 8192 + Math.floor(z / cell) + 4096
+    // One integer key rather than a string: 46,000 of these at build time and
+    // one per frame of a 2742-frame sweep is the whole cost of the test.
+    const key = columnKey(x, z, cell)
+    // A vertex outside the key's domain would be a hull tens of kilometers
+    // across, which the `extent` assertions would have caught first.
+    if (key === null)
+      throw new Error(`${glbPath} has a vertex ${x}, ${z} out of range`)
     const found = columns.get(key)
     if (found === undefined) columns.set(key, [y, y])
     else {
@@ -257,9 +278,12 @@ export function readHullField(
     extent,
     columns: columns.size,
     depthInside(p) {
-      const key =
-        (Math.floor(p.x / cell) + 4096) * 8192 + Math.floor(p.z / cell) + 4096
-      const column = columns.get(key) as Column | undefined
+      const key = columnKey(p.x, p.z, cell)
+      // Outside the key's own domain there is provably no geometry — the hull
+      // is a few hundred meters across — so a point out there is clear, and
+      // saying so is not the same as failing to find its column.
+      if (key === null) return -Infinity
+      const column = columns.get(key)
       if (column === undefined) return -Infinity
       return Math.min(p.y - column[0], column[1] - p.y)
     },

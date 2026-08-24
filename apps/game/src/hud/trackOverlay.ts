@@ -145,10 +145,16 @@ export const CHORD_STEP = 4
 /**
  * The hull's camera-relative offset, from a pair of render-space poses.
  *
- * Render space is a rebase, not a compression — `toRenderSpace` translates and
- * nothing else — so the difference of two render-space positions is the true
- * displacement in meters, and rotating it into camera axes is the offset the
- * script authored its beats in.
+ * Render space is a rebase, not a compression, so the difference of two
+ * render-space positions is a true displacement in meters — but it is that
+ * displacement *rotated by the origin's own pose*, because `toRenderSpace` is
+ * `rotateInverse(origin.orientation, …)` and an origin is a planet's frame,
+ * not the identity. What makes this the camera-axes offset anyway is that
+ * `orientationToRenderSpace` carried the same rotation into
+ * `camera.orientation`, so rotating back out by it cancels exactly. The pair
+ * has to come from the same space; a render-space position difference against
+ * a universe-space camera orientation is silently rotated, and the whole point
+ * of this module is that its numbers are the reference CSV's.
  */
 export const offsetOf = (
   camera: { readonly position: Vec3; readonly orientation: Quat },
@@ -244,9 +250,17 @@ export function angleBetween(a: Vec3, b: Vec3): number {
  * From `TNG_CUTS`, so the label cannot drift from the cut table the script and
  * its tests both read. An em dash for a frame past the end rather than a
  * throw: the overlay draws while the transport is being dragged.
+ *
+ * Rounded first, for the same reason `tngIntro.ts`'s own `shotAt` falls back
+ * to the nearest shot: cuts are contiguous over *integers* and `view.frame` is
+ * `(renderTime - epoch) * fps`, fractional on essentially every rendered
+ * frame. Tested against the table as written, f239.4 belongs to no shot at
+ * all, and the readout blinks to an em dash at every cut boundary — on the one
+ * surface whose job is to say which shot you are looking at.
  */
 export function shotAt(frame: number): string {
-  const cut = TNG_CUTS.find((one) => frame >= one.from && frame <= one.to)
+  const at = Math.round(frame)
+  const cut = TNG_CUTS.find((one) => at >= one.from && at <= one.to)
   return cut?.id ?? '—'
 }
 

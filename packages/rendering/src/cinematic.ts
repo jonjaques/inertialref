@@ -306,10 +306,14 @@ export interface WarpFlash {
  * up before the envelope had left zero, which a capture reads as a flash two
  * frames late. So the ramp opens at t = −3.5.
  *
- * And the top is round, not flat. The old envelope held exactly 1 from t=4 to
- * t=11 while the reference rises 0.89 → 1.00 → 0.83 across those same eight
- * frames — a plateau a host cannot shape, because a constant input carries no
- * information for it to shape. Peak sits at t≈6–8.
+ * And the top is *rounder*. The old envelope held exactly 1 from t=4 to t=11
+ * while the reference rises 0.89 → 1.00 → 0.83 across those same eight frames —
+ * a plateau a host cannot shape, because a constant input carries no
+ * information for it to shape. Peak sits at t≈6–8, and `smooth` saturates, so
+ * this pair still holds exactly 1 across t ∈ [5.5, 9]: three and a half frames
+ * rather than eight, not none. Shaping those last frames needs a curve that is
+ * not a min of two clamped ramps, and that is a re-meter against the reference
+ * rather than an edit.
  *
  * One function for both flashes still: their normalized shapes agree. Their
  * *amplitudes* do not — the second peaks 17% brighter in output mean — which is
@@ -820,8 +824,11 @@ export interface AdvanceBeat {
  *
  * Everything is in camera axes, the frame `screenOffset` produces offsets in,
  * so `anchor` is a displacement from the lens rather than a place in the
- * universe. Fitting one of these from a measured track is
- * `fitLinePath` in devtools: a solver has no business on the sample path.
+ * universe. Fitting one of these from a measured track belongs in devtools and
+ * is not written yet: a solver has no business on the sample path. Nothing in
+ * `tngIntro.ts` flies one of these either — the straight passes are still
+ * authored `AimBeat`s composed through `withAttitude`, which is the same
+ * attitude a line would derive but without the guarantee.
  */
 export interface LinePath {
   /** Camera axes. The point `t = 0` names. */
@@ -829,9 +836,8 @@ export interface LinePath {
   /**
    * Unit, camera axes, and the direction of *flight* — see `orientationAlong`.
    * Taken at its word rather than normalized on every evaluation: a direction
-   * that is not unit rescales the whole advance profile silently, and both
-   * producers of one (a hand-authored `Vec.normalize` and `fitLinePath`) are
-   * already unit.
+   * that is not unit rescales the whole advance profile silently, and the only
+   * producer today is a hand-authored `Vec.normalize`.
    */
   readonly direction: Vec3
   /**
@@ -973,9 +979,8 @@ export function orientationAlong(path: LinePath, upHint: Vec3): Quat {
  *
  * The axes and the multiplication order are `tngIntro.ts`'s existing
  * `facingBeats`: a Z-axis rotation right-multiplied onto `lookAlong`, plus the
- * X-axis pitch its planet passes already use. So the authored bank numbers
- * survive the migration meaning exactly what they meant before — −8, −18 and
- * −14 through the bank-away, 5, 8 and 4 through the skim.
+ * X-axis pitch its planet passes already use. So an authored bank number
+ * survives the migration meaning exactly what it meant before.
  *
  * No renormalization. `base` and both factors are unit and an overlay is
  * applied once rather than accumulated, so `withAttitude(base, 0, 0)` is

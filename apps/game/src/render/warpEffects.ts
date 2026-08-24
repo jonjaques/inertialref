@@ -25,6 +25,7 @@ import {
   vec2,
   vec3,
 } from 'three/tsl'
+import { apparentWidth, smooth } from '@inertialref/rendering'
 import type { CinematicView } from '../engine/GameEngine.ts'
 
 /*
@@ -265,8 +266,11 @@ export function createWarpEffects(hullLength: () => number): WarpEffects {
   const smear = warpMaterial('streak')
   const spark = warpMaterial('spark')
   const stretch = warpMaterial('stretch')
-  for (const element of [wash, ...glows, ...streaks, smear, spark, stretch])
-    group.add(element.mesh)
+  // One roster, because it is read twice — added here and disposed below. Two
+  // copies of the list is how an element gets created and never disposed, or
+  // disposed and never drawn.
+  const all = [wash, ...glows, ...streaks, smear, spark, stretch]
+  for (const element of all) group.add(element.mesh)
 
   // Streak quads pivot about their origin end: shift the unit quad so u=0
   // sits on the anchor and scaling stretches away from it.
@@ -477,34 +481,39 @@ export function createWarpEffects(hullLength: () => number): WarpEffects {
        * seek than on a play-through, and the capture loop seeks.)
        *
        * The flash sets the *length* and the streak drive sets the brightness.
-       * Both flashes plateau at 1 for eight frames, so neither channel can
-       * shape the peak; what the flash can do is say when the ship is longest,
-       * which is the frame the warp point actually forms.
+       * Both still hold at exactly 1 across the peak — `warpFlashEnvelope`'s
+       * `flash` for t 5.5–9 and its `streaks` for t 2–7.5 — so through those
+       * frames neither channel can shape anything; what the flash can do is
+       * say when the ship is longest, which is the frame the warp point
+       * actually forms.
        *
        * The same apparent width, read at the other end of its range, is what
-       * ends the residual. The streak envelope decays over 26 frames after
-       * each flash; the reference's residual is gone in about eight, and a
-       * stretch held through the difference sat at 6–7 for a dozen frames
-       * where the reference is under one. There is nothing left to stretch
-       * once the hull is smaller than a pixel, so the bounds are eight
+       * ends the residual. The streak envelope decays over 9 frames after the
+       * first flash and 15 after the second; the reference's residual is gone
+       * in about eight and about twelve. There is nothing left to stretch once
+       * the hull is smaller than a pixel, so the bounds are eight
        * ten-thousandths and seven thousandths of the frame: the second
        * warp-out's hull crosses them over f2398–2405, and measured against the
        * reference's own cliff (13.4 at f2397, 8.4 at f2400, 1.2 at f2403) that
        * window's mean error falls from 3.6 to 1.6.
        *
-       * It does nothing at the first warp-out, and that is a script defect
-       * rather than a tuning one: `tngIntro.ts`'s titles shot does not carry
-       * the warp-out beats, so from the f1092 cut the hull is held at its
-       * route's first knot — the wipe entry — and its apparent width is frozen
-       * at 0.012 for thirty frames. The residual there decays on the streak
-       * envelope alone, which outlasts the reference's by about ten frames.
+       * The first warp-out now runs this too. It did not when the bounds were
+       * metered — `tngIntro.ts`'s titles shot carried no warp-out beats, so
+       * the hull froze at w 0.012 from the f1092 cut — and `WARP_OUT_1` fixed
+       * that. Nothing here was re-metered against it, so the first exit is the
+       * one to look at first when this reads wrong.
+       *
+       * `aspect` is the window's, not the script's, so these thresholds move
+       * with the shape of the browser. They were metered on 16:9.
        */
-      const hullWidth =
-        L /
-        Math.max(distanceTo(camera, ship.position), 1) /
-        (2 * tanHalf * aspect)
-      const collapsed = 1 - ramp(hullWidth, 0.45, 0.95)
-      const resolvable = ramp(hullWidth, 0.0008, 0.007)
+      const hullWidth = apparentWidth(
+        L,
+        Math.max(distanceTo(camera, ship.position), 1),
+        camera.fov ?? 45,
+        aspect,
+      )
+      const collapsed = 1 - between(hullWidth, 0.45, 0.95)
+      const resolvable = between(hullWidth, 0.0008, 0.007)
       place(stretch.mesh, shipScreen.x, shipScreen.y)
       stretch.mesh.rotation.z = streakAngle
       stretch.mesh.scale.set(
@@ -512,9 +521,14 @@ export function createWarpEffects(hullLength: () => number): WarpEffects {
         frameHeight * 0.22,
         1,
       )
-      stretch.intensity.value = shipScreen.ok
-        ? effects.streaks ** 1.4 * collapsed * resolvable * 0.85
-        : 0
+      stretch.intensity.value =
+        shipScreen.ok && ship.visible
+          ? effects.streaks ** 1.4 * collapsed * resolvable * 0.85
+          : 0
+      // A quarter of the frame of additive blend for the ~2,600 frames it is
+      // dark: the profile is zero but the fragments are still shaded, and this
+      // quad has `depthTest` off and no frustum culling to stop them.
+      stretch.mesh.visible = stretch.intensity.value > 0
       stretch.tint.value.setRGB(1, 1, 1)
 
       /*
@@ -583,14 +597,7 @@ export function createWarpEffects(hullLength: () => number): WarpEffects {
       }
     },
     dispose() {
-      for (const element of [
-        wash,
-        ...glows,
-        ...streaks,
-        smear,
-        spark,
-        stretch,
-      ]) {
+      for (const element of all) {
         element.mesh.removeFromParent()
         const material = element.mesh.material
         if (!Array.isArray(material)) material.dispose()
@@ -601,17 +608,16 @@ export function createWarpEffects(hullLength: () => number): WarpEffects {
 }
 
 /**
- * Hermite ramp between two bounds, held outside them.
+ * `smooth` in its two-bound form, held outside them.
  *
- * `packages/rendering`'s `smooth` is the same curve, but this module already
- * cannot import it — `apps/game` may, but the one caller here is a gate on a
- * screen measurement rather than an envelope, and it would be the only thing
- * this file pulled out of the cinematic layer.
+ * The curve itself is `@inertialref/rendering`'s and stays there — an earlier
+ * copy of it here claimed this module could not import that package, which was
+ * never true: `preloadPlan.ts` and `atmosphereLuts.ts` next door already do.
+ * This is only the change of variable, kept so the two bounds a gate is
+ * authored with read as two bounds.
  */
-function ramp(x: number, a: number, b: number): number {
-  const t = Math.min(1, Math.max(0, (x - a) / (b - a)))
-  return t * t * (3 - 2 * t)
-}
+const between = (x: number, a: number, b: number): number =>
+  smooth((x - a) / (b - a))
 
 const eye = new Vector3()
 function distanceTo(

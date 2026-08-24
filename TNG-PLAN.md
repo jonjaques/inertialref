@@ -390,7 +390,7 @@ skim the beats put the camera 125–170 m from the hull's origin — inside a
 saucer 467 m across. Decoding the glTF's vertex positions in Node and reducing
 them to a per-column height field in hull axes puts it _within the surface
 envelope_ for forty-eight frames, f2234–2281, by up to 3.5 m, and within a
-metre either side of that; at f2188 the shot is the inside of the saucer with
+meter either side of that; at f2188 the shot is the inside of the saucer with
 the engineering hull's battle bridge showing through the plating. The reference
 diff is structurally blind to this — its subject channel scores the largest lit
 mass, and an interior wall is a large lit mass — so it was found by eye and is

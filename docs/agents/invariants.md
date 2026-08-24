@@ -42,6 +42,7 @@ only the imperative. If a copy disagrees, `AGENTS.md` wins.
 | Do not hand-roll a registry control                    | [Development](../guides/development.md) · [`DESIGN.md`](../../DESIGN.md)                    |
 | Cinematic effects are staging, not scripts             | [Cinematics](../guides/cinematics.md)                                                       |
 | A scripted camera clears the prop it stages            | [Cinematics](../guides/cinematics.md)                                                       |
+| Shots hand a prop over on a shared knot                | [Cinematics](../guides/cinematics.md)                                                       |
 | Labels are title case in source                        | [`DESIGN.md`](../../DESIGN.md) · [UX](../design/ux.md)                                      |
 | Import `three/webgpu`, not `three`                     | [Rendering](../concepts/rendering.md) · [Development](../guides/development.md)             |
 | Compile-ahead goes through one recipe                  | [Rendering](../concepts/rendering.md)                                                       |

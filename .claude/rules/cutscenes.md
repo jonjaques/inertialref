@@ -41,6 +41,14 @@ second scene** — the traps below are the index, not the explanation.
   _screen_ spline for a heading: near the lens, sub-pixel wobble is large angular velocity.
   `withAttitude(base, bank, pitch)` carries the places the ship really maneuvers and the
   places its attitude and its flight path genuinely differ.
+- **A shot's exit beats are not dead.** A Catmull-Rom segment is shaped by the knot
+  past its far end, so beats authored after the cut set the tangent of the segment the
+  shot still renders. The cruise flew a whole warp-out across its own last twelve frames
+  that way, and the titles stage's entry knot snapped the hull back. Two shots handing a
+  prop over share the knot — change one and change the other. The same holds for
+  attitude: `routeOrientation` holds its first beat before that beat's frame, so a facing
+  list that starts at the next shot's own beats pins the handed-over prop to the wrong
+  heading.
 - **Camera-relative choreography is offset beats, never absolute beats off a moving
   camera.** Never per-frame look-at a hull near the lens.
 - **An effect is staging, so a script turns it on.** Anything screen-space belongs in
