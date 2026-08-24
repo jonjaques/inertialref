@@ -3440,6 +3440,31 @@ was copied from `sample`'s preamble minus the world-identity check; and the
 warp stretch rasterized 13–24% of the frame with additive blend for ~2,600
 frames it should have been invisible for.
 
+And CI went red on the one finding the review had deferred as a policy call.
+`hullClearance.test.ts` is the first test here to read git-lfs content, and
+`.github/workflows/check.yml` checked out with `actions/checkout@v5` and no
+`lfs: true` — so `enterprise-d.glb` arrived as a 130-byte pointer, `readHullField`
+threw "is not a binary glTF" while vitest was still collecting, and the run
+reported one failed _suite_ with no test names. The policy call is fail, not
+skip: the asset is in the repo and the invariant is the whole point of the file,
+so a skip would leave "a scripted camera clears the prop it stages" unchecked in
+the only place it is checked automatically. Three things changed. The workflow
+fetches LFS. `readHullField` recognizes a pointer and says `run \`git lfs pull\``rather than blaming the model, the courtesy`ingest/sources.ts`already extends
+to a pointer served over HTTP. And the decode moved out of the`describe` body
+behind a memo, so a missing asset fails three named tests instead of erasing the
+suite.
+
+The quieter half is the build. `shipModels.ts` pulls the hull in through
+`import.meta.glob`, so `pnpm build` bundles whatever is on disk and Vite does not
+care whether it is a glTF — a pointer checkout produces a _green_ build that
+ships a 130-byte file where the hero ship should be. This is the second time LFS
+has cost something: 6dea1c7 fixed the same gap in the Cloud Agent image, where
+the symptom was the renderer silently falling back to the debug cone. Every
+environment that checks this repository out needs the smudge filter, and the
+failure looks different in each one. Production was verified unaffected — the
+deployed `enterprise-d-ByumsAL0.glb` begins `glTF` and its length field reads
+13,928,924, matching the local asset byte for byte.
+
 Two things were left as they are, deliberately. `warpFlashEnvelope` still has a
 flat top — `min` of two saturating smoothsteps is exactly 1.0 for t in
 [5.5, 9] — which three comments and a test title claim it does not; reshaping it

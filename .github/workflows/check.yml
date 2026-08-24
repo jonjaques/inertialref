@@ -32,7 +32,18 @@ jobs:
     timeout-minutes: 20
 
     steps:
+      # `lfs: true` because `data/models/enterprise-d.glb` is git-lfs tracked and
+      # two things here read the bytes, not the pointer. `hullClearance.test.ts`
+      # decodes the glTF to check the cutscene camera clears the hull, and it is
+      # the only test in the repo that touches LFS content — without this it
+      # throws "is not a binary glTF" during collection and takes the whole
+      # suite with it. Worse and quieter: `shipModels.ts` pulls the model in
+      # through `import.meta.glob`, so `pnpm build` bundles whatever is on disk.
+      # A pointer checkout produces a green build that ships a 130-byte file
+      # where the hero ship should be.
       - uses: actions/checkout@v5
+        with:
+          lfs: true
 
       # Reads the pinned version from package.json's `packageManager` field, so
       # the lockfile format and the CI pnpm can never disagree.

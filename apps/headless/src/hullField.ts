@@ -178,6 +178,18 @@ export function readHullField(
   cell = 8,
 ): HullField {
   const buf = readFileSync(glbPath)
+  /*
+   * A git-lfs pointer is the likely wrong file, so name it rather than letting
+   * it fall through to "not a binary glTF" — the same courtesy
+   * `ingest/sources.ts` extends to an LFS pointer served over HTTP. This is the
+   * only asset in the repo behind LFS and the only test that reads one, so a
+   * checkout that skipped `lfs: true` fails here and nowhere else, and the
+   * generic message sends you looking at the model instead of at the checkout.
+   */
+  if (buf.length < 1024 && buf.subarray(0, 9).toString('ascii') === 'version h')
+    throw new Error(
+      `${glbPath} is a git-lfs pointer, not the model — run \`git lfs pull\``,
+    )
   if (buf.readUInt32LE(0) !== GLB_MAGIC)
     throw new Error(`${glbPath} is not a binary glTF`)
 

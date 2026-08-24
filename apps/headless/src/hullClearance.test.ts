@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { Quaternion as Q, UV } from '@inertialref/spatial'
 import { openSession, TNG_INTRO } from '@inertialref/devtools'
-import { readHullField } from './hullField.ts'
+import { type HullField, readHullField } from './hullField.ts'
 
 /*
  * A cutscene may not fly its camera through the hero prop.
@@ -61,11 +61,25 @@ describe('cutscene camera against the hero hull', () => {
   const spec = manifest.models.find((m) => m.id === 'enterprise-d')
   if (spec === undefined)
     throw new Error('no enterprise-d in the model manifest')
-  const field = readHullField(
-    `${root}/data/models/${spec.file}`,
-    spec.lengthMetres,
-    spec.nose,
-  )
+
+  /*
+   * Decoded on first use, not in the `describe` body.
+   *
+   * This is the only test in the repository that reads git-lfs content, and a
+   * throw out here is a *collection* error: vitest reports the suite as unable
+   * to load and every test in it disappears, rather than one test failing with
+   * a reason. That is how a checkout without `lfs: true` presented itself —
+   * as "1 failed suite", with the actual sentence about the glTF three screens
+   * up. Memoized because decoding 13.9 MB per test is the reason it was
+   * hoisted in the first place.
+   */
+  let decoded: HullField | null = null
+  const hull = (): HullField =>
+    (decoded ??= readHullField(
+      `${root}/data/models/${spec.file}`,
+      spec.lengthMetres,
+      spec.nose,
+    ))
 
   it('reads the shipped hull, in the axes the renderer builds it in', () => {
     /*
@@ -76,15 +90,15 @@ describe('cutscene camera against the hero hull', () => {
      * differently-shaped ship and passing. The manifest's length is the shared
      * input, and a Z extent that is not it means the transform has drifted.
      */
-    expect(field.extent.z).toBeCloseTo(spec.lengthMetres, 1)
+    expect(hull().extent.z).toBeCloseTo(spec.lengthMetres, 1)
     // A Galaxy-class saucer is 463.7 m across and the hull 142 m deep; both
     // fall out of the same scale, so they are a second reading of it.
-    expect(field.extent.x).toBeGreaterThan(400)
-    expect(field.extent.x).toBeLessThan(500)
-    expect(field.extent.y).toBeGreaterThan(100)
-    expect(field.extent.y).toBeLessThan(200)
+    expect(hull().extent.x).toBeGreaterThan(400)
+    expect(hull().extent.x).toBeLessThan(500)
+    expect(hull().extent.y).toBeGreaterThan(100)
+    expect(hull().extent.y).toBeLessThan(200)
     // Enough columns that the field is a shape rather than a handful of points.
-    expect(field.columns).toBeGreaterThan(1000)
+    expect(hull().columns).toBeGreaterThan(1000)
   })
 
   it('clears the hull at every frame the hull is on stage', () => {
@@ -95,6 +109,7 @@ describe('cutscene camera against the hero hull', () => {
     // The first sample anchors frame 0 to its epoch.
     at(0)
 
+    const field = hull()
     let staged = 0
     let worst = { frame: -1, depth: -Infinity }
     for (let frame = 0; frame < TNG_INTRO.durationFrames; frame += 1) {
@@ -137,14 +152,14 @@ describe('cutscene camera against the hero hull', () => {
      * If the field ever stops calling these what it called them, it has stopped
      * describing this ship.
      */
-    expect(field.depthInside({ x: -29.3, y: 74.7, z: -102.4 })).toBeGreaterThan(
-      -CLEARANCE_MARGIN_M,
-    )
-    expect(field.depthInside({ x: -19.9, y: 66.6, z: -136.3 })).toBeGreaterThan(
-      0,
-    )
+    expect(
+      hull().depthInside({ x: -29.3, y: 74.7, z: -102.4 }),
+    ).toBeGreaterThan(-CLEARANCE_MARGIN_M)
+    expect(
+      hull().depthInside({ x: -19.9, y: 66.6, z: -136.3 }),
+    ).toBeGreaterThan(0)
     // And a camera well clear of the plating is clear by this instrument too.
-    expect(field.depthInside({ x: 0, y: 400, z: 0 })).toBeLessThan(
+    expect(hull().depthInside({ x: 0, y: 400, z: 0 })).toBeLessThan(
       -CLEARANCE_MARGIN_M,
     )
     /*
@@ -156,6 +171,6 @@ describe('cutscene camera against the hero hull', () => {
      * the aliased keys off occupied columns.
      */
     for (const z of [65536, 131072, -65536, 968472])
-      expect(field.depthInside({ x: 0, y: 0, z }), `z=${z}`).toBe(-Infinity)
+      expect(hull().depthInside({ x: 0, y: 0, z }), `z=${z}`).toBe(-Infinity)
   })
 })
