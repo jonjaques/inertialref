@@ -72,7 +72,7 @@ export function SettingsPage({
     SECTIONS.find((entry) => entry.id === section)?.id ?? DEFAULT_SECTION
 
   return (
-    <OverlayPage title="settings" subtitle="the simulation keeps running">
+    <OverlayPage title="Settings" subtitle="The simulation keeps running">
       <nav
         aria-label="Settings sections"
         className="mb-3 flex gap-1 border-b border-slate-800 pb-2"
