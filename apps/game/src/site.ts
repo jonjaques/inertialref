@@ -113,7 +113,7 @@ export const PAGES: readonly PageMeta[] = [
   {
     path: ABOUT,
     title: 'About',
-    description: `What ${SITE.name} is, what its universe is derived from, and where the astronomy comes from.`,
+    description: `What ${SITE.name} is today — a pre-alpha architectural proof of a deterministic Milky Way — and where the astronomy and the source live.`,
     index: true,
   },
   {

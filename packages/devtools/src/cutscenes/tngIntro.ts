@@ -38,6 +38,7 @@ import {
   smooth,
   sparkEnvelope,
   warpFlashEnvelope,
+  withAttitude,
 } from '@inertialref/rendering'
 import type { CutsceneScript, PreparedCutscene } from '../cutscene.ts'
 import { placeShot, type ShotDefinition } from '../shots.ts'
@@ -322,24 +323,46 @@ const TITLES: readonly TitleSpec[] = [
     window: fade(2530, 2604, 2613, 10),
   },
 
-  // Shot 09 — the outro card, crediting the reference this was measured from.
+  /*
+   * Shot 09 — the outro card, crediting the reference this was measured from.
+   *
+   * The label is one word because the *label* is what the blue mask measures.
+   * A label rides its name's element flush left (see `CinematicTextState`), so
+   * its length is a horizontal extent added to the right of the block, and the
+   * reference's is eight characters — "Video By" over "JASON T", 0.166 of the
+   * frame against the name's 0.215. Set "After The Recreation By" there instead
+   * and the label alone spans 0.313 to 0.778: the card still *looks* centered,
+   * but the measured blue centroid lands at 0.494 where the reference's is
+   * 0.371, and every title-channel number for the shot is a measurement of the
+   * caption rather than of the card.
+   *
+   * Worth naming because the plan blamed the accent for that 0.494 and the
+   * accent was never in the mask. Splitting the mask by row band is what shows
+   * it: the 0.778 right edge sits in the label's rows (0.370–0.434), not the
+   * name's (0.467–0.541), and the gold reads out as its own band entirely.
+   *
+   * Marks are the reference's own. Its name spans 0.276–0.491, center 0.383;
+   * ours renders 0.007 right of its authored center, so 0.376 puts it there.
+   * The accent then clears the name's right edge with room to spare and its
+   * far edge lands on the reference's 0.715.
+   */
   {
     id: 'o1',
     style: 'name',
-    label: 'After The Recreation By',
+    label: 'Reference',
     text: 'JASON T',
-    x: 0.4222,
+    x: 0.3761,
     y: NAME_Y,
     window: fade(2637, 2700, 2712, 13),
   },
   {
     id: 'o1-accent',
     style: 'accent',
-    // Clear of the name beside it: the reference's blue portion ends at 0.491
-    // and this face sets the same name wider, so the measured 0.611 puts the
-    // opening parenthesis hard against the T.
+    // Gold, and therefore outside the blue band `detect_titles.py` masks on —
+    // which is also true of the reference's, and is why the reference's own
+    // measured centroid covers the blue words alone.
     text: '(JTVFX)',
-    x: 0.658,
+    x: 0.61,
     y: NAME_Y,
     window: fade(2637, 2700, 2712, 13),
   },
@@ -432,46 +455,144 @@ const SHIP_CRUISE: readonly ScreenBeat[] = [
   { frame: 760, x: 0.203, y: 0.757, range: atWidth(0.401) },
   { frame: 792, x: 0.242, y: 0.691, range: atWidth(0.395) },
   { frame: 824, x: 0.278, y: 0.635, range: atWidth(0.438) },
-  { frame: 856, x: 0.321, y: 0.568, range: atWidth(0.568) },
-  { frame: 872, x: 0.354, y: 0.512, range: atWidth(0.695) },
-  { frame: 896, x: 0.4, y: 0.43, range: atWidth(0.95) },
   /*
-   * The close pass runs far tighter than the first authoring guessed. Captured
-   * against the reference, f1005–1020 had the hull filling the frame there
-   * (measured width 1.000, mean luminance 40–45) against a render showing the
-   * whole ship at half that size and a mean of 11–14. The reference is *inside
-   * the ship's envelope* through this stretch — hull plating and window rows,
-   * not a silhouette — so the ranges close by roughly two thirds.
-   */
-  /*
-   * The hull rides LOW through the close pass, and that is a measurement
-   * before it is a lighting decision: the reference's box center is at y 0.60
-   * at f944, 0.62 at f960 and 0.64 through f990–1000 before rising again. The
-   * first authoring had it near the frame's center, and the two facts turn out
-   * to be one fact — a hull below the center shows the camera its dorsal,
-   * which is the surface an overhead key lights. Riding it high showed the
-   * belly instead, and the render's mean luminance collapsed from the
-   * reference's 50–58 to 15–20 across the best hundred frames in the piece.
+   * The close pass, refit from the reference's own landmarks rather than from
+   * its bounding box — because through this stretch the box is not a
+   * measurement.
    *
-   * Screen position barely tips the view angle once the hull is this close,
-   * which is worth knowing before reaching for it: at 145 meters from a
-   * 642-meter ship the camera is inside the envelope, and a mark 14 meters
-   * under the axis leaves it a tenth of a radian off the saucer's own plane —
-   * edge-on, seeing neither surface. Measured in the browser,
-   * `camOnDorsalSide` read −0.097 while the key sat a healthy 0.80 normal to
-   * the dorsal. Which face the camera sees here is settled by the *cut*, not
-   * by the framing; see `cruise-close`.
+   * Three things break it at once, and all three were being read as range.
+   * The box is **truncated by the frame edge** (f876–896 on the left, then the
+   * top); it **saturates** — 84 frames, f920–1051, sit at w ≥ 0.995 against all
+   * four edges; and a *second component*, the far Bussard cap, flickers across
+   * the tracker's 400-pixel floor and takes the box's left edge with it, which
+   * is the whole of the f752 0.376 → f754 0.292 → f756 0.383 step that looked
+   * like closing and was a filter threshold.
+   *
+   * What survives all three is the **pair of Bussard collectors**: a rigid
+   * baseline whose two centroids stay interior and stay bright. Calibrated
+   * where the caps read equal area (no yaw foreshortening) the separation is
+   * 265.5 m, and an independent check agrees — the ratio of cap separation to
+   * box width has a hard ceiling when the nacelle axis is square to the sight
+   * line, and the measured ceiling of 0.5725 is exactly 265.5 / 463.7.
+   *
+   * 463.7 m, and that number is the other finding: **the reference's hull is
+   * nose-on or bow-quarter in every pass, never broadside**, so the width of
+   * its box is the saucer's disc and not the ship's length. Widths below are
+   * therefore the reference's *measured* screen widths, spliced at f872 from
+   * the box to the cap-pair's range ratio once the box stops being interior.
+   *
+   * Why `atWidth` still divides by `HULL` and not by the saucer: the render's
+   * own effective width, measured as its tracked width times its authored
+   * range over f700–890, is 618 m — near the hull's 642.5 — because our hull
+   * is lit along its length where the reference's reads as a disc. Two errors
+   * have been cancelling, which is exactly why the cruise entry scores +0.013.
+   * Correcting one alone would break the best stretch in the piece. Both are
+   * written down here so whoever unwinds them unwinds both.
    */
-  { frame: 928, x: 0.45, y: 0.55, range: atWidth(1.5) },
-  { frame: 960, x: 0.47, y: 0.62, range: atWidth(1.9) },
-  { frame: 990, x: 0.44, y: 0.64, range: atWidth(2.1) },
-  { frame: 1015, x: 0.46, y: 0.58, range: atWidth(1.8) },
-  { frame: 1045, x: 0.54, y: 0.46, range: atWidth(1.2) },
-  { frame: 1080, x: 0.617, y: 0.42, range: atWidth(0.62) },
-  // The warp-out: hurled down its own axis under the flash.
-  { frame: 1092, x: 0.63, y: 0.39, range: atWidth(0.02) },
-  { frame: 1108, x: 0.64, y: 0.39, range: atWidth(0.004) },
-  { frame: 1120, x: 0.645, y: 0.39, range: atWidth(0.0008) },
+  { frame: 856, x: 0.317, y: 0.568, range: atWidth(0.54) },
+  { frame: 872, x: 0.353, y: 0.512, range: atWidth(0.664) },
+  { frame: 890, x: 0.35, y: 0.505, range: atWidth(0.758) },
+  { frame: 904, x: 0.341, y: 0.497, range: atWidth(0.849) },
+  { frame: 916, x: 0.327, y: 0.487, range: atWidth(0.945) },
+  { frame: 928, x: 0.308, y: 0.471, range: atWidth(1.059) },
+  { frame: 940, x: 0.294, y: 0.445, range: atWidth(1.161) },
+  { frame: 952, x: 0.293, y: 0.408, range: atWidth(1.237) },
+  /*
+   * f956–1031 has no measurement at all: the hull spans the frame and the far
+   * cap is behind the engineering hull, so both channels are gone. Authored by
+   * continuity, on the one thing that is still measurable through it — the lit
+   * mask's *area* fraction, which peaks at f985. That is closest approach.
+   *
+   * The shape is a rise and then a settle, not a climb. The mask centroid
+   * rides low, y 0.61–0.65, from f956 to f1008, breaks upward at f1008,
+   * overshoots to 0.34 at f1032 and comes back to 0.38–0.45 through f1090. The
+   * previous authoring ran a monotone climb through the middle of that and
+   * missed both ends of it — the depth of the low and the overshoot.
+   */
+  { frame: 966, x: 0.388, y: 0.613, range: atWidth(1.32) },
+  { frame: 985, x: 0.415, y: 0.633, range: atWidth(1.4) },
+  { frame: 1000, x: 0.413, y: 0.647, range: atWidth(1.36) },
+  { frame: 1016, x: 0.443, y: 0.492, range: atWidth(1.24) },
+  { frame: 1032, x: 0.489, y: 0.34, range: atWidth(1.1) },
+  /*
+   * Interior again from here, so these are measurements — of the **area
+   * centroid**, which is the channel the diff scores and which is not the box's
+   * centre. The two disagree by up to 0.15 of the frame across this stretch
+   * (f1056: centroid 0.536, box centre 0.689) because the lit mass is not
+   * centred on the hull, and authoring against the wrong one of them put the
+   * exit 0.09 too far right and 0.12 too high in the capture.
+   *
+   * Widths carry a factor of 1.32, and that is a measurement too: at these
+   * ranges the render's own lit mass reads about 0.76 of the apparent width the
+   * beat asks for — the hull is close enough that only part of it is in frame
+   * and lit — so an unscaled measured width renders a third narrower than the
+   * reference's. It is the same `atWidth` length mismatch documented above,
+   * measured at the other end of the pass, and the same rule applies: the two
+   * are written down rather than folded into `HULL`, because folding either one
+   * in alone breaks the far end.
+   */
+  { frame: 1044, x: 0.563, y: 0.386, range: atWidth(1.24) },
+  { frame: 1056, x: 0.536, y: 0.421, range: atWidth(1.27) },
+  { frame: 1064, x: 0.5, y: 0.442, range: atWidth(1.2) },
+  { frame: 1072, x: 0.49, y: 0.452, range: atWidth(1.12) },
+  { frame: 1080, x: 0.489, y: 0.454, range: atWidth(1.01) },
+  /*
+   * The handover to `WARP_OUT_1`, not a warp-out of its own — and it is a beat
+   * of *this* list because a Catmull-Rom segment is shaped by the knot past
+   * its far end.
+   *
+   * This used to be three knots hurling the hull down its own axis to
+   * `atWidth(0.0008)` by f1120, on the reasoning that the shot ends at f1091
+   * so they are never read. They are: they set the tangent of the f1080–1092
+   * segment, which `cruise-close` renders in full. Sampled, that put the hull
+   * at 432 m and w 1.010 at f1080 and at 17.4 km and w 0.025 by f1091 — an
+   * entire warp-out flown in the clear, the first two frames of it before the
+   * wash has left zero — and then the titles stage's own f1092 knot snapped it
+   * back to 568 m and w 0.768. The ship warped out twice, twelve frames apart.
+   *
+   * One knot instead, and it is `WARP_OUT_1`'s own first beat repeated: the
+   * two shots then agree about where the hull is on the frame they hand over
+   * on, and f1081–1091 is the gentle recede from w 1.010 to w 0.768 the
+   * reference measures rather than a collapse. Change one of the two and
+   * change the other.
+   */
+  { frame: 1092, x: 0.365, y: 0.497, range: atWidth(0.768) },
+]
+
+/*
+ * The first warp-out, in the *titles* stage's frame — and it has to be here,
+ * not in `SHIP_CRUISE`, which is the bug this fixes.
+ *
+ * The cut to the titles stage lands at f1092, mid-flash. From that frame the
+ * hull is driven by the titles shot's own route, and that route used to begin
+ * at the first wipe's f1288 knot — so for the twenty-six frames of the
+ * warp-out the hull simply held at the wipe's entry mark, a 0.012-wide dot at
+ * (0.236, 0.593), motionless. Verified in the browser — `view.ship.position`
+ * was byte-identical at f1092, f1096, f1100, f1106 and f1120.
+ *
+ * `SHIP_CRUISE`'s own exit beats were *not* the other half of this. They
+ * belong to a shot that ends at f1091 — but a Catmull-Rom reads the knot past
+ * the far end of a segment, so they flew a second, earlier warp-out across
+ * f1081–1091 with `cruise-close` still on screen. They are one handover knot
+ * now, and it is this list's own first beat repeated: change one and change
+ * the other.
+ *
+ * The track is the reference's, frame by frame: centred and still under the
+ * whiteout, then thrown to the lower right over eight frames and gone by
+ * f1108. The reference means 0.4 from f1108 to f1118 — the frame is genuinely
+ * empty between the ship leaving and the lens spike arriving — which is why
+ * the visibility window closes at f1107 rather than carrying a dot through it.
+ */
+const WARP_OUT_1: readonly ScreenBeat[] = [
+  { frame: 1092, x: 0.365, y: 0.497, range: atWidth(0.768) },
+  { frame: 1097, x: 0.391, y: 0.5, range: atWidth(0.738) },
+  { frame: 1099, x: 0.543, y: 0.519, range: atWidth(0.681) },
+  { frame: 1102, x: 0.609, y: 0.541, range: atWidth(0.478) },
+  { frame: 1104, x: 0.607, y: 0.575, range: atWidth(0.403) },
+  { frame: 1106, x: 0.644, y: 0.684, range: atWidth(0.118) },
+  { frame: 1107, x: 0.654, y: 0.701, range: atWidth(0.069) },
+  { frame: 1112, x: 0.656, y: 0.702, range: atWidth(0.008) },
+  { frame: 1120, x: 0.656, y: 0.702, range: atWidth(0.0008) },
 ]
 
 /*
@@ -499,9 +620,36 @@ const WIPE: readonly ScreenBeat[] = [
   { frame: 1319, x: 1.15, y: 0.05, range: atWidth(3.2) },
   { frame: 1322, x: 2.1, y: -0.5, range: atWidth(1.2) },
 ]
-/** Frame offsets of the three wipes, and their measured occlusion frames. */
-const WIPE_OFFSETS = [0, 128, 247] as const
-const WIPE_OCCLUSIONS = [1317, 1445, 1564] as const
+/*
+ * Frame offsets of the three wipes, and their measured occlusion frames.
+ *
+ * 126, not 128 — and this is a reference-against-reference measurement, so it
+ * owes nothing to the render. Aligning the reference's own tracked boxes for
+ * the second wipe against the first's, mirrored in x, they agree to a
+ * thousandth on *every* frame at an offset of 126: (0.239, w 0.018) against
+ * (0.239, 0.020), (0.264, 0.072) against (0.264, 0.067), (0.427, 0.394)
+ * against (0.427, 0.393). At 128 the whole pass ran two frames early — the
+ * mirror looked like a bad mirror when it was a perfect mirror on the wrong
+ * beat, which is the kind of thing a signed per-band diff finds and a
+ * worst-frames list hides.
+ *
+ * Wipes one and three at 247 reproduce to a thousandth as authored; that half
+ * of the recipe was already right.
+ */
+const WIPE_OFFSETS = [0, 126, 247] as const
+/**
+ * The first wipe's measured occlusion frame. The other two are it plus their
+ * own offsets — derived rather than retyped, because it is the same frame of
+ * the same animation and the two tables must not be able to disagree. Moving
+ * the second offset 128 → 126 meant moving 1445 → 1443 with it, by hand, which
+ * is the failure this removes.
+ */
+const WIPE_OCCLUSION = 1317
+const WIPE_OCCLUSIONS = [
+  WIPE_OCCLUSION + WIPE_OFFSETS[0],
+  WIPE_OCCLUSION + WIPE_OFFSETS[1],
+  WIPE_OCCLUSION + WIPE_OFFSETS[2],
+] as const
 
 const shifted = (beat: ScreenBeat, offset: number): ScreenBeat => ({
   ...beat,
@@ -531,17 +679,76 @@ const SHIP_RETURN: readonly ScreenBeat[] = [
   { frame: 1890, x: 0.408, y: 0.2, range: atWidth(0.21) },
   { frame: 1920, x: 0.392, y: 0.287, range: atWidth(0.24) },
   { frame: 1960, x: 0.41, y: 0.359, range: atWidth(0.32) },
-  { frame: 2000, x: 0.394, y: 0.418, range: atWidth(0.45) },
-  { frame: 2040, x: 0.368, y: 0.48, range: atWidth(0.575) },
-  { frame: 2070, x: 0.35, y: 0.528, range: atWidth(0.672) },
-  { frame: 2100, x: 0.33, y: 0.578, range: atWidth(0.94) },
-  { frame: 2130, x: 0.35, y: 0.72, range: atWidth(1.8) },
-  // The skim: close enough that the saucer is a landscape, drifting aft.
-  { frame: 2180, x: 0.45, y: 0.74, range: atWidth(3.1) },
-  { frame: 2230, x: 0.53, y: 0.74, range: atWidth(3.2) },
-  { frame: 2280, x: 0.6, y: 0.73, range: atWidth(2.6) },
-  { frame: 2330, x: 0.62, y: 0.66, range: atWidth(1.6) },
-  { frame: 2380, x: 0.6, y: 0.58, range: atWidth(1.0) },
+  /*
+   * The late descent, refit on the same two channels as the close pass: the
+   * box while it is interior, the Bussard cap pair's range ratio once it is
+   * not, spliced at f2040. Past f2085 the box is clipped on the left and its
+   * width pins near 1.0, so the last three beats come from the fitted line's
+   * own advance profile — the reference's track over f1801–2095 is straight to
+   * a perpendicular residual of 40 m over 800 m and strictly monotone, with no
+   * backsteps, so extrapolating along it is a stronger statement than reading a
+   * clipped box.
+   *
+   * The previous authoring reached full frame fifteen to twenty frames late:
+   * signed width error −0.427 across f1990–2100, the largest number anywhere
+   * in the piece.
+   *
+   * Two limits, both real. From ~f2075 the caps foreshorten as the hull yaws
+   * into the skim (their area ratio goes 1.01 at f2070 to 1.27 at f2085), so
+   * the cap channel under-reads the closing there as well. And the reference
+   * accelerates hard through f2095–2150 — by f2150 the camera is on the
+   * saucer's surface — which a straight line at this throttle does not contain.
+   * The skim's own beats below carry that, authored rather than measured,
+   * because the skim is not measurable at all: 217 of its 282 frames are
+   * saturated and 273 of them touch a frame edge.
+   */
+  { frame: 1990, x: 0.413, y: 0.403, range: atWidth(0.433) },
+  { frame: 2010, x: 0.397, y: 0.432, range: atWidth(0.473) },
+  { frame: 2030, x: 0.378, y: 0.463, range: atWidth(0.546) },
+  { frame: 2040, x: 0.368, y: 0.48, range: atWidth(0.576) },
+  { frame: 2050, x: 0.429, y: 0.496, range: atWidth(0.608) },
+  { frame: 2065, x: 0.483, y: 0.521, range: atWidth(0.666) },
+  { frame: 2075, x: 0.357, y: 0.535, range: atWidth(0.673) },
+  { frame: 2085, x: 0.353, y: 0.553, range: atWidth(0.709) },
+  { frame: 2100, x: 0.339, y: 0.591, range: atWidth(0.735) },
+  { frame: 2115, x: 0.337, y: 0.634, range: atWidth(0.761) },
+  { frame: 2130, x: 0.335, y: 0.683, range: atWidth(0.85) },
+  /*
+   * The skim: close enough that the saucer is a landscape, drifting aft — and
+   * no closer, because the previous ranges flew the camera *through* it.
+   *
+   * Solved against the hull's own geometry rather than chosen. Decoding the
+   * glTF's vertex positions and reducing them to a per-column height field in
+   * hull axes puts the camera inside the surface envelope for 48 frames,
+   * f2234–2281, by up to 3.5 m, and within 1–4 m either side of that. What
+   * that looks like is the saucer's interior: at f2188 the camera sits 8 m over
+   * the dorsal plating with the engineering hull's battle bridge visible
+   * *through* it, which is the shot reading as a modelling error rather than as
+   * speed.
+   *
+   * The camera's elevation over the hull's own plane falls from 38° to 14°
+   * across this stretch, so a grazing pass over a 467 m disc simply needs more
+   * range: 190–210 m through f2180–2280 rather than 125–168. Widths below are
+   * the smallest that clear the envelope by 40 m at every frame, which
+   * `clears the hero hull's geometry at every frame it is on stage` asserts.
+   * The reference cannot arbitrate the exact scale here — 217 of the skim's 282
+   * frames are saturated and 273 touch a frame edge — so "the saucer fills the
+   * frame" is the whole of what it says, and it still does.
+   */
+  { frame: 2180, x: 0.45, y: 0.74, range: atWidth(2.25) },
+  { frame: 2230, x: 0.53, y: 0.74, range: atWidth(2.0) },
+  { frame: 2280, x: 0.6, y: 0.73, range: atWidth(2.0) },
+  { frame: 2330, x: 0.62, y: 0.66, range: atWidth(1.45) },
+  /*
+   * f2355 is a knot placed to stop an *undershoot*, not to stage anything. The
+   * log-range Catmull-Rom between f2330 and f2380 was pulled down by its
+   * neighbours far enough to dip the range from 301 m to 242 m in the middle of
+   * a stretch that is supposed to be opening out, which put the camera back
+   * within 11 m of the saucer's rim at f2352 — inside the margin, on a segment
+   * where every authored knot is clear. Three knots make the tail monotone.
+   */
+  { frame: 2355, x: 0.61, y: 0.62, range: atWidth(1.1) },
+  { frame: 2380, x: 0.6, y: 0.58, range: atWidth(0.9) },
   { frame: 2392, x: 0.55, y: 0.55, range: atWidth(0.02) },
   { frame: 2404, x: 0.5, y: 0.52, range: atWidth(0.002) },
   { frame: 2416, x: 0.48, y: 0.51, range: atWidth(0.0004) },
@@ -562,46 +769,175 @@ interface FacingBeat {
   readonly frame: number
   readonly forward: Vec3
   readonly bankDeg?: number
+  /**
+   * Nose-down pitch relative to the derived frame, degrees.
+   *
+   * The overlay `TNG-PLAN` §5.2 asks for, and it is needed because a fitted
+   * line gives the hull's **flight path**, not its attitude, and here the two
+   * differ. The reference's hull climbs the frame through the cruise while the
+   * camera plainly looks down on the saucer's top — lit window rows, nacelles
+   * and their red collectors below it, in every frame from f760 to f916. A ship
+   * whose nose follows a climbing velocity vector shows a camera it is climbing
+   * toward its *belly* instead; measured, `dot(toCamera, dorsal)` ran −0.09 to
+   * −0.36 across the whole approach once the fitted direction went in. So the
+   * reference flies its ship nose-down along a climbing path. That is a real
+   * attitude, not an error, and it is exactly what has to be authored on top of
+   * a derived frame rather than derived from it.
+   */
+  readonly pitchDeg?: number
 }
 
+/*
+ * Forward vectors are now *fits*, not judgments, wherever the reference flies
+ * straight — the direction of a least-squares line through the tracked
+ * Bussard-cap midpoints, in camera axes. That is `orientationAlong` by hand:
+ * for a straight pass the derived attitude is constant, so the beat list holds
+ * one vector across the whole pass and sliding is impossible by construction.
+ * Banks stay authored, because the reference really does roll.
+ *
+ * What the fits corrected:
+ *
+ * - The **cruise approach** was authored at (0.26, 0.02, 0.96) and fits
+ *   (0.464, 0.408, 0.787) — 24° out, and out in the channel that shows: the
+ *   hull climbs the frame from y 1.16 to y 0.43 while its nose pointed level.
+ * - The **credit descent** was authored at (−0.02, 0.30, 0.95) and fits
+ *   (−0.039, −0.605, 0.796) — 57° out, with **the wrong sign in y**. The hull
+ *   descends 0.6 of the frame over 340 frames with its nose tipped up: flying
+ *   backwards down its own track, which is precisely the "sliding" read.
+ * - The **wipes** were authored nose-down at (0.06, −0.20, 0.98) and fit
+ *   (0.369, 0.074, 0.926) — essentially level, and the three wipes' own fits
+ *   agree with each other to 0.22°. The old comment argued the hull must be
+ *   diving because its dorsal is lit; a level hull below the frame's centre
+ *   shows its dorsal too, which is the simpler explanation and the measured
+ *   one.
+ *
+ * **Each vector's uncertainty, because the tests are held to it.** A direction
+ * fitted to the cap-pair midpoints and one fitted to the lit-mass box centre
+ * are not the same line, and their spread is the honest error bar: **6.8° on
+ * the cruise**, **15.0° on the descent**, **0.22° on the wipes** (that last is
+ * the three wipes' own fits against each other, which is why the wipes are the
+ * pass this can be asserted tightly on). Those three numbers are the bounds in
+ * `cutscene.test.ts`'s flight-dynamics properties; change a vector and the
+ * spread it was fitted with has to move with it.
+ *
+ * The roll and yaw census also moves the bank-away: cap-pair screen angle and
+ * cap area ratio both break from their approach values at **f880–900**, not
+ * f976. Roll runs 0° at f704 to −25.5° by f958, at up to 0.656°/frame. The
+ * descent by contrast rolls 0.26° in total across 280 frames — dead straight
+ * and unrolled, which is why one beat covers all of it.
+ */
+/**
+ * How far the reference's hull noses down against its own climbing track.
+ *
+ * Solved rather than chosen: swept against `dot(toCamera, dorsal)` over
+ * f700–930 until the camera is on the lit side of the saucer everywhere in the
+ * approach, which is the one thing the reference's frames state without
+ * ambiguity.
+ */
+const PITCH_CRUISE = -34
+
 const FACING_CRUISE: readonly FacingBeat[] = [
-  { frame: 676, forward: vec3(0.26, 0.02, 0.96) },
-  { frame: 900, forward: vec3(0.16, -0.04, 0.98) },
-  // Nose-up through the low stretch: the hull sits below the frame's center
-  // and pitching it down would tip the dorsal away from the lens again.
-  { frame: 960, forward: vec3(-0.1, 0.18, 0.98), bankDeg: -8 },
-  { frame: 1000, forward: vec3(-0.45, 0.1, 0.88), bankDeg: -18 },
-  { frame: 1035, forward: vec3(-0.62, -0.15, -0.77), bankDeg: -14 },
+  { frame: 676, forward: vec3(0.464, 0.408, 0.787), pitchDeg: PITCH_CRUISE },
+  {
+    frame: 800,
+    forward: vec3(0.464, 0.408, 0.787),
+    bankDeg: -10,
+    pitchDeg: PITCH_CRUISE,
+  },
+  // The bank-away starts here, 80-100 frames earlier than it was authored.
+  {
+    frame: 880,
+    forward: vec3(0.42, 0.4, 0.81),
+    bankDeg: -18,
+    pitchDeg: PITCH_CRUISE,
+  },
+  {
+    frame: 930,
+    forward: vec3(0.2, 0.34, 0.92),
+    bankDeg: -23,
+    pitchDeg: PITCH_CRUISE,
+  },
+  { frame: 985, forward: vec3(-0.25, 0.2, 0.95), bankDeg: -25 },
+  { frame: 1035, forward: vec3(-0.62, -0.15, -0.77), bankDeg: -20 },
   { frame: 1120, forward: vec3(-0.6, -0.14, -0.79) },
 ]
 
 const FACING_TITLES: readonly FacingBeat[] = [
-  // Nose-*down* through the wipes. The hull crosses above the frame's center,
-  // so a level ship shows the camera its belly — and the reference's wipe
-  // frames plainly show the saucer's top, lit, right up to the occlusion. It
-  // is diving at the lens, not flying level past it.
-  { frame: 1280, forward: vec3(0.06, -0.2, 0.98) },
-  { frame: 1600, forward: vec3(0.06, -0.2, 0.98) },
-  { frame: 1755, forward: vec3(-0.02, 0.3, 0.95) },
-  { frame: 2000, forward: vec3(-0.04, 0.22, 0.97) },
-  { frame: 2130, forward: vec3(-0.16, 0.06, 0.98), bankDeg: 5 },
-  { frame: 2280, forward: vec3(-0.3, -0.05, 0.95), bankDeg: 8 },
-  { frame: 2380, forward: vec3(-0.42, -0.1, 0.9), bankDeg: 4 },
-  { frame: 2420, forward: vec3(-0.42, -0.1, 0.9) },
+  /*
+   * The cruise's exit attitude, carried across the f1092 cut.
+   *
+   * `routeOrientation` holds its first beat before that beat's frame, so a
+   * list starting at f1280 pinned the warp-out hull to the *wipes'* heading —
+   * which points back down the lens. Measured: the attitude snapped 164.40° in
+   * the single frame f1091→f1092 and the nose then sat 87°–169° off its own
+   * velocity for every frame of `WARP_OUT_1`, on a hull three-quarters of the
+   * frame wide. A ship flying tail-first out of its own warp point is the
+   * defect this pass exists to remove, one shot along.
+   *
+   * These two beats are `FACING_CRUISE`'s last two, repeated verbatim.
+   * `routeOrientation` slerps inside a segment and takes nothing from the
+   * neighbours, so the same pair of endpoints gives the same attitude at every
+   * frame of f1035–1120 in either list, and the cut is exact rather than
+   * close. The swing from here to the wipes' heading happens across
+   * f1120–1280, with the hull off stage from f1108.
+   */
+  { frame: 1035, forward: vec3(-0.62, -0.15, -0.77), bankDeg: -20 },
+  { frame: 1120, forward: vec3(-0.6, -0.14, -0.79) },
+  /*
+   * The wipes' fitted heading — and the middle one's is mirrored, because its
+   * *track* is.
+   *
+   * One forward vector used to cover all three passes while `mirrored()`
+   * reflected only the beats, so the middle hull flew the mirrored track on the
+   * unmirrored heading: nose 43.3° off its own velocity for thirty-five frames,
+   * which reads as a ship crabbing sideways across the frame. A property test
+   * now holds every straight pass's nose to its chord and this is what it
+   * found.
+   *
+   * Reflecting in x negates the direction's x and nothing else. It would also
+   * flip the sign of an authored bank — a mirrored frame's right axis is
+   * negated — but the wipes carry none, so there is nothing to flip. The swings
+   * between these four beats all happen while the hull is off stage
+   * (`SHIP_WINDOWS` has gaps at f1324–1413 and f1452–1533), so nothing on
+   * screen ever turns.
+   */
+  { frame: 1280, forward: vec3(0.369, 0.074, 0.926) },
+  { frame: 1330, forward: vec3(0.369, 0.074, 0.926) },
+  { frame: 1408, forward: vec3(-0.369, 0.074, 0.926) },
+  { frame: 1452, forward: vec3(-0.369, 0.074, 0.926) },
+  { frame: 1530, forward: vec3(0.369, 0.074, 0.926) },
+  { frame: 1570, forward: vec3(0.369, 0.074, 0.926) },
+  // The hull is off stage f1571-1757, so this swing is never on screen.
+  { frame: 1758, forward: vec3(-0.039, -0.605, 0.796) },
+  { frame: 2092, forward: vec3(-0.039, -0.605, 0.796) },
+  // Into the skim, where the reference rolls +11.3° over f2315-2380.
+  { frame: 2180, forward: vec3(-0.2, -0.4, 0.89), bankDeg: 4 },
+  { frame: 2280, forward: vec3(-0.3, -0.2, 0.93), bankDeg: 8 },
+  { frame: 2380, forward: vec3(-0.42, -0.1, 0.9), bankDeg: 11 },
+  { frame: 2420, forward: vec3(-0.42, -0.1, 0.9), bankDeg: 11 },
 ]
 
+/*
+ * `lookAlong(forward, POLE)` is `orientationAlong` for a straight pass — a
+ * line's derived attitude is constant and depends on nothing but its direction
+ * — and `withAttitude` is the sparse overlay on top of it. Composed in that
+ * order the previously authored bank angles are numerically unchanged.
+ */
 const facingBeats = (list: readonly FacingBeat[]): AimBeat[] =>
   list.map((beat) => ({
     frame: beat.frame,
-    orientation: Q.multiply(
+    orientation: withAttitude(
       lookAlong(beat.forward, POLE),
-      Q.fromAxisAngle(vec3(0, 0, 1), ((beat.bankDeg ?? 0) * Math.PI) / 180),
+      beat.bankDeg ?? 0,
+      beat.pitchDeg ?? 0,
     ),
   }))
 
 /** Ship visibility windows, frames inclusive. */
 const SHIP_WINDOWS: readonly (readonly [number, number])[] = [
-  [676, 1118],
+  // Measured: the reference means 0.4 from f1108 to f1118 — nothing on screen
+  // between the ship leaving and the lens spike arriving at f1119.
+  [676, 1107],
   [1286, 1323],
   [1414, 1451],
   [1534, 1570],
@@ -650,8 +986,18 @@ const CUTS = {
   eclipse: [240, 356],
   jupiter: [357, 412],
   saturn: [413, 531],
-  cruise: [532, 937],
-  'cruise-close': [938, 1091],
+  cruise: [532, 947],
+  /*
+   * f948, not f938. The relight is a *consequence* of which face the camera can
+   * see, so it has to sit where that flips — and correcting the hull's attitude
+   * to the fitted flight path moved the crossing. Measured on the sample,
+   * `dot(toCamera, dorsal)` runs +0.102 at f940 and −0.059 at f950: the camera
+   * is still looking at the lit dorsal for ten frames after the old cut, so the
+   * key used to swing under the ship while the top of it was still the thing on
+   * screen. The hull is wider than the lens throughout, so the cut is hidden
+   * either way.
+   */
+  'cruise-close': [948, 1091],
   titles: [1092, 2392],
   'end-cards': [2393, DURATION],
 } as const satisfies Record<string, readonly [number, number]>
@@ -724,55 +1070,113 @@ function buildStage(world: World): Stage {
 
   /*
    * A low sweep, not a framed disk: the reference's limb slashes down the
-   * frame at x≈0.22 at f150 with terrain filling everything to its right, and
-   * the pull-back only closes the disk in the last third. It ends on the
-   * composition the f240 cut answers — disk centered (0.634, 0.555) at 4.30
+   * frame from top-right to bottom-left with terrain filling everything to its
+   * right, and the pull-back only closes the disk in the last third. It ends on
+   * the composition the f240 cut answers — disk centered (0.634, 0.555) at 4.30
    * radii with the star 15.7° away, 2.3° outside the left limb.
    *
-   * One thing the reference does here cannot be reproduced honestly, and it is
-   * worth naming rather than chasing. Its opening has *both* broadly lit
-   * terrain and the sun in frame beside the planet, and those two facts
-   * contradict each other: the sun's measured screen position puts it 72° from
-   * the disk's center, which for a camera 1.2 radii up means the entire
-   * visible cap sits past the terminator. It is a CG render whose key light
-   * and whose sun sprite were placed independently. Staged against a real
-   * ephemeris you get one or the other.
+   * A previous pass here recorded that the reference was physically
+   * self-contradictory — broadly lit terrain *and* a sun in frame beside the
+   * planet — and ramped the phase from 78° as the honest compromise. That
+   * finding was wrong, and it was wrong because of how the sun's clearance had
+   * been measured: from the sprite to the lit mask's leftmost *bounding-box*
+   * corner, which sits at the box's mid height rather than on the limb, and
+   * which reads 7.2° when the true clearance is 16.7°. Fitting the visible limb
+   * arc as a cone instead — a sphere's limb is a cone about the body direction,
+   * so least squares over ~270 boundary points recovers the angular radius and
+   * with it the standoff, on every frame and not just the one unclipped one —
+   * gives a track that is smooth, well conditioned (residuals 0.26–0.42° from
+   * f140 to f200) and, crucially, *self-consistent*:
    *
-   * So the phase *ramps*: 78° at f125, where the cap is broadly lit and the
-   * star is behind the lens, opening to 164° by f239, where the disk is the
-   * thin crescent the match cut needs and the star has swung into frame beside
-   * it. The shot the reference is trying to be, told in an order that is true.
+   *   f140  1.20 radii  phase 107°     f190  1.59  126°
+   *   f150  1.22        phase 108°     f200  1.80  132°
+   *   f160  1.25        phase 111°     f210  1.90  135°
+   *   f170  1.31        phase 114°     f230  ~3.5  ~157°
+   *   f180  1.40        phase 119°     f239  4.90  161°
+   *
+   * Rendered as a Lambert sphere plus a flat night-side term, that geometry
+   * reproduces the reference's own frame luminance to within ±2.6 across
+   * f140–f200 (41.6 → 20.4 measured, 44.0 → 19.9 predicted). There is no
+   * contradiction to work around; there was a bad ruler.
+   *
+   * So the phase is not authored against the exposure — it is *derived* from
+   * the two screen marks. Fix where the star is and where the disk's center is
+   * and the elongation between them is fixed, and phase = 180° − elongation.
+   * The star's mark, the limb's angle and the frame's brightness are one
+   * variable, and the numbers below are that variable read off the reference
+   * rather than three knobs tuned against each other.
    */
   const earthPos = positionOf(earth)
   const earthShot: Shot = (() => {
-    // Measured widths at f140 and f160: 0.97 and 0.93 of the frame against
-    // 0.67 and 0.54 in the first capture — the opening stood a third too far
-    // off its planet the whole way down.
-    const e125 = at(earth, earthPos, 1.1, 78, 4)
-    const e165 = at(earth, earthPos, 1.24, 92, 5)
-    const e195 = at(earth, earthPos, 1.9, 118, 6)
-    const e220 = at(earth, earthPos, 3.2, 142, 6)
+    /*
+     * Standoff from the cone fit; phase from the pair of marks below. The
+     * center's mark runs off the bottom-right corner for the first half of the
+     * shot — that is not a mistake, it is what a camera 0.2 radii above the
+     * terrain sees, and `frameTwoTargets` is happy to aim at a target the
+     * frame does not contain.
+     */
+    const e125 = at(earth, earthPos, 1.19, 105.4, 4)
+    const e150 = at(earth, earthPos, 1.22, 108.4, 4.5)
+    const e175 = at(earth, earthPos, 1.35, 116.4, 5)
+    const e200 = at(earth, earthPos, 1.8, 132.4, 5.5)
+    const e222 = at(earth, earthPos, 2.55, 148.5, 6)
     const e239 = at(earth, earthPos, 4.3, 164.3, 6)
-    const aimAt = (from: UniverseVector, x: number, y: number): Quat =>
-      frameTarget(from, { at: earthPos, x, y }, FOV, ASPECT, POLE)
+    /*
+     * The star is the *primary* target on every knot but the last. Both land
+     * when the standoff gives the pair the separation the marks ask for, which
+     * is how these were solved — but the star's mark is a sprite centroid read
+     * straight off a pixel, while the disk's center is extrapolated from a limb
+     * that is three-quarters off-frame, so the star is the one to trust with
+     * the exact placement. It is also the one that sets the roll: `frameTarget`
+     * takes its roll from `POLE` alone, which is what left the render's limb
+     * ~50° off the reference's, the largest orientation error in the sequence.
+     */
+    const pair = (
+      from: UniverseVector,
+      star: readonly [number, number],
+      disk: readonly [number, number],
+    ): Quat =>
+      frameTwoTargets(
+        from,
+        { at: sun, x: star[0], y: star[1] },
+        { at: earthPos, x: disk[0], y: disk[1] },
+        FOV,
+        ASPECT,
+      )
     return {
       id: 'earth',
       from: CUTS.earth[0],
       to: CUTS.earth[1],
       camera: [
         { frame: 125, position: e125 },
-        { frame: 165, position: e165 },
-        { frame: 195, position: e195 },
-        { frame: 220, position: e220 },
+        { frame: 150, position: e150 },
+        { frame: 175, position: e175 },
+        { frame: 200, position: e200 },
+        { frame: 222, position: e222 },
         { frame: 239, position: e239 },
       ],
       aim: [
-        { frame: 125, orientation: aimAt(e125, 1.05, 0.62) },
-        { frame: 165, orientation: aimAt(e165, 0.98, 0.6) },
-        { frame: 195, orientation: aimAt(e195, 0.84, 0.585) },
-        { frame: 220, orientation: aimAt(e220, 0.72, 0.57) },
-        // Both marks, because the f240 cut lands invisibly only if the two
-        // sides agree on the star *and* the disk; eyeballing a roll gets one.
+        // f125's marks are the f140–f150 track run back four frames; the
+        // reference is still fading up out of black there and its sprite does
+        // not clear the detector's floor until f140.
+        { frame: 125, orientation: pair(e125, [0.081, 0.374], [0.995, 1.49]) },
+        { frame: 150, orientation: pair(e150, [0.118, 0.381], [0.989, 1.394]) },
+        { frame: 175, orientation: pair(e175, [0.182, 0.396], [0.938, 1.186]) },
+        { frame: 200, orientation: pair(e200, [0.278, 0.416], [0.826, 0.884]) },
+        { frame: 222, orientation: pair(e222, [0.378, 0.435], [0.732, 0.716]) },
+        /*
+         * Both marks, because the f240 cut lands invisibly only if the two
+         * sides agree on the star *and* the disk; eyeballing a roll gets one.
+         * This is the one knot with the *disk* primary, and it is deliberate:
+         * the eclipse's f240 camera is built to put Mars's center on exactly
+         * this mark, so the cut is invisible when the two disks agree, and a
+         * knot whose primary is the star would spend the pair's residual on
+         * the disk instead. The reference's own f239 says 4.90 radii and phase
+         * 161° where this stands at 4.30 and 164.3° — a 14% larger disk and
+         * 3.5° more separation. Held at 4.30 because the eclipse side is
+         * built from the same numbers and the seam matters more here than the
+         * last frame's diameter does.
+         */
         {
           frame: 239,
           orientation: frameTwoTargets(
@@ -971,36 +1375,105 @@ function buildStage(world: World): Stage {
 
   const saturnPos = positionOf(saturn)
   const saturnShot: Shot = (() => {
-    // Same correction as Jupiter, one stop gentler: the reference's terminator
-    // runs down x≈0.60 at f432 with the lit half to its left, which is a
-    // camera near quadrature rather than over the day side.
-    // Measured at f423: the reference has Saturn 0.664 of the frame wide and
-    // means 91 there, against 0.356 and 33 in the first capture — the approach
-    // was arriving half a second late. 3.4 radii rather than 5.2 at the cut.
-    const s413 = at(saturn, saturnPos, 3.4, 74, -12)
-    const s432 = at(saturn, saturnPos, 1.9, 88, -30)
-    const s460 = at(saturn, saturnPos, 2.6, 100, -26)
-    const s500 = at(saturn, saturnPos, 6.5, 116, -30)
-    const s531 = at(saturn, saturnPos, 13, 128, -32)
+    /*
+     * A flyby, and the standoff schedule is a fit rather than a taste.
+     *
+     * The reference's subject bounding box, measured on the frames where it is
+     * not clipped by an edge, gives the planet-and-rings angular span: 50.4° at
+     * f426, 42.3° at f428, 35.9° at f430, 20.9° at f440, 16.6° at f445, 14.0°
+     * at f450, 10.4° at f460. Distance runs as 1/tan(half-span), which puts
+     * **closest approach near 2.4 radii at f425** — a fast flyby, not the
+     * hover the previous schedule described.
+     *
+     * The pass is a straight line at a *varying* speed, and the asymmetry is
+     * measured rather than convenient: matching the reference's tracked width
+     * frame by frame needs 0.17 radii per frame closing and about 0.09 opening.
+     * A constant-velocity line reproduces the approach and then leaves too
+     * fast — captured at v = 0.20 throughout, f445 meant 8.1 against the
+     * reference's 15.5 and f460 meant 3.1 against 7.7. Fixed direction,
+     * throttled, which is what the plan's §4 finds in every ship pass too.
+     *
+     * The previous schedule stood closest at f432–440 rather than f425 and then
+     * hung there, and the capture is what showed it: at f420 the reference means
+     * 91.1 against the render's 34.3, and at f450 the reference means 11.8
+     * against the render's 39.0. Too dim at the peak and too bright for the next
+     * second, both from one error — the pass was arriving eight frames late and
+     * then not leaving. Neither is an exposure problem; a planet flying past on
+     * the wrong schedule is dim when the reference is bright and bright when the
+     * reference is dark. It is also the case a mean-absolute summary cannot
+     * see: over f413–470 the old schedule scored a respectable +3.1 of exposure
+     * error, because −26.5 across the entry and +18.7 across the exit cancel.
+     *
+     * Phase stays near quadrature, which is what the reference's f432 shows: the
+     * terminator runs down x≈0.60 with the lit half to its left. It opens a
+     * little more slowly than before so the peak frames carry more light.
+     *
+     * Elevation is doing a second job now — it is the only handle on the ring
+     * opening, because `placeShot` swings the camera in a basis around the sun
+     * line and how far that lands out of Saturn's equatorial plane is what sets
+     * how wide the rings read. The reference's rings are nearly edge-on through
+     * the approach (a line at f425, moderately open by f445), and the render's
+     * ran 11° open at the cut and 31° by f440. Held shallower early, they open
+     * on roughly the reference's schedule.
+     *
+     * Measured over f413–470, captured: mean |Δcx| 0.036 → 0.029, |Δcy| 0.038 →
+     * 0.016, |Δwidth| 0.110 → 0.093, exposure −26.5/+18.7 entry/exit → −14.4/−1.1.
+     *
+     * **Two things this shot cannot match, and both are physics.** Saturn sits
+     * at 9.5 AU against Jupiter's 5.2, so it receives 30% of the light — the
+     * render is dim at the peak (53–74 against the reference's 91) because it is
+     * lit correctly, while the reference lights its Saturn like its Jupiter. And
+     * the ring system reads: closer than ~2.5 radii ours spans the whole frame
+     * where the reference's barely registers, so the width error concentrates
+     * entirely in the entry (|Δwidth| 0.219 there against 0.027 on the exit).
+     * Standing far enough back to match the width costs another 9 of exposure,
+     * which is the trade this schedule declines.
+     */
+    const s413 = at(saturn, saturnPos, 3.13, 66, -4)
+    const s417 = at(saturn, saturnPos, 2.56, 70, -7)
+    const s421 = at(saturn, saturnPos, 2.2, 74, -10)
+    const s425 = at(saturn, saturnPos, 2.1, 78, -13)
+    const s430 = at(saturn, saturnPos, 2.35, 81, -16)
+    const s440 = at(saturn, saturnPos, 3.1, 86, -20)
+    const s460 = at(saturn, saturnPos, 5.0, 95, -25)
+    const s500 = at(saturn, saturnPos, 8.9, 110, -30)
+    const s531 = at(saturn, saturnPos, 12.2, 120, -32)
     const aimAt = (from: UniverseVector, x: number, y: number): Quat =>
       frameTarget(from, { at: saturnPos, x, y }, FOV, ASPECT, POLE)
+    /*
+     * Aim marks are the reference's own area-weighted subject centroids —
+     * (0.967, 0.889) at f413, (0.807, 0.567) at f417, (0.719, 0.534) at f421,
+     * (0.675, 0.521) at f425, (0.467, 0.498) at f430, (0.287, 0.436) at f440,
+     * (0.108, 0.362) at f460, (0.022, 0.320) at f480 — pushed right and down at
+     * the entry because at f413 the reference is a 0.095-wide ring sliver in the
+     * bottom-right corner, so its centroid is a measurement of the corner and
+     * not of where the planet is.
+     */
     return {
       id: 'saturn',
       from: CUTS.saturn[0],
       to: CUTS.saturn[1],
       camera: [
         { frame: 413, position: s413 },
-        { frame: 432, position: s432 },
+        { frame: 417, position: s417 },
+        { frame: 421, position: s421 },
+        { frame: 425, position: s425 },
+        { frame: 430, position: s430 },
+        { frame: 440, position: s440 },
         { frame: 460, position: s460 },
         { frame: 500, position: s500 },
         { frame: 531, position: s531 },
       ],
       aim: [
-        { frame: 413, orientation: aimAt(s413, 1.25, 0.62) },
-        { frame: 432, orientation: aimAt(s432, 0.62, 0.5) },
-        { frame: 460, orientation: aimAt(s460, 0.3, 0.42) },
-        { frame: 500, orientation: aimAt(s500, 0.06, 0.36) },
-        { frame: 531, orientation: aimAt(s531, -0.06, 0.34) },
+        { frame: 413, orientation: aimAt(s413, 1.5, 0.98) },
+        { frame: 417, orientation: aimAt(s417, 0.95, 0.62) },
+        { frame: 421, orientation: aimAt(s421, 0.8, 0.56) },
+        { frame: 425, orientation: aimAt(s425, 0.7, 0.53) },
+        { frame: 430, orientation: aimAt(s430, 0.55, 0.51) },
+        { frame: 440, orientation: aimAt(s440, 0.35, 0.45) },
+        { frame: 460, orientation: aimAt(s460, 0.15, 0.37) },
+        { frame: 500, orientation: aimAt(s500, 0.02, 0.32) },
+        { frame: 531, orientation: aimAt(s531, -0.04, 0.3) },
       ],
     }
   })()
@@ -1035,7 +1508,7 @@ function buildStage(world: World): Stage {
    * reframing moved it, because the problem was never the framing.
    *
    * So it relights, which is what the reference must itself have done. The cut
-   * sits at f938 — the first frame where the hull is wider than the lens, and
+   * sits at f948 — the first frame where the hull is wider than the lens, and
    * the frame by which the reference has already swung its key under the
    * ship — the same place this piece hides every other cut. Camera position and hull choreography are
    * identical across it; only the key swings from 0.9 poleward to 0.9 the
@@ -1100,10 +1573,11 @@ function buildStage(world: World): Stage {
    * seconds of credits over a star's disk is not a title sequence.
    *
    * This one looks across the sun line with the star up and behind, so the
-   * hull doing the fly-bys and the descent catches a strong dorsal key — the
-   * reference's light exactly, where the saucer's top surface is the brightest
-   * thing in the frame from f1920 to the second flash — while the star stays
-   * ~115° off the view axis, outside both the frame and the flare's edge fade.
+   * credit descent catches a strong dorsal key, while the star stays ~115° off
+   * the view axis, outside both the frame and the flare's edge fade. It cannot
+   * also serve the fly-through wipes, which turn the hull's other face to the
+   * lens; those are lit from the camera. The key construction below carries the
+   * measurements and the reason no re-aim changes them.
    */
   interface PitchBeat {
     readonly frame: number
@@ -1129,11 +1603,34 @@ function buildStage(world: World): Stage {
       return Vec.dot(raw, towardSaturn) > 0 ? Vec.negate(raw) : raw
     })()
     const poleward = Vec.normalize(Vec.cross(toStar, side))
-    // The same overhead key as the cruise, and for the same reason: the hull
-    // spends this shot nose-on and then dorsal-up under the camera, and both
-    // want the light almost normal to the saucer. Rolled the other way round
-    // the sun line so the starfield behind the credits is not the starfield
-    // behind the approach.
+    // The same overhead key as the cruise, rolled the other way round the sun
+    // line so the starfield behind the credits is not the starfield behind the
+    // approach.
+    //
+    // It used to add that the hull is "dorsal-up under the camera" here and so
+    // wants the light normal to the saucer. Do not restore any claim of that
+    // shape: which face this shot shows the camera is a property of the beat
+    // tables, not of the key, and it has already changed once. Under the
+    // authored attitudes it was the *ventral* through the whole credit descent
+    // — the far side from this key — and 205 frames of the descent rendered as
+    // a silhouette because of it; the landmark refit of `FACING_TITLES` turned
+    // the hull the right way round and the same beats now show the dorsal at
+    // +0.24 to +0.63. The wipes went the other way in the same refit and are
+    // near edge-on, showing the unlit side at −0.77.
+    //
+    // Which is the point: re-aiming this shot cannot settle it either way. The
+    // hull's beats are camera-relative, so a rotation here carries the hull
+    // with it and the visible face does not move — only the star does. Sweeping
+    // every unit direction against the beats, no single key clears grazing on
+    // all of them, and the direction that comes closest points back down the
+    // lens. One shot showing both faces of a hull cannot be lit by one distant
+    // source. The reference relights; so does `cruiseShot`, across its own cut
+    // at f948. This shot has no cut to hide one in, so the light that covers
+    // whichever face the star misses is mounted on the camera and lives in
+    // `scene/CameraRig.tsx` — see `STAGE_FILL_INTENSITY`. It contributes
+    // nothing to a face the key already reaches, so it costs the beats nothing
+    // when they are right. `cutscene.test.ts` § "tng-intro lighting geometry"
+    // asserts the condition, and says what to do if it stops holding.
     const orientation = lookAlong(
       Vec.normalize(
         Vec.add(
@@ -1143,11 +1640,10 @@ function buildStage(world: World): Stage {
       ),
       POLE,
     )
-    const pitch = (deg: number): Quat =>
-      Q.multiply(
-        orientation,
-        Q.fromAxisAngle(vec3(1, 0, 0), (deg * Math.PI) / 180),
-      )
+    // `withAttitude`'s pitch overlay, which is what this was a second copy of.
+    // The composition order is the thing that must not drift, so there is one
+    // of it.
+    const pitch = (deg: number): Quat => withAttitude(orientation, 0, deg)
     return {
       id,
       from,
@@ -1166,6 +1662,7 @@ function buildStage(world: World): Stage {
   }
 
   const shipTitles: readonly ScreenBeat[] = [
+    ...WARP_OUT_1,
     ...WIPE.map((beat) => shifted(beat, WIPE_OFFSETS[0] as number)),
     ...WIPE.map((beat) => mirrored(beat, WIPE_OFFSETS[1] as number)),
     ...WIPE.map((beat) => shifted(beat, WIPE_OFFSETS[2] as number)),
@@ -1291,7 +1788,9 @@ function wipeStreak(occlusion: number, frame: number): number {
  * the axis — and each is the bridge into the card that follows it.
  */
 const SPARKS: readonly { start: number; x: number; y: number }[] = [
-  { start: 1118, x: 0.645, y: 0.665 },
+  // (0.655, 0.695): the reference's spike registers at (0.659, 0.704) on f1119
+  // and (0.655, 0.688) on f1120, which is also where the hull was last seen.
+  { start: 1118, x: 0.655, y: 0.695 },
   { start: 2412, x: 0.688, y: 0.43 },
 ]
 
@@ -1316,18 +1815,27 @@ function effectsAt(frame: number): CinematicEffects {
     0.5 * smooth((frame - 2332) / 50) * (frame < 2382 ? 1 : 0),
   )
   /*
-   * The residual streak carrying the hull out of each flash, and it has to
-   * outlast the flash by a good margin: measured, the reference still means
-   * 10.3 at f1100 and 8.4 at f2400, where the first capture had 1.7 and 0.1.
-   * The frames after a warp-out are not empty — the ship is still leaving.
+   * The residual streak carrying the hull out of each flash. It has to outlast
+   * the flash — the frames after a warp-out are not empty, the ship is still
+   * leaving; the first capture had 1.7 at f1100 where the reference means 10.3
+   * — but it was made to outlast it by three times too long.
+   *
+   * Nine frames and fifteen, not twenty-six each — and they differ because the
+   * two exits differ. The first is short and steep: 10.3, 9.7, 9.1, 8.1, 7.1,
+   * 2.9, 1.2, 0.7 across f1100-1107, then 0.4 flat until the lens spike arrives
+   * at f1119. A 26-frame decay leaves light on frames the reference has already
+   * emptied, which are the frames the *spike* is supposed to arrive into. The
+   * second runs 13.4, 11.1, 9.7, 8.4, 6.5, 5.0 across f2397-2402 before
+   * dropping to 1.2 — twice as long, because the reference's ship is still a
+   * recognizable w 0.68 hull at f2397 where the first exit has already gone.
    */
   streaks = Math.max(
     streaks,
-    0.8 * (1 - smooth((frame - 1100) / 26)) * (frame >= 1096 ? 1 : 0),
+    0.8 * (1 - smooth((frame - 1100) / 9)) * (frame >= 1096 ? 1 : 0),
   )
   streaks = Math.max(
     streaks,
-    0.8 * (1 - smooth((frame - 2396) / 26)) * (frame >= 2392 ? 1 : 0),
+    0.8 * (1 - smooth((frame - 2396) / 15)) * (frame >= 2392 ? 1 : 0),
   )
   for (const occlusion of WIPE_OCCLUSIONS)
     streaks = Math.max(streaks, 0.85 * wipeStreak(occlusion, frame))
@@ -1490,10 +1998,17 @@ export const TNG_TITLE_WINDOWS: ReadonlyMap<string, FadeWindow> = new Map(
 
 /** Hull length the ranges assume, and the lens they are solved for. */
 export const TNG_HULL_LENGTH = HULL
+
+/**
+ * The cruise's authored nose-down pitch, so a test asserting the hull's nose
+ * against its own track can account for it rather than restating the number.
+ */
+export const TNG_CRUISE_PITCH_DEG = PITCH_CRUISE
 export const TNG_LENS = { fov: FOV, aspect: ASPECT } as const
 
-/** The measured wipe occlusions. */
+/** The measured wipe occlusions, and the offsets that place them. */
 export const TNG_WIPE_OCCLUSIONS = WIPE_OCCLUSIONS
+export const TNG_WIPE_OFFSETS = WIPE_OFFSETS
 
 /** The shot boundaries, so a test can assert where the cuts are. */
 export const TNG_CUTS: readonly { id: string; from: number; to: number }[] =

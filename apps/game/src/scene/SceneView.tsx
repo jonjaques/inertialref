@@ -42,9 +42,15 @@ export function SceneView({ engine }: { engine: GameEngine }) {
   return (
     <>
       {/* Space is genuinely high-contrast, but a debug build that renders its
-          own spacecraft as a black silhouette is not a debug build. A little
-          ambient plus a dim camera-mounted fill keeps the near field readable
-          without flattening the terminator on a planet. */}
+          own spacecraft as a black silhouette is not a debug build. Ambient
+          plus the camera-mounted fill in `CameraRig` keeps the near field
+          readable; the fill is what does the work, and it was a fixed world
+          direction pretending to be camera-mounted until the title sequence
+          caught it. Ambient stays small because it is the one term with no
+          direction: raising *it* to rescue a shadowed hull flattens the
+          terminator on every streamed terrain patch as well, which is the only
+          other thing in the scene these lights reach — planets and atmospheres
+          shade from their own `sunDirection` uniform and never see them. */}
       <ambientLight intensity={0.16} />
       <EngineTick engine={engine} />
       <CameraRig engine={engine} />

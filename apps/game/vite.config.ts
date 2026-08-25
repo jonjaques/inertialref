@@ -1,4 +1,5 @@
 import { execSync } from 'node:child_process'
+import { closeSync, openSync, readdirSync, readSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { defineConfig, loadEnv } from 'vite'
 import react, { reactCompilerPreset } from '@vitejs/plugin-react'
@@ -85,6 +86,47 @@ function reportAnalytics(mode: string): void {
   )
 }
 
+/**
+ * Refuse to bundle a git-lfs pointer in place of a model.
+ *
+ * `render/shipModels.ts` pulls `data/models/*.glb` in through
+ * `import.meta.glob`, and Vite copies an asset without looking inside it — so
+ * on a checkout that skipped the smudge filter the build *succeeds* and ships
+ * 130 bytes of pointer text where the hero ship should be. There is no error
+ * anywhere; the renderer just falls back to the debug cone at runtime, which is
+ * how this last went unnoticed on the Cloud Agent image (6dea1c7).
+ *
+ * Every environment that checks this repository out needs LFS and each one
+ * fails its own way — GitHub Actions threw during test collection, Workers
+ * Builds would not have complained at all. Rather than fix them one at a time,
+ * the build itself declines: a glTF starts with the ASCII magic `glTF`, and
+ * anything that does not is not a model.
+ */
+function requireRealModels() {
+  return {
+    name: 'inertialref:require-real-models',
+    apply: 'build' as const,
+    buildStart() {
+      const dir = fileURLToPath(new URL('../../data/models', import.meta.url))
+      for (const file of readdirSync(dir).filter((f) => f.endsWith('.glb'))) {
+        const head = Buffer.alloc(4)
+        const fd = openSync(`${dir}/${file}`, 'r')
+        try {
+          readSync(fd, head, 0, 4, 0)
+        } finally {
+          closeSync(fd)
+        }
+        if (head.toString('ascii') !== 'glTF')
+          throw new Error(
+            `data/models/${file} is not a glTF — most likely a git-lfs ` +
+              'pointer. Run `git lfs pull` before building; a build that ' +
+              'bundles the pointer ships a broken ship and says nothing.',
+          )
+      }
+    },
+  }
+}
+
 export default defineConfig(({ mode }) => {
   reportAnalytics(mode)
   return {
@@ -104,6 +146,7 @@ export default defineConfig(({ mode }) => {
       alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
     },
     plugins: [
+      requireRealModels(),
       react(),
       // React Compiler handles memoisation, so components here do not hand-write
       // useMemo/useCallback around render work.

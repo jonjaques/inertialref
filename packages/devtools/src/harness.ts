@@ -182,6 +182,8 @@ export class GameHarness {
   readonly #logSink = new RingBufferSink(256)
   readonly #cutscenes: CutsceneDirector
   readonly #observatory: Observatory
+  /** The track overlay's switch. Session-local; see `trackOverlay`. */
+  #trackOverlay = false
 
   constructor(host: HarnessHost) {
     this.#host = host
@@ -928,6 +930,48 @@ export class GameHarness {
     return this.#cutscenes.sample(renderTime)
   }
 
+  /**
+   * The cinematic state at a reference frame, without moving the playhead.
+   *
+   * For anything that needs a *neighbouring* frame rather than the one on
+   * screen — the track overlay finite-differences the hull's camera-relative
+   * offset either side of it to get a velocity. `cutsceneSample` cannot serve
+   * that: it is the host's per-frame ask and re-bases the playhead on every
+   * call. `CutsceneDirector.peek` carries the rest of the reasoning.
+   */
+  cutscenePeek(frame: number): CinematicSample | null {
+    return this.#cutscenes.peek(frame)
+  }
+
+  /**
+   * Draw the reference edit's tracked subject over the scene as it plays.
+   *
+   * A debug surface for the seek-and-compare loop: the reference's box for the
+   * frame on screen, the render's own hull projected and boxed beside it, and
+   * the hull's nose and velocity as two short vectors — so "the descent is
+   * late" is a picture rather than two columns of a CSV.
+   *
+   * A flag rather than a drawing, because this layer has no DOM and no React:
+   * `apps/game/src/hud/TrackOverlay.tsx` reads it once a frame while a scene is
+   * playing and draws nothing at all when it is false, which is the same
+   * arrangement every other presentation switch here uses.
+   *
+   * **Deliberately not persisted and not in the URL.** A capture run navigates
+   * a fresh page and never turns this on, so it cannot end up in a render of
+   * the sequence — which is the one thing a surface drawn over the picture must
+   * never do. A remembered flag would put it in the next capture instead.
+   */
+  trackOverlay(on = true): boolean {
+    this.#trackOverlay = on === true
+    log.info('track overlay', { showing: this.#trackOverlay })
+    return this.#trackOverlay
+  }
+
+  /** Whether `trackOverlay` is on. Read once a rendered frame by the host. */
+  get trackOverlayShowing(): boolean {
+    return this.#trackOverlay
+  }
+
   /* --------------------------------------------------------------------- */
   /* The planetarium                                                        */
   /* --------------------------------------------------------------------- */
@@ -1003,6 +1047,7 @@ export class GameHarness {
           .map((c) => c.id)
           .join(', '),
       '  ir.stopCutscene() / ir.seekCutscene(frame) / ir.cutsceneStatus()',
+      '  ir.trackOverlay(on?)          the reference track over a playing scene',
       '  ir.look(target)               planetarium: move the camera, not the ship',
       '  ir.observatory                the free camera itself — drag, zoom, setPhase',
       '  ir.logs(n)',
