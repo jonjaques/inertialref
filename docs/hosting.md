@@ -437,9 +437,16 @@ application rather than a shortcut with a dinosaur behind it.
 `pnpm brand` renders the favicon, the `.ico`, the apple-touch and PWA icons, the
 maskable variant, the 1200×630 share card, the manifest, `robots.txt`,
 `sitemap.xml` and the `<Logomark>` module from it. `pnpm brand:check` is in
-`pnpm check`. The card is _drawn_ rather than screenshotted: a screenshot
-pipeline would need a GPU in the build and would produce a different picture
-every time, where this one is byte-stable enough to be checked.
+`pnpm check`.
+
+The card's background is the one artifact with a second source:
+`design/brand/og-plate.png`, a frame of the real renderer — Earth's limb at
+sunrise, with the flare the flight camera actually produces — captured once and
+committed. The build composites the type over it with `sharp` and never touches
+a GPU, and the picture cannot drift because it is a file in the tree rather
+than a screenshot taken at build time. That was the objection to screenshots,
+and it is an objection about the build; the drawing it replaced was six bezier
+continents on a cyan disk.
 
 **Agents are welcome and are told so.** `robots.txt` allows everything and
 points at `/llms.txt`, which is the short prose version of what this project is

@@ -3240,6 +3240,61 @@ both fail if the bug returns. The new test adds what neither could see: it runs
 sixty frames so alpha wraps four times, because a single sample cannot detect a
 sawtooth no matter which instant it asks about.
 
+## The Cloud Agent that was supposed to rebuild from #15 did not (23 Aug 2026)
+
+The test plan on #15 was: after merge, start a new Cloud Agent so it rebuilds
+from the Dockerfile rather than from the previous snapshot, then confirm `pnpm
+dev` is in tmux and `data/models/enterprise-d.glb` is a real GLB.
+
+This agent is that follow-up. It booted from snapshot
+`bld-20260823-8f2a6585-8181-4c0a-9ead-01cf98aad959` (`gitSetup: reuse`,
+`warmFork: warm_fork`). That snapshot predates the merge. The first recurring
+build after merge, `bld-20260823-6c5f7e0b-edef-414f-8924-32d1ecfaf161`, is
+`SKIPPED`. So the new Dockerfile is on `main` and this pod is still the old
+image.
+
+Measured on this pod:
+
+| Probe                          | Result                             |
+| ------------------------------ | ---------------------------------- |
+| `git-lfs`                      | not installed                      |
+| `tmux`                         | not installed                      |
+| `LANG` / locale                | empty / POSIX                      |
+| `data/models/enterprise-d.glb` | 133-byte LFS pointer, `ASCII text` |
+| Game and Worker terminal       | not running                        |
+
+Node 26.7 and pnpm 11.22 are present — those were already on the image #15
+amended. The three things #15 added are the three things still missing. A new
+agent is not a rebuild when Cursor reuses a snapshot; the next green Build of
+this environment is what would actually pick up the Dockerfile.
+
+## The share card was a cyan marble (23 Aug 2026)
+
+`scripts/brand/og.mjs` drew a sky-gradient disk with no surface. At 300 px —
+the size a chat client actually shows — that disk is a glow, not a world, and
+it does not look like the front door, which is Earth.
+
+The card is still a drawing. A screenshot of `b:2` would be the honest picture
+and the wrong artifact: it would move with the camera and it would need a GPU
+in the build. Continents, clouds and a terminator that share one mask are how
+a drawing reads as a world without becoming a second renderer.
+
+Two things that look obvious and are wrong:
+
+- **Darker land on the same hue is maria.** Sky-900 continents on a sky-700
+  ocean read as craters. Land is slate-400, and it is painted _after_ the
+  day-side wash, because the wash on top of land turns continents back into
+  more cyan.
+- **The anamorphic streak was behind the type panel.** The front door is
+  composed around that blade of light; under an opaque panel it is a decoration
+  on the planet. It is drawn after the type now, in the gap between the mark
+  and the title.
+
+`pnpm brand --check` still does not pixel-diff the PNG — sharp is not
+byte-stable across versions. `og.test.mjs` holds the SVG: 1200×630, the same
+markup twice, a seeded starfield of unequal dots, and the ids that would vanish
+if a rewrite dropped the planet, the terminator mask or the streak.
+
 ## The title sequence measured again, and the ship flies straight lines (23 Aug 2026)
 
 Planning the next fidelity pass over `tng-intro` produced three findings worth
@@ -3480,6 +3535,58 @@ corrected to the truth instead. And `hullWidth` divides by the live
 stretch's on and off frames move with the window's shape. That one is a real
 reproducibility hole in a pipeline built on reference diffs, and it is a design
 change rather than a repair.
+
+## The share card stopped being a drawing (24 Aug 2026)
+
+Yesterday's entry above ends "the card is still a drawing," with the reasoning
+that a screenshot would need a GPU in the build and would produce a different
+picture every regeneration. Both halves of that are true and neither is an
+argument about the _picture_ — they are arguments about the _build_. A frame
+captured once and committed answers both: `design/brand/og-plate.png` sits
+beside `brandmark.svg` as the second thing the brand is drawn from, `sharp`
+composites the type over it, and re-shooting it is a deliberate commit rather
+than a build step. The drawing it replaced was six bezier continents and a
+hand-built anamorphic blade, and at 300 px it read as grey amoebas on a blue
+ball.
+
+**The plate is a real orbital sunrise, not a beauty pass.** Earth at 1.16 body
+radii (~1020 km), phase 95° so the ground under the camera is at dusk, rolled
+6° so the limb climbs to the right and leaves the type column open sky. The
+star is aimed to (0.865, 0.205) of the frame, which puts its streak above the
+wordmark where the old drawn blade was. Captured at 3200×1680 and reduced to
+1200×630 — the reduction is the only antialiasing the limb gets, and at 1× the
+terminator stairsteps.
+
+**Shot at `flareArtifacts = 0.35`, which is the menu's stance and not the
+flight camera's.** `GameEngine.flareArtifacts` already documents why: the
+ghosts march along the line from the star through frame centre, so a star on
+the right of a poster puts the red aperture ring squarely on the paragraph on
+the left. The first plate was shot at 1 and had a 150 px hoop behind the rule.
+The value that was already correct for the front door was already correct for
+the front door's photograph.
+
+Three things about compositing type over a photograph rather than over a
+drawing:
+
+- **A partial rectangle has an edge.** The bottom-left scrim started as a
+  vertical gradient inside a 672-wide box, and the box's right side was a
+  straight vertical seam running down through the terminator. It is a radial
+  that reaches zero before it reaches anything, painted across the whole
+  canvas.
+- **The scrim can be nearly nothing, because the framing did the work.** The
+  drawn card needed a slab across 78% of the width to have anywhere to set
+  type; this one ends at 68% and never reaches opaque, because the plate was
+  framed with the column empty. A slab wide enough to cover the old planet
+  would erase the sunrise.
+- **The streak is the render's now.** Drawing a second one on top would be two
+  blades of light from one star.
+
+`pnpm brand --check` still does not pixel-diff the PNG. `og.test.mjs` holds the
+overlay — 1200×630, the same markup twice, the scrim and floor ids, and the
+assertion that the scrim's last stop is transparent and no stop is opaque,
+which is the slab creeping back. It also reads the plate's IHDR and asserts it
+is exactly the size the card is composited at, which is the one thing about a
+captured frame a test in Node can know.
 
 ## Known gaps
 

@@ -2,18 +2,48 @@
  * The share card — `og.png`, 1200x630.
  *
  * It is the front door, reduced to the parts that survive being 300 px wide in
- * a chat window. `pages/HomePage.tsx` composes a poster: a gradient panel of
- * type on the left, a lit planet filling the right, and the star's anamorphic
- * streak running under the wordmark. That composition is reproduced here rather
- * than invented, because the card is a promise about what the link opens.
+ * a chat window: a column of type on the left, and behind it a real frame of
+ * the simulation. `pages/HomePage.tsx` composes the same poster live — type
+ * over a lit world with the star's flare running under the wordmark — and this
+ * reproduces that composition rather than inventing one, because the card is a
+ * promise about what the link opens.
  *
- * What it deliberately is *not* is a screenshot. The real frame is a WebGPU
- * render of a generated world at a wall-clock camera phase, so a screenshot
- * pipeline would need a GPU in the build, and the picture would change every
- * time somebody regenerated it. This is drawn, so it is the same card every
- * time and `pnpm brand --check` can hold it to that.
+ * **The background is a render, and it is checked in.** It used to be drawn:
+ * an SVG planet with six continent paths, a seeded starfield and a hand-built
+ * anamorphic blade. That was the right call while the reason stood — a
+ * screenshot pipeline would put a GPU in the build, and a frame captured on
+ * every regeneration would make `pnpm brand --check` mean nothing — and it
+ * produced a cyan marble with grey amoebas on it, because six bezier blobs is
+ * not what Earth looks like and a drawn flare is not what a lens does.
  *
- * Every color below is a Tailwind step already in `index.css`, written as a
+ * Both objections are about the *build*, not about the picture, and a
+ * committed plate answers both. `design/brand/og-plate.png` is one frame of
+ * the real renderer, captured once, sitting beside `brandmark.svg` as the
+ * other thing the brand is drawn from. The build composites type over it with
+ * `sharp` and never touches a GPU; the card is the same card every time
+ * because the plate is a file in the tree. Re-capturing it is a deliberate
+ * commit, which is exactly the property the drawing had.
+ *
+ * **What is in the plate, so nothing here draws it twice:** the star, its
+ * ghosts and its anamorphic streak — a real one, from
+ * `apps/game/src/render/flare.ts` — the atmosphere on the limb, the terminator,
+ * the ocean's specular glint, the clouds, the terrain and the stars behind it
+ * all. This file draws the scrim and the type and nothing else.
+ *
+ * **How the plate was framed**, so it can be framed again. Earth at ~1020 km,
+ * a hair past the terminator, looking along the limb into a sunrise, with the
+ * star clear of the horizon so the flare has room. In `pnpm dev` at
+ * `/play/solo`, with `engine.showShip = false`:
+ *
+ *     camera 1.16 body radii from Earth's centre
+ *     phase (sun–body–camera) 95°, so the near ground is at dusk
+ *     the camera around the terminator ring far enough to bring the Red Sea
+ *       and the Gulf under it, rolled 6° so the limb climbs to the right
+ *     aimed so the star lands at (0.865, 0.205) of the frame
+ *     captured at 3200x1680 and reduced to 1200x630, which is the only
+ *       antialiasing the limb gets
+ *
+ * Every colour below is a Tailwind step already in `index.css`, written as a
  * hex literal with the step named — the same convention that file uses, and for
  * the same reason: a bare triple is unreadable next to the palette it belongs
  * to. The type steps are quoted from `index.css` too, axis by axis, so a change
@@ -26,6 +56,12 @@ import { outline } from './type.mjs'
 export const OG_WIDTH = 1200
 export const OG_HEIGHT = 630
 
+/** The rendered frame the type sits on. Already 1200x630; see the header. */
+export const OG_PLATE = new URL(
+  '../../design/brand/og-plate.png',
+  import.meta.url,
+)
+
 const SLATE_950 = '#020617'
 const SLATE_800 = '#1e293b'
 const SLATE_500 = '#64748b'
@@ -37,84 +73,6 @@ const SKY_200 = '#bae6fd'
 
 /** The left margin, and the type column's left edge. */
 const GUTTER = 80
-
-/*
- * The star, and the planet it lights.
- *
- * The planet's center is off the bottom-right corner so only its limb is in
- * frame — a full disk centered in the right third reads as a stock globe, where
- * an arc leaving the frame reads as being near something. The star sits above
- * and outside it, which is what puts the terminator across the visible limb
- * instead of flattening it.
- */
-const STAR = { x: 1094, y: 148, r: 15 }
-const PLANET = { x: 1130, y: 720, r: 470 }
-
-/**
- * The sub-stellar point, in the planet gradient's own coordinates.
- *
- * Derived rather than eyeballed: move the star or the planet above and the
- * terminator follows, which is the whole reason those two are constants and
- * this is not a third one to keep in step with them.
- */
-const SUBSTELLAR = {
-  x: 0.5 + (STAR.x - PLANET.x) / (2 * PLANET.r),
-  y: 0.5 + (STAR.y - PLANET.y) / (2 * PLANET.r),
-}
-
-/**
- * How far past the limb the falloff runs, as a fraction of the disk.
- *
- * The one number on this card that is a picture rather than a fact. At 0.5 the
- * gradient ends exactly on the limb, which is the honest reading — and the
- * star is nearly edge-on here, so the honest reading is a two-pixel crescent
- * and a black ball. Stretching the scale to 0.72 keeps the terminator running
- * the right way across the visible face and gives it something to run across.
- * The card is a drawing of the front door, not a render of it.
- */
-const LIT_SPREAD = 0.62
-
-/*
- * A hundred and forty stars, from a fixed seed.
- *
- * Hand-placing them would be forty lines of magic numbers; `Math.random()`
- * would make the card different on every build and turn `pnpm brand --check`
- * into noise. This is the same trade the simulation makes everywhere — a seed
- * is a decision you can re-read — so it is the same 32-bit mix, spelled out
- * rather than imported because `packages/*` has no business being a build
- * dependency of a poster.
- *
- * They are drawn *behind* the planet and the panel, which is what keeps them
- * out of the type: only the wedge of open sky above the limb ever shows any.
- */
-const STAR_SEED = 0x9e3779b9
-const STAR_COUNT = 140
-
-function scatter() {
-  let state = STAR_SEED
-  const next = () => {
-    state = (state + 0x6d2b79f5) | 0
-    let t = Math.imul(state ^ (state >>> 15), 1 | state)
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-  }
-  const stars = []
-  for (let index = 0; index < STAR_COUNT; index += 1) {
-    const x = next() * OG_WIDTH
-    const y = next() * OG_HEIGHT
-    // Apparent magnitude, roughly: many faint, few bright. The cube is what
-    // stops an even scatter of identical dots reading as a texture.
-    const brightness = next() ** 3
-    const radius = 0.5 + brightness * 1.6
-    const opacity = 0.18 + brightness * 0.62
-    stars.push(
-      `    <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${radius.toFixed(2)}" fill="#e0f2fe" opacity="${opacity.toFixed(3)}" />`,
-    )
-  }
-  return stars.join('\n')
-}
-
-const STARFIELD = scatter()
 
 /** A text path, placed by its baseline. */
 const place = (run, x, y, fill) =>
@@ -200,87 +158,51 @@ export async function composeOgCard() {
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${OG_WIDTH}" height="${OG_HEIGHT}" viewBox="0 0 ${OG_WIDTH} ${OG_HEIGHT}">
   <defs>
-    <!-- The lit hemisphere. The gradient's end circle is the planet's own
-         circle and its focal point is the sub-stellar point, so an offset is
-         distance from where the star is overhead. That is what makes the
-         falloff a terminator rather than a vignette: a radial fill centered on
-         the disk lights the middle and darkens the rim, which is the one thing
-         a lit sphere never does. -->
-    <radialGradient id="planet" cx="0.5" cy="0.5" r="${LIT_SPREAD}" fx="${SUBSTELLAR.x.toFixed(3)}" fy="${SUBSTELLAR.y.toFixed(3)}">
-      <stop offset="0%" stop-color="#bae6fd" stop-opacity="1" />
-      <stop offset="10%" stop-color="#7dd3fc" stop-opacity="1" />
-      <stop offset="24%" stop-color="#38bdf8" stop-opacity="1" />
-      <stop offset="38%" stop-color="#0ea5e9" stop-opacity="1" />
-      <stop offset="52%" stop-color="#0369a1" stop-opacity="1" />
-      <stop offset="66%" stop-color="#075985" stop-opacity="1" />
-      <stop offset="79%" stop-color="#0c2b45" stop-opacity="1" />
-      <stop offset="91%" stop-color="#050d1c" stop-opacity="1" />
-      <stop offset="100%" stop-color="${SLATE_950}" stop-opacity="1" />
-    </radialGradient>
-    <!-- Atmosphere: a stroke on the limb, brightest where the star is and gone
-         by the terminator. Filled behind the disk instead it is a halo all the
-         way round, which reads as a glow effect rather than as air. -->
-    <linearGradient id="rim" x1="0.1" y1="0.95" x2="0.7" y2="0">
-      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0" />
-      <stop offset="45%" stop-color="#7dd3fc" stop-opacity="0.18" />
-      <stop offset="100%" stop-color="#e0f2fe" stop-opacity="0.85" />
+    <!--
+      The scrim, and why it is nearly nothing.
+
+      The drawn card needed a slab: it painted a planet across the right two
+      thirds and then had to take the left third back to have anywhere to set
+      type. The plate is framed so the type column is already open sky, so what
+      is left for a scrim to do is guarantee the two places the picture reaches
+      into the column — the star's third ghost, a dark red ring that lands
+      behind the rule, and the limb climbing into the bottom left — and to sink
+      the sky from the render's pure black to the site's slate-950, so the card
+      and the page it opens are the same colour.
+
+      It therefore ends at 62%, well short of the terminator. A slab wide enough
+      to cover the old planet would erase the sunrise, which is the picture.
+    -->
+    <linearGradient id="scrim" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="${SLATE_950}" stop-opacity="0.88" />
+      <stop offset="28%" stop-color="${SLATE_950}" stop-opacity="0.8" />
+      <stop offset="44%" stop-color="${SLATE_950}" stop-opacity="0.52" />
+      <stop offset="56%" stop-color="${SLATE_950}" stop-opacity="0.2" />
+      <stop offset="68%" stop-color="${SLATE_950}" stop-opacity="0" />
     </linearGradient>
-    <radialGradient id="glow">
-      <stop offset="0%" stop-color="#e0f2fe" stop-opacity="0.9" />
-      <stop offset="35%" stop-color="#7dd3fc" stop-opacity="0.28" />
-      <stop offset="100%" stop-color="#7dd3fc" stop-opacity="0" />
-    </radialGradient>
-    <!-- The anamorphic streak. A blade, not a halo: it is the artifact the
-         front door is composed around, and it is what carries light across the
-         type instead of leaving the left third flat. -->
-    <linearGradient id="streak" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#7dd3fc" stop-opacity="0" />
-      <stop offset="38%" stop-color="#bae6fd" stop-opacity="0.30" />
-      <stop offset="50%" stop-color="#f0f9ff" stop-opacity="0.55" />
-      <stop offset="62%" stop-color="#bae6fd" stop-opacity="0.30" />
-      <stop offset="100%" stop-color="#7dd3fc" stop-opacity="0" />
-    </linearGradient>
-    <linearGradient id="blade" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#ffffff" stop-opacity="0" />
-      <stop offset="50%" stop-color="#ffffff" stop-opacity="1" />
-      <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
-    </linearGradient>
-    <mask id="bladeMask">
-      <rect x="0" y="${STAR.y - 60}" width="${OG_WIDTH}" height="120" fill="url(#blade)" />
-    </mask>
-    <!-- The poster's dark side. It has to be solid *past* the type column and
-         only then fade, or the last words of a line dissolve into the planet —
-         a lovely effect and an unreadable sentence. -->
-    <!-- The limb's scatter. A stroke alone is a drawn line; the same stroke
-         blurred under it is the width of atmosphere the stroke is claiming. -->
-    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur stdDeviation="9" />
-    </filter>
-    <linearGradient id="panel" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="${SLATE_950}" stop-opacity="1" />
-      <stop offset="52%" stop-color="${SLATE_950}" stop-opacity="1" />
-      <stop offset="74%" stop-color="${SLATE_950}" stop-opacity="0.86" />
+    <!--
+      The floor. The limb climbs into the bottom left corner under the last two
+      lines of type, and the scrim above is horizontal, so it cannot see that.
+      The same guarantee in the axis the scrim has nothing to say about.
+
+      Radial, and painted across the whole canvas rather than a rectangle over
+      the corner, because **a partial rectangle has an edge**. The first version
+      of this was a vertical gradient in a 672-wide box and the box's right side
+      was a visible seam running down through the terminator — a straight line
+      across a photograph, which is the one thing a scrim must never be. A
+      gradient that reaches zero before it reaches anything can be as wide as
+      the card.
+    -->
+    <radialGradient id="floor" cx="0.16" cy="1" r="0.66">
+      <stop offset="0%" stop-color="${SLATE_950}" stop-opacity="0.82" />
+      <stop offset="48%" stop-color="${SLATE_950}" stop-opacity="0.4" />
+      <stop offset="78%" stop-color="${SLATE_950}" stop-opacity="0.1" />
       <stop offset="100%" stop-color="${SLATE_950}" stop-opacity="0" />
-    </linearGradient>
+    </radialGradient>
   </defs>
 
-  <rect width="${OG_WIDTH}" height="${OG_HEIGHT}" fill="${SLATE_950}" />
-
-  <g>
-${STARFIELD}
-  </g>
-
-  <g>
-    <circle cx="${PLANET.x}" cy="${PLANET.y}" r="${PLANET.r}" fill="url(#planet)" />
-    <circle cx="${PLANET.x}" cy="${PLANET.y}" r="${PLANET.r + 3}" fill="none" stroke="url(#rim)" stroke-width="9" filter="url(#soft)" opacity="0.85" />
-    <circle cx="${PLANET.x}" cy="${PLANET.y}" r="${PLANET.r + 1}" fill="none" stroke="url(#rim)" stroke-width="2.5" />
-  </g>
-
-  <circle cx="${STAR.x}" cy="${STAR.y}" r="${STAR.r * 8}" fill="url(#glow)" />
-  <rect x="0" y="${STAR.y - 60}" width="${OG_WIDTH}" height="120" fill="url(#streak)" mask="url(#bladeMask)" />
-  <circle cx="${STAR.x}" cy="${STAR.y}" r="${STAR.r}" fill="#f0f9ff" />
-
-  <rect width="${OG_WIDTH * 0.78}" height="${OG_HEIGHT}" fill="url(#panel)" />
+  <rect width="${OG_WIDTH}" height="${OG_HEIGHT}" fill="url(#scrim)" />
+  <rect width="${OG_WIDTH}" height="${OG_HEIGHT}" fill="url(#floor)" />
 
   <g transform="translate(${GUTTER} 72)">
     <g transform="${markFit.attribute()}">
