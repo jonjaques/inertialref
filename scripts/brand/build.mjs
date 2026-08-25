@@ -5,9 +5,12 @@
  *     pnpm brand           re-render every artifact
  *     pnpm brand --check   fail if any of them has drifted from the source
  *
- * `design/brand/brandmark.svg` is the mark. This script is the only thing that
- * reads it, and it writes the eight places the mark, the name and the site's
- * own description end up:
+ * `design/brand/brandmark.svg` is the mark, and `design/brand/og-plate.png` is
+ * one captured frame of the renderer that the share card's type sits on — see
+ * `og.mjs` for why the card's background is a committed file rather than
+ * either a drawing or a screenshot taken at build time. This script is the only
+ * thing that reads either of them, and it writes the eight places the mark, the
+ * name and the site's own description end up:
  *
  *     apps/game/public/favicon.svg           the mark on its slate-950 plate
  *     apps/game/public/favicon.ico           for clients that still ask
@@ -41,7 +44,7 @@ import { format, getFileInfo, resolveConfig } from 'prettier'
 import { PAGES, SITE, canonicalUrl } from '../../apps/game/src/site.ts'
 import { checkPublicSurface } from './checkHead.mjs'
 import { readMark, fit, markup, measure } from './mark.mjs'
-import { composeOgCard, OG_HEIGHT, OG_WIDTH } from './og.mjs'
+import { composeOgCard, OG_HEIGHT, OG_PLATE, OG_WIDTH } from './og.mjs'
 
 const ROOT = new URL('../../', import.meta.url)
 const PUBLIC = new URL('apps/game/public/', ROOT)
@@ -447,11 +450,24 @@ async function main() {
     say(new URL(name, PUBLIC), `${size} px`)
   }
 
+  /*
+   * The share card: type over a captured frame, composited rather than drawn.
+   *
+   * `density: 96` renders the overlay at 4/3 scale and the resize takes it
+   * back down, which is the only antialiasing the type gets — resvg has no
+   * hinting and the 1 px rule under the lead would otherwise land on a half
+   * pixel. The plate is already `OG_WIDTH x OG_HEIGHT`, so nothing resamples
+   * the picture: whatever is committed is exactly what ships.
+   */
   const card = await composeOgCard()
+  const overlay = await sharp(Buffer.from(card), { density: 96 })
+    .resize(OG_WIDTH, OG_HEIGHT)
+    .png()
+    .toBuffer()
   await writeFile(
     new URL('og.png', PUBLIC),
-    await sharp(Buffer.from(card), { density: 96 })
-      .resize(OG_WIDTH, OG_HEIGHT)
+    await sharp(await readFile(OG_PLATE))
+      .composite([{ input: overlay }])
       .png({ compressionLevel: 9 })
       .toBuffer(),
   )

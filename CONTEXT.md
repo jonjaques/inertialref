@@ -3295,6 +3295,58 @@ byte-stable across versions. `og.test.mjs` holds the SVG: 1200×630, the same
 markup twice, a seeded starfield of unequal dots, and the ids that would vanish
 if a rewrite dropped the planet, the terminator mask or the streak.
 
+## The share card stopped being a drawing (24 Aug 2026)
+
+Yesterday's entry above ends "the card is still a drawing," with the reasoning
+that a screenshot would need a GPU in the build and would produce a different
+picture every regeneration. Both halves of that are true and neither is an
+argument about the _picture_ — they are arguments about the _build_. A frame
+captured once and committed answers both: `design/brand/og-plate.png` sits
+beside `brandmark.svg` as the second thing the brand is drawn from, `sharp`
+composites the type over it, and re-shooting it is a deliberate commit rather
+than a build step. The drawing it replaced was six bezier continents and a
+hand-built anamorphic blade, and at 300 px it read as grey amoebas on a blue
+ball.
+
+**The plate is a real orbital sunrise, not a beauty pass.** Earth at 1.16 body
+radii (~1020 km), phase 95° so the ground under the camera is at dusk, rolled
+6° so the limb climbs to the right and leaves the type column open sky. The
+star is aimed to (0.865, 0.205) of the frame, which puts its streak above the
+wordmark where the old drawn blade was. Captured at 3200×1680 and reduced to
+1200×630 — the reduction is the only antialiasing the limb gets, and at 1× the
+terminator stairsteps.
+
+**Shot at `flareArtifacts = 0.35`, which is the menu's stance and not the
+flight camera's.** `GameEngine.flareArtifacts` already documents why: the
+ghosts march along the line from the star through frame centre, so a star on
+the right of a poster puts the red aperture ring squarely on the paragraph on
+the left. The first plate was shot at 1 and had a 150 px hoop behind the rule.
+The value that was already correct for the front door was already correct for
+the front door's photograph.
+
+Three things about compositing type over a photograph rather than over a
+drawing:
+
+- **A partial rectangle has an edge.** The bottom-left scrim started as a
+  vertical gradient inside a 672-wide box, and the box's right side was a
+  straight vertical seam running down through the terminator. It is a radial
+  that reaches zero before it reaches anything, painted across the whole
+  canvas.
+- **The scrim can be nearly nothing, because the framing did the work.** The
+  drawn card needed a slab across 78% of the width to have anywhere to set
+  type; this one ends at 68% and never reaches opaque, because the plate was
+  framed with the column empty. A slab wide enough to cover the old planet
+  would erase the sunrise.
+- **The streak is the render's now.** Drawing a second one on top would be two
+  blades of light from one star.
+
+`pnpm brand --check` still does not pixel-diff the PNG. `og.test.mjs` holds the
+overlay — 1200×630, the same markup twice, the scrim and floor ids, and the
+assertion that the scrim's last stop is transparent and no stop is opaque,
+which is the slab creeping back. It also reads the plate's IHDR and asserts it
+is exactly the size the card is composited at, which is the one thing about a
+captured frame a test in Node can know.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

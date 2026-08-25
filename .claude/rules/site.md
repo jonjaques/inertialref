@@ -16,9 +16,14 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", `docs/hosting.md`, A
 
 - **Never edit a file `pnpm brand` writes.** `favicon.svg`, `favicon.ico`, `apple-touch-icon.png`,
   `icon-*.png`, `og.png`, `manifest.webmanifest`, `robots.txt`, `sitemap.xml` and
-  `src/icons/brandmark.ts` are all generated from `design/brand/brandmark.svg` and
-  `src/site.ts`. Edit the source, run `pnpm brand`, commit the result.
-  `pnpm brand:check` is in `pnpm check`.
+  `src/icons/brandmark.ts` are all generated from `design/brand/brandmark.svg`,
+  `design/brand/og-plate.png` and `src/site.ts`. Edit the source, run `pnpm brand`,
+  commit the result. `pnpm brand:check` is in `pnpm check`.
+- **`design/brand/og-plate.png` is the share card's background and is a capture,
+  not a drawing.** One frame of the real renderer, committed so the build stays
+  GPU-free and the card stays the same card. `scripts/brand/og.mjs` carries the
+  framing; re-shooting it is a deliberate commit, and the type is composited on
+  top rather than baked in.
 - **`index.html`'s head and `src/site.ts` are duplicated on purpose and change together.**
   No social scraper runs JavaScript, so the static head is the only card the site has;
   `DocumentMeta.tsx` covers only readers that execute scripts. `scripts/brand/checkHead.mjs`

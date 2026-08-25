@@ -153,7 +153,10 @@ its `display: table` viewport breaks `truncate`. Add a component with
 **Brand** is generated from `design/brand/brandmark.svg` via `pnpm brand`.
 Never hand-edit `favicon.svg`, the `.ico`, the apple-touch and PWA icons, the
 share card, the web manifest, `robots.txt`, `sitemap.xml`, or
-`src/icons/brandmark.ts`. `pnpm brand:check` is in `pnpm check`.
+`src/icons/brandmark.ts`. `pnpm brand:check` is in `pnpm check`. The share
+card has a second source, `design/brand/og-plate.png` — a captured frame of the
+renderer that its type is composited over. `scripts/brand/og.mjs` carries the
+framing it was shot at, so it can be shot again.
 
 **Site metadata** is duplicated on purpose: `src/site.ts` for the running
 client, `index.html` for scrapers that do not run JavaScript, and
