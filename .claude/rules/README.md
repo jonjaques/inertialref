@@ -26,9 +26,9 @@ you open a rule or `AGENTS.md`, and costs nothing the rest of the time.
 Two rules are deliberately unscoped, because no glob would fire in time for them.
 `branching.md` governs the first commit, which happens before any rule about a directory
 is relevant, and `writing.md` governs prose written into files a glob cannot predict —
-including the commit message, which is not a file in the tree at all. Both are held to a
-tighter length limit than the scoped ones for the same reason: they are in context for
-every session, including the ones that only answer a question.
+including the commit message, which is not a file in the tree at all. Both are kept under
+thirty lines for the same reason: they are in context for every session, including the
+ones that only answer a question.
 
 ## The maintenance contract
 

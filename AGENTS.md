@@ -28,6 +28,14 @@ Each invariant below is mirrored as a path-scoped one-liner in
 A drifted mirror is worse than none: it fires with authority and states the
 previous rule.
 
+That directory also holds two rules that are not mirrors of anything below.
+`branching.md` and `writing.md` carry no `paths:` and load every session, because
+the first commit and the commit message both happen before any glob would fire.
+They govern process and prose rather than the code, so they mirror
+[`docs/agents/working.md`](docs/agents/working.md) and
+[`docs/STYLE.md`](docs/STYLE.md) — the writing rules for every comment, document
+and commit message here — and are deliberately absent from the invariant map.
+
 ---
 
 ## The rules that actually matter
