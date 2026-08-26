@@ -37,7 +37,7 @@ case "$file" in
     ;;
 esac
 
-# Anything the four tsconfig projects, oxlint, vitest or the layering check would look
+# Anything the five tsconfig projects, oxlint, vitest or the layering check would look
 # at. Markdown and CSS are deliberately absent: nothing in `pnpm check` reads them.
 case "$file" in
   *.ts | *.tsx | *.mjs | *.json)

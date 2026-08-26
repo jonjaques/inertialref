@@ -123,9 +123,9 @@ Meanwhile, do the verification **CI has no way to do.** CI already runs `pnpm ch
 the PR is everything that needs a GPU, a browser, or a human eye:
 
 - **A screenshot, for anything visible.** `/drive` — `ir.shot()` for a still,
-  `ir.seekCutscene(name, frame)` then `ir.shot()` for a beat. Caption it with the scale,
-  frame or address it was taken at. Attach with `gh pr comment <n>` and reference it
-  from the body.
+  `ir.play(name)` then `ir.seekCutscene(frame)` then `ir.shot()` for a beat. Caption it
+  with the scale, frame or address it was taken at. Attach with `gh pr comment <n>` and
+  reference it from the body.
 - **A before/after pair** when the change is a correction to something that was visibly
   wrong. The pair is the argument; a paragraph describing a frame is not.
 - **A headless probe** of the specific claim the change makes, when a number is the

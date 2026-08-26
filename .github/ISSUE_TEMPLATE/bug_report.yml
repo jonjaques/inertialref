@@ -49,8 +49,8 @@ body:
         `pnpm sim` invocation — those replay exactly.
       render: shell
       placeholder: |
-        pnpm sim --seed 1 --address s:0/b:2/m:0 --ticks 4096
-        ir.seekCutscene('tng-intro', 1180); ir.shot()
+        pnpm sim --seed voyager --goto b:2.0 --ticks 4096
+        ir.play('tng-intro'); ir.seekCutscene(1180); ir.shot()
 
   - type: textarea
     id: output
