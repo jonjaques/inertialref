@@ -1,10 +1,9 @@
 /*
  * What is drawn, and who is allowed to say so.
  *
- * Four presentation fields — `showShip`, `showOrbits`, `flareArtifacts`, and
- * the observatory's target — were written on mode entry under three different
- * disciplines, none of them owned (`orbitScope` is a fifth, and arrived after
- * the stack existed, which is what the stack is for):
+ * Five presentation fields — `showShip`, `showOrbits`, `orbitScope`,
+ * `flareArtifacts`, and the observatory's target. Four of them were written on
+ * mode entry under three different disciplines, none of them owned:
  *
  *   - the menu captured the previous values and restored them
  *   - the planetarium restored to hard-coded literals, so leaving it after
@@ -34,6 +33,10 @@
  * me", so the menu → planetarium → flight round trip lands where it started
  * without any layer having to remember what it displaced. That is the bug
  * class, and a stack makes it unrepresentable rather than commented against.
+ *
+ * `orbitScope` is the field that proves the shape: it arrived after the stack
+ * existed, and it needed nothing — one more line in `resolveStances`, and the
+ * View panel's switch is a push like any other.
  *
  * The cost is that a layer must be released, and a mode that forgets holds the
  * scene hostage. That is a `useEffect` cleanup, which React already guarantees,

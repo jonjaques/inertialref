@@ -10,37 +10,35 @@ Reasoning: [ADR-0014](../../docs/adr/0014-the-record-with-holes-in-it.md),
 `docs/design/planetarium.md` § "The record that is not filled in yet".
 
 - **A field nothing has measured is a row, not an omission.** `Fact.value` is
-  `string | null`; a null requires `pending` and draws as _no data_. An absent row
-  cannot distinguish "this body has no atmosphere" from "nobody has measured this
-  body's atmosphere", and those are opposite claims about the same world.
+  `string | null`; a null requires `pending`. An absent row cannot tell "this body has
+  no atmosphere" from "nobody has measured it".
 
 - **Write the reason in the universe's voice, never the engine's.** "No magnetometer
-  has been flown through it" and "the generator does not produce one" are the same
-  fact and only the first may ship. The galaxy is _there_ — `projected` means the
-  ship's computer worked a world out from its star's parameters, not that the world
-  is fake — and the planetarium is the one screen whose whole subject is that the sky
-  is not a program. `dossier.test.ts` greps every reason for `generator`,
-  `procedural`, `not modeled`, `this build`, `engine` and `TODO`.
+  has been flown through it", not "the generator does not produce one".
+  `dossier.test.ts` greps for the vocabulary that breaks this — it cannot check that a
+  reason is _true_, and one that was false about the star shipped past it once.
 
 - **"None" is an answer and is not `no data`.** An airless body's `Envelope: None` is
-  a measurement. Collapsing it into the same grey as an unmeasured field throws away
-  the distinction the nullable value exists for.
+  a measurement.
 
-- **Derive; do not add a field to `Body` for something the panel can compute.** Density,
-  surface gravity, escape velocity, the synodic day, the parallax and the habitable
-  zone are all arithmetic over what is already stored — the catalog's own "never store
-  what the catalog can derive", one layer up.
+- **Derive; do not add a field for what the panel can compute.** Density, gravity,
+  escape velocity, the synodic day, the parallax, the habitable zone.
 
-- **Nothing about the camera belongs here.** Range, frame fill, the orbit angles and
-  the frame id are facts about where you are standing. They live in the author's
-  Camera instrument; on a page about Mars they read as a debugger.
+- **Nothing about the camera belongs here.** Range, fill, the orbit angles and the
+  frame id live in the author's Camera instrument.
 
-- **The reading is formatted here, never by `Intl`.** `toLocaleString` picks the
-  decimal separator from the browser's locale, so the same planet renders "6.371,0 km"
-  on one machine and "6,371.0 km" on another — and a test asserting either passes
-  exactly where it was written. Instruments do not translate.
+- **Divide by the radius the body actually has.** `body.radius` is `a`. For the
+  ninety-two bodies in Sol that are not spheroids it overstates the volume by up to
+  two thirds — Phobos read 1.08 g/cm³ against a published 1.88, one row under its own
+  mean radius. Use the volumetric mean.
 
-- **Sort a system for display by orbit, and never by the address.** `b:2` is the third
-  body _issued_ (ADR-0009); the two agree in Sol by accident. A body promoted to the
-  top level because the filter removed its parent sorts by the _parent's_ axis, or
-  nine moons of asteroids appear above Mercury.
+- **Print the figure an almanac prints.** The sign of `rotationPeriod` carries the
+  direction, so a retrograde body's obliquity is `180° − axialTilt`: Venus is 177.36°.
+
+- **Sort for display by orbit, never by the address** (ADR-0009). A body promoted
+  because the filter removed its parent sorts by the _parent's_ axis.
+
+- **A measurement is formatted here, never by `Intl`** — `toLocaleString` takes the
+  decimal separator from the reader's locale. **An instant is the opposite case**, and
+  `simulationTime.ts` is right to use `Intl.DateTimeFormat`: a time zone is a property
+  of whoever is looking.

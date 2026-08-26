@@ -82,7 +82,23 @@ export function PresetsPanel({ engine }: PlanetariumContext) {
                */
               className={`group flex flex-col gap-1 rounded border border-slate-700/70 bg-slate-900/50 p-0.5 transition-[border-color,background-color,scale] hover:border-sky-500/60 hover:bg-slate-800/60 active:scale-[0.96] disabled:pointer-events-none disabled:opacity-35 ${FOCUS_RING}`}
             >
-              <ShotThumb phase={shot.phase} tilt={shot.tilt} fill={shot.fill} />
+              {/*
+               * A star is always full, so its thumbnail is drawn full.
+               *
+               * `setPhase` returns immediately on a star — it *is* the light,
+               * there is no terminator to swing round — so on one of these only
+               * the `frameTarget` half runs. Drawing the authored phase there
+               * would leave nine thumbnails promising crescents and rim-lit
+               * disks that the press cannot produce, which is the one thing a
+               * thumbnail may not do. At phase 0 they collapse to what a star
+               * actually offers, which is five distinct framings, and the line
+               * under the grid says so.
+               */}
+              <ShotThumb
+                phase={subject.isStar ? 0 : shot.phase}
+                tilt={subject.isStar ? 0 : shot.tilt}
+                fill={shot.fill}
+              />
               {/* Wrapping rather than truncating. Three columns in a 19 rem
                   panel is about seven characters a line, and `truncate` turned
                   "Blue Marble" into "BLUE MARB…" — a caption for a picture,
@@ -94,6 +110,17 @@ export function PresetsPanel({ engine }: PlanetariumContext) {
             </button>
           ))}
         </div>
+        {subject.isStar && (
+          // Enabled rather than disabled, unlike the Light row below: the
+          // framing half of a shot works on anything, and `Close` on a star is
+          // exactly what somebody wants from it. What does not work is said
+          // once, here, rather than left for the reader to infer from nine
+          // presses that all do the same thing.
+          <p className="type-ui mt-1.5 text-pretty text-slate-400">
+            a star is always full — on one, a shot sets the framing and nothing
+            else
+          </p>
+        )}
       </div>
 
       <Section id="planetarium.presets.phase" title="Light">

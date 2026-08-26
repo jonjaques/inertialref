@@ -101,7 +101,19 @@ are generated from the code that draws them and cannot.
 
 **The voice rule costs a sentence per field and is enforced.** It is easy to
 write "the generator does not carry this" at two in the morning, and the test
-is what stops it reaching a player.
+is what stops it reaching a player. It walks every page this build can produce
+— Sol, its 129 bodies, and a projected system with its own — rather than a
+hand-listed few, because the population whose reasons are most tempting to
+write in the engine's voice is the one the generator invents.
+
+**The test checks the voice and cannot check the truth, and that gap has
+already been paid for.** `Published insolation` shipped with the reason "quoted
+for a planet whose host star has a measured luminosity. This one's has not" —
+printed on Earth, whose star's own page renders 1.000 L☉ two clicks away. It is
+in the universe's voice, it names an instrument, it passes the grep, and it is
+false about the universe. A reason is a _claim_, and the only thing that
+catches a wrong one is somebody reading it beside the rest of the record. Write
+them against the body in front of you, not against the branch you are in.
 
 ## Related
 

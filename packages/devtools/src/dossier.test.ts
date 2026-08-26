@@ -127,17 +127,62 @@ describe('a body’s record', () => {
      * projected body is real, it simply has not been visited. A reason that
      * said "the generator does not produce one" would tell the reader the sky
      * is a program, which is the one thing this mode may not do.
+     *
+     * **Over every page this build can produce, not a hand-listed four.** The
+     * first version named `s:SOL`, `s:SOL/b:2`, `s:SOL/b:3.0` and `s:SOL/b:5`,
+     * which never entered `discoveryGroup`'s projected branch — every Sol body
+     * carries a `measurement` — and never opened a procedurally charted system
+     * at all. That is exactly the population whose reasons are most tempting to
+     * write in the engine's voice, because it is the population the generator
+     * invents. This walks all 129 bodies of Sol, its star, and a projected
+     * system with its own.
+     *
+     * What it cannot check is whether a reason is *true*. One that claimed a
+     * host star's luminosity had not been measured shipped past this, on Earth,
+     * whose star's page renders 1.000 L☉ two clicks away. See ADR-0014.
      */
     const live = session()
     const banned =
       /generator|generated|procedural|not modeled|this build|codebase|engine|TODO|implement/i
-    for (const address of ['s:SOL', 's:SOL/b:2', 's:SOL/b:3.0', 's:SOL/b:5']) {
+    let projectedPages = 0
+    let checked = 0
+
+    for (const address of everyPage(live)) {
       const page = live.harness.dossier(address) as Dossier
+      if (page.provenance === 'projected') projectedPages += 1
       for (const fact of facts(page)) {
         if (fact.pending === undefined) continue
+        checked += 1
         expect(fact.pending, `${address} · ${fact.label}`).not.toMatch(banned)
       }
     }
+
+    // The two populations the hand-listed version could not reach.
+    expect(projectedPages).toBeGreaterThan(0)
+    expect(checked).toBeGreaterThan(500)
+  })
+
+  it('reaches the branch a body nobody has confirmed takes', () => {
+    // `discoveryGroup` has a second half for a projected body, and no Sol
+    // address enters it — every body there carries a `measurement`.
+    const live = session()
+    const projected = [...everyPage(live)]
+      .map((address) => live.harness.dossier(address))
+      .find(
+        (page): page is Dossier =>
+          // A *body*, not the star it goes round: a star's record has no
+          // discovery group at all, so the first projected page in the walk is
+          // the wrong one to assert against.
+          page !== null &&
+          page.provenance === 'projected' &&
+          page.kind !== 'star',
+      )
+    expect(projected).toBeDefined()
+    expect(valueOf(projected as Dossier, 'First observed')).toBeNull()
+    const why = facts(projected as Dossier).find(
+      (fact) => fact.label === 'First observed',
+    )?.pending
+    expect(why).toContain('projected')
   })
 
   it('lists the satellites as addresses, so the panel can send you to one', () => {
@@ -346,6 +391,33 @@ describe('the readings', () => {
 })
 
 /* ------------------------------------------------------------------------- */
+
+/**
+ * Every address this build can produce a page for: Sol, its 129 bodies, and the
+ * first projected system in reach with its own.
+ *
+ * The survey rather than a literal list, so a system gained or a body added is
+ * covered without anybody remembering to add a string.
+ */
+function* everyPage(live: Session): Generator<string> {
+  const rows = live.harness.targets({ lightYears: 8 })
+  let projected: string | null = null
+  for (const row of rows) {
+    if (row.system === 'SOL') {
+      yield row.address
+      continue
+    }
+    if (row.kind === 'system' && row.provenance === 'projected') {
+      projected ??= row.address
+    }
+  }
+  if (projected === null) return
+  yield projected
+  // Loading it is what makes its bodies addressable at all.
+  for (const body of live.harness.loadSystem(projected.split('s:')[1] ?? '')) {
+    yield body.address
+  }
+}
 
 /** Enough of a `Body` for the two period derivations, which read two fields. */
 function fakeBody(over: {

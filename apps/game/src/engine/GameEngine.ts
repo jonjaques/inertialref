@@ -20,7 +20,6 @@ import {
   cellKey,
   cellOf,
   type EntityId,
-  isDebris,
   type StarCatalog,
   type SystemId,
 } from '@inertialref/universe'
@@ -43,8 +42,10 @@ import {
   openSession,
   type OrbitPath,
   orbitPaths,
+  orbitScopeKey,
   type PresentationHost,
   type Session,
+  visibleOrbits,
 } from '@inertialref/devtools'
 import { DEFAULT_SLOT, type SaveStore } from '@inertialref/persistence'
 import type { RendererHandle } from '../render/createRenderer.ts'
@@ -700,10 +701,29 @@ export class GameEngine implements PresentationHost {
      * are one field on the path.
      */
     const focus = this.harness.observatory.target?.frame ?? null
-    const subjectAddress = this.harness.observatory.target?.address ?? null
-    // The scope is part of the key: it decides which of `all` survives, so a
-    // panel switching it has to rebuild exactly as loading a system does.
-    const key = `${systems.map((system) => system.id).join(',')}|${focus ?? ''}|${subjectAddress ?? ''}|${this.orbitScope}`
+    /*
+     * Which traces are context is `visibleOrbits`, and the key it is cached
+     * against is `orbitScopeKey` — both in `packages/devtools/src/orbitPaths.ts`
+     * and both tested there. The selection rule used to live in this method,
+     * reachable only through the frame loop, so the one thing it does — turn a
+     * hundred and twenty-nine lines into eight — had no test, and neither did
+     * the key. Both failures are silent: a key that omitted the scope leaves the
+     * View panel's switch looking dead until the reader navigates away and back.
+     */
+    const scope = {
+      focus,
+      // The frame the subject itself orbits, so its siblings can be recognized.
+      grandparent:
+        focus !== null && this.world.frames.has(focus)
+          ? this.world.frames.get(focus).parent
+          : null,
+      subject: this.harness.observatory.target?.address ?? null,
+      scope: this.orbitScope,
+    }
+    const key = orbitScopeKey(
+      systems.map((system) => system.id),
+      scope,
+    )
     if (
       key === this.#orbitsSystems &&
       this.#orbitsWorld === this.#starFieldWorld
@@ -713,44 +733,7 @@ export class GameEngine implements PresentationHost {
     this.#orbitsWorld = this.#starFieldWorld
 
     const all = systems.flatMap((system) => orbitPaths(this.world, system))
-    // The frame the subject itself orbits, so its siblings can be recognized.
-    const grandparent =
-      focus !== null && this.world.frames.has(focus)
-        ? this.world.frames.get(focus).parent
-        : null
-    /*
-     * Siblings, but only the ones that are worlds.
-     *
-     * The sibling rule was written when a star's children were eight planets.
-     * Sol has sixty-seven now — fifty-nine asteroids, comets and dwarf planets
-     * on top of the eight — and every one of their moons, and drawn all at once
-     * they are a hundred and twenty-nine lines across the frame with the subject
-     * somewhere behind them. Measured by looking at Bennu: the asteroid was a
-     * dark shape inside a wireframe cage.
-     *
-     * So a small body's orbit is drawn when it *is* the subject, or when it
-     * goes round the subject, and not merely because it shares a primary. The
-     * planets stay, because "where is this relative to the planets" is the
-     * question a planetarium exists to answer, and eight ellipses answer it.
-     *
-     * The nine dwarf planets stay too — `isDebris` is asteroids and comets
-     * only. Hiding them cost the one trace a planetarium is most often opened
-     * for: with Neptune selected, where Pluto's orbit crosses it.
-     *
-     * `orbitScope: 'all'` is the deliberate way to ask for the cage. From
-     * outside a system it is the picture — the whole architecture of the place
-     * at once — and from inside it is a fan of edge-on lines. Which is why it
-     * is a switch a reader throws rather than the default.
-     */
-    this.orbits =
-      focus === null || this.orbitScope === 'all'
-        ? all
-        : all.filter(
-            (path) =>
-              path.parent === focus ||
-              (path.parent === grandparent &&
-                (!isDebris(path.kind) || path.address === subjectAddress)),
-          )
+    this.orbits = visibleOrbits(all, scope)
     log.info('orbit traces rebuilt', {
       paths: this.orbits.length,
       of: all.length,

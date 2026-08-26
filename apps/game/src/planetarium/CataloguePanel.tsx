@@ -47,6 +47,17 @@ import { ALL_CLASSES, OBJECT_CLASSES } from './kinds.ts'
 /** How far the survey reaches. The radii a person actually asks for. */
 const RADII = ['5', '10', '25', '50'] as const
 
+/**
+ * How many systems the list will draw at once.
+ *
+ * Measured against the shipped catalog: 5 ly is 4 systems, 10 ly is 17, 25 ly
+ * is about 130, and 50 ly is **1,378** — the sweep's volume goes as r³ and the
+ * count goes with it. Two hundred covers every radius but the last one whole
+ * and holds the last one to a size React reconciles without being noticed.
+ * See the comment at the `slice`.
+ */
+const MAX_SYSTEMS = 200
+
 /** Where it opens: far enough to hold the nearest half-dozen stars. */
 const DEFAULT_RADIUS = '10'
 
@@ -165,7 +176,26 @@ export function CataloguePanel({ engine, target, focus }: PlanetariumContext) {
    * cannot disagree. Counting bodies inside a collapsed group as "shown" is
    * what the fold exists to prevent, and it read "137 shown" over nine rows.
    */
-  const folded = groups.map((group) => {
+  /*
+   * The nearest systems, and a line saying what that left out.
+   *
+   * At 50 ly the real catalog answers with 1,507 rows, 1,378 of them stars —
+   * every one a button with an SVG in it, reconciled against a fresh array
+   * twice a second, beside the render loop. The derivations are not the cost
+   * (0.19 ms at that size); React is.
+   *
+   * A cap rather than windowing, because the far end of this list is the least
+   * useful part of it: the survey is sorted nearest-first, nobody finds a star
+   * a thousand rows down by scrolling, and anything past the cap is still
+   * reachable by name through the search, which reads the whole 150 ly index.
+   * **The count below says how many were dropped** — a silent truncation reads
+   * as "this is everything within fifty light years", which is the one thing
+   * the panel would then be lying about.
+   */
+  const capped = groups.slice(0, MAX_SYSTEMS)
+  const beyondCap = groups.length - capped.length
+
+  const folded = capped.map((group) => {
     /*
      * Open by default only where the camera is, and never during a search: a
      * search matched the *star*, and expanding every hit would bury the next
@@ -418,6 +448,7 @@ export function CataloguePanel({ engine, target, focus }: PlanetariumContext) {
         <p className="type-micro shrink-0 text-slate-400 tabular-nums">
           {shown} shown
           {hidden > 0 && ` · ${hidden} filtered`}
+          {beyondCap > 0 && ` · ${beyondCap} further out, by name`}
         </p>
       )}
     </div>
