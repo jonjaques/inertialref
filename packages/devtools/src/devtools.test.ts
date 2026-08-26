@@ -419,6 +419,29 @@ describe('travel targets', () => {
     expect(sol?.detail).toContain('planets')
   })
 
+  it('writes a spectral type into an unloaded row, not a record', () => {
+    /*
+     * The regression. `CatalogStar.spectralType` is the *parsed* type — class,
+     * subclass and luminosity — and `StarSystem.star.spectralType` is the
+     * string. The two branches of this row's `detail` read one each and looked
+     * identical in the source, so every search result for a star that was not
+     * loaded rendered `[object Object] · 0.12 M☉`.
+     *
+     * Sirius is the case: never loaded in this fixture, so it takes the branch
+     * that was wrong, and it is the row a person is most likely to search for.
+     */
+    const { harness: ir } = harness()
+    const sirius = ir.search('sirius')[0]
+    expect(sirius?.loaded).toBe(false)
+    expect(sirius?.detail).not.toContain('[object Object]')
+    expect(sirius?.detail).toMatch(/^A[0-9.]*[IV]* · /)
+    // And the structured field the catalog's glyph and filters read, which has
+    // no display string to hide a record inside.
+    expect(sirius?.spectralType).toMatch(/^A/)
+    expect(sirius?.bodyKind).toBeNull()
+    expect(sirius?.colour).not.toBeNull()
+  })
+
   it('finds nothing rather than everything for an empty query', () => {
     const { harness: ir } = harness()
     expect(ir.search('')).toEqual([])

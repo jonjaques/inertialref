@@ -55,10 +55,12 @@ Violating one of these is a rewrite later, not a refactor.
   `apps/game/src/state/engineStore.ts`. Subscribe to the narrowest slice you
   need, and do not add a timer of your own — one sampler owns the rate.
 - **Never write a presentation switch directly.** `showShip`, `showOrbits`,
-  `flareArtifacts` and the observatory's target go through
+  `orbitScope`, `flareArtifacts` and the observatory's target go through
   `engine.presentation`: a mode pushes a stance on mount and releases it on
   unmount, a panel's override is another push, and `release()` restores what
-  was underneath rather than a literal.
+  was underneath rather than a literal. The rule has no carve-out for the
+  fields that look like preferences — `orbitScope` is read by the frame loop,
+  which is the other half of why it cannot be React state.
 - **Never construct a `Worker` outside `apps/game/src/engine/browserWorker.ts`.**
   Tasks are typed and versioned; the pool owns dispatch, cancellation, and
   instrumentation.
@@ -110,6 +112,18 @@ Violating one of these is a rewrite later, not a refactor.
   whether `shapeGeometryFor` returned a mesh, and everything downstream of that
   branch belongs on one side of it.
   [ADR-0013](docs/adr/0013-measured-figures.md).
+- **Never leave a field out of a record because nothing has measured it.**
+  `Fact.value` is nullable, a null draws as _no data_ with its reason attached,
+  and the panel counts them. An absent row cannot distinguish "this body has no
+  atmosphere" from "nobody has measured this body's atmosphere", and those are
+  opposite claims about the same world. **The reason is written in the
+  universe's voice, never in the engine's** — "no magnetometer has been flown
+  through it", not "the generator does not produce one". A projected world is
+  _real_; `projected` is a claim about the record rather than about the place,
+  and the planetarium is a reading room for a galaxy that is there rather than
+  a debugger with a starfield behind it. `dossier.test.ts` greps every reason
+  for the vocabulary that would break it.
+  [ADR-0014](docs/adr/0014-the-record-with-holes-in-it.md).
 - **Never read a body's figure as "unknown".** `figure: null` means **round**.
   Every planet, every large moon, Pluto and Ceres are spheroids and carry none;
   the ninety-two bodies in Sol that are not, and every generated body below
