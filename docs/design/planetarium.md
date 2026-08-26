@@ -27,8 +27,9 @@ running world**: you can leave a ship in orbit of Mars, spend ten minutes on
 Saturn's rings, and come back to find the ship exactly where it was with the
 same state hash. There is no "load a different mode".
 
-✅ **Built.** Camera, catalog, orbit traces, labels, presets, dockable panels,
-touch. What is not built is listed at the bottom.
+✅ **Built.** Camera, catalog with folds and class filters, orbit traces, labels,
+the body record, composed shots, dockable panels, touch. What is not built is
+listed at the bottom, along with the astronomy nothing has measured yet.
 
 ---
 
@@ -103,13 +104,71 @@ no time would have taught nothing about four light years.
 Everything is a **panel**, and every panel is dockable — see
 [ux](ux.md#dockable-panels).
 
-| Panel       | Answers                                                         |
-| ----------- | --------------------------------------------------------------- |
-| **Catalog** | Where can I go? Search by name or designation, browse by system |
-| **Object**  | What is this? Real data, provenance, orbit, and its address     |
-| **View**    | Names, orbit traces, the ship, the lens                         |
-| **Presets** | Lighting, framing, and a short tour                             |
-| **Time**    | Pause, warp, and what the clock is actually delivering          |
+| Panel       | Answers                                                                      |
+| ----------- | ---------------------------------------------------------------------------- |
+| **Catalog** | Where can I go? Search the whole index, fold the systems, filter the classes |
+| **Object**  | What is this? The record — physical, orbit, rotation, air, light             |
+| **View**    | Names, orbit traces, the ship, the lens, the glare                           |
+| **Shots**   | Nine composed pictures, the light on its own, and the way out                |
+| **Time**    | Pause, warp, and what the clock is actually delivering                       |
+
+The camera's own readings — range, altitude, how much of the frame the subject
+fills, the two orbit angles, the frame id — are **not** in the object panel.
+They are facts about where you are standing rather than about the thing being
+looked at, and on a page about Mars they read as a debugger. They live in the
+author's Camera instrument, beside the lens they describe.
+
+### The catalog
+
+Sol is a hundred and twenty-nine bodies, and a flat list of them in issue order
+is not something anybody browses twice. Three controls, and each answers a
+question a list cannot.
+
+**The folds.** One line per system, expanded where the camera is. The default is
+re-derived from the target on every render rather than stored — a set of _open_
+addresses freezes it, so flying to Proxima would leave Sol as the expanded one.
+What is stored is the set of systems the reader has changed.
+
+**The classes.** Six chips: stars, planets, moons, dwarfs, asteroids, comets.
+Turning off the rubble is the single most useful press in the panel. An empty
+selection means _everything_, because a filter whose worst state is an empty
+list that looks exactly like a failed survey is a control with a trap in it. A
+star whose own class is off stays when something under it survived, and a moon
+stays when its planet was the thing removed — and a promoted moon sorts by
+where its _parent_ was, or nine rocks orbiting at a kilometre appear above
+Mercury.
+
+**The radius.** 5, 10, 25 or 50 light years. A search ignores it and reaches the
+whole index, because "what is near me" and "what is called this" are different
+questions and only one of them can run per keystroke.
+
+**The neighborhood rail** is the part a list cannot be. Proxima at 4.24 ly and
+Sirius at 8.6 ly are two rows differing by a numeral and the factor of two never
+lands; on a scale it lands in 28 px. The dots are real stars at real distances
+in their real colours — [art](art.md) puts a star's colour on the list of things
+this game may not invent — and clicking one flies the camera there. The scale is
+√r: a survey's volume grows as r³, so linearly the whole neighborhood piles into
+the left tenth, and logarithmically the observer's own zero has nowhere to go.
+
+### Shots
+
+`Framing` and `Compositions` were two banks of word-buttons and they were never
+two kinds of thing — a framing is a composition that happens not to move the
+light. Nine identical rectangles of type, and the two things that separate any
+two shots are _how much of the frame the body fills_ and _where the terminator
+falls_, both of which are pictures.
+
+So they are drawn, to the geometry the solver uses: the disk's radius is
+`fill × half the frame height`, which is what `frameTarget` solves a distance
+for, and the terminator is a half-ellipse of projected width `r·cos φ`, which is
+why it collapses to a straight line at 90°. The thumbnail is a prediction rather
+than an illustration.
+
+The light stays as its own row of five phase glyphs, because changing it
+_without_ losing your framing is the commonest thing anyone does here and a
+whole shot cannot express it. The two scale jumps are absolute distances rather
+than framings — one AU from Jupiter is a planet in a frame and one AU from Sol
+is most of the inner system — so they are labelled "Step Back" and kept apart.
 
 ### Names
 
@@ -118,6 +177,15 @@ single feature that turns a rendered starfield into a planetarium. Drawn in the
 DOM over the tone-mapped frame, thinned greedily so a system seen from outside
 is a sky rather than a list, and the leader ends on the body's limb so a name
 never covers the thing it names.
+
+**A label layer is not a boolean.** Eighteen names is right for a system and
+wrong for a planet with two moons, so the density is a three-step — 8, 18, 40 —
+rather than a constant or a slider. And the thinning is greedy by _screen size_,
+which means from far enough out Sol's ninety-two asteroids and comets are the
+same handful of pixels as Mercury and take the slots in whatever order the scene
+lists them: a sky captioned with six provisional designations and no planets.
+Minor bodies are therefore a switch of their own. A dwarf planet is not in that
+class, for the same reason its orbit is drawn.
 
 ### Orbit traces
 
@@ -143,7 +211,12 @@ shows on screen:
   twenty-nine lines with the subject somewhere behind them. So an asteroid, a comet or
   a dwarf planet's orbit is drawn when it **is** the subject or goes round it,
   and the planets stay — "where is this relative to the planets" is the question
-  a planetarium exists to answer, and eight ellipses answer it.
+  a planetarium exists to answer, and eight ellipses answer it. **`Scope: all`
+  is the deliberate way to ask for the cage** — from outside a system it is the
+  picture, the whole architecture of the place at once, and from inside it is a
+  fan of edge-on lines. Which is why it is a switch a reader throws rather than
+  the default, and why it is a field on the presentation stance rather than
+  component state: the frame loop reads it.
 - **Sample in eccentric anomaly, not in time.** By Kepler's second law a
   near-parabolic body spends nearly all of its period near aphelion, so equal
   steps in time put nearly all the samples in the same place. At e = 0 the two
@@ -219,14 +292,75 @@ address. The planetarium has no ship to be in.
 
 ## Not built
 
-| Thing                        | Note                                                                                     |
-| ---------------------------- | ---------------------------------------------------------------------------------------- |
-| Bookmarks                    | ⬜ The address is already the whole record; the store is what is missing                 |
-| Filters over the catalog     | ⬜ [galaxy](galaxy.md#interactions) lists the fields; the planetarium wants the same set |
-| Measure between two objects  | ⬜ Shift-click two things, get a distance                                                |
-| Surface-level free look      | ⬜ The observatory's floor is the datum sphere; standing on the ground is a flight mode  |
-| Export a still               | ⬜ Photo mode's export, without the ship                                                 |
-| Scale tiers beyond the local | ⬜ [galaxy](galaxy.md#scale-tiers) specifies three; the local one is what exists         |
+| Thing                        | Note                                                                                                                              |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Bookmarks                    | ⬜ The address is already the whole record; the store is what is missing                                                          |
+| Measure between two objects  | ⬜ Shift-click two things, get a distance                                                                                         |
+| Surface-level free look      | ⬜ The observatory's floor is the datum sphere; standing on the ground is a flight mode                                           |
+| Export a still               | ⬜ Photo mode's export, without the ship                                                                                          |
+| Scale tiers beyond the local | ⬜ [galaxy](galaxy.md#scale-tiers) specifies three; the local one is what exists                                                  |
+| Survey status as a filter    | ⬜ [galaxy](galaxy.md#interactions) filters by what _you_ have visited. That is a gameplay fact and the planetarium has no player |
+
+Filters over the catalog are ✅ built — by class and by survey radius. What is
+not built is the half of [galaxy](galaxy.md#interactions)'s set that is about
+the player's own survey, and that half is deliberately absent: looking at Vega
+is not going there, and a mode with no ship has nothing to filter by.
+
+---
+
+## The record that is not filled in yet
+
+The object panel draws a row for every field a planetarium is expected to carry,
+including the ones nothing has measured — muted, marked **no data**, with the
+reason attached. [ADR-0014](../adr/0014-the-record-with-holes-in-it.md) is the
+argument for that; this is the list, and the engineering half of each reason.
+
+The panel's copy is written **in the universe's voice** — "no magnetometer has
+been flown through it", never "the generator does not produce one". The galaxy
+is real, `projected` means the ship's computer worked a world out from its
+star's parameters rather than anybody having flown there
+([galaxy](galaxy.md)), and a mode whose whole subject is that the sky is not a
+program may not tell a reader that it is. A test greps every reason for the
+vocabulary that would break it.
+
+### On a body
+
+| Field                   | Where the value will come from                                                                                                                                             |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Composition             | A layered interior model — core, mantle, volatile fraction — that the generator derives alongside the density it already computes. Real bodies want it packed in `solar/`. |
+| Age                     | A formation date per system, then per body. Procedural: one draw per system seed. Solar: published, not yet packed.                                                        |
+| Surface temperature     | A greenhouse model over the atmosphere that already exists, plus thermal inertia. The equilibrium figure is already right and is not the same number.                      |
+| Atmospheric composition | Gas fractions on `Atmosphere`, which currently carries a density, a scale height and a ceiling. The scattering colour is already tuned from an implied composition.        |
+| Circulation             | Bands and a jet profile on `CloudLayer`, which has a rotation rate and nothing else.                                                                                       |
+| Magnetic field          | A dipole moment from mass, rotation and composition. It is also the gate on aurora, which [art](art.md) already licenses the renderer to draw.                             |
+| Pole direction          | Right ascension and declination on `Body`. `axialTilt` is a magnitude with no direction, so nothing can place a season.                                                    |
+| Precession              | A secular term on the pole. Needs the pole first.                                                                                                                          |
+| Element drift           | Secular variation on `OrbitalElements`. The two-body solve is right at J2000 and drifts after it.                                                                          |
+| Resonances              | A relationship between two records rather than a field on either. Wants a `resonances` table per system.                                                                   |
+| Apparent magnitude      | A phase function. Size, albedo and geometry are all on file already.                                                                                                       |
+| Exosphere               | A sputtered-envelope model for airless bodies — Mercury's sodium, Luna's argon.                                                                                            |
+| Ring divisions          | Multiple annuli on `RingSystem`, plus the shepherd moons that hold the gaps open.                                                                                          |
+| Ring particle size      | A size distribution, which is also what would let the forward-scattering blaze be derived rather than tuned.                                                               |
+| Designation history     | Naming authority and prior designations, alongside the name the packed data ships.                                                                                         |
+
+### On a star
+
+| Field              | Where the value will come from                                                                                                                               |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Age, metallicity   | Isochrone fitting needs both, and neither is in the packed catalog. Metallicity is the one a future generator wants first — it sets planet occurrence rates. |
+| Rotation, activity | A rotation period from age and class, then starspots and a flare rate.                                                                                       |
+| Variability        | Luminosity is a constant. Cepheids, eclipsing binaries and long-period variables all hold still.                                                             |
+| Companions' orbits | The catalog records the component _count_; separations and mutual orbits are a second table.                                                                 |
+| Debris disk        | An infrared excess in the source data, then a belt in the generator.                                                                                         |
+| Proper motion      | A second epoch. One is packed, so nothing can move.                                                                                                          |
+| Radial velocity    | Not packed. It is what a jump planner eventually wants.                                                                                                      |
+| Constellation      | The eighty-eight boundaries, as a lookup over the J2000 sky.                                                                                                 |
+
+**Every one of these is a row on screen today.** Filling one in is a two-line
+diff — the label and its place in the group do not move — and `pendingCount` in
+the panel's header is the count going down. There is no separate ledger to keep
+in step; this table is about _sources_, and the rows themselves are generated by
+the code that draws them.
 
 ---
 
@@ -237,3 +371,4 @@ address. The planetarium has no ship to be in.
 - [galaxy](galaxy.md) — the two in-game maps this is deliberately not
 - [cinema](cinema.md) — the other mode with no ship
 - [ADR-0011](../adr/0011-application-shell-and-modes.md) — routes, modes and who owns the camera
+- [ADR-0014](../adr/0014-the-record-with-holes-in-it.md) — why an unmeasured field is a row rather than an omission

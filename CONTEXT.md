@@ -4130,6 +4130,152 @@ mechanical enforcement at all. The main checkout sits on `main`, and the
 `SessionStart` report does run there — so the guard is a branch line in context
 and a rule that reads it. That is deliberate and it is behavioral.
 
+## The planetarium panels stop describing the telescope (25 Aug 2026)
+
+Four panels, and each was answering a question next to the one it was being
+asked. The mode's subject is the sky; three of its five panels were about the
+instrument, the list, or nothing in particular.
+
+### Four rows about the telescope and one about Mars
+
+The object panel led with the range from the camera to the subject, the
+fraction of the frame the disk filled, the two orbit angles and the address
+string. Two of its five readings were about the body — a name and a radius —
+and the rest were about where you were standing.
+
+Meanwhile `packages/universe` already held a mass, a density that follows from
+it, elements at J2000, a rotation period, an axial tilt, an atmosphere as a
+surface density and a scale height, a geometric albedo, three measured
+half-extents for anything gravity never rounded off, and a discovery record for
+every confirmed exoplanet. None of it was on screen.
+
+`packages/devtools/src/dossier.ts` is the projection onto a page, and it lives
+there rather than in the panel for the reason `travel.ts` does: it is a query
+over the world, and every derivation in it deserves a Node test rather than a
+component that has to be rendered to be checked. Earth comes out at 1.01 bar
+from `p = ρgH`, a 24.00 h solar day against a 23.93 h sidereal one, 1,361 W/m²
+of insolation, and a Sun 0.533° across — all four of which are the published
+figures, from arithmetic over what the generator already stored.
+
+Two derivations were wrong the first way they were written, and both are
+properties now.
+
+**The synodic day takes the period about the _star_, not about whatever the
+body immediately orbits.** Luna is tidally locked, so its rotation period and
+its month are equal and the difference of their reciprocals is zero — an
+infinite day, for a body whose sunrises are 29.5 days apart. What moves the Sun
+across a moon's sky is its planet's year, and against Earth's 365.25 days the
+same subtraction gives the synodic month exactly.
+
+**The sign of the rotation is kept.** Dropping it puts Venus's solar day at
+2,802 days instead of 117 and looks entirely plausible in a panel.
+
+### An unmeasured field is a row
+
+Writing that page forced the question this project had not had to answer: what
+does the interface do about the astronomy it does not have? The list is long
+and none of it is obscure — composition, surface temperature as opposed to
+equilibrium temperature, magnetic field, atmospheric chemistry, age, proper
+motion, metallicity, orbital resonance.
+
+Omitting the row destroys information. An absent "Atmosphere" cannot
+distinguish _this body has no atmosphere_ from _nobody has measured this body's
+atmosphere_, and those are opposite claims about the same world.
+
+So `Fact.value` is nullable, a null draws as **no data** with the reason behind
+it, and the header counts them: _12 unmeasured_ on Earth.
+[ADR-0014](docs/adr/0014-the-record-with-holes-in-it.md) is the whole argument.
+The part worth repeating here is the voice rule: **the reason is written in the
+universe's terms and never in the engine's.** "No spectrometer has resolved
+this body's interior" and "the generator does not produce a composition" are
+the same fact and only the first may be shown. A projected world is _real_ —
+`projected` is a claim about the record, not about the place — and a row
+reading "not modeled yet" tells the reader the sky is a program, on the one
+screen whose entire subject is that it is not. A test greps every reason on
+four representative pages for `generator`, `procedural`, `not modeled`, `this
+build`, `engine` and `TODO`.
+
+### The catalog could not be folded, and its order was not an order
+
+Sol is a hundred and twenty-nine bodies. The panel listed all of them, flat, in
+the order the addresses were issued, with three glyphs across nine classes.
+
+Three separate bugs came out of that shape.
+
+**Issue order is not orbital order.** ADR-0009 says `b:2` is the third body
+ever _issued_, and the two agree in Sol by historical accident. The tree is
+sorted outward now, over the `parent` field the survey already answers.
+
+**A promoted moon sorted by its own orbit.** Turning off "Asteroids" orphans
+their moons, and the design keeps an orphan rather than dropping it — losing Io
+because "Planets" is off would be a filter deciding what a moon is. But sorted
+by its own semi-major axis, a moon of an asteroid orbits at a kilometre or two
+and lands _above Mercury_: nine rocks nobody asked for at the head of the list,
+measured in kilometres in a column of AU. The sort key for a promoted body is
+its parent's axis now, taken from the run before the filter.
+
+**`searchTargets` was interpolating a parsed record into a string.**
+`CatalogStar.spectralType` is a `SpectralType`, not the string, so every search
+result for a star that was not loaded read `[object Object] · 0.12 M☉`. The
+loaded branch reads `system.star.spectralType`, which _is_ the string, and the
+two looked identical in the source.
+
+### A brightness floor is desaturation
+
+The neighborhood rail and the catalog's star glyphs carry each star's own
+colour, which `docs/design/art.md` puts on the list of things this game may not
+invent — "a K dwarf is orange, it does not get to be a nicer orange". The first
+version lifted every channel toward white by 0.45 so a saturated M-dwarf red
+would be legible at 12 px over slate. It turned the whole neighborhood into
+pale peach and Sirius into off-white: a rail of nine identical dots.
+
+It did not need one. `blackbodyColour` normalizes the brightest channel to 1,
+so every star already has a channel at full and no glyph can come out dim. What
+the floor was buying was already there, and the hue was what was being spent
+for it. The transfer function stays — linear to gamma-encoded sRGB, because an
+M dwarf's blue channel is 0.16 linear, which is 111 encoded and 41 not.
+
+### Year zero is not a year
+
+`SolarBody.discoveryYear` uses `0` for the bodies known since antiquity, and
+rendering it as a number produced `First observed 0` on Earth. It is not an
+empty field either: "nobody wrote down when this was first seen" is a stronger
+answer than a date. It reads **Antiquity** now, and Uranus still reads 1781.
+
+The same class of bug, one clause along: `starSummary` divides by the Sun's
+luminosity and quotes a distance from Sol, so without a branch for the Sun
+itself it wrote "catalogued at 0.00 light years, putting out 1.000 times
+fainter than the Sun" — wrong twice, about the one star every reader looks at
+first.
+
+### Two banks of word-buttons that were the same kind of thing
+
+`Framing` had three buttons and `Compositions` had six. A framing is a
+composition that happens not to move the light, so they were one list badly
+split — and either way they were nine identical rectangles of type, when the
+only two things separating any two shots are how much of the frame the body
+fills and where the terminator falls. Both are pictures.
+
+They are drawn now, to the geometry the solver uses: the disk's radius is
+`fill × half the frame height`, which is what `frameTarget` solves a distance
+for, and the terminator is a half-ellipse of projected width `r·cos φ`, which
+is why it collapses to a straight line at exactly 90°. Checked against the
+running app: pressing **Backlit** put Earth on screen as a dark disk inside a
+thin warm ring of its own atmosphere, with the night-side city lights showing —
+which is the thumbnail, at full size.
+
+### What is now a stance field
+
+`orbitScope` — the subject's context, or every orbit in the system — is the
+fifth field on `Stance`, because the frame loop reads it and a presentation
+switch has no carve-out for the ones that look like preferences. It arrived
+after the stack existed, which is what the stack is for: a panel's override is
+a one-field push and `release()` restores the mode's.
+
+Label density and the minor-body filter did _not_ become stance fields, and the
+line is worth stating: they are read by a DOM layer that already owns its own
+projection pass, not by `GameEngine.#step`.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

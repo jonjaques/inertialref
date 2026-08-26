@@ -331,7 +331,7 @@ function starDossier(world: World, system: StarSystem): Dossier {
         {
           label: 'Confirmed',
           value: `${system.observedPlanets} of ${census.planets + census.dwarfs}`,
-          note: 'the rest are projections',
+          note: 'the rest projected',
         },
         {
           label: 'In the habitable zone',
@@ -374,12 +374,12 @@ function starDossier(world: World, system: StarSystem): Dossier {
         {
           label: 'Habitable zone',
           value: `${round(zone.inner / AU, 3)} – ${round(zone.outer / AU, 3)} AU`,
-          note: 'where a rocky world with air could hold liquid water',
+          note: 'liquid water, on a world with air',
         },
         {
           label: 'Frost line',
           value: `${round(frost / AU, 3)} AU`,
-          note: 'beyond it, volatiles survive and giants can form',
+          note: 'volatiles survive beyond it',
         },
       ],
     },
@@ -551,7 +551,7 @@ function physicalGroup(body: Body): FactGroup {
       value: kilometres(
         Math.cbrt(body.radius * figure.intermediateRadius * body.polarRadius),
       ),
-      note: 'the sphere of the same volume',
+      note: 'same volume',
     })
   }
 
@@ -616,23 +616,28 @@ function orbitGroup(world: World, body: Body, primary: Body | null): FactGroup {
     value: round(elements.eccentricity, 4),
     note: eccentricityWord(elements.eccentricity),
   })
+  /*
+   * The three angles, and the symbol lives in the *label*.
+   *
+   * A note is a gloss — a second reading of the same quantity, in the unit a
+   * person thinks in — and it is set small and right-aligned under the value.
+   * "Ω — where it crosses the plane going north" is not a gloss, it is a
+   * definition, and at that width it wrapped to three lines under a number
+   * three characters long. The symbol is the thing an astronomer reads and it
+   * belongs beside the name of the element; the definition is a tooltip's job.
+   */
   facts.push({
     label: 'Inclination',
     value: `${round(degrees(elements.inclination), 3)}°`,
-    note:
-      primary === null
-        ? 'to the system’s reference plane'
-        : `to ${primary.name}’s equator`,
+    note: primary === null ? 'to the plane' : `to ${primary.name}’s equator`,
   })
   facts.push({
-    label: 'Ascending node',
+    label: 'Ascending node Ω',
     value: `${round(degrees(elements.longitudeOfAscendingNode), 2)}°`,
-    note: 'Ω — where it crosses the plane going north',
   })
   facts.push({
-    label: 'Argument of periapsis',
+    label: 'Periapsis argument ω',
     value: `${round(degrees(elements.argumentOfPeriapsis), 2)}°`,
-    note: 'ω — from the node round to closest approach',
   })
   facts.push({ label: 'Periapsis', value: span(periapsis(elements)) })
   facts.push({ label: 'Apoapsis', value: span(apoapsis(elements)) })
@@ -788,12 +793,12 @@ function atmosphereGroup(body: Body): FactGroup {
     {
       label: 'Scale height',
       value: kilometres(air.scaleHeight),
-      note: 'where the density falls to 1/e',
+      note: 'density falls to 1/e',
     },
     {
       label: 'Ceiling',
       value: kilometres(air.ceiling),
-      note: 'the top of the sensible atmosphere',
+      note: 'the sensible atmosphere ends',
     },
   ]
   const haze = body.appearance.haze
@@ -956,8 +961,24 @@ function discoveryGroup(body: Body): FactGroup {
       ],
     }
   }
+  /*
+   * Year zero is not a year.
+   *
+   * `SolarBody.discoveryYear` uses 0 for "known since antiquity", which is the
+   * six naked-eye planets plus Luna and the Sun — and rendered as a number it
+   * came out as `First observed 0`, which is both meaningless and the kind of
+   * sentinel leaking into a readout that this whole panel is meant not to do.
+   * It is also not an empty field: "nobody wrote down when this was first
+   * seen" is an answer, and a stronger one than a date.
+   */
   const facts: Fact[] = [
-    { label: 'First observed', value: `${measured.discoveryYear}` },
+    measured.discoveryYear > 0
+      ? { label: 'First observed', value: `${measured.discoveryYear}` }
+      : {
+          label: 'First observed',
+          value: 'Antiquity',
+          note: 'known before anybody recorded when',
+        },
     { label: 'Method', value: measured.discoveryMethod },
   ]
   /*
@@ -970,13 +991,13 @@ function discoveryGroup(body: Body): FactGroup {
     facts.push({
       label: 'Mass basis',
       value: 'Lower bound',
-      note: 'M sin i, from radial velocity',
+      note: 'M sin i, radial velocity',
     })
   else if (measured.massInferred)
     facts.push({
       label: 'Mass basis',
       value: 'Inferred',
-      note: 'from the radius, by a mass–radius relation',
+      note: 'from the radius',
     })
   else facts.push({ label: 'Mass basis', value: 'Measured' })
   facts.push({
@@ -1082,10 +1103,21 @@ function starSummary(
   census: Census,
   cataloged: CatalogStar | undefined,
 ): string {
+  /*
+   * Three clauses, and each has a case that only shows up on one star.
+   *
+   * The Sun is the denominator of two of them, so writing the sentence without
+   * a branch for it produces "catalogued at 0.00 light years, putting out 1.000
+   * times fainter than the Sun" — which is wrong twice about the one star every
+   * reader will look at first.
+   */
+  const ratio = star.luminosity / SOLAR_LUMINOSITY
   const brightness =
-    star.luminosity > SOLAR_LUMINOSITY
-      ? `${significant(star.luminosity / SOLAR_LUMINOSITY)} times the Sun’s output`
-      : `${significant(SOLAR_LUMINOSITY / star.luminosity)} times fainter than the Sun`
+    Math.abs(ratio - 1) < 0.005
+      ? 'the Sun’s own output'
+      : ratio > 1
+        ? `${significant(ratio)} times the Sun’s output`
+        : `${significant(1 / ratio)} times less light than the Sun`
   const worlds =
     census.planets === 0
       ? 'No planets are charted here'
@@ -1093,7 +1125,9 @@ function starSummary(
   const seen =
     cataloged === undefined
       ? 'Charted from stellar parameters'
-      : `Catalogued at ${round(cataloged.distanceLightYears, 2)} light years`
+      : cataloged.distanceLightYears < 0.001
+        ? 'The star every distance in this catalog is measured from'
+        : `Catalogued at ${round(cataloged.distanceLightYears, 2)} light years`
   return `${seen}: ${colourWord(star.temperature)}, ${round(star.temperature, 0)} K, putting out ${brightness}. ${worlds}.`
 }
 

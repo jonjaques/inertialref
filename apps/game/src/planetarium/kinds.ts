@@ -143,27 +143,32 @@ export function acceptsRow(
 /**
  * A star's own colour as a CSS string, or null for a body.
  *
- * The catalog carries linear sRGB — the value the renderer lights the sky with
- * — and CSS wants the gamma-encoded form, so this is the transfer function and
- * not a `Math.round` of three floats. Without it every star comes out
- * noticeably darker in the panel than it is in the frame, and the M dwarfs that
- * are three quarters of the neighborhood come out nearly black.
+ * The catalog carries **linear** sRGB — the value the renderer lights the sky
+ * with — and CSS wants the gamma-encoded form, so this is the transfer function
+ * and not a `Math.round` of three floats. Without it every star comes out
+ * noticeably darker in the panel than it is in the frame: an M dwarf's blue
+ * channel is 0.16 linear, which is 111 encoded and 41 not.
  *
- * Lifted toward white by `FLOOR`, and that is the one licensed part: hue is
- * fixed by physics (`docs/design/art.md`) and how vividly it is rendered is a
- * sensor choice. A fully saturated M-dwarf red at 12 px on a slate panel is a
- * glyph nobody can see, which is not a more honest reading of the temperature.
+ * **Nothing else is done to it.** A brightness floor was tried first, on the
+ * argument that a saturated M-dwarf red at 12 px over slate is hard to see —
+ * and lifting every channel toward white is *desaturation*, which is the one
+ * move `docs/design/art.md` forbids by name: "A K dwarf is orange. It does not
+ * get to be a nicer orange." At 0.45 it turned the whole neighborhood into pale
+ * peach and Sirius into off-white, which is a rail of nine identical dots.
+ *
+ * It does not need one. `blackbodyColour` normalizes the brightest channel to
+ * 1, so every star has a channel at full and no glyph can come out dim — the
+ * legibility the floor was buying is already there, and the hue is what was
+ * being spent for it.
  */
-const FLOOR = 0.45
-
 export function starColour(colour: TravelTarget['colour']): string | null {
   if (colour === null) return null
   const channel = (linear: number): number => {
-    const lifted = FLOOR + (1 - FLOOR) * Math.min(1, Math.max(0, linear))
+    const value = Math.min(1, Math.max(0, linear))
     const encoded =
-      lifted <= 0.003_130_8
-        ? 12.92 * lifted
-        : 1.055 * Math.pow(lifted, 1 / 2.4) - 0.055
+      value <= 0.003_130_8
+        ? 12.92 * value
+        : 1.055 * Math.pow(value, 1 / 2.4) - 0.055
     return Math.round(encoded * 255)
   }
   return `rgb(${channel(colour.r)} ${channel(colour.g)} ${channel(colour.b)})`

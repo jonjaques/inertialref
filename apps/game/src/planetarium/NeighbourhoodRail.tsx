@@ -104,8 +104,12 @@ export function NeighbourhoodRail({
           midpoint label sits where a quarter of the radius actually falls. */}
       <div className="type-micro relative h-3 text-slate-500 tabular-nums">
         <span className="absolute left-0">here</span>
+        {/* A quarter of the radius, because the scale is √r and this is the
+            halfway mark on it. One decimal: at a 10 ly sweep the midpoint is
+            2.5 ly, and rounding it to "3" puts a wrong number under a tick
+            that is drawn in exactly the right place. */}
         <span className="absolute left-1/2 -translate-x-1/2">
-          {(radiusLightYears / 4).toFixed(radiusLightYears < 8 ? 1 : 0)}
+          {(radiusLightYears / 4).toFixed(1)}
         </span>
         <span className="absolute right-0">{radiusLightYears} ly</span>
       </div>

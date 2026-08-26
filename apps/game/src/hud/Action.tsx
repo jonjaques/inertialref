@@ -63,7 +63,20 @@ export function Action({
        * — but every hand-written control in `hud/` says `rounded`, and one
        * spelling is what makes a grep for the dock's radius answer.
        */
-      className={`type-ui min-h-6 min-w-6 rounded border px-1.5 py-0.5 font-normal whitespace-nowrap shadow-none disabled:opacity-35 ${FOCUS_RING} ${TONE[tone]}`}
+      /*
+       * `active:scale-[0.96]`, and the property list is written out.
+       *
+       * A press with no acknowledgement reads as a control that might not have
+       * heard, which in this dock is most of them — the effect of an `Action`
+       * is usually somewhere else on screen, and a few of them are no-ops on
+       * purpose (the `1×` readout in the time transport asserts a state rather
+       * than changing one). 0.96 because anything under 0.95 reads as the
+       * button being squashed rather than pressed. Never `transition-all`:
+       * `Button` already animates `color` and `box-shadow`, and adding `all` on
+       * top of that animates the border, the background and the opacity of
+       * every disabled state as well.
+       */
+      className={`type-ui min-h-6 min-w-6 rounded border px-1.5 py-0.5 font-normal whitespace-nowrap shadow-none transition-transform active:scale-[0.96] disabled:opacity-35 ${FOCUS_RING} ${TONE[tone]}`}
     >
       {label}
     </Button>

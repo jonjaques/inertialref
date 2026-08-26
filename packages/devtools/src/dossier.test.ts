@@ -164,6 +164,20 @@ describe('a body’s record', () => {
     )
   })
 
+  it('does not print a sentinel year as a year', () => {
+    /*
+     * `SolarBody.discoveryYear` is 0 for the bodies known since antiquity, and
+     * a panel that renders it renders `First observed 0`. It is not an empty
+     * field either — "nobody wrote down when this was first seen" is a stronger
+     * answer than a date.
+     */
+    const live = session()
+    const earth = live.harness.dossier('s:SOL/b:2') as Dossier
+    expect(valueOf(earth, 'First observed')).toBe('Antiquity')
+    const uranus = live.harness.dossier('s:SOL/b:6') as Dossier
+    expect(valueOf(uranus, 'First observed')).toBe('1781')
+  })
+
   it('returns null rather than throwing on an address that names nothing', () => {
     const live = session()
     expect(live.harness.dossier('s:SOL/b:9999')).toBeNull()
@@ -180,6 +194,18 @@ describe('a star’s record', () => {
     // bounds, and its frost line is the 2.7 AU the giants form beyond.
     expect(valueOf(sol, 'Habitable zone')).toMatch(/AU$/)
     expect(valueOf(sol, 'Frost line')).toBe('2.700 AU')
+  })
+
+  it('does not describe the Sun as fainter than the Sun', () => {
+    // The Sun is the denominator of two clauses in that sentence, so writing
+    // it without a branch produced "catalogued at 0.00 light years, putting out
+    // 1.000 times fainter than the Sun" — wrong twice, about the one star every
+    // reader looks at first.
+    const live = session()
+    const sol = live.harness.dossier('s:SOL') as Dossier
+    expect(sol.summary).not.toMatch(/0\.00 light years/)
+    expect(sol.summary).not.toMatch(/1\.00 times/)
+    expect(sol.summary).toContain('the Sun’s own output')
   })
 
   it('counts planets rather than bodies', () => {

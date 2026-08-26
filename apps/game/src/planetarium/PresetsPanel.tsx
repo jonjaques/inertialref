@@ -49,7 +49,13 @@ export function PresetsPanel({ engine }: PlanetariumContext) {
 
   return (
     <div className="flex flex-col gap-1">
-      <Section id="planetarium.presets.shots" title="Shots">
+      {/*
+       * The grid is the panel's subject, so it carries no heading of its own.
+       * A `Section` titled "Shots" inside a panel titled "Shots" is the word
+       * twice in forty pixels, and the disclosure it would buy is the panel's
+       * own collapse doing the same job one row up.
+       */}
+      <div className="mb-2">
         <div className="grid grid-cols-3 gap-1.5">
           {SHOTS.map((shot) => (
             <button
@@ -77,13 +83,18 @@ export function PresetsPanel({ engine }: PlanetariumContext) {
               className={`group flex flex-col gap-1 rounded border border-slate-700/70 bg-slate-900/50 p-0.5 transition-[border-color,background-color,scale] hover:border-sky-500/60 hover:bg-slate-800/60 active:scale-[0.96] disabled:pointer-events-none disabled:opacity-35 ${FOCUS_RING}`}
             >
               <ShotThumb phase={shot.phase} tilt={shot.tilt} fill={shot.fill} />
-              <span className="type-label truncate px-0.5 pb-0.5 text-center text-slate-300 transition-colors group-hover:text-sky-200">
+              {/* Wrapping rather than truncating. Three columns in a 19 rem
+                  panel is about seven characters a line, and `truncate` turned
+                  "Blue Marble" into "BLUE MARB…" — a caption for a picture,
+                  cut off. The grid row grows to the tallest card, so two lines
+                  cost nothing that a shorter, worse name would have saved. */}
+              <span className="type-label px-0.5 pb-0.5 text-center leading-tight text-balance text-slate-300 transition-colors group-hover:text-sky-200">
                 {shot.label}
               </span>
             </button>
           ))}
         </div>
-      </Section>
+      </div>
 
       <Section id="planetarium.presets.phase" title="Light">
         <div className="flex flex-wrap gap-1">

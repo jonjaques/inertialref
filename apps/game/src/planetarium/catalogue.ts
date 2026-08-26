@@ -55,18 +55,20 @@ export function groupBySystem(
   const groups: {
     system: TravelTarget
     bodies: TravelTarget[]
+    all: TravelTarget[]
     total: number
   }[] = []
   let current: (typeof groups)[number] | null = null
 
   for (const row of rows) {
     if (row.kind === 'system') {
-      current = { system: row, bodies: [], total: 0 }
+      current = { system: row, bodies: [], all: [], total: 0 }
       groups.push(current)
       continue
     }
     if (current === null) continue
     current.total += 1
+    current.all.push(row)
     if (acceptsRow(row, chosen)) current.bodies.push(row)
   }
 
@@ -80,7 +82,9 @@ export function groupBySystem(
     )
     .map((group) => ({
       system: group.system,
-      bodies: orbitalOrder(group.bodies),
+      // The unfiltered run as well, so a body whose parent the filter removed
+      // can still be sorted by where its parent was. See `orbitalOrder`.
+      bodies: orbitalOrder(group.bodies, group.all),
       total: group.total,
     }))
 }
@@ -93,21 +97,39 @@ export function groupBySystem(
  * address to find its prefix is re-implementing `parseAddress` in a component —
  * and the survey already answers the question.
  *
- * A body whose parent is missing from this list — because the filter removed
- * the planet but kept its moons — is kept at the top level rather than dropped.
- * Losing Io because "Planets" is off is a filter deciding what a *moon* is.
+ * **A body whose parent the filter removed is promoted, not dropped, and it is
+ * sorted by where its parent was.** Losing Io because "Planets" is off would be
+ * a filter deciding what a *moon* is. But a promoted moon sorted by its own
+ * semi-major axis is worse than either: turning off "Asteroids" in Sol left
+ * Dimorphos, Selam, Dactyl and six more sitting *above Mercury*, because a moon
+ * of an asteroid orbits at a kilometre or two and the planets orbit at tenths
+ * of an AU. Nine rocks nobody asked for, at the top of the list, measured in
+ * kilometres in a column of AU.
+ *
+ * So the sort key for a promoted body is its parent's axis, taken from `all` —
+ * the run before the filter. It lands where Didymos would have been, which is
+ * the only place in the list that means anything.
  */
 export function orbitalOrder(
   bodies: readonly TravelTarget[],
+  /** The same system's bodies before the filter. Defaults to `bodies`. */
+  all: readonly TravelTarget[] = bodies,
 ): readonly TravelTarget[] {
   const present = new Set(bodies.map((body) => body.address))
+  const axisOf = new Map(all.map((body) => [body.address, body.semiMajorAxis]))
   const children = new Map<string, TravelTarget[]>()
   const roots: TravelTarget[] = []
+  const key = new Map<string, number>()
 
   for (const body of bodies) {
     const parent = body.parent
     if (parent === null || !present.has(parent)) {
       roots.push(body)
+      key.set(
+        body.address,
+        (parent === null ? undefined : axisOf.get(parent)) ??
+          body.semiMajorAxis,
+      )
       continue
     }
     const siblings = children.get(parent)
@@ -116,7 +138,8 @@ export function orbitalOrder(
   }
 
   const outward = (a: TravelTarget, b: TravelTarget): number =>
-    a.semiMajorAxis - b.semiMajorAxis
+    (key.get(a.address) ?? a.semiMajorAxis) -
+    (key.get(b.address) ?? b.semiMajorAxis)
   const ordered: TravelTarget[] = []
   const walk = (level: TravelTarget[]): void => {
     for (const body of [...level].sort(outward)) {

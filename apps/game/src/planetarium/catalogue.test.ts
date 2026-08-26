@@ -165,6 +165,49 @@ describe('orbital order', () => {
     expect(indentOf(ordered[0] as TravelTarget, new Set())).toBe(1)
   })
 
+  it('sorts a promoted moon by where its parent was, not by its own orbit', () => {
+    /*
+     * The bug the second argument exists for. Turning off "Asteroids" in Sol
+     * left Dimorphos, Selam, Dactyl and six more sitting *above Mercury*: a
+     * moon of an asteroid orbits at a kilometre or two and the planets orbit at
+     * tenths of an AU, so promoting them to the top level put nine rocks nobody
+     * asked for at the head of the list, measured in kilometres in a column of
+     * AU.
+     */
+    const didymos = row({ address: 's:X/b:9', semiMajorAxis: 1.64 * AU })
+    const dimorphos = row({
+      address: 's:X/b:9.0',
+      depth: 2,
+      parent: 's:X/b:9',
+      semiMajorAxis: 1190,
+    })
+    const mercury = row({ address: 's:X/b:0', semiMajorAxis: 0.39 * AU })
+    const ordered = orbitalOrder(
+      [mercury, dimorphos],
+      [mercury, didymos, dimorphos],
+    )
+    expect(ordered.map((body) => body.address)).toEqual([
+      's:X/b:0',
+      's:X/b:9.0',
+    ])
+  })
+
+  it('falls back to its own orbit when the parent is not in either list', () => {
+    // Nothing in the survey produces this, and a sort key of `undefined`
+    // silently sorts everything to one end.
+    const orphan = row({
+      address: 's:X/b:9.0',
+      depth: 2,
+      parent: 's:X/b:9',
+      semiMajorAxis: 1190,
+    })
+    const inner = row({ address: 's:X/b:0', semiMajorAxis: 0.39 * AU })
+    expect(orbitalOrder([inner, orphan]).map((body) => body.address)).toEqual([
+      's:X/b:9.0',
+      's:X/b:0',
+    ])
+  })
+
   it('indents a moon under a planet that is on screen', () => {
     const moon = row({ address: 's:X/b:1.0', depth: 2, parent: 's:X/b:1' })
     expect(indentOf(moon, new Set(['s:X/b:1']))).toBe(2)
