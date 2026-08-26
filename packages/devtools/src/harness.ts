@@ -1037,6 +1037,7 @@ export class GameHarness {
       '  ir.summary()                  one-line state',
       '  ir.status()                   full structured state',
       '  ir.inspect(id?)               one entity, in detail',
+      '  ir.dossier(address)           one star or body, as a page of astronomy',
       '  ir.step(ticks) / ir.runSeconds(s)',
       '  ir.pause() / ir.resume() / ir.timeWarp(x)',
       '  ir.control({translation,rotation}) / ir.hold()',

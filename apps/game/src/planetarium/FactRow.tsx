@@ -38,7 +38,7 @@ export function FactRow({ fact }: { fact: Fact }) {
           <TooltipTrigger asChild>
             <button
               type="button"
-              className={`type-readout cursor-help rounded text-right text-slate-500 underline decoration-slate-600 decoration-dotted underline-offset-4 transition-colors hover:text-slate-300 ${FOCUS_RING}`}
+              className={`type-readout cursor-help rounded text-right text-slate-400 underline decoration-slate-400/50 decoration-dotted underline-offset-4 transition-colors hover:text-slate-300 ${FOCUS_RING}`}
             >
               no data
             </button>
@@ -54,8 +54,18 @@ export function FactRow({ fact }: { fact: Fact }) {
           <span className="type-readout text-right text-slate-200">
             {fact.value}
           </span>
+          {/*
+           * The gloss is `slate-400`, which is also the label's grade — and it
+           * is not a missing distinction. `slate-500` measures 3.2:1 against
+           * the Sun filling the frame and 4.24:1 on a fully opaque panel, so no
+           * alpha and no darker ground gets it to 4.5:1; 400 is the floor and
+           * there is nothing below it to be subordinate in. What separates a
+           * label from a gloss here is position, face and size — sentence-case
+           * sans on the left against a mono micro reading on the right — which
+           * is what `DESIGN.md` § Neutral says to use once the grade runs out.
+           */}
           {fact.note !== undefined && (
-            <span className="type-micro text-right text-slate-500">
+            <span className="type-micro text-right text-slate-400">
               {fact.note}
             </span>
           )}

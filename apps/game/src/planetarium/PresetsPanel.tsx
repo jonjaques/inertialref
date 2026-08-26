@@ -115,7 +115,7 @@ export function PresetsPanel({ engine }: PlanetariumContext) {
             </Button>
           ))}
         </div>
-        <p className="type-ui mt-1.5 text-pretty text-slate-500">
+        <p className="type-ui mt-1.5 text-pretty text-slate-400">
           {subject.isStar
             ? // A star has no phase: it is the light source. Saying so beats
               // five buttons that appear to do nothing.
@@ -143,7 +143,7 @@ export function PresetsPanel({ engine }: PlanetariumContext) {
             against the subject's radius and means the same thing at a moon and
             at a star, and these are absolute. One AU from Jupiter is a planet
             in a frame; one AU from Sol is most of the inner system. */}
-        <p className="type-ui mt-1.5 text-pretty text-slate-500">
+        <p className="type-ui mt-1.5 text-pretty text-slate-400">
           absolute distances, not framings — the way out to where a system is a
           point
         </p>

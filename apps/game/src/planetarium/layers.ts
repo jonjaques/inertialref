@@ -1,3 +1,6 @@
+import type { OrbitScope } from '../engine/presentation.ts'
+import { oneOf } from '../hud/panelState.ts'
+
 /*
  * The names for the things the View panel switches on and off.
  *
@@ -25,12 +28,17 @@ export const LABEL_DENSITIES: readonly LabelDensity[] = [
   'dense',
 ]
 
-export const isLabelDensity = (value: unknown): value is LabelDensity =>
-  typeof value === 'string' &&
-  (LABEL_DENSITIES as readonly string[]).includes(value)
+/*
+ * `oneOf` from `hud/panelState.ts`, which is the closed-set validator every
+ * persisted setting already goes through. Written out, each of these is a
+ * third and fourth copy of the same three lines — and `isOrbitScope` had also
+ * re-declared `OrbitScope` as a literal union, so adding a scope in
+ * `presentation.ts` would leave a narrower predicate compiling happily and
+ * silently rejecting the stored value.
+ */
+export const isLabelDensity = oneOf(LABEL_DENSITIES)
 
 /** See `engine/presentation.ts` § `OrbitScope` for what the two mean. */
-export const ORBIT_SCOPES = ['context', 'all'] as const
+export const ORBIT_SCOPES: readonly OrbitScope[] = ['context', 'all']
 
-export const isOrbitScope = (value: unknown): value is 'context' | 'all' =>
-  value === 'context' || value === 'all'
+export const isOrbitScope = oneOf(ORBIT_SCOPES)

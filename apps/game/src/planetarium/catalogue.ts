@@ -1,4 +1,5 @@
 import { AU, LIGHT_YEAR } from '@inertialref/shared'
+import { parseAddress, systemOf } from '@inertialref/universe'
 import type { TravelTarget } from '@inertialref/devtools'
 import { acceptsRow } from './kinds.ts'
 
@@ -115,6 +116,10 @@ export function orbitalOrder(
   /** The same system's bodies before the filter. Defaults to `bodies`. */
   all: readonly TravelTarget[] = bodies,
 ): readonly TravelTarget[] {
+  // A 50 ly sweep is fourteen hundred systems and all but one of them is an
+  // unloaded stub with no bodies at all, so the empty walk — a Set, two Maps
+  // and two arrays each — is most of what this function is asked to do.
+  if (bodies.length === 0) return bodies
   const present = new Set(bodies.map((body) => body.address))
   const axisOf = new Map(all.map((body) => [body.address, body.semiMajorAxis]))
   const children = new Map<string, TravelTarget[]>()
@@ -149,6 +154,26 @@ export function orbitalOrder(
   }
   walk(roots)
   return ordered
+}
+
+/**
+ * Which system an address belongs to, or null if it names none.
+ *
+ * A property of the string and of nothing else, so it is asked of the address
+ * rather than of the rows on screen: the panel wants "where is the camera",
+ * and scanning the filtered listing for a match answers "where is the camera,
+ * among the classes you have left switched on" — which goes null the moment a
+ * reader turns off the chip for the thing they are looking at.
+ */
+export function systemOfAddress(address: string | null): string | null {
+  if (address === null) return null
+  try {
+    return systemOf(parseAddress(address))
+  } catch {
+    // A bare designation the survey has not resolved yet. Not an error here —
+    // it simply is not an address, so it names no system.
+    return null
+  }
 }
 
 /**
@@ -212,7 +237,20 @@ export interface Neighbour {
  * is not a number, and everything inside a light year of the camera lands off
  * the left end. √r is the compromise a star chart uses — it spreads the near
  * half without pretending the far half is not there.
+ *
+ * **A star outside the radius is dropped, not clamped.** `travelTargets` unions
+ * the sweep with every *loaded* system whatever its distance, so a system flown
+ * to and come back from is in the rows at 8.6 ly under a 5 ly sweep — and
+ * clamped it lands exactly on the "5 ly" tick, indistinguishable from a star
+ * that really is there, under a caption reading "n within 5 ly". Position on
+ * this rail is the whole claim it makes.
+ *
+ * **And the nearest `RAIL_LIMIT` of them.** A 50 ly sweep finds around fourteen
+ * hundred systems; drawn, that is fourteen hundred absolutely positioned buttons
+ * hundreds deep per pixel in a 20 px band, which is not a picture of anything.
  */
+const RAIL_LIMIT = 24
+
 export function neighbours(
   rows: readonly TravelTarget[],
   radiusLightYears: number,
@@ -226,10 +264,12 @@ export function neighbours(
         address: row.address,
         name: row.name,
         lightYears,
-        at: Math.sqrt(Math.min(1, lightYears / limit)),
+        at: Math.sqrt(lightYears / limit),
         colour: row.colour,
         loaded: row.loaded,
       }
     })
+    .filter((one) => one.at <= 1)
     .sort((a, b) => a.lightYears - b.lightYears)
+    .slice(0, RAIL_LIMIT)
 }

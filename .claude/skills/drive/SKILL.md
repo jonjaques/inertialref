@@ -43,8 +43,10 @@ Drive it from the console on `window.ir`. `ir.help()` prints the whole API.
 
 ```js
 ir.targets() // START HERE — every other verb takes an address and none of them will tell you one
+ir.search('vega') // the whole catalog by name; targets() is a sweep with a radius and is not it
 ir.goTo('HIP71683') / ir.goTo('b:2') // teleports the SHIP; changes canonical state
 ir.look(address) // moves only a CAMERA; the planetarium's whole verb
+ir.dossier(address) // what the thing IS — the object panel's whole source, as JSON
 ir.orbit('g:milky-way/s:SOL/b:2', 400)
 ir.land('g:milky-way/s:SOL/b:0', 0.35, -1.1)
 ir.shot('crescent', address) // camera bookmarks: full-face gibbous half crescent glint sunset oblique

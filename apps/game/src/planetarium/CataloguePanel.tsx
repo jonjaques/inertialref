@@ -4,11 +4,17 @@ import { Input } from '@/components/ui/input'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { useTravelTargets } from '../hud/useTravelTargets.ts'
 import { FOCUS_RING, releaseFocus } from '../hud/focus.ts'
-import { isBoolean, usePersistentState } from '../hud/panelState.ts'
+import { isBoolean, oneOf, usePersistentState } from '../hud/panelState.ts'
 import { CatalogueRow } from './CatalogueRow.tsx'
 import { NeighbourhoodRail } from './NeighbourhoodRail.tsx'
 import type { PlanetariumContext } from './context.ts'
-import { groupBySystem, indentOf, measureOf, neighbours } from './catalogue.ts'
+import {
+  groupBySystem,
+  indentOf,
+  measureOf,
+  neighbours,
+  systemOfAddress,
+} from './catalogue.ts'
 import { ALL_CLASSES, OBJECT_CLASSES } from './kinds.ts'
 
 /*
@@ -44,19 +50,27 @@ const RADII = ['5', '10', '25', '50'] as const
 /** Where it opens: far enough to hold the nearest half-dozen stars. */
 const DEFAULT_RADIUS = '10'
 
+/** One allocation for every collapsed group, rather than one per group. */
+const NOTHING_VISIBLE: ReadonlySet<string> = new Set()
+
 export function CataloguePanel({ engine, target, focus }: PlanetariumContext) {
   const [query, setQuery] = useState('')
   const [radius, setRadius] = usePersistentState<string>(
     'planetarium.catalogue.radius',
     DEFAULT_RADIUS,
-    (value): value is string =>
-      typeof value === 'string' && (RADII as readonly string[]).includes(value),
+    oneOf(RADII),
   )
   const [classes, setClasses] = usePersistentState<readonly string[]>(
     'planetarium.catalogue.classes',
     ALL_CLASSES,
+    // Membership in the live set, not merely "an array of strings". The point
+    // of a validator here is the value that survives a *rename* — a stored id
+    // no chip answers to parses perfectly and quietly hides a whole class.
     (value): value is readonly string[] =>
-      Array.isArray(value) && value.every((one) => typeof one === 'string'),
+      Array.isArray(value) &&
+      value.every(
+        (one) => typeof one === 'string' && ALL_CLASSES.includes(one),
+      ),
   )
   const [filtering, setFiltering] = usePersistentState(
     'planetarium.catalogue.filtering',
@@ -64,16 +78,23 @@ export function CataloguePanel({ engine, target, focus }: PlanetariumContext) {
     isBoolean,
   )
   /*
-   * Which systems the reader has *changed*, rather than which are open.
+   * The systems the reader has decided about, and what they decided.
    *
-   * The default is a function of where the camera is — the system you are in is
-   * open, every other is one line — and that default has to keep applying as
-   * the camera moves. A set of open addresses would freeze it: fly to Proxima
-   * and Sol is still the expanded one, because that is what was true when the
-   * set was written. A set of exceptions re-derives on every render, so
-   * arriving somewhere new opens it without anything having to notice.
+   * A map rather than a list of open addresses, so the default keeps applying
+   * to everything nobody has touched: the system the camera is in is open,
+   * every other is one line, and arriving somewhere new opens it without
+   * anything having to notice.
+   *
+   * A *set of exceptions* is the shape that looks equivalent and is not. Its
+   * stored bit is a polarity against a default that moves with the camera, so
+   * every recorded exception inverts the moment `opensByDefault` changes:
+   * expand Proxima from Sol, click into it, and it collapses on arrival —
+   * closing the thing the click was for. An explicit `open`/`closed` means the
+   * same on both sides of a jump.
    */
-  const [toggled, setToggled] = useState<ReadonlySet<string>>(new Set())
+  const [decided, setDecided] = useState<ReadonlyMap<string, boolean>>(
+    new Map(),
+  )
 
   /*
    * Two questions, one hook (`hud/useTravelTargets.ts`).
@@ -91,7 +112,7 @@ export function CataloguePanel({ engine, target, focus }: PlanetariumContext) {
    * hard to find, it was unreachable by name.
    */
   const lightYears = Number(radius)
-  const { rows, ready } = useTravelTargets(engine, {
+  const { rows, ready, failure } = useTravelTargets(engine, {
     lightYears,
     origin: 'observer',
     query,
@@ -99,28 +120,69 @@ export function CataloguePanel({ engine, target, focus }: PlanetariumContext) {
   })
 
   const searching = query.trim() !== ''
-  const groups = groupBySystem(rows, classes)
+  /*
+   * The chips filter the survey and never the search.
+   *
+   * `searchTargets` answers with star rows and nothing else — there are no body
+   * rows to keep a group alive — so with "Stars" off `groupBySystem` dropped
+   * every hit and the panel stated "no charted star is called that" about a
+   * star it had just been handed. The copy under the chips already promises
+   * this ("a search reaches the whole catalog whatever this says"); the code
+   * now agrees with it.
+   */
+  const groups = groupBySystem(rows, searching ? ALL_CLASSES : classes)
   const near = neighbours(rows, lightYears)
-  const shown = groups.reduce(
+  /*
+   * What the filter took, counted against the survey rather than against what
+   * survived it: a system whose star *and* whose every body were filtered out
+   * is gone from `groups` entirely, so summing over `groups` cannot see it.
+   */
+  const kept = groups.reduce(
     (total, group) => total + 1 + group.bodies.length,
     0,
   )
-  const hidden = groups.reduce(
-    (total, group) => total + group.total - group.bodies.length,
-    0,
-  )
+  const hidden = rows.length - kept
   const narrowed = classes.length > 0 && classes.length < OBJECT_CLASSES.length
 
-  /** The system the camera is in, which is the one that opens by default. */
+  /*
+   * The system the camera is in, taken from the address rather than by scanning
+   * the rows that survived the filter — turning off the chip for the class you
+   * are looking at must not move where the panel thinks you are standing.
+   */
+  const homeSystem = systemOfAddress(target)
   const home =
-    groups.find(
-      (group) =>
-        group.system.address === target ||
-        group.bodies.some((body) => body.address === target),
-    )?.system.address ?? null
+    homeSystem === null
+      ? null
+      : (groups.find(
+          (group) => systemOfAddress(group.system.address) === homeSystem,
+        )?.system.address ?? null)
   /* Nothing focused yet — the mode's first `look` has not landed. The nearest
      system is the useful thing to have open, and it is the first row. */
   const opensByDefault = home ?? groups[0]?.system.address ?? null
+
+  /*
+   * Whether each group is folded, decided once so the footer and the list
+   * cannot disagree. Counting bodies inside a collapsed group as "shown" is
+   * what the fold exists to prevent, and it read "137 shown" over nine rows.
+   */
+  const folded = groups.map((group) => {
+    /*
+     * Open by default only where the camera is, and never during a search: a
+     * search matched the *star*, and expanding every hit would bury the next
+     * result under a hundred and twenty-nine bodies.
+     */
+    const byDefault = !searching && group.system.address === opensByDefault
+    return {
+      group,
+      open:
+        group.bodies.length > 0 &&
+        (decided.get(group.system.address) ?? byDefault),
+    }
+  })
+  const shown = folded.reduce(
+    (total, one) => total + 1 + (one.open ? one.group.bodies.length : 0),
+    0,
+  )
 
   return (
     <div className="flex min-h-0 flex-col gap-2">
@@ -277,20 +339,10 @@ export function CataloguePanel({ engine, target, focus }: PlanetariumContext) {
       )}
 
       <ul className="flex min-h-0 flex-col">
-        {groups.map((group) => {
-          /*
-           * Open by default only where the camera is, and never during a
-           * search: a search matched the *star*, and expanding every hit would
-           * bury the next result under a hundred and twenty-nine bodies.
-           */
-          const byDefault =
-            !searching && group.system.address === opensByDefault
-          const open =
-            group.bodies.length > 0 &&
-            (toggled.has(group.system.address) ? !byDefault : byDefault)
-          const visible = new Set(
-            open ? group.bodies.map((body) => body.address) : [],
-          )
+        {folded.map(({ group, open }) => {
+          const visible = open
+            ? new Set(group.bodies.map((body) => body.address))
+            : NOTHING_VISIBLE
           return (
             <li key={group.system.address}>
               <ul className="flex flex-col">
@@ -303,15 +355,13 @@ export function CataloguePanel({ engine, target, focus }: PlanetariumContext) {
                     ? {
                         expanded: open,
                         onExpand: () =>
-                          setToggled((current) => {
+                          setDecided((current) => {
                             // The updater form, and it is required rather than
-                            // tidy: a set derived from a captured snapshot
+                            // tidy: a map derived from a captured snapshot
                             // silently discards a second toggle in the same
                             // commit. Same rule `dock/layout.ts` states.
-                            const next = new Set(current)
-                            if (next.has(group.system.address))
-                              next.delete(group.system.address)
-                            else next.add(group.system.address)
+                            const next = new Map(current)
+                            next.set(group.system.address, !open)
                             return next
                           }),
                       }
@@ -330,7 +380,7 @@ export function CataloguePanel({ engine, target, focus }: PlanetariumContext) {
                     />
                   ))}
                 {!open && group.bodies.length > 0 && (
-                  <li className="type-micro pl-12 text-slate-500">
+                  <li className="type-micro pl-12 text-slate-400">
                     {group.bodies.length} bodies
                   </li>
                 )}
@@ -341,18 +391,22 @@ export function CataloguePanel({ engine, target, focus }: PlanetariumContext) {
 
         {groups.length === 0 && (
           /*
-           * Three different answers, not one. "Surveying…" and "there is
-           * nothing here" have different next steps, and the empty state used
-           * to give the second for both. The typed case is a third: it is the
-           * whole catalog now, so "no star is called that" is a fact rather
-           * than a statement about how far the survey reached.
+           * Four different answers, not one, because each has a different next
+           * step. A failed read is the one that must not read as "surveying…":
+           * `ready` stays false while the sweep keeps throwing, so without this
+           * branch a broken survey says "surveying…" every 500 ms forever with
+           * the message sitting unread in the hook's return value. The typed
+           * case reaches the whole catalog, so "no star is called that" is a
+           * fact rather than a statement about how far the survey got.
            */
-          <li className="type-ui px-1 py-2 text-slate-400">
-            {!ready
-              ? 'surveying…'
-              : searching
-                ? 'no charted star is called that'
-                : `nothing within ${lightYears} ly`}
+          <li className="type-ui px-1 py-2 text-pretty text-slate-400">
+            {failure !== null
+              ? `the survey did not answer: ${failure}`
+              : !ready
+                ? 'surveying…'
+                : searching
+                  ? 'no charted star is called that'
+                  : `nothing within ${lightYears} ly`}
           </li>
         )}
       </ul>
@@ -361,7 +415,7 @@ export function CataloguePanel({ engine, target, focus }: PlanetariumContext) {
           of the survey is on screen, and how much the chips are holding back.
           A count that was always there would be furniture. */}
       {groups.length > 0 && (
-        <p className="type-micro shrink-0 text-slate-500 tabular-nums">
+        <p className="type-micro shrink-0 text-slate-400 tabular-nums">
           {shown} shown
           {hidden > 0 && ` · ${hidden} filtered`}
         </p>

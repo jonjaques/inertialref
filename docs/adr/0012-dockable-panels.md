@@ -20,10 +20,14 @@ a build that renamed a panel.
 **Panels move between zones by dragging. The layout is a value, the moves are
 pure functions over it, and the drag library is only an input device.**
 
-- **Four zones**: `left`, `right`, `bottom`, `hidden`. `hidden` is a _zone_
+- **Four zones**: `left`, `right`, `float`, `hidden`. `hidden` is a _zone_
   rather than an absence, which is what makes the invariant expressible at all —
   closing a panel and reopening it is a move, not a deletion followed by an
-  invention.
+  invention. `float` is the same trick pointed the other way: a panel pulled out
+  of a pane is not outside the layout, it is in the one zone whose arrangement is
+  two coordinates rather than an order. Those coordinates live in
+  `dock/floating.ts` and deliberately not in the census, because a position is a
+  decoration that can be lost without anything breaking.
 - **One invariant, and everything preserves it**: _every known panel appears in
   exactly one zone, exactly once._ A panel in two zones renders twice and its
   state diverges; a panel in none is unreachable and there is no UI for opening
@@ -66,6 +70,14 @@ is worth more than the choice of library.
 powerful and much worse here: floating windows cover the thing being looked at,
 which in a planetarium is the entire content. Zones keep the middle of the frame
 clear by construction.
+
+That rejection is about the _model_, and it survives the `float` zone above.
+A floated panel keeps the pane's width, cannot be resized, and carries the only
+z-index in the workspace — panels do not stack or compete for order. `float` is
+also not a drop target: `DROP_ZONES` is the two panes, so a drag can only be
+_inserted_ into a pane, and floating is what a release over the scene means. The
+default arrangement is still two columns and an empty center; one panel out over
+the scene is a thing the reader does on purpose.
 
 **A fixed layout with no docking at all.** Cheapest, and it fails the actual
 use: a catalog wants a tall column, a transport wants a wide bar, and which of

@@ -2,11 +2,13 @@ import {
   AU,
   EARTH_MASS,
   EARTH_RADIUS,
+  GRAVITATIONAL_CONSTANT,
   JUPITER_MASS,
   JUPITER_RADIUS,
   type Kilograms,
+  LIGHT_YEAR,
   type Meters,
-  PARSEC,
+  metersToParsecs,
   type Seconds,
   SECONDS_PER_DAY,
   SECONDS_PER_YEAR,
@@ -22,12 +24,15 @@ import {
   type BodyKind,
   type BodyProvenance,
   type CatalogStar,
+  findBody as findBodyAt,
   formatAddress,
   frostLine,
   habitableZone,
+  insolation,
   isDebris,
   isHabitable,
   isPlanetKind,
+  orbitalOrder,
   parseSpectralType,
   type Star,
   type StarSystem,
@@ -181,6 +186,16 @@ const noData = (label: string, why: string, note?: string): Fact => ({
  */
 export function dossier(host: HarnessHost, address: string): Dossier | null {
   const world = host.world
+  /*
+   * `loadSystem` is inside the guard, not after it.
+   *
+   * A well-formed address for a system the catalog does not hold parses
+   * cleanly and then trips `World.loadSystem`'s own `Unknown system` invariant —
+   * so `dossier('s:NOSUCH')` threw past a signature that says `| null`. Only
+   * `useDossier` had a catch of its own; the console, the headless runner and a
+   * `?at=` URL carrying a save's address all took the throw.
+   */
+  let system
   let resolved
   try {
     resolved = resolveDestination(
@@ -188,11 +203,11 @@ export function dossier(host: HarnessHost, address: string): Dossier | null {
       world.galaxy,
       currentSystemOf(world, host.player()),
     )
+    system = world.loadSystem(resolved.system)
   } catch {
     return null
   }
 
-  const system = world.loadSystem(resolved.system)
   if (resolved.kind === 'system') return starDossier(world, system)
   const body = findBody(system, resolved.address)
   return body === undefined ? null : bodyDossier(world, system, body)
@@ -220,7 +235,7 @@ function starDossier(world: World, system: StarSystem): Dossier {
   const parsecs =
     cataloged === undefined
       ? null
-      : (cataloged.distanceLightYears * 9.4607304725808e15) / PARSEC
+      : metersToParsecs(cataloged.distanceLightYears * LIGHT_YEAR)
 
   const physical: Fact[] = [
     {
@@ -254,7 +269,7 @@ function starDossier(world: World, system: StarSystem): Dossier {
     {
       label: 'Surface gravity',
       value: `${significant(gravity(star.mass, star.radius))} m/s²`,
-      note: `${significant(gravity(star.mass, star.radius) / 9.80665)} g`,
+      note: `${significant(gravity(star.mass, star.radius) / STANDARD_GRAVITY)} g`,
     },
     {
       label: 'Absolute magnitude',
@@ -329,9 +344,20 @@ function starDossier(world: World, system: StarSystem): Dossier {
           note: 'asteroids and comets',
         },
         {
+          /*
+           * Both halves count the same thing.
+           *
+           * `observedPlanets` is planets — Sol packs `SOLAR_PLANETS.length`, 8 —
+           * so putting the dwarfs in the denominator wrote "8 of 17" over the
+           * one system every reader opens first, with a note calling Pluto,
+           * Ceres and Eris this build's own guesses. All seventeen are observed.
+           */
           label: 'Confirmed',
-          value: `${system.observedPlanets} of ${census.planets + census.dwarfs}`,
-          note: 'the rest projected',
+          value: `${system.observedPlanets} of ${census.planets}`,
+          note:
+            system.observedPlanets < census.planets
+              ? 'the rest projected'
+              : 'every planet here has been seen',
         },
         {
           label: 'In the habitable zone',
@@ -506,6 +532,22 @@ function bodyDossier(world: World, system: StarSystem, body: Body): Dossier {
 function physicalGroup(body: Body): FactGroup {
   const facts: Fact[] = []
   const figure = body.figure
+  /*
+   * The radius a volume is taken from, which is never `body.radius`.
+   *
+   * `radius` is the equatorial half-extent — the *largest* of the three on a
+   * body gravity never rounded off — and every quantity below cubes or squares
+   * it. Phobos is 13.3 × 11.9 × 9.8 km, so quoting 13.3 overstates its volume
+   * by half and reports a mean density of 1.08 g/cm³ against a published 1.88,
+   * directly under a row that has just printed the correct mean radius. The
+   * spheroid case is the same error two orders of magnitude smaller: Earth's
+   * equatorial radius gives 5.496 g/cm³ against a published 5.514.
+   */
+  const meanRadius = Math.cbrt(
+    body.radius *
+      (figure?.intermediateRadius ?? body.radius) *
+      body.polarRadius,
+  )
 
   if (figure === null) {
     facts.push({
@@ -548,9 +590,7 @@ function physicalGroup(body: Body): FactGroup {
     })
     facts.push({
       label: 'Mean radius',
-      value: kilometres(
-        Math.cbrt(body.radius * figure.intermediateRadius * body.polarRadius),
-      ),
+      value: kilometres(meanRadius),
       note: 'same volume',
     })
   }
@@ -560,16 +600,16 @@ function physicalGroup(body: Body): FactGroup {
     value: `${exponential(body.mass)} kg`,
     note: massNote(body.mass),
   })
-  facts.push({ label: 'Mean density', value: density(body.mass, body.radius) })
-  const g = gravity(body.mass, body.radius)
+  facts.push({ label: 'Mean density', value: density(body.mass, meanRadius) })
+  const g = gravity(body.mass, meanRadius)
   facts.push({
     label: 'Surface gravity',
     value: `${significant(g)} m/s²`,
-    note: `${significant(g / 9.80665)} g`,
+    note: `${significant(g / STANDARD_GRAVITY)} g`,
   })
   facts.push({
     label: 'Escape velocity',
-    value: `${significant(Math.sqrt((2 * body.mu) / body.radius) / 1000)} km/s`,
+    value: `${significant(Math.sqrt((2 * body.mu) / meanRadius) / 1000)} km/s`,
   })
   facts.push({
     label: 'Geometric albedo',
@@ -719,10 +759,26 @@ function rotationGroup(body: Body, year: Seconds): FactGroup {
         }
       : { note: 'sunrise to sunrise' }),
   })
+  /*
+   * The obliquity an almanac prints, which is not the stored tilt.
+   *
+   * `solar/bodies.ts` states the convention it packs to: the retrograde fact
+   * lives in the *sign of the rotation period*, so `axialTilt` carries only the
+   * axis and Venus is filed as 2.64° rather than 177.36°. Both halves applied
+   * at once give a prograde Venus, which is why the generator wants it that way
+   * — and why a panel that prints the field raw reports Venus as 2.64° upright,
+   * Uranus as 82.23° and Pluto as 60.41°, three numbers no reference carries.
+   */
+  const obliquity = retrograde
+    ? 180 - Math.abs(degrees(body.axialTilt))
+    : Math.abs(degrees(body.axialTilt))
   facts.push({
     label: 'Axial tilt',
-    value: `${round(degrees(body.axialTilt), 2)}°`,
-    note: tiltWord(body.axialTilt),
+    value: `${round(obliquity, 2)}°`,
+    // The *word* is about seasons, and seasons run on the angle to the orbital
+    // plane's normal — which is 2.64° for Venus, not 177.36°. An obliquity past
+    // 90° is a pole pointing the other way round the same tilt.
+    note: tiltWord(Math.min(obliquity, 180 - obliquity)),
   })
   facts.push(
     noData(
@@ -848,13 +904,26 @@ function insolationGroup(
    * Europa 671,000 km from the Sun. What lights a moon is the planet's orbit.
    */
   const range = (primary ?? body).elements.semiMajorAxis
-  const flux = star.luminosity / (4 * Math.PI * range * range)
+  // `insolation`, not the formula written out: `isHabitable` tests bodies
+  // against that function and this panel counts what it says, so a second copy
+  // of the flux model would eventually shade a band the simulation disagreed
+  // with. Same argument `habitableZone` is exported beside it for.
+  const flux = insolation(star, range)
   const albedo = body.appearance.geometricAlbedo
   /*
    * Equilibrium temperature: the balance of absorbed sunlight against a
-   * blackbody's own radiation, with no atmosphere in it. Earth comes out at
-   * 255 K against a measured 288 — the 33 K difference is the greenhouse
-   * effect, and the empty row below is where that would be said.
+   * blackbody's own radiation, with no atmosphere in it.
+   *
+   * The albedo this balance wants is the **Bond** albedo — the fraction of all
+   * incident power reflected in every direction — and the record carries the
+   * *geometric* one, which is a back-scatter ratio at zero phase. They are not
+   * interchangeable and the ratio between them is not a constant: Earth's pair
+   * is 0.306 / 0.434, Mercury's 0.088 / 0.142, Mars's 0.250 / 0.170. So this
+   * figure is low for Earth by about 14 K and the note says which albedo it
+   * came from, because a reader checking it against an almanac otherwise finds
+   * a number that matches nothing. The Bond albedo is the field that closes it,
+   * and `docs/design/planetarium.md` § "The record that is not filled in yet"
+   * is where it is listed.
    */
   const equilibrium = Math.pow(
     ((1 - albedo) * flux) / (4 * STEFAN_BOLTZMANN),
@@ -876,7 +945,7 @@ function insolationGroup(
         label: 'Equilibrium temp.',
         value: `${round(published ?? equilibrium, 0)} K`,
         note: `${round((published ?? equilibrium) - 273.15, 0)} °C${
-          published === null ? '' : ' · published'
+          published === null ? ' · from the geometric albedo' : ' · published'
         }`,
       },
       {
@@ -888,7 +957,7 @@ function insolationGroup(
       },
       noData(
         'Surface temperature',
-        'the figure above is what a bare rock at this distance would sit at — Earth’s equivalent is 255 K against a measured 288. What the air and the ground do with that heat has not been measured here',
+        'the figure above is what a bare rock at this distance would sit at. Earth’s is around 255 K against a measured 288, and what the air and the ground do with that 33 K is a greenhouse model nobody has run over this body',
         'equilibrium ≠ surface',
       ),
       noData(
@@ -1013,8 +1082,16 @@ function discoveryGroup(body: Body): FactGroup {
         : `${round(measured.insolation, 2)}× Earth`,
     ...(measured.insolation === null
       ? {
+          /*
+           * The reason is about *this row*, not about the star.
+           *
+           * The old sentence said the host star's luminosity had not been
+           * measured — on Earth, whose star's page prints 1.000 L☉ two clicks
+           * away. What is missing is the discovery paper's own figure; the
+           * Sunlight group above computes the flux and always has one.
+           */
           pending:
-            'quoted for a planet whose host star has a measured luminosity. This one’s has not',
+            'the flux above is worked out from the star and this orbit. A separately published figure is something a discovery paper carries, and no survey has filed one for this body',
         }
       : {}),
   })
@@ -1070,9 +1147,9 @@ function classifyBody(
   const noun = KIND_NOUN[body.kind]
   if (primary !== null) return `${noun} of ${primary.name}`
   if (!isPlanetKind(body.kind)) return `${noun} of ${system.name}`
-  const order = [...system.planets]
-    .filter((one) => isPlanetKind(one.kind))
-    .sort((a, b) => a.elements.semiMajorAxis - b.elements.semiMajorAxis)
+  // `orbitalOrder` from `universe`, which is that sort — a private copy of it
+  // is how the ordinal here and the row order in the catalog come to disagree.
+  const order = orbitalOrder(system).filter((one) => isPlanetKind(one.kind))
   const at = order.findIndex((one) => one.id === body.id)
   const ordinal = ORDINALS[at]
   return ordinal === undefined
@@ -1167,9 +1244,25 @@ function censusOf(system: StarSystem): Census {
   return { planets, dwarfs, moons, debris }
 }
 
-/** Surface gravity of a sphere of this mass and radius, m/s². */
+/**
+ * Standard gravity, m/s² — the unit the `g` gloss is quoted in.
+ *
+ * Not `gravity(EARTH_MASS, EARTH_RADIUS)`, which is 9.82: that is the figure at
+ * the equator of an Earth-mass sphere, and `g` is a defined constant rather than
+ * a reading anybody took.
+ */
+const STANDARD_GRAVITY = 9.806_65
+
+/**
+ * Surface gravity of a sphere of this mass and radius, m/s².
+ *
+ * `GRAVITATIONAL_CONSTANT` rather than a literal, because `body.mu` — which the
+ * escape-velocity row beside this one uses — is `GRAVITATIONAL_CONSTANT × mass`
+ * from `universe`. Two spellings of G in adjacent rows agree only by the digits
+ * happening to match, and a CODATA revision would move one and not the other.
+ */
 export const gravity = (mass: Kilograms, radius: Meters): number =>
-  (6.6743e-11 * mass) / (radius * radius)
+  (GRAVITATIONAL_CONSTANT * mass) / (radius * radius)
 
 /**
  * Whether a body turns once per orbit, within a percent.
@@ -1217,31 +1310,23 @@ export function synodicDay(rotation: Seconds, year: Seconds): Seconds | null {
   return Number.isFinite(solar) ? solar : null
 }
 
-function primaryOf(system: StarSystem, body: Body): Body | null {
-  if (body.address.kind !== 'body' || body.address.body.length < 2) return null
-  const parentPath = body.address.body.slice(0, -1)
-  for (const candidate of walkBodies(system)) {
-    if (
-      candidate.address.kind === 'body' &&
-      candidate.address.body.length === parentPath.length &&
-      candidate.address.body.every((n, i) => n === parentPath[i])
-    )
-      return candidate
-  }
-  return null
-}
+/*
+ * Both lookups go through `universe`'s own `findBody`, which indexes straight
+ * in — `system.planets[path[0]].moons[path[1]]`. The scan they replaced walked
+ * all 129 of Sol's bodies formatting an address string per candidate, twice per
+ * page, to answer a question the path already answers.
+ */
 
-function findBody(
+const primaryOf = (system: StarSystem, body: Body): Body | null =>
+  body.address.kind !== 'body' || body.address.body.length < 2
+    ? null
+    : (findBodyAt(system, body.address.body.slice(0, -1)) ?? null)
+
+const findBody = (
   system: StarSystem,
   address: UniverseAddress,
-): Body | undefined {
-  if (address.kind !== 'body') return undefined
-  const wanted = formatAddress(address)
-  for (const body of walkBodies(system)) {
-    if (formatAddress(body.address) === wanted) return body
-  }
-  return undefined
-}
+): Body | undefined =>
+  address.kind === 'body' ? findBodyAt(system, address.body) : undefined
 
 /* ------------------------------------------------------------------------- */
 /* Formatting                                                                 */
@@ -1283,9 +1368,18 @@ function round(value: number, digits: number): string {
   return group(value.toFixed(digits))
 }
 
-/** Three significant figures, which is what a reading of this kind is worth. */
+/**
+ * Three significant figures, which is what a reading of this kind is worth.
+ *
+ * A non-finite value is the em dash every other formatter here gives it, and
+ * never `'0'`: a zero radius or a zero period sends `gravity`, the escape
+ * velocity and the flux to infinity, and printing those as `0 m/s²` is a
+ * confident measurement of the opposite of the truth. `0` stays the answer for
+ * an actual zero.
+ */
 function significant(value: number): string {
-  if (!Number.isFinite(value) || value === 0) return '0'
+  if (!Number.isFinite(value)) return '—'
+  if (value === 0) return '0'
   const magnitude = Math.abs(value)
   if (magnitude >= 1e5 || magnitude < 1e-3) return exponential(value)
   const digits = Math.max(0, 3 - Math.ceil(Math.log10(magnitude)))
@@ -1400,8 +1494,8 @@ const eccentricityWord = (e: number): string => {
   return 'near-parabolic'
 }
 
-const tiltWord = (tilt: number): string => {
-  const deg = Math.abs(degrees(tilt))
+const tiltWord = (degreesOfObliquity: number): string => {
+  const deg = Math.abs(degreesOfObliquity)
   if (deg < 3) return 'almost upright — no seasons'
   if (deg < 35) return 'seasons like Earth’s'
   if (deg < 80) return 'extreme seasons'

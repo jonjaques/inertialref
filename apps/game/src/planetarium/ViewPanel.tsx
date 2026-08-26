@@ -107,7 +107,7 @@ export function ViewPanel({
                 onChange={onOrbitScope}
               />
             </div>
-            <p className="type-ui text-pretty text-slate-500">
+            <p className="type-ui text-pretty text-slate-400">
               {orbitScope === 'context'
                 ? 'the subject’s siblings and whatever goes round it'
                 : 'every orbit in the system — the architecture, from outside'}
@@ -135,7 +135,7 @@ export function ViewPanel({
           {/* A lens choice is a framing choice here, not just a crop: the
               observatory solves its distance against this angle, so narrowing
               the lens pulls the camera back rather than magnifying. */}
-          <p className="type-ui text-pretty text-slate-500">
+          <p className="type-ui text-pretty text-slate-400">
             the camera re-solves its distance, so the subject stays the same
             size
           </p>
@@ -170,7 +170,7 @@ export function ViewPanel({
               on exactly that basis. Which makes turning it down a *lens*
               decision and not a lie: at zero this is what the sky looks like to
               something with no optics in front of it. */}
-          <p className="type-ui text-pretty text-slate-500">
+          <p className="type-ui text-pretty text-slate-400">
             ghosts, streaks and bloom — the aperture’s own signature, not the
             star’s
           </p>

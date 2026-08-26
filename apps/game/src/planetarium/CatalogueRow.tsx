@@ -70,7 +70,7 @@ export function CatalogueRow({
             releaseFocus(event)
             onExpand()
           }}
-          className={`flex w-6 shrink-0 items-center justify-center rounded text-slate-500 transition-colors hover:text-sky-300 ${FOCUS_RING}`}
+          className={`flex w-6 shrink-0 items-center justify-center rounded text-slate-400 transition-colors hover:text-sky-300 ${FOCUS_RING}`}
         >
           <Chevron aria-hidden className="size-3.5" />
         </button>
@@ -111,7 +111,7 @@ export function CatalogueRow({
                 // and one that is still a stub in the catalog.
                 row.loaded
                 ? 'text-sky-400/80'
-                : 'text-slate-500'
+                : 'text-slate-400'
           }`}
           // A star's measured colour beats the palette; nothing else has one.
           // Dimmed until the system is generated, which is the same claim the

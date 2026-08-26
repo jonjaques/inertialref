@@ -14,11 +14,9 @@ import { iconForKind } from './kinds.ts'
  */
 export function SatelliteRow({
   moon,
-  selected,
   onFocus,
 }: {
   moon: Satellite
-  selected: boolean
   onFocus: () => void
 }) {
   const Glyph = iconForKind(moon.kind)
@@ -26,20 +24,15 @@ export function SatelliteRow({
     <li>
       <button
         type="button"
-        aria-current={selected}
         onClick={(event) => {
           releaseFocus(event)
           onFocus()
         }}
-        className={`flex min-h-7 w-full items-center gap-2 rounded px-1 text-left transition-colors ${FOCUS_RING} ${
-          selected
-            ? 'bg-sky-500/15 text-sky-100'
-            : 'text-slate-300 hover:bg-slate-800/60 hover:text-sky-100'
-        }`}
+        className={`flex min-h-7 w-full items-center gap-2 rounded px-1 text-left transition-colors text-slate-300 hover:bg-slate-800/60 hover:text-sky-100 ${FOCUS_RING}`}
       >
-        <Glyph aria-hidden className="size-3.5 shrink-0 text-slate-500" />
+        <Glyph aria-hidden className="size-3.5 shrink-0 text-slate-400" />
         <span className="type-ui min-w-0 flex-1 truncate">{moon.name}</span>
-        <span className="type-micro shrink-0 text-slate-500 tabular-nums">
+        <span className="type-micro shrink-0 text-slate-400 tabular-nums">
           {Math.round(moon.radius / 1000)} km
         </span>
       </button>

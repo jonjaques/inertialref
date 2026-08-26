@@ -228,13 +228,13 @@ shows on screen:
   _forwards_ and needs no solver; the same ninety-six points then walk the
   ellipse at nearly constant arc length.
 
-### Lighting presets
+### The light, in the photographer's terms
 
-Full, gibbous, half, crescent — the photographer's terms, and the same ones the
-flight harness's [camera bookmarks](../../packages/devtools/src/shots.ts) use, so
-the two cannot disagree about what "gibbous" means. Each is solved against where
-the star **actually is now**, so a preset means the same thing at any point in a
-planet's year.
+Full, gibbous, half, crescent, rim — the same vocabulary the flight harness's
+[camera bookmarks](../../packages/devtools/src/shots.ts) use, over the same
+solver, so the two cannot disagree about what "gibbous" means. Each is solved
+against where the star **actually is now**, so a phase means the same thing at
+any point in a planet's year.
 
 ---
 
@@ -253,9 +253,10 @@ a gesture with an invisible effect — worse than no gesture. The panel _set_ is
 still the same stored layout, so a workspace arranged on a desktop and opened on
 a phone keeps its panels and rotating a tablet back restores the columns.
 
-**Presets carry the weight on touch.** A phone has one finger and no keyboard,
-so a preset is the only way to reach a framing that would otherwise take a drag,
-a pinch and a phase solve.
+**The shots carry the weight on touch.** A phone has one finger and no keyboard,
+so a composed shot is the only way to reach a framing that would otherwise take a
+drag, a pinch and a phase solve — and a drawn thumbnail is the only way to say
+which framing it is without a caption a phone has no room for.
 
 ---
 

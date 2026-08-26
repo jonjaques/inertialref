@@ -14,6 +14,7 @@ import {
   type EntityId,
   formatAddress,
   formatSpectralType,
+  parentAddress,
   type LinearRgb,
   type GalaxyId,
   isLandable,
@@ -205,9 +206,19 @@ export function travelTargets(
   for (const [id, star] of ordered) {
     const system = loaded.get(id)
     const distance = UV.distance(star.position, from)
+    /*
+     * One encoder for the address, which the rows under this one hang off:
+     * a body's `parent` at depth 1 is exactly this string, and two hand-written
+     * copies of the grammar agreeing is not something a compiler checks.
+     */
+    const systemAddress: UniverseAddress = {
+      kind: 'system',
+      galaxy: world.galaxy,
+      system: id,
+    }
     targets.push({
       kind: 'system',
-      address: `g:${world.galaxy}/s:${id}`,
+      address: formatAddress(systemAddress),
       name: star.name,
       system: id,
       depth: 0,
@@ -258,13 +269,15 @@ export function travelTargets(
         radius: body.radius,
         semiMajorAxis: body.elements.semiMajorAxis,
         children: body.moons.length,
-        parent:
-          body.address.kind === 'body' && body.address.body.length > 1
-            ? formatAddress({
-                ...body.address,
-                body: body.address.body.slice(0, -1),
-              })
-            : `g:${world.galaxy}/s:${id}`,
+        /*
+         * `parentAddress`, which is `universe`'s own — it already answers the
+         * depth-1 case with the system's address. Slicing the path here and
+         * concatenating `g:…/s:…` for the top level was a second copy of the
+         * address grammar, and one it would be silent about breaking: a changed
+         * separator leaves every `parent` failing to match any `address`, which
+         * `orbitalOrder` reads as "no parent is present" and flattens the tree.
+         */
+        parent: formatAddress(parentAddress(body.address) ?? systemAddress),
       })
     }
   }

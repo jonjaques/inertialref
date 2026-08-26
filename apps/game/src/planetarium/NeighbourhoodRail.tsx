@@ -102,7 +102,7 @@ export function NeighbourhoodRail({
           instrument, and a labeled axis under a 28 px band is more chrome than
           picture. Both are placed by the same √ scale the dots are, so the
           midpoint label sits where a quarter of the radius actually falls. */}
-      <div className="type-micro relative h-3 text-slate-500 tabular-nums">
+      <div className="type-micro relative h-3 text-slate-400 tabular-nums">
         <span className="absolute left-0">here</span>
         {/* A quarter of the radius, because the scale is √r and this is the
             halfway mark on it. One decimal: at a 10 ly sweep the midpoint is

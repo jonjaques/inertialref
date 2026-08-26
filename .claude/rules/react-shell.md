@@ -17,12 +17,14 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", ADR-0011.
   `useShallow`. **Do not add a timer.** The two that remain are not field reads — a star
   sweep (`hud/useTravelTargets.ts`) and a scene projection (`planetarium/SkyLabels.tsx`).
 - **Never write a presentation switch directly.** `showShip`, `showOrbits`,
-  `flareArtifacts` and the observatory's target go through `engine.presentation` — a mode
-  pushes a stance on mount and releases on unmount, a panel's override is another push,
-  and `release()` restores what was underneath. Assigning the field instead is the
-  "restored by whoever lowered it" convention that had three implementations and no owner:
-  leaving the planetarium after arriving from the menu put `showShip` back to a value it
-  had never held.
+  `orbitScope`, `flareArtifacts` and the observatory's target go through
+  `engine.presentation` — a mode pushes a stance on mount and releases on unmount, a
+  panel's override is another push, and `release()` restores what was underneath.
+  Assigning the field instead is the "restored by whoever lowered it" convention that had
+  three implementations and no owner: leaving the planetarium after arriving from the menu
+  put `showShip` back to a value it had never held. There is no carve-out for a field that
+  looks like a preference — the frame loop reads `orbitScope`, which is the other half of
+  why it cannot be component state.
 - **`App` owns the `<Canvas>` and `.hud-layer` for the life of the session.** Every route
   renders _inside_ that layer, as a sibling of the canvas. A router over the whole tree
   rebuilds the `WebGPURenderer` on every navigation — the black-screen class

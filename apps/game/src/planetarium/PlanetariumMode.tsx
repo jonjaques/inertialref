@@ -130,7 +130,7 @@ export function PlanetariumMode({
       flareArtifacts: flare,
       observatory: true,
     })
-  }, [ship, orbits, orbitScope, flare])
+  }, [engine, ship, orbits, orbitScope, flare])
 
   const focus = useCallback(
     (address: string, options: { url?: boolean } = {}) => {

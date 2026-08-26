@@ -41,6 +41,7 @@ pixels.
 | `ir.summary()`         | one line: tick, hash, frame, speed, systems                       |
 | `ir.status()`          | everything the debug overlay shows, structured                    |
 | `ir.inspect(id?)`      | one entity in full — frames, canonical + local coords, velocities |
+| `ir.dossier(address)`  | one star or one body as a page of astronomy                       |
 | `ir.snapshot(alpha?)`  | the raw presentation snapshot                                     |
 | `ir.bodies(system?)`   | flat listing of a system's bodies with addresses                  |
 | `ir.systemsNearby(ly)` | nearest star systems, catalog and procedural                      |
@@ -51,6 +52,17 @@ ir.summary()
 // tick 2590 (40.47 s, 1x) | hash fdf43017 | Debug One in sf:g:milky-way/s:SOL/b:0@0.350000,-1.100000 | 51849.8 m/s alt 0.000 mm | systems 1, frames 19
 ```
 
+**`inspect` and `dossier` answer different questions and take different
+arguments.** `inspect` takes an entity id and reports a pose and a velocity;
+`dossier` takes an address and reports what the thing _is_ — mass, orbit,
+rotation, atmosphere, light — in the groups the planetarium's object panel
+draws. A body is not an entity, so "what is Europa" has no answer in the entity
+store. Fields nothing has measured come back as a `Fact` with a null `value` and
+a `pending` reason, and `pendingCount` is how many
+([ADR-0014](../adr/0014-the-record-with-holes-in-it.md)). It is lenient about its
+input in the same way `ir.look` is, through the same resolver, and returns `null`
+for an address that names nothing.
+
 ---
 
 ## Finding and loading destinations
@@ -58,12 +70,21 @@ ir.summary()
 | Call                | Effect                                                        |
 | ------------------- | ------------------------------------------------------------- |
 | `ir.targets()`      | destinations near the player, with addresses — start here     |
+| `ir.search(text)`   | everywhere matching a name, nearest first — the whole catalog |
 | `ir.goTo(target)`   | resolve a human form and move the ship to that system or body |
 | `ir.loadSystem(id)` | generate a system without moving the ship                     |
 
 `goTo` is the only verb that accepts all the forms a person types: `SOL`,
 `s:SOL/b:2`, or `b:2` relative to the current system. Everywhere else,
 `parseAddress` remains strict.
+
+**`targets` and `search` are not the same list narrowed.** `targets` is a star
+sweep with a radius and answers "what is near me"; `search` is an index lookup
+over the whole catalog and answers "what is called this". Filtering the survey
+to serve a name query can only ever find what was already a few light years
+away. Both take `{ origin: 'observer' }` when the question is about the
+planetarium's camera rather than the ship — in that mode the two are nowhere
+near each other.
 
 ---
 

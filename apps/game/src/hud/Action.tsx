@@ -71,12 +71,18 @@ export function Action({
        * is usually somewhere else on screen, and a few of them are no-ops on
        * purpose (the `1×` readout in the time transport asserts a state rather
        * than changing one). 0.96 because anything under 0.95 reads as the
-       * button being squashed rather than pressed. Never `transition-all`:
-       * `Button` already animates `color` and `box-shadow`, and adding `all` on
-       * top of that animates the border, the background and the opacity of
-       * every disabled state as well.
+       * button being squashed rather than pressed.
+       *
+       * **The properties are named because `transition-transform` alone is a
+       * removal.** `cn` is `twMerge`, `Button`'s base carries `transition-all`,
+       * and the two are the same class group — so a bare `transition-transform`
+       * here wins the merge and takes the hover color and border animation of
+       * every `Action` in the interface with it. `transition-all` is not the
+       * answer either: it animates the border, the background and the opacity
+       * of every disabled state as well. `PresetsPanel`'s phase row states the
+       * same list for the same reason.
        */
-      className={`type-ui min-h-6 min-w-6 rounded border px-1.5 py-0.5 font-normal whitespace-nowrap shadow-none transition-transform active:scale-[0.96] disabled:opacity-35 ${FOCUS_RING} ${TONE[tone]}`}
+      className={`type-ui min-h-6 min-w-6 rounded border px-1.5 py-0.5 font-normal whitespace-nowrap shadow-none transition-[color,border-color,background-color,box-shadow,scale] active:scale-[0.96] disabled:opacity-35 ${FOCUS_RING} ${TONE[tone]}`}
     >
       {label}
     </Button>

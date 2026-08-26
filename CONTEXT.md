@@ -88,8 +88,10 @@ Full reasoning is in `docs/adr/`. The short version:
   the mountains behind as the planet rotates; this was a real bug.
 - `packages/*` must run unchanged in the browser, a worker and Node. The root
   `tsconfig.json` gives them no DOM lib, which is how that is enforced.
-- No TS project references: a referenced project may not disable emit. Three
-  independent tsconfig projects, plus `pnpm graph` for the dependency layering.
+- No TS project references: a referenced project may not disable emit. Five
+  independent tsconfig projects — the portable core, the client, the Node
+  runner, the Worker and the offline ingest — plus `pnpm graph` for the
+  dependency layering.
 
 ## Commands
 

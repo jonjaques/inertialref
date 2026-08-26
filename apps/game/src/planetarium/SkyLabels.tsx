@@ -1,6 +1,7 @@
 'use no memo'
 import { useEffect, useRef, useState } from 'react'
 import type { PerspectiveCamera } from 'three/webgpu'
+import { type BodyKind, isDebris } from '@inertialref/universe'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import type { LabelDensity } from './layers.ts'
 import { declutter } from './pick.ts'
@@ -46,16 +47,25 @@ const DENSITY: Readonly<Record<LabelDensity, number>> = {
 }
 
 /**
- * The classes a name is not worth spending a slot on when the sky is crowded.
+ * Whether a name is worth spending a slot on when the sky is crowded.
  *
  * Sol carries ninety-two asteroids and comets. The declutter is greedy by
  * *screen size*, so from far enough out every one of them is the same handful
  * of pixels as Mercury and they take the slots in whatever order the scene
  * happens to list them — a sky captioned with six provisional designations and
- * no planets. A dwarf is not in here for the same reason its orbit is drawn:
+ * no planets. A dwarf is not rubble, for the same reason its orbit is drawn:
  * Pluto, Ceres and Eris are what a reader is looking for.
+ *
+ * `isDebris` from `universe`, which is the table `GameEngine` filters orbit
+ * traces with. A local `Set(['asteroid', 'comet'])` is the third copy of that
+ * decision and the one no compiler checks: a ninth `BodyKind` would land in the
+ * table, keep the trace rule right, and leave the label rule silently answering
+ * for the old set.
  */
-const RUBBLE = new Set(['asteroid', 'comet'])
+const isRubble = (kind: string): boolean =>
+  // The cast is safe in the one direction that matters: `DEBRIS` has no entry
+  // for `'star'`, so anything that is not a body class reads as not rubble.
+  isDebris(kind as BodyKind) === true
 
 /** Minimum separation before one of a pair is dropped, in CSS pixels. */
 const SPACING = { x: 96, y: 18 }
@@ -144,7 +154,19 @@ export function SkyLabels({
             candidate.y > 0 &&
             candidate.y < size.height &&
             candidate.name.length > 0 &&
-            (minor || !RUBBLE.has(candidate.kind)),
+            /*
+             * The subject always keeps its name, whatever the switch says.
+             *
+             * `pick.ts` deliberately leaves rubble clickable, and the catalog's
+             * asteroid and comet chips are on by default — so a reader reaches
+             * Bennu by click or by row, and with minor bodies off it was the one
+             * thing on screen with no caption and no selection ring. A thinning
+             * rule is about the sky being a list; it is not about the body the
+             * reader has just asked for.
+             */
+            (minor ||
+              candidate.address === target ||
+              !isRubble(candidate.kind)),
         )
         // Largest first, so the priority the declutter is greedy about is
         // "what dominates the frame" — which is what a person is looking at.
@@ -167,7 +189,7 @@ export function SkyLabels({
      */
     const timer = window.setInterval(refresh, 250)
     return () => window.clearInterval(timer)
-  }, [engine, enabled, density, minor])
+  }, [engine, enabled, density, minor, target])
 
   useEffect(() => {
     if (!enabled) return

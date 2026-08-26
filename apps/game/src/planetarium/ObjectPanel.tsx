@@ -109,7 +109,7 @@ export function ObjectPanel({ engine, target, focus }: PlanetariumContext) {
           )}
           {page.pendingCount > 0 && (
             <span
-              className="type-micro flex items-center gap-1 text-slate-500"
+              className="type-micro flex items-center gap-1 text-slate-400"
               title="Fields no survey has filled in. Each one says what is missing."
             >
               <CircleDashed aria-hidden className="size-3" />
@@ -144,12 +144,16 @@ export function ObjectPanel({ engine, target, focus }: PlanetariumContext) {
           title="Satellites"
           trailing={`${page.satellites.length}`}
         >
+          {/* No row here is ever the subject — `page` is the record *of* the
+              subject and a body is not one of its own satellites — so nothing
+              is marked. `selected` on this list could only ever fire on the
+              frame between a click and the record catching up, which reads as
+              a flicker rather than as a selection. */}
           <ul className="flex flex-col">
             {page.satellites.map((moon) => (
               <SatelliteRow
                 key={moon.address}
                 moon={moon}
-                selected={moon.address === target}
                 onFocus={() => focus(moon.address)}
               />
             ))}

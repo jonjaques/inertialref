@@ -25,6 +25,7 @@ cutscene, presentation.
 ir.help()
 ir.targets() // start here — every other verb takes an address
 ir.goTo('b:2')
+ir.dossier('b:2') // what it is, rather than where it is
 await ir.selfTest()
 await ir.scenario('surface')
 ```
@@ -68,6 +69,12 @@ camera. Every panel calls the harness and nothing else, so anything you can
 do by clicking is reproducible in a test.
 
 `G` opens navigate, `P` opens perf, and `H` hides or restores both panes.
+
+The camera panel is where the observatory reads out — range, altitude, frame
+fill, the two orbit angles, the address and the frame id — because those are
+facts about where the camera is standing rather than about the body in front of
+it. The planetarium's object panel is the body's record and carries none of
+them.
 
 Look at the perf panel before optimizing anything, and before believing a
 performance claim in a design document.

@@ -283,14 +283,28 @@ describe('the neighborhood rail', () => {
     expect(quarter?.at).toBeCloseTo(0.5, 6)
   })
 
-  it('clamps a loaded system that is outside the survey radius', () => {
-    // A loaded system is always listed regardless of the sweep — flying out
-    // and having the place you came from vanish is how you get stranded.
-    const [far] = neighbours(
-      [star({ address: 's:FAR', distance: 40 * LIGHT_YEAR })],
-      10,
+  it('drops a loaded system that is outside the survey radius', () => {
+    /*
+     * The survey always lists a loaded system whatever the sweep — flying out
+     * and having the place you came from vanish from the *list* is how you get
+     * stranded. The rail is a different claim: a dot's position is a distance,
+     * so clamping one to the right-hand end puts a star 40 ly away exactly on
+     * the "10 ly" tick, under a caption that then counts it as within 10.
+     */
+    expect(
+      neighbours([star({ address: 's:FAR', distance: 40 * LIGHT_YEAR })], 10),
+    ).toHaveLength(0)
+  })
+
+  it('draws at most two dozen, so a wide sweep is still a picture', () => {
+    // A 50 ly sweep finds around fourteen hundred systems, and fourteen hundred
+    // dots in a 20 px band is a solid bar rather than a neighborhood.
+    const many = Array.from({ length: 200 }, (_, at) =>
+      star({ address: `s:S${at}`, distance: (at / 100) * LIGHT_YEAR }),
     )
-    expect(far?.at).toBe(1)
+    const placed = neighbours(many, 10)
+    expect(placed).toHaveLength(24)
+    expect(placed[0]?.address).toBe('s:S0')
   })
 
   it('is nearest first, whatever order the survey gave', () => {

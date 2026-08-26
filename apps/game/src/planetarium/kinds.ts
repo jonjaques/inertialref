@@ -1,5 +1,5 @@
 import { Globe, type LucideIcon } from 'lucide-react'
-import type { BodyKind } from '@inertialref/universe'
+import { type BodyKind, isPlanetKind } from '@inertialref/universe'
 import type { TravelTarget } from '@inertialref/devtools'
 import {
   Asteroid,
@@ -71,11 +71,14 @@ export interface ObjectClass {
   readonly accepts: (row: TravelTarget) => boolean
 }
 
+/*
+ * `isPlanetKind` from `universe`, which owns the taxonomy. Its table is a
+ * `Record<BodyKind, boolean>`, so a ninth class fails to compile there and has
+ * to be classified; the `||` chain this replaces would have kept compiling and
+ * silently answered `false`, hiding the new class behind the Planets chip.
+ */
 const isPlanet = (kind: BodyKind | null): boolean =>
-  kind === 'rocky' ||
-  kind === 'ice' ||
-  kind === 'gas-giant' ||
-  kind === 'ice-giant'
+  kind !== null && isPlanetKind(kind)
 
 export const OBJECT_CLASSES: readonly ObjectClass[] = [
   {
@@ -133,7 +136,14 @@ export function acceptsRow(
   row: TravelTarget,
   chosen: readonly string[],
 ): boolean {
-  if (chosen.length === 0 || chosen.length === OBJECT_CLASSES.length)
+  // Membership, not a count. `chosen.length === OBJECT_CLASSES.length` reads as
+  // "everything" for any six-element array — six duplicates, or six ids from a
+  // build where the chips were named differently — so the filter would report
+  // itself off with five chips lit and quietly stop filtering.
+  if (
+    chosen.length === 0 ||
+    OBJECT_CLASSES.every((one) => chosen.includes(one.id))
+  )
     return true
   return OBJECT_CLASSES.some(
     (one) => chosen.includes(one.id) && one.accepts(row),
