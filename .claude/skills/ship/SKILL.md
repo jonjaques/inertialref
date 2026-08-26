@@ -93,7 +93,8 @@ Monitor({
   persistent: false,
   command: `prev=""
     while true; do
-      s=$(gh pr checks <n> --json name,bucket 2>/dev/null) || { sleep 30; continue; }
+      s=$(gh pr checks <n> --json name,bucket 2>/dev/null)
+      [ -n "$s" ] || { sleep 30; continue; }
       cur=$(jq -r '.[] | select(.bucket!="pending") | "\\(.name): \\(.bucket)"' <<<"$s" | sort)
       comm -13 <(echo "$prev") <(echo "$cur")
       prev=$cur
@@ -106,6 +107,14 @@ Monitor({
 It emits one line per check as it settles and exits when none are pending, so a failure
 and a pass both arrive — a filter that only matched success would be silent through a
 crash.
+
+**Key the loop on the output, not on the exit code.** `gh pr checks` exits 8 while any
+check is pending and 1 when one has failed, so `|| continue` never reaches the parse and
+the watch runs to its timeout having emitted nothing. A non-empty body is the signal.
+
+There is more than one check on a PR here: `pnpm check` from
+`.github/workflows/check.yml`, and a Cloudflare `Workers Builds` deployment. Ready means
+both.
 
 Meanwhile, do the verification **CI has no way to do.** CI already runs `pnpm check` and
 `pnpm sim --self-test`; repeating those locally proves nothing new. What is missing from
