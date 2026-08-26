@@ -35,8 +35,9 @@ web
    under debugging outranks polish, and every control has a harness equivalent
    so that anything doable by clicking is reproducible in a test.
 2. **People sent the link.** The build is deployed at
-   <https://inertialrefd.jaquers.workers.dev>. They form an impression in about
-   a minute, from a first viewport, with no context and no instructions.
+   <https://inertialref.jonjaques.com>, which is the only address it answers on
+   — `workers_dev` is off. They form an impression in about a minute, from a
+   first viewport, with no context and no instructions.
 
 **Designed for, not yet reachable.** The audience the game is being built
 toward, from [charter](docs/design/charter.md#audience):

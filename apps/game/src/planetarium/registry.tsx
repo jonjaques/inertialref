@@ -1,6 +1,6 @@
-import { Crosshair, Eye, Sparkles, Sun } from 'lucide-react'
+import { Eye, Layers, Sun } from 'lucide-react'
 import type { DockPanelDefinition } from '../dock/panels.ts'
-import { StellarSpan } from '../icons/index.tsx'
+import { Neighbourhood, StarBody } from '../icons/index.tsx'
 import type { PlanetariumContext } from './context.ts'
 import { CataloguePanel } from './CataloguePanel.tsx'
 import { ObjectPanel } from './ObjectPanel.tsx'
@@ -29,17 +29,25 @@ export function planetariumPanels(
     {
       id: 'catalogue',
       title: 'Catalog',
-      icon: StellarSpan,
+      // The neighborhood rather than the span between two stars: this panel is
+      // "what is around here", and `StellarSpan` is a *dimension* — a measure
+      // with arrow heads. The two glyphs sat one menu apart meaning almost the
+      // same thing, which in a bar read by shape is two buttons that look like
+      // they do each other's job.
+      icon: Neighbourhood,
       zone: 'left',
-      hint: 'everything within reach, nearest first',
+      hint: 'what is within reach — fold it, filter it, fly to it',
       render: () => <CataloguePanel {...context} />,
     },
     {
       id: 'object',
       title: 'Object',
-      icon: Crosshair,
+      // A body, not a reticle. `Crosshair` is the *aiming* glyph and this
+      // panel stopped being about the camera the moment its readouts moved to
+      // the Camera instrument — it is the record of a thing in the sky now.
+      icon: StarBody,
       zone: 'right',
-      hint: 'what the camera is on, in detail',
+      hint: 'the record: mass, orbit, air, light',
       render: () => <ObjectPanel {...context} />,
     },
     {
@@ -47,15 +55,18 @@ export function planetariumPanels(
       title: 'View',
       icon: Eye,
       zone: 'right',
-      hint: 'names, orbits, the lens',
+      hint: 'names, orbit traces, the ship and the lens',
       render: () => <ViewPanel {...context} />,
     },
     {
       id: 'presets',
-      title: 'Presets',
-      icon: Sparkles,
+      title: 'Shots',
+      // Layers, because a shot is where the light and the framing are stacked
+      // into one press. `Sparkles` was the registry's "something magic happens"
+      // glyph and said nothing about what.
+      icon: Layers,
       zone: 'right',
-      hint: 'light, framing and six ready compositions',
+      hint: 'nine composed shots, the light, and the way out',
       render: () => <PresetsPanel {...context} />,
     },
     {

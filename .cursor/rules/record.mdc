@@ -1,0 +1,8 @@
+---
+globs: packages/devtools/src/dossier.ts,apps/game/src/planetarium/**
+alwaysApply: false
+---
+
+Apply the canonical object-record rule:
+
+@.claude/rules/record.md

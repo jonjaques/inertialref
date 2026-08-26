@@ -1,9 +1,9 @@
 /*
  * What is drawn, and who is allowed to say so.
  *
- * Four presentation fields — `showShip`, `showOrbits`, `flareArtifacts`, and
- * the observatory's target — were written on mode entry under three different
- * disciplines, none of them owned:
+ * Five presentation fields — `showShip`, `showOrbits`, `orbitScope`,
+ * `flareArtifacts`, and the observatory's target. Four of them were written on
+ * mode entry under three different disciplines, none of them owned:
  *
  *   - the menu captured the previous values and restored them
  *   - the planetarium restored to hard-coded literals, so leaving it after
@@ -34,6 +34,10 @@
  * without any layer having to remember what it displaced. That is the bug
  * class, and a stack makes it unrepresentable rather than commented against.
  *
+ * `orbitScope` is the field that proves the shape: it arrived after the stack
+ * existed, and it needed nothing — one more line in `resolveStances`, and the
+ * View panel's switch is a push like any other.
+ *
  * The cost is that a layer must be released, and a mode that forgets holds the
  * scene hostage. That is a `useEffect` cleanup, which React already guarantees,
  * and it is the same discipline the three modes were already failing at less
@@ -48,12 +52,34 @@
  * target is `GameEngine.#step`'s, exactly as before.
  */
 
+/**
+ * Which orbits are worth drawing.
+ *
+ * `context` is the subject's siblings and the things going round it — eight
+ * ellipses that answer "where is this relative to the planets". `all` is every
+ * orbit in every loaded system, which in Sol is a hundred and twenty-nine lines
+ * with the subject somewhere behind them; it is the right answer exactly once,
+ * when the question is the shape of the whole system rather than one body in
+ * it. `docs/design/planetarium.md` § "Orbit traces" argues the default.
+ */
+export type OrbitScope = 'context' | 'all'
+
 /** What a layer asks to be drawn. Anything omitted is left to the layer below. */
 export interface Stance {
   /** The debug ship and the meter-scale reference props. */
   readonly showShip?: boolean
   /** Orbit traces. */
   readonly showOrbits?: boolean
+  /**
+   * How many of them: the subject's own context, or every orbit in the system.
+   *
+   * A stance field rather than a panel's own boolean, because it is a
+   * *presentation switch* and the rule about those has no carve-out for the
+   * ones that look like preferences — a mode pushes it, a panel overrides it,
+   * and `release()` puts back whatever was underneath. It is also read by the
+   * frame loop, which is the other half of why it cannot live in React state.
+   */
+  readonly orbitScope?: OrbitScope
   /** How much of the lens's artifact stack is showing, 0..1. */
   readonly flareArtifacts?: number
   /**
@@ -70,6 +96,7 @@ export interface Stance {
 export interface Presentation {
   readonly showShip: boolean
   readonly showOrbits: boolean
+  readonly orbitScope: OrbitScope
   readonly flareArtifacts: number
   readonly observatory: boolean
 }
@@ -78,6 +105,7 @@ export interface Presentation {
 export const GROUND_STANCE: Presentation = {
   showShip: true,
   showOrbits: false,
+  orbitScope: 'context',
   flareArtifacts: 1,
   observatory: false,
 }
@@ -112,6 +140,7 @@ export function resolveStances(layers: readonly Stance[]): Presentation {
     resolved = {
       showShip: layer.showShip ?? resolved.showShip,
       showOrbits: layer.showOrbits ?? resolved.showOrbits,
+      orbitScope: layer.orbitScope ?? resolved.orbitScope,
       flareArtifacts: layer.flareArtifacts ?? resolved.flareArtifacts,
       observatory: layer.observatory ?? resolved.observatory,
     }
@@ -138,6 +167,7 @@ export function createPresentationStack(
     if (
       next.showShip === last.showShip &&
       next.showOrbits === last.showOrbits &&
+      next.orbitScope === last.orbitScope &&
       next.flareArtifacts === last.flareArtifacts &&
       next.observatory === last.observatory
     ) {

@@ -415,7 +415,7 @@ function makeStar(stub: SystemStub): Star {
 }
 
 /** Water frost line: where volatiles survive, so where giants can form. */
-const frostLine = (luminosity: number): Meters =>
+export const frostLine = (luminosity: number): Meters =>
   2.7 * AU * Math.sqrt(luminosity / SOLAR_LUMINOSITY)
 
 const DENSITY: Readonly<Record<BodyKind, number>> = {
@@ -1801,10 +1801,37 @@ export function insolation(star: Star, semiMajorAxis: Meters): number {
   return star.luminosity / (4 * Math.PI * semiMajorAxis * semiMajorAxis)
 }
 
+/**
+ * The insolation band this build calls habitable, W/m².
+ *
+ * A pair of constants rather than two literals inside `isHabitable`, because
+ * the planetarium draws the band as a distance and the generator tests a body
+ * against it, and a panel that answered from its own numbers would eventually
+ * shade a ring the simulation disagreed with. Earth receives about 1361.
+ */
+export const HABITABLE_INSOLATION = { inner: 2_000, outer: 800 } as const
+
+/**
+ * Where that band falls around a star, as radii.
+ *
+ * The inverse of `insolation`: r = √(L / 4πS). Named here rather than derived
+ * in the panel for the reason above — one solver, two readers.
+ */
+export const habitableZone = (
+  star: Star,
+): { readonly inner: Meters; readonly outer: Meters } => ({
+  inner: Math.sqrt(
+    star.luminosity / (4 * Math.PI * HABITABLE_INSOLATION.inner),
+  ),
+  outer: Math.sqrt(
+    star.luminosity / (4 * Math.PI * HABITABLE_INSOLATION.outer),
+  ),
+})
+
 export const isHabitable = (star: Star, body: Body): boolean =>
   body.kind === 'rocky' &&
   body.atmosphere !== null &&
-  insolation(star, body.elements.semiMajorAxis) > 800 &&
-  insolation(star, body.elements.semiMajorAxis) < 2_000
+  insolation(star, body.elements.semiMajorAxis) > HABITABLE_INSOLATION.outer &&
+  insolation(star, body.elements.semiMajorAxis) < HABITABLE_INSOLATION.inner
 
 export const yearsOf = (seconds: Seconds): number => seconds / SECONDS_PER_YEAR

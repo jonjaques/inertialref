@@ -27,6 +27,7 @@ const candidate = (
   over: Partial<PickCandidate> & Pick<PickCandidate, 'address'>,
 ): PickCandidate => ({
   name: over.address,
+  kind: 'rocky',
   x: 0,
   y: 0,
   radius: 0,

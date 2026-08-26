@@ -57,8 +57,8 @@ describe('the presentation stance', () => {
     // Back to the menu's stance, not to a literal. The old code put `showShip`
     // back to `true` here, over a menu that had deliberately hidden it.
     expect(presentation.resolved()).toEqual({
+      ...GROUND_STANCE,
       showShip: false,
-      showOrbits: false,
       flareArtifacts: 0.15,
       observatory: true,
     })
@@ -161,11 +161,21 @@ describe('the presentation stance', () => {
         { showShip: true },
       ]),
     ).toEqual({
+      ...GROUND_STANCE,
       showShip: true,
       showOrbits: true,
       flareArtifacts: 0.15,
-      observatory: false,
     })
+  })
+
+  it('carries the orbit scope like any other field', () => {
+    // It arrived after the stack existed, which is what the stack is for: a
+    // panel's override is a one-field push and `release` puts back the mode's.
+    expect(resolveStances([{ orbitScope: 'all' }]).orbitScope).toBe('all')
+    expect(
+      resolveStances([{ orbitScope: 'all' }, { showShip: true }]).orbitScope,
+    ).toBe('all')
+    expect(resolveStances([]).orbitScope).toBe('context')
   })
 
   it('leaves a field alone when no layer claims it', () => {

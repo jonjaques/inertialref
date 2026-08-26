@@ -6,6 +6,7 @@ import {
   type BodyKind,
   bodyFrameId,
   formatAddress,
+  isDebris,
   type StarSystem,
   walkBodies,
 } from '@inertialref/universe'
@@ -170,3 +171,79 @@ export function orbitPaths(
   }
   return paths
 }
+
+/* ------------------------------------------------------------------------- */
+/* Which of them are worth drawing                                            */
+/* ------------------------------------------------------------------------- */
+
+/** What the host knows about the subject when it decides which traces to keep. */
+export interface OrbitScopeContext {
+  /** The frame the subject's own trace hangs off, or null for no subject. */
+  readonly focus: FrameId | null
+  /** The frame the *subject* orbits, so its siblings can be recognized. */
+  readonly grandparent: FrameId | null
+  /** The subject's address, so its own orbit survives whatever its class. */
+  readonly subject: string | null
+  /** `context` is the subject's neighbourhood; `all` is every trace loaded. */
+  readonly scope: 'context' | 'all'
+}
+
+/**
+ * Thin every trace in the loaded systems down to the ones that are context.
+ *
+ * A pure function, and that is the point rather than tidiness. It lived inside
+ * `GameEngine.#maybeTraceOrbits`, reachable only through the frame loop, so the
+ * one thing it does — turn a hundred and twenty-nine lines into eight — had no
+ * test at all, and neither did the rebuild key that decides whether it is
+ * re-run. Both failures are silent: drop the scope from the key and the View
+ * panel's switch appears dead until the reader navigates away and back, and
+ * lint, typecheck and the whole suite stay green.
+ *
+ * The rule itself: **a subject's siblings and the things going round it, and
+ * rubble is not context.** That was unambiguous when a star's children were
+ * eight planets. Sol has sixty-seven, fifty-nine of them asteroids and comets,
+ * and drawn together they are a cage with the subject somewhere behind it —
+ * measured by looking at Bennu, which was a dark shape inside a wireframe. So a
+ * small body's orbit is drawn when it *is* the subject or goes round it, and not
+ * merely because it shares a primary.
+ *
+ * The nine dwarf planets stay: `isDebris` is asteroids and comets only, and
+ * hiding Pluto costs the one trace a planetarium is most often opened for —
+ * with Neptune selected, where the two orbits cross.
+ *
+ * `scope: 'all'` is the deliberate way to ask for the cage. From outside a
+ * system it is the picture, the whole architecture of the place at once; from
+ * inside it is a fan of edge-on lines. Which is why it is a switch a reader
+ * throws rather than the default.
+ */
+export function visibleOrbits(
+  all: readonly OrbitPath[],
+  context: OrbitScopeContext,
+): readonly OrbitPath[] {
+  if (context.focus === null || context.scope === 'all') return all
+  return all.filter(
+    (path) =>
+      path.parent === context.focus ||
+      (path.parent === context.grandparent &&
+        (!isDebris(path.kind) || path.address === context.subject)),
+  )
+}
+
+/**
+ * What a host caches its last selection against.
+ *
+ * Every input `visibleOrbits` reads, plus the loaded systems that produced
+ * `all`. A key that omitted the scope is the failure named above; naming the
+ * key here rather than interpolating it at the call site is what keeps the two
+ * from drifting apart.
+ */
+export const orbitScopeKey = (
+  systems: readonly string[],
+  context: OrbitScopeContext,
+): string =>
+  [
+    systems.join(','),
+    context.focus ?? '',
+    context.subject ?? '',
+    context.scope,
+  ].join('|')

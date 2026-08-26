@@ -58,21 +58,27 @@ and a form that looks real is one they will type a real one into.
 
 ### The debug overlay
 
-The dev dock — navigation, telemetry, performance, graphics, camera — is the
-author's instrument and is **off by default**, toggled by `` ` `` or the shell
-bar. A first-time visitor should never meet it; nothing on this page describes
-it, and the cockpit it will eventually be replaced by is specified below.
+The dev dock — navigation, controls, telemetry, performance, graphics, camera —
+is the author's instrument and is **off by default**, toggled by `` ` `` or the
+shell bar. A first-time visitor should never meet it; nothing on this page
+describes it, and the cockpit it will eventually be replaced by is specified
+below.
 
 ### Dockable panels
 
 A tool mode is made of panels, and a panel belongs where the person using it
-wants it. Four zones — left, right, bottom, and closed — and a panel moves
-between them by dragging its header.
+wants it. Four zones — left, right, floating, and closed — and a panel moves
+between them by dragging its header. Closed and floating are places a panel _is_
+rather than absences, which is what lets the arrangement be a census: every panel
+in exactly one zone, exactly once.
 [ADR-0012](../adr/0012-dockable-panels.md) has the mechanism; the design rules
 are three:
 
-- **The middle of the frame is never covered.** Zones, not floating windows: the
-  thing being looked at is the content.
+- **The middle of the frame is never covered by default.** Two panes at the
+  edges and a menu at the bottom center; the thing being looked at is the
+  content. A panel reaches the floating zone only by being released over the
+  scene, which is a deliberate act with a visible cost, and it says so with the
+  second elevation step.
 - **Closing is a move, not a deletion.** A launcher rail is always on screen, so
   a closed panel always has a way back.
 - **A phone gets the same panels.** The zones stop being read and the set becomes
@@ -83,10 +89,10 @@ are three:
 ⬜ **Piloting on a touchscreen is not designed.** ✅ **Looking is.**
 
 The [planetarium](planetarium.md#mobile) and the [cinema player](cinema.md) work
-on a phone today: one finger orbits, two pinch, a tap focuses, presets carry the
-framings a keyboard would otherwise reach. Flight modes are desktop-only until
-there is a touch control scheme worth shipping, and the menu says which is
-which rather than letting someone find out.
+on a phone today: one finger orbits, two pinch, a tap focuses, and the composed
+shots carry the framings a keyboard would otherwise reach. Flight modes are
+desktop-only until there is a touch control scheme worth shipping, and the menu
+says which is which rather than letting someone find out.
 
 ---
 

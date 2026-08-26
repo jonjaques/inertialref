@@ -8,10 +8,14 @@ import { UV, type UniverseVector } from '@inertialref/spatial'
 import type { World } from '@inertialref/simulation'
 import {
   type Body,
+  type BodyKind,
   type BodyProvenance,
   bodyFrameId,
   type EntityId,
   formatAddress,
+  formatSpectralType,
+  parentAddress,
+  type LinearRgb,
   type GalaxyId,
   isLandable,
   parseAddress,
@@ -71,6 +75,44 @@ export interface TravelTarget {
    * four light years the other way rendered identically.
    */
   readonly provenance: BodyProvenance
+  /**
+   * The body's own class, or null on a system row.
+   *
+   * Structured rather than left inside `detail`, because two readers now branch
+   * on it and both were reduced to parsing a sentence: the catalog draws a glyph
+   * per class — a comet is not a circle — and its filter chips select by it.
+   * `detail` is a line of prose for a human and must stay free to be rewritten.
+   */
+  readonly bodyKind: BodyKind | null
+  /** Spectral type on a system row, null on a body. */
+  readonly spectralType: string | null
+  /**
+   * The star's own colour, linear sRGB, or null on a body row.
+   *
+   * A measurement rather than decoration: `docs/design/art.md` puts a star's
+   * colour on the list of things the game may not invent, because it follows
+   * from the effective temperature. A K dwarf is orange and does not get to be
+   * a nicer orange. Carried here rather than looked up from the class letter,
+   * so the glyph in the catalog and the disk in the sky are the same number.
+   */
+  readonly colour: {
+    readonly r: number
+    readonly g: number
+    readonly b: number
+  } | null
+  /** Equatorial radius, meters. A star's own on a system row. */
+  readonly radius: Meters
+  /** Semi-major axis about its primary, meters. 0 on a system row. */
+  readonly semiMajorAxis: Meters
+  /** How many bodies go round this one. Planets for a star, moons for a planet. */
+  readonly children: number
+  /**
+   * The row this one hangs off — a body's primary, a system's own address.
+   *
+   * What makes the flat listing a tree the panel can fold. Sol is 129 bodies
+   * and a list that cannot be collapsed is a list nobody scrolls twice.
+   */
+  readonly parent: string | null
 }
 
 export interface TravelTargetOptions {
@@ -115,6 +157,8 @@ export function travelTargets(
       name: string
       position: UniverseVector
       detail: string
+      spectralType: string
+      colour: LinearRgb
       provenance: BodyProvenance
     }
   >()
@@ -128,6 +172,8 @@ export function travelTargets(
       name: stub.name,
       position: stub.position,
       detail: `${stub.spectralType} · ${stub.solarMasses.toFixed(2)} M☉`,
+      spectralType: stub.spectralType,
+      colour: stub.colour,
       // The domain word, not the storage boolean. `catalogued` says which table
       // the row came out of; `observed` says somebody pointed a telescope at it,
       // which is what the listing is actually claiming.
@@ -139,6 +185,8 @@ export function travelTargets(
       name: system.name,
       position: system.position,
       detail: `${system.star.spectralType} · ${planetCount(system)} planets`,
+      spectralType: system.star.spectralType,
+      colour: system.star.colour,
       // A loaded system may be outside the survey radius, so this cannot be
       // inherited from the sweep above. Asked of the catalog directly, which is
       // the same question `catalogStub` answers with `catalogued: true` — and
@@ -158,9 +206,19 @@ export function travelTargets(
   for (const [id, star] of ordered) {
     const system = loaded.get(id)
     const distance = UV.distance(star.position, from)
+    /*
+     * One encoder for the address, which the rows under this one hang off:
+     * a body's `parent` at depth 1 is exactly this string, and two hand-written
+     * copies of the grammar agreeing is not something a compiler checks.
+     */
+    const systemAddress: UniverseAddress = {
+      kind: 'system',
+      galaxy: world.galaxy,
+      system: id,
+    }
     targets.push({
       kind: 'system',
-      address: `g:${world.galaxy}/s:${id}`,
+      address: formatAddress(systemAddress),
       name: star.name,
       system: id,
       depth: 0,
@@ -170,6 +228,13 @@ export function travelTargets(
       landable: false,
       loaded: system !== undefined,
       provenance: star.provenance,
+      bodyKind: null,
+      spectralType: star.spectralType,
+      colour: star.colour,
+      radius: system?.star.radius ?? 0,
+      semiMajorAxis: 0,
+      children: system === undefined ? 0 : planetCount(system),
+      parent: null,
     })
     if (system === undefined) continue
 
@@ -198,6 +263,21 @@ export function travelTargets(
         // The body's own, not its system's: Sol is observed and Ganymede is
         // observed, but every moon of a catalog star is currently a projection.
         provenance: body.provenance,
+        bodyKind: body.kind,
+        spectralType: null,
+        colour: null,
+        radius: body.radius,
+        semiMajorAxis: body.elements.semiMajorAxis,
+        children: body.moons.length,
+        /*
+         * `parentAddress`, which is `universe`'s own — it already answers the
+         * depth-1 case with the system's address. Slicing the path here and
+         * concatenating `g:…/s:…` for the top level was a second copy of the
+         * address grammar, and one it would be silent about breaking: a changed
+         * separator leaves every `parent` failing to match any `address`, which
+         * `orbitalOrder` reads as "no parent is present" and flattens the tree.
+         */
+        parent: formatAddress(parentAddress(body.address) ?? systemAddress),
       })
     }
   }
@@ -237,9 +317,18 @@ export function searchTargets(
       name: star.designations[0]?.text ?? star.id,
       system: star.id,
       depth: 0,
+      /*
+       * `formatSpectralType`, not the object.
+       *
+       * `CatalogStar.spectralType` is the *parsed* type — a record of class,
+       * subclass and luminosity — and interpolating it wrote `[object Object]`
+       * into every search result for a star that was not loaded, which is most
+       * of them. The loaded branch reads `system.star.spectralType`, which is
+       * the string, and the two looked identical in the source.
+       */
       detail:
         system === undefined
-          ? `${star.spectralType} · ${star.physical.solarMasses.toFixed(2)} M☉`
+          ? `${formatSpectralType(star.spectralType)} · ${star.physical.solarMasses.toFixed(2)} M☉`
           : `${system.star.spectralType} · ${planetCount(system)} planets`,
       distance,
       distanceText: formatDistance(distance),
@@ -248,6 +337,14 @@ export function searchTargets(
       // Everything the catalog holds is a star somebody has observed. That is
       // what being in it means.
       provenance: 'observed' as const,
+      bodyKind: null,
+      spectralType: formatSpectralType(star.spectralType),
+      colour: system?.star.colour ?? star.physical.colour,
+      radius: system?.star.radius ?? 0,
+      semiMajorAxis: 0,
+      children:
+        system === undefined ? star.planets.length : planetCount(system),
+      parent: null,
     }
   })
 }

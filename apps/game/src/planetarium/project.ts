@@ -43,6 +43,7 @@ export function projectScene(
   const add = (
     address: string,
     name: string,
+    kind: string,
     position: { x: number; y: number; z: number },
     worldRadius: number,
   ): void => {
@@ -57,6 +58,7 @@ export function projectScene(
     candidates.push({
       address,
       name,
+      kind,
       x: (scratch.x * 0.5 + 0.5) * size.width,
       y: (1 - (scratch.y * 0.5 + 0.5)) * size.height,
       radius: range > 0 ? (worldRadius / range / tanHalfFov) * halfHeight : 0,
@@ -65,12 +67,24 @@ export function projectScene(
   }
 
   for (const body of scene.bodies) {
-    add(body.address, body.name, body.placement.position, body.placement.scale)
+    add(
+      body.address,
+      body.name,
+      body.kind,
+      body.placement.position,
+      body.placement.scale,
+    )
   }
   for (const star of scene.stars) {
     // A bare designation, which `resolveDestination` accepts and turns into a
     // system address — the same string a person types into the search box.
-    add(star.system, star.name, star.placement.position, star.placement.scale)
+    add(
+      star.system,
+      star.name,
+      'star',
+      star.placement.position,
+      star.placement.scale,
+    )
   }
   return candidates
 }

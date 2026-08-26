@@ -226,6 +226,12 @@ architecture, runnable in Node and in the browser. Reports measurements, not
 UI. The same object the headless runner uses.
 → [harness](guides/harness.md)
 
+**Dossier** — one star or one body as a page of astronomy: groups of `Fact`
+rows, its satellites, and how many fields are still empty. Derived on demand
+from what the body already carries, never stored. A `Fact` with a null `value`
+carries the reason nothing has measured it.
+→ [ADR-0014](adr/0014-the-record-with-holes-in-it.md)
+
 **Session** — the module that owns standing a world up: seed → system → target →
 ship → pool → saves → harness. Exists because five copies of that sequence had
 already drifted.

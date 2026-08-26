@@ -52,6 +52,7 @@ import {
   summarizeCapabilities,
   type CapabilityResult,
 } from './capabilities.ts'
+import { type Dossier, dossier } from './dossier.ts'
 import {
   inspectEntity,
   inspectRender,
@@ -313,6 +314,17 @@ export class GameHarness {
       (options.origin === 'observer' ? this.observatory.eye : null) ??
       this.#here()
     return searchTargets(this.world, from, text)
+  }
+
+  /**
+   * Everything known about one star or one body, as a page of astronomy.
+   *
+   * The object panel's whole source. Split from `inspect` — which is an
+   * *entity* readout, a pose and a velocity — because a body is not an entity
+   * and the question "what is Europa" has no answer in the entity store.
+   */
+  dossier(address: string): Dossier | null {
+    return dossier(this.#host, address)
   }
 
   /**
@@ -1025,6 +1037,7 @@ export class GameHarness {
       '  ir.summary()                  one-line state',
       '  ir.status()                   full structured state',
       '  ir.inspect(id?)               one entity, in detail',
+      '  ir.dossier(address)           one star or body, as a page of astronomy',
       '  ir.step(ticks) / ir.runSeconds(s)',
       '  ir.pause() / ir.resume() / ir.timeWarp(x)',
       '  ir.control({translation,rotation}) / ir.hold()',

@@ -1,3 +1,3 @@
 # Memory index
 
-- [Audit patterns](audit-patterns.md) — where invariant violations actually cluster in InertialRef, the rules-mirror checklist, and what `pnpm graph` does and does not catch
+- [Audit patterns](audit-patterns.md) — where invariant violations cluster in InertialRef: amended-AGENTS.md mirror drift, `text-slate-500`, private-method filters, and what `pnpm graph` misses

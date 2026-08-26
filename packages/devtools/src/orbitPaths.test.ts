@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { UV, type UniverseVector, Vec } from '@inertialref/spatial'
 import {
+  type FrameId,
+  UV,
+  type UniverseVector,
+  Vec,
+} from '@inertialref/spatial'
+import {
+  type BodyKind,
   bodyFrameId,
   parseAddress,
   systemId,
@@ -8,7 +14,12 @@ import {
 } from '@inertialref/universe'
 import { createInlineWorker, createTaskRegistry } from '@inertialref/workers'
 import { openSession, type Session } from './session.ts'
-import { orbitPaths, type OrbitPath } from './orbitPaths.ts'
+import {
+  orbitPaths,
+  orbitScopeKey,
+  type OrbitPath,
+  visibleOrbits,
+} from './orbitPaths.ts'
 
 /*
  * Two claims, and both have a version that looks right in a screenshot and is
@@ -131,3 +142,95 @@ function centroid(points: readonly UniverseVector[]): UniverseVector {
   for (const point of points) sum = Vec.add(sum, UV.difference(point, first))
   return UV.translate(first, Vec.scale(sum, 1 / points.length))
 }
+
+describe('which orbits are worth drawing', () => {
+  /*
+   * This lived inside `GameEngine.#maybeTraceOrbits`, reachable only through
+   * the frame loop, so the one thing it does — turn a hundred and twenty-nine
+   * lines into eight — had no test and neither did the key it is cached
+   * against. Both failures are silent, which is the reason these exist.
+   */
+  const path = (
+    address: string,
+    parent: string,
+    kind: BodyKind = 'rocky',
+  ): OrbitPath =>
+    ({ address, parent, kind, name: address }) as unknown as OrbitPath
+
+  const SUN = 'f:s:SOL' as FrameId
+  const MARS = 'f:s:SOL/b:3' as FrameId
+
+  const mars = path('s:SOL/b:3', SUN)
+  const earth = path('s:SOL/b:2', SUN)
+  const phobos = path('s:SOL/b:3.0', MARS, 'moon')
+  const bennu = path('s:SOL/b:44', SUN, 'asteroid')
+  const pluto = path('s:SOL/b:60', SUN, 'dwarf')
+  const all = [mars, earth, phobos, bennu, pluto]
+
+  const onMars = {
+    focus: MARS,
+    grandparent: SUN,
+    subject: 's:SOL/b:3',
+    scope: 'context' as const,
+  }
+
+  it('keeps the subject’s siblings and whatever goes round it', () => {
+    const kept = visibleOrbits(all, onMars).map((one) => one.address)
+    expect(kept).toContain('s:SOL/b:2') // a sibling planet
+    expect(kept).toContain('s:SOL/b:3.0') // a moon of the subject
+  })
+
+  it('leaves the rubble out, and keeps the dwarf planets', () => {
+    /*
+     * Measured by looking at Bennu: the asteroid was a dark shape inside a
+     * wireframe cage of a hundred and twenty-nine lines. Pluto stays, because
+     * "where does its orbit cross Neptune's" is the one trace a planetarium is
+     * most often opened for.
+     */
+    const kept = visibleOrbits(all, onMars).map((one) => one.address)
+    expect(kept).not.toContain('s:SOL/b:44')
+    expect(kept).toContain('s:SOL/b:60')
+  })
+
+  it('draws a small body’s own orbit when it is the subject', () => {
+    const onBennu = {
+      ...onMars,
+      focus: 'f:s:SOL/b:44' as FrameId,
+      subject: 's:SOL/b:44',
+    }
+    expect(visibleOrbits(all, onBennu).map((one) => one.address)).toContain(
+      's:SOL/b:44',
+    )
+  })
+
+  it('draws everything on `all`, and everything when nothing is focused', () => {
+    expect(visibleOrbits(all, { ...onMars, scope: 'all' })).toHaveLength(5)
+    expect(visibleOrbits(all, { ...onMars, focus: null })).toHaveLength(5)
+  })
+
+  it('keys on the scope, or the switch looks dead', () => {
+    /*
+     * The regression that motivated the extraction. Drop the scope from the
+     * key and flipping *Scope* in the View panel changes `engine.orbitScope`,
+     * the rebuild early-returns on a matching key, and `this.orbits` stays
+     * exactly as it was — a control that appears to do nothing until the reader
+     * navigates away and back. Lint, typecheck and the suite stay green.
+     */
+    const systems = ['SOL']
+    expect(orbitScopeKey(systems, onMars)).not.toBe(
+      orbitScopeKey(systems, { ...onMars, scope: 'all' }),
+    )
+    // ...and on everything else the selection reads, for the same reason.
+    expect(orbitScopeKey(systems, onMars)).not.toBe(
+      orbitScopeKey(systems, { ...onMars, focus: SUN }),
+    )
+    expect(orbitScopeKey(systems, onMars)).not.toBe(
+      orbitScopeKey(systems, { ...onMars, subject: 's:SOL/b:2' }),
+    )
+    expect(orbitScopeKey(systems, onMars)).not.toBe(
+      orbitScopeKey([...systems, 'HIP71683'], onMars),
+    )
+    // Same inputs, same key — or it rebuilds every frame.
+    expect(orbitScopeKey(systems, onMars)).toBe(orbitScopeKey(systems, onMars))
+  })
+})
