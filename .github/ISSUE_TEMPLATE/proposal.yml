@@ -1,0 +1,53 @@
+name: Proposal
+description: Something the build should do that it does not do yet.
+labels: ['enhancement']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        InertialRef is an architectural proof before it is a game, so a proposal is
+        judged on what it costs the boundaries as much as on what it adds. Say what it
+        should do; the sections below are where it gets cheap or expensive.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What it should do
+      description: The behavior, in the present tense, as if it already worked.
+      placeholder: |
+        The planetarium labels a body's parent system when the camera is far enough out
+        that the body is under a pixel.
+    validations:
+      required: true
+
+  - type: textarea
+    id: why
+    attributes:
+      label: Why the current behavior is not enough
+      description: |
+        What a person cannot do today, or what they get wrong. A measurement beats an
+        adjective here too.
+    validations:
+      required: true
+
+  - type: textarea
+    id: sketch
+    attributes:
+      label: Sketch or reference
+      description: |
+        Encouraged. A screenshot with an annotation, a frame from something that already
+        does it well, or a paper sketch. Caption what you are pointing at.
+      placeholder: Drag images in here.
+
+  - type: textarea
+    id: boundaries
+    attributes:
+      label: What it touches
+      description: |
+        Which layer, which package, and any rule in `AGENTS.md` § "The rules that
+        actually matter" that this would press against. A proposal that needs an
+        invariant relaxed is not disqualified — it needs an ADR, and naming that up
+        front is the whole difference between a week and an afternoon.
+      placeholder: |
+        packages/rendering and apps/game/src/scene. Reads renderTime, writes nothing
+        canonical, so ADR-0006 and the planetarium rule both hold.

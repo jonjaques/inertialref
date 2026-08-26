@@ -28,6 +28,14 @@ Each invariant below is mirrored as a path-scoped one-liner in
 A drifted mirror is worse than none: it fires with authority and states the
 previous rule.
 
+That directory also holds two rules that are not mirrors of anything below.
+`branching.md` and `writing.md` carry no `paths:` and load every session, because
+the first commit and the commit message both happen before any glob would fire.
+They govern process and prose rather than the code, so they mirror
+[`docs/agents/working.md`](docs/agents/working.md) and
+[`docs/STYLE.md`](docs/STYLE.md) — the writing rules for every comment, document
+and commit message here — and are deliberately absent from the invariant map.
+
 ---
 
 ## The rules that actually matter
@@ -228,6 +236,12 @@ When a defect exposes a missing invariant, add the regression test rather
 than patching the symptom.
 
 A Stop hook runs `graph → lint → typecheck → test` after a turn that touched
-source. It is a safety net. The full `pnpm check` and `pnpm sim --self-test`
-belong at commit — that is what the `ship` skill runs. `IR_SKIP_GATE=1`
-disables the hook.
+source. It is a safety net. The full `pnpm check` gates the push and
+`pnpm sim --self-test` runs in CI — between them, the `ship` skill and
+`.github/workflows/check.yml` cover everything the hook leaves out.
+`IR_SKIP_GATE=1` disables the hook.
+
+Commit each coherent piece as it goes green rather than one lump at the end,
+and cut the branch at the first commit, off `origin/main`. Pushing and the
+pull request are `ship`, which opens the PR as a draft and marks it ready only
+once CI is green. [Working](docs/agents/working.md) § "Starting work".

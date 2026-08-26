@@ -17,7 +17,7 @@ on this machine.
 | [`AGENTS.md`](AGENTS.md)                | Invariants and definition of done. Read first.                   |
 | [`docs/agents/`](docs/agents/README.md) | How to work here as an agent.                                    |
 | [`docs/`](docs/README.md)               | Vision, architecture, concepts, ADRs, guides, design bible.      |
-| [`docs/STYLE.md`](docs/STYLE.md)        | House voice. American English.                                   |
+| [`docs/STYLE.md`](docs/STYLE.md)        | House voice — docs, comments, commits. American English.         |
 | [`CONTEXT.md`](CONTEXT.md)              | Build log. Read on demand; do not treat it as the working guide. |
 | [`README.md`](README.md)                | Project overview and the twelve proven capabilities.             |
 | [`.claude/`](.claude/rules/README.md)   | Rules, skills, agents, hooks. Path-scoped rules load themselves. |
@@ -40,12 +40,24 @@ Most of `.claude/` runs without being asked.
   invariants but Claude Code does not auto-load it. `AGENTS.md` stays canonical
   and carries the reasoning; the rules carry only the imperative. The contract is
   [`.claude/rules/README.md`](.claude/rules/README.md).
+  Two rules carry no `paths:` and are therefore in context from the first turn:
+  `branching.md`, because the first commit happens before any directory rule
+  would fire, and `writing.md`, because a commit message is not a file a glob
+  can match.
+- **The session knows what tree it is in.** `SessionStart` fetches `origin`,
+  fast-forwards local `main` when it can do so without a checkout, and states
+  the branch, the uncommitted count, and the distance from `origin/main`. It
+  does not create a branch — that happens at the first commit, when the work
+  has a name. A dirty tree at session start is a question for you, not a
+  decision for the agent. In a linked worktree it reports nothing about the
+  branch: that tree is already on one cut for a single change, and saying "you
+  are not on main" to it is noise.
 - **The Stop hook runs the gate.** After a turn that touched a
   `.ts` / `.tsx` / `.mjs` / `.json` file, `graph → lint → typecheck → test`
   runs. A failure comes back as work to do, not a finished task. It blocks at
   most three times per prompt, then reports and lets go. `pnpm build` is not
-  in it. The full `pnpm check` belongs at commit, which is what `/ship` runs.
-  `IR_SKIP_GATE=1` disables it.
+  in it. The full `pnpm check` gates the push, which is what `/ship` runs, and
+  `pnpm sim --self-test` runs in CI. `IR_SKIP_GATE=1` disables it.
 - **Edits are formatted for you.** Prettier runs on every file written. Do
   not run `pnpm format` or `pnpm lint` by hand — you would re-read output the
   hooks suppress.
@@ -57,7 +69,7 @@ Most of `.claude/` runs without being asked.
 | Skill          | For                                                       |
 | -------------- | --------------------------------------------------------- |
 | `/drive`       | Driving the game: harness, headless runner, browser traps |
-| `/ship`        | Full check → commit → PR. Never auto-invoked              |
+| `/ship`        | Check → commit → draft PR → watch CI → ready. You invoke  |
 | `/parallel`    | Fanning work across worktrees. Never auto-invoked         |
 | `/adr`         | Writing an ADR in house style                             |
 | `/context-log` | Appending to `CONTEXT.md`                                 |
@@ -86,6 +98,12 @@ import.
   mathematical.
 - When a test's bound is loose because of a real limit, name the limit in the
   assertion.
-- Write documentation in the voice in [`docs/STYLE.md`](docs/STYLE.md).
+- Write documentation, comments and commit messages in the voice in
+  [`docs/STYLE.md`](docs/STYLE.md), and write all of them in the present tense.
+  The code is what the product does now; nothing describes the version it
+  replaced. History has three homes — `CONTEXT.md`, an ADR, and the commit
+  message of the change itself.
+- Commit each coherent piece as it goes green, without asking. Push and the
+  pull request are `/ship`.
 - Report completion as: Implemented / Architecture decisions / Tests and
   verification / Known limitations / Recommended next step.

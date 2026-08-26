@@ -6,9 +6,10 @@ argument-hint: '[the decision]'
 
 # Architecture decision records
 
-`docs/adr/` holds thirteen, numbered `0001`–`0013`. They exist because these decisions are
-expensive to reverse, and `AGENTS.md` opens by telling you to read the one for the area you
-are touching **before** changing anything.
+`docs/adr/` is numbered from `0001`, and the next number is one past the highest file
+there — read the directory rather than trusting a count written down, including this one.
+They exist because these decisions are expensive to reverse, and `AGENTS.md` opens by
+telling you to read the one for the area you are touching **before** changing anything.
 
 ## Before writing one, check one does not already exist
 
@@ -26,14 +27,15 @@ are touching **before** changing anything.
 | `0010` | the cinematic director          |
 | `0011` | the application shell and modes |
 | `0012` | dockable panels                 |
+| `0013` | measured figures                |
 
 If one covers the ground, **you are not relitigating it** — you are either applying it, or
 writing a new ADR that supersedes it and says so explicitly.
 
 ## The shape
 
-Read `docs/adr/0012-dockable-panels.md` before writing; it is the most recent and the
-closest to current style. The skeleton:
+Read the highest-numbered ADR before writing; it is the closest to current style. The
+skeleton:
 
 ```markdown
 # ADR-00NN: <decision, stated as the thing decided — not "choice of X">

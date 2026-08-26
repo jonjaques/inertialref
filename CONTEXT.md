@@ -3991,6 +3991,145 @@ these carries a different half of it:
 The **known gaps** below are the short form of the roadmap section. Where the two
 differ, the roadmap has the seam and this has the measurement.
 
+## The session setup learns what the transcripts already knew (25 Aug 2026)
+
+Ten sessions of transcripts are the input to this one. Each change is a cost
+those sessions paid more than once.
+
+### A watch that could only report success
+
+`gh pr checks` documents one extra exit code — `8: Checks pending` — and
+returns `1` once a check has failed. The `/ship` watch guarded its poll with
+`|| { sleep 30; continue; }`, so every iteration that had something to say
+skipped the parse and slept. A red CI and a CI still working are the same
+thing to that loop: thirty minutes of silence, then a timeout.
+
+The loop keys on a non-empty body now, not on the exit code. `--json
+name,bucket` returns the array whatever the exit status, which is what makes
+the body a usable signal. This is the shape of the bug worth remembering: a
+guard written for "the command failed" firing on "the command has news".
+
+There are two checks on a PR here — `pnpm check` from
+`.github/workflows/check.yml` and a Cloudflare `Workers Builds` deployment —
+so ready means both, and `all(.[]; .bucket!="pending")` is what says so.
+
+### The template was searched for once per session and never existed
+
+`.github/pull_request_template.md` was absent. Measured across the project's
+transcripts, counting tool invocations whose input names it:
+
+| Sessions searching for it | Searches per session | Times it was found |
+| ------------------------- | -------------------- | ------------------ |
+| 10                        | 1                    | 0                  |
+
+The GitHub tooling looks for a template before every PR regardless of what
+any instruction says, so the fix is the file rather than another instruction.
+It asks for what review here needs: the invariants a change touches,
+screenshots, and verification with numbers. The issue forms ask for the seed,
+the address and the tick — generation and simulation are deterministic, which
+makes a reproduction that replays headlessly cheap to write and worth more
+than a description.
+
+### The hook was talking to the wrong reader
+
+`SessionStart` emitted everything as `systemMessage` under a comment
+asserting that channel reached the model. It reaches the human. "pnpm install
+FAILED, no test result from this tree can be trusted" was going to the one
+reader who was not about to run a test.
+
+Facts go through `hookSpecificOutput.additionalContext`; the subset a human
+must act on also goes through `systemMessage`, because only a human decides to
+stop and fix the environment. Cursor's `sessionStart` has no
+`additionalContext`, so its payload is detected by `conversation_id` — the
+same discriminator `gate.mjs` already uses — and gets everything on the one
+channel it has.
+
+### The branch is cut at the first commit, not at session start
+
+The hook fetches `origin` and fast-forwards local `main` through `git fetch .
+origin/main:main` — no checkout, no second network round trip, and it refuses
+a non-fast-forward. It reports the branch, the uncommitted count and the
+distance from `origin/main`.
+
+It deliberately does not create a branch. At session start the work has no
+name, so a hook that made one produces `wip-3` on every session that turns out
+to be a question. The first commit is where the work has been described, and
+the branch is cut there off `origin/main` rather than off `HEAD`: a branch
+based on a branch that merged last week produces a diff containing work that
+already shipped, and that is discovered at review.
+
+A dirty tree at session start is a question for the human, not a decision for
+the agent.
+
+### Draft first, and the slow verification goes where the time already is
+
+`pnpm sim --self-test` leaves the pre-push gate for CI, where it already ran.
+Holding the push for it bought nothing. The window while CI works goes to what
+CI cannot do — a screenshot, a before/after pair, `invariant-auditor` and
+`docs-curator`, both read-only, both slow, and both previously at zero
+invocations across the transcripts.
+
+A PR opens as a draft, because one opened ready-for-review announces a verdict
+CI has not reached. `gh pr ready` is the last step rather than the first.
+
+`git commit` moves from ask to allow. A commit is reversible and costs
+nothing; a session that ends with forty files in one lump is neither
+reviewable nor bisectable.
+
+### Two rules load with no `paths:`
+
+Path-scoped rules fire when a matching file enters context, which is too late
+for two of them. `branching.md` governs the first commit, which happens before
+any rule about a directory is relevant. `writing.md` governs prose written
+into files no glob predicts — including the commit message, which is not a
+file in the tree at all. Both are held to a tighter length limit than the
+scoped rules for the same reason: they are in context for every session,
+including the ones that only answer a question.
+
+These two mirror `docs/agents/working.md` § "Starting work" and
+[`docs/STYLE.md`](docs/STYLE.md) rather than `AGENTS.md`, because what they
+carry is not a property of the code. `AGENTS.md` stays canonical for the code
+invariants, and `docs/agents/invariants.md` maps those to their technical
+pages; process rules are deliberately not in that table.
+
+The ADR count was hardcoded in the `adr` skill and in `/ship`, and went stale
+on every ADR. Both read the directory now.
+
+### What the audit caught, and one bug worth a name
+
+`invariant-auditor` and `docs-curator` ran against the branch while CI worked.
+Between them they found five things a green `pnpm check` cannot see, because
+none of them is a link, a type or a test.
+
+The one worth remembering is **reparenting by insertion**. `### Avoid` was a
+subsection of `## Voice` in `docs/STYLE.md`. Three new `##` sections landed
+between them, and nesting alone moved that block under `## Commit messages` —
+so a code invariant ("interface copy is title case in source; CSS decides what
+is shouted") ended up filed under commit-message guidance. **Not one line of the
+moved block appears in the diff.** Markdown nesting is positional, so a heading
+can change meaning without changing text, and neither review nor Prettier nor a
+link checker has any signal to fire on. Adding a `##` to a page means checking
+what `###` now sits under it.
+
+The other four are ordinary drift, each introduced by this branch:
+
+| Claim                                               | Reality                                               |
+| --------------------------------------------------- | ----------------------------------------------------- |
+| Every rule is a path-scoped mirror of `AGENTS.md`   | Two carry no `paths:` and mirror other pages          |
+| Unscoped rules are held to a tighter length limit   | `writing.md` was 33 lines against a ~30 cap           |
+| Force-push and push to `main` are "denied outright" | Four matchers; `git push -u origin HEAD` matches none |
+| `SessionStart` states the branch                    | Silent in a linked worktree, by design                |
+
+The deny-list one is the pattern to watch: a rule that asserts a mechanical
+guarantee stronger than the mechanism gives makes an agent _less_ careful,
+because it stops checking what it believes is enforced. `git push:*` in `ask` is
+what actually catches the push `/ship` runs.
+
+`git commit` moving from ask to allow leaves "never commit to `main`" with no
+mechanical enforcement at all. The main checkout sits on `main`, and the
+`SessionStart` report does run there — so the guard is a branch line in context
+and a rule that reads it. That is deliberate and it is behavioral.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

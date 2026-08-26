@@ -8,7 +8,9 @@ instead of creating a second source of truth.
   install, development terminal, and exposed ports.
 - `rules/*.mdc` supply Cursor's path matching and reference the canonical rule
   bodies in [`.claude/rules/`](../.claude/rules/README.md). Keep the globs in
-  step with each rule's `paths:` frontmatter.
+  step with each rule's `paths:` frontmatter. `branching.mdc` and `writing.mdc`
+  carry `alwaysApply: true` instead of globs, mirroring the two canonical rules
+  that carry no `paths:`.
 - `hooks.json` maps Cursor lifecycle events onto the shared implementations in
   `.claude/hooks/`. The scripts accept both Cursor and Claude hook payloads and
   claim one shared dirty marker, so enabling third-party configuration cannot

@@ -1,0 +1,7 @@
+---
+alwaysApply: true
+---
+
+Apply the canonical writing rule — comments, documents, commit messages:
+
+@.claude/rules/writing.md

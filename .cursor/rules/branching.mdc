@@ -1,0 +1,7 @@
+---
+alwaysApply: true
+---
+
+Apply the canonical branching and committing rule:
+
+@.claude/rules/branching.md

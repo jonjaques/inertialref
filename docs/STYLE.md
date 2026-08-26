@@ -1,8 +1,14 @@
-# Documentation style
+# House style
 
 InertialRef is written in **American English**, in one voice, for three
-audiences. This page is the house style. Follow it for new pages and when
-editing old ones.
+audiences. This page is that voice. It governs every surface prose reaches —
+documentation pages, code comments, plans, pull request bodies, and commit
+messages. Follow it for new writing and when editing what is already here.
+
+The imperative half of this page is mirrored as
+[`.claude/rules/writing.md`](../.claude/rules/writing.md), which carries no
+`paths:` and therefore loads at the start of every agent session. The rule has
+to be in context before the first comment is written, not after.
 
 ---
 
@@ -49,6 +55,94 @@ cite those pages. They should not retell them.
   that produced the file.
 - Writing a label in the case you want on screen. Interface copy is title case
   in source; CSS decides what is shouted. See [`DESIGN.md`](../DESIGN.md).
+
+---
+
+## Look forward, not back
+
+**The code is what the product does now.** Everything written about it —
+comments, guides, plans, rules, pull request bodies — describes the system as it
+stands. Not the version it replaced, and not the route taken to get here.
+
+The target is a sentence about a **previous version of the system**, and these
+are the tell: _used to_, _previously_, _formerly_, _no longer_, _we then
+changed_, _the old approach_, _this was refactored from_, _as of this change_.
+Find one, and the sentence around it is almost always deletable whole.
+
+The words themselves are innocent — a body one tick behind the picture "is where
+it used to be" and that is a present-tense fact about interpolation, not a
+changelog. Read what the sentence is about, not which words it uses.
+
+The reason is not tidiness. A reader who never saw the previous version is the
+only reader a file reliably has, and to them a sentence about that version is a
+claim they cannot check and cannot act on. It ages into a lie the moment the
+thing it contrasts against changes again, and nothing mechanical catches it.
+
+**"Why the obvious thing does not work" is not history.** It is a present-tense
+fact about a constraint, and it is the most valuable sentence on the page:
+
+> Presentation happens at `renderTime` — one tick back, plus the interpolation
+> alpha. Asking where a body is at `clock.time` aims one tick behind the
+> picture, by that body's velocity times up to 15.6 ms: invisible on a planet,
+> and 11 and 19 pixels on Phobos and Deimos.
+
+That stays. What goes is the sentence saying when it was found, who found it,
+or what the file looked like the day before.
+
+History has three homes, and none of them is a comment:
+
+| What                                             | Where                                          |
+| ------------------------------------------------ | ---------------------------------------------- |
+| A bug that must not come back; what was measured | [`CONTEXT.md`](../CONTEXT.md) — `/context-log` |
+| A decision and the alternatives it beat          | An [ADR](adr/README.md) — `/adr`               |
+| What one change did, and why                     | That change's commit message                   |
+
+---
+
+## Code comments
+
+Comments are held to the same standard as the prose, and to one more: they earn
+their line or they do not exist.
+
+- **Explain why, and specifically why the obvious thing does not work.** A
+  comment that restates the code is worse than no comment, because it is a
+  second thing to keep true.
+- **Name the failure.** "Registration is idempotent by label, because StrictMode
+  does everything twice." A constraint, a number, or a mode that breaks.
+- **Match the density of the file you are in.** Do not import a different
+  commenting habit into a module that has its own.
+- **A comment that has to narrate a change is a commit message in the wrong
+  file.** Move it.
+
+---
+
+## Commit messages
+
+Every commit gets a subject and an extended body. Both are prose.
+
+**The subject** is a conventional prefix and then a declarative claim, not a
+ticket summary:
+
+```
+fix: the share card was a cyan marble
+feat(cinematics): the hull was flying backwards, and the camera was inside it
+```
+
+Read `git log --oneline -20` before writing one and match what is there.
+
+**The body** says why, and specifically why the obvious approach did not work,
+with the measured numbers that settled it. This is the one place a backward
+glance is correct — a commit exists to describe a change — so it may say what
+the previous behavior was and why it was wrong. It may not use that license to
+plant the same sentence in a source comment.
+
+A body that restates the diff was not worth writing. A body that names a
+constraint, a measurement, and a rejected alternative is what makes
+`git log` worth reading a year later.
+
+Pull request bodies follow the commit body, plus the invariants the change
+touches and what was verified. The template is
+[`.github/pull_request_template.md`](../.github/pull_request_template.md).
 
 ---
 

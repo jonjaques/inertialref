@@ -7,6 +7,11 @@ without reconstructing it from a one-liner.
 Path-scoped copies in [`.claude/rules/`](../../.claude/rules/README.md) carry
 only the imperative. If a copy disagrees, `AGENTS.md` wins.
 
+`branching.md` and `writing.md` are the two exceptions and have no row here. They
+are unscoped process rules, not invariants about the code, and they mirror
+[`working.md`](working.md) § "Starting work" and [`docs/STYLE.md`](../STYLE.md).
+A rule missing from this table is one of those two, not drift.
+
 | Invariant                                              | Technical home                                                                              |
 | ------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
 | No absolute position in a `Vec3`                       | [Coordinates](../concepts/coordinates.md) · [ADR-0001](../adr/0001-universe-coordinates.md) |
