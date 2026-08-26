@@ -45,6 +45,17 @@ Bug history, rejected approaches, and "this must not come back" belong in
 [`CONTEXT.md`](../CONTEXT.md) or in an [ADR](adr/README.md). Working guides may
 cite those pages. They should not retell them.
 
+### Avoid
+
+- Session-speak: "the overlay refactor," "the black-screen class," "which is
+  the trap one paragraph down."
+- Insider shorthand without a definition. "The twelve" is fine after you have
+  said "the twelve capability checks."
+- Addressing "the next agent" or "the maintainer" as if they shared the chat
+  that produced the file.
+- Writing a label in the case you want on screen. Interface copy is title case
+  in source; CSS decides what is shouted. See [`DESIGN.md`](../DESIGN.md).
+
 ---
 
 ## Look forward, not back
@@ -132,17 +143,6 @@ constraint, a measurement, and a rejected alternative is what makes
 Pull request bodies follow the commit body, plus the invariants the change
 touches and what was verified. The template is
 [`.github/pull_request_template.md`](../.github/pull_request_template.md).
-
-### Avoid
-
-- Session-speak: "the overlay refactor," "the black-screen class," "which is
-  the trap one paragraph down."
-- Insider shorthand without a definition. "The twelve" is fine after you have
-  said "the twelve capability checks."
-- Addressing "the next agent" or "the maintainer" as if they shared the chat
-  that produced the file.
-- Writing a label in the case you want on screen. Interface copy is title case
-  in source; CSS decides what is shouted. See [`DESIGN.md`](../DESIGN.md).
 
 ---
 
