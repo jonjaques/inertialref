@@ -1,0 +1,11 @@
+# Blank issues stay enabled: this is a small repository and a one-line note should not
+# have to be filed through a form. The templates exist to make a *reproducible* report
+# the path of least resistance, not the only one.
+blank_issues_enabled: true
+contact_links:
+  - name: How the system works
+    url: https://github.com/jonjaques/inertialref/blob/main/docs/README.md
+    about: Architecture, concepts, ADRs and guides. Read this before filing a design question.
+  - name: What is actually proven
+    url: https://github.com/jonjaques/inertialref/blob/main/README.md
+    about: The capability checks the build asserts about itself, and the pre-alpha scope.

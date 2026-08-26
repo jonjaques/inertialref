@@ -8,7 +8,9 @@ code is the authority on what it does. These pages exist so the code reads as
 a set of decisions rather than a pile of tricks.
 
 Writing voice, American English, and where each audience should look:
-[`STYLE.md`](STYLE.md).
+[`STYLE.md`](STYLE.md). It covers every surface prose reaches — these pages, code
+comments, and commit messages — and it is the reason none of them describe a
+previous version of the system.
 
 ```mermaid
 flowchart LR

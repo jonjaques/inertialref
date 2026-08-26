@@ -228,6 +228,12 @@ When a defect exposes a missing invariant, add the regression test rather
 than patching the symptom.
 
 A Stop hook runs `graph → lint → typecheck → test` after a turn that touched
-source. It is a safety net. The full `pnpm check` and `pnpm sim --self-test`
-belong at commit — that is what the `ship` skill runs. `IR_SKIP_GATE=1`
-disables the hook.
+source. It is a safety net. The full `pnpm check` gates the push and
+`pnpm sim --self-test` runs in CI — between them, the `ship` skill and
+`.github/workflows/check.yml` cover everything the hook leaves out.
+`IR_SKIP_GATE=1` disables the hook.
+
+Commit each coherent piece as it goes green rather than one lump at the end,
+and cut the branch at the first commit, off `origin/main`. Pushing and the
+pull request are `ship`, which opens the PR as a draft and marks it ready only
+once CI is green. [Working](docs/agents/working.md) § "Starting work".

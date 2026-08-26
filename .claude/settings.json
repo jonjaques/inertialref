@@ -32,8 +32,11 @@
       "Bash(git worktree list:*)",
       "Bash(git worktree add:*)",
       "Bash(git add:*)",
+      "Bash(git commit:*)",
       "Bash(git checkout -b:*)",
       "Bash(git switch:*)",
+      "Bash(git fetch:*)",
+      "Bash(git merge --ff-only:*)",
 
       "Bash(gh pr view:*)",
       "Bash(gh pr list:*)",
@@ -43,6 +46,7 @@
       "Bash(gh issue list:*)",
       "Bash(gh run list:*)",
       "Bash(gh run view:*)",
+      "Bash(gh run watch:*)",
 
       "Bash(rg:*)",
       "Bash(fd:*)",
@@ -56,8 +60,10 @@
 
     "ask": [
       "Bash(git push:*)",
-      "Bash(git commit:*)",
       "Bash(gh pr create:*)",
+      "Bash(gh pr edit:*)",
+      "Bash(gh pr ready:*)",
+      "Bash(gh pr comment:*)",
       "Bash(pnpm run deploy:worker)",
       "Bash(pnpm catalog:build:*)",
       "Bash(pnpm textures:build:*)",

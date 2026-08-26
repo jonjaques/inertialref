@@ -1,0 +1,76 @@
+name: Bug report
+description: Something the simulation, the renderer, or the shell gets wrong.
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Simulation and generation here are deterministic: the same seed, address and tick
+        produce the same frame. That makes a reproduction cheap to write and worth far
+        more than a description — fill in the repro fields and the bug can be replayed
+        headlessly rather than hunted.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happens
+      description: What the build does now, and what it should do instead.
+      placeholder: |
+        Phobos is 26% too flat in the planetarium at 1×. It should match the measured
+        figure in data/reference/solar-system.json.
+    validations:
+      required: true
+
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: Screenshot or capture
+      description: |
+        Encouraged, and close to required for anything visible. A still, a before/after
+        pair, or a short capture beats a paragraph describing a frame. Caption it with
+        the scale, the frame, or the address it was taken at — an uncaptioned screenshot
+        is not evidence.
+      placeholder: Drag images or video in here.
+
+  - type: input
+    id: where
+    attributes:
+      label: Where
+      description: The mode or route, or `headless` if it reproduces without a browser.
+      placeholder: /planetarium, or apps/headless
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: |
+        The seed, the body address, the tick or cutscene frame, and the steps. If it
+        reproduces through the harness, paste the `window.ir` calls or the
+        `pnpm sim` invocation — those replay exactly.
+      render: shell
+      placeholder: |
+        pnpm sim --seed 1 --address s:0/b:2/m:0 --ticks 4096
+        ir.seekCutscene('tng-intro', 1180); ir.shot()
+
+  - type: textarea
+    id: output
+    attributes:
+      label: Console or command output
+      description: Errors, warnings, or the failing assertion. Trim it to the part that names a file.
+      render: shell
+
+  - type: input
+    id: commit
+    attributes:
+      label: Commit
+      description: '`git rev-parse --short HEAD`, so the report is pinned to a tree.'
+      placeholder: fbc34a2
+
+  - type: input
+    id: environment
+    attributes:
+      label: Browser and GPU
+      description: |
+        Rendering is WebGPU. The adapter matters — say which browser, which OS, and
+        which GPU if you know it. Leave blank for a headless bug.
+      placeholder: Chrome 141, macOS 26, Apple M3 Max

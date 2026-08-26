@@ -6,6 +6,39 @@ are in [`AGENTS.md`](../../AGENTS.md).
 
 ---
 
+## Starting work
+
+A session begins by knowing what tree it is standing in. The `SessionStart`
+hook fetches `origin`, fast-forwards local `main` when it can do so without a
+checkout, and states the branch, the uncommitted count, and how far ahead of
+`origin/main` the branch is. The imperative half is
+[`.claude/rules/branching.md`](../../.claude/rules/branching.md), which carries
+no `paths:` and so is in context from the first turn.
+
+**A dirty working tree is someone else's work.** Ask what to do with it —
+continue on the branch, stash it, commit it as it stands — rather than building
+on top of it or cleaning it up. Uncommitted changes are the one repository state
+with no history behind it, so a wrong guess there is the only one that cannot be
+undone.
+
+**The branch is cut at the first commit, not at the start of the session.** By
+then the work has been described and can be named after itself, which is why the
+branches here read like their commits rather than like `wip-3`. It comes off
+`origin/main`:
+
+```bash
+git switch -c feat/<topic> origin/main
+```
+
+From `origin/main` rather than from `HEAD`, because `HEAD` may be a branch that
+was merged last week — and a branch based on a merged branch produces a pull
+request whose diff contains work that already shipped, which is discovered at
+review and costs a rebase.
+
+Nothing is committed to `main`.
+
+---
+
 ## Before you change anything
 
 1. Read the [ADR](../adr/README.md) for the area you are touching. They are
@@ -55,15 +88,20 @@ Not "the browser rendered something." Done means:
 
 A Stop hook runs `graph → lint → typecheck → test` after a turn that touched
 source. It is a safety net, not the definition of done. The full `pnpm check`
-and `pnpm sim --self-test` belong at commit, which is what the `ship` skill
-runs. `IR_SKIP_GATE=1` disables the hook when you must.
+gates the push, which is what the `ship` skill runs, and `pnpm sim --self-test`
+runs in CI. `IR_SKIP_GATE=1` disables the hook when you must.
 
 ---
 
 ## After a meaningful change
 
 - **Code comments** explain why, and specifically why the obvious thing does
-  not work. Do not restate the code.
+  not work. Do not restate the code, and do not narrate what the file said
+  before. [`docs/STYLE.md`](../STYLE.md) § "Code comments".
+- **Everything written is written in the present tense.** The code is what the
+  product does now; a comment, a guide, a plan or a pull request body describes
+  it as it stands, never as the version it replaced.
+  [`docs/STYLE.md`](../STYLE.md) § "Look forward, not back".
 - **Technical docs** update when the page would otherwise describe a previous
   version. See the [docs curator](../../.claude/agents/docs-curator.md).
 - **`CONTEXT.md`** gets a dated entry when you decided something, measured
@@ -77,6 +115,30 @@ runs. `IR_SKIP_GATE=1` disables the hook when you must.
   invariants" and "twelve decisions" were all true and all in several files at
   once. `README.md`, `PRODUCT.md`, `docs/roadmap.md`, `docs/design/` and the
   guides each state the same facts for different audiences.
+
+---
+
+## Committing
+
+**Commit without being asked.** A commit is reversible and costs nothing; a
+session that ends with forty files in one lump is neither reviewable nor
+bisectable. Commit each coherent piece once the Stop gate is green.
+
+Every commit gets a subject that is a declarative claim behind a conventional
+prefix, and an extended body saying **why** — specifically why the obvious
+approach did not work, with the numbers that settled it.
+[`docs/STYLE.md`](../STYLE.md) § "Commit messages" is the specification;
+`git log --oneline -20` is the calibration.
+
+A commit message is the one place a backward glance is correct, because a commit
+exists to describe a change. That license does not extend to the source comment
+next to it.
+
+Pushing and opening a pull request are [`/ship`](../../.claude/skills/ship/SKILL.md),
+which runs the full `pnpm check`, opens the PR as a **draft**, watches CI in the
+background, and marks it ready only once the checks are green and the
+verification CI cannot do — a screenshot, a before/after pair, a headless probe
+— is attached.
 
 ---
 
