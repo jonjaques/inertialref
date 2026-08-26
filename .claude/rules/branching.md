@@ -24,5 +24,6 @@ Reasoning: [`docs/agents/working.md`](../../docs/agents/working.md) § "Starting
   ([`docs/STYLE.md`](../../docs/STYLE.md) § "Commit messages").
 
 - **Pushing and opening a pull request are `/ship`.** Invoking that skill is the
-  approval for everything in it. Force-pushing and pushing to `main` are denied
-  outright and are not to be worked around.
+  approval for everything in it. Force-pushing and the direct `git push … main`
+  forms are denied by matcher; every other push prompts. Check the branch yourself
+  rather than trusting the deny list to catch it.
