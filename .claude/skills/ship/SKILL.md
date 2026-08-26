@@ -49,7 +49,9 @@ applicable, and say which:
   path-scoped one-liner, and a row in `docs/agents/invariants.md`. See
   `.claude/rules/README.md`.
 - **A regression test** if a defect exposed a missing invariant. Patch the invariant,
-  not the symptom, and check the test can actually fail by reintroducing the bug.
+  not the symptom, and **watch the test fail** with the defect reintroduced — three have
+  failed that check here for three different reasons.
+  `docs/guides/testing.md#prove-a-regression-test-can-fail`.
 - **`worker-configuration.d.ts`** if `wrangler.jsonc` changed —
   `pnpm --filter @inertialref/server run types`, and commit it.
 
