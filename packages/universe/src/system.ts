@@ -1831,8 +1831,7 @@ export const habitableZone = (
 export const isHabitable = (star: Star, body: Body): boolean =>
   body.kind === 'rocky' &&
   body.atmosphere !== null &&
-  insolation(star, body.elements.semiMajorAxis) >
-    HABITABLE_INSOLATION.outer &&
+  insolation(star, body.elements.semiMajorAxis) > HABITABLE_INSOLATION.outer &&
   insolation(star, body.elements.semiMajorAxis) < HABITABLE_INSOLATION.inner
 
 export const yearsOf = (seconds: Seconds): number => seconds / SECONDS_PER_YEAR

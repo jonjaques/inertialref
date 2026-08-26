@@ -14,6 +14,7 @@ import {
   type EntityId,
   formatAddress,
   formatSpectralType,
+  type LinearRgb,
   type GalaxyId,
   isLandable,
   parseAddress,
@@ -84,6 +85,20 @@ export interface TravelTarget {
   readonly bodyKind: BodyKind | null
   /** Spectral type on a system row, null on a body. */
   readonly spectralType: string | null
+  /**
+   * The star's own colour, linear sRGB, or null on a body row.
+   *
+   * A measurement rather than decoration: `docs/design/art.md` puts a star's
+   * colour on the list of things the game may not invent, because it follows
+   * from the effective temperature. A K dwarf is orange and does not get to be
+   * a nicer orange. Carried here rather than looked up from the class letter,
+   * so the glyph in the catalog and the disk in the sky are the same number.
+   */
+  readonly colour: {
+    readonly r: number
+    readonly g: number
+    readonly b: number
+  } | null
   /** Equatorial radius, meters. A star's own on a system row. */
   readonly radius: Meters
   /** Semi-major axis about its primary, meters. 0 on a system row. */
@@ -142,6 +157,7 @@ export function travelTargets(
       position: UniverseVector
       detail: string
       spectralType: string
+      colour: LinearRgb
       provenance: BodyProvenance
     }
   >()
@@ -156,6 +172,7 @@ export function travelTargets(
       position: stub.position,
       detail: `${stub.spectralType} · ${stub.solarMasses.toFixed(2)} M☉`,
       spectralType: stub.spectralType,
+      colour: stub.colour,
       // The domain word, not the storage boolean. `catalogued` says which table
       // the row came out of; `observed` says somebody pointed a telescope at it,
       // which is what the listing is actually claiming.
@@ -168,6 +185,7 @@ export function travelTargets(
       position: system.position,
       detail: `${system.star.spectralType} · ${planetCount(system)} planets`,
       spectralType: system.star.spectralType,
+      colour: system.star.colour,
       // A loaded system may be outside the survey radius, so this cannot be
       // inherited from the sweep above. Asked of the catalog directly, which is
       // the same question `catalogStub` answers with `catalogued: true` — and
@@ -201,6 +219,7 @@ export function travelTargets(
       provenance: star.provenance,
       bodyKind: null,
       spectralType: star.spectralType,
+      colour: star.colour,
       radius: system?.star.radius ?? 0,
       semiMajorAxis: 0,
       children: system === undefined ? 0 : planetCount(system),
@@ -235,6 +254,7 @@ export function travelTargets(
         provenance: body.provenance,
         bodyKind: body.kind,
         spectralType: null,
+        colour: null,
         radius: body.radius,
         semiMajorAxis: body.elements.semiMajorAxis,
         children: body.moons.length,
@@ -306,9 +326,11 @@ export function searchTargets(
       provenance: 'observed' as const,
       bodyKind: null,
       spectralType: formatSpectralType(star.spectralType),
+      colour: system?.star.colour ?? star.physical.colour,
       radius: system?.star.radius ?? 0,
       semiMajorAxis: 0,
-      children: system === undefined ? star.planets.length : planetCount(system),
+      children:
+        system === undefined ? star.planets.length : planetCount(system),
       parent: null,
     }
   })

@@ -6,6 +6,7 @@ import {
   JUPITER_RADIUS,
   type Kilograms,
   type Meters,
+  PARSEC,
   type Seconds,
   SECONDS_PER_DAY,
   SECONDS_PER_YEAR,
@@ -25,6 +26,7 @@ import {
   frostLine,
   habitableZone,
   isDebris,
+  isHabitable,
   isPlanetKind,
   parseSpectralType,
   type Star,
@@ -52,38 +54,65 @@ import type { HarnessHost } from './harness.ts'
  * that deserves a test in Node rather than a component that has to be rendered
  * to be checked.
  *
- * ## Three rules it follows
+ * ## Four rules it follows
  *
- * **Derive, never store.** Density, surface gravity, escape velocity and the
- * habitable zone are all computed from what the body already carries. That is
- * the catalog's own rule ("never store what the catalog can derive") applied one
- * layer up, and it is why a change to a planet's mass moves nine numbers here
- * rather than leaving eight of them stale.
+ * **Derive, never store.** Density, surface gravity, escape velocity, the
+ * parallax and the habitable zone are all computed from what the body already
+ * carries. That is the catalog's own rule ("never store what the catalog can
+ * derive") applied one layer up, and it is why a change to a planet's mass moves
+ * nine numbers here rather than leaving eight of them stale.
  *
  * **Nothing about the camera.** No range, no fill, no azimuth. Those are facts
  * about where you are standing, they belong to the instrument, and mixing them
  * into a body's record is what made the old panel read as a debugger. The
  * observatory's own readout is in the author's Camera instrument now.
  *
- * **Say what is not known.** `gaps` is not an apology, it is the same claim
- * `provenance` makes on every row of the catalog: this build knows a bulk
- * density and does not know a composition, and a panel that quietly omitted the
- * second would let a reader assume it had been checked. PRODUCT.md promises the
- * interface always states which half of that it is on.
+ * **An empty field is a row, not an omission.** `Fact.value` is nullable and a
+ * null draws as *no data* with a reason attached. A reader can then tell "this
+ * body has no atmosphere" from "nobody has measured its atmosphere", which are
+ * completely different claims and are indistinguishable when the row is simply
+ * absent. It also means the panel shows the shape of the record that is coming:
+ * every empty field here is one the survey will eventually fill, and the list of
+ * them is the specification for filling it.
+ * `docs/design/planetarium.md` § "The record that is not filled in yet" is the
+ * same list with the engineering source for each.
+ *
+ * **The reason is written in the universe's voice, never in the engine's.**
+ * "No spectrometer has resolved this body's interior" and "the generator does
+ * not produce a composition" are the same fact and only the first one may be
+ * shown. A projected body is *real* — the galaxy is real, and `projected` means
+ * the ship's computer worked it out from the star's parameters rather than
+ * somebody having flown there ([galaxy](docs/design/galaxy.md): "projected from
+ * stellar parameters — not confirmed"). The planetarium is a reading room for
+ * that galaxy, not a debugger with a starfield behind it, and a panel that said
+ * "not modeled yet" would be telling the reader the sky is a program.
  */
 
 /** One reading: what it is, what it says, and a second scale for the same thing. */
 export interface Fact {
   readonly label: string
-  readonly value: string
+  /**
+   * The reading, or **null** where the record has no entry.
+   *
+   * Null is not an error and not an empty string — it is the honest answer, and
+   * `pending` is required alongside it. See the header: a row that is simply
+   * absent cannot distinguish "this body has none" from "nothing has measured
+   * it", and those are the two answers a planetarium most needs to keep apart.
+   */
+  readonly value: string | null
   /**
    * The same quantity in the unit a reader actually thinks in.
    *
-   * `5.97e24 kg` is a number nobody has an intuition for and `1.00 M⊕` is the
+   * `5.97×10²⁴ kg` is a number nobody has an intuition for and `1.00 M⊕` is the
    * whole point of it. Two rows would separate them by the width of the panel;
    * one row with a trailing gloss keeps the comparison where the measurement is.
    */
   readonly note?: string
+  /**
+   * Why the field is empty, in the universe's own terms. Set exactly when
+   * `value` is null.
+   */
+  readonly pending?: string
 }
 
 /** A titled run of facts. `id` is what its collapsed state is remembered by. */
@@ -105,19 +134,6 @@ export interface Satellite {
   readonly orbitalPeriod: Seconds
 }
 
-/**
- * A fact a planetarium is expected to carry and this universe has no data for.
- *
- * Stated rather than omitted, and stated *specifically* — "no composition"
- * rather than "limited data" — because the useful version tells a reader what
- * the model actually contains and tells whoever adds it next what the shape of
- * the missing field is.
- */
-export interface Gap {
-  readonly label: string
-  readonly why: string
-}
-
 /** Everything the object panel draws, for one star or one body. */
 export interface Dossier {
   readonly address: string
@@ -134,8 +150,23 @@ export interface Dossier {
   readonly primary: { readonly address: string; readonly name: string } | null
   readonly groups: readonly FactGroup[]
   readonly satellites: readonly Satellite[]
-  readonly gaps: readonly Gap[]
+  /** How many fields are still empty. The panel's header says so once. */
+  readonly pendingCount: number
 }
+
+/**
+ * A field the record has no entry for.
+ *
+ * One helper so the shape cannot drift, and so every call site is forced to
+ * supply the `why` — a bare "no data" is the thing this design is trying not to
+ * be. See the header on the voice these are written in.
+ */
+const noData = (label: string, why: string, note?: string): Fact => ({
+  label,
+  value: null,
+  pending: why,
+  ...(note === undefined ? {} : { note }),
+})
 
 /* ------------------------------------------------------------------------- */
 /* The entry point                                                            */
@@ -163,11 +194,17 @@ export function dossier(host: HarnessHost, address: string): Dossier | null {
 
   const system = world.loadSystem(resolved.system)
   if (resolved.kind === 'system') return starDossier(world, system)
-
   const body = findBody(system, resolved.address)
-  if (body === undefined) return null
-  return bodyDossier(world, system, body)
+  return body === undefined ? null : bodyDossier(world, system, body)
 }
+
+/** Fields still waiting on an observation, across the whole page. */
+const countPending = (groups: readonly FactGroup[]): number =>
+  groups.reduce(
+    (total, group) =>
+      total + group.facts.filter((fact) => fact.value === null).length,
+    0,
+  )
 
 /* ------------------------------------------------------------------------- */
 /* A star                                                                     */
@@ -180,6 +217,10 @@ function starDossier(world: World, system: StarSystem): Dossier {
   const zone = habitableZone(star)
   const frost = frostLine(star.luminosity)
   const census = censusOf(system)
+  const parsecs =
+    cataloged === undefined
+      ? null
+      : (cataloged.distanceLightYears * 9.4607304725808e15) / PARSEC
 
   const physical: Fact[] = [
     {
@@ -209,30 +250,59 @@ function starDossier(world: World, system: StarSystem): Dossier {
       value: `${round(star.radius / SOLAR_RADIUS, 3)} R☉`,
       note: kilometres(star.radius),
     },
-    {
-      label: 'Mean density',
-      value: density(star.mass, star.radius),
-    },
+    { label: 'Mean density', value: density(star.mass, star.radius) },
     {
       label: 'Surface gravity',
       value: `${significant(gravity(star.mass, star.radius))} m/s²`,
       note: `${significant(gravity(star.mass, star.radius) / 9.80665)} g`,
     },
-  ]
-  if (cataloged?.physical.absoluteMagnitude != null) {
-    physical.push({
+    {
       label: 'Absolute magnitude',
-      value: round(cataloged.physical.absoluteMagnitude, 2),
-      note: 'visual, at 10 pc',
-    })
-  }
-  if (cataloged?.physical.colourIndex != null) {
-    physical.push({
+      value:
+        cataloged?.physical.absoluteMagnitude == null
+          ? null
+          : round(cataloged.physical.absoluteMagnitude, 2),
+      ...(cataloged?.physical.absoluteMagnitude == null
+        ? {
+            pending:
+              'no photometric survey has returned a visual magnitude for this star. Its temperature and radius are inferred from the class alone',
+          }
+        : { note: 'visual, at 10 pc' }),
+    },
+    {
       label: 'Colour index',
-      value: round(cataloged.physical.colourIndex, 3),
-      note: 'B−V',
-    })
-  }
+      value:
+        cataloged?.physical.colourIndex == null
+          ? null
+          : round(cataloged.physical.colourIndex, 3),
+      ...(cataloged?.physical.colourIndex == null
+        ? {
+            pending:
+              'B−V requires two-band photometry. This star has been classified but not measured that way',
+          }
+        : { note: 'B−V' }),
+    },
+    noData(
+      'Age',
+      'dating a star means fitting it to an isochrone, which needs a metallicity and a surface gravity nobody has published for it',
+    ),
+    noData(
+      'Metallicity',
+      '[Fe/H] comes out of a high-resolution spectrum. None is on file for this star',
+    ),
+    noData(
+      'Rotation period',
+      'spin is read from starspots crossing the disk over months of photometry. This star has no such light curve on record',
+    ),
+    noData(
+      'Variability',
+      'nothing has watched this star long enough to say whether its output holds steady',
+    ),
+  ]
+
+  const habitable = [...walkBodies(system)].filter((body) =>
+    isHabitable(star, body),
+  ).length
 
   const groups: FactGroup[] = [
     {
@@ -241,7 +311,7 @@ function starDossier(world: World, system: StarSystem): Dossier {
       ...(cataloged?.physical.estimated === true
         ? {
             caption:
-              'no published magnitude or classification — these rest on a class-typical fallback',
+              'classified but not measured — the figures below are typical of the class',
           }
         : {}),
       facts: physical,
@@ -251,33 +321,55 @@ function starDossier(world: World, system: StarSystem): Dossier {
       title: 'System',
       facts: [
         { label: 'Planets', value: `${census.planets}` },
-        ...(census.dwarfs > 0
-          ? [{ label: 'Dwarf planets', value: `${census.dwarfs}` }]
-          : []),
-        ...(census.moons > 0
-          ? [{ label: 'Moons', value: `${census.moons}` }]
-          : []),
-        ...(census.debris > 0
-          ? [
-              {
-                label: 'Small bodies',
-                value: `${census.debris}`,
-                note: 'asteroids and comets',
-              },
-            ]
-          : []),
+        { label: 'Dwarf planets', value: `${census.dwarfs}` },
+        { label: 'Moons', value: `${census.moons}` },
+        {
+          label: 'Small bodies',
+          value: `${census.debris}`,
+          note: 'asteroids and comets',
+        },
         {
           label: 'Confirmed',
           value: `${system.observedPlanets} of ${census.planets + census.dwarfs}`,
           note: 'the rest are projections',
         },
+        {
+          label: 'In the habitable zone',
+          value: `${habitable}`,
+          note: 'rocky, with an atmosphere',
+        },
+        {
+          label: 'Companions',
+          value:
+            cataloged === undefined
+              ? null
+              : cataloged.components > 1
+                ? `${cataloged.components - 1} recorded`
+                : 'None recorded',
+          ...(cataloged === undefined
+            ? {
+                pending:
+                  'multiplicity is settled by resolving a star into components, which takes an instrument nobody has pointed here',
+              }
+            : cataloged.components > 1
+              ? { note: 'the primary is charted' }
+              : {}),
+        },
+        noData(
+          'Companion orbits',
+          'the separation and period of a multiple system come from decades of astrometry. Only the primary is charted here',
+        ),
+        noData(
+          'Debris disk',
+          'a dust belt shows as an infrared excess. No survey at those wavelengths covers this star',
+        ),
       ],
     },
     {
       id: 'star.zones',
       title: 'Zones',
       caption:
-        'both are insolation boundaries solved from the star’s luminosity, not climate models',
+        'both are solved from the star’s luminosity — they are boundaries of sunlight, not of climate',
       facts: [
         {
           label: 'Habitable zone',
@@ -291,32 +383,64 @@ function starDossier(world: World, system: StarSystem): Dossier {
         },
       ],
     },
+    {
+      id: 'star.record',
+      title: 'Record',
+      facts: [
+        {
+          label: 'Distance from Sol',
+          value:
+            cataloged === undefined
+              ? null
+              : `${round(cataloged.distanceLightYears, 3)} ly`,
+          ...(cataloged === undefined
+            ? {
+                pending:
+                  'this star’s place is fixed by the galactic model rather than by a parallax measurement',
+              }
+            : { note: `${round(parsecs ?? 0, 3)} pc` }),
+        },
+        {
+          label: 'Parallax',
+          value:
+            parsecs === null || parsecs === 0
+              ? null
+              : `${round(1 / parsecs, 4)}″`,
+          ...(parsecs === null || parsecs === 0
+            ? { pending: 'no astrometric parallax has been taken of this star' }
+            : { note: 'the angle the parsec is defined by' }),
+        },
+        {
+          label: 'Also known as',
+          value:
+            cataloged === undefined
+              ? null
+              : cataloged.designations
+                  .slice(0, 6)
+                  .map((one) => one.text)
+                  .join(' · '),
+          ...(cataloged === undefined
+            ? {
+                pending:
+                  'this star carries a survey address and no name anybody has given it',
+              }
+            : {}),
+        },
+        noData(
+          'Proper motion',
+          'the catalog holds one epoch. Two are needed before anything can be said to be moving across the sky',
+        ),
+        noData(
+          'Radial velocity',
+          'the Doppler shift along the line of sight. It needs a spectrum this star has not had taken',
+        ),
+        noData(
+          'Constellation',
+          'the eighty-eight boundaries are drawn from Earth’s sky and are not carried in this catalog',
+        ),
+      ],
+    },
   ]
-
-  const catalogFacts: Fact[] = []
-  if (cataloged !== undefined) {
-    catalogFacts.push({
-      label: 'Distance from Sol',
-      value: `${round(cataloged.distanceLightYears, 3)} ly`,
-      note: `${round((cataloged.distanceLightYears * 9.4607304725808e15) / 3.085677581491367e16, 3)} pc`,
-    })
-    if (cataloged.components > 1) {
-      catalogFacts.push({
-        label: 'Components',
-        value: `${cataloged.components}`,
-        note: 'one is simulated',
-      })
-    }
-    const names = cataloged.designations
-      .slice(0, 6)
-      .map((one) => one.text)
-      .join(' · ')
-    if (names.length > 0)
-      catalogFacts.push({ label: 'Also known as', value: names })
-  }
-  if (catalogFacts.length > 0) {
-    groups.push({ id: 'star.catalog', title: 'Record', facts: catalogFacts })
-  }
 
   return {
     address: `g:${world.galaxy}/s:${system.id}`,
@@ -329,7 +453,7 @@ function starDossier(world: World, system: StarSystem): Dossier {
     primary: null,
     groups,
     satellites: [],
-    gaps: starGaps(cataloged),
+    pendingCount: countPending(groups),
   }
 }
 
@@ -347,15 +471,12 @@ function bodyDossier(world: World, system: StarSystem, body: Body): Dossier {
     // what moves the Sun across a moon's sky is its planet's year. See
     // `synodicDay`, where getting this wrong gives Luna an infinite day.
     rotationGroup(body, (primary ?? body).orbitalPeriod),
+    atmosphereGroup(body),
+    insolationGroup(star, body, primary),
   ]
-
-  const air = atmosphereGroup(body)
-  if (air !== null) groups.push(air)
-  groups.push(insolationGroup(star, body, primary))
   const rings = ringGroup(body)
   if (rings !== null) groups.push(rings)
-  const found = discoveryGroup(body)
-  if (found !== null) groups.push(found)
+  groups.push(discoveryGroup(body))
 
   return {
     address: formatAddress(body.address),
@@ -378,7 +499,7 @@ function bodyDossier(world: World, system: StarSystem, body: Body): Dossier {
       semiMajorAxis: moon.elements.semiMajorAxis,
       orbitalPeriod: moon.orbitalPeriod,
     })),
-    gaps: bodyGaps(body),
+    pendingCount: countPending(groups),
   }
 }
 
@@ -455,6 +576,19 @@ function physicalGroup(body: Body): FactGroup {
     value: round(body.appearance.geometricAlbedo, 3),
     note: albedoWord(body.appearance.geometricAlbedo),
   })
+  facts.push(
+    noData(
+      'Composition',
+      'the mean density says what this body weighs per litre and nothing about what is where. Separating a core from a mantle takes a gravity map from orbit, or a seismometer on the ground',
+      'density implies it; nothing states it',
+    ),
+  )
+  facts.push(
+    noData(
+      'Age',
+      'a surface is dated by counting craters on it or by returning a sample. Neither has been done here',
+    ),
+  )
   return { id: 'body.physical', title: 'Physical', facts }
 }
 
@@ -462,12 +596,12 @@ function orbitGroup(world: World, body: Body, primary: Body | null): FactGroup {
   const elements = body.elements
   const facts: Fact[] = []
   const moonScale = body.address.kind === 'body' && body.address.body.length > 1
+  const span = (metres: Meters): string =>
+    moonScale ? kilometres(metres) : `${round(metres / AU, 4)} AU`
 
   facts.push({
     label: 'Semi-major axis',
-    value: moonScale
-      ? kilometres(elements.semiMajorAxis)
-      : `${round(elements.semiMajorAxis / AU, 4)} AU`,
+    value: span(elements.semiMajorAxis),
     note: moonScale
       ? `${round(elements.semiMajorAxis / AU, 6)} AU`
       : kilometres(elements.semiMajorAxis),
@@ -491,17 +625,17 @@ function orbitGroup(world: World, body: Body, primary: Body | null): FactGroup {
         : `to ${primary.name}’s equator`,
   })
   facts.push({
-    label: 'Periapsis',
-    value: moonScale
-      ? kilometres(periapsis(elements))
-      : `${round(periapsis(elements) / AU, 4)} AU`,
+    label: 'Ascending node',
+    value: `${round(degrees(elements.longitudeOfAscendingNode), 2)}°`,
+    note: 'Ω — where it crosses the plane going north',
   })
   facts.push({
-    label: 'Apoapsis',
-    value: moonScale
-      ? kilometres(apoapsis(elements))
-      : `${round(apoapsis(elements) / AU, 4)} AU`,
+    label: 'Argument of periapsis',
+    value: `${round(degrees(elements.argumentOfPeriapsis), 2)}°`,
+    note: 'ω — from the node round to closest approach',
   })
+  facts.push({ label: 'Periapsis', value: span(periapsis(elements)) })
+  facts.push({ label: 'Apoapsis', value: span(apoapsis(elements)) })
   facts.push({
     label: 'Mean orbital speed',
     value: `${significant(
@@ -534,12 +668,20 @@ function orbitGroup(world: World, body: Body, primary: Body | null): FactGroup {
     value: kilometres(body.sphereOfInfluence),
     note: `${round(body.sphereOfInfluence / body.radius, 1)} radii`,
   })
+  facts.push(
+    noData(
+      'Element drift',
+      'these elements are quoted at J2000 and solved as a two-body problem. How the orbit precesses under everything else in the system has not been integrated, so a date ten thousand years out is approximate',
+    ),
+  )
+  facts.push(
+    noData(
+      'Resonances',
+      'whether this orbit is locked to a neighbour’s — 3:2, 1:2:4 — is a relationship between two records, and nothing holds it',
+    ),
+  )
 
-  return {
-    id: 'body.orbit',
-    title: 'Orbit',
-    facts,
-  }
+  return { id: 'body.orbit', title: 'Orbit', facts }
 }
 
 function rotationGroup(body: Body, year: Seconds): FactGroup {
@@ -559,45 +701,76 @@ function rotationGroup(body: Body, year: Seconds): FactGroup {
    *
    * Earth turns in 23h56m and the Sun comes back in 24h, because the planet has
    * moved a degree along its year in the meantime. The same subtraction is what
-   * makes Luna's solar day 29.5 days against a 27.3-day month, and it is why a
-   * tidally locked body has a day at all rather than none.
+   * makes Luna's solar day 29.5 days against a 27.3-day month.
    */
   const solar = synodicDay(body.rotationPeriod, year)
-  if (solar !== null && Number.isFinite(solar)) {
-    facts.push({
-      label: 'Solar day',
-      value: period(solar),
-      note: 'sunrise to sunrise',
-    })
-  }
+  facts.push({
+    label: 'Solar day',
+    value: solar === null ? null : period(solar),
+    ...(solar === null
+      ? {
+          pending:
+            'this body turns once per year, so it keeps one face to its star and has no sunrise at all',
+        }
+      : { note: 'sunrise to sunrise' }),
+  })
   facts.push({
     label: 'Axial tilt',
     value: `${round(degrees(body.axialTilt), 2)}°`,
     note: tiltWord(body.axialTilt),
   })
+  facts.push(
+    noData(
+      'Pole direction',
+      'the tilt is on record as a magnitude. Which way the axis points — the right ascension and declination of the north pole — is what a season depends on, and it has not been fixed',
+    ),
+  )
+  facts.push(
+    noData(
+      'Precession',
+      'how the axis itself wanders. It takes centuries of observation to measure and none is on file',
+    ),
+  )
 
   return {
     id: 'body.rotation',
     title: 'Rotation',
     ...(locked
-      ? {
-          caption: 'tidally locked — it keeps one face toward what it orbits',
-        }
+      ? { caption: 'tidally locked — it keeps one face toward what it orbits' }
       : {}),
     facts,
   }
 }
 
-function atmosphereGroup(body: Body): FactGroup | null {
+function atmosphereGroup(body: Body): FactGroup {
   const air = body.atmosphere
-  if (air === null) return null
+  if (air === null) {
+    /*
+     * An airless body still gets the group, and the first row is a *fact*
+     * rather than an empty field: "none" is an answer, and collapsing it into
+     * the same grey as "nobody has looked" would throw away the difference this
+     * whole design exists to keep.
+     */
+    return {
+      id: 'body.atmosphere',
+      title: 'Atmosphere',
+      facts: [
+        { label: 'Envelope', value: 'None', note: 'vacuum at the datum' },
+        noData(
+          'Exosphere',
+          'an airless body can still hold a sputtered exosphere — Mercury’s sodium, Luna’s argon. Detecting one takes a spectrometer in orbit',
+        ),
+      ],
+    }
+  }
+
   /*
-   * Pressure from density, because the model stores the density.
+   * Pressure from density, because the record stores the density.
    *
-   * p = ρ g H for an isothermal column, which is the same atmosphere
-   * `atmosphericDensity` integrates — so the number in this panel and the drag
-   * the ship feels come from one description rather than from two that agree
-   * until somebody edits one.
+   * p = ρ g H for an isothermal column, which is the same atmosphere the drag
+   * model integrates — so the number in this panel and the drag a hull feels
+   * come from one description rather than from two that agree until somebody
+   * edits one.
    */
   const g = gravity(body.mass, body.radius)
   const pressure = air.surfaceDensity * g * air.scaleHeight
@@ -620,7 +793,7 @@ function atmosphereGroup(body: Body): FactGroup | null {
     {
       label: 'Ceiling',
       value: kilometres(air.ceiling),
-      note: 'above it, drag is not modeled',
+      note: 'the top of the sensible atmosphere',
     },
   ]
   const haze = body.appearance.haze
@@ -631,13 +804,30 @@ function atmosphereGroup(body: Body): FactGroup | null {
       note: `optical thickness ${round(haze.thickness, 2)}`,
     })
   }
-  if (body.appearance.clouds !== null) {
-    facts.push({
-      label: 'Cloud deck',
-      value: kilometres(body.appearance.clouds.altitude),
-      note: `turns in ${period(Math.abs(body.appearance.clouds.rotationPeriod))}`,
-    })
-  }
+  facts.push({
+    label: 'Cloud deck',
+    value:
+      body.appearance.clouds === null
+        ? 'None'
+        : kilometres(body.appearance.clouds.altitude),
+    ...(body.appearance.clouds === null
+      ? {}
+      : {
+          note: `turns in ${period(Math.abs(body.appearance.clouds.rotationPeriod))}`,
+        }),
+  })
+  facts.push(
+    noData(
+      'Composition',
+      'the column has a density, a scale height and a colour. Which gases add up to that needs a transmission spectrum, and none has been taken',
+    ),
+  )
+  facts.push(
+    noData(
+      'Circulation',
+      'the deck’s turn rate is known; its weather is not. No jet streams, no seasonal bands and no storms with positions',
+    ),
+  )
   return { id: 'body.atmosphere', title: 'Atmosphere', facts }
 }
 
@@ -656,11 +846,10 @@ function insolationGroup(
   const flux = star.luminosity / (4 * Math.PI * range * range)
   const albedo = body.appearance.geometricAlbedo
   /*
-   * Equilibrium temperature, which is the only temperature this build can
-   * honestly quote — the balance of absorbed sunlight against a blackbody's own
-   * radiation, with no atmosphere in it. Earth comes out at 255 K against a
-   * measured 288: the 33 K difference is the greenhouse effect, which is
-   * exactly the model this does not have. `gaps` says so.
+   * Equilibrium temperature: the balance of absorbed sunlight against a
+   * blackbody's own radiation, with no atmosphere in it. Earth comes out at
+   * 255 K against a measured 288 — the 33 K difference is the greenhouse
+   * effect, and the empty row below is where that would be said.
    */
   const equilibrium = Math.pow(
     ((1 - albedo) * flux) / (4 * STEFAN_BOLTZMANN),
@@ -692,6 +881,19 @@ function insolationGroup(
         value: `${arcs(angular)} across`,
         note: `${significant(angular / SUN_FROM_EARTH)}× the Sun from Earth`,
       },
+      noData(
+        'Surface temperature',
+        'the figure above is what a bare rock at this distance would sit at — Earth’s equivalent is 255 K against a measured 288. What the air and the ground do with that heat has not been measured here',
+        'equilibrium ≠ surface',
+      ),
+      noData(
+        'Magnetic field',
+        'a magnetometer has to be flown through it. Nothing here has been, so there is no field strength, no magnetosphere and no aurora on record',
+      ),
+      noData(
+        'Apparent magnitude',
+        'how bright this body looks from Earth. Size, albedo and geometry are all on file; the phase curve that closes it is not',
+      ),
     ],
   }
 }
@@ -722,138 +924,80 @@ function ringGroup(body: Body): FactGroup | null {
         value: significant(rings.opticalDepth),
         note: opacityWord(rings.opticalDepth),
       },
+      noData(
+        'Divisions',
+        'the system is charted as one annulus. Resolving the gaps in it, and the shepherd moons that hold them open, needs a close pass',
+      ),
+      noData(
+        'Particle size',
+        'the size distribution and composition of the ring particles come from a radio occultation. None has been made here',
+      ),
     ],
   }
 }
 
-function discoveryGroup(body: Body): FactGroup | null {
+function discoveryGroup(body: Body): FactGroup {
   const measured = body.measurement
-  if (measured === null) return null
+  if (measured === null) {
+    return {
+      id: 'body.discovery',
+      title: 'Record',
+      facts: [
+        noData(
+          'First observed',
+          body.provenance === 'projected'
+            ? 'nobody has confirmed this body directly. It is projected from the star’s own parameters, and the projection carries no date'
+            : 'this body’s discovery is older than the survey record that reached this catalog',
+        ),
+        noData(
+          'Designation history',
+          'which authority named it, and what it was called before. The catalog carries the current name and nothing behind it',
+        ),
+      ],
+    }
+  }
   const facts: Fact[] = [
-    { label: 'Discovered', value: `${measured.discoveryYear}` },
+    { label: 'First observed', value: `${measured.discoveryYear}` },
     { label: 'Method', value: measured.discoveryMethod },
   ]
   /*
-   * How the two headline numbers were arrived at, because for an exoplanet they
-   * usually were not both measured. Radial velocity gives M sin i — a lower
-   * bound, not a mass — and a transit gives a radius with no mass at all.
+   * How the two headline numbers were arrived at, because for a confirmed
+   * exoplanet they usually were not both measured. Radial velocity gives
+   * M sin i — a lower bound, not a mass — and a transit gives a radius with no
+   * mass at all.
    */
   if (measured.massIsLowerBound)
     facts.push({
-      label: 'Mass',
-      value: 'lower bound',
+      label: 'Mass basis',
+      value: 'Lower bound',
       note: 'M sin i, from radial velocity',
     })
   else if (measured.massInferred)
     facts.push({
-      label: 'Mass',
-      value: 'inferred',
+      label: 'Mass basis',
+      value: 'Inferred',
       note: 'from the radius, by a mass–radius relation',
     })
-  if (measured.radiusInferred)
-    facts.push({ label: 'Radius', value: 'inferred', note: 'from the mass' })
-  if (measured.insolation !== null)
-    facts.push({
-      label: 'Published insolation',
-      value: `${round(measured.insolation, 2)}× Earth`,
-    })
-  return { id: 'body.discovery', title: 'Discovery', facts }
-}
-
-/* ------------------------------------------------------------------------- */
-/* What is not recorded                                                       */
-/* ------------------------------------------------------------------------- */
-
-/*
- * The astronomy this build does not have.
- *
- * Every entry is a field a real planetarium shows and this universe carries no
- * value for, which is a different statement from "unknown to science" — most of
- * these are published for the Solar System and simply are not in the packed
- * catalog or the generator yet. Writing them down here rather than in a document
- * nobody opens means the gap is visible at the exact moment a reader would
- * otherwise assume the absence was an answer.
- *
- * `docs/design/planetarium.md` § "What is not recorded" is the same list with
- * the reasoning; this is the version the panel draws.
- */
-
-function bodyGaps(body: Body): readonly Gap[] {
-  const gaps: Gap[] = [
-    {
-      label: 'Composition',
-      why: 'the model carries a bulk density, not a chemistry — there is no iron core, no silicate mantle and no ice fraction to report',
-    },
-    {
-      label: 'Surface temperature',
-      why: 'the figure above is an equilibrium temperature. Greenhouse warming, thermal inertia and the day–night range need an atmosphere model this build does not have',
-    },
-    {
-      label: 'Magnetic field',
-      why: 'nothing in the generator produces one, so there is no magnetosphere, no aurora and no radiation belt',
-    },
-    {
-      label: 'Age',
-      why: 'systems are generated whole. Nothing carries a formation date or a differentiation history',
-    },
-  ]
-  if (body.atmosphere !== null) {
-    gaps.push({
-      label: 'Atmospheric composition',
-      why: 'density, scale height and a scattering colour — the gases those imply are not stored, so "78% nitrogen" is not something this can claim',
-    })
-  }
-  if (body.measurement === null) {
-    gaps.push({
-      label: 'Discovery record',
-      why: 'only cataloged exoplanets carry a discovery year and method. A Solar System body has none in the packed data, and a projected one was never discovered at all',
-    })
-  }
-  gaps.push({
-    label: 'Secular motion',
-    why: 'the elements are fixed at J2000. Precession, resonance and the long-period drift of a real orbit are not integrated, so a date ten thousand years out is Keplerian rather than true',
+  else facts.push({ label: 'Mass basis', value: 'Measured' })
+  facts.push({
+    label: 'Radius basis',
+    value: measured.radiusInferred ? 'Inferred' : 'Measured',
+    ...(measured.radiusInferred ? { note: 'from the mass' } : {}),
   })
-  if (isDebris(body.kind)) {
-    gaps.push({
-      label: 'Light curve',
-      why: 'no absolute magnitude, phase curve or rotation-resolved brightness — the shape model is geometry only',
-    })
-  }
-  return gaps
-}
-
-function starGaps(cataloged: CatalogStar | undefined): readonly Gap[] {
-  const gaps: Gap[] = [
-    {
-      label: 'Age and metallicity',
-      why: 'the catalog packs a magnitude, a colour and a classification. Neither age nor composition is derivable from those, and neither is stored',
-    },
-    {
-      label: 'Rotation and activity',
-      why: 'no rotation period, no starspots, no flare record — a flare star and a quiet one are drawn identically',
-    },
-    {
-      label: 'Variability',
-      why: 'luminosity is a constant here. Cepheids, eclipsing binaries and long-period variables all hold still',
-    },
-    {
-      label: 'Proper motion',
-      why: 'stars are placed at their J2000 positions and stay there. The sky does not drift, however far the clock is wound',
-    },
-  ]
-  if (cataloged !== undefined && cataloged.components > 1) {
-    gaps.push({
-      label: 'The other components',
-      why: `the catalog records ${cataloged.components} stellar components and this build simulates one. Separations, mutual orbits and the second star’s own light are absent`,
-    })
-  }
-  if (cataloged === undefined) {
-    gaps.push({
-      label: 'Everything here is projected',
-      why: 'no telescope has resolved this star. Every figure on this page is what the generator expects of a star in this place, not a measurement',
-    })
-  }
-  return gaps
+  facts.push({
+    label: 'Published insolation',
+    value:
+      measured.insolation === null
+        ? null
+        : `${round(measured.insolation, 2)}× Earth`,
+    ...(measured.insolation === null
+      ? {
+          pending:
+            'quoted for a planet whose host star has a measured luminosity. This one’s has not',
+        }
+      : {}),
+  })
+  return { id: 'body.discovery', title: 'Record', facts }
 }
 
 /* ------------------------------------------------------------------------- */
@@ -944,13 +1088,13 @@ function starSummary(
       : `${significant(SOLAR_LUMINOSITY / star.luminosity)} times fainter than the Sun`
   const worlds =
     census.planets === 0
-      ? 'no planets are mapped here'
-      : `${census.planets} ${census.planets === 1 ? 'planet' : 'planets'} are mapped here`
+      ? 'No planets are charted here'
+      : `${census.planets} ${census.planets === 1 ? 'planet is' : 'planets are'} charted here`
   const seen =
     cataloged === undefined
-      ? 'This star is a projection'
+      ? 'Charted from stellar parameters'
       : `Catalogued at ${round(cataloged.distanceLightYears, 2)} light years`
-  return `${seen}. A ${colourWord(star.temperature)} ${star.spectralClass}-type star at ${round(star.temperature, 0)} K, putting out ${brightness}; ${worlds}.`
+  return `${seen}: ${colourWord(star.temperature)}, ${round(star.temperature, 0)} K, putting out ${brightness}. ${worlds}.`
 }
 
 function bodySummary(star: Star, body: Body, primary: Body | null): string {
@@ -961,8 +1105,7 @@ function bodySummary(star: Star, body: Body, primary: Body | null): string {
       : `${round((body.radius / EARTH_RADIUS) * 100, 1)}% of Earth’s radius`
   const air =
     body.atmosphere === null ? 'It has no atmosphere' : 'It holds an atmosphere'
-  const lap = period(body.orbitalPeriod)
-  return `${KIND_NOUN[body.kind]} at ${size}, going round ${around} once every ${lap}. ${air}.`
+  return `${KIND_NOUN[body.kind]} at ${size}, going round ${around} once every ${period(body.orbitalPeriod)}. ${air}.`
 }
 
 /* ------------------------------------------------------------------------- */
@@ -998,9 +1141,9 @@ export const gravity = (mass: Kilograms, radius: Meters): number =>
  * Whether a body turns once per orbit, within a percent.
  *
  * A percent rather than an equality: Luna's sidereal month and its rotation
- * period agree to about a part in 10⁵ and a generated body's agree exactly,
- * but nothing guarantees either, and a lock reported only on an exact match is
- * a lock that is never reported.
+ * period agree to about a part in 10⁵ and a charted body's agree exactly, but
+ * nothing guarantees either, and a lock reported only on an exact match is a
+ * lock that is never reported.
  */
 export const tidallyLocked = (body: Body): boolean =>
   body.orbitalPeriod > 0 &&
@@ -1036,8 +1179,8 @@ export function synodicDay(rotation: Seconds, year: Seconds): Seconds | null {
   // A denormal rotation period overflows the reciprocal to infinity and the
   // day back to zero. The honest answer there is the sidereal period: a body
   // spinning that fast is not measurably slowed by its own orbit.
-  if (!Number.isFinite(solar) || solar === 0) return Math.abs(rotation)
-  return solar
+  if (solar === 0) return Math.abs(rotation)
+  return Number.isFinite(solar) ? solar : null
 }
 
 function primaryOf(system: StarSystem, body: Body): Body | null {
@@ -1089,7 +1232,7 @@ const degrees = (radians: number): number => (radians * 180) / Math.PI
  * every other one is quoted against: the Sun from Pluto is a fiftieth of this,
  * which is a bright star with a shape.
  */
-const SUN_FROM_EARTH = 9.30e-3
+const SUN_FROM_EARTH = 9.3e-3
 
 function group(text: string): string {
   const [whole = '', fraction] = text.split('.')
@@ -1117,8 +1260,7 @@ function significant(value: number): string {
 
 function exponential(value: number): string {
   if (!Number.isFinite(value)) return '—'
-  const text = value.toExponential(3)
-  const [mantissa = '', power = ''] = text.split('e')
+  const [mantissa = '', power = ''] = value.toExponential(3).split('e')
   const sign = power.startsWith('-') ? '−' : ''
   return `${mantissa}×10${superscript(sign + power.replace(/^[+-]/, ''))}`
 }
@@ -1196,8 +1338,7 @@ function massNote(mass: Kilograms): string {
 
 function density(mass: Kilograms, radius: Meters): string {
   const volume = (4 / 3) * Math.PI * radius * radius * radius
-  const kgPerCubicMetre = mass / volume
-  return `${round(kgPerCubicMetre / 1000, 3)} g/cm³`
+  return `${round(mass / volume / 1000, 3)} g/cm³`
 }
 
 const colourWord = (temperature: number): string => {

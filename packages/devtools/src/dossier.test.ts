@@ -1,10 +1,6 @@
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import {
-  EARTH_MASS,
-  EARTH_RADIUS,
-  SECONDS_PER_DAY,
-} from '@inertialref/shared'
+import { EARTH_MASS, EARTH_RADIUS, SECONDS_PER_DAY } from '@inertialref/shared'
 import { TEST_CATALOG, type Body } from '@inertialref/universe'
 import { createInlineWorker, createTaskRegistry } from '@inertialref/workers'
 import { openSession, type Session } from './session.ts'
@@ -35,7 +31,7 @@ function session(): Session {
 const facts = (page: Dossier): readonly Fact[] =>
   page.groups.flatMap((group) => group.facts)
 
-const valueOf = (page: Dossier, label: string): string | undefined =>
+const valueOf = (page: Dossier, label: string): string | null | undefined =>
   facts(page).find((fact) => fact.label === label)?.value
 
 describe('a body’s record', () => {
@@ -54,13 +50,20 @@ describe('a body’s record', () => {
       expect(page, body.name).not.toBeNull()
       expect(page?.name).toBe(body.name)
       expect(page?.groups.length ?? 0).toBeGreaterThan(2)
-      // Every fact has to say something. An empty value is a row that renders
-      // as a label and a gap, which reads as a load failure.
+      /*
+       * Every row says something, and a row with no value says *why*.
+       *
+       * The empty string is the failure this guards: it renders as a label
+       * beside a blank, which reads as a load fault rather than as an answer.
+       * `value: null` is the deliberate form and it carries `pending` with it.
+       */
       for (const fact of facts(page as Dossier)) {
-        expect(
-          fact.value.length,
-          `${body.name} · ${fact.label}`,
-        ).toBeGreaterThan(0)
+        const where = `${body.name} · ${fact.label}`
+        if (fact.value === null) {
+          expect(fact.pending?.length ?? 0, where).toBeGreaterThan(20)
+        } else {
+          expect(fact.value.length, where).toBeGreaterThan(0)
+        }
       }
       checked += 1
     }
@@ -103,17 +106,38 @@ describe('a body’s record', () => {
     expect(valueOf(phobos, 'Radius')).toBeUndefined()
   })
 
-  it('states what it has no data for', () => {
-    // The promise PRODUCT.md makes: the interface says which side of the
-    // observed/projected line it is on, and an omission is not an answer.
+  it('draws an unmeasured field as a row rather than leaving it out', () => {
+    /*
+     * The promise PRODUCT.md makes, and the reason `value` is nullable. An
+     * absent row cannot distinguish "this body has no atmosphere" from "nobody
+     * has measured its atmosphere", and those are the two answers a
+     * planetarium most needs to keep apart.
+     */
     const live = session()
     const page = live.harness.dossier('s:SOL/b:2') as Dossier
-    expect(page.gaps.length).toBeGreaterThan(3)
-    for (const gap of page.gaps) {
-      expect(gap.label.length).toBeGreaterThan(0)
-      expect(gap.why.length).toBeGreaterThan(20)
+    expect(page.pendingCount).toBeGreaterThan(3)
+    const empty = facts(page).filter((fact) => fact.value === null)
+    expect(empty.map((fact) => fact.label)).toContain('Composition')
+    expect(empty.length).toBe(page.pendingCount)
+  })
+
+  it('says why a field is empty in the universe’s voice, not the engine’s', () => {
+    /*
+     * The planetarium is a reading room for a galaxy that is *there* — a
+     * projected body is real, it simply has not been visited. A reason that
+     * said "the generator does not produce one" would tell the reader the sky
+     * is a program, which is the one thing this mode may not do.
+     */
+    const live = session()
+    const banned =
+      /generator|generated|procedural|not modeled|this build|codebase|engine|TODO|implement/i
+    for (const address of ['s:SOL', 's:SOL/b:2', 's:SOL/b:3.0', 's:SOL/b:5']) {
+      const page = live.harness.dossier(address) as Dossier
+      for (const fact of facts(page)) {
+        if (fact.pending === undefined) continue
+        expect(fact.pending, `${address} · ${fact.label}`).not.toMatch(banned)
+      }
     }
-    expect(page.gaps.map((gap) => gap.label)).toContain('Composition')
   })
 
   it('lists the satellites as addresses, so the panel can send you to one', () => {
@@ -166,7 +190,7 @@ describe('a star’s record', () => {
     expect(valueOf(sol, 'Planets')).toBe('8')
   })
 
-  it('says when the second star of a pair is not simulated', () => {
+  it('counts the companions the catalog records, and charts the primary', () => {
     const live = session()
     const pages = TEST_CATALOG.stars
       .filter((star) => star.components > 1)
@@ -174,9 +198,8 @@ describe('a star’s record', () => {
       .map((star) => live.harness.dossier(`s:${star.id}`))
       .filter((page): page is Dossier => page !== null)
     for (const page of pages) {
-      expect(page.gaps.map((gap) => gap.label)).toContain(
-        'The other components',
-      )
+      expect(valueOf(page, 'Companions')).toMatch(/recorded$/)
+      expect(valueOf(page, 'Companion orbits')).toBeNull()
     }
   })
 })
@@ -281,6 +304,7 @@ describe('the readings', () => {
     const live = session()
     const page = live.harness.dossier('s:SOL/b:4') as Dossier
     for (const fact of facts(page)) {
+      if (fact.value === null) continue
       expect(fact.value, fact.label).not.toMatch(/e[+-]\d/)
       expect(fact.value, fact.label).not.toMatch(/\d,\d{1,2}\b(?!\d)/)
     }
