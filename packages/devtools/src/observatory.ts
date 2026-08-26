@@ -21,6 +21,7 @@ import {
   type SystemId,
   type UniverseAddress,
   walkBodies,
+  planetCount,
 } from '@inertialref/universe'
 import {
   anglesForPhase,
@@ -466,7 +467,7 @@ export class Observatory {
         system: resolved.system,
         frame: systemFrameId(resolved.system),
         radius: system.star.radius,
-        detail: `${system.star.spectralType} · ${system.planets.length} planets`,
+        detail: `${system.star.spectralType} · ${planetCount(system)} planets`,
       }
     }
 

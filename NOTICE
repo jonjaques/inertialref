@@ -44,6 +44,11 @@ Most are public domain — NASA and USGS imagery is not subject to copyright:
   NASA Scientific Visualization Studio — LRO LROC color, LRO LOLA topography
   NASA / JPL / USGS Astrogeology Science Center — Voyager and Galileo global
     mosaics of Io, Europa, Ganymede and Callisto
+  NASA / USGS Astrogeology Science Center — New Horizons global mosaics of Pluto
+    and Charon, Dawn Framing Camera mosaics of Ceres and Vesta, and the Mars
+    Express SRC mosaic of Phobos
+  NASA / Goddard / University of Arizona (OSIRIS-REx), via USGS Astrogeology —
+    the OCAMS global color mosaic of Bennu at 25 cm per pixel
 
 The exceptions require attribution and impose no share-alike:
 
@@ -51,6 +56,46 @@ The exceptions require attribution and impose no share-alike:
   Maps of Mercury, Venus, Mars, Jupiter, Saturn, Uranus, Neptune and Saturn's
   rings. Licensed CC BY 4.0 — https://creativecommons.org/licenses/by/4.0/
   Modified: resized and re-encoded.
+
+--------------------------------------------------------------------------------
+Shape models
+--------------------------------------------------------------------------------
+
+`data/shapes/` holds measured figures for twenty-five Solar System bodies that
+gravity never rounded off, built by `apps/ingest` from models archived at the
+NASA Planetary Data System Small Bodies Node.
+
+These are United States Government works and are in the PUBLIC DOMAIN. There is
+no license to comply with. What is recorded instead is PROVENANCE, which for a
+shape model matters more than a license does: a body's figure is a measurement,
+and a measurement with no citation is a guess. `data/shapes/manifest.json`
+carries the source URL, the publication each model comes from, the reconstructed
+volume against the original, and the output digest, for every file.
+
+  P. C. Thomas — Viking, Galileo, NEAR and Cassini shape models of Phobos,
+    Deimos, Vesta, Ida, Gaspra, Mathilde, Hyperion, Janus and Epimetheus
+  P. J. Stooke — the small-body map atlas: Amalthea, Thebe, Proteus, Larissa,
+    Prometheus, Pandora, and the nucleus of 1P/Halley
+  R. W. Gaskell — stereophotoclinometry models of 433 Eros and 25143 Itokawa
+  PDS Small Bodies Node radar shape model compilation — 216 Kleopatra,
+    4179 Toutatis, 1620 Geographos, 6489 Golevka, 4769 Castalia and 1998 KY26
+  NASA / OSIRIS-REx / University of Arizona — the SPC/OLA global model of
+    101955 Bennu at 6.32 m per facet
+
+--------------------------------------------------------------------------------
+Solar System measurements
+--------------------------------------------------------------------------------
+
+`packages/universe/src/solar/` carries the Solar System's published
+measurements transcribed into source, and `data/reference/solar-system.json`
+carries the same numbers fetched from JPL so the transcription can be checked
+against them. Both are facts rather than a licensed database.
+
+  NASA/JPL-Caltech Solar System Dynamics — planetary and satellite physical
+    parameters, satellite mean elements, and the Small-Body Database.
+    https://ssd.jpl.nasa.gov/ — public domain.
+
+--------------------------------------------------------------------------------
 
 Gaia (ESA) is deliberately NOT used. Its data are distributed under
 CC BY-NC 3.0 IGO, and a non-commercial clause on the data this game cannot run

@@ -19,7 +19,7 @@ universe is derived rather than fetched.
 
 The client opens on Earth, three-quarter lit, with the ship — a CC-BY
 USS Enterprise-D hull, or the debug cone while it loads — framed in the
-foreground of a procedurally generated Sol.
+foreground of a Solar System built from measurements rather than from a seed.
 
 ```mermaid
 flowchart LR

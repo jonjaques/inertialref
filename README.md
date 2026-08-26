@@ -30,7 +30,7 @@ primitives; the point is what is underneath them.**
 The hard problems in a game at this scale are precision, determinism and
 identity, and all three are solved and demonstrated here rather than asserted. You
 can fly from the galactic center to a mountainside, resolve an inch, save the
-whole universe in under 700 bytes, and get the same answer twice.
+whole universe in under 800 bytes, and get the same answer twice.
 
 > **Status: pre-alpha, single maintainer, no release.** There is no gameplay yet.
 > [`docs/roadmap.md`](docs/roadmap.md) says what is deliberately not built and
@@ -164,17 +164,29 @@ pnpm sim --help                # all flags
 - **Stars named the way people name them** — `Sirius`, `Alpha Centauri`,
   `Tau Ceti`, `61 Cygni` — with every alternate designation searchable, and one
   stable address per system whatever the catalog calls it next year.
-- **The real Solar System** — eight planets and twenty moons with measured
-  radii, oblateness, axial tilts, rotation periods, albedos and ring geometry,
-  drawn from NASA and USGS surface, elevation, cloud and ring maps. Earth has its
+- **The real Solar System** — **129 bodies**: eight planets, nine dwarf planets,
+  fifty asteroids and comets, and sixty-two moons, with measured radii,
+  oblateness, axial tilts, rotation periods, albedos and ring geometry, drawn
+  from NASA and USGS surface, elevation, cloud and ring maps. Earth has its
   clouds, its city lights and sun-glint on its oceans; Saturn is visibly oblate
-  and casts its shadow across its own rings.
+  and casts its shadow across its own rings; Pluto has its heart.
+- **Bodies that are not spheres** — twenty-five **measured shape models** from
+  the NASA Planetary Data System, resampled to radius grids that reconstruct
+  their sources' volume to between 99.8% and 100.6%. Phobos has Stickney in its
+  silhouette, Bennu has the equatorial ridge its own rotation raised, and
+  216 Kleopatra is a dog bone. Everything else that gravity never rounded off —
+  in Sol and in every generated system — gets a figure from its own seed, on its
+  published half-extents, drawn from the distribution those twenty-five bodies
+  actually have.
 - **Deterministic star systems everywhere else** — planets, moons, orbits,
-  atmospheres and terrain, all a pure function of a global seed and an address.
+  atmospheres and terrain, all a pure function of a global seed and an address —
+  and a belt of six to eighteen small bodies in each, sized by Dohnanyi's
+  collisional cascade and spinning no faster than the 2.2-hour rotation barrier
+  a rubble pile comes apart at.
 - A debug spacecraft with **6-DoF flight**, patched-conic gravity, atmospheric
   drag, sphere-of-influence frame transitions, and landing.
 - **Streamed cube-sphere terrain**, generated in a worker pool.
-- **Save and load to IndexedDB in under 700 bytes**, because a save is a reference
+- **Save and load to IndexedDB in under 800 bytes**, because a save is a reference
   and not a copy.
 - **Genuinely offline** — a service worker caches the app, and with the server
   stopped the game still loads, streams terrain from its workers, and passes all
@@ -192,18 +204,18 @@ in Node:
 
 ```
 12/12 capabilities proven
-PASS  1. Deterministic generation — Alpha Centauri identical across runs, differs by seed
-PASS  2. Stable addressing — 8 bodies addressed and round-tripped
-PASS  3. Astronomical distances — Sol to Alpha Centauri: 4.3650 ly
+PASS  1. Deterministic generation — HIP 38 identical across runs, differs by seed
+PASS  2. Stable addressing — 129 bodies addressed and round-tripped
+PASS  3. Astronomical distances — Sol to Alpha Centauri: 4.3209 ly
 PASS  4. Movement within a system — 6.81 km under thrust in 10 s
-PASS  5. Approach a planet — fell 18.74 m in 60 s at 0.0104 m/s², within 0.03% of free fall
+PASS  5. Approach a planet — fell 16.65 m in 60 s at 0.0092 m/s², within 0.03% of free fall
 PASS  6. Frame transitions — entered b:g:milky-way/s:SOL/b:0 after traveling 8 Mm
 PASS  7. Precision near the surface — 1 inch resolved to 9.4 µm, 8.18 kpc from the galactic center
 PASS  8. Meter-scale rendering — 1 m separation survives float32 at 8.18 kpc
 PASS  9. Origin rebasing — 500 rebases, 2560 km of origin travel, zero drift
 PASS 10. Worker task — 4225 terrain samples generated in a worker, identical to local generation
-PASS 11. Save round trip — 696 bytes restored to an identical state hash
-PASS 12. Frame-rate independence — identical state hash 804b2d58 at tick 513
+PASS 11. Save round trip — 744 bytes restored to an identical state hash
+PASS 12. Frame-rate independence — identical state hash f38e988a at tick 513
 ```
 
 CI runs this on every pull request, alongside `pnpm check`.
@@ -348,7 +360,7 @@ are in [`docs/STYLE.md`](docs/STYLE.md).
 | [Vision and scope](docs/vision.md)                | What this is for, and the principles behind it                           |
 | [Architecture](docs/architecture.md)              | The system in one sitting                                                |
 | [Concepts](docs/README.md#concepts)               | How each mechanism works, and why                                        |
-| [ADRs](docs/adr/README.md)                        | Twelve decisions that are expensive to reverse                           |
+| [ADRs](docs/adr/README.md)                        | Thirteen decisions that are expensive to reverse                         |
 | [Development](docs/guides/development.md)         | Commands, toolchain, conventions                                         |
 | [The harness](docs/guides/harness.md)             | The scriptable API, in full                                              |
 | [Testing](docs/guides/testing.md)                 | Property tests, golden vectors, state hashes                             |
@@ -379,9 +391,10 @@ Stated plainly, because discovering these by surprise is worse than reading them
   at 1000×760, not the 2023-class laptop at 1920×1080 the budgets are written
   for. Cold load to interactive is still unmeasured.
 - **The graphics are primitives.** The renderer is WebGPU and TSL and the HDR
-  output path is real, but what it draws is spheres, cones and boxes. Compute
-  terrain, GPU-driven instancing and Bruneton atmosphere LUTs are the
-  [migration's](docs/design/technical.md#the-webgpu-migration) remaining half.
+  output path is real, but what it draws is spheres, radius-grid bodies, cones
+  and boxes. Compute terrain, GPU-driven instancing and Bruneton atmosphere LUTs
+  are the [migration's](docs/design/technical.md#the-webgpu-migration) remaining
+  half.
 - **The atmosphere is an analytic shell, not scattering.** Uniform density and a
   path length, standing in for the precomputed LUTs that
   [spike 2](docs/spikes.md#2--tsl-and-the-atmosphere-integral) made a requirement.

@@ -196,7 +196,7 @@ rather than parsing text.
 
 ```
 12/12 capabilities proven
-PASS  5. Approach a planet — fell 18.74 m in 60 s at 0.0104 m/s², within 0.03% of free fall
+PASS  5. Approach a planet — fell 16.65 m in 60 s at 0.0092 m/s², within 0.03% of free fall
 PASS  9. Origin rebasing — 500 rebases, 2560 km of origin travel, zero drift
 …
 ```
@@ -211,7 +211,7 @@ than one. Worth knowing before using the self-test as a mid-session probe.
 ## Persistence
 
 ```js
-const text = ir.save() // serialized save, ~700 bytes
+const text = ir.save() // serialized save, ~750 bytes
 ir.load(text) // → Result<stateHash, error>
 ```
 

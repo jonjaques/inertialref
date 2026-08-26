@@ -44,7 +44,7 @@ persistent universe at all: the server's job is small.
 ```mermaid
 flowchart TB
     BASE["<b>derived universe</b><br/>seed · catalog version · address<br/><i>identical on every client, forever</i>"]
-    LOCAL["<b>local state</b><br/>ship · Almanac · bookmarks<br/>696-byte save"]
+    LOCAL["<b>local state</b><br/>ship · Almanac · bookmarks<br/>744-byte save"]
     NET["<b>replicated state</b><br/>other entities<br/>persistent mutations"]
 
     BASE --> SOLO["<b>Solo offline</b>"]

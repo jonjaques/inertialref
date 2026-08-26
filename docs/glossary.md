@@ -107,6 +107,36 @@ grid.
 
 **Region** — one cube-sphere quadtree cell, addressed `face.level.i.j`.
 
+**Figure** — a body's measured shape, present exactly when it is **not** a
+spheroid. `radius` is `a`, `polarRadius` is `c`, and `BodyFigure` carries `b`
+plus a shape-model key. `null` means **round**, not unknown.
+→ [ADR-0013](adr/0013-measured-figures.md)
+
+**Rounding radius** — 200 km, where self-gravity beats material strength and a
+body is pulled round. Mimas is round at 198 km; Hyperion at 133 is a sponge. Not
+a sharp edge, but where the transition is centered.
+
+**Shape model** — a latitude/longitude grid of radii, one `uint16` per sample,
+in Three's own sphere layout so an equirectangular map fits it. Twenty-five are
+vendored in `data/shapes/` from the NASA Planetary Data System.
+
+**Irregularity** — the residual radial deviation about a body's own best-fit
+ellipsoid, as a fraction of its mean radius. Measured across the vendored set:
+0.023 to 0.61, median 0.090. What a generated figure is asked for.
+
+**Star-shaped** — the property a radius grid needs: one surface point per
+direction from the body's centroid. Bilobate bodies have it (a neck is a saddle,
+not a roof); the ingest measures rather than assumes it.
+
+**Spin barrier** — `sqrt(3π / Gρ)`, the rotation period at which a strengthless
+rubble pile flies apart. 2.13 h for an asteroid, 4.26 h for a comet. Real
+populations pile up against it and do not cross it, and neither does the
+generator.
+
+**Dohnanyi distribution** — `dN/dD ∝ D^-3.5`, the steady state of a population
+grinding itself down by collisions. Sampled from the top, because what a system
+_presents_ is its largest members.
+
 ---
 
 ## Simulation
@@ -159,6 +189,14 @@ generation it was built for.
 
 **Heightfield** — 65×65 elevation samples for a region. Cached across rebases;
 the mesh is not.
+
+**Datum radius** — the surface a ship contacts, before terrain. `radius` for a
+spheroid; the measured ellipsoid for a body with a figure. Not the shape model —
+`packages/universe` may not read a file.
+
+**Adaptation** — the per-body exposure lift for a surface too dark to expose the
+whole scene for. Only opens up, only below 0.12 geometric albedo, only as the
+body fills the frame. The mirror of a star stopping down as it fills the frame.
 
 ---
 

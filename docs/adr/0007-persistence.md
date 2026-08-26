@@ -27,7 +27,7 @@ A save contains exactly:
   schema bump.
 
 Not one planet, moon, orbit, star or heightfield. Measured at **580 bytes** when
-this was written and **685–696 bytes** today; the entity record has gained fields
+this was written and **733–749 bytes** today; the entity record has gained fields
 since, control input among them. The number to care about is its order of
 magnitude, not its value.
 
@@ -54,7 +54,7 @@ contain state this build cannot represent, and silently dropping it loses a
 player's progress.
 
 Storage is behind a `SaveStore` port. The browser uses IndexedDB (localStorage
-is a synchronous 5 MB box that blocks the main thread — fine for 700 bytes,
+is a synchronous 5 MB box that blocks the main thread — fine for 750 bytes,
 wrong the moment terrain mutations arrive); Node tests and the headless runner
 use an in-memory store.
 

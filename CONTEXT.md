@@ -76,7 +76,7 @@ Full reasoning is in `docs/adr/`. The short version:
    kinematically to a surface frame instead.
 8. **Render compression keys off distance to the _surface_.** Keying off the
    center put a planet's datum sphere 30 km from the terrain it represents.
-9. **A save is a reference, not a copy** — under 700 bytes for a flown session.
+9. **A save is a reference, not a copy** — under 800 bytes for a flown session.
 
 ## Conventions worth knowing before editing
 
@@ -3588,6 +3588,409 @@ which is the slab creeping back. It also reads the plate's IHDR and asserts it
 is exactly the size the card is composited at, which is the one thing about a
 captured frame a test in Node can know.
 
+## 25 Aug — the Solar System stops being eight planets, and the renderer stops drawing spheres
+
+Sol had eight planets and twenty moons. It has **129 bodies**: nine dwarf
+planets, fifty asteroids and comets, and forty-two more moons — twenty-one of the
+planets' that are rocks, and twenty-one going round something that is not a
+planet — on top of what was there. Ninety-two of them are not spheroids,
+twenty-five of those carry a **measured shape model**, and the renderer had to
+learn what a shape is.
+[ADR-0013](docs/adr/0013-measured-figures.md) is the decision; this is what it
+cost and what it found.
+
+### The reference is fetched and committed, and it is what caught the typos
+
+`packages/universe/src/solar/` is a hand-transcribed table of about fourteen
+hundred numbers. A table that size has typos in it — that is not a worry, it is
+the base rate — and a transposed digit in a semi-major axis produces a Solar
+System that runs, renders, and is wrong until somebody looks up Deimos.
+
+So `pnpm solar:fetch` writes `data/reference/solar-system.json` straight out of
+JPL: the planetary and satellite tables from Solar System Dynamics, and one
+Small-Body Database query per asteroid and comet. It is _committed_ rather than
+fetched at test time, because a test that reaches the network fails on a plane
+and a reference that changes between two runs of one commit is not a reference.
+`apps/headless/src/solarSystem.test.ts` builds Sol through the engine and checks
+it row by row — **297 assertions**.
+
+Half of what it compares is _derived rather than stored_, which is what makes it
+worth more than a diff of two tables. The engine does not store an orbital
+period; it computes one from `G(M+m)` and the semi-major axis. Matching JPL's
+published period to four figures says the axis is right, the Sun's mass is right,
+the body's mass is right and `orbitalPeriod` is right, in one assertion, because
+there is no way for two of those to be wrong and still produce it.
+
+What it found, in the order it found it:
+
+- **Mercury's radius was the mean, not the equatorial.** 2,439.7 against JPL's
+  2,440.53. 830 m, on the field whose contract is the equatorial radius and
+  whose neighbours in the same file are all equatorial.
+- **Deimos's mass was 2.4% high** — an older value than the GM the MAR097
+  ephemeris fit gives.
+- **Nix's and Hydra's masses were double.** JPL's GM for both is small and badly
+  constrained; the literature values that were transcribed are not the same
+  numbers.
+- **The ingest's own cell parser read `n/a PLU060` as sixty.** Styx and Kerberos
+  have no measured GM and the cell says so and then names the ephemeris; a regex
+  hunting for digits finds the `060` and reports a five-kilometer moon's
+  gravitational parameter as half Charon's. Nereid's GM cell is a literal
+  `0.00000`, which is JPL writing "unmeasured" in a numeric column. Both are
+  fixed by taking the _first token_ rather than the first thing that looks like a
+  number.
+
+And four disagreements that are not errors, each named in the test with its
+citation rather than tolerated by a loose bound:
+
+- **Eros is `34.4 × 11.2 × 11.2` km as an ellipsoid and 35.1 × 17.2 × 12.1 as a
+  bounding box.** Both are right; the body is bent like a banana. The shape
+  model is what the game draws, so it is what the data file carries, and the
+  check that keeps it honest is the volume — which agrees to 1%.
+- **Haumea is 715 km to Spitzer and 798 to the 2017 occultation.** Two
+  measurements, and the newer one is used.
+- **Hartley 2 is 1.6 km in SBDB and 1.16 to EPOXI**, which flew past it.
+- **Pluto's four small moons come out 6 to 10% slow.** They orbit the
+  Pluto–Charon barycentre and the engine is a patched-conic hierarchy that
+  propagates them about Pluto alone, so `sqrt(1 + M_Charon/M_Pluto)` = 5.9% of it
+  is the engine's and the rest is a resonant six-body system that a two-body
+  relation describes to a few percent whoever computes it. The test asserts the
+  _sign_ and a bound, and says which part is whose.
+
+### The comets broke the Kepler solver, silently
+
+Nothing in the game had an orbit more eccentric than 0.95 until C/2020 F3
+(NEOWISE) arrived at **0.99913**. Newton–Raphson from a Danby guess diverges
+above about 0.999 — the derivative `1 − e·cos E` goes to a thousandth near
+periapsis, the first step overshoots by three orders of magnitude, and the loop
+returns whatever it has after thirty passes.
+
+Measured: residual 8.9e-16 up to e = 0.995 and **1.5 radians** at 0.9991. Not a
+slightly wrong answer; a body on the wrong side of the Sun, with nothing to say
+it had failed. `solveKepler` now falls back to a bracketed solve — `f` is
+strictly increasing on `[0, 2π]` so the root is always bracketed by the interval
+itself, and a Newton step that leaves the bracket is replaced by a bisection.
+Reached only where the fast path already gave up, so every orbit that solved
+before solves identically. The property test's bound went from 0.95 to 0.9999.
+
+### Twenty-five shape models, and the star-shaped question
+
+`pnpm shapes:build` pulls from the PDS Small Bodies Node — Thomas's satellite
+grids, Stooke's small-body atlas, Gaskell's stereophotoclinometry, the radar
+inversions, and the OSIRIS-REx SPC model of Bennu at 6.32 m — and resamples each
+to a latitude/longitude grid of radii. 937 KB for the set.
+
+The representation cannot hold an overhang, so the ingest **measures** whether it
+had to: it computes the reconstructed volume and compares it against the source
+mesh's own, and refuses anything outside ±6%. Every one of the twenty-five came
+back between 99.8% and 100.6%, **including Kleopatra**, whose waist is a saddle
+rather than a roof. A dog bone is star-shaped about its own centroid, which was
+the open question and is now a number.
+
+Two bugs the volume check found on the way:
+
+- **Longitude 0 extrapolated backwards across the whole table.** The interval
+  search used `<=` at the low end, so the output's first column — which is
+  longitude 0, which is the axis's first sample — took the wrap branch and
+  interpolated with `t = −119`. Every body came out with one meridian several
+  times its own radius long. The check saw it; the eye would have read it as a
+  shape model of something else.
+- **The reported half-extents were the equatorial maximum, twice.** `shapeExtent`
+  computed the largest radius in the equatorial plane and the largest along the
+  pole, then reported three axes as `[eq, eq, polar]` — so no body ever had a
+  distinct intermediate axis and Eros came out 17.6 × 17.6 × 6.1.
+
+Measured against JPL afterwards, the reconstructions land: Phobos's
+volume-equivalent radius is 11.115 km against a published 11.08, Epimetheus's is
+58.32 against 58.2, Amalthea's 81.8 against 83.5.
+
+### The generated case is the same case
+
+A body with a `figure` and no model gets a radius grid out of its own address
+seed, on its measured half-extents, through the same mesh builder. That is what
+makes the change reach the rest of the galaxy rather than just Sol: generated
+moons below 200 km — which is most of them, the mass draw runs from 10¹⁸ kg —
+are now rocks, and generated systems have belts.
+
+Both distributions are measured rather than chosen, off the twenty-five models:
+
+```
+                                     min    median      max
+  b / a                             0.43      0.74     0.99
+  c / b                             0.71      0.87     1.00
+  rms(r) about the fitted           0.023     0.090    0.61
+    ellipsoid, over the mean
+```
+
+The one clear trend is the threshold. The two bodies above 200 km — Vesta and
+Proteus — have `a/c` of 1.21 and 1.09; everything below is scattered from 1.05
+(Mathilde, a ball) to 2.89 (Eros) with no strong size dependence inside the
+range. So the model is a threshold plus a spread rather than a formula. A tidy
+monotonic function of radius would fit the data worse and look more scientific.
+
+**The noise had to be calibrated to mean what it said.** Asked for 0.18 it
+delivered 0.03, because an fBm's standard deviation is a sixth of its range and
+nothing divided it out — every generated small body in the galaxy was a very
+slightly dented ball. The displacement is now log-normal about a measured
+`NOISE_SIGMA` of 0.167, clamped to an exponent range that caps the max/min
+radius ratio at 4.5 (Ida, the worst measured, is 9.4 — the rest of that comes
+from the half-extents, which is where a body that shape gets it from anyway).
+
+### A belt in every system
+
+Generated systems had planets and moons and nothing else — a tidy diagram of a
+system rather than a system. They now get six to eighteen small bodies, and three
+things about them are measured:
+
+- **The size ladder is Dohnanyi's**, sampled from the top. `dN/dD ∝ D^-3.5`
+  means the k-th largest goes as `k^-0.4`, so a belt is parameterized by its
+  largest member rather than its smallest. Drawing fourteen bodies at random from
+  a Dohnanyi population gives fourteen kilometer-sized rocks, which is correct
+  and useless.
+- **The spin barrier is real and is the floor.** `T = sqrt(3π/Gρ)` — 2.13 h at
+  an asteroid's density, 4.26 h at a comet's. Across 300 generated systems,
+  **the only body in the game below its own barrier is 1998 KY26**, which is real
+  and is the textbook exception: eleven meters across, below the size where
+  cohesion stops mattering, turning once every 5.4 minutes.
+- **The composition gradient is the frost line.** Inner-belt bodies are S-type
+  at a fifth reflectance, outer ones C- and D-type at a twentieth, and the
+  transition is where volatiles survive.
+
+`SYSTEM_ALGORITHM` went to 3. Nothing a save could already point at moved —
+that is what issue ordinals are for — but a system contains things it did not.
+
+### What the renderer had to be told
+
+Three changes, and only one of them is in the draw loop.
+
+- **`Bodies.tsx` branches once.** A body with no `figure` is drawn exactly as it
+  was: a unit sphere, squashed by `flattening`. A body with one takes a mesh from
+  `shapeModels.ts` and scales by a single number, because the mesh already
+  carries all three half-extents. Applying `flattening` on top would squash it a
+  second time by a ratio the geometry has already spent.
+- **`MAX_BODIES` went from 64 to 160.** The cap counts every visual, and the
+  star takes one: Sol was 29 and is 130. At 64 the arrivals past the cap
+  silently stopped rendering.
+- **Orbit traces learned what rubble is.** The planetarium drew a subject's
+  siblings for context, which was eight ellipses and became a hundred and
+  twenty-nine lines with Bennu somewhere behind them. `OrbitPath` gained a
+  `kind`; a small body's orbit is drawn when it _is_ the subject or goes round
+  it, and the planets stay because "where is this relative to the planets" is
+  the question a planetarium exists to answer.
+
+### The photometry, measured in the planetarium
+
+The first pass made the dark bodies too bright, and the measurement is the
+interesting part. The tint for a body with no map was `0.18 + 1.6·p`, which is a
+guess, and it compresses a 6-to-1 range of real albedos into 2.3-to-1 of rendered
+brightness. Shot at matched framing against the Moon, whose map is real and whose
+rendering is the reference at sRGB 83:
+
+| body     | geometric albedo | before | after |
+| -------- | ---------------- | ------ | ----- |
+| Deimos   | 0.068            | 155    | 71    |
+| Phobos   | 0.071            | 147    | 97    |
+| Amalthea | 0.090            | 85     | 63    |
+
+Deimos was rendering _twice as bright as the Moon_ at half its albedo. It is now
+the physical relation — a geometric albedo `p` comes from a Lambert reflectance
+of `1.5 p`, on a hue normalized to its brightest channel so the color is not
+multiplied in twice. Phobos additionally needed its tint halved because the Mars
+Express SRC mosaic is a contrast-stretched product: its mean linear luminance is
+0.30, about the same as the Moon's LRO map, on a body with half the Moon's
+albedo.
+
+**Nothing in `bodies.ts` above the small bodies was touched.** The eight planets
+and the twenty original moons render exactly as they did.
+
+The other half is an _exposure_, and it has a precedent in this file. The star
+material already stops **down** as a star fills the frame — "a sun that fills the
+frame is exposed for its surface, not for the scene it lights". A body reflecting
+4.4% of the light that reaches it is the same decision at the other end: a camera
+that spends a minute looking at Bennu from five hundred meters adapts to it, and
+a renderer with one exposure for the whole scene cannot. `adaptationFor` in
+`Bodies.tsx` opens `albedoScale` up toward a 0.12 target, scaled by how much of
+the frame the body covers, and **returns exactly 1 above 0.12 geometric albedo**
+— which is below Mercury at 0.142 and the Moon at 0.136, so no planet and no
+major moon ever sees anything but 1. Bennu's boulder field is legible at close
+range and it is still the darkest object in the frame.
+
+The reference was OSIRIS-REx's published full-rotation animation of Bennu — the
+one everybody has seen, and a _contrast-stretched_ OCAMS product: it is what the
+instrument team put out to be read, not what an eye would see. It is not in
+`design/inspiration/` with the rest, because it is fourteen megabytes of GIF and
+git history is permanent. The render matches its silhouette, its equatorial ridge
+and its boulders, and is honestly darker.
+
+### One O(bodies) scan per tick, found by a test timing out
+
+`considerFrameChange` walks every child of the entity's current frame looking
+for a sphere of influence to descend into. For a ship in the system frame the
+children are every body orbiting the star, which was eight and is now sixty-six
+— and the loop body was a Kepler solve _plus_ a full canonical-position
+resolution, per child, per tick. The approach test in `world.test.ts` went from
+comfortably inside vitest's five seconds to 6.3 s and failed.
+
+Two changes:
+
+- **The entity's canonical position was recomputed inside the loop** and does
+  not depend on the child. That was already wrong and merely cost eight times
+  less.
+- **A child is skipped unless the entity's distance from the parent overlaps
+  the child's own orbital band.** `periapsis` and `apoapsis` come off elements
+  the body already carries, and the test is exact rather than conservative: by
+  the triangle inequality a body outside that band cannot be within `soi` of the
+  entity.
+
+**6,339 ms to 84 ms** on the same 13,836 ticks, entering the same frame at the
+same tick — 2,180 ticks/s to 164,700, which is faster than the eight-body
+version ever was. The cost is now proportional to the bodies plausibly nearby
+rather than to the size of the system, which is what it should always have been;
+sixty-six heliocentric bodies are what made it worth noticing.
+
+### What the review caught
+
+`/code-review max --fix` over the diff. Fifteen findings; the ones worth
+recording because they were wrong in a way that would not have shown up:
+
+- **A module cycle that only worked by luck.** `smallBodies.ts` imported
+  `ROUNDING_RADIUS` as a _value_ from `system.ts`, and `system.ts` imports
+  `solar/system.ts` which imports `smallBodies.ts` — with `SOLAR_SMALL_BODIES`
+  built eagerly at module scope, so the constant is dereferenced before
+  `system.ts`'s body has run. `import('packages/universe/src/system.ts')`
+  directly threw a TDZ `ReferenceError`. It worked in the app only because
+  `index.ts`'s `export *` list happens to name `solar/system.ts` first. Now a
+  leaf `rounding.ts` with no imports of its own.
+
+  The regression test is the interesting part. `pnpm graph` structurally cannot
+  see this — it discards every intra-package edge before it starts. Neither can
+  a vitest test: vitest evaluates modules through its own runner, which resolves
+  the graph without the temporal dead zone Node's ESM linker enforces, and the
+  first attempt **passed with the bug deliberately reintroduced**, which would
+  have been worse than no test. `apps/headless/src/moduleGraph.test.ts` spawns
+  one `node` per entry point instead, which is the only way to make each module
+  the _first_ in its own graph. Verified failing, then passing.
+
+  It also came back within the hour on the way there: `smallBodies.ts` is
+  emitted from a script, and re-running that script to add a missing body
+  restored the old import. The fix belongs in the generator, not the output.
+
+- **The collision datum became the longest half-extent.** `surfaceRadius` was
+  `body.radius + groundElevation(...)`, and `radius` is `a`. Ground contact is
+  gated on having a spin frame, not on `isLandable`, so a ship can touch down on
+  Haumea — 513 km above the pole, with the altitude readout at zero, and
+  `frames.ts` anchors the saved site at the same wrong radius so it survives
+  save and load. Phobos was the small version of the same thing and a genuine
+  regression: its datum was the 11.27 km mean radius until it gained a figure.
+  `surfaceRadius` now evaluates the measured ellipsoid. Spheroids are untouched
+  — Earth's own 21 km of polar flattening has always been ignored there and
+  changing it would move the ground under every save.
+- **The generated field was up to 37% too big.** `NOISE_SIGMA` was measured on
+  `broad + cut` and the code uses `broad + 1.6·cut`, and the analytic
+  `exp(−k²σ²/2)` correction does not survive the clamp or the folded `cut` term
+  — neither is the Gaussian that identity assumes. Measured: volume 1.004× the
+  ellipsoid at the median roughness and **1.37×** at the top. Replaced with a
+  uniform rescale to the ellipsoid's own volume, which is exact, costs one pass,
+  and changes no shape at all. The property test that should have caught it
+  asserted `exp(0.6)` while its comment claimed 30%, so it could not fail for
+  any input in its own range.
+- **The generated field was rebuilt at every LOD tier**, 23 ms of noise
+  synchronously inside `useFrame`, because the cache key included the stride and
+  the field does not depend on it. **The geometry cache was unbounded** and
+  `disposeShapeGeometries` had no callers — one pass through Sol built 70–80 MB
+  and every system jump added its own.
+- **Comet traces were sampled uniformly in time.** By Kepler's second law a
+  near-parabolic body spends nearly all its period near aphelion, so for
+  NEOWISE consecutive samples were sixty-nine years apart and the two bracketing
+  perihelion sat at 38 AU on opposite sides: the trace was a flat-ended lens
+  through the middle of the Sun. Sampled in _eccentric anomaly_ now — the same
+  96 points spread along the curve rather than along the clock, starting at the
+  body's own anomaly so the pre-existing "the trace starts where the body is"
+  invariant still holds. NEOWISE's innermost sample went from 38 AU to 0.41
+  against a true perihelion of 0.295.
+- **The pole was `across` copies of one point with `across` different normals**,
+  so shading pinwheeled at both ends of any body whose pole faced the camera.
+  `SphereGeometry` gets away with the same layout because its pole normal is the
+  axis whichever face you ask; a lumpy body's is not.
+- **`toutatis` shipped, was preloaded, and no body referenced it** — the entry
+  was lost from the emitter's group list. And the Phobos map shipped in every
+  bundle while the Phobos entry never set `texture: 'phobos'`, so the tint that
+  had just been halved _to compensate for that map_ was landing on nothing.
+- **`system.planets.length` beside the literal word "planets"** in four display
+  sites, now that the array holds every body orbiting the star: the catalogue
+  row read "Sol · 66 planets".
+- **`Set<string>` in three files** for the same "which kinds are worlds"
+  partition, so a ninth `BodyKind` would compile against all three and land in
+  the wrong half of each while both tests kept passing. Typed
+  `Record<BodyKind, boolean>` tables now; a ninth kind is a compile error.
+
+Not fixed, and named in the gaps below: `radius` means the bounding box for a
+measured body and the reference ellipsoid for a generated one, which cannot be
+reconciled without giving up either the mass or the silhouette.
+
+### The suite outgrew a five-second timeout
+
+Worth writing down because the symptom pointed at the wrong tests. After the
+Solar System quadrupled, `pnpm check` started failing intermittently — and the
+tests it killed were mostly _not_ the new ones: an Rng uniformity property, an
+atmosphere transmittance sweep, the catalog's own "inside a keystroke" search
+bound. All pre-existing, all green standalone, all around a second of pure CPU.
+
+Vitest's default is five seconds per test and it runs sixty-four files across
+every core at once. Several things now legitimately take a second or more — a
+129-body Solar System stepped for thousands of ticks, a fast-check property over
+a quarter of a million noise samples — so under that contention the timeout had
+stopped measuring the code and started measuring how busy the machine was.
+`testTimeout` is 20 s now, which is still an order of magnitude below any of
+them, and the two per-test overrides that were compensating for the low default
+are gone.
+
+The one place the new work was genuinely at fault: `moduleGraph.test.ts` began
+as ten `it.each` cases, each spawning a Node process that type-strips the whole
+universe package. Ten of those fanned out in parallel starved everything else.
+It is one test with six serial spawns now, 1.3 s in total.
+
+### Textures
+
+Six new maps, all public-domain USGS Astrogeology mosaics: Pluto and Charon from
+New Horizons at 300 m, Ceres and Vesta from Dawn, Phobos from Mars Express SRC,
+and Bennu from OSIRIS-REx OCAMS at **25 cm per pixel** — a global map with
+individual boulders in it, and the highest-resolution map of anything anywhere.
+About 900 MB of download into `.data/` for 6 MB of shipped WebP; the whole
+texture set is 25 maps and 25 MB.
+
+Deimos, Eros, Itokawa and Ryugu have no global mosaic in a public archive and
+fall back to their measured albedo and color. That matters less than it sounds:
+a body a few kilometers across is a silhouette long before it is a texture, and
+three of those four have their silhouette vendored.
+
+### Where the rest of this ended up
+
+This entry is the narrative. The durable parts are distributed, and each of
+these carries a different half of it:
+
+| Document                                                           | Carries                                                                                                                         |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| [ADR-0013](docs/adr/0013-measured-figures.md)                      | Why a radius grid and not a mesh, and the four alternatives that were rejected                                                  |
+| [`AGENTS.md`](AGENTS.md)                                           | The two invariants: never flatten a body that has a figure, never read `figure: null` as "unknown"                              |
+| [Rendering concepts](docs/concepts/rendering.md)                   | Two shapes and which one is not a rendering choice; shape models as radius grids; exposure at both ends                         |
+| [Determinism](docs/concepts/determinism.md)                        | Why `system` went to 3, and "draw, then override" as a numbered rule                                                            |
+| [Identity](docs/concepts/identity.md)                              | Why Ceres is `b:8`: issue ordinals are what let fifty-nine small bodies land after the eight planets without moving an address  |
+| [Art direction](docs/design/art.md)                                | A body's figure is on the "never negotiable" list; the shape _below_ the published axes is licensed                             |
+| [Galaxy](docs/design/galaxy.md)                                    | Provenance is per **field**, not per body — the refinement the Solar System forced                                              |
+| [Content](docs/design/content.md)                                  | Dohnanyi, the spin barrier and the measured elongation spread, as content targets                                               |
+| [Planetarium](docs/design/planetarium.md)                          | The four orbit-trace rules, including sampling in eccentric anomaly                                                             |
+| [Exploration](docs/design/exploration.md)                          | A figure is a Tier 2 scan yield, and on a small body it is the headline one                                                     |
+| [Roadmap](docs/roadmap.md#small-bodies-and-their-figures)          | Photometric normalization, the archives the ingest cannot reach, what `radius` means, polyhedral gravity, belts as a population |
+| [Catalog guide](docs/guides/catalogue.md#shape-models)             | `pnpm shapes:build`, `pnpm solar:fetch`, and the volume check that refuses a model the format cannot hold                       |
+| [Testing guide](docs/guides/testing.md)                            | Three ways a regression test failed to fail; timeouts as hang guards; distributions; derived quantities                         |
+| [Extending guide](docs/guides/extending.md)                        | Adding a body kind; calibrating a generator against a measurement; intra-package cycles                                         |
+| [Architecture](docs/architecture.md#where-the-universe-comes-from) | The generation inputs, and that the observed/generated split runs per field                                                     |
+| [Glossary](docs/glossary.md)                                       | figure · rounding radius · shape model · irregularity · star-shaped · spin barrier · Dohnanyi · datum radius · adaptation       |
+| [`NOTICE`](NOTICE)                                                 | Provenance for twenty-five public-domain shape models and six new surface maps                                                  |
+
+The **known gaps** below are the short form of the roadmap section. Where the two
+differ, the roadmap has the seam and this has the measurement.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).
@@ -3606,10 +4009,35 @@ Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md
   in the catalog records the truth for all 375 of them within 150 ly).
 - Moons outside the Solar System are all projections, which is right — no
   exoplanet moon has been confirmed. Sol's twenty are real and observed.
-- **Seven Solar System bodies have no vendored surface map** — Titan, Enceladus,
-  Iapetus, Triton, Phobos, Deimos and the Uranian moons — and render from their
-  measured albedo and tint. USGS has mosaics for several; they are large, and the
-  return per gigabyte is much lower than for the four Galileans.
+- **Most small bodies have no vendored surface map** — Titan, Enceladus,
+  Iapetus, Triton, the Uranian moons, Deimos, Eros, Itokawa, Ryugu and every
+  asteroid and comet below Bennu — and render from their measured albedo and
+  tint. For the moons that is a size-versus-return judgment. For the small bodies
+  no global mosaic exists in a public archive: NEAR, Hayabusa and Hayabusa2
+  archived images and shape models rather than projected maps. Twenty-five of
+  them do have their _figure_ vendored, which for a body a few kilometers across
+  is the half that shows.
+- **67P/Churyumov–Gerasimenko and Ryugu have no shape model here.** Both are
+  archived — ESA's Planetary Science Archive and JAXA's DARTS respectively — and
+  the shape ingest only speaks PDS. 67P is the most recognizable small-body
+  silhouette in existence and it is currently a generated figure on its measured
+  half-extents.
+- **`radius` means the bounding box for a measured body and the reference
+  ellipsoid for a generated one.** The two cannot agree: a lumpy body with an
+  ellipsoid's volume has a larger bounding box than that ellipsoid, and
+  `irregularFigure` picks volume because the mass depends on it. Measured
+  consequence: a generated body's silhouette exceeds its stated `radius` by
+  about 17% at the median roughness and up to 55% at the top of the range. The
+  only thing downstream is the angular radius the LOD tiers are chosen from,
+  which is a tier boundary rather than a fact.
+- **The renderer has no per-body photometric normalization.** A surface map's
+  mean linear luminance ranges from 0.048 (Callisto) to 0.32 (the Moon) across
+  the shipped set, against published geometric albedos that do not track it —
+  Vesta's map is four times darker than Mercury's on a body three times brighter.
+  Each body's tint compensates by hand. The fix is for the texture ingest to
+  record each map's mean and the renderer to scale toward `1.5 p`, which would
+  change how every planet is lit and is therefore a deliberate pass rather than a
+  patch.
 - **Three of the four Galilean maps are monochrome.** That is how Voyager and
   Galileo returned them. They are tinted with published colors, which is a
   different and smaller lie than rendering them gray.

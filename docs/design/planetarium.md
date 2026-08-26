@@ -126,15 +126,34 @@ Affordable here for a reason specific to this engine: **orbits are analytic**
 evaluations rather than 96 integration steps that would drift off the body they
 belong to.
 
-Two rules, both of which the naive version gets wrong in a way that only shows
-on screen:
+Four rules, every one of which the naive version gets wrong in a way that only
+shows on screen:
 
 - **A trace is relative to its primary, re-anchored to now.** Sampling a moon's
   absolute position over one of its months also sweeps the planet through a
   twelfth of its year, so the trace comes out as an open corkscrew.
-- **Traces are contextual.** What is drawn is the subject's siblings and the
-  things going round it. Everything at once, in a system seen from inside, is a
-  dozen ellipses edge-on — a fan of near-straight lines that says nothing.
+- **A trace starts where the body is.** It is drawn as a tail behind the subject,
+  and a curve that is geometrically right but phase-shifted is invisible until
+  somebody looks at the tail.
+- **Traces are contextual, and rubble is not context.** What is drawn is the
+  subject's siblings and the things going round it. Everything at once, in a
+  system seen from inside, is a dozen ellipses edge-on — a fan of near-straight
+  lines that says nothing. That was written when a star's children were eight
+  planets; Sol has sixty-seven now, and drawn all at once they are a hundred and
+  twenty-nine lines with the subject somewhere behind them. So an asteroid, a comet or
+  a dwarf planet's orbit is drawn when it **is** the subject or goes round it,
+  and the planets stay — "where is this relative to the planets" is the question
+  a planetarium exists to answer, and eight ellipses answer it.
+- **Sample in eccentric anomaly, not in time.** By Kepler's second law a
+  near-parabolic body spends nearly all of its period near aphelion, so equal
+  steps in time put nearly all the samples in the same place. At e = 0 the two
+  are identical and nobody notices; C/2020 F3 (NEOWISE) is 0.99913, and its
+  ninety-six samples were sixty-nine years apart with the two bracketing
+  perihelion at 38 AU on opposite sides. The trace was a flat-ended lens through
+  the middle of the Sun, and whenever the comet was near perihelion it was
+  nowhere near its own orbit line. `M = E − e·sin E` is Kepler's equation run
+  _forwards_ and needs no solver; the same ninety-six points then walk the
+  ellipse at nearly constant arc length.
 
 ### Lighting presets
 

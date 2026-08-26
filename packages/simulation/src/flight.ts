@@ -15,6 +15,7 @@ import {
   type FrameState,
   Quaternion as Q,
   reframe,
+  type UniverseVector,
   UV,
   Vec,
   type Vec3,
@@ -432,14 +433,75 @@ function considerFrameChange(
   distance: Meters,
   time: Seconds,
 ): { state: FrameState; change: FrameChange } | null {
-  // Descend first: being inside a moon's SOI is more specific than being inside
-  // its planet's, and checking children before the parent gets that ordering
-  // right without a special case.
-  for (const child of world.bindingsUnder(binding.frame)) {
-    const childPose = world.frames.pose(child.frame, time)
+  /*
+   * Descend first: being inside a moon's SOI is more specific than being inside
+   * its planet's, and checking children before the parent gets that ordering
+   * right without a special case.
+   *
+   * The loop is over every child of the current frame, which for a star is
+   * every body orbiting it. That was eight and is now sixty-six, and the loop
+   * body was a Kepler solve *and* a full canonical-position resolution — per
+   * child, per tick. Measured on the approach test: 2,180 ticks per second
+   * against 9,600 before the small bodies landed. Two changes, and the second
+   * is the one that matters:
+   *
+   *   - The entity's canonical position does not depend on the child. It was
+   *     recomputed inside the loop, which was already wrong and merely cost
+   *     eight times less.
+   *   - A child can only be within reach if the entity's distance from the
+   *     *parent* overlaps the child's own orbital band. `periapsis` and
+   *     `apoapsis` come out of elements the body already carries, and the test
+   *     is exact rather than conservative — a body outside that band cannot be
+   *     within `soi` of the entity, by the triangle inequality.
+   *
+   * The prune is what makes the cost proportional to the bodies that are
+   * plausibly nearby rather than to the size of the system.
+   */
+  /*
+   * Resolved once, on the first child that needs it, and not before.
+   *
+   * Hoisting it out of the loop is right — it does not depend on the child —
+   * but computing it *unconditionally* moved it from "n times" to "always",
+   * including on the ticks where the loop body never runs. That is the common
+   * case, not a corner: 108 of Sol's 128 body frames have no children at all,
+   * and the count of ticks scales with time warp.
+   *
+   * `parentDistance` is re-derived here rather than using the `distance`
+   * argument, and that is the point of doing it at all. `distance` is measured
+   * from `entity.state` *before* this tick's integration, while the SOI test
+   * below uses the position *after* it. The prune's triangle inequality is only
+   * exact when both are the same instant; mixed, an entity that crossed a
+   * child's band edge during the step could be pruned past a body the exact
+   * test would have accepted — silently, and the smaller the body the worse it
+   * is, because Bennu's whole `reach` is about 2.8 km.
+   */
+  let resolved: { universe: UniverseVector; parentDistance: Meters } | null =
+    null
+  const resolve = (): { universe: UniverseVector; parentDistance: Meters } => {
+    if (resolved !== null) return resolved
     const universe = canonicalPosition(world.frames, entity.state, time)
+    resolved = {
+      universe,
+      parentDistance: UV.distance(
+        universe,
+        world.frames.pose(binding.frame, time).position,
+      ),
+    }
+    return resolved
+  }
+  for (const child of world.bindingsUnder(binding.frame)) {
+    const reach = child.sphereOfInfluence * SOI_ENTER
+    const elements = child.body?.elements
+    const { universe, parentDistance } = resolve()
+    if (elements !== undefined) {
+      const near = elements.semiMajorAxis * (1 - elements.eccentricity)
+      const far = elements.semiMajorAxis * (1 + elements.eccentricity)
+      if (parentDistance + reach < near || parentDistance - reach > far)
+        continue
+    }
+    const childPose = world.frames.pose(child.frame, time)
     const childDistance = UV.distance(universe, childPose.position)
-    if (childDistance < child.sphereOfInfluence * SOI_ENTER) {
+    if (childDistance < reach) {
       return {
         state: reframe(world.frames, entity.state, child.frame, time),
         change: {

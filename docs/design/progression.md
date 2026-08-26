@@ -116,7 +116,7 @@ with when and under which catalog version.
 It is never lost, it works offline, it is not a power curve, and it is the thing
 most likely to still matter to a player after two hundred hours. It is also the
 only progression that survives everything: a destroyed ship, a wiped save
-restored from a 696-byte reference, a catalog revision that retires a world you
+restored from a 744-byte reference, a catalog revision that retires a world you
 found.
 
 **Milestones exist but are not rewards.** _1,000 bodies. Every planet in Sol.

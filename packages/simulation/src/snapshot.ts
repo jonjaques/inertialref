@@ -12,6 +12,7 @@ import {
 } from '@inertialref/spatial'
 import {
   type BodyAppearance,
+  type BodyFigure,
   bodyFrameId,
   type EntityId,
   formatAddress,
@@ -79,6 +80,11 @@ export interface BodySnapshot {
   readonly atmosphereCeiling: Meters
   /** Peak-to-datum terrain relief, so the renderer can sink the datum sphere. */
   readonly relief: Meters
+  /**
+   * The measured figure, for a body that is not a spheroid, or null for one
+   * that is. See `BodyFigure` in `@inertialref/universe`.
+   */
+  readonly figure: BodyFigure | null
 }
 
 export interface StarSnapshot {
@@ -179,6 +185,7 @@ export function snapshot(
         kind: body.kind,
         radius: body.radius,
         polarRadius: body.polarRadius,
+        figure: body.figure,
         rotationPeriod: body.rotationPeriod,
         appearance: body.appearance,
         position: pose.position,

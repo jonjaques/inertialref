@@ -32,21 +32,22 @@ problem.
 Mirrors [`docs/roadmap.md`](../roadmap.md#content-the-rest-of-the-vision), which
 is the engineering-facing view of this same table.
 
-| Thing                  | Status | Launch target                        | Notes                                                                                             |
-| ---------------------- | ------ | ------------------------------------ | ------------------------------------------------------------------------------------------------- |
-| Galaxy, systems, stars | ✅     | Catalog + procedural fill            | 7,123 real systems within 150 ly, from the [ingest pipeline](galaxy.md#ingest-pipeline)           |
-| Planets, moons         | ✅     | Full                                 | Deterministic from address                                                                        |
-| Planetary terrain      | 🟡     | Quadtree LOD, biomes, materials      | The visible ceiling on everything — see [production](production.md)                               |
-| Ships                  | 🟡     | 6 hulls, ~60 modules                 | One debug ship today                                                                              |
-| Rings                  | ⬜     | All giants that warrant them         | A body property plus an instanced renderer                                                        |
-| Asteroids / belts      | ⬜     | 2–4 belts per system where warranted | Wants a **population generator**: many small bodies from one cell seed, addressed as `o:` objects |
-| Star clusters, nebulae | ⬜     | Post-MVP                             | Density modulation in the galaxy generator + volumetric rendering                                 |
-| Exotic remnants        | ⬜     | Post-MVP                             | White dwarfs, neutron stars, black holes — a body kind; the hard part is rendering                |
-| Vegetation, flora      | ⬜     | Post-MVP                             | Region-seeded scatter; the `o:` address segment exists for it                                     |
-| Rocks, surface scatter | ⬜     | **MVP**                              | Same mechanism, much easier, and it is what makes a surface a place                               |
-| Structures, outposts   | ⬜     | 3 kinds, parts-assembled             | First real consumer of [persistent mutations](../roadmap.md#persistent-mutations)                 |
-| Humanoids              | ⬜     | Post-MVP                             | Needs a character controller on a surface frame                                                   |
-| Small physical objects | 🟡     | Samples, tools, debris               | Debug cubes render at correct scale today; no interaction                                         |
+| Thing                  | Status | Launch target                        | Notes                                                                                                                                                                                                                       |
+| ---------------------- | ------ | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Galaxy, systems, stars | ✅     | Catalog + procedural fill            | 7,123 real systems within 150 ly, from the [ingest pipeline](galaxy.md#ingest-pipeline)                                                                                                                                     |
+| Planets, moons         | ✅     | Full                                 | Deterministic from address                                                                                                                                                                                                  |
+| Planetary terrain      | 🟡     | Quadtree LOD, biomes, materials      | The visible ceiling on everything — see [production](production.md)                                                                                                                                                         |
+| Ships                  | 🟡     | 6 hulls, ~60 modules                 | One debug ship today                                                                                                                                                                                                        |
+| Rings                  | ✅     | All bodies that warrant them         | Saturn's, Jupiter's, Uranus's, Neptune's, and Haumea's, Quaoar's, Chariklo's and Chiron's; procedural giants get a 1-in-6 chance                                                                                            |
+| Asteroids / belts      | 🟡     | 2–4 belts per system where warranted | 50 real asteroids and comets in Sol and 6–18 generated per system, as addressable `b:` bodies. A belt you can _see_ still wants a **population generator**: many small bodies from one cell seed, addressed as `o:` objects |
+| Body figures           | ✅     | Everything below the rounding radius | 92 of Sol's 129 bodies are not spheres; 25 carry measured shape models — [ADR-0013](../adr/0013-measured-figures.md)                                                                                                        |
+| Star clusters, nebulae | ⬜     | Post-MVP                             | Density modulation in the galaxy generator + volumetric rendering                                                                                                                                                           |
+| Exotic remnants        | ⬜     | Post-MVP                             | White dwarfs, neutron stars, black holes — a body kind; the hard part is rendering                                                                                                                                          |
+| Vegetation, flora      | ⬜     | Post-MVP                             | Region-seeded scatter; the `o:` address segment exists for it                                                                                                                                                               |
+| Rocks, surface scatter | ⬜     | **MVP**                              | Same mechanism, much easier, and it is what makes a surface a place                                                                                                                                                         |
+| Structures, outposts   | ⬜     | 3 kinds, parts-assembled             | First real consumer of [persistent mutations](../roadmap.md#persistent-mutations)                                                                                                                                           |
+| Humanoids              | ⬜     | Post-MVP                             | Needs a character controller on a surface frame                                                                                                                                                                             |
+| Small physical objects | 🟡     | Samples, tools, debris               | Debug cubes render at correct scale today; no interaction                                                                                                                                                                   |
 
 ---
 
@@ -58,14 +59,18 @@ Where the catalog is silent, generation fills in — and it should fill in
 _plausibly_, which means the generator's statistics should look like the real
 ones rather than like a designer's preferences.
 
-| Property            | Target distribution       | Real basis                                                                                                         |
-| ------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Spectral class      | M ≫ K > G > F > A > B > O | The stellar initial mass function [Source: Chabrier, _Galactic Stellar and Substellar IMF_, 2003]                  |
-| Planets per system  | 0–12, median ~3           | Kepler occurrence rates `[Assumption: approximate; validate against current occurrence-rate literature at ingest]` |
-| Rocky : giant ratio | ~2 : 1 within 10 AU       |                                                                                                                    |
-| Moons per giant     | 4–60, log-distributed     | Sol's giants as the reference                                                                                      |
-| Landable fraction   | ~55% of solid bodies      | Airless and thin-atmosphere worlds; thick-atmosphere worlds are not landable in the MVP                            |
-| Systems with belts  | ~40%                      |                                                                                                                    |
+| Property                             | Target distribution                  | Real basis                                                                                                                                                                |
+| ------------------------------------ | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Spectral class                       | M ≫ K > G > F > A > B > O            | The stellar initial mass function [Source: Chabrier, _Galactic Stellar and Substellar IMF_, 2003]                                                                         |
+| Planets per system                   | 0–12, median ~3                      | Kepler occurrence rates `[Assumption: approximate; validate against current occurrence-rate literature at ingest]`                                                        |
+| Rocky : giant ratio                  | ~2 : 1 within 10 AU                  |                                                                                                                                                                           |
+| Moons per giant                      | 4–60, log-distributed                | Sol's giants as the reference                                                                                                                                             |
+| Landable fraction                    | ~55% of solid bodies                 | Airless and thin-atmosphere worlds; thick-atmosphere worlds are not landable in the MVP                                                                                   |
+| Systems with belts                   | 100%                                 | Every system that formed planets has leftovers. 6–18 bodies each, which is a _sample_ of a population that runs to millions                                               |
+| Small-body sizes                     | `dN/dD ∝ D^-3.5`                     | Dohnanyi's collisional cascade [Source: Dohnanyi, _Collisional model of asteroids_, JGR 74, 1969]                                                                         |
+| Small-body rotation                  | ≥ `sqrt(3π/Gρ)`, log-normal above it | The rotation barrier a strengthless rubble pile flies apart at — 2.13 h for rock, 4.26 h for a comet nucleus. Measured populations pile up against it and do not cross it |
+| Elongation, `b/a`                    | 0.43–0.99, median 0.74               | The 25 measured shape models in `data/shapes/`                                                                                                                            |
+| Roughness about the fitted ellipsoid | 0.023–0.61, median 0.090             | The same 25                                                                                                                                                               |
 
 **The generator already does the astrophysics honestly** — main-sequence
 mass–luminosity, a frost line that scales with luminosity, densities that separate
@@ -74,15 +79,24 @@ something better later is a change to one file. That is the right posture.
 
 ### Body kinds
 
-| Kind              | Landable | Notes                                                               |
-| ----------------- | -------- | ------------------------------------------------------------------- |
-| Rocky             | ✅       | The default. Terrain, no or thin atmosphere.                        |
-| Ice               | ✅       | Terrain with an ice material set; often outer-system                |
-| Gas giant         | ❌       | Approachable, ring systems, moons. A destination without a surface. |
-| Ice giant         | ❌       |                                                                     |
-| Moon              | ✅       | Anything orbiting a body rather than a star                         |
-| Asteroid ⬜       | ✅       | Micro-gravity; the most interesting on-foot environment in the game |
-| Exotic remnant ⬜ | ❌       | White dwarf, neutron star, black hole. Hazard and spectacle.        |
+| Kind              | Landable | Notes                                                                                                                                                                |
+| ----------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Rocky             | ✅       | The default. Terrain, no or thin atmosphere.                                                                                                                         |
+| Ice               | ✅       | Terrain with an ice material set; often outer-system                                                                                                                 |
+| Gas giant         | ❌       | Approachable, ring systems, moons. A destination without a surface.                                                                                                  |
+| Ice giant         | ❌       |                                                                                                                                                                      |
+| Moon              | ✅       | Anything orbiting a body rather than a star                                                                                                                          |
+| Asteroid          | ⬜       | Modeled and drawn with its real figure; **not landable yet** — micro-gravity is still the most interesting on-foot environment in the game and nothing implements it |
+| Comet             | ⬜       | The nucleus is modeled and drawn. The coma and tail — the part anybody has ever seen — are a rendering problem nobody has started                                    |
+| Dwarf planet      | ✅       | Round, and a world. Pluto has its heart; Haumea is a genuine tri-axial ellipsoid because it turns in 3.9 hours                                                       |
+| Exotic remnant ⬜ | ❌       | White dwarf, neutron star, black hole. Hazard and spectacle.                                                                                                         |
+
+Below about 200 km a body stops being a spheroid and starts being a _shape_ —
+see [ADR-0013](../adr/0013-measured-figures.md). That is a rendering and data
+distinction rather than a gameplay one today, but it is the thing that makes an
+asteroid feel like a place rather than a small planet, and the on-foot design
+should assume an irregular surface with a gravity vector that does not point at
+the center.
 
 ---
 

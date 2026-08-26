@@ -46,11 +46,21 @@ describe('Kepler', () => {
     expect(outer / inner).toBeCloseTo(8, 6)
   })
 
-  it("solves Kepler's equation for eccentricities up to 0.95 (property)", () => {
+  /*
+   * 0.9999, not 0.95.
+   *
+   * The bound used to be 0.95 because nothing in the game had an orbit more
+   * eccentric than that. Then the comets arrived: C/2020 F3 (NEOWISE) is
+   * 0.99913 and Halley is 0.96714, and at 0.9991 the plain Newton iteration
+   * returned a residual of 1.5 radians — a body on the wrong side of the Sun,
+   * with nothing to say it had failed. `solveKepler` now falls back to a
+   * bracketed solve; this is the bound that would have caught it.
+   */
+  it("solves Kepler's equation for eccentricities up to 0.9999 (property)", () => {
     fc.assert(
       fc.property(
         fc.double({ min: 0, max: 2 * Math.PI, noNaN: true }),
-        fc.double({ min: 0, max: 0.95, noNaN: true }),
+        fc.double({ min: 0, max: 0.9999, noNaN: true }),
         (M, e) => {
           const E = solveKepler(M, e)
           // The residual of the equation we claim to have solved.

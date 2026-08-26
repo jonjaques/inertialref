@@ -16,6 +16,18 @@ Reasoning: `AGENTS.md` § "The rules that actually matter",
   against the wrong one is a vibration at the frame/tick beat, scaled by the subject's own
   radius. `terrainStreamer` and the observatory each learned this the hard way.
 
+- **`figure: null` means round, not unknown, and a body that has one must not also be
+  flattened.** The mesh from `shapeGeometryFor` already carries all three measured
+  half-extents; `flattening` is `polarRadius / radius`, which it has already spent, so
+  applying both squashes the body twice — 26% on Phobos. `Bodies.tsx` branches once on
+  whether it got a mesh. ADR-0013.
+
+- **A shape model is a radius grid in Three's own sphere UV layout, and that is
+  load-bearing.** It is what lets an equirectangular albedo map fit an asteroid through
+  the same material as Mars. `buildShapeMesh` reproduces `SphereGeometry`'s vertex order,
+  UVs and duplicated seam column exactly; changing any of them rotates every small body's
+  texture by an amount nobody can name.
+
 - **Never import from `three` in `apps/game`.** It is `three/webgpu` and `three/tsl`. Both
   share `three.core.js`, so `Mesh` is the same class either way and nothing breaks loudly
   — but only `three/webgpu` carries the node system, and a material taken from `three` is

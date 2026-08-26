@@ -43,7 +43,7 @@ import type { BodyTextures } from './planetTextures.ts'
  *
  * Everything here is one node graph with per-body uniforms, which matters more
  * than it looks: the WebGPU backend keys pipelines on generated source, so
- * twenty-eight bodies that differ only in their uniforms and texture bindings
+ * a hundred and thirty bodies that differ only in their uniforms and texture bindings
  * compile once. A branch per body would be twenty-eight pipelines and a visible
  * stall on arrival in the Solar System.
  *
@@ -127,6 +127,14 @@ export interface PlanetMaterial {
   readonly centre: { value: Vector3 }
   /** Tint, and the whole surface where there is no albedo map. */
   readonly baseColour: { value: Color }
+  /**
+   * A multiplier on the sampled albedo, for the eye a photograph implies.
+   *
+   * 1 for everything the renderer draws at a distance, and for every body
+   * bright enough that the scene's own exposure already suits it. `Bodies.tsx`
+   * raises it only for a *dark* body *filling the frame* — see `adaptationFor`
+   * there for why that is an exposure decision rather than a lie about albedo.
+   */
   readonly albedoScale: { value: number }
   /** How much of the lunar-Lambert blend is Lommel-Seeliger. */
   readonly lunarLambert: { value: number }

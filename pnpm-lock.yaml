@@ -180,6 +180,9 @@ importers:
       '@inertialref/persistence':
         specifier: workspace:*
         version: link:../../packages/persistence
+      '@inertialref/physics':
+        specifier: workspace:*
+        version: link:../../packages/physics
       '@inertialref/procedural':
         specifier: workspace:*
         version: link:../../packages/procedural
@@ -207,6 +210,9 @@ importers:
       '@inertialref/procedural':
         specifier: workspace:*
         version: link:../../packages/procedural
+      '@inertialref/rendering':
+        specifier: workspace:*
+        version: link:../../packages/rendering
       '@inertialref/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -332,6 +338,9 @@ importers:
 
   packages/rendering:
     dependencies:
+      '@inertialref/procedural':
+        specifier: workspace:*
+        version: link:../procedural
       '@inertialref/shared':
         specifier: workspace:*
         version: link:../shared

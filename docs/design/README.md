@@ -116,6 +116,6 @@ in the appendix so nothing hides in a paragraph.
 - [`docs/vision.md`](../vision.md) — the charter this serves
 - [`docs/architecture.md`](../architecture.md) — the system these designs run on
 - [`docs/roadmap.md`](../roadmap.md) — engineering sequence; [production](production.md) is the design-facing view of the same work
-- [`docs/adr/`](../adr/) — the twelve decisions everything here assumes
+- [`docs/adr/`](../adr/) — the thirteen decisions everything here assumes
 - [`AGENTS.md`](../../AGENTS.md) — how to change any of it
 - [`docs/agents/`](../agents/README.md) — the agent handbook

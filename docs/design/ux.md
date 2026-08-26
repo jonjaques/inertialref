@@ -106,7 +106,7 @@ view.
 | **Station services** | Terminals you walk to                   | No                              | Walk up, `F`       | Walk away                       |
 
 **There is no pause menu that stops the world**, because there is no state in
-which stopping the world is correct — the save is 696 bytes and restores an
+which stopping the world is correct — the save is 744 bytes and restores an
 identical state hash, so _quit anywhere_ is already true. Settings open as an
 overlay while the simulation runs.
 

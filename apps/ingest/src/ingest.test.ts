@@ -146,10 +146,21 @@ describe('the real Solar System', () => {
     return generateSystem(ROOT, MILKY_WAY, catalogStub(sol))
   }
 
+  /*
+   * A planet, as against everything else Sol is now made of.
+   *
+   * `system.planets` is the array of bodies orbiting the star, and since the
+   * dwarf planets, asteroids and comets landed in it that is 67 entries rather
+   * than 8. Every one of them is `observed` — they are all real and all
+   * measured — so provenance no longer separates the eight, and `kind` is what
+   * does. This is the 2006 IAU vote showing up as a filter.
+   */
+  const PLANET_KINDS = new Set(['rocky', 'gas-giant', 'ice-giant', 'ice'])
+
   it('has the eight planets, named, in the right orbits', () => {
     const system = solSystem()
     const observed = orbitalOrder(system).filter(
-      (b) => b.provenance === 'observed',
+      (b) => b.provenance === 'observed' && PLANET_KINDS.has(b.kind),
     )
     expect(observed.map((b) => b.name)).toEqual([
       'Mercury',
@@ -192,10 +203,18 @@ describe('the real Solar System', () => {
   it('gives the Solar System its real moons', () => {
     const system = solSystem()
     const moons = system.planets.flatMap((planet) => planet.moons)
-    expect(moons.map((m) => m.name)).toContain('Luna')
-    expect(moons.map((m) => m.name)).toContain('Titan')
-    expect(moons.map((m) => m.name)).toContain('Europa')
-    expect(moons.length).toBe(20)
+    const names = new Set(moons.map((m) => m.name))
+    expect(names).toContain('Luna')
+    expect(names).toContain('Titan')
+    expect(names).toContain('Europa')
+    // The twenty round ones, the twenty-one that are rocks — Amalthea,
+    // Hyperion, Prometheus, Proteus and the rest — and the twenty-one that
+    // orbit something that is not a planet, from Charon down to Dimorphos.
+    expect(names).toContain('Amalthea')
+    expect(names).toContain('Hyperion')
+    expect(names).toContain('Charon')
+    expect(names).toContain('Dimorphos')
+    expect(moons.length).toBe(62)
     for (const moon of moons) expect(moon.provenance).toBe('observed')
 
     const luna = moons.find((m) => m.name === 'Luna')

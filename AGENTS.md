@@ -94,6 +94,20 @@ Violating one of these is a rewrite later, not a refactor.
 - **Never read the raw pathname when a dialog could be open over a mode.**
   Use `resolvedLocation`. Links that stay inside a dialog, and controls that
   close one, go through `pages/useOverlay.ts`.
+- **Never apply `flattening` to a body that has a `figure`.** A `figure` is
+  present exactly when a body is not a spheroid, and its mesh already carries
+  all three measured half-extents. `flattening` is `polarRadius / radius`, which
+  the mesh has already spent — applying it as well squashes the body a second
+  time by the same ratio, which on Phobos is 26%. `Bodies.tsx` branches once, on
+  whether `shapeGeometryFor` returned a mesh, and everything downstream of that
+  branch belongs on one side of it.
+  [ADR-0013](docs/adr/0013-measured-figures.md).
+- **Never read a body's figure as "unknown".** `figure: null` means **round**.
+  Every planet, every large moon, Pluto and Ceres are spheroids and carry none;
+  the ninety-two bodies in Sol that are not, and every generated body below
+  `ROUNDING_RADIUS`, carry one. A renderer that treated null as "no data
+  available" and fell back to a sphere would be right by accident and wrong the
+  moment the fallback changed.
 - **Never place a compressed body about the render origin.** `placeAt` takes
   the eye in render space and compresses radially about _that_. The origin is a
   snapped grid point that lags the camera and jumps; compressing about it gives

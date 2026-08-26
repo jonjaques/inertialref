@@ -20,6 +20,7 @@ import {
   cellKey,
   cellOf,
   type EntityId,
+  isDebris,
   type StarCatalog,
   type SystemId,
 } from '@inertialref/universe'
@@ -695,7 +696,8 @@ export class GameEngine implements PresentationHost {
      * are one field on the path.
      */
     const focus = this.harness.observatory.target?.frame ?? null
-    const key = `${systems.map((system) => system.id).join(',')}|${focus ?? ''}`
+    const subjectAddress = this.harness.observatory.target?.address ?? null
+    const key = `${systems.map((system) => system.id).join(',')}|${focus ?? ''}|${subjectAddress ?? ''}`
     if (
       key === this.#orbitsSystems &&
       this.#orbitsWorld === this.#starFieldWorld
@@ -710,11 +712,33 @@ export class GameEngine implements PresentationHost {
       focus !== null && this.world.frames.has(focus)
         ? this.world.frames.get(focus).parent
         : null
+    /*
+     * Siblings, but only the ones that are worlds.
+     *
+     * The sibling rule was written when a star's children were eight planets.
+     * Sol has sixty-seven now — fifty-nine asteroids, comets and dwarf planets
+     * on top of the eight — and every one of their moons, and drawn all at once
+     * they are a hundred and twenty-nine lines across the frame with the subject
+     * somewhere behind them. Measured by looking at Bennu: the asteroid was a
+     * dark shape inside a wireframe cage.
+     *
+     * So a small body's orbit is drawn when it *is* the subject, or when it
+     * goes round the subject, and not merely because it shares a primary. The
+     * planets stay, because "where is this relative to the planets" is the
+     * question a planetarium exists to answer, and eight ellipses answer it.
+     *
+     * The nine dwarf planets stay too — `isDebris` is asteroids and comets
+     * only. Hiding them cost the one trace a planetarium is most often opened
+     * for: with Neptune selected, where Pluto's orbit crosses it.
+     */
     this.orbits =
       focus === null
         ? all
         : all.filter(
-            (path) => path.parent === focus || path.parent === grandparent,
+            (path) =>
+              path.parent === focus ||
+              (path.parent === grandparent &&
+                (!isDebris(path.kind) || path.address === subjectAddress)),
           )
     log.info('orbit traces rebuilt', {
       paths: this.orbits.length,

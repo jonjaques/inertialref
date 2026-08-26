@@ -43,6 +43,25 @@ export default defineConfig({
       'apps/*/src/**/*.test.ts',
       'scripts/**/*.test.mjs',
     ],
+    /*
+     * 20 seconds, not vitest's default 5.
+     *
+     * The default was ample while nothing in the suite took more than a couple
+     * of hundred milliseconds. Several things now legitimately take a second or
+     * more of pure CPU — 128-body Solar Systems stepped for thousands of ticks,
+     * fast-check properties over a quarter of a million noise samples, a
+     * uniformity test over an Rng's whole output distribution — and the runner
+     * puts sixty-four files across every core at once. Measured under that
+     * contention: tests that finish in 1.1 s standalone were being killed at 5,
+     * and the ones that failed were mostly *not* the new ones. Nothing was
+     * wrong with them; the timeout had stopped measuring the code and started
+     * measuring how busy the machine was.
+     *
+     * A timeout is a guard against a hang, and 20 s is still an order of
+     * magnitude below any of these. Individual tests that need more say so at
+     * the call site with their own reason.
+     */
+    testTimeout: 20_000,
     reporters: ['dot'],
   },
 })

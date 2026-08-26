@@ -595,14 +595,23 @@ describe('going places', () => {
         )
       } else {
         unorbitable += 1
-        // Handed back to the parent, not flung across the system.
-        expect(`${target.name}: ${player?.frame}`).toMatch(/^[^:]+: b:/)
+        /*
+         * Handed back to the parent, not flung across the system — and the
+         * parent of an asteroid is the *star*. Phobos falls back to Mars
+         * because Mars is what it orbits; Itokawa's sphere of influence is
+         * 2.5 km on a body 300 m across, and what it orbits is the Sun. Both
+         * are `s:` or `b:`, and neither is a frame belonging to somewhere else
+         * in the system.
+         */
+        expect(`${target.name}: ${player?.frame}`).toMatch(/^[^:]+: [bs]:/)
       }
       expect(`${target.name}: landed ${player?.landed}`).toBe(
         `${target.name}: landed false`,
       )
     }
-    // Phobos and Deimos. If this ever reaches zero the check above has stopped
+    // Phobos, Deimos, and every asteroid and comet small enough that its
+    // sphere of influence is smaller than a sensible viewing distance — which
+    // is most of them. If this ever reaches zero the check above has stopped
     // testing the case it was written for.
     expect(unorbitable).toBeGreaterThan(0)
   }, 20_000)

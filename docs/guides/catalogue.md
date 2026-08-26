@@ -25,7 +25,7 @@ All three are **committed**. The raw downloads they are built from are not:
 | Over the wire                                    |                               |
 | ------------------------------------------------ | ----------------------------- |
 | `stars-150ly.irsc`                               | 458 KB raw, **179 KB brotli** |
-| the client bundle beside it                      | 1.8 MB raw, 512 KB gzip       |
+| the client bundle beside it                      | 2.49 MB raw, 736 KB gzip      |
 | the decoder and tables this added to that bundle | **15 KB**                     |
 
 ---
@@ -60,17 +60,19 @@ flowchart LR
     style RES fill:#7f1d1d,stroke:#450a0a,color:#fff
 ```
 
-| Stage                                 | Lives in                                        |
-| ------------------------------------- | ----------------------------------------------- |
-| fetch, with pinned URLs and a digest  | `apps/ingest/src/sources.ts`                    |
-| CSV, normalize, group, match          | `apps/ingest/src/build.ts`                      |
-| choosing the name that goes on screen | `apps/ingest/src/naming.ts`                     |
-| the Solar System, by hand             | `apps/ingest/src/solarSystem.ts`                |
-| **the codec, both halves**            | `packages/universe/src/catalog/format.ts`       |
-| identity resolution                   | `packages/universe/src/catalog/identity.ts`     |
-| measured → physical                   | `packages/universe/src/catalog/photometry.ts`   |
-| spectral type parsing                 | `packages/universe/src/catalog/spectral.ts`     |
-| designations and search               | `packages/universe/src/catalog/designations.ts` |
+| Stage                                   | Lives in                                        |
+| --------------------------------------- | ----------------------------------------------- |
+| fetch, with pinned URLs and a digest    | `apps/ingest/src/sources.ts`                    |
+| CSV, normalize, group, match            | `apps/ingest/src/build.ts`                      |
+| choosing the name that goes on screen   | `apps/ingest/src/naming.ts`                     |
+| the Solar System, transcribed           | `packages/universe/src/solar/`                  |
+| the JPL reference it is checked against | `apps/ingest/src/solarReference.ts`             |
+| shape models, downloaded and resampled  | `apps/ingest/src/shapes.ts`                     |
+| **the codec, both halves**              | `packages/universe/src/catalog/format.ts`       |
+| identity resolution                     | `packages/universe/src/catalog/identity.ts`     |
+| measured → physical                     | `packages/universe/src/catalog/photometry.ts`   |
+| spectral type parsing                   | `packages/universe/src/catalog/spectral.ts`     |
+| designations and search                 | `packages/universe/src/catalog/designations.ts` |
 
 The packer and the unpacker are **the same file**, imported by the ingest and by
 the game. There is no second description of the layout to fall out of step with
@@ -80,11 +82,14 @@ the first.
 
 ## The sources
 
-| Source                                                                            | Provides                                                                       | License                                                    |
-| --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------- |
-| [HYG v4.4](https://codeberg.org/astronexus/hyg)                                   | 119,614 stars: positions, parallaxes, magnitudes, spectral types, designations | **CC BY-SA 4.0**                                           |
-| [NASA Exoplanet Archive](https://exoplanetarchive.ipac.caltech.edu/) `pscomppars` | confirmed planets with published orbits, masses and radii                      | none stated; acknowledgment requested                      |
-| `apps/ingest/src/solarSystem.ts`                                                  | the eight planets of the Solar System                                          | J2000 elements from JPL fact sheets — facts, not a dataset |
+| Source                                                                            | Provides                                                                          | License                                       |
+| --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | --------------------------------------------- |
+| [HYG v4.4](https://codeberg.org/astronexus/hyg)                                   | 119,614 stars: positions, parallaxes, magnitudes, spectral types, designations    | **CC BY-SA 4.0**                              |
+| [NASA Exoplanet Archive](https://exoplanetarchive.ipac.caltech.edu/) `pscomppars` | confirmed planets with published orbits, masses and radii                         | none stated; acknowledgment requested         |
+| `packages/universe/src/solar/`                                                    | the Solar System's 129 bodies, transcribed into source                            | JPL measurements — facts, not a dataset       |
+| [JPL Solar System Dynamics](https://ssd.jpl.nasa.gov/)                            | the reference that transcription is checked against, and every small body's orbit | NASA/JPL-Caltech, public domain               |
+| [PDS Small Bodies Node](https://sbn.psi.edu/pds/)                                 | 25 measured shape models                                                          | United States Government works, public domain |
+| [USGS Astrogeology](https://astrogeology.usgs.gov/)                               | surface mosaics for Pluto, Charon, Ceres, Vesta, Phobos and Bennu                 | NASA / USGS, public domain                    |
 
 **Gaia is deliberately absent.** Its data are CC BY-NC 3.0 IGO, and a
 non-commercial clause on the data the game cannot run without would attach that
@@ -254,11 +259,12 @@ What to look at, in order:
 1. **The report.** Compare `systems`, `planets matched` and `ids only HYG can
 supply` against `data/catalog/manifest.json` from the previous build. A large
    move in any of them is the story.
-2. **`apps/ingest/src/ingest.test.ts`.** It asserts the nearest stars by name and
-   distance, the eight planets of the Solar System, and that no procedural star is
-   invented closer than Proxima Centauri. If it fails, the ingest changed the
-   universe. That is allowed — astronomy publishes — but it is never allowed to be
-   a surprise, which is what those numbers are written down for.
+2. **`apps/ingest/src/ingest.test.ts`.** It asserts the nearest stars by name
+   and distance, the eight planets and the sixty-two moons of the Solar System,
+   and that no procedural star is invented closer than Proxima Centauri. If it
+   fails, the ingest changed the universe. That is allowed — astronomy
+   publishes — but it is never allowed to be a surprise, which is what those
+   numbers are written down for.
 3. **The version string.** It digests the _packed output_, not the downloads, so
    it changes exactly when the shipped data changes. Hashing the sources was the
    first attempt and it churns: the NASA archive's TAP service returned two
@@ -351,12 +357,20 @@ data/textures/
   mercury_albedo.webp  venus_albedo.webp  venus_clouds.webp  mars_albedo.webp
   jupiter_albedo.webp  saturn_albedo.webp  saturn-ring_ring.webp
   uranus_albedo.webp   neptune_albedo.webp
+  pluto_albedo.webp    charon_albedo.webp  ceres_albedo.webp  vesta_albedo.webp
+  phobos_albedo.webp   bennu_albedo.webp
   manifest.json      LICENSE.md
 ```
 
-**19 maps, 10.7 MB**, all 4096×2048 except the two that have no source that
-large. Committed, and streamed per body at runtime — `planetTextures.ts` fetches
-a body's maps the first time it is drawn as more than a few pixels, and the
+**25 maps, 25.0 MB**, all 4096×2048 except the ones with no source that large.
+The six at the end arrived with the dwarf planets and the small bodies and are
+why the set went from 10.7 MB to 25.0 MB: Pluto and Charon are New Horizons at
+300 m, Ceres and Vesta are Dawn, Phobos is Mars Express SRC, and Bennu is
+OSIRIS-REx OCAMS at **25 cm per pixel** — a global map with individual boulders
+in it, and the highest-resolution map of anything anywhere.
+
+Committed, and streamed per body at runtime — `planetTextures.ts` fetches a
+body's maps the first time it is drawn as more than a few pixels, and the
 service worker caches them like any other content-hashed asset.
 
 ### Where they come from
@@ -395,6 +409,43 @@ because GEBCO_08 turns out to have no bathymetry: 77.5% of it is exactly zero.
 Measured, and the mask comes out at 69% ocean coverage against a true 71%.
 
 ---
+
+## Shape models
+
+```
+pnpm shapes:build              # download, resample, and write data/shapes
+pnpm shapes:build --refresh    # ...re-downloading rather than using the cache
+```
+
+Twenty-five measured figures from the NASA Planetary Data System Small Bodies
+Node, resampled to latitude/longitude grids of radii. Public-domain United
+States Government works: there is no license to comply with, only provenance,
+which for a shape model matters more — a body's figure is a measurement and a
+measurement with no citation is a guess. `data/shapes/manifest.json` records the
+source URL, the publication, the reconstructed volume against the source's own,
+and the output digest for each.
+
+The ingest **refuses a model it cannot represent**. A radius grid is
+single-valued in radius per direction, so it needs the surface to be star-shaped
+about the body's centroid; the build measures the enclosed volume against the
+source mesh's and fails past ±6%. Every current model reconstructs between 99.8%
+and 100.6%, including 216 Kleopatra, whose waist is a saddle rather than a roof.
+
+## The Solar System reference
+
+```
+pnpm solar:fetch               # rewrite data/reference/solar-system.json from JPL
+pnpm solar:fetch --refresh     # ...re-downloading rather than using the cache
+```
+
+Not an asset the game loads. `packages/universe/src/solar/` carries the Solar
+System's measurements transcribed into source, because facts are not a licensed
+database; this writes the same numbers straight out of JPL's planetary,
+satellite and small-body tables so that
+`apps/headless/src/solarSystem.test.ts` can tell a typo from a decision. It is
+committed rather than fetched at test time — a test that reaches the network
+fails on a plane, and a reference that changes between two runs of one commit is
+not a reference. Re-run it when JPL publishes; the diff is the news.
 
 ## Related
 

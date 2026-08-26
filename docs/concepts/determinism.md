@@ -169,8 +169,15 @@ Generators carry an `AlgorithmVersion`. The version is part of what defines the
 universe, and a save records the versions it was written with:
 
 ```
-generation: { galaxy: 1, system: 1, terrain: 1 }
+generation: { galaxy: 2, system: 3, terrain: 1, photometry: 1 }
 ```
+
+`system` went to 3 when generated systems gained a belt — six to eighteen small
+bodies each, issued after every planet. Nothing a save could already point at
+moved, because [issue ordinals](../adr/0009-issue-ordinal-addressing.md) are
+exactly what stops that; but a system now _contains_ things it did not, and a
+manifest that did not say so would let two builds of the game disagree about the
+contents of one address space with nothing to notice.
 
 So "this save was made with terrain v2" is a statement the loader can act on,
 rather than a mystery about why the coastline moved. Deciding _what_ to do about
@@ -186,7 +193,7 @@ Generation determinism is only half. The simulation half is enforced by a single
 comparison value:
 
 ```ts
-world.stateHash() // '804b2d58'
+world.stateHash() // 'f38e988a'
 ```
 
 A hash over the tick, the seed, and every entity's frame, position, velocity,
@@ -225,6 +232,8 @@ See [simulation time](time.md) for why the clock makes this possible.
 3. Derive from an address; never draw from a shared stream.
 4. If generating object B first can change object A, it is wrong.
 5. Changing a generator changes its version, in the same commit.
+6. Draw, then override. A `??` that skips the draw makes every later value for
+   that object depend on whether the override happened to be present.
 
 ---
 

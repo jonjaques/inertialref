@@ -21,6 +21,7 @@ import {
   systemsWithin,
   type UniverseAddress,
   walkBodies,
+  planetCount,
 } from '@inertialref/universe'
 
 /*
@@ -137,7 +138,7 @@ export function travelTargets(
     stars.set(system.id, {
       name: system.name,
       position: system.position,
-      detail: `${system.star.spectralType} · ${system.planets.length} planets`,
+      detail: `${system.star.spectralType} · ${planetCount(system)} planets`,
       // A loaded system may be outside the survey radius, so this cannot be
       // inherited from the sweep above. Asked of the catalog directly, which is
       // the same question `catalogStub` answers with `catalogued: true` — and
@@ -239,7 +240,7 @@ export function searchTargets(
       detail:
         system === undefined
           ? `${star.spectralType} · ${star.physical.solarMasses.toFixed(2)} M☉`
-          : `${system.star.spectralType} · ${system.planets.length} planets`,
+          : `${system.star.spectralType} · ${planetCount(system)} planets`,
       distance,
       distanceText: formatDistance(distance),
       landable: false,

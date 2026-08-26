@@ -84,6 +84,21 @@ visible timestamp.
 > long enough to _look at the planet_, which is the thing we want. Shortening it
 > to five seconds would make the game faster and worse.
 
+**A body's figure is a Tier 2 yield, and on a small body it is the headline
+one.** Below about 200 km gravity has not rounded a body off, so its _shape is
+its identity_ — and unlike mass or rotation, a shape is something a player can
+recognize rather than read. The scan that resolves 216 Kleopatra from a dashed
+point into a dog bone is a better moment than the one that fills in its density.
+Sol's small bodies are already `observed` and carry measured shape models
+([ADR-0013](../adr/0013-measured-figures.md)); everywhere else, the projection
+is an ellipsoid on the projected half-extents and the survey is what puts the
+real relief on it.
+
+That also gives the ladder a natural extra rung on exactly the bodies that
+currently have the least to scan: a 500 m asteroid has no atmosphere, no
+landability question and no temperature range worth a panel, and it does have a
+silhouette.
+
 ### Tier 3 — Surface survey
 
 **Input.** Establish orbit inside 3 body radii. Deploy probes.

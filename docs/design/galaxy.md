@@ -54,6 +54,30 @@ Every body carries `provenance`, and the UI shows it everywhere the body appears
 > project can ship with a thin catalog and get better forever without a single
 > design change.
 
+### Provenance is per _field_, not per body
+
+A refinement the Solar System forced, and worth stating because the three-layer
+diagram above reads as though a body is wholly one thing.
+
+An `observed` body is observed in the fields somebody published and generated in
+the rest, and the split runs straight down the middle of a single object:
+
+| Body             | Observed                                                                  | Generated                                                             |
+| ---------------- | ------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Earth            | radius, oblateness, mass, tilt, spin, orbit, albedo, surface maps         | terrain below the map's ten kilometers per texel                      |
+| Phobos           | half-extents, mass, orbit, spin, albedo, **and its whole measured shape** | nothing — a 2° shape grid is finer than anything a ship resolves      |
+| 67P              | half-extents, mass, orbit, spin                                           | the figure between them — its model is in an archive this cannot read |
+| A generated moon | nothing                                                                   | everything, and it says so                                            |
+
+The rule that keeps this honest is the same one everywhere: **what is measured is
+used verbatim; what nobody has measured is derived from the body's own seed, and
+the absence of a value is what says which.** `SurfaceParameters` has always
+worked this way — the published relief is a fact and the shape below it is a
+draw — and `BodyFigure` is the same contract one level up.
+
+The consequence for the UI is that "observed" on a panel is a claim about the
+numbers beside it, not a blanket claim about the object.
+
 ---
 
 ## Data sources
@@ -116,7 +140,7 @@ rendering its own coverage.
 The hard problem the whole three-layer model exists to solve.
 
 **The problem.** Generation is a pure function of seed and address, which is what
-makes the universe reproducible, streamable and 696 bytes to save. But the
+makes the universe reproducible, streamable and 744 bytes to save. But the
 catalog is an _input_ to generation, and the catalog changes. A star with no
 known planets today may have three confirmed next year. If that shifts every
 generated body around it, then every save, every Almanac entry and every
@@ -243,10 +267,12 @@ scheduled advance.
 
 Worth stating plainly, because it is easy to assume real data is merely flavour.
 
-- **Systems are unequal, truthfully.** Sol has eight planets and hundreds of
-  moons. Barnard's Star, six light-years away, has nothing confirmed. That
-  variance is not a difficulty curve; it is a fact, and it makes arrival
-  genuinely uncertain in a way a designed distribution never is.
+- **Systems are unequal, truthfully.** Sol has 129 modeled bodies — eight
+  planets, nine dwarf planets, fifty asteroids and comets, sixty-two moons
+  — and every one of them is a published measurement. Barnard's Star, six
+  light-years away, has nothing confirmed and gets a projection. That variance is
+  not a difficulty curve; it is a fact, and it makes arrival genuinely uncertain
+  in a way a designed distribution never is.
 - **Routes have real texture.** Class M dwarfs dominate the neighborhood and
   scoop slowly, so the good refuelling stars are sparse and their positions are
   not negotiable.

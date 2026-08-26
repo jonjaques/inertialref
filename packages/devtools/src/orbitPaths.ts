@@ -1,7 +1,9 @@
 import type { Meters } from '@inertialref/shared'
 import { type FrameId, UV, type UniverseVector } from '@inertialref/spatial'
+import { solveKepler } from '@inertialref/physics'
 import type { World } from '@inertialref/simulation'
 import {
+  type BodyKind,
   bodyFrameId,
   formatAddress,
   type StarSystem,
@@ -47,6 +49,17 @@ export interface OrbitPath {
   readonly radius: Meters
   /** How deep in the moon hierarchy: 1 for a planet, 2 for a moon. */
   readonly depth: number
+  /**
+   * What is on this orbit, so a host can decide whether the trace is context.
+   *
+   * A planetarium draws a subject's siblings to show where it sits. That was
+   * unambiguous while a star's children were eight planets; with fifty-nine
+   * dwarf planets, asteroids and comets in Sol it is a cage of a hundred and
+   * twenty-nine lines
+   * across the frame, and Bennu is somewhere behind it. `kind` is what lets a
+   * host draw the worlds and leave the rubble out.
+   */
+  readonly kind: BodyKind
   /** Closed: the last point is one full period on, which is the first again. */
   readonly points: readonly UniverseVector[]
   /**
@@ -104,8 +117,40 @@ export function orbitPaths(
 
     const anchor = world.frames.pose(parent, now).position
     const points: UniverseVector[] = []
+    /*
+     * Sampled uniformly in *eccentric anomaly*, not in time.
+     *
+     * Kepler's second law says a body on an eccentric orbit spends almost all
+     * of its period near aphelion, so equal steps in time put almost all the
+     * samples in the same place. At e = 0 the two are identical and nobody
+     * noticed; then C/2020 F3 (NEOWISE) arrived at e = 0.99913 with a 6,600-year
+     * period, and consecutive samples were sixty-nine years apart with the two
+     * bracketing perihelion sitting at 38 AU on opposite sides. The drawn trace
+     * was a flat-ended lens through the middle of the Sun, and whenever the
+     * comet was near perihelion it was nowhere near its own orbit line.
+     *
+     * `M = E − e·sin E` is Kepler's equation run *forwards*, which needs no
+     * solver, and `t = epoch + (M − M₀)/n` is the absolute instant with that
+     * eccentric anomaly. Stepping E uniformly walks the ellipse at nearly
+     * constant arc length instead — the same 96 samples, spread along the
+     * curve rather than along the clock.
+     */
+    const { eccentricity, meanAnomalyAtEpoch, epoch } = body.elements
+    /*
+     * The sweep starts at the body's *own* eccentric anomaly, not at
+     * periapsis, because the first sample has to be where the body is now —
+     * the trace is drawn as a tail behind it, and a curve that is right but
+     * phase-shifted is invisible until somebody looks at the tail. That is one
+     * Kepler solve for the whole path against ninety-six evaluations of it.
+     */
+    const meanNow = meanAnomalyAtEpoch + (2 * Math.PI * (now - epoch)) / period
+    const startAnomaly = solveKepler(meanNow, eccentricity)
     for (let i = 0; i <= samples; i += 1) {
-      const t = now + (period * i) / samples
+      const eccentricAnomaly = startAnomaly + (2 * Math.PI * i) / samples
+      const meanAnomaly =
+        eccentricAnomaly - eccentricity * Math.sin(eccentricAnomaly)
+      const t =
+        epoch + ((meanAnomaly - meanAnomalyAtEpoch) * period) / (2 * Math.PI)
       const here = world.frames.pose(frame, t).position
       const primary = world.frames.pose(parent, t).position
       // The offset in universe axes, re-hung on where the primary is *now*.
@@ -116,6 +161,7 @@ export function orbitPaths(
       address: formatAddress(body.address),
       name: body.name,
       radius: body.radius,
+      kind: body.kind,
       depth: body.address.kind === 'body' ? body.address.body.length : 1,
       points,
       parent,

@@ -19,15 +19,17 @@ are in [`AGENTS.md`](../../AGENTS.md).
 
 ## Where to edit
 
-| Kind of change                         | Where it goes                                                                        |
-| -------------------------------------- | ------------------------------------------------------------------------------------ |
-| Simulation, coordinates, generation    | `packages/*`, observing the layer declared in each `package.json`                    |
-| Host adapters (workers, saves, Worker) | `apps/game`, `apps/headless`, `apps/server`                                          |
-| Overlay UI                             | `apps/game/src/hud/`, through the existing wrappers, not a one-off control           |
-| Modes and routes                       | `apps/game/src/pages/` — the mode is a function of the path, never React state       |
-| Dock layout                            | `apps/game/src/dock/layout.ts` and `dock/floating.ts`, never a splice at a call site |
-| Star catalog ingest                    | `apps/ingest/` — offline, never at play time                                         |
-| Brand assets                           | `design/brand/brandmark.svg` only; `pnpm brand` writes the rest                      |
+| Kind of change                         | Where it goes                                                                                                                  |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Simulation, coordinates, generation    | `packages/*`, observing the layer declared in each `package.json`                                                              |
+| Host adapters (workers, saves, Worker) | `apps/game`, `apps/headless`, `apps/server`                                                                                    |
+| Overlay UI                             | `apps/game/src/hud/`, through the existing wrappers, not a one-off control                                                     |
+| Modes and routes                       | `apps/game/src/pages/` — the mode is a function of the path, never React state                                                 |
+| Dock layout                            | `apps/game/src/dock/layout.ts` and `dock/floating.ts`, never a splice at a call site                                           |
+| Star catalog ingest                    | `apps/ingest/` — offline, never at play time                                                                                   |
+| Solar System measurements              | `packages/universe/src/solar/` — transcribed facts, checked against `data/reference/solar-system.json`                         |
+| Anything under `data/`                 | Fix the pipeline in `apps/ingest/`, never the artifact. A correction applied to the output alone is undone by the next rebuild |
+| Brand assets                           | `design/brand/brandmark.svg` only; `pnpm brand` writes the rest                                                                |
 
 Do not assemble a session by hand. `openSession` in `packages/devtools` is the
 one constructor. A host passes adapters in; it does not reconstruct the graph.
@@ -44,7 +46,9 @@ Not "the browser rendered something." Done means:
   `world.stateHash()`; coverage is manual, not automatic. See
   [determinism](../concepts/determinism.md#determinism-in-the-simulation-not-just-generation).
 - Tests exist and pass, including a regression test when a defect exposed a
-  missing invariant.
+  missing invariant — and you have **watched that regression test fail** with the
+  defect reintroduced. Three have failed that check here for three different
+  reasons; see [testing](../guides/testing.md#prove-a-regression-test-can-fail).
 - `pnpm check` is green.
 - The ADRs and `CONTEXT.md` reflect any meaningful architectural change.
 - The debug tooling can inspect whatever you added.
@@ -68,6 +72,11 @@ runs. `IR_SKIP_GATE=1` disables the hook when you must.
 - **A new invariant** goes in `AGENTS.md` and as a one-liner in
   `.claude/rules/` — see that folder's [contract](../../.claude/rules/README.md).
   Add a row to [invariants.md](invariants.md) pointing at the technical page.
+- **A count or a measurement in prose goes stale silently.** Grep for the old
+  number before you finish: "eight planets", "twenty moons", "19 maps", "thirty
+  invariants" and "twelve decisions" were all true and all in several files at
+  once. `README.md`, `PRODUCT.md`, `docs/roadmap.md`, `docs/design/` and the
+  guides each state the same facts for different audiences.
 
 ---
 

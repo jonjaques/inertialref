@@ -23,10 +23,17 @@
  *
  * ## What is missing
  *
- * Titan, Enceladus, Iapetus, Triton, Phobos, Deimos and the Uranian moons have
- * no vendored map and fall back to their measured albedo and color. USGS has
- * mosaics for several; they are large, and the visual return per gigabyte is
- * much lower than for the four Galileans, which are the moons anyone flies to.
+ * Titan, Enceladus, Iapetus, Triton, the Uranian moons and every small body
+ * below Bennu have no vendored map and fall back to their measured albedo and
+ * color. For the moons that is a size-versus-return judgment. For the small
+ * bodies it is that no global mosaic of them exists in a public archive: Eros,
+ * Itokawa and Ryugu were mapped by NEAR, Hayabusa and Hayabusa2, and what is
+ * archived is images and shape models rather than a projected map.
+ *
+ * That is also why it matters less than it sounds. A body a few kilometers
+ * across is a *silhouette* long before it is a texture, and the silhouettes are
+ * vendored: `data/shapes/` has twenty-five measured figures, including all
+ * three of those.
  */
 
 export type MapKind = 'albedo' | 'normal' | 'night' | 'clouds' | 'ring'
@@ -78,6 +85,9 @@ export interface TextureSource {
 const NASA = 'NASA Earth Observatory / NASA Scientific Visualization Studio'
 const USGS = 'NASA / JPL / USGS Astrogeology Science Center'
 const SSS = 'Solar System Scope (solarsystemscope.com), CC BY 4.0'
+const USGS_ASC = 'NASA / USGS Astrogeology Science Center'
+const OREX_MAP =
+  'NASA / Goddard / University of Arizona (OSIRIS-REx), via USGS Astrogeology'
 
 const sss = (
   body: string,
@@ -223,6 +233,97 @@ export const TEXTURE_SOURCES: readonly TextureSource[] = [
     credit: USGS,
     transform: 'image',
     width: 4_096,
+  },
+
+  /* --- The small bodies anybody has photographed the whole of.
+   *
+   * These arrived with the dwarf planets and the asteroids, and they come from
+   * the USGS Astrogeology mosaic archive — the same public-domain collection the
+   * Galilean moons above do, served from `planetarymaps.usgs.gov`, which
+   * redirects to the bucket the products actually live in.
+   *
+   * They are large. Pluto's global mosaic is 310 MB and Vesta's is 357, because
+   * both are 300 m and 74 pixels-per-degree products of bodies a spacecraft
+   * spent a year mapping. That is a one-time download into `.data/`, and it is
+   * worth it for the same reason the Moon's LOLA map is: these are the bodies
+   * whose *appearance* is the thing people know. Pluto's heart is the most
+   * recognisable feature in the outer Solar System, and there is no way to get
+   * it except from the map that has it in.
+   *
+   * Deimos, Eros, Itokawa and Ryugu have no global mosaic in this archive and
+   * fall back to their measured albedo and color. Their *shapes* are vendored,
+   * which is the half that matters more for a body a few kilometers across.
+   */
+  {
+    body: 'pluto',
+    map: 'albedo',
+    // The July 2017 New Horizons global mosaic: LORRI and MVIC, 300 m/px on the
+    // encounter hemisphere and much coarser on the far side, which is honest —
+    // half of Pluto was in the dark when the only spacecraft ever to go there
+    // went past at 14 km/s.
+    url: 'https://planetarymaps.usgs.gov/mosaic/Pluto_NewHorizons_Global_Mosaic_300m_Jul2017_8bit.tif',
+    file: 'pluto_albedo.tif',
+    licence: 'public-domain',
+    credit: USGS_ASC,
+    transform: 'image',
+    width: 4_096,
+  },
+  {
+    body: 'charon',
+    map: 'albedo',
+    url: 'https://planetarymaps.usgs.gov/mosaic/Charon_NewHorizons_Global_Mosaic_300m_Jul2017_8bit.tif',
+    file: 'charon_albedo.tif',
+    licence: 'public-domain',
+    credit: USGS_ASC,
+    transform: 'image',
+    width: 4_096,
+  },
+  {
+    body: 'ceres',
+    map: 'albedo',
+    // Dawn Framing Camera, 20 pixels per degree. The bright spots in Occator
+    // are salt deposits and they are the whole reason anybody looks at Ceres.
+    url: 'https://planetarymaps.usgs.gov/mosaic/Ceres_Dawn_FC_DLR_global_20ppd_Oct2015.tif',
+    file: 'ceres_albedo.tif',
+    licence: 'public-domain',
+    credit: USGS_ASC,
+    transform: 'image',
+    width: 4_096,
+  },
+  {
+    body: 'vesta',
+    map: 'albedo',
+    url: 'https://planetarymaps.usgs.gov/mosaic/Vesta_Dawn_FC_HAMO_Mosaic_Global_74ppd.tif',
+    file: 'vesta_albedo.tif',
+    licence: 'public-domain',
+    credit: USGS_ASC,
+    transform: 'image',
+    width: 4_096,
+  },
+  {
+    body: 'phobos',
+    map: 'albedo',
+    // Mars Express SRC rather than the 104 MB Viking mosaic beside it: newer,
+    // six times smaller, and it has Stickney lit.
+    url: 'https://planetarymaps.usgs.gov/mosaic/Phobos_ME_SRC_Mosaic_Global_16ppd.tif',
+    file: 'phobos_albedo.tif',
+    licence: 'public-domain',
+    credit: USGS_ASC,
+    transform: 'image',
+    width: 2_048,
+  },
+  {
+    body: 'bennu',
+    map: 'albedo',
+    // OSIRIS-REx OCAMS, 25 cm per pixel. On a body 500 m across that is a map
+    // with individual boulders in it, and it is the highest-resolution global
+    // map of anything, anywhere.
+    url: 'https://planetarymaps.usgs.gov/mosaic/Bennu/Bennu_OSIRIS-REx_OCAMS_color_mosaic_25cm.tif',
+    file: 'bennu_albedo.tif',
+    licence: 'public-domain',
+    credit: OREX_MAP,
+    transform: 'image',
+    width: 2_048,
   },
 
   /* --- Everything else. */

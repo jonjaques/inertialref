@@ -26,6 +26,17 @@ flowchart TB
 The layer rule decides most of it: a package may depend only on strictly lower
 layers, and `pnpm graph` will tell you if you got it wrong.
 
+**It will not tell you about a cycle _inside_ a package.** `pnpm graph` discards
+every intra-package edge before it starts, and an import cycle that is fine for
+types is a crash for values: a module-scope constant read across the cycle is
+dereferenced before its own module's body has run, which is a
+`ReferenceError: Cannot access 'X' before initialization` under native Node ESM
+and — because vitest resolves modules through its own runner — **invisible to a
+vitest test**. `apps/headless/src/moduleGraph.test.ts` spawns one Node process
+per entry point and is the thing that catches it. If you add a value import
+between two files that already reach each other, add the entry point to that
+list.
+
 ---
 
 ## Adding generated content
@@ -60,6 +71,38 @@ sequenceDiagram
 the previous one was small" — reintroduces order dependence. If you need
 correlation between siblings, derive both from the parent in a single pure
 function that produces the whole set at once.
+
+**The other trap, from the same family.** A `??` that skips a draw is order
+dependence in miniature:
+
+```ts
+// Wrong: reading the seed only when the published value is absent makes every
+// *later* draw for this body depend on whether JPL happens to publish a node.
+longitudeOfAscendingNode: body.ascendingNode ?? rng.range(0, 2 * Math.PI)
+
+// Right: draw, then override.
+const nodeDraw = rng.range(0, 2 * Math.PI)
+longitudeOfAscendingNode: body.ascendingNode ?? nodeDraw
+```
+
+### Calibrate a generator against something measured
+
+If the content has a real-world counterpart, the distribution is not a design
+choice and should not be written as one. `irregularFigure` draws a body's
+elongation and roughness from the spread across twenty-five published shape
+models; `makeSmallBody` sizes a belt by Dohnanyi's collisional cascade and floors
+its rotation at the barrier a rubble pile flies apart at.
+
+Two things follow, and both have already been learned the hard way here:
+
+- **Assert the distribution, not a draw.** A claim about a population cannot be
+  evaluated by generating one body. See
+  [testing](testing.md#check-a-distribution-when-the-claim-is-about-one).
+- **Check that the parameter means what it says.** `irregularity` is defined as
+  a fraction of the mean radius, and the first version delivered 0.03 when asked
+  for 0.18 — an fBm's standard deviation is a sixth of its range and nothing
+  divided it out. A parameter with a physical name has to be measured against
+  its own definition at least once.
 
 ---
 
@@ -113,6 +156,27 @@ adding a dynamic evaluator in `packages/universe/src/frames.ts`.
   the round trip be a property test — and what stops a repeat of the `-0` trap,
   where the parser lived a package below the formatter and had no counterpart to
   its sign-collapsing rule.
+
+---
+
+## Adding a body kind
+
+`BodyKind` is a closed union and the tables keyed on it are
+`Record<BodyKind, …>`, so adding one is a compile error until every table has an
+entry — which is the point. `DENSITY`, `KIND_COLOUR`, `KIND_ALBEDO`,
+`KIND_ROUGHNESS` and `KIND_HAZE` all live in `packages/universe/src/system.ts`.
+
+Two things the type system does **not** catch and that a new kind has to answer:
+
+- **Is it a world or is it rubble?** `isDebris` and `isPlanetKind` in
+  `packages/universe` are the typed partition, and the display sites, the orbit
+  traces and `observedPlanets` all read them. These were three separate
+  `Set<string>` literals in three files once, and a ninth kind would have
+  compiled against all of them and landed in the wrong half of each while both
+  tests kept passing.
+- **Is it round?** A kind whose members fall below `ROUNDING_RADIUS` needs a
+  `figure` — see [ADR-0013](../adr/0013-measured-figures.md). `figure: null`
+  means round, not unknown.
 
 ---
 

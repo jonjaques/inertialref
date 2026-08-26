@@ -3,7 +3,7 @@
 > **The question:** what is worth storing, when the entire universe can be
 > regenerated from a seed?
 > **The answer:** the seed, the tick, and the handful of things that have no
-> address to regenerate from. About **700 bytes** for a flown session.
+> address to regenerate from. About **750 bytes** for a flown session.
 >
 > Decision record: [ADR-0007](../adr/0007-persistence.md) ·
 > Code: `packages/persistence/`, `packages/protocol/src/save.ts`
@@ -151,7 +151,7 @@ flowchart LR
 ```
 
 IndexedDB rather than localStorage: localStorage is a synchronous 5 MB box that
-blocks the main thread — fine for 700 bytes, wrong the moment terrain mutations
+blocks the main thread — fine for 750 bytes, wrong the moment terrain mutations
 arrive. Starting there avoids a migration later.
 
 Verified in Chrome: save → step 500 ticks → load → hash returns to the saved

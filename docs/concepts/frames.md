@@ -36,7 +36,7 @@ re-expression**. The numbers an entity carries change; where it is does not.
 flowchart TB
     ROOT["<b>universe</b><br/><i>root · galactic center · identity axes</i>"]
     SYS["<b>s:SOL</b><br/><i>system · fixed at an absolute position</i>"]
-    SYS2["<b>s:HIP71683</b><br/><i>4.365 ly away</i>"]
+    SYS2["<b>s:HIP71683</b><br/><i>4.321 ly away</i>"]
     BODY["<b>b:…/b:0</b><br/><i>body-centered inertial</i><br/>translates along the orbit,<br/>does not spin"]
     BF["<b>bf:…/b:0</b><br/><i>body-fixed</i><br/>spins with the planet"]
     SF["<b>sf:…@0.350000,-1.100000</b><br/><i>surface</i><br/>east / up / south at one lat-lon"]

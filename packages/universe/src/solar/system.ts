@@ -29,13 +29,14 @@ import {
   type SurfaceParameters,
 } from '../system.ts'
 import { SOLAR_PLANETS, type SolarBody } from './bodies.ts'
+import { SOLAR_SMALL_BODIES } from './smallBodies.ts'
 
 /*
  * Sol, built from measurements rather than from a seed.
  *
  * Every other system in the game is a real star with projected bodies around
- * it. This is the one where the whole system is known — eight planets and twenty
- * moons that the player has seen photographs of — so a generated substitute
+ * it. This is the one where the whole system is known — a hundred and twenty-nine
+ * bodies the player has seen photographs of — so a generated substitute
  * would not merely be unverifiable, it would be visibly and embarrassingly
  * wrong. `docs/design/charter.md` calls Sol home; this is what that costs.
  *
@@ -147,16 +148,38 @@ function buildBody(
   const address = bodyAddress(galaxy, system, path)
   const bodyMu = mu(body.mass)
 
+  /*
+   * Both draws happen whichever branch is taken.
+   *
+   * `rng` is a stream and this is the rule about not making generation depend
+   * on order, in its smallest possible form: reading the seed only when the
+   * published value is absent would make every *later* draw for this body —
+   * its terrain seed, its roughness — depend on whether JPL happens to publish
+   * a node for it. Draw, then override.
+   */
+  const nodeDraw = rng.range(0, 2 * Math.PI)
+  const anomalyDraw = rng.range(0, 2 * Math.PI)
+  const drawnNode = body.ascendingNode ?? nodeDraw
+  const drawnAnomaly = body.meanAnomaly ?? anomalyDraw
+
   const elements: OrbitalElements = {
     semiMajorAxis: body.semiMajorAxis,
     eccentricity: body.eccentricity,
     inclination: body.inclination,
-    // Not published consistently across the satellite tables, and not something
-    // a player can check: where a moon is on a given tick is a phase, and the
-    // shape of the orbit is the fact.
-    longitudeOfAscendingNode: rng.range(0, 2 * Math.PI),
+    /*
+     * Where the body is *right now*, when anybody has published it.
+     *
+     * The satellite tables do not carry a consistent node or mean anomaly, and
+     * where a moon is on a given tick is a phase rather than a fact — so those
+     * are drawn from the body's own seed, exactly as a projected world's are.
+     * The small bodies are the other case: JPL publishes a full osculating
+     * element set for every numbered asteroid and comet, and *where Halley is*
+     * is something a player will check. Two draws either way, so the order of
+     * the stream does not depend on which branch is taken.
+     */
+    longitudeOfAscendingNode: drawnNode,
     argumentOfPeriapsis: body.argumentOfPeriapsis,
-    meanAnomalyAtEpoch: rng.range(0, 2 * Math.PI),
+    meanAnomalyAtEpoch: drawnAnomaly,
     epoch: 0,
   }
 
@@ -201,6 +224,9 @@ function buildBody(
     mass: body.mass,
     radius: body.radius,
     polarRadius: body.polarRadius,
+    // Straight through. Sol is the one system where a body's figure is a
+    // measurement rather than a draw, and this is where that arrives.
+    figure: body.figure,
     appearance: appearanceOf(body),
     mu: bodyMu,
     elements,
@@ -232,8 +258,19 @@ export function solarSystem(
 ): StarSystem {
   const seed = systemSeedOf(rootSeed, galaxy, stub.id)
   const star = theSun(stub.name)
-  const planets = SOLAR_PLANETS.map((planet, index) =>
-    buildBody(seed, star.mu, star.mass, galaxy, stub.id, [index], planet),
+  /*
+   * Planets first, then everything else, and the order is load-bearing.
+   *
+   * `b:2` is Earth because Earth was the third body *issued* in this system,
+   * and ADR-0009 is that an address is an issue ordinal rather than a
+   * position. Appending the fifty-nine small bodies after the eight planets
+   * is what keeps every save, every bookmark and every cutscene that names
+   * `b:2` pointing at Earth. Putting Ceres between Mars and Jupiter — where it
+   * is — would renumber half the system.
+   */
+  const planets = [...SOLAR_PLANETS, ...SOLAR_SMALL_BODIES].map(
+    (planet, index) =>
+      buildBody(seed, star.mu, star.mass, galaxy, stub.id, [index], planet),
   )
   return {
     id: stub.id,
@@ -243,13 +280,19 @@ export function solarSystem(
     seed,
     star,
     planets,
-    observedPlanets: planets.length,
+    // Eight. The small bodies are observed, and they are not planets — that
+    // distinction is what the 2006 IAU vote was about, and this field is the
+    // one place in the codebase where the answer matters.
+    observedPlanets: SOLAR_PLANETS.length,
     generation: GENERATION_VERSIONS,
   }
 }
 
-/** Total bodies in the modeled Solar System, planets and moons. */
+/** Total bodies in the modeled Solar System: everything, at every depth. */
 export const solarBodyCount = (): number =>
-  SOLAR_PLANETS.reduce((n, planet) => n + 1 + planet.moons.length, 0)
+  [...SOLAR_PLANETS, ...SOLAR_SMALL_BODIES].reduce(
+    (n, body) => n + 1 + body.moons.length,
+    0,
+  )
 
 export type { Meters }

@@ -97,27 +97,45 @@ lied and [pillar 2](charter.md#pillar-2--the-sky-is-real) is gone.
 
 `position` · `parallax and distance` · `spectral class` · `effective temperature`
 · `mass` · `radius` · `luminosity` · `orbital elements` · `confirmed exoplanet
-parameters` · `which stars are scoopable` · `body count and provenance`
+parameters` · `which stars are scoopable` · `body count and provenance` ·
+`a body's figure` · `geometric albedo`
 
 A star's **color** is on this list, because it is computed from its effective
 temperature. A K dwarf is orange. It does not get to be a nicer orange.
+
+A body's **figure** is on it for a sharper reason: below about 200 km across,
+gravity has not rounded a body off and its _shape is its identity_. Phobos is
+27 × 22 × 18 km with a nine-kilometer crater in one end. 216 Kleopatra is a dog
+bone. Bennu is a spinning top with a ridge round its equator. Drawing any of them
+as a sphere is not a simplification, it is a picture of a different object —
+which is why twenty-five of them ship as measured shape models and every
+half-extent in `packages/universe/src/solar/` is a published number. See
+[ADR-0013](../adr/0013-measured-figures.md).
 
 ### Granted — the image is photographed, not measured
 
 Everything downstream of the physics, where a real imaging system would also be
 making choices:
 
-| Licensed                                    | Bounded by                                                                          |
-| ------------------------------------------- | ----------------------------------------------------------------------------------- |
-| Exposure, tone curve, highlight rolloff     | It is a camera. There is no "correct" curve.                                        |
-| Integration time — making the faint visible | The structure must actually be there                                                |
-| Saturation and color mapping                | Hue is fixed by physics; how vividly it is rendered is a sensor choice              |
-| Atmospheric scattering coefficients         | Tuned within the real range for the modeled composition                             |
-| Aurora intensity and occurrence             | Requires a magnetic field and an atmosphere, both of which are generated properties |
-| Ring particle albedo and phase function     | Within the range Cassini actually measured                                          |
-| Dust, nebulosity, zodiacal light brightness | Present where it is present; brightness is integration                              |
-| Glare, bloom, diffraction spikes            | A property of the aperture, which is a designed object                              |
-| Surface material response                   | Albedo comes from the biome; roughness and detail are art                           |
+| Licensed                                     | Bounded by                                                                                                                                                                  |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Exposure, tone curve, highlight rolloff      | It is a camera. There is no "correct" curve.                                                                                                                                |
+| Integration time — making the faint visible  | The structure must actually be there                                                                                                                                        |
+| Saturation and color mapping                 | Hue is fixed by physics; how vividly it is rendered is a sensor choice                                                                                                      |
+| Atmospheric scattering coefficients          | Tuned within the real range for the modeled composition                                                                                                                     |
+| Aurora intensity and occurrence              | Requires a magnetic field and an atmosphere, both of which are generated properties                                                                                         |
+| Ring particle albedo and phase function      | Within the range Cassini actually measured                                                                                                                                  |
+| Dust, nebulosity, zodiacal light brightness  | Present where it is present; brightness is integration                                                                                                                      |
+| Glare, bloom, diffraction spikes             | A property of the aperture, which is a designed object                                                                                                                      |
+| Surface material response                    | Albedo comes from the biome; roughness and detail are art                                                                                                                   |
+| The shape _below_ the published half-extents | The extents are measured; what happens between the samples of a model, or in place of one, is generated. Volume is preserved exactly, so the body is never a different size |
+| Per-body exposure at close range             | Only opens up, only for a body under 0.12 geometric albedo, only as it fills the frame. The albedo is unchanged and the body stays the darkest thing in the picture         |
+
+Those last two are the same rule the star already follows in reverse — a sun
+that fills the frame is exposed for its surface — and the same rule the terrain
+follows, where the published elevation is used verbatim and the shape below the
+map's resolution is drawn from a seed. **What is measured is used; what nobody
+has measured is generated and says so.**
 
 > 🎮 Designer's Note: The test for any proposed visual flourish is one question:
 > **would a good camera pointed at this actually record it?** If yes, render it
