@@ -27,7 +27,7 @@ behind that URL before the persistent universe is possible.
 Because the universe is a pure function of `(seed, catalog version, address)`,
 a server never has to store, serve or simulate the galaxy. It holds exactly what
 a client cannot derive — **other entities and persistent mutations** — which is
-the same set a 696-byte save file holds. That is
+the same set a 744-byte save file holds. That is
 [ADR-0007](adr/0007-persistence.md) and [ADR-0008](adr/0008-multiplayer-partitions.md)
 agreeing with each other, and it is the reason a non-commercial project can
 credibly promise a persistent universe at all.
@@ -108,7 +108,7 @@ have sidestepped one real problem for free.
 | **DO SQLite**          | Per-partition durable state, co-located with the authority                    | Transactional with the code that owns it. No network round trip. 10 GB per object, which is four orders of magnitude more than a partition will ever need.                                                  |
 | **D1**                 | Account-scoped and globally-unique data                                       | Cross-partition queries and global uniqueness — "who discovered this first" — need one writer for the whole galaxy, not one per system.                                                                     |
 | **R2** ✅              | What the repository will not carry; biome material sets later                 | Zero egress fees. Today one bucket, `inertialrefd-storage`, holding the cutscene's reference audio ([H-8](#h-8--r2-holds-what-the-repository-will-not-carry)). Material sets are the planned second tenant. |
-| **Workers KV**         | ⛔ nothing                                                                    | The catalog is 159 KB brotli and ships in the bundle ([spike 3](spikes.md#3--catalog-bundle-size)). There is no eventually-consistent read tier to fill.                                                    |
+| **Workers KV**         | ⛔ nothing                                                                    | The catalog is 179 KB brotli and ships in the bundle ([spike 3](spikes.md#3--catalog-bundle-size)). There is no eventually-consistent read tier to fill.                                                    |
 | **Queues / Workflows** | ⛔ nothing yet                                                                | No asynchronous fan-out exists. Revisit if catalog revision publishing becomes a batch job.                                                                                                                 |
 | **Cloudflare Pages**   | ⛔ nothing                                                                    | Workers static assets is the same capability inside the Worker that already has to exist. Two deploy targets for one site is one too many.                                                                  |
 
@@ -145,7 +145,7 @@ and Cloudflare states plainly that the number of objects is "unlimited (within
 an account or of a given class)". The 500 ceiling would only bind if the design
 grew 500 distinct _kinds_ of authority, which would be a bizarre thing to want.
 
-The bundle is **541.4 KB gzip** measured 2026-08-21, so the 3 MB script limit is
+The bundle is **736.0 KB gzip** measured 2026-08-25, so the 3 MB script limit is
 irrelevant — the bundle is an _asset_, not part of the script.
 
 ---

@@ -27,6 +27,8 @@
     "catalog:report": "node apps/ingest/src/main.ts report",
     "catalog:build": "node apps/ingest/src/main.ts build",
     "textures:build": "node apps/ingest/src/main.ts textures",
+    "solar:fetch": "node apps/ingest/src/main.ts solar",
+    "shapes:build": "node apps/ingest/src/main.ts shapes",
     "deploy:worker": "pnpm build && pnpm --filter @inertialref/server run deploy",
     "check": "pnpm graph && pnpm brand:check && pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },

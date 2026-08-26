@@ -6,7 +6,7 @@ argument-hint: '[the decision]'
 
 # Architecture decision records
 
-`docs/adr/` holds twelve, numbered `0001`–`0012`. They exist because these decisions are
+`docs/adr/` holds thirteen, numbered `0001`–`0013`. They exist because these decisions are
 expensive to reverse, and `AGENTS.md` opens by telling you to read the one for the area you
 are touching **before** changing anything.
 

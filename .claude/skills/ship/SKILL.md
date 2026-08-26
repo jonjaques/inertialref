@@ -29,8 +29,8 @@ it as a known issue.
 Done is not "the tests pass". Before committing, confirm each of these is either done or
 genuinely not applicable, and say which:
 
-- **An ADR** if an architectural boundary moved. `docs/adr/` — twelve exist; the next is
-  the next number. Use `/adr`.
+- **An ADR** if an architectural boundary moved. `docs/adr/` — thirteen exist; the next
+  is the next number. Use `/adr`.
 - **`CONTEXT.md`** if anything was decided, measured, or is a bug that must not return.
   Use `/context-log`.
 - **`AGENTS.md`** if a new invariant now exists — then `.claude/rules/` for the

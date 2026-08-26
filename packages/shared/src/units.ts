@@ -76,6 +76,16 @@ export const JUPITER_MASS: Kilograms = 1.898e27
 export const JUPITER_RADIUS: Meters = 6.9911e7
 export const SPEED_OF_LIGHT: MetersPerSecond = 299_792_458
 
+/**
+ * Stefan–Boltzmann, W m⁻² K⁻⁴. Exact since the 2019 SI redefinition.
+ *
+ * The bridge between a star's luminosity and a temperature at a distance, which
+ * is what sets a frost line, a sublimation radius and an equilibrium
+ * temperature — three different places in the generator that were each about to
+ * write it down separately.
+ */
+export const STEFAN_BOLTZMANN = 5.670_374_419e-8
+
 /* ------------------------------------------------------------------------- */
 /* Conversions — presentation layer only                                      */
 /* ------------------------------------------------------------------------- */

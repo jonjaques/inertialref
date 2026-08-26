@@ -30,9 +30,20 @@ import {
 import { scatteringFor } from '../render/atmosphereLuts.ts'
 import { texturesFor } from '../render/planetTextures.ts'
 import { proceduralRingStrip } from '../render/proceduralRings.ts'
+import { shapeGeometryFor } from '../render/shapeModels.ts'
 
-/** How many body visuals may be resident at once. See `evictStale`. */
-const MAX_BODIES = 64
+/**
+ * How many body visuals may be resident at once. See `evictStale`.
+ *
+ * 160 rather than 64 because the Solar System grew. This caps `visuals.size`,
+ * which stars enter under a `star:` key alongside the bodies — so it was 29
+ * (eight planets, twenty moons and the Sun) and it is 130 now that the dwarf
+ * planets, the asteroids, the comets and the forty-two moons that are rocks or
+ * go round one are in it. At 64 the arrivals past the cap silently stopped
+ * rendering, which is the failure `evictStale` exists to make graceful and is
+ * not one to leave a system permanently over.
+ */
+const MAX_BODIES = 160
 
 interface BodyVisual {
   readonly mesh: Mesh
@@ -57,7 +68,7 @@ interface BodyVisual {
  * lot by 2010 standards and nothing at all now, and at most two bodies are ever
  * in that tier: it is keyed on angular radius, so a planet earns it by filling
  * the view rather than by existing. Tiers rather than one geometry because the
- * Solar System puts twenty-eight bodies in the scene at once and most of them
+ * Solar System puts a hundred and twenty-nine bodies in the scene at once and most of them
  * are a pixel across.
  */
 const SPHERE_TIERS: readonly { minAngle: number; segments: number }[] = [
@@ -124,6 +135,63 @@ interface PlanetTuning {
   readonly saturation: number
   /** Equatorial jet, UV turns per second. Real magnitudes; see `planet.ts`. */
   readonly flowRate: number
+}
+
+/**
+ * How much to open up for a body too dark to expose the scene for.
+ *
+ * The star already does this in reverse: `visual.star.exposure` stops *down* as
+ * a star fills the frame, because "a sun that fills the frame is exposed for its
+ * surface, not for the scene it lights". This is the same decision at the other
+ * end. Bennu reflects 4.4% of the light that reaches it and Halley's nucleus
+ * 4% — darker than charcoal — and a camera or an eye that spends a minute
+ * looking at one from five hundred meters away adapts to it. The renderer has
+ * one exposure for the whole scene and cannot.
+ *
+ * So it is applied as an exposure and not as an albedo: it scales with how much
+ * of the frame the body covers, it is 1 the moment the body is one object among
+ * several, and it never fires at all above `ADAPTED_ALBEDO`. Every planet sees
+ * exactly 1 — Mercury is 0.142 and the Moon 0.136, the two darkest.
+ *
+ * It is *not* only the small bodies below it. Fifteen moons already in
+ * `bodies.ts` are darker than the threshold — Iapetus at 0.05, Thebe 0.047,
+ * Himalia 0.057, Phoebe 0.081, Amalthea 0.09, Proteus 0.096 and the rest — and
+ * every one of them opens up when it fills the frame. That is the intended
+ * reading of the rule rather than an exception to it: a body too dark to expose
+ * the scene for is a body too dark to expose the scene for, and Iapetus's
+ * leading hemisphere is the canonical example. Saying otherwise here would be a
+ * comment that reads as a guarantee and is not one.
+ *
+ * `docs/design/art.md` licenses this and draws the line it is on the right side
+ * of: the *albedo* is the published one, the body is still the darkest thing in
+ * the frame, and what is being adjusted is the sensor.
+ */
+/**
+ * The albedo the scene's own exposure already suits.
+ *
+ * One constant, read twice, because the two readings are only correct together:
+ * it is both the cut-off and the target the lift aims at, so `lift` is exactly
+ * 1 just below the threshold and the function is continuous there. Written out
+ * as two literals — which it was — moving only the guard leaves it
+ * discontinuous *and inverted*: at a guard of 0.15 a body at albedo 0.149 gets
+ * `lift = 0.8`, so filling the frame would darken it.
+ */
+const ADAPTED_ALBEDO = 0.12
+/** Angular radius at which adaptation starts, and the span over which it completes. */
+const ADAPT_FROM = 0.02
+const ADAPT_SPAN = 0.2
+
+function adaptationFor(body: RenderBody): number {
+  const albedo = body.appearance.geometricAlbedo
+  if (albedo >= ADAPTED_ALBEDO) return 1
+  // ADAPT_FROM is about a fifth of the frame; by ADAPT_FROM + ADAPT_SPAN the
+  // body is the scene.
+  const filling = Math.min(
+    1,
+    Math.max(0, (body.placement.angularRadius - ADAPT_FROM) / ADAPT_SPAN),
+  )
+  const lift = ADAPTED_ALBEDO / Math.max(albedo, 0.01)
+  return 1 + (lift - 1) * filling
 }
 
 function tuningFor(body: RenderBody): PlanetTuning {
@@ -391,15 +459,34 @@ export function Bodies({ engine }: { engine: GameEngine }) {
         placement.position.y,
         placement.position.z,
       )
-      // Oblate, in the body's own frame — so the quaternion tilts the bulge with
-      // the spin axis, which is the whole point. Saturn is 9.8% flattened and
-      // reads as wrong long before anyone can say why.
-      visual.mesh.scale.set(
-        placement.scale,
-        placement.scale * body.flattening,
-        placement.scale,
-      )
-      visual.mesh.geometry = geometryFor(placement.angularRadius)
+      /*
+       * Two shapes, and which one is not a rendering choice.
+       *
+       * A body with no `figure` is a spheroid, and is drawn the way it always
+       * was: a unit sphere, squashed along its spin axis by the measured
+       * flattening. Saturn is 9.8% oblate and reads as wrong long before
+       * anyone can say why, and the quaternion tilts the bulge with the axis,
+       * which is the whole point of doing it in the body's own frame.
+       *
+       * A body *with* a figure is not a spheroid and never was. Its mesh is
+       * built from a measured shape model or from its own seed, already
+       * carries its three half-extents and its relief, and is normalized to
+       * `trueRadius` — so it scales by one number. Applying `flattening` on
+       * top would squash it a second time by a ratio the geometry has already
+       * spent.
+       */
+      const shape = shapeGeometryFor(body)
+      if (shape === null) {
+        visual.mesh.scale.set(
+          placement.scale,
+          placement.scale * body.flattening,
+          placement.scale,
+        )
+        visual.mesh.geometry = geometryFor(placement.angularRadius)
+      } else {
+        visual.mesh.scale.setScalar(placement.scale)
+        visual.mesh.geometry = shape
+      }
       visual.mesh.visible = true
       // A body drawn as streamed terrain does not also need its datum sphere,
       // except as the sea floor below it.
@@ -469,6 +556,7 @@ export function Bodies({ engine }: { engine: GameEngine }) {
           appearance.colour.g,
           appearance.colour.b,
         )
+        planet.albedoScale.value = adaptationFor(body)
         planet.lunarLambert.value = tuning.lunarLambert
         planet.terminator.value = tuning.terminator
         planet.reliefScale.value = maps.normal === null ? 0 : tuning.reliefScale
@@ -669,6 +757,9 @@ export function Bodies({ engine }: { engine: GameEngine }) {
           trueRadius: 1,
           rotationPeriod: 1,
           flattening: 1,
+          // A star is a sphere, and the one in this scene is drawn by
+          // `createStarMaterial` on a sphere tier regardless.
+          figure: null,
           rings: null,
           appearance: STAR_APPEARANCE,
         },
@@ -739,6 +830,29 @@ export function Bodies({ engine }: { engine: GameEngine }) {
       let task = warmQueue.current.shift()
       while (task !== undefined && visuals.has(task.key))
         task = warmQueue.current.shift()
+      /*
+       * At the cap, retire something — and if nothing can be retired, put the
+       * task back rather than dropping it.
+       *
+       * It was shifted off and then silently discarded when `visuals.size`
+       * reached the cap: not materialised, not requeued, and `ticket.done()`
+       * never called, while `ticket.finish()` below credited the shortfall so
+       * the boot bar still read 100%. The queue is only rebuilt on a system
+       * change, so the build-ahead for every body past the cap was gone until
+       * the next jump and each paid its ~5 ms of pipeline generation live, on
+       * first sight. Sol is 129 bodies against a cap of 160, so a second loaded
+       * system reaches this in ordinary flight.
+       */
+      if (task !== undefined && visuals.size >= MAX_BODIES && !evictStale()) {
+        warmQueue.current.unshift(task)
+        task = undefined
+        // The queue cannot drain while nothing is evictable, and boot waits on
+        // it draining. `finish` is already called every frame once the queue
+        // empties, so saying it here too is idempotent — and it is the
+        // difference between "no build-ahead until something frees up" and a
+        // cover that never lifts.
+        ticket.finish()
+      }
       if (task !== undefined && visuals.size < MAX_BODIES) {
         const visual = materialise(
           task.key,

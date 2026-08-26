@@ -10,6 +10,7 @@
   "dependencies": {
     "@inertialref/devtools": "workspace:*",
     "@inertialref/persistence": "workspace:*",
+    "@inertialref/physics": "workspace:*",
     "@inertialref/procedural": "workspace:*",
     "@inertialref/protocol": "workspace:*",
     "@inertialref/shared": "workspace:*",

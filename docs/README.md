@@ -80,16 +80,16 @@ Where the bible and [vision.md](vision.md) disagree, vision.md wins.
 
 ## Guides
 
-| Page                                         | What it covers                                                  |
-| -------------------------------------------- | --------------------------------------------------------------- |
-| [Getting started](guides/getting-started.md) | Install, run, fly, and the first things to try                  |
-| [Development](guides/development.md)         | Commands, toolchain, and conventions                            |
-| [Client](guides/client.md)                   | Canvas, modes, camera, dock                                     |
-| [Cinematics](guides/cinematics.md)           | Authoring scripted scenes                                       |
-| [The harness](guides/harness.md)             | Driving the simulation from a console, a test, or an agent      |
-| [The star catalog](guides/catalogue.md)      | Where the real astronomy comes from, and how to rebuild it      |
-| [Testing](guides/testing.md)                 | What to test, which style, and how to write an honest assertion |
-| [Extending](guides/extending.md)             | Adding generated content, a worker task, a body type, a frame   |
+| Page                                         | What it covers                                                                                           |
+| -------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| [Getting started](guides/getting-started.md) | Install, run, fly, and the first things to try                                                           |
+| [Development](guides/development.md)         | Commands, toolchain, and conventions                                                                     |
+| [Client](guides/client.md)                   | Canvas, modes, camera, dock                                                                              |
+| [Cinematics](guides/cinematics.md)           | Authoring scripted scenes                                                                                |
+| [The harness](guides/harness.md)             | Driving the simulation from a console, a test, or an agent                                               |
+| [The star catalog](guides/catalogue.md)      | Where the real astronomy comes from — stars, planets, surface maps, shape models — and how to rebuild it |
+| [Testing](guides/testing.md)                 | What to test, which style, and how to write an honest assertion                                          |
+| [Extending](guides/extending.md)             | Adding generated content, a worker task, a body type, a frame                                            |
 
 ---
 

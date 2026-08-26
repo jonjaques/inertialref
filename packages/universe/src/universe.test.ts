@@ -184,6 +184,9 @@ describe('system generation', () => {
     }
   })
 
+  /** The classes that are worlds. Dwarfs, asteroids and comets are not. */
+  const WORLD_KINDS = new Set(['rocky', 'ice', 'gas-giant', 'ice-giant'])
+
   it('lays planets out in increasing orbits with plausible physics', () => {
     for (const stub of CATALOG_STARS.map(catalogStub)) {
       const system = generateSystem(ROOT, MILKY_WAY, stub)
@@ -194,7 +197,16 @@ describe('system generation', () => {
       for (const planet of orbitalOrder(system)) {
         expect(planet.elements.semiMajorAxis).toBeGreaterThan(previous)
         previous = planet.elements.semiMajorAxis
-        expect(planet.radius).toBeGreaterThan(1e5)
+        /*
+         * A hundred kilometers is the floor for a *world*, and Sol is now full
+         * of things that are not worlds: 1998 KY26 is thirteen meters across
+         * and is in `system.planets` because it orbits the star. The check is
+         * scoped to the classes the generator issues rather than relaxed,
+         * because "no generated planet is a pebble" is the thing it was
+         * written to catch and it is still worth catching.
+         */
+        if (WORLD_KINDS.has(planet.kind))
+          expect(planet.radius).toBeGreaterThan(1e5)
         expect(planet.mass).toBeGreaterThan(0)
         expect(planet.elements.eccentricity).toBeLessThan(1)
         // `G(M + m)`, the same two-body parameter `frames.ts` propagates with.

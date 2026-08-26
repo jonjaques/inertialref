@@ -103,6 +103,50 @@ export function solveKepler(
     E -= delta
     if (Math.abs(delta) < tolerance) return E
   }
+  return bracketedKepler(M, eccentricity, tolerance)
+}
+
+/**
+ * The same equation, solved the way that cannot fail.
+ *
+ * Plain Newton–Raphson diverges near periapsis on a very eccentric orbit: the
+ * derivative `1 − e·cos E` goes to `1 − e`, which at e = 0.999 is a thousandth,
+ * so the first step overshoots by three orders of magnitude and the iteration
+ * wanders. Measured before this existed: residuals of 8.9e-16 up to e = 0.995
+ * and **1.5 radians** at e = 0.9991 — not a slightly wrong answer, a
+ * *completely* wrong one, and silently, because the loop returned whatever it
+ * had after thirty passes.
+ *
+ * Nothing in the game had an orbit that eccentric until the comets arrived.
+ * C/2020 F3 (NEOWISE) is 0.99913 and C/1995 O1 (Hale-Bopp) is 0.99495, which is
+ * exactly either side of where it breaks.
+ *
+ * `f(E) = E − e·sin E − M` is strictly increasing for e < 1, and on [0, 2π] it
+ * runs from −M to 2π − M — so the root is always bracketed by the interval
+ * itself and a Newton step that leaves the bracket can always be replaced by a
+ * bisection. That is guaranteed convergence with Newton's speed wherever
+ * Newton behaves, and it is reached only by the cases where the fast path
+ * already gave up, so every orbit that solved before solves identically now.
+ */
+function bracketedKepler(
+  meanAnomaly: Radians,
+  eccentricity: number,
+  tolerance: number,
+): Radians {
+  const M = meanAnomaly
+  let low = 0
+  let high = 2 * Math.PI
+  let E = M
+  for (let i = 0; i < 100; i += 1) {
+    const f = E - eccentricity * Math.sin(E) - M
+    if (f > 0) high = E
+    else low = E
+    if (Math.abs(f) < tolerance) return E
+    const fPrime = 1 - eccentricity * Math.cos(E)
+    const next = fPrime === 0 ? Infinity : E - f / fPrime
+    E = next > low && next < high ? next : (low + high) / 2
+    if (high - low < tolerance) return E
+  }
   return E
 }
 

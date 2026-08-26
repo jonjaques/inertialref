@@ -48,6 +48,7 @@ import {
   systemsWithin,
   uninstallSystemFrames,
   walkBodies,
+  planetCount,
 } from '@inertialref/universe'
 import type { FrameBinding } from './binding.ts'
 import { SimulationClock, TICK_DURATION, timeOfTick } from './clock.ts'
@@ -157,11 +158,12 @@ export class World implements FlightWorld {
     this.#record(
       'system-loaded',
       null,
-      `${system.name} (${system.planets.length} planets)`,
+      `${system.name} (${planetCount(system)} planets)`,
     )
     this.#log.info('system loaded', {
       system: id,
-      planets: system.planets.length,
+      planets: planetCount(system),
+      bodies: system.planets.length,
     })
     return system
   }

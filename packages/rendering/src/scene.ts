@@ -55,6 +55,21 @@ export interface RenderBody {
    * would have to undo that first.
    */
   readonly flattening: number
+  /**
+   * The measured figure, for a body that is not a spheroid, or null.
+   *
+   * Half-extents in meters rather than as ratios, because the shape field the
+   * renderer builds from them is in meters and the mesh is then normalized by
+   * `trueRadius` — which is `a`. `flattening` is *not* applied to a body that
+   * has one of these: the figure already carries the polar squash, and
+   * applying both squashes it twice.
+   */
+  readonly figure: {
+    readonly model: string | null
+    readonly irregularity: number
+    /** a >= b >= c, meters. `a` is `trueRadius`. */
+    readonly semiAxes: readonly [Meters, Meters, Meters]
+  } | null
   /** Rings in units of the placed radius, or null. */
   readonly rings: {
     readonly innerScale: number
@@ -200,6 +215,18 @@ export function buildScene(
       trueRadius: body.radius,
       rotationPeriod: body.rotationPeriod,
       flattening: body.polarRadius / body.radius,
+      figure:
+        body.figure === null
+          ? null
+          : {
+              model: body.figure.model,
+              irregularity: body.figure.irregularity,
+              semiAxes: [
+                body.radius,
+                body.figure.intermediateRadius,
+                body.polarRadius,
+              ],
+            },
       rings:
         rings === null || ringSpan === null
           ? null

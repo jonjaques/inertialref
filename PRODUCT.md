@@ -53,7 +53,7 @@ score, or a session that resolves in ten minutes. Serving them damages the
 momentum and single-viewpoint pillars.
 
 **Session assumption:** 45–120 minutes typical, and the design must tolerate a
-30-minute session ending mid-flight. A save is 696 bytes and restores an
+30-minute session ending mid-flight. A save is 744 bytes and restores an
 identical state hash, so **quit anywhere is a hard requirement, not a nicety.**
 
 ---
@@ -100,7 +100,7 @@ Two supporting claims, both load-bearing:
   problems, years in, when they are a rewrite rather than a refactor.
 - **Zero install is a distribution advantage nobody in the genre has.** The
   comparables are 100 GB downloads behind a store account. This is a link, and a
-  696-byte save means **a coordinate is the share.**
+  744-byte save means **a coordinate is the share.**
 
 Fidelity is where this project would always lose. Continuity, reality and reach
 are where it can win outright, and every scoping argument resolves that way.
@@ -214,17 +214,31 @@ spike has never been run — no stick-and-throttle pair was available.
 in the browser. Twelve capability checks, each reporting a measurement rather
 than a tick, run by CI on every pull request alongside `pnpm check`.
 
-**Real data**, in `data/catalog/`: 7,123 real star systems out to 150 light-years
-from HYG v4.4 converted through ICRS → galactic coordinates; 702 confirmed
-exoplanets around 443 of them with published orbits, masses and radii; the eight
-Solar System planets and twenty moons with measured radii, oblateness, axial
-tilts, rotation periods, albedos and ring geometry, drawn from NASA and USGS
-surface, elevation, cloud and ring maps.
+**Real data**, in `data/`: 7,123 real star systems out to 150 light-years from
+HYG v4.4 converted through ICRS → galactic coordinates; 702 confirmed exoplanets
+around 443 of them with published orbits, masses and radii; and **129 Solar
+System bodies** — eight planets, nine dwarf planets, fifty asteroids and comets
+and sixty-two moons — with measured radii, oblateness, axial tilts,
+rotation periods, albedos and ring geometry, drawn from NASA and USGS surface,
+elevation, cloud and ring maps.
+
+**Ninety-two of those bodies are not spheres**, because gravity never rounded
+them off, and twenty-five carry a **measured shape model** from the NASA
+Planetary Data System — Phobos with Stickney in its silhouette, Bennu with the
+equatorial ridge its own rotation raised, 216 Kleopatra as the dog bone it is.
+Everything else that is not round, in Sol and in every generated system, gets a
+figure from its own seed on its published half-extents, drawn from the
+distribution those twenty-five bodies actually have.
 
 **Attribution obligations, verified rather than assumed.** `data/catalog/` is a
 derived database under **CC BY-SA 4.0**, not the Apache license that covers the
-code. The NASA Exoplanet Archive's requested acknowledgment is carried. Gaia is
-**deliberately unused** because ESA releases it CC BY-NC 3.0 IGO, and a
+code. The shape models and most of the surface maps are United States Government
+works with no license to comply with at all — what they carry instead is
+_provenance_, which for a measurement matters more: `data/shapes/manifest.json`
+records the source URL, the publication, and the reconstructed volume against
+the original for every one of them. The NASA Exoplanet Archive's requested
+acknowledgment is carried. Gaia is **deliberately unused** because ESA releases
+it CC BY-NC 3.0 IGO, and a
 non-commercial clause is not an open source license. See `NOTICE` and
 [the catalog guide](docs/guides/catalogue.md).
 

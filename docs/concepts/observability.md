@@ -69,7 +69,7 @@ reported at all.
 Records carry fields, not interpolated prose:
 
 ```
-[simulation.world] system loaded { seed: 'inertialref', system: 'HIP71683', planets: 9 }
+[simulation.world] system loaded { seed: 'inertialref', system: 'HIP71683', planets: 9, bodies: 18 }
 ```
 
 ```mermaid
@@ -95,7 +95,7 @@ into a bug report, does not.
 ## The state hash
 
 ```
-state hash  804b2d58
+state hash  f38e988a
 ```
 
 Eight characters that answer "are these two universes the same?". It is the

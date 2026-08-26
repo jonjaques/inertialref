@@ -17,6 +17,7 @@ import {
   createRingMaterial,
 } from './planet.ts'
 import { preloadAllTextures, SHIPPED_TEXTURE_COUNT } from './planetTextures.ts'
+import { preloadAllShapes, SHIPPED_SHAPE_COUNT } from './shapeModels.ts'
 import { scatteringBakes } from './preloadPlan.ts'
 import { DEFAULT_SHIP, loadShipModel } from './shipModels.ts'
 import {
@@ -178,6 +179,19 @@ async function warm(
         done()
         await breathe()
       }
+    },
+  })
+
+  /* Every shipped shape model. Under a megabyte in total and decoded on the
+   * CPU into a Float32Array, so unlike a texture there is nothing to upload —
+   * the cost that matters is the *fetch*, and a body whose model arrives after
+   * the cover lifts pops from its generated figure to its measured one in the
+   * frame it lands. Behind the overlay, nobody sees it happen. */
+  warmup.register({
+    label: 'measuring the small bodies',
+    units: SHIPPED_SHAPE_COUNT,
+    run: async (done) => {
+      await preloadAllShapes(done)
     },
   })
 

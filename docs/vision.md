@@ -60,16 +60,16 @@ the browser (`await ir.selfTest()`):
 | #   | Claim                                                          | Measured                                         |
 | --- | -------------------------------------------------------------- | ------------------------------------------------ |
 | 1   | Deterministically generate the same systems from a global seed | identical across runs; differs by seed           |
-| 2   | Address every generated object with a stable id                | all bodies round-trip through text               |
-| 3   | Place systems at astronomical distances                        | Sol → Alpha Centauri: 4.3650 ly                  |
+| 2   | Address every generated object with a stable id                | 129 bodies round-trip through text               |
+| 3   | Place systems at astronomical distances                        | Sol → Alpha Centauri: 4.3209 ly                  |
 | 4   | Move within a system                                           | 6.81 km under thrust in 10 s                     |
-| 5   | Approach a planet                                              | fell 18.74 m in 60 s — within 0.03% of free fall |
+| 5   | Approach a planet                                              | fell 16.65 m in 60 s — within 0.03% of free fall |
 | 6   | Transition into increasingly local frames                      | entered a planet frame mid-flight                |
 | 7   | Preserve precision near the surface                            | 1 inch resolved to 9.4 µm, 8.18 kpc out          |
 | 8   | Render meter-scale objects near the player                     | 1 m survives float32 at 8.18 kpc                 |
 | 9   | Rebase render origins without moving entities                  | 500 rebases, 2,560 km, zero drift                |
 | 10  | Run a meaningful procedural task in a worker                   | 4,225 terrain samples, identical to local        |
-| 11  | Serialize and restore world/player state                       | 696 bytes → identical state hash                 |
+| 11  | Serialize and restore world/player state                       | 744 bytes → identical state hash                 |
 | 12  | Run the simulation independently of frame rate                 | same hash at 60 Hz, 144 Hz and 100× warp         |
 
 The point of listing measurements rather than ticks: a self-test that cannot

@@ -213,12 +213,57 @@ export function groundElevation(
   return Math.max(elevation, (sea * 2 - 1) * surface.maxElevation * 0.55)
 }
 
+/**
+ * The datum radius in a direction, before terrain.
+ *
+ * For a spheroid this is `radius`, exactly as it has always been. For a body
+ * with a `figure` it is that body's measured ellipsoid, and the difference is
+ * not cosmetic: `radius` is `a`, the *largest* half-extent, so a sphere of it
+ * sits above the real surface everywhere except at the two tips of the long
+ * axis. Haumea is 1050 × 840 × 537 km, which puts its poles 513 km inside a
+ * sphere of its own equatorial radius — a ship would latch `landed` half a
+ * Haumea-radius above anything, with the altitude readout at zero. Phobos was
+ * the smaller version of the same bug and a genuine regression: its datum was
+ * the 11.27 km mean radius until it gained a figure, and became 13.3.
+ *
+ * The lumps *below* the ellipsoid are not accounted for here and cannot be:
+ * they live in `data/shapes/`, and `packages/universe` may not read a file.
+ * That leaves an error bounded by the body's own roughness — a median of 9% of
+ * the mean radius across the measured set — against the 50% a sphere of `a`
+ * leaves on a body like Haumea. It is the difference between a datum that is
+ * approximately the surface and one that is definitely not.
+ *
+ * A spheroid's own flattening is *also* not accounted for, and that is
+ * deliberate rather than an oversight: it has always been that way, Earth's
+ * 21 km of polar flattening is the largest case that can be landed on, and
+ * changing it moves the ground under every existing save.
+ */
+function datumRadius(body: Body, direction: Vec3): Meters {
+  const figure = body.figure
+  if (figure === null) return body.radius
+  /*
+   * `+Y is the pole` in body-fixed axes — the same convention `spinEvaluator`
+   * and `geodeticDirection` use — so `polarRadius` divides Y and the two
+   * equatorial half-extents divide X and Z. Which of `a` and `b` lands on
+   * which is a *convention*, not a measurement: the half-extents arrive sorted
+   * and nothing records the prime meridian's orientation relative to the long
+   * axis. Getting that pair the wrong way round is an error of `a − b`, which
+   * is bounded by the difference between two equatorial axes; putting `a` on
+   * all three, which is what this replaced, is an error of `a − c`.
+   */
+  const x = direction.x / body.radius
+  const y = direction.y / body.polarRadius
+  const z = direction.z / figure.intermediateRadius
+  const inverseSquare = x * x + y * y + z * z
+  return inverseSquare <= 0 ? body.radius : 1 / Math.sqrt(inverseSquare)
+}
+
 /** Radius of the surface below a direction, including elevation and any ocean. */
 export function surfaceRadius(
   body: Body,
   direction: BodyFixedDirection,
 ): Meters {
-  return body.radius + groundElevation(body.surface, direction)
+  return datumRadius(body, direction) + groundElevation(body.surface, direction)
 }
 
 /**

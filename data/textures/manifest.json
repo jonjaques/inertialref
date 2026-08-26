@@ -1,5 +1,5 @@
 {
-  "generated": "2026-08-21",
+  "generated": "2026-08-26",
   "attribution": [
     "Earth and Moon imagery: NASA Earth Observatory (Blue Marble Next Generation, Black Marble) and NASA Scientific Visualization Studio (LRO LROC color, LOLA topography). Public domain.",
     "Io, Europa, Ganymede and Callisto: NASA / JPL / USGS Astrogeology Science Center global mosaics, from Voyager and Galileo. Public domain.",
@@ -125,6 +125,78 @@
       "credit": "NASA / JPL / USGS Astrogeology Science Center",
       "source": "https://planetarymaps.usgs.gov/mosaic/Callisto_Voyager_GalileoSSI_global_mosaic_1km.tif",
       "sha256": "8e3eec67b4a28a6b"
+    },
+    {
+      "body": "pluto",
+      "map": "albedo",
+      "file": "pluto_albedo.webp",
+      "width": 4096,
+      "height": 2048,
+      "bytes": 713106,
+      "licence": "public-domain",
+      "credit": "NASA / USGS Astrogeology Science Center",
+      "source": "https://planetarymaps.usgs.gov/mosaic/Pluto_NewHorizons_Global_Mosaic_300m_Jul2017_8bit.tif",
+      "sha256": "d76d9739853bec8a"
+    },
+    {
+      "body": "charon",
+      "map": "albedo",
+      "file": "charon_albedo.webp",
+      "width": 4096,
+      "height": 2048,
+      "bytes": 522406,
+      "licence": "public-domain",
+      "credit": "NASA / USGS Astrogeology Science Center",
+      "source": "https://planetarymaps.usgs.gov/mosaic/Charon_NewHorizons_Global_Mosaic_300m_Jul2017_8bit.tif",
+      "sha256": "00c96aabceb83a54"
+    },
+    {
+      "body": "ceres",
+      "map": "albedo",
+      "file": "ceres_albedo.webp",
+      "width": 4096,
+      "height": 2048,
+      "bytes": 1607902,
+      "licence": "public-domain",
+      "credit": "NASA / USGS Astrogeology Science Center",
+      "source": "https://planetarymaps.usgs.gov/mosaic/Ceres_Dawn_FC_DLR_global_20ppd_Oct2015.tif",
+      "sha256": "98da54cdf07d461c"
+    },
+    {
+      "body": "vesta",
+      "map": "albedo",
+      "file": "vesta_albedo.webp",
+      "width": 4096,
+      "height": 2048,
+      "bytes": 693460,
+      "licence": "public-domain",
+      "credit": "NASA / USGS Astrogeology Science Center",
+      "source": "https://planetarymaps.usgs.gov/mosaic/Vesta_Dawn_FC_HAMO_Mosaic_Global_74ppd.tif",
+      "sha256": "1feef1255ba734de"
+    },
+    {
+      "body": "phobos",
+      "map": "albedo",
+      "file": "phobos_albedo.webp",
+      "width": 2048,
+      "height": 1024,
+      "bytes": 113434,
+      "licence": "public-domain",
+      "credit": "NASA / USGS Astrogeology Science Center",
+      "source": "https://planetarymaps.usgs.gov/mosaic/Phobos_ME_SRC_Mosaic_Global_16ppd.tif",
+      "sha256": "9dae1214f0893121"
+    },
+    {
+      "body": "bennu",
+      "map": "albedo",
+      "file": "bennu_albedo.webp",
+      "width": 2048,
+      "height": 1024,
+      "bytes": 2531906,
+      "licence": "public-domain",
+      "credit": "NASA / Goddard / University of Arizona (OSIRIS-REx), via USGS Astrogeology",
+      "source": "https://planetarymaps.usgs.gov/mosaic/Bennu/Bennu_OSIRIS-REx_OCAMS_color_mosaic_25cm.tif",
+      "sha256": "a4f2d0b4228522a1"
     },
     {
       "body": "mercury",

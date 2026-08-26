@@ -30,6 +30,8 @@ only the imperative. If a copy disagrees, `AGENTS.md` wins.
 | Mode is a function of the path                         | [Client](../guides/client.md)                                                               |
 | Overlays resolve location through one helper           | [Client](../guides/client.md)                                                               |
 | Render compression is radial about the eye             | [Rendering](../concepts/rendering.md) · [ADR-0003](../adr/0003-render-coordinates.md)       |
+| A body with a `figure` is not also flattened           | [ADR-0013](../adr/0013-measured-figures.md)                                                 |
+| `figure: null` means round, not unknown                | [ADR-0013](../adr/0013-measured-figures.md)                                                 |
 | Chrome is not sized or positioned against the viewport | [Client](../guides/client.md) · [`DESIGN.md`](../../DESIGN.md)                              |
 | One producer of the camera                             | [Client](../guides/client.md) · [ADR-0011](../adr/0011-application-shell-and-modes.md)      |
 | The planetarium does not write canonical state         | [Planetarium](../design/planetarium.md)                                                     |

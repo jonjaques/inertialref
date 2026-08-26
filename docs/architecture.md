@@ -220,7 +220,7 @@ Nothing is stored. Content is a pure function of a seed and an address.
 flowchart LR
     SEED["global seed<br/><code>'inertialref'</code>"]
     ADDR["address<br/><code>g:milky-way/s:SOL/b:2</code>"]
-    VER["algorithm version<br/><code>system@1</code>"]
+    VER["algorithm version<br/><code>system@3</code>"]
     GEN(("derive"))
     OUT["the same planet,<br/>every time,<br/>everywhere"]
 
@@ -237,8 +237,18 @@ own identity — not on what was generated before it, in what order, or in how
 many workers. [Determinism](concepts/determinism.md) ·
 [identity](concepts/identity.md)
 
+**Except where somebody measured it.** The catalog is a second generation input
+(`docs/design/galaxy.md` Rule 1), and so are `packages/universe/src/solar/` and
+`data/shapes/` — 7,123 real stars, 702 confirmed exoplanets, the Solar System's
+129 bodies, and twenty-five published shape models. The split is not per object
+but per _field_: an `observed` body uses the published number for everything
+somebody published and derives the rest from its own seed, and the absence of a
+value is what decides which. Phobos's whole shape is a measurement; 67P's is a
+draw on measured half-extents; a generated moon is a draw all the way down.
+[ADR-0013](adr/0013-measured-figures.md)
+
 The consequence for storage is stark: a save is the seed, the tick and the
-handful of things with no address to regenerate from — **just under 700 bytes
+handful of things with no address to regenerate from — **just under 800 bytes
 for a flown session**. [Persistence](concepts/persistence.md)
 
 ---

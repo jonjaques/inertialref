@@ -132,9 +132,72 @@ both 1e-3 and 1e16; an absolute epsilon does not.
 
 Before keeping a regression test, temporarily reintroduce the defect and
 watch that test fail for the intended reason. Then restore the fix and watch
-it pass. A terrain-normal regression once asserted only that normals were unit
-length; a radial normal is also unit length, so the test passed both before and
-after the bug it claimed to guard.
+it pass. Three ways a test has failed that check here, each different:
+
+- **The assertion did not distinguish the cases.** A terrain-normal regression
+  asserted only that normals were unit length; a radial normal is also unit
+  length, so it passed both before and after the bug it claimed to guard.
+- **The bound was looser than the claim beside it.** A shape-generator property
+  test asserted that a body could not exceed `exp(0.6)` — 1.82 times — its
+  published extent, while its own comment said "30% larger would be inventing a
+  size". The measured inflation topped out at 1.7, so the assertion could not
+  fail for any input in its own range and the 37% volume error it was written to
+  catch sailed through.
+- **The runtime was not the one with the bug.** A module cycle threw
+  `ReferenceError: Cannot access 'X' before initialization` under native Node
+  ESM. Written as an `import()` inside a vitest test it **passed with the defect
+  deliberately reintroduced**, because vitest evaluates modules through its own
+  runner and does not enforce the temporal dead zone Node's linker does. The
+  working version spawns a Node process per entry point from `apps/headless`.
+  If a bug lives in a boundary — a loader, a bundler, a host — the test has to
+  cross that boundary too.
+
+### A timeout is a guard against a hang, not a performance budget
+
+`testTimeout` is 20 s in `vitest.config.ts`, not vitest's default 5, and the
+reason is written there. Several tests legitimately take a second or more of
+pure CPU — a 129-body Solar System stepped for thousands of ticks, a fast-check
+property over a quarter of a million noise samples — and the runner puts
+sixty-odd files across every core at once. At 5 s the suite failed
+intermittently, and **the tests it killed were mostly not the ones that had
+grown**: an Rng uniformity property, an atmosphere sweep, the catalog's own
+search bound, all pre-existing and green standalone.
+
+The diagnosis is worth remembering because the symptom points somewhere else
+entirely: when unrelated tests start failing together and pass on a re-run, the
+timeout has stopped measuring the code and started measuring how busy the
+machine is. A test that spawns processes is the usual culprit — one here began
+as ten parallel `node` invocations under `it.each` and starved everything.
+
+### Check a distribution when the claim is about one
+
+`irregularFigure` claims its numbers come from twenty-five measured shape
+models. That is a claim about a _population_, and a test that generated one body
+and looked at it could not evaluate it. The test generates eighty across the
+parameter range and asserts the median and both tails — which is how the
+generator was caught delivering 0.03 when asked for 0.18, because an fBm's
+standard deviation is a sixth of its range and nothing divided it out.
+
+The same shape appears wherever a generator has a statistical claim: the spin
+barrier (nothing may rotate faster than `sqrt(3π/Gρ)`), the retrograde fraction,
+the size ladder. Each is one assertion over a population and none of them is
+expressible about a single draw.
+
+### Compare derived quantities, not stored ones
+
+`apps/headless/src/solarSystem.test.ts` checks the engine's Solar System against
+a JPL reference, and the strongest assertions in it are the ones about numbers
+the engine **does not store**. It has no orbital period field — it computes one
+from `G(M+m)` and the semi-major axis — and no surface gravity or escape velocity
+at all. Matching JPL's published period to four figures says the axis is right,
+the star's mass is right, the body's mass is right and `orbitalPeriod` is right,
+in one assertion, because there is no way for two of those to be wrong and still
+produce it.
+
+It also converts units in only one direction: the reference keeps the kilometers
+and days JPL publishes, and the test does the arithmetic, so a check and the
+thing it checks cannot share a factor of 86,400 and agree with each other
+about it.
 
 ---
 

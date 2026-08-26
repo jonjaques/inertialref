@@ -27,12 +27,14 @@ pnpm check            # graph, brand, format, lint, typecheck, test, build
 pnpm sim --self-test           # headless run plus the twelve capability checks
 pnpm vitest run <substring>    # a single test file
 
-# Star catalog. data/catalog/ is committed; these rebuild it.
-pnpm catalog:fetch
-pnpm catalog:report
-pnpm catalog:build
-pnpm catalog:build --refresh
-pnpm textures:build
+# Vendored data. Everything under data/ is committed; these rebuild it.
+pnpm catalog:fetch             # download the star catalog sources into .data/raw
+pnpm catalog:report            # build the catalog and print, without writing
+pnpm catalog:build             # build the catalog and write data/catalog
+pnpm catalog:build --refresh   # ...re-downloading rather than using the cache
+pnpm textures:build            # surface maps into data/textures (1.5 GB in, 25 MB out)
+pnpm shapes:build              # measured shape models into data/shapes
+pnpm solar:fetch               # data/reference/solar-system.json, from JPL
 
 pnpm dev:client                # Vite only
 pnpm dev:server                # wrangler on 127.0.0.1:8787
@@ -47,6 +49,12 @@ built-in. After any change to `wrangler.jsonc`, regenerate
 `pnpm --filter @inertialref/server run types` and commit it.
 
 `pnpm check` is the gate. Do not report a task complete without it passing.
+
+None of the four data commands are needed to build or run the game — their
+outputs are committed. Run one when the upstream publishes; the diff is the news.
+`textures:build` and `shapes:build` download 1.5 GB between them into the
+gitignored `.data/`, and only the processed outputs are committed. The
+[catalog guide](catalogue.md) has the provenance rules each of them follows.
 
 The site deploys to the `inertialrefd` Worker. Canonical URL:
 <https://inertialref.jonjaques.com>, and the only address it answers on. To

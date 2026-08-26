@@ -43,7 +43,7 @@ Slash-separated, typed segments:
 ```
 g:milky-way                                       a galaxy
 g:milky-way/s:HIP71683                            a star system
-g:milky-way/s:HIP71683/b:2                        the third planet
+g:milky-way/s:HIP71683/b:2                        the third body issued
 g:milky-way/s:HIP71683/b:2.0                      its first moon
 g:milky-way/s:HIP71683/b:2/r:3.6.12.44            a surface region
 g:milky-way/s:HIP71683/b:2/r:3.6.12.44/o:7        an object in that region
@@ -53,7 +53,7 @@ g:milky-way/s:HIP71683/b:2/r:3.6.12.44/o:7        an object in that region
 | ------- | -------------------------------------------------------------- |
 | `g:`    | galaxy id                                                      |
 | `s:`    | system id — a catalog designation or an encoded cell reference |
-| `b:`    | orbital index path; `2.0` is "third planet, first moon"        |
+| `b:`    | issue-ordinal path; `2.0` is the first moon of the third body  |
 | `r:`    | cube-sphere region: `face.level.i.j`                           |
 | `o:`    | object index within a region                                   |
 
@@ -82,7 +82,7 @@ body in the exact universe.
 
 ---
 
-## Two flavours of entity id
+## Two flavors of entity id
 
 Runtime entities carry an `EntityId`, distinguishable at a glance:
 
@@ -146,7 +146,7 @@ maps a direction to its region, and `regionDirection(region, s, t)` maps back.
 The 1e-12 property test is on the layer below — `directionToFace` ⇄
 `faceToDirection`. `regionForDirection` is checked against
 `regionCentreDirection` to within one region's angular half-width, which is the
-strongest thing that can be true of a map that quantises.
+strongest thing that can be true of a map that quantizes.
 
 Both `regionDirection` and `faceToDirection` return a branded
 `BodyFixedDirection`, which is what makes it impossible to hand `surfaceRadius`
@@ -160,16 +160,19 @@ an inertial direction.
 
 - Identity exists before generation and survives unloading.
 - Generation, persistence, logging and tooling share one vocabulary.
-- No registry, no id allocation, no synchronisation between clients.
+- No registry, no id allocation, no synchronization between clients.
 
 **Costs**
 
 - Addresses are long: 28 characters where an integer would be 4. They compress
   well and appear once per entity in a save.
-- Bodies are addressed by **orbital index**, so changing how a system lays out
-  its orbits renames its planets. That is what
-  [algorithm versioning](determinism.md#algorithm-versioning) is for: the rename
-  becomes deliberate and detectable rather than silent.
+- A body's index is the ordinal it was **issued** at, not its orbital position
+  ([ADR-0009](../adr/0009-issue-ordinal-addressing.md)). That is what keeps a
+  newly confirmed planet from renaming every world outward of it — but it means
+  indices are sparse, they accumulate tombstones, and `b:2` is not "the third
+  planet" and must never be presented as one. Sol shows the cost plainly: its
+  fifty-nine dwarf planets, asteroids and comets are issued _after_ the eight
+  planets, so Ceres is `b:8` and orbits between `b:3` and `b:4`.
 
 ---
 

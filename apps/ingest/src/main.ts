@@ -6,6 +6,8 @@ import { encodeCatalog, isUnstableId, readCatalog } from '@inertialref/universe'
 import { fetchSource, SOURCES } from './sources.ts'
 import { buildCatalog, type BuildReport } from './build.ts'
 import { buildTextures } from './textures.ts'
+import { buildSolarReference } from './solarReference.ts'
+import { buildShapes } from './shapes.ts'
 
 /*
  * The ingest.
@@ -32,6 +34,8 @@ const RADIUS_LIGHT_YEARS = 150
 const COMPLETE_RADIUS_LIGHT_YEARS = 25
 const OUTPUT_DIRECTORY = 'data/catalog'
 const TEXTURE_DIRECTORY = 'data/textures'
+const REFERENCE_DIRECTORY = 'data/reference'
+const SHAPE_DIRECTORY = 'data/shapes'
 const OUTPUT_FILE = 'stars-150ly.irsc'
 
 const root = new URL('../../../', import.meta.url).pathname
@@ -316,6 +320,88 @@ Per-file provenance — source URL, license and output digest — is in
 \`docs/guides/catalogue.md\`.
 `
 
+/**
+ * The Solar System's published measurements, as the reference the tests use.
+ *
+ * Not an asset the game loads. `packages/universe/src/solar` carries the
+ * numbers transcribed into source, because facts are not a licensed database;
+ * this writes the same numbers straight out of JPL so that
+ * `apps/headless/src/solarSystem.test.ts` can tell a typo from a decision.
+ * See `solarSources.ts` for why it is committed rather than fetched at test
+ * time.
+ */
+async function solar(refresh: boolean) {
+  console.log('solar system reference')
+  const reference = await buildSolarReference({
+    root,
+    refresh,
+    today: new Date().toISOString().slice(0, 10),
+    onProgress: (message) => console.log(message),
+  })
+  const directory = join(root, REFERENCE_DIRECTORY)
+  mkdirSync(directory, { recursive: true })
+  const file = join(directory, 'solar-system.json')
+  writeFileSync(file, `${JSON.stringify(reference, null, 2)}\n`)
+
+  const irregular = reference.smallBodies.filter(
+    (body) => body.physical.extentKm !== null,
+  ).length
+  const shaped = reference.smallBodies.filter(
+    (body) => body.physical.diameterKm !== null,
+  ).length
+  console.log(`
+  with a measured diameter  ${pad(shaped)} of ${reference.smallBodies.length}
+  with a tri-axial extent   ${pad(irregular)}   these are the ones that are not spheres
+  written to ${REFERENCE_DIRECTORY}/solar-system.json`)
+}
+
+/**
+ * Shape models for the bodies gravity never rounded off.
+ *
+ * Separate from `textures` for the same reason `textures` is separate from
+ * `build`: different inputs, different runtime, and no reason for one to
+ * re-download the other. The whole set is about 20 MB in and 900 KB out.
+ */
+async function shapes(refresh: boolean) {
+  console.log('shape models')
+  const manifest = await buildShapes({
+    root,
+    outputDirectory: SHAPE_DIRECTORY,
+    refresh,
+    onProgress: (message) => console.log(message),
+  })
+  const total = manifest.shapes.reduce((n, s) => n + s.bytes, 0)
+  writeFileSync(
+    join(root, SHAPE_DIRECTORY, 'manifest.json'),
+    `${JSON.stringify(manifest, null, 2)}\n`,
+  )
+  writeFileSync(
+    join(root, SHAPE_DIRECTORY, 'LICENSE.md'),
+    shapeLicence(manifest.attribution),
+  )
+  console.log(`
+  ${manifest.shapes.length} shape models, ${(total / 1024).toFixed(0)} KB
+  written to ${SHAPE_DIRECTORY}/`)
+}
+
+const shapeLicence = (attribution: readonly string[]): string =>
+  `# Shape models — provenance
+
+Measured figures of Solar System bodies, built by \`apps/ingest\` from models
+archived at the NASA Planetary Data System Small Bodies Node.
+
+**These are United States Government works and are in the public domain.** There
+is no license to comply with. What is here instead is *provenance*, which for a
+shape model matters more than a license does: a body's figure is a measurement,
+and a measurement with no citation is a guess.
+
+${attribution.map((line) => `- ${line}`).join('\n\n')}
+
+Per-model provenance — the source URL, the publication the model comes from, the
+reconstructed volume against the source's own, and the output digest — is in
+\`manifest.json\`. Rebuild with \`pnpm shapes:build\`.
+`
+
 const command = process.argv[2] ?? 'build'
 const refresh = process.argv.includes('--refresh')
 
@@ -329,9 +415,13 @@ try {
     await build({ write: true, refresh })
   } else if (command === 'textures') {
     await textures()
+  } else if (command === 'solar') {
+    await solar(refresh)
+  } else if (command === 'shapes') {
+    await shapes(refresh)
   } else {
     console.error(
-      `unknown command "${command}"\n\n  fetch     download the catalog sources into .data/raw\n  report    build the catalog and print, without writing\n  build     build the catalog and write data/catalog\n  textures  build the planetary surface maps into data/textures\n\n  --refresh  re-download rather than using the cache`,
+      `unknown command "${command}"\n\n  fetch     download the catalog sources into .data/raw\n  report    build the catalog and print, without writing\n  build     build the catalog and write data/catalog\n  textures  build the planetary surface maps into data/textures\n  solar     refresh data/reference/solar-system.json from JPL\n  shapes    build the measured shape models into data/shapes\n\n  --refresh  re-download rather than using the cache`,
     )
     process.exit(2)
   }

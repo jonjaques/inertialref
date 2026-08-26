@@ -8,7 +8,8 @@ import {
   type Seconds,
   SECONDS_PER_DAY,
 } from '@inertialref/shared'
-import type { BodyKind } from '../system.ts'
+import type { BodyFigure, BodyKind } from '../system.ts'
+import { JOVIAN_MINOR, NEPTUNIAN_MINOR, SATURNIAN_MINOR } from './minorMoons.ts'
 import type { LinearRgb } from '../catalog/photometry.ts'
 
 /*
@@ -91,10 +92,21 @@ export interface SolarClouds {
 export interface SolarBody {
   readonly name: string
   readonly kind: BodyKind
-  /** Equatorial radius. */
+  /**
+   * Equatorial radius — the largest half-extent `a` for a body that is not
+   * round.
+   */
   readonly radius: Meters
   /** Polar radius. Equal to `radius` for a body with no measured flattening. */
   readonly polarRadius: Meters
+  /**
+   * The measured figure, for a body gravity never rounded off.
+   *
+   * Null means round, not unknown. See `BodyFigure`; the half-extents here are
+   * JPL's published `extent` halved, and the model keys name files in
+   * `data/shapes/`.
+   */
+  readonly figure: BodyFigure | null
   readonly mass: Kilograms
   /** Sidereal rotation period. Negative is retrograde. */
   readonly rotationPeriod: Seconds
@@ -107,6 +119,19 @@ export interface SolarBody {
   readonly inclination: Radians
   /** Argument of periapsis, radians. */
   readonly argumentOfPeriapsis: Radians
+  /**
+   * Longitude of the ascending node, radians, where it is published.
+   *
+   * The eight planets and the twenty moons leave this out on purpose — the
+   * header explains why a satellite's node is not a fact a player can check.
+   * A small body's is: JPL publishes an osculating element set for every one of
+   * them, and where Halley is on its orbit in 2061 is a thing somebody will
+   * look up. Absent means "draw it from the seed", which is what every body in
+   * `bodies.ts` does.
+   */
+  readonly ascendingNode?: Radians
+  /** Mean anomaly at J2000, radians, where it is published. See `ascendingNode`. */
+  readonly meanAnomaly?: Radians
   /** Geometric albedo. */
   readonly geometricAlbedo: number
   /** Mean surface or 1-bar temperature, kelvin. */
@@ -170,6 +195,10 @@ const moon = (
   kind: 'moon',
   radius: radiusKm * KM,
   polarRadius: radiusKm * KM,
+  // Round unless the body says otherwise. Every moon large enough to be in the
+  // original twenty is; the ones added since are not, and each of those carries
+  // its own measured half-extents.
+  figure: null,
   mass: massKg,
   // Every one of these is tidally locked, which is why the same face of the
   // Moon has been pointed at us for four billion years. Synchronous rotation is
@@ -378,8 +407,13 @@ export const SOLAR_PLANETS: readonly SolarBody[] = [
     name: 'Mercury',
     tint: { r: 1, g: 0.97, b: 0.92 },
     kind: 'rocky',
-    radius: 2_439.7 * KM,
-    polarRadius: 2_439.7 * KM,
+    figure: null,
+    // JPL's *equatorial* radius, not the 2,439.7 km mean that circulates as
+    // "Mercury's radius". The difference is 830 m and this field's contract is
+    // the equatorial one — Earth and Mars beside it are both equatorial, so a
+    // mean here would make Mercury the one planet measured differently.
+    radius: 2_440.53 * KM,
+    polarRadius: 2_440.53 * KM,
     mass: 3.3011e23,
     // 58.6 days — locked 3:2 to its 88-day year, so a solar day lasts two of
     // its years. The only body in the system in that resonance.
@@ -405,6 +439,7 @@ export const SOLAR_PLANETS: readonly SolarBody[] = [
     name: 'Venus',
     tint: WHITE,
     kind: 'rocky',
+    figure: null,
     radius: 6_051.8 * KM,
     polarRadius: 6_051.8 * KM,
     mass: 4.8675e24,
@@ -448,6 +483,7 @@ export const SOLAR_PLANETS: readonly SolarBody[] = [
     name: 'Earth',
     tint: WHITE,
     kind: 'rocky',
+    figure: null,
     radius: 6_378_137,
     polarRadius: 6_356_752,
     mass: 5.972_17e24,
@@ -486,6 +522,7 @@ export const SOLAR_PLANETS: readonly SolarBody[] = [
     name: 'Mars',
     tint: WHITE,
     kind: 'rocky',
+    figure: null,
     radius: 3_396_200,
     polarRadius: 3_376_200,
     mass: 6.4171e23,
@@ -520,17 +557,71 @@ export const SOLAR_PLANETS: readonly SolarBody[] = [
     rings: null,
     discoveryYear: 0,
     moons: [
-      moon('Phobos', 11.267, 1.0659e16, 9_376, 0.318_91, 0.071, {
+      /*
+       * The two that were always ellipsoids drawn as balls.
+       *
+       * Phobos is 27 × 22 × 18 km with Stickney — a crater nine kilometers
+       * across — taken out of one end, and Deimos is 17 × 13 × 12 and smooth
+       * because its regolith has filled its own craters in. Neither has ever
+       * been round. They were drawn as spheres for as long as the renderer
+       * could only draw spheres, and it did not show, because from Mars orbit
+       * they are eleven and six kilometers of gray at a hundred pixels' remove.
+       * From a hundred kilometers it is the only thing you can see.
+       *
+       * The radius here is `a`, the largest half-extent, and it is *measured
+       * off the shipped model* rather than transcribed from the fact sheet —
+       * 13.3 km rather than the mean 11.08 — so the number the renderer scales
+       * by and the geometry it scales cannot disagree. The mean radius is still
+       * recoverable and still checked: `shapeExtent` computes it from the grid,
+       * and it comes back at 11.115 km against JPL's 11.08.
+       */
+      moon('Phobos', 13.3, 1.0659e16, 9_376, 0.318_91, 0.071, {
         eccentricity: 0.0151,
         inclination: 1.093 * DEG,
         temperature: 233,
-        relief: 5_000,
+        polarRadius: 9.8 * KM,
+        // The Mars Express SRC mosaic, vendored by this same change. Without
+        // this key `texturesFor` returns the empty set, the map is dead weight
+        // in every bundle, and the halved tint below — which exists *because*
+        // that map is contrast-stretched — is applied to nothing, leaving
+        // Phobos at half the brightness it is meant to have.
+        texture: 'phobos',
+        figure: {
+          intermediateRadius: 11.9 * KM,
+          model: 'phobos',
+          irregularity: 0,
+        },
+        // The model is the relief. Sinking the drawn body by another five
+        // kilometers would put the whole moon inside its own shape.
+        relief: 0,
+        /*
+         * Halved, because the map is a *stretched* product.
+         *
+         * The Mars Express SRC mosaic is photometrically corrected and
+         * contrast-stretched for interpretation, so its mean linear luminance
+         * is 0.30 — about the same as the Moon's LRO map, on a body with half
+         * the Moon's albedo. Measured in the planetarium at the same framing:
+         * Phobos came out at sRGB 143 against the Moon's 83, when it should be
+         * darker than the Moon and not brighter. Phobos is one of the darkest
+         * objects in the Solar System and it has to look like it.
+         */
+        tint: { r: 0.17, g: 0.155, b: 0.14 },
       }),
-      moon('Deimos', 6.2, 1.4762e15, 23_463, 1.263_24, 0.068, {
+      moon('Deimos', 8.4, 1.4413e15, 23_457, 1.263_24, 0.068, {
         eccentricity: 0.0002,
-        inclination: 0.93 * DEG,
+        inclination: 1.8 * DEG,
         temperature: 233,
-        relief: 3_000,
+        polarRadius: 5.8 * KM,
+        figure: {
+          intermediateRadius: 6.7 * KM,
+          model: 'deimos',
+          irregularity: 0,
+        },
+        relief: 0,
+        // No map, so this is the whole surface: the Lambert reflectance of a
+        // 0.068 geometric albedo, which is `1.5 p`. Same relation as
+        // `smallBodies.ts`, and the same reason.
+        tint: { r: 0.102, g: 0.094, b: 0.086 },
       }),
     ],
   },
@@ -538,6 +629,7 @@ export const SOLAR_PLANETS: readonly SolarBody[] = [
     name: 'Jupiter',
     tint: WHITE,
     kind: 'gas-giant',
+    figure: null,
     radius: 71_492 * KM,
     // 6.5% flattened. Drawn as a sphere it reads as wrong before you can say
     // why.
@@ -579,12 +671,16 @@ export const SOLAR_PLANETS: readonly SolarBody[] = [
       texture: null,
     },
     discoveryYear: 0,
-    moons: GALILEANS,
+    // The four Galileans, then the four inner shepherds and Himalia. Appended
+    // rather than interleaved: a moon's index is its address, and reordering
+    // this array would move Europa.
+    moons: [...GALILEANS, ...JOVIAN_MINOR],
   },
   {
     name: 'Saturn',
     tint: WHITE,
     kind: 'gas-giant',
+    figure: null,
     radius: 60_268 * KM,
     // The most oblate planet in the system: 9.8%.
     polarRadius: 54_364 * KM,
@@ -623,12 +719,13 @@ export const SOLAR_PLANETS: readonly SolarBody[] = [
       texture: 'saturn-ring',
     },
     discoveryYear: 0,
-    moons: SATURNIAN,
+    moons: [...SATURNIAN, ...SATURNIAN_MINOR],
   },
   {
     name: 'Uranus',
     tint: WHITE,
     kind: 'ice-giant',
+    figure: null,
     radius: 25_559 * KM,
     polarRadius: 24_973 * KM,
     mass: 8.681e25,
@@ -675,6 +772,7 @@ export const SOLAR_PLANETS: readonly SolarBody[] = [
     name: 'Neptune',
     tint: WHITE,
     kind: 'ice-giant',
+    figure: null,
     radius: 24_764 * KM,
     polarRadius: 24_341 * KM,
     mass: 1.024_13e26,
@@ -710,6 +808,7 @@ export const SOLAR_PLANETS: readonly SolarBody[] = [
     },
     discoveryYear: 1846,
     moons: [
+      // Triton first — it was the first issued and `b:7/b:0` is its address.
       moon('Triton', 1_353.4, 2.139e22, 354_759, -5.876_854, 0.76, {
         eccentricity: 0.000_016,
         // Retrograde and steeply inclined, because it was captured rather than
@@ -734,6 +833,7 @@ export const SOLAR_PLANETS: readonly SolarBody[] = [
           thickness: 0.05,
         },
       }),
+      ...NEPTUNIAN_MINOR,
     ],
   },
 ]

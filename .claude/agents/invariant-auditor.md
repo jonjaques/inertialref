@@ -1,6 +1,6 @@
 ---
 name: invariant-auditor
-description: Audits a change against this repository's thirty named invariants — determinism, addressing, layering, camera precedence, the dock, the catalog. Use before opening a PR, after a large change, or whenever a change touches more than one package. Read-only; it reports, it does not fix.
+description: Audits a change against this repository's named invariants — determinism, addressing, layering, camera precedence, the dock, the catalog, measured figures. Use before opening a PR, after a large change, or whenever a change touches more than one package. Read-only; it reports, it does not fix.
 tools: Read, Grep, Glob, Bash, WebFetch
 model: opus
 effort: high
@@ -20,7 +20,7 @@ still a useful finding; a fix you applied without being asked is a merge conflic
 
 1. **Read your own memory first.** It records which invariants have actually been violated
    in this repository and what the violation looked like. That is a better prior than
-   auditing all thirty with equal suspicion.
+   auditing every one of them with equal suspicion.
 2. `git diff` the change under review — against `main` unless told otherwise. Get the real
    file list; do not audit from a description.
 3. Read `AGENTS.md` § "The rules that actually matter" in full. It is the canonical list.
@@ -69,7 +69,7 @@ Ranked most severe first. For each finding:
 - the smallest fix.
 
 Separate **confirmed** from **suspected** and say which is which. If the diff is clean
-against all thirty, say so plainly and name what you checked — a short honest report beats
+against all of them, say so plainly and name what you checked — a short honest report beats
 a padded one.
 
 ## Then update your memory

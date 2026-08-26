@@ -47,7 +47,8 @@ a production build. What follows is depth, not foundations.
 | Render coordinates, floating origin | ✅     | [ADR-0003](adr/0003-render-coordinates.md)                                                                     |
 | Stable identity and addressing      | ✅     | [ADR-0004](adr/0004-entity-addressing.md)                                                                      |
 | Deterministic generation            | ✅     | Core proven; two inputs now — seed _and_ catalog version                                                       |
-| Real astronomical data              | ✅     | 7,123 systems and 702 planets within 150 ly; [guide](guides/catalogue.md)                                      |
+| Real astronomical data              | ✅     | 7,123 systems and 702 planets within 150 ly; 129 Solar System bodies; [guide](guides/catalogue.md)             |
+| Measured body figures               | ✅     | 25 shape models from the PDS; generated figures everywhere else — [ADR-0013](adr/0013-measured-figures.md)     |
 | Simulation clock and determinism    | 🟡     | All of it except [replay](#replay-and-reconciliation)                                                          |
 | Simulation / rendering separation   | ✅     | Proven by `apps/headless`                                                                                      |
 | Worker architecture                 | ✅     | Pool, contracts, cancellation, instrumentation                                                                 |
@@ -77,22 +78,23 @@ The [vision](vision.md) names the eventual inhabitants of the galaxy. Most are
 not built. The important thing is that **none of them need architectural
 change** — they are generators plus representations.
 
-| Thing                    | Status | Seam                                                                                                             |
-| ------------------------ | ------ | ---------------------------------------------------------------------------------------------------------------- |
-| Galaxy, systems, stars   | ✅     | Real out to 150 ly, procedural beyond — [catalog guide](guides/catalogue.md)                                     |
-| Planets, moons           | ✅     | Confirmed exoplanets and the Solar System are `observed`; the rest is `projected`                                |
-| Moons of real planets    | ⬜     | `PackedPlanet` needs a moon list; every moon in the game is currently a projection, including Luna               |
-| Catalog revision diff    | ✅     | `versionDrift` in `packages/protocol` — one verdict, read by the handshake, the save loader and the health panel |
-| Planetary terrain        | 🟡     | Heightfields only; no biomes or materials                                                                        |
-| Ships                    | 🟡     | One modeled hull (a CC-BY Enterprise-D in `data/models/`, debug cone as fallback), no variants or subsystems     |
-| Rings                    | ✅     | Saturn's, with the planet's shadow on them and theirs on the planet; procedural giants get a 1-in-6 chance       |
-| Asteroids / belts        | ⬜     | Wants a _population_ generator: many small bodies from one cell seed, addressed as `o:` objects within a region  |
-| Star clusters, nebulae   | ⬜     | Density modulation in the galaxy generator + volumetric rendering                                                |
-| Black holes              | ⬜     | A body kind; the interesting part is rendering, not simulation                                                   |
-| Vegetation, flora, fauna | ⬜     | Region-seeded scatter on terrain — the `o:` address segment exists for this                                      |
-| Structures, settlements  | ⬜     | First real consumer of [persistent mutations](#persistent-mutations)                                             |
-| Humanoids                | ⬜     | Needs a character controller on a surface frame                                                                  |
-| Small physical objects   | 🟡     | Debug cubes render at the right scale; no interaction                                                            |
+| Thing                    | Status | Seam                                                                                                                                                                                                                            |
+| ------------------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Galaxy, systems, stars   | ✅     | Real out to 150 ly, procedural beyond — [catalog guide](guides/catalogue.md)                                                                                                                                                    |
+| Planets, moons           | ✅     | Confirmed exoplanets and the Solar System are `observed`; the rest is `projected`                                                                                                                                               |
+| Moons of real planets    | 🟡     | Sol's 62 are `observed` and measured; every exoplanet's moon is a projection, and `PackedPlanet` still has no moon list to change that                                                                                          |
+| Catalog revision diff    | ✅     | `versionDrift` in `packages/protocol` — one verdict, read by the handshake, the save loader and the health panel                                                                                                                |
+| Planetary terrain        | 🟡     | Heightfields only; no biomes or materials                                                                                                                                                                                       |
+| Ships                    | 🟡     | One modeled hull (a CC-BY Enterprise-D in `data/models/`, debug cone as fallback), no variants or subsystems                                                                                                                    |
+| Rings                    | ✅     | All four giants, with Saturn's shadow on its own and theirs on it; Haumea, Quaoar, Chariklo and Chiron carry theirs; procedural giants get a 1-in-6 chance                                                                      |
+| Asteroids / belts        | 🟡     | 50 real asteroids and comets in Sol, and 6–18 generated per system — but they are `b:` bodies at system scale, not the `o:` region population a _visible_ belt would need (see [belts as a population](#belts-as-a-population)) |
+| Small-body figures       | ✅     | 92 of Sol's 129 bodies are not spheroids; 25 have published shape models and the rest are seeded — [ADR-0013](adr/0013-measured-figures.md)                                                                                     |
+| Star clusters, nebulae   | ⬜     | Density modulation in the galaxy generator + volumetric rendering                                                                                                                                                               |
+| Black holes              | ⬜     | A body kind; the interesting part is rendering, not simulation                                                                                                                                                                  |
+| Vegetation, flora, fauna | ⬜     | Region-seeded scatter on terrain — the `o:` address segment exists for this                                                                                                                                                     |
+| Structures, settlements  | ⬜     | First real consumer of [persistent mutations](#persistent-mutations)                                                                                                                                                            |
+| Humanoids                | ⬜     | Needs a character controller on a surface frame                                                                                                                                                                                 |
+| Small physical objects   | 🟡     | Debug cubes render at the right scale; no interaction                                                                                                                                                                           |
 
 **Gameplay verbs**: piloting ✅, in-system travel ✅, approach and orbit ✅,
 landing ✅. Interstellar travel is 🟡 — possible but takes hours of
@@ -358,6 +360,88 @@ sits on a canopy, not from this layout.
 
 ---
 
+## Small bodies and their figures
+
+Landed 25 Aug 2026 — [ADR-0013](adr/0013-measured-figures.md), and the build log
+entry for what it cost. What follows is what it left open, in the order the
+value is.
+
+### Photometric normalization
+
+**The largest single thing standing between the renderer and "photographic".**
+
+A surface map's mean linear luminance ranges from 0.048 (Callisto) to 0.32 (the
+Moon) across the shipped set, and it does not track the published geometric
+albedo at all — Vesta's map is four times darker than Mercury's on a body three
+times brighter. Every body's tint compensates by hand, which is a per-body
+constant standing in for a per-body measurement.
+
+| Gap                                    | Consequence                                                      | Seam                                                                                                                                                 |
+| -------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Maps are not normalized to albedo      | Each body's brightness is hand-tuned and a new map arrives wrong | `apps/ingest/src/textures.ts` already decodes every map; recording its mean linear luminance in the manifest is a few lines                          |
+| The renderer has no target reflectance | Nothing converts a published `p` into a rendered brightness      | `PlanetMaterial.albedoScale` already exists and is already driven per body by `adaptationFor`; a normalization term multiplies into the same uniform |
+
+The reason it is not done: it changes how **every planet** is lit, including the
+eight that are currently right. That makes it a deliberate pass with its own
+before-and-after plates, not a patch. The measurement that would drive it is in
+[`CONTEXT.md`](../CONTEXT.md) under the 25 Aug entry.
+
+### Shape models the ingest cannot reach
+
+`pnpm shapes:build` speaks PDS, and two of the most recognizable silhouettes in
+the Solar System are archived elsewhere.
+
+| Body                                 | Archive                                                  | Why it matters                                                                                                                                  |
+| ------------------------------------ | -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| 67P/Churyumov–Gerasimenko            | ESA Planetary Science Archive                            | The duck. The single most recognizable small-body outline there is, and it currently renders as a generated figure on its measured half-extents |
+| 162173 Ryugu                         | JAXA DARTS                                               | A spinning top like Bennu, and the other sample-return target                                                                                   |
+| 433 Eros, 25143 Itokawa surface maps | NEAR and Hayabusa archived images, not projected mosaics | Both have their figure vendored; neither has a map, and no public archive holds one                                                             |
+
+The seam is a second fetcher shape in `shapeSources.ts` — the readers
+(`grid`, `obj`, `vertex`) already cover every format those archives publish.
+
+### What `radius` means
+
+**Unresolved on purpose, and the trade-off is the interesting part.**
+
+For a body with a shipped model, `radius` is the measured bounding box, so
+nothing ever exceeds it. For a generated body it is the reference _ellipsoid's_
+semi-axis, and the lumps stand above it — about 17% at the median roughness and
+up to 55% at the top of the range.
+
+The two cannot be reconciled: a lumpy body with an ellipsoid's volume has a
+**larger** bounding box than that ellipsoid, so a figure can preserve the volume
+or match the bounding box and not both. `irregularFigure` picks volume, because
+the mass and the class density depend on it and nothing depends on the bounding
+box except which LOD tier gets picked — a tier boundary rather than a fact.
+Changing it means carrying both, which is a third set of numbers on every body
+for a cosmetic gain.
+
+### Gravity is still a point mass
+
+The bodies this added are exactly the ones where that stops being true. Bennu's
+gravity field is dominated by its _shape_ — the equatorial ridge is centrifugal,
+material migrates along a slope field that a point mass does not have, and the
+OSIRIS-REx team published the gravity model precisely because the point-mass
+answer is wrong at the surface. Nothing in the game is close enough to a small
+body for long enough for it to matter yet, and the seam is real: the shape field
+is already a polyhedron and the polyhedral gravity integral is a known closed
+form.
+
+### Belts as a population
+
+Generated systems get 6–18 small bodies each, and Sol has 50 real ones. That is
+a _sample_ of a population that in reality runs to millions, and it is deliberate
+— they are `b:` bodies at system scale, addressed and traceable like planets.
+
+A belt you can **see** is a different object: many thousands of instanced points
+from one cell seed, addressed as `o:` objects within a region, culled and drawn
+as a cloud rather than as bodies. The `o:` address segment exists for it. The
+two are complements, not alternatives: the named ones stay addressable
+destinations and the population is the scenery between them.
+
+---
+
 ## Automation gaps
 
 | Gap                             | Note                                                                                                                                                                                                    |
@@ -374,15 +458,16 @@ sits on a canopy, not from this layout.
 
 Not roadmap items so much as honest labels on what is modeled:
 
-| Simplification                                | Reality                                                                       |
-| --------------------------------------------- | ----------------------------------------------------------------------------- |
-| Multiple-star systems modeled as single stars | The catalog records true component counts for all 375 of them within 150 ly   |
-| No vendored maps for seven Solar System moons | They render from their measured albedo and tint; USGS has mosaics for several |
-| Patched conics, no n-body                     | Lagrange points, resonances and perturbations do not exist                    |
-| No collision except ground contact            | No hull, no entity-to-entity, no terrain slope response                       |
-| Circular-ish orbits, coplanar-ish systems     | Generated inclinations and eccentricities are small                           |
-| Atmospheres are isothermal exponential        | No layers, no weather, no wind                                                |
-| Bodies are spheres                            | No oblateness, so no J2 precession                                            |
+| Simplification                                | Reality                                                                                                                                                                                                                                                                            |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Multiple-star systems modeled as single stars | The catalog records true component counts for all 375 of them within 150 ly                                                                                                                                                                                                        |
+| No vendored maps for most small bodies        | Titan, Enceladus, Iapetus, Triton, the Uranian moons, Deimos, Eros, Itokawa, Ryugu and everything below Bennu render from measured albedo and tint. Twenty-five of them do have a measured _figure_, which for a body a few kilometers across is the half that shows               |
+| Patched conics, no n-body                     | Lagrange points, resonances and perturbations do not exist                                                                                                                                                                                                                         |
+| No collision except ground contact            | No hull, no entity-to-entity, no terrain slope response                                                                                                                                                                                                                            |
+| Circular-ish orbits, coplanar-ish systems     | Generated inclinations and eccentricities are small                                                                                                                                                                                                                                |
+| Atmospheres are isothermal exponential        | No layers, no weather, no wind                                                                                                                                                                                                                                                     |
+| Bodies are spheroids or measured figures      | Oblateness is carried and drawn, and 92 Solar System bodies have a real figure — but nothing acts on either. No J2 precession, and gravity is a point mass everywhere, so the 500-meter bodies whose _shape_ dominates their gravity field are attracted to as if they were points |
+| The collision datum is an ellipsoid           | `surfaceRadius` evaluates the measured ellipsoid for a figured body, not its shape model — `packages/universe` may not read a file. The residual is the body's own roughness, a median 9% of its mean radius                                                                       |
 
 ---
 
@@ -392,18 +477,26 @@ If the goal is the most architectural value per unit of work:
 
 ```mermaid
 flowchart LR
-    T["<b>1. Terrain quadtree<br/>+ stitching</b>"] --> W["<b>2. Content variety</b><br/>rings, asteroids, scatter"]
+    T["<b>1. Terrain quadtree<br/>+ stitching</b>"] --> W["<b>2. Content variety</b><br/>scatter, belts as a population"]
     T --> P["<b>3. Replay recording</b>"]
     W --> M["<b>4. Persistent mutations</b>"]
     P --> N["<b>5. Multiplayer</b>"]
     M --> N
+    L["<b>0. Photometric<br/>normalization</b>"] --> T
 
     style T fill:#0369a1,stroke:#0c4a6e,color:#fff
+    style L fill:#0e7490,stroke:#155e75,color:#fff
 ```
 
 Terrain first: it is the visible ceiling on everything surface-related, it
 exercises the streaming and LOD systems properly, and every later content system
 (scatter, structures, terrain mutations) sits on top of it.
+
+[Photometric normalization](#photometric-normalization) is numbered zero because
+it is smaller than any of these and is the difference between a renderer that is
+correct and one that is convincing. It is a day's work behind a measurement that
+already exists, and it is the last thing that would be easy to do _before_ the
+number of bodies grows again.
 
 ---
 

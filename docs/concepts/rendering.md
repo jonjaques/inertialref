@@ -314,15 +314,71 @@ kilometers is a fraction of a degree — the map's standard deviation is 2.4 out
 and forbids the thing next door to it: the elevation is the published one and the
 terrain is where it really is; only how sharply it catches the light is turned up.
 
-### Oblateness
+### Two shapes, and which one is not a rendering choice
 
-Bodies are drawn as oblate spheroids, scaled on the spin axis so the quaternion
-tilts the bulge with it. Saturn is 9.8% flattened and Jupiter 6.5%, which reads as
-wrong long before anyone can say why. Real bodies carry their measured polar
+A body is drawn as an **oblate spheroid** or as a **measured figure**, and what
+decides is whether gravity rounded it off.
+
+**Spheroids** are the unit sphere scaled on the spin axis, so the quaternion
+tilts the bulge with it. Saturn is 9.8% flattened and Jupiter 6.5%, which reads
+as wrong long before anyone can say why. Real bodies carry their measured polar
 radius; generated ones derive it from their own rotation, because the
 uniform-density relation that does so overstates Jupiter's by 70% and there is
 nothing better to derive it from — and a sphere is not the neutral choice here,
 it is the wrong one.
+
+**Figures** are for everything below about 200 km, where self-gravity loses to
+material strength and the body keeps whatever the last collision left. That is
+92 of the Solar System's 129 bodies and a large fraction of every generated
+system. Phobos is 27 × 22 × 18 km with a nine-kilometer crater in one end;
+216 Kleopatra is a dog bone; Bennu is a spinning top with a ridge its own
+rotation raised. A sphere is not an approximation of those, it is a different
+object.
+
+`Body.figure` is present **exactly when a body is not a spheroid**. Null means
+round, not unknown — a renderer that read it as "no data" and fell back to a
+sphere would be right by accident. `flattening` is not applied to a body that
+has one: the mesh already carries all three half-extents, and applying both
+squashes it twice, which on Phobos is 26%. [ADR-0013](../adr/0013-measured-figures.md).
+
+### Shape models are radius grids
+
+A figure is a latitude/longitude grid of radii — `packages/rendering/src/shape.ts`
+holds the format, the decoder, the mesh builder and the generator, and
+`data/shapes/` holds twenty-five measured ones from the NASA Planetary Data
+System. The mesh is built in **Three.js's own `SphereGeometry` layout**, and that
+is load-bearing rather than incidental: every surface map in the project is
+equirectangular and was written for that sphere, so a grid mesh _is_ that sphere
+with the radii moved, and Phobos takes an albedo map through the same material as
+Mars — seam, poles and all.
+
+It buys three more things a mesh would not. Level of detail is **subsampling**,
+so a coarse tier is the fine one's own samples rather than a decimation with its
+own error and a body cannot change size when it crosses a tier. The **file is the
+data** — sixteen bytes of header and one `uint16` per sample, 65 KB for Phobos.
+And the **generated case and the measured case are the same case**: a body with
+no shipped model gets a field out of its own address seed on its measured
+half-extents, through the same builder, so there is one code path for "not a
+sphere" and it does not know which kind it is holding.
+
+What it cannot represent is an overhang, which is the cost and is measured
+rather than assumed — see the [catalog guide](../guides/catalogue.md#shape-models)
+for the volume check that refuses a model the format cannot hold.
+
+### Exposure, at both ends
+
+A star **stops down** as it fills the frame: a sun across the whole viewport is
+exposed for its surface, not for the scene it lights. A very dark body does the
+same thing in reverse. Bennu reflects 4.4% of the light that reaches it and
+Halley's nucleus 4% — darker than charcoal — and an eye that spends a minute
+looking at one from five hundred meters adapts to it, which a renderer with one
+exposure for the whole scene cannot.
+
+`adaptationFor` opens `albedoScale` toward a 0.12 target, scaled by how much of
+the frame the body covers, and returns **exactly 1 above 0.12 geometric albedo**
+— below Mercury at 0.142 and the Moon at 0.136, so no planet and no major moon
+ever sees anything but 1. It is applied as an _exposure_: the albedo is still the
+published one and the body is still the darkest thing in the frame.
 
 ### Rings
 
@@ -357,6 +413,12 @@ silhouette problem before it is a shading one — no amount of normal mapping hi
 a faceted limb, and the limb is exactly where the eye goes. Ring meshes are 768
 segments around, because a ring seen nearly edge-on is a straight line a thousand
 pixels long and any faceting shows as a scalloped edge.
+
+Figures are tiered the same way but one step coarser across the board, and by
+**stride** rather than by segment count: a shape mesh at 128 columns already has
+its silhouette right, because the silhouette is where its samples _are_. The
+reason a sphere needs 512 is that a sphere's error is entirely in its limb, and
+a figure does not have that problem to begin with.
 
 ### The haze is not the atmosphere
 
@@ -488,6 +550,7 @@ flowchart TB
 
 ## Related
 
+- [ADR-0013](../adr/0013-measured-figures.md) — why a body that gravity never rounded off carries a radius grid rather than a sphere
 - [Coordinates](coordinates.md) — what render space is derived from
 - [Streaming](streaming.md) — how terrain patches are chosen and reconciled
 - [Time](time.md) — where the interpolation alpha comes from

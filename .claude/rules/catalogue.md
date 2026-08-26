@@ -29,4 +29,11 @@ catalog })`. A singleton would make the catalog _version_ a hidden input, which
   rebuilding it. `pnpm catalog:report` prints the counts without writing; `catalog:build`
   writes; `--refresh` re-downloads rather than reusing `.data/raw`.
 - **`data/catalog/manifest.json` records the digest of exactly what was used.** A rebuild
-  that changes the counts is a deliberate act — say what moved and why.
+  that changes the counts is a deliberate act — say what moved and why. `data/textures/`,
+  `data/shapes/` and `data/reference/` follow the same contract with their own manifests.
+- **A shape model that the format cannot hold must fail the build, not ship rounded off.**
+  A radius grid is single-valued per direction, so it needs a star-shaped surface;
+  `shapes.ts` measures the reconstructed volume against the source mesh's and refuses
+  past ±6%. Every current model lands between 99.8% and 100.6%. Never widen that
+  tolerance to make a body fit — a shape nobody can check is the one thing this pipeline
+  exists to prevent.
