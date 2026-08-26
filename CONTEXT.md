@@ -4095,6 +4095,41 @@ pages; process rules are deliberately not in that table.
 The ADR count was hardcoded in the `adr` skill and in `/ship`, and went stale
 on every ADR. Both read the directory now.
 
+### What the audit caught, and one bug worth a name
+
+`invariant-auditor` and `docs-curator` ran against the branch while CI worked.
+Between them they found five things a green `pnpm check` cannot see, because
+none of them is a link, a type or a test.
+
+The one worth remembering is **reparenting by insertion**. `### Avoid` was a
+subsection of `## Voice` in `docs/STYLE.md`. Three new `##` sections landed
+between them, and nesting alone moved that block under `## Commit messages` —
+so a code invariant ("interface copy is title case in source; CSS decides what
+is shouted") ended up filed under commit-message guidance. **Not one line of the
+moved block appears in the diff.** Markdown nesting is positional, so a heading
+can change meaning without changing text, and neither review nor Prettier nor a
+link checker has any signal to fire on. Adding a `##` to a page means checking
+what `###` now sits under it.
+
+The other four are ordinary drift, each introduced by this branch:
+
+| Claim                                               | Reality                                               |
+| --------------------------------------------------- | ----------------------------------------------------- |
+| Every rule is a path-scoped mirror of `AGENTS.md`   | Two carry no `paths:` and mirror other pages          |
+| Unscoped rules are held to a tighter length limit   | `writing.md` was 33 lines against a ~30 cap           |
+| Force-push and push to `main` are "denied outright" | Four matchers; `git push -u origin HEAD` matches none |
+| `SessionStart` states the branch                    | Silent in a linked worktree, by design                |
+
+The deny-list one is the pattern to watch: a rule that asserts a mechanical
+guarantee stronger than the mechanism gives makes an agent _less_ careful,
+because it stops checking what it believes is enforced. `git push:*` in `ask` is
+what actually catches the push `/ship` runs.
+
+`git commit` moving from ask to allow leaves "never commit to `main`" with no
+mechanical enforcement at all. The main checkout sits on `main`, and the
+`SessionStart` report does run there — so the guard is a branch line in context
+and a rule that reads it. That is deliberate and it is behavioral.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).
