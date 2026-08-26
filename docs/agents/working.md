@@ -15,6 +15,11 @@ checkout, and states the branch, the uncommitted count, and how far ahead of
 [`.claude/rules/branching.md`](../../.claude/rules/branching.md), which carries
 no `paths:` and so is in context from the first turn.
 
+In a linked worktree the hook installs dependencies and says nothing about the
+branch. A worktree is already on a branch cut for one change, so the report
+would be noise and any suggestion to rebranch would undo the isolation it
+exists for.
+
 **A dirty working tree is someone else's work.** Ask what to do with it —
 continue on the branch, stash it, commit it as it stands — rather than building
 on top of it or cleaning it up. Uncommitted changes are the one repository state

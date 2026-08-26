@@ -49,7 +49,9 @@ Most of `.claude/` runs without being asked.
   the branch, the uncommitted count, and the distance from `origin/main`. It
   does not create a branch — that happens at the first commit, when the work
   has a name. A dirty tree at session start is a question for you, not a
-  decision for the agent.
+  decision for the agent. In a linked worktree it reports nothing about the
+  branch: that tree is already on one cut for a single change, and saying "you
+  are not on main" to it is noise.
 - **The Stop hook runs the gate.** After a turn that touched a
   `.ts` / `.tsx` / `.mjs` / `.json` file, `graph → lint → typecheck → test`
   runs. A failure comes back as work to do, not a finished task. It blocks at
