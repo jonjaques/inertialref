@@ -8,10 +8,12 @@ import { UV, type UniverseVector } from '@inertialref/spatial'
 import type { World } from '@inertialref/simulation'
 import {
   type Body,
+  type BodyKind,
   type BodyProvenance,
   bodyFrameId,
   type EntityId,
   formatAddress,
+  formatSpectralType,
   type GalaxyId,
   isLandable,
   parseAddress,
@@ -71,6 +73,30 @@ export interface TravelTarget {
    * four light years the other way rendered identically.
    */
   readonly provenance: BodyProvenance
+  /**
+   * The body's own class, or null on a system row.
+   *
+   * Structured rather than left inside `detail`, because two readers now branch
+   * on it and both were reduced to parsing a sentence: the catalog draws a glyph
+   * per class — a comet is not a circle — and its filter chips select by it.
+   * `detail` is a line of prose for a human and must stay free to be rewritten.
+   */
+  readonly bodyKind: BodyKind | null
+  /** Spectral type on a system row, null on a body. */
+  readonly spectralType: string | null
+  /** Equatorial radius, meters. A star's own on a system row. */
+  readonly radius: Meters
+  /** Semi-major axis about its primary, meters. 0 on a system row. */
+  readonly semiMajorAxis: Meters
+  /** How many bodies go round this one. Planets for a star, moons for a planet. */
+  readonly children: number
+  /**
+   * The row this one hangs off — a body's primary, a system's own address.
+   *
+   * What makes the flat listing a tree the panel can fold. Sol is 129 bodies
+   * and a list that cannot be collapsed is a list nobody scrolls twice.
+   */
+  readonly parent: string | null
 }
 
 export interface TravelTargetOptions {
@@ -115,6 +141,7 @@ export function travelTargets(
       name: string
       position: UniverseVector
       detail: string
+      spectralType: string
       provenance: BodyProvenance
     }
   >()
@@ -128,6 +155,7 @@ export function travelTargets(
       name: stub.name,
       position: stub.position,
       detail: `${stub.spectralType} · ${stub.solarMasses.toFixed(2)} M☉`,
+      spectralType: stub.spectralType,
       // The domain word, not the storage boolean. `catalogued` says which table
       // the row came out of; `observed` says somebody pointed a telescope at it,
       // which is what the listing is actually claiming.
@@ -139,6 +167,7 @@ export function travelTargets(
       name: system.name,
       position: system.position,
       detail: `${system.star.spectralType} · ${planetCount(system)} planets`,
+      spectralType: system.star.spectralType,
       // A loaded system may be outside the survey radius, so this cannot be
       // inherited from the sweep above. Asked of the catalog directly, which is
       // the same question `catalogStub` answers with `catalogued: true` — and
@@ -170,6 +199,12 @@ export function travelTargets(
       landable: false,
       loaded: system !== undefined,
       provenance: star.provenance,
+      bodyKind: null,
+      spectralType: star.spectralType,
+      radius: system?.star.radius ?? 0,
+      semiMajorAxis: 0,
+      children: system === undefined ? 0 : planetCount(system),
+      parent: null,
     })
     if (system === undefined) continue
 
@@ -198,6 +233,18 @@ export function travelTargets(
         // The body's own, not its system's: Sol is observed and Ganymede is
         // observed, but every moon of a catalog star is currently a projection.
         provenance: body.provenance,
+        bodyKind: body.kind,
+        spectralType: null,
+        radius: body.radius,
+        semiMajorAxis: body.elements.semiMajorAxis,
+        children: body.moons.length,
+        parent:
+          body.address.kind === 'body' && body.address.body.length > 1
+            ? formatAddress({
+                ...body.address,
+                body: body.address.body.slice(0, -1),
+              })
+            : `g:${world.galaxy}/s:${id}`,
       })
     }
   }
@@ -237,9 +284,18 @@ export function searchTargets(
       name: star.designations[0]?.text ?? star.id,
       system: star.id,
       depth: 0,
+      /*
+       * `formatSpectralType`, not the object.
+       *
+       * `CatalogStar.spectralType` is the *parsed* type — a record of class,
+       * subclass and luminosity — and interpolating it wrote `[object Object]`
+       * into every search result for a star that was not loaded, which is most
+       * of them. The loaded branch reads `system.star.spectralType`, which is
+       * the string, and the two looked identical in the source.
+       */
       detail:
         system === undefined
-          ? `${star.spectralType} · ${star.physical.solarMasses.toFixed(2)} M☉`
+          ? `${formatSpectralType(star.spectralType)} · ${star.physical.solarMasses.toFixed(2)} M☉`
           : `${system.star.spectralType} · ${planetCount(system)} planets`,
       distance,
       distanceText: formatDistance(distance),
@@ -248,6 +304,12 @@ export function searchTargets(
       // Everything the catalog holds is a star somebody has observed. That is
       // what being in it means.
       provenance: 'observed' as const,
+      bodyKind: null,
+      spectralType: formatSpectralType(star.spectralType),
+      radius: system?.star.radius ?? 0,
+      semiMajorAxis: 0,
+      children: system === undefined ? star.planets.length : planetCount(system),
+      parent: null,
     }
   })
 }
