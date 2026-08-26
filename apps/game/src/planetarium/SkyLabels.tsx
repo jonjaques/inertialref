@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { PerspectiveCamera } from 'three/webgpu'
 import type { GameEngine } from '../engine/GameEngine.ts'
+import type { LabelDensity } from './layers.ts'
 import { declutter } from './pick.ts'
 import { projectScene } from './project.ts'
 
@@ -29,8 +30,32 @@ import { projectScene } from './project.ts'
  * positioned divs at display rate would be all diffing and no picture.
  */
 
-/** How many names at once. More than this and the sky is a list, not a sky. */
-const MAX_LABELS = 18
+/**
+ * How many names at once, at each of the three densities.
+ *
+ * More than the top of this range and the sky is a list rather than a sky —
+ * which is the whole reason the declutter is greedy and the cap exists. It is a
+ * *choice* rather than one constant because the right answer genuinely differs
+ * by what is on screen: a single planet with two moons wants every name it can
+ * get, and a system seen from outside wants the eight that matter. 8 / 18 / 40.
+ */
+const DENSITY: Readonly<Record<LabelDensity, number>> = {
+  sparse: 8,
+  normal: 18,
+  dense: 40,
+}
+
+/**
+ * The classes a name is not worth spending a slot on when the sky is crowded.
+ *
+ * Sol carries ninety-two asteroids and comets. The declutter is greedy by
+ * *screen size*, so from far enough out every one of them is the same handful
+ * of pixels as Mercury and they take the slots in whatever order the scene
+ * happens to list them — a sky captioned with six provisional designations and
+ * no planets. A dwarf is not in here for the same reason its orbit is drawn:
+ * Pluto, Ceres and Eris are what a reader is looking for.
+ */
+const RUBBLE = new Set(['asteroid', 'comet'])
 
 /** Minimum separation before one of a pair is dropped, in CSS pixels. */
 const SPACING = { x: 96, y: 18 }
@@ -72,10 +97,16 @@ interface LabelNode {
 export function SkyLabels({
   engine,
   enabled,
+  density,
+  minor,
   target,
 }: {
   engine: GameEngine
   enabled: boolean
+  /** How many names the sky will carry at once. */
+  density: LabelDensity
+  /** Whether asteroids and comets are worth a slot. */
+  minor: boolean
   target: string | null
 }) {
   /*
@@ -112,13 +143,14 @@ export function SkyLabels({
             candidate.x < size.width &&
             candidate.y > 0 &&
             candidate.y < size.height &&
-            candidate.name.length > 0,
+            candidate.name.length > 0 &&
+            (minor || !RUBBLE.has(candidate.kind)),
         )
         // Largest first, so the priority the declutter is greedy about is
         // "what dominates the frame" — which is what a person is looking at.
         .sort((a, b) => b.radius - a.radius)
       setNames(
-        declutter(candidates, SPACING, MAX_LABELS).map((candidate) => ({
+        declutter(candidates, SPACING, DENSITY[density]).map((candidate) => ({
           address: candidate.address,
           name: candidate.name,
         })),
@@ -135,7 +167,7 @@ export function SkyLabels({
      */
     const timer = window.setInterval(refresh, 250)
     return () => window.clearInterval(timer)
-  }, [engine, enabled])
+  }, [engine, enabled, density, minor])
 
   useEffect(() => {
     if (!enabled) return

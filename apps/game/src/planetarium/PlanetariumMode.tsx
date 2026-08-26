@@ -4,13 +4,18 @@ import { useSearchParams } from 'react-router'
 import type { PerspectiveCamera } from 'three/webgpu'
 import { DEFAULT_FILL } from '@inertialref/devtools'
 import type { GameEngine } from '../engine/GameEngine.ts'
-import type { StanceHandle } from '../engine/presentation.ts'
+import type { OrbitScope, StanceHandle } from '../engine/presentation.ts'
 import { Workspace } from '../dock/Workspace.tsx'
 import type { DevWorkspace } from '../dock/workspace.ts'
-import { isBoolean, usePersistentState } from '../hud/panelState.ts'
+import {
+  isBoolean,
+  numberWithin,
+  usePersistentState,
+} from '../hud/panelState.ts'
 import { QUERY } from '../pages/paths.ts'
 import type { PlanetariumContext } from './context.ts'
 import { planetariumPanels } from './registry.tsx'
+import { isLabelDensity, isOrbitScope, type LabelDensity } from './layers.ts'
 import { pick } from './pick.ts'
 import { projectScene } from './project.ts'
 import { SkyLabels } from './SkyLabels.tsx'
@@ -64,6 +69,34 @@ export function PlanetariumMode({
     false,
     isBoolean,
   )
+  const [labelDensity, setLabelDensity] = usePersistentState(
+    'planetarium.labelDensity',
+    'normal' as LabelDensity,
+    isLabelDensity,
+  )
+  const [labelMinor, setLabelMinor] = usePersistentState(
+    'planetarium.labelMinor',
+    false,
+    isBoolean,
+  )
+  const [orbitScope, setOrbitScope] = usePersistentState(
+    'planetarium.orbitScope',
+    'context' as OrbitScope,
+    isOrbitScope,
+  )
+  /*
+   * Glare starts where the flight modes have it, which is all the way up.
+   *
+   * `numberWithin` rather than a bare number check: a stored value reaches
+   * `flareArtifacts` and from there the composite, and `panelState.ts` is
+   * explicit that a value from a build that meant something else is not a value
+   * somebody nearly chose.
+   */
+  const [flare, setFlare] = usePersistentState(
+    'planetarium.flare',
+    1,
+    numberWithin(0, 1),
+  )
   const [notice, setNotice] = useState<string | null>(null)
 
   /*
@@ -93,9 +126,11 @@ export function PlanetariumMode({
     stance.current?.update({
       showShip: ship,
       showOrbits: orbits,
+      orbitScope,
+      flareArtifacts: flare,
       observatory: true,
     })
-  }, [ship, orbits])
+  }, [ship, orbits, orbitScope, flare])
 
   const focus = useCallback(
     (address: string, options: { url?: boolean } = {}) => {
@@ -149,10 +184,18 @@ export function PlanetariumMode({
     focus,
     labels,
     onLabels: setLabels,
+    labelDensity,
+    onLabelDensity: setLabelDensity,
+    labelMinor,
+    onLabelMinor: setLabelMinor,
     orbits,
     onOrbits: setOrbits,
+    orbitScope,
+    onOrbitScope: setOrbitScope,
     ship,
     onShip: setShip,
+    flare,
+    onFlare: setFlare,
     fov,
     onFov,
   } satisfies PlanetariumContext)
@@ -219,7 +262,13 @@ export function PlanetariumMode({
         aria-hidden
       />
 
-      <SkyLabels engine={engine} enabled={labels} target={target} />
+      <SkyLabels
+        engine={engine}
+        enabled={labels}
+        density={labelDensity}
+        minor={labelMinor}
+        target={target}
+      />
 
       {/* The aiming point. Small, dim and always there: it is the answer to
           "what will a click hit", and in a mode with no ship it is the only

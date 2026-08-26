@@ -12,6 +12,18 @@
 export interface PickCandidate {
   readonly address: string
   readonly name: string
+  /**
+   * The body's class, or `star`.
+   *
+   * Carried so the label layer can thin by *what a thing is* rather than only
+   * by where it lands. Sol has ninety-two asteroids and comets and eighteen
+   * label slots, and the declutter is greedy by screen size — so from far
+   * enough out the rubble is the same handful of pixels as everything else and
+   * takes the slots at random. `pick` itself never reads this: a click is aimed
+   * at a position, and refusing to select a rock because a switch is off would
+   * make the sky lie about what is clickable.
+   */
+  readonly kind: string
   /** Screen position, CSS pixels, origin top-left. */
   readonly x: number
   readonly y: number

@@ -59,6 +59,7 @@ import {
 } from '../cinema/session.ts'
 import {
   createPresentationStack,
+  type OrbitScope,
   type PresentationStack,
 } from './presentation.ts'
 import { TerrainStreamer, type TerrainState } from './terrainStreamer.ts'
@@ -333,6 +334,8 @@ export class GameEngine implements PresentationHost {
    * See `orbitPaths.ts`, which carries the anchor for exactly this.
    */
   showOrbits = false
+  /** Whether a trace is drawn for everything, or only for the subject's context. */
+  orbitScope: OrbitScope = 'context'
   orbits: readonly OrbitPath[] = []
   #orbitsWorld = -1
   #orbitsSystems = ''
@@ -401,6 +404,7 @@ export class GameEngine implements PresentationHost {
     this.presentation = createPresentationStack((stance) => {
       this.showShip = stance.showShip
       this.showOrbits = stance.showOrbits
+      this.orbitScope = stance.orbitScope
       this.flareArtifacts = stance.flareArtifacts
       // The observatory's *lifetime*, not the camera: a layer that was holding
       // a target releases it on the way out, and the camera falls back to the
@@ -697,7 +701,9 @@ export class GameEngine implements PresentationHost {
      */
     const focus = this.harness.observatory.target?.frame ?? null
     const subjectAddress = this.harness.observatory.target?.address ?? null
-    const key = `${systems.map((system) => system.id).join(',')}|${focus ?? ''}|${subjectAddress ?? ''}`
+    // The scope is part of the key: it decides which of `all` survives, so a
+    // panel switching it has to rebuild exactly as loading a system does.
+    const key = `${systems.map((system) => system.id).join(',')}|${focus ?? ''}|${subjectAddress ?? ''}|${this.orbitScope}`
     if (
       key === this.#orbitsSystems &&
       this.#orbitsWorld === this.#starFieldWorld
@@ -730,9 +736,14 @@ export class GameEngine implements PresentationHost {
      * The nine dwarf planets stay too — `isDebris` is asteroids and comets
      * only. Hiding them cost the one trace a planetarium is most often opened
      * for: with Neptune selected, where Pluto's orbit crosses it.
+     *
+     * `orbitScope: 'all'` is the deliberate way to ask for the cage. From
+     * outside a system it is the picture — the whole architecture of the place
+     * at once — and from inside it is a fan of edge-on lines. Which is why it
+     * is a switch a reader throws rather than the default.
      */
     this.orbits =
-      focus === null
+      focus === null || this.orbitScope === 'all'
         ? all
         : all.filter(
             (path) =>
