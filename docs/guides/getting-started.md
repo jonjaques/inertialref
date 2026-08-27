@@ -17,6 +17,10 @@ also how you get the offline path deliberately: with no Worker, the client
 correctly reports `no server`, and that is the normal case for a game whose
 universe is derived rather than fetched.
 
+From VS Code or Cursor, **Run and Debug → Launch Browser** does the same start
+and attaches the debugger. Attach/Launch Node target the headless runner.
+[Development](development.md#debugging) has the four configurations.
+
 The client opens on Earth, three-quarter lit, with the ship — a CC-BY
 USS Enterprise-D hull, or the debug cone while it loads — framed in the
 foreground of a Solar System built from measurements rather than from a seed.

@@ -20,6 +20,10 @@ Cursor discovers `.claude/skills/*/SKILL.md` and `.claude/agents/*.md`
 natively. Do not copy those into `.cursor/`: duplicate names make discovery
 ambiguous and create two files to maintain.
 
+Debug configurations live in [`.vscode/`](../.vscode/README.md), which both
+Cursor and VS Code read. Launch Browser starts the game; Launch Node starts
+the headless runner. There is no Cursor-specific copy.
+
 The Dockerfile is ordinary OCI input. OrbStack can build it on macOS through
 its Docker-compatible CLI, while Cursor Cloud builds and runs it on Linux.
 OrbStack itself is not installed in the Cloud VM and no nested Docker daemon is

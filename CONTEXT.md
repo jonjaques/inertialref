@@ -4278,6 +4278,37 @@ Label density and the minor-body filter did _not_ become stance fields, and the
 line is worth stating: they are read by a DOM layer that already owns its own
 projection pass, not by `GameEngine.#step`.
 
+## Source maps in every mode, and four editor debug configurations (27 Aug 2026)
+
+Vite's defaults are JS maps in `pnpm dev` only, nothing for CSS, and
+`build.sourcemap: false`. A production deploy — and `pnpm preview` — therefore
+shipped minified bundles the debugger could not map, while the editor's launch
+configs looked as if they could. `hidden` would have written the `.map` files
+and omitted the `sourceMappingURL` comment, so DevTools would never fetch them:
+a deployed site that looked debuggable from the asset list and was not.
+
+`build.sourcemap: true` and `css.devSourcemap: true` are the switches. A
+writeBundle check fails the production build if any hashed JS asset —
+including the universe worker — lacks the comment or its sibling `.map`.
+Copied `public/` files are not compiled and are not in `assets/`. Production
+CSS has no map: Vite 8 minifies it with lightningcss and does not expose
+`sourceMap` on those options, so the gate does not claim otherwise. The
+service worker lets `.map` requests through: they sit next to hashed chunks,
+so `/assets/` would otherwise cache-first megabytes of original source in
+every player's Cache Storage, and DevTools asks the network when a breakpoint
+needs them.
+
+Wrangler's inspector defaults to 9229, which is Node's `--inspect` default.
+`pnpm sim` now binds that port; Attach Node is aimed at it. workerd listens on
+9230 so the two can run together. `upload_source_maps` is the Worker script
+half — client maps ride with the asset store.
+
+Four configurations in `.vscode/launch.json`, shared by VS Code and Cursor.
+Launch Browser is first, so the play button starts the game: a background task
+runs `node scripts/dev.mjs --ensure`, which reuses 5173 if something is already
+answering and does not kill a server it did not start. Launch Node runs the
+headless runner. Attach Browser is Chrome on 9222.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

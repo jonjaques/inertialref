@@ -18,6 +18,10 @@
  *     pnpm dev:client just vite — raw stdio, so its `r`/`o`/`q` keys work
  *     pnpm dev:server just wrangler
  *     pnpm preview    the built bundle served by the real Worker, on 8787
+ *     node scripts/dev.mjs --ensure
+ *                     the editor's Launch Browser task: reuse 5173 if it is
+ *                     already up, otherwise this same two-child start. The
+ *                     editor owns the lifetime either way.
  *
  * `preview` is the one that answers "as close to production as possible": the
  * same workerd, the same static asset store, the same `run_worker_first` and
@@ -28,9 +32,12 @@
  * `preview`.
  */
 import { spawn } from 'node:child_process'
+import { createConnection } from 'node:net'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url))
+const ENSURE = process.argv.includes('--ensure')
+const CLIENT_PORT = 5173
 
 const ESC = '\u001b'
 const RESET = `${ESC}[0m`
@@ -55,6 +62,43 @@ const CHILDREN = [
     argv: ['--filter', '@inertialref/server', 'run', 'dev'],
   },
 ]
+
+/*
+ * `--inspect` is for `pnpm sim` (port 9229). Wrangler already opens workerd's
+ * inspector on 9230. A leftover `NODE_OPTIONS=--inspect` inherited into both
+ * children would fight itself for 9229, and fight the headless runner too.
+ */
+function withoutInspect(env) {
+  const current = env.NODE_OPTIONS ?? ''
+  const cleaned = current
+    .replace(/(^|\s)--inspect(?:-brk)?(?:=\S+)?(?=\s|$)/g, ' ')
+    .trim()
+  const next = { ...env, FORCE_COLOR: '1' }
+  if (cleaned === '') delete next.NODE_OPTIONS
+  else next.NODE_OPTIONS = cleaned
+  return next
+}
+
+function listening(port) {
+  return new Promise((resolve) => {
+    const socket = createConnection({ port, host: '127.0.0.1' }, () => {
+      socket.end()
+      resolve(true)
+    })
+    socket.on('error', () => resolve(false))
+  })
+}
+
+if (ENSURE && (await listening(CLIENT_PORT))) {
+  // Match the Vite ready line so the editor's problem matcher unblocks,
+  // then hold until it stops the task. Do not kill a server we did not start.
+  console.log(`Local: http://localhost:${CLIENT_PORT}/`)
+  await new Promise((resolve) => {
+    const stop = () => resolve(undefined)
+    for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, stop)
+  })
+  process.exit(0)
+}
 
 /** One prefixed writer per stream, holding a partial line between chunks. */
 function prefixer(label, colour, stream) {
@@ -84,7 +128,7 @@ for (const { label, colour, argv } of CHILDREN) {
   const child = spawn('pnpm', argv, {
     cwd: ROOT,
     stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env, FORCE_COLOR: '1' },
+    env: withoutInspect(process.env),
   })
   /*
    * Character mode, not Buffer mode, and it is not a formality.
