@@ -1,5 +1,5 @@
 import { formatDistance } from '@inertialref/shared'
-import { compassDegrees, horizonPitch } from '@inertialref/rendering'
+import { compassDegrees, MIN_STANCE_HEIGHT } from '@inertialref/rendering'
 import { Slider } from '@/components/ui/slider'
 import { Action } from '../hud/Action.tsx'
 import { Section } from '../hud/Section.tsx'
@@ -19,11 +19,11 @@ import { useSurveySites } from './useSurveySites.ts'
  * never be *inspected*. The only way to look at a mountain was to fly a ship at
  * it, which is a canonical change, a physics problem and several minutes.
  *
- * **Not on the Object panel, though the plan first put it there.** That panel is
- * the record — mass, orbit, air, light — and `.claude/rules/record.md` is
- * explicit that nothing about the camera belongs on it. Range, fill and the
- * orbit angles were moved off it once already, for this reason. Descending is a
- * camera act, so it is a camera panel.
+ * **Not on the Object panel.** That panel is the record — mass, orbit, air,
+ * light — and `.claude/rules/record.md` is explicit that nothing about the
+ * camera belongs on it; range, fill and the orbit angles live in the Camera
+ * instrument for the same reason. Descending is a camera act, so it is a camera
+ * panel.
  *
  * Three controls and they are three different questions. *Where* on the body,
  * which is a list because a seeded world has no place names and typing
@@ -48,7 +48,6 @@ export function SurfacePanel({ engine, target }: PlanetariumContext) {
   const stance = useEngine(
     useShallow((snapshot) => ({
       kind: snapshot.observer?.target?.kind ?? null,
-      radius: snapshot.observer?.target?.radius ?? 0,
       standing: snapshot.observer?.surface != null,
       site: snapshot.observer?.surface?.site ?? null,
       scrub: snapshot.observer?.surface?.scrub ?? 1,
@@ -78,14 +77,28 @@ export function SurfacePanel({ engine, target }: PlanetariumContext) {
     )
   }
 
+  /*
+   * `observatory.standing`, never the sampled `stance.standing`.
+   *
+   * The snapshot is republished at `PANEL_HZ`, so for up to 125 ms after a
+   * press it still says "in orbit". A second press inside that window took the
+   * arrival branch again and re-stood on `sites[0]`, which is always the
+   * summit — and this phase's own tests pin that a summit above the fade line
+   * draws nothing. The observatory answers the same question synchronously.
+   */
   const visit = (site: string): void => {
+    if (observatory.standing) {
+      // Already down here: move the stance and keep the height, the heading and
+      // the tilt. `stand` reads an absent heading as north and an absent pitch
+      // as the horizon, so routing every site press through it would reset both
+      // controls beside it on every press.
+      observatory.moveTo(site)
+      return
+    }
     // Through the harness rather than the observatory, so the console verb and
     // this button are the same call and cannot drift on the degrees/radians
     // boundary. `ir.visit` takes degrees; the arm below it takes radians.
-    engine.harness.visit(undefined, {
-      site,
-      height: stance.standing ? stance.height : 2,
-    })
+    engine.harness.visit(undefined, { site, height: MIN_STANCE_HEIGHT })
   }
 
   return (
@@ -173,16 +186,12 @@ export function SurfacePanel({ engine, target }: PlanetariumContext) {
                 title={rung.why}
                 tone={rung.label === 'Ground' ? 'primary' : 'normal'}
                 onClick={() => {
-                  if (!stance.standing) {
-                    visit(stance.site ?? sites[0]?.id ?? 'summit')
-                  }
+                  if (!observatory.standing) visit(sites[0]?.id ?? 'summit')
                   // `null` is the top of the band, which depends on the body:
                   // the ceiling is the orbit arm's floor, so it is 3,186 km at
                   // Earth and 118 km at Miranda.
-                  observatory.setStanceScrub(rung.height === null ? 1 : 0)
-                  if (rung.height !== null) {
-                    observatory.setStanceHeight(rung.height)
-                  }
+                  if (rung.height === null) observatory.setStanceScrub(1)
+                  else observatory.setStanceHeight(rung.height)
                 }}
               />
             ))}
@@ -244,10 +253,15 @@ export function SurfacePanel({ engine, target }: PlanetariumContext) {
               // is `acos(r / (r + h))`, which is 0.045° from 2 m on an
               // Earth-sized body and 19.79° from 400 km. A control that levelled
               // to zero would aim at empty sky from the top of the descent.
+              //
+              // Solved in the arm rather than here, from the height the stance
+              // actually holds: the height this panel can see is up to 125 ms
+              // old, and `setStanceHeight` decides whether to keep tracking the
+              // horizon by comparing against the dip the *current* height
+              // implies — so a pitch solved from a stale height stops the
+              // tracking for the rest of the descent.
               title="Put the horizon across the middle of the frame"
-              onClick={() =>
-                observatory.setPitch(horizonPitch(stance.radius, stance.height))
-              }
+              onClick={() => observatory.levelToHorizon()}
             />
             <Action
               label="Leave"

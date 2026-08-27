@@ -101,8 +101,8 @@ export class TerrainStreamer {
    *
    * `state()` maps every patch through `patchPlacement` — render-space
    * arithmetic these counters throw away immediately — and the renderer already
-   * calls it once a frame. `ir.terrain()` asking through `state()` paid for a
-   * second complete placement pass it never read.
+   * calls it once a frame. Answering `ir.terrain()` through `state()` would be
+   * a second complete placement pass whose only output is a count.
    */
   summary(): {
     readonly bodyAddress: string | null
@@ -219,7 +219,10 @@ export class TerrainStreamer {
     // measurement rather than a manual fly-down. Nothing about the rule changed
     // when it moved.
     const window = terrainWindow(body.radius, distance, direction)
+    // Both readings from the one call, so the fade and the patches can never
+    // describe different level caps.
     this.#level = window.level
+    this.#opacity = window.opacity
 
     const wanted = new Set<string>()
     for (const region of window.regions) {
@@ -316,5 +319,9 @@ export class TerrainStreamer {
     this.#bodyAddress = null
     this.#pose = null
     this.#opacity = 0
+    // The level goes too. It is a property of a camera over a body, and there
+    // is neither once this returns — `ir.terrain()` reporting `level: 11`
+    // beside `body: null` is a number that describes nowhere.
+    this.#level = 0
   }
 }

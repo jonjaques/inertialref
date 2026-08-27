@@ -44,6 +44,17 @@ export function useSurveySites(
     (snapshot) => snapshot.observer?.target?.address ?? null,
   )
   const address = looking ?? requested
+  /*
+   * The seed, because an address is not enough to identify a world.
+   *
+   * A save load replaces the world underneath the same `engine` object and the
+   * same address string, so neither of the other two dependencies moves and the
+   * effect never re-fires — leaving six rows naming the previous universe's
+   * summit, each of which sends the camera to a latitude derived from a world
+   * that no longer exists. `surveySites` keys its memo on the surface seed, so
+   * the right list is one call away; it is simply never asked for.
+   */
+  const seed = useEngine((snapshot) => snapshot.status?.world.seed ?? null)
 
   /*
    * The list and the address it is a list *of*, carried together.
@@ -71,7 +82,12 @@ export function useSurveySites(
       // would take the whole overlay through the error boundary.
       setBuilt({ of: address, sites: [] })
     }
-  }, [engine, address])
+  }, [engine, address, seed])
 
+  // `null` for a null address too, and not `[]`. There is no body to have no
+  // ground: drawing "no ground here yet — pick a solid body" for a session that
+  // is looking at nothing is a claim about a body that does not exist, which is
+  // the distinction the docstring above says this hook exists to keep.
+  if (address === null) return null
   return built.of === address ? built.sites : null
 }

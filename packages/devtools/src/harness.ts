@@ -34,6 +34,7 @@ import {
   systemFrameId,
   systemId,
   type SystemId,
+  hasSolidSurface,
   surveySites,
   systemsWithin,
   walkBodies,
@@ -1089,6 +1090,11 @@ export class GameHarness {
    * regeneration by construction: "the highest ground on this world" is still
    * the interesting place after the generator changes, and a latitude written
    * down last month is not. See `surveySites`.
+   *
+   * Empty on a giant, the same answer `Observatory.sites` gives. `surveySites`
+   * derives from `body.surface`, which every body carries — Jupiter included —
+   * so without the filter here the Surface panel draws six clickable cards for
+   * ground that `visit` refuses, and each of them throws out of an onClick.
    */
   sites(address?: string): readonly {
     id: string
@@ -1100,6 +1106,7 @@ export class GameHarness {
     region: string
   }[] {
     const body = this.#requireBody(address)
+    if (!hasSolidSurface(body)) return []
     return surveySites(body).map((site) => ({
       id: site.id,
       name: site.name,
@@ -1175,9 +1182,33 @@ export class GameHarness {
    */
   descend(
     address?: string,
-    options: DescentOptions = {},
+    options: Omit<DescentOptions, 'latitude' | 'longitude'> & {
+      /**
+       * Degrees, like every other verb on this object.
+       *
+       * `DescentOptions` below the harness is radians, and `Radians` is a bare
+       * `number` — so a latitude copied out of `ir.sites()`, which prints
+       * degrees, was read as radians and described ground 2,578° away with
+       * nothing to catch it. `visit` converts at exactly this boundary and this
+       * is the same boundary.
+       */
+      readonly latitude?: number
+      readonly longitude?: number
+    } = {},
   ): DescentReport & { readonly text: string } {
-    const report = simulateDescent(this.#requireBody(address), options)
+    const body = this.#requireBody(address)
+    if (!hasSolidSurface(body)) {
+      throw new Error(`${body.name} has no surface to descend to`)
+    }
+    const report = simulateDescent(body, {
+      ...options,
+      ...(options.latitude === undefined
+        ? {}
+        : { latitude: (options.latitude * Math.PI) / 180 }),
+      ...(options.longitude === undefined
+        ? {}
+        : { longitude: (options.longitude * Math.PI) / 180 }),
+    })
     const text = summarizeDescent(report)
     log.info('descent simulated', {
       body: report.body,
@@ -1365,14 +1396,34 @@ export class GameHarness {
    * then whatever the planetarium is looking at, then the body the ship is
    * inside. `ir.sites()` with no argument answers about the thing on screen,
    * which is the only reading anybody means.
+   *
+   * Through `resolveDestination`, the same resolver `look`, `goTo`, `orbit`,
+   * `shot` and `visit` use, so `SOL`, `b:2` and `g:milky-way/s:SOL/b:2` mean
+   * here what they mean there. `parseAddress` alone accepts only the
+   * galaxy-qualified form, which made these two verbs the only ones in the
+   * console with their own address vocabulary.
+   *
+   * The planetarium's target is skipped when it is a star, rather than throwing
+   * on it: a system address is not a body, so the third fallback is what the
+   * caller meant. Without that the ship's body was unreachable whenever the
+   * camera happened to be holding a sun.
    */
   #requireBody(address?: string): Body {
+    const looking = this.observatory.target
     const text =
-      address ?? this.observatory.target?.address ?? this.#currentBodyAddress()
-    const parsed = parseAddress(text)
-    if (parsed.kind !== 'body') throw new Error(`${text} is not a body address`)
-    const system = this.world.loadSystem(parsed.system)
-    const body = findBody(system, parsed.body)
+      address ??
+      (looking !== null && looking.kind !== 'star'
+        ? looking.address
+        : this.#currentBodyAddress())
+    const resolved = resolveDestination(
+      text,
+      this.world.galaxy,
+      currentSystemOf(this.world, this.#host.player()),
+    )
+    if (resolved.kind !== 'body' || resolved.address.kind !== 'body')
+      throw new Error(`${text} is not a body address`)
+    const system = this.world.loadSystem(resolved.system)
+    const body = findBody(system, resolved.address.body)
     if (body === undefined) throw new Error(`No body at ${text}`)
     return body
   }

@@ -84,10 +84,9 @@ const { harness, system, target } = session
 console.log(
   `InertialRef headless — seed "${session.world.seedText}", ${system.name}, target ${target.name}`,
 )
-// The detail, not just the side effect. Every scenario has always returned one
-// — "circular orbit 300 km above b:0" — and the runner dropped it on the floor,
-// which is why `--scenario descent`, whose whole output *is* the detail, came
-// back silent.
+// The detail, not just the side effect. A scenario's return value is its
+// sentence — "circular orbit 300 km above b:0" — and for `--scenario descent`
+// the detail *is* the whole output, so dropping it leaves the runner silent.
 console.log((await harness.scenario(values.scenario ?? 'orbit')).detail)
 
 // After the scenario, not instead of it: a scenario sets up a situation and

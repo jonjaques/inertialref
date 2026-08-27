@@ -65,7 +65,10 @@ export function terrainWindow(
   direction: BodyFixedDirection,
   options: { readonly maxLevel?: number; readonly windowRadius?: number } = {},
 ): TerrainWindow {
-  const maxLevel = options.maxLevel ?? 12
+  // `maxLevel` is forwarded rather than defaulted here: `lod.ts` owns the cap,
+  // and a second `?? 12` in this file would be a copy that goes stale silently
+  // the first time the LOD rule moves it.
+  const { maxLevel } = options
   const ring = options.windowRadius ?? TERRAIN_WINDOW_RADIUS
   const level = terrainLevelFor(radius, distance, maxLevel)
   const centre = regionForDirection(direction, level)

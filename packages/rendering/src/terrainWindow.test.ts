@@ -46,9 +46,9 @@ const directions = fc
 
 describe('the terrain window', () => {
   it('reports exactly the level and opacity the LOD rule chooses', () => {
-    // Not a restatement of the implementation: the point is that pulling the
-    // rule out of the streamer did not change it, so the baseline this measures
-    // describes the build that shipped.
+    // Not a restatement of the implementation: the window and the LOD rule are
+    // one rule with one owner, and this is the assertion that keeps the baseline
+    // a measurement of what the streamer actually asks for.
     fc.assert(
       fc.property(
         radii,
