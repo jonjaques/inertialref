@@ -266,5 +266,4 @@ export class TerrainStreamer {
     this.#pose = null
     this.#opacity = 0
   }
-
 }

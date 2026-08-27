@@ -62,6 +62,6 @@ export default defineConfig({
      * the call site with their own reason.
      */
     testTimeout: 20_000,
-    reporters: ['dot'],
+    reporters: ['vitest-nyancat-reporter'],
   },
 })

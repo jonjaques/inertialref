@@ -235,7 +235,10 @@ describe('the horizon', () => {
      * gives 20.30° there: 2.6% wrong, and the error grows with height.
      */
     expect((-horizonPitch(EARTH, 2) * 180) / Math.PI).toBeCloseTo(0.0453, 3)
-    expect((-horizonPitch(EARTH, 400_000) * 180) / Math.PI).toBeCloseTo(19.793, 2)
+    expect((-horizonPitch(EARTH, 400_000) * 180) / Math.PI).toBeCloseTo(
+      19.793,
+      2,
+    )
     // Luna's horizon is much closer, which is why its landscapes read as small.
     expect((-horizonPitch(LUNA, 2) * 180) / Math.PI).toBeCloseTo(0.0868, 3)
   })

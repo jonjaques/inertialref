@@ -125,8 +125,7 @@ describe('surface archetypes', () => {
      * this test fail for something it does not test.
      */
     const phobos = find('Phobos')
-    const naive =
-      phobos.mass / ((4 / 3) * Math.PI * phobos.radius ** 3) / 1000
+    const naive = phobos.mass / ((4 / 3) * Math.PI * phobos.radius ** 3) / 1000
     const proper = bulkDensity(phobos) / 1000
     expect(volumetricMeanRadius(phobos)).toBeLessThan(phobos.radius)
     expect(proper / naive).toBeCloseTo(1.517, 2)
