@@ -106,6 +106,8 @@ export interface SessionHost {
   readonly scene?: PresentationHost['scene']
   /** Frames per second and frame time, for `ir.status().frame`. */
   readonly frameStats?: PresentationHost['frameStats']
+  /** What the terrain streamer holds this frame, for `ir.terrain()`. */
+  readonly terrain?: PresentationHost['terrain']
   /**
    * Called after the world is replaced, so a host can drop derived state.
    *
@@ -205,6 +207,10 @@ export function openSession(options: SessionOptions = {}): Session {
       player = id
     },
     pool: () => pool,
+    // The host's clock, for the measuring verbs. Nothing below `apps/` may
+    // reach for one itself, so a session that was given none reports "not
+    // timed" rather than inventing a number.
+    ...(options.now === undefined ? {} : { now: options.now }),
     replaceWorld: (next, nextPlayer) => {
       world = next
       player = nextPlayer
@@ -217,6 +223,9 @@ export function openSession(options: SessionOptions = {}): Session {
     ...(options.host?.frameStats === undefined
       ? {}
       : { frameStats: options.host.frameStats }),
+    ...(options.host?.terrain === undefined
+      ? {}
+      : { terrain: options.host.terrain }),
   }
 
   const harness = new GameHarness(host)

@@ -28,12 +28,14 @@ import {
   type EntityId,
   findBody,
   formatAddress,
+  hasSolidSurface,
   installSurfaceFrame,
   isLandable,
   parseAddress,
   systemFrameId,
   systemId,
   type SystemId,
+  surveySites,
   systemsWithin,
   walkBodies,
 } from '@inertialref/universe'
@@ -43,7 +45,7 @@ import {
   restoreSave,
   serializeSave,
 } from '@inertialref/persistence'
-import type { RenderScene } from '@inertialref/rendering'
+import { MIN_STANCE_HEIGHT, type RenderScene } from '@inertialref/rendering'
 import type { PoolStats, WorkerPool } from '@inertialref/workers'
 import type { AuthorityPort, AuthorityStatus } from '@inertialref/net'
 import { describeDrift, type VersionDrift } from '@inertialref/protocol'
@@ -81,6 +83,20 @@ import {
   type ObserverPose,
   type ObserverStatus,
 } from './observatory.ts'
+import {
+  type DescentOptions,
+  type DescentReport,
+  summarizeDescent,
+  simulateDescent,
+  type TerrainReport,
+} from './descent.ts'
+import {
+  summarizeBaseline,
+  type BaselineOptions,
+  type TerrainBaseline,
+  terrainBaseline,
+} from './terrainBaseline.ts'
+import { terrainZoo, type ZooEntry } from './terrainZoo.ts'
 import { TNG_INTRO } from './cutscenes/tngIntro.ts'
 import type { CinematicSample } from '@inertialref/rendering'
 
@@ -132,6 +148,14 @@ export interface SimulationHost {
    * supplies it.
    */
   authority?(): AuthorityPort
+  /**
+   * The host's clock, for the things here that measure rather than simulate.
+   *
+   * Optional because a host may not have one and the terrain baseline degrades
+   * to "not timed" rather than reaching for `performance.now()` itself — which
+   * nothing below `apps/` is allowed to do. Both real hosts supply it.
+   */
+  now?(): number
 }
 
 /**
@@ -145,6 +169,16 @@ export interface SimulationHost {
 export interface PresentationHost {
   scene(): RenderScene | null
   frameStats(): FrameStats | null
+  /**
+   * What the terrain streamer is doing this frame.
+   *
+   * The one number in the terrain rig that cannot be derived: `simulateDescent`
+   * says what the streamer *would* be asked for, and this says what it actually
+   * has — how many patches are on screen, how deep the worker queue is, and
+   * whether the cache is holding. The two disagreeing is the interesting case
+   * and there was no way to see it.
+   */
+  terrain(): TerrainReport | null
 }
 
 export type HarnessHost = SimulationHost & Partial<PresentationHost>
@@ -875,15 +909,48 @@ export class GameHarness {
         this.step(64)
         return this.#scenarioResult(name, before, 'holding off Alpha Centauri')
       }
+      case 'descent': {
+        /*
+         * The terrain rig's own scenario: orbit to two meters over every zoo
+         * body, on paper.
+         *
+         * The only scenario that moves no ship and runs no physics, because
+         * that is what it is proving — the descent is a camera and a selection
+         * rule, so it produces the same numbers here, in a browser console and
+         * in a Node test.
+         *
+         * The camera is left on the last body's *summit*, which is the place
+         * this milestone's first phase made visitable. Phase 0 had to leave it
+         * in a basin: the zoo's declaration order puts `icy-active` last, which
+         * on this seed is Miranda, and Miranda's summit stands 4,826 m over a
+         * fade line at 2,605 m — so "something on screen when it returns" was a
+         * bare datum sphere. There is no fade, and the summit is ground.
+         */
+        const zoo = this.zoo()
+        if (zoo.length === 0) throw new Error('the terrain zoo came back empty')
+        const reports = zoo.map((entry) => this.descend(entry.address))
+        const last = zoo[zoo.length - 1]
+        if (last !== undefined) {
+          this.visit(last.address, {
+            site: 'summit',
+            height: MIN_STANCE_HEIGHT,
+          })
+        }
+        return this.#scenarioResult(
+          name,
+          before,
+          reports.map((report) => report.text).join('\n'),
+        )
+      }
       default:
         throw new Error(
-          `Unknown scenario "${name}". Try: orbit, approach, surface, interstellar`,
+          `Unknown scenario "${name}". Try: ${this.scenarios().join(', ')}`,
         )
     }
   }
 
   scenarios(): readonly string[] {
-    return ['orbit', 'approach', 'surface', 'interstellar']
+    return ['orbit', 'approach', 'surface', 'interstellar', 'descent']
   }
 
   /* --------------------------------------------------------------------- */
@@ -945,7 +1012,7 @@ export class GameHarness {
   /**
    * The cinematic state at a reference frame, without moving the playhead.
    *
-   * For anything that needs a *neighbouring* frame rather than the one on
+   * For anything that needs a *neighboring* frame rather than the one on
    * screen — the track overlay finite-differences the hull's camera-relative
    * offset either side of it to get a velocity. `cutsceneSample` cannot serve
    * that: it is the host's per-frame ask and re-bases the playhead on every
@@ -1015,6 +1082,176 @@ export class GameHarness {
     return this.#observatory.focus(destination, options ?? {})
   }
 
+  /* --------------------------------------------------------------------- */
+  /* Terrain                                                                */
+  /* --------------------------------------------------------------------- */
+
+  /**
+   * The named places on a body — what `visit` and `descend` take.
+   *
+   * Derived from the body's own field rather than authored, so a site survives
+   * regeneration by construction: "the highest ground on this world" is still
+   * the interesting place after the generator changes, and a latitude written
+   * down last month is not. See `surveySites`.
+   */
+  sites(address?: string): readonly {
+    id: string
+    name: string
+    detail: string
+    latitude: number
+    longitude: number
+    elevation: number
+    region: string
+  }[] {
+    const body = this.#requireBody(address)
+    // The observatory's own gate: a giant's SurfaceParameters run through the
+    // survey without complaint, but every row would be a place `visit` refuses
+    // to stand — six clickable throws in the Surface panel. An empty list is
+    // the answer the panel draws an honest empty state for.
+    if (!hasSolidSurface(body)) return []
+    return surveySites(body).map((site) => ({
+      id: site.id,
+      name: site.name,
+      detail: site.detail,
+      latitude: (site.latitude * 180) / Math.PI,
+      longitude: (site.longitude * 180) / Math.PI,
+      elevation: site.elevation,
+      region: `${site.region.face}.${site.region.level}.${site.region.i}.${site.region.j}`,
+    }))
+  }
+
+  /**
+   * Stand on a body and look at it. No ship, no physics, no canonical write.
+   *
+   * The planetarium's other camera arm — see `Observatory.stand`. `ir.land`
+   * teleports the *ship* onto a pad and is a canonical change; this moves a
+   * camera to a place a ship may never go, at a height a slider can scrub from
+   * half a radius down to two meters.
+   *
+   * The height is set outright rather than eased, which is what makes a plate
+   * loop work: `for (const h of heights) { ir.visit(a, {site, height: h}); await
+   * ir.shot(...) }` captures a descent one frame per rung, with nothing
+   * settling in between.
+   */
+  visit(
+    address?: string,
+    options: {
+      site?: string
+      latitude?: number
+      longitude?: number
+      height?: number
+      heading?: number
+      pitch?: number
+    } = {},
+  ): ObserverStatus {
+    const target = address ?? this.observatory.target?.address
+    if (target === undefined)
+      throw new Error('Nothing to visit — pass an address')
+    // Degrees at this boundary, radians below it. Every other harness verb that
+    // takes a latitude does the same, and `ir.land` is the one that does not —
+    // it takes radians, which is a wart this does not copy.
+    return this.observatory.stand(target, {
+      ...(options.site === undefined ? {} : { site: options.site }),
+      ...(options.latitude === undefined
+        ? {}
+        : { latitude: (options.latitude * Math.PI) / 180 }),
+      ...(options.longitude === undefined
+        ? {}
+        : { longitude: (options.longitude * Math.PI) / 180 }),
+      ...(options.height === undefined ? {} : { height: options.height }),
+      ...(options.heading === undefined
+        ? {}
+        : { heading: (options.heading * Math.PI) / 180 }),
+      ...(options.pitch === undefined
+        ? {}
+        : { pitch: (options.pitch * Math.PI) / 180 }),
+    })
+  }
+
+  /** Back to orbit, at the framing the camera had before the descent. */
+  ascend(): ObserverStatus {
+    return this.observatory.leaveSurface()
+  }
+
+  /**
+   * Fly a descent on paper and report what the streamer would be asked for.
+   *
+   * The unit of terrain measurement. Pure arithmetic — no world state changes,
+   * no worker runs, no frame is drawn — so it produces the same numbers in a
+   * browser console, in `pnpm sim` and in a Node test. What it answers is the
+   * gap-table line "no terrain perf baseline": the level churn, the peak burst
+   * and the cache behavior of a descent from orbit to two meters.
+   */
+  descend(
+    address?: string,
+    options: Omit<DescentOptions, 'latitude' | 'longitude'> & {
+      /** Degrees at this boundary, like every harness verb — see `visit`. */
+      readonly latitude?: number
+      readonly longitude?: number
+    } = {},
+  ): DescentReport & { readonly text: string } {
+    // Degrees here, radians below — the same boundary `visit` states. Passing
+    // the numbers straight through let `ir.sites()` output (degrees) land in
+    // `geodeticDirection` as radians: a report about ground wrapped ~2,578°
+    // from the place the caller named, with no error anywhere.
+    const { latitude, longitude, ...rest } = options
+    const report = simulateDescent(this.#requireBody(address), {
+      ...rest,
+      ...(latitude === undefined
+        ? {}
+        : { latitude: (latitude * Math.PI) / 180 }),
+      ...(longitude === undefined
+        ? {}
+        : { longitude: (longitude * Math.PI) / 180 }),
+    })
+    const text = summarizeDescent(report)
+    log.info('descent simulated', {
+      body: report.body,
+      site: report.site,
+      levels: report.levels.join('→'),
+      peakDrawn: report.peakDrawn,
+      peakBurst: report.peakBurst,
+    })
+    return { ...report, text }
+  }
+
+  /**
+   * What the live streamer has this frame, or null in a host that draws nothing.
+   *
+   * The counterpart to `descend`: that one says what should be asked for, this
+   * says what is actually held. Headlessly it is always null, and that is the
+   * honest answer rather than a zero.
+   */
+  terrain(): TerrainReport | null {
+    return this.#host.terrain?.() ?? null
+  }
+
+  /**
+   * One body per surface archetype, found rather than written down.
+   *
+   * The fixture every visual phase is judged through. It loads systems while it
+   * searches — the same caveat capability check 3 carries — and stops as soon
+   * as all four archetypes are filled.
+   */
+  zoo(): readonly ZooEntry[] {
+    return terrainZoo(this.world)
+  }
+
+  /**
+   * The Phase 0 baseline: the zoo, a descent over each member, and the measured
+   * cost of generating the patches those descents ask for.
+   *
+   * The CPU half only. Frame cost, draw calls and the worker queue's real depth
+   * need a browser, and the summary says so rather than inventing them.
+   */
+  terrainBaseline(
+    options: BaselineOptions = {},
+  ): TerrainBaseline & { readonly text: string } {
+    const now = this.#host.now?.bind(this.#host) ?? null
+    const baseline = terrainBaseline(this.world, now, options)
+    return { ...baseline, text: summarizeBaseline(baseline) }
+  }
+
   /** The observatory's camera, or null when it has no target. */
   observerStatus(): ObserverStatus | null {
     return this.#observatory.target === null ? null : this.#observatory.status()
@@ -1063,6 +1300,15 @@ export class GameHarness {
       '  ir.trackOverlay(on?)          the reference track over a playing scene',
       '  ir.look(target)               planetarium: move the camera, not the ship',
       '  ir.observatory                the free camera itself — drag, zoom, setPhase',
+      '  ir.sites(address?)            the named places on a body, derived from its own terrain',
+      '  ir.visit(address?, {site, height, heading, pitch})',
+      '                                stand on it — a camera, not the ship; degrees and meters',
+      '  ir.ascend()                   back to orbit, at the framing you left',
+      '  ir.descend(address?, {site, steps})',
+      '                                fly a descent on paper: level churn, burst, cache',
+      '  ir.terrain()                  what the live streamer holds this frame',
+      '  ir.zoo()                      one body per surface archetype',
+      '  ir.terrainBaseline()          the zoo, its descents, and measured patch cost',
       '  ir.logs(n)',
     ].join('\n')
   }
@@ -1137,6 +1383,25 @@ export class GameHarness {
       detail,
       status: this.status(),
     }
+  }
+
+  /**
+   * The body a terrain verb is about, from whatever the caller did not say.
+   *
+   * Three fallbacks in the order that makes a console usable: the address given,
+   * then whatever the planetarium is looking at, then the body the ship is
+   * inside. `ir.sites()` with no argument answers about the thing on screen,
+   * which is the only reading anybody means.
+   */
+  #requireBody(address?: string): Body {
+    const text =
+      address ?? this.observatory.target?.address ?? this.#currentBodyAddress()
+    const parsed = parseAddress(text)
+    if (parsed.kind !== 'body') throw new Error(`${text} is not a body address`)
+    const system = this.world.loadSystem(parsed.system)
+    const body = findBody(system, parsed.body)
+    if (body === undefined) throw new Error(`No body at ${text}`)
+    return body
   }
 
   #firstSolidBodyAddress(): string {

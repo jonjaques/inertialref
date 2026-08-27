@@ -21,6 +21,7 @@ the browser exposes, so a scenario that reproduces a bug in Chrome replays here.
 ```bash
 pnpm sim --self-test          # the twelve capability claims, executed (~0.4s)
 pnpm sim --targets --goto b:2 # the same navigation from a terminal
+pnpm sim --terrain-baseline   # what a descent costs — patch ms, level churn (~2s)
 pnpm sim --help               # every flag
 pnpm vitest run <substring>   # one test file
 ```
@@ -51,14 +52,24 @@ ir.orbit('g:milky-way/s:SOL/b:2', 400)
 ir.land('g:milky-way/s:SOL/b:0', 0.35, -1.1)
 ir.shot('crescent', address) // camera bookmarks: full-face gibbous half crescent glint sunset oblique
 ir.shots() // what they are
+ir.sites(address) // the named places on a body: summit basin shore rough corner pole
+ir.visit(address, { site: 'summit', height: 2 }) // stand there; moves only a CAMERA
+ir.ascend() // back to the framing the visit left
+ir.terrain() // what the live streamer holds this frame
 await ir.selfTest() // the twelve capabilities, in the real renderer
-await ir.scenario('surface') // orbit | approach | surface | interstellar
+await ir.scenario('surface') // orbit | approach | surface | interstellar | descent
 ir.play('tng-intro')
 ir.pause()
 ir.seekCutscene(1150) // frame-exact stills
 ```
 
 For a clean product shot: `engine.showShip = false`, then `ir.shot(...)`.
+
+`ir.visit` sets the height outright rather than easing it, which is what makes a
+descent plate loop work — `for (const h of [40000, 2000, 120, 2])`, one capture
+per rung, with nothing settling in between. Terrain fades out well above the
+ground, so a plate at 40 km is a smooth limb by design and not a broken streamer;
+`ir.terrain()` reads the opacity if you need to be sure.
 
 ## The four browser traps, in the order they will bite you
 

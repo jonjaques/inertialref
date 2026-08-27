@@ -40,35 +40,35 @@ a production build. What follows is depth, not foundations.
 
 ## Status at a glance
 
-| Area                                | Status | Notes                                                                                                                                      |
-| ----------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| Universe coordinates and precision  | ✅     | [ADR-0001](adr/0001-universe-coordinates.md)                                                                                               |
-| Reference frames and transitions    | ✅     | [ADR-0002](adr/0002-reference-frames.md)                                                                                                   |
-| Render coordinates, floating origin | ✅     | [ADR-0003](adr/0003-render-coordinates.md)                                                                                                 |
-| Stable identity and addressing      | ✅     | [ADR-0004](adr/0004-entity-addressing.md)                                                                                                  |
-| Deterministic generation            | ✅     | Core proven; two inputs now — seed _and_ catalog version                                                                                   |
-| Real astronomical data              | ✅     | 7,123 systems and 702 planets within 150 ly; 129 Solar System bodies; [guide](guides/catalogue.md)                                         |
-| Measured body figures               | ✅     | 25 shape models from the PDS; generated figures everywhere else — [ADR-0013](adr/0013-measured-figures.md)                                 |
-| Simulation clock and determinism    | 🟡     | All of it except [replay](#replay-and-reconciliation)                                                                                      |
-| Simulation / rendering separation   | ✅     | Proven by `apps/headless`                                                                                                                  |
-| Worker architecture                 | ✅     | Pool, contracts, cancellation, instrumentation                                                                                             |
-| Offline-first                       | ✅     | Service worker + IndexedDB + migrations                                                                                                    |
-| Persistence model                   | 🟡     | Proven; [mutations](#persistent-mutations) unbuilt                                                                                         |
-| Streaming                           | 🟡     | Systems and terrain stream; [policy is naive](#streaming-and-scale)                                                                        |
-| Level of detail                     | 🟡     | Tiers exist; [terrain LOD](#terrain) is single-level                                                                                       |
-| Units and conventions               | ✅     |                                                                                                                                            |
-| Repository structure and layering   | ✅     | Enforced by `pnpm graph`                                                                                                                   |
-| Protocols and serialization         | 🟡     | Worker + save done; net, replay and binary unbuilt                                                                                         |
-| Observability                       | ✅     | All twelve inspectable fields                                                                                                              |
-| Automation and DX                   | 🟡     | Commands, docs, CI and the formatter done; [no save fixture](#automation-gaps)                                                             |
-| Testing                             | 🟡     | Strong; [replay and fixtures](#automation-gaps) missing                                                                                    |
-| Performance                         | 🟡     | Designed for, [barely measured](#performance-work)                                                                                         |
-| Multiplayer                         | ⛔     | Deferred. Seams only — [ADR-0008](adr/0008-multiplayer-partitions.md); the partition key is a live debug field                             |
-| Application shell and modes         | ✅     | Five modes, routes as the public surface — [ADR-0011](adr/0011-application-shell-and-modes.md)                                             |
-| Planetarium                         | ✅     | Free navigation, a folding and filterable catalog, the body record, orbit traces, labels, composed shots — [design](design/planetarium.md) |
-| Cinema player                       | ✅     | Transport, timecode and a frame-exact link over the cutscene format — [design](design/cinema.md)                                           |
-| Dockable panels                     | ✅     | Four zones, property-tested layout algebra — [ADR-0012](adr/0012-dockable-panels.md)                                                       |
-| Mobile                              | 🟡     | Looking works and is verified; piloting on a touchscreen is not designed                                                                   |
+| Area                                | Status | Notes                                                                                                                                                             |
+| ----------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Universe coordinates and precision  | ✅     | [ADR-0001](adr/0001-universe-coordinates.md)                                                                                                                      |
+| Reference frames and transitions    | ✅     | [ADR-0002](adr/0002-reference-frames.md)                                                                                                                          |
+| Render coordinates, floating origin | ✅     | [ADR-0003](adr/0003-render-coordinates.md)                                                                                                                        |
+| Stable identity and addressing      | ✅     | [ADR-0004](adr/0004-entity-addressing.md)                                                                                                                         |
+| Deterministic generation            | ✅     | Core proven; two inputs now — seed _and_ catalog version                                                                                                          |
+| Real astronomical data              | ✅     | 7,123 systems and 702 planets within 150 ly; 129 Solar System bodies; [guide](guides/catalogue.md)                                                                |
+| Measured body figures               | ✅     | 25 shape models from the PDS; generated figures everywhere else — [ADR-0013](adr/0013-measured-figures.md)                                                        |
+| Simulation clock and determinism    | 🟡     | All of it except [replay](#replay-and-reconciliation)                                                                                                             |
+| Simulation / rendering separation   | ✅     | Proven by `apps/headless`                                                                                                                                         |
+| Worker architecture                 | ✅     | Pool, contracts, cancellation, instrumentation                                                                                                                    |
+| Offline-first                       | ✅     | Service worker + IndexedDB + migrations                                                                                                                           |
+| Persistence model                   | 🟡     | Proven; [mutations](#persistent-mutations) unbuilt                                                                                                                |
+| Streaming                           | 🟡     | Systems and terrain stream; [policy is naive](#streaming-and-scale)                                                                                               |
+| Level of detail                     | 🟡     | Tiers exist; [terrain](#terrain) is a restricted morphing quadtree; no scatter below a patch cell                                                                 |
+| Units and conventions               | ✅     |                                                                                                                                                                   |
+| Repository structure and layering   | ✅     | Enforced by `pnpm graph`                                                                                                                                          |
+| Protocols and serialization         | 🟡     | Worker + save done; net, replay and binary unbuilt                                                                                                                |
+| Observability                       | ✅     | All twelve inspectable fields                                                                                                                                     |
+| Automation and DX                   | 🟡     | Commands, docs, CI and the formatter done; [no save fixture](#automation-gaps)                                                                                    |
+| Testing                             | 🟡     | Strong; [replay and fixtures](#automation-gaps) missing                                                                                                           |
+| Performance                         | 🟡     | Designed for, [barely measured](#performance-work)                                                                                                                |
+| Multiplayer                         | ⛔     | Deferred. Seams only — [ADR-0008](adr/0008-multiplayer-partitions.md); the partition key is a live debug field                                                    |
+| Application shell and modes         | ✅     | Five modes, routes as the public surface — [ADR-0011](adr/0011-application-shell-and-modes.md)                                                                    |
+| Planetarium                         | ✅     | Free navigation, a folding and filterable catalog, the body record, orbit traces, labels, composed shots, standing on a surface — [design](design/planetarium.md) |
+| Cinema player                       | ✅     | Transport, timecode and a frame-exact link over the cutscene format — [design](design/cinema.md)                                                                  |
+| Dockable panels                     | ✅     | Four zones, property-tested layout algebra — [ADR-0012](adr/0012-dockable-panels.md)                                                                              |
+| Mobile                              | 🟡     | Looking works and is verified; piloting on a touchscreen is not designed                                                                                          |
 
 ---
 
@@ -84,7 +84,7 @@ change** — they are generators plus representations.
 | Planets, moons           | ✅     | Confirmed exoplanets and the Solar System are `observed`; the rest is `projected`                                                                                                                                               |
 | Moons of real planets    | 🟡     | Sol's 62 are `observed` and measured; every exoplanet's moon is a projection, and `PackedPlanet` still has no moon list to change that                                                                                          |
 | Catalog revision diff    | ✅     | `versionDrift` in `packages/protocol` — one verdict, read by the handshake, the save loader and the health panel                                                                                                                |
-| Planetary terrain        | 🟡     | Heightfields only; no biomes or materials                                                                                                                                                                                       |
+| Planetary terrain        | 🟡     | Whole-disk heightfields, seamless; three noise bands and no materials                                                                                                                                                           |
 | Ships                    | 🟡     | One modeled hull (a CC-BY Enterprise-D in `data/models/`, debug cone as fallback), no variants or subsystems                                                                                                                    |
 | Rings                    | ✅     | All four giants, with Saturn's shadow on its own and theirs on it; Haumea, Quaoar, Chariklo and Chiron carry theirs; procedural giants get a 1-in-6 chance                                                                      |
 | Asteroids / belts        | 🟡     | 50 real asteroids and comets in Sol, and 6–18 generated per system — but they are `b:` bodies at system scale, not the `o:` region population a _visible_ belt would need (see [belts as a population](#belts-as-a-population)) |
@@ -108,30 +108,45 @@ yet.
 
 ## Terrain
 
-The most visible shallowness, and the natural next milestone.
+The most visible shallowness, and the milestone in progress —
+[TERRAIN-PLAN](../TERRAIN-PLAN.md) sequences it.
 
 ```mermaid
 flowchart TB
-    NOW["<b>today</b><br/>3×3 patches at one level<br/>65×65 samples each"]
-    A["<b>quadtree LOD</b><br/>fine under the camera,<br/>coarse to the horizon"]
-    B["<b>edge stitching</b><br/>across faces and between levels"]
-    C["<b>materials + biomes</b><br/>from latitude, altitude, slope"]
-    D["<b>scatter</b><br/>rocks, then vegetation"]
+    NOW["<b>today</b><br/>restricted quadtree, whole disk<br/>morphed, seamless, one field<br/>at every distance"]
+    C["<b>the geology</b><br/>craters, plates, volcanism<br/>from a per-body sketch"]
+    D["<b>the face</b><br/>biomes, splat materials,<br/>the orbital albedo bake"]
+    E["<b>the ground</b><br/>meter-scale levels,<br/>rock scatter"]
+    F["<b>the GPU producer</b><br/>TSL compute tiles"]
 
-    NOW --> A --> B
-    A --> C --> D
+    NOW --> C --> D --> E
+    E -.->|"if generation is<br/>the binding constraint"| F
 
     style NOW fill:#334155,stroke:#1e293b,color:#fff
-    style A fill:#0369a1,stroke:#0c4a6e,color:#fff
+    style C fill:#0369a1,stroke:#0c4a6e,color:#fff
 ```
 
-| Gap                                         | Consequence today                         | Seam                                                                                        |
-| ------------------------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Single LOD level                            | The visible horizon is a few patches wide | `terrainLevelFor` already picks a level from altitude; the streamer needs a per-patch level |
-| No edge stitching                           | Hairline seams between patches            | `buildPatch` uses one-sided differences at edges; it needs the neighbors' edge rows         |
-| No cube-face wrapping                       | Patches at a face boundary are skipped    | The streamer skips out-of-range `i`/`j` rather than crossing to the adjacent face           |
-| Spherical-only normals for the datum sphere | Fallback sphere is featureless            | Acceptable; it is only visible beyond the streamed set                                      |
-| No terrain materials                        | One flat color                            | Elevation and slope are already available per vertex                                        |
+Phase 1 landed 27 Aug 2026: per-patch level selection, whole-disk coverage,
+cross-face sampling, bordered patches, the CDLOD morph, prefetch and budget.
+[ADR-0015](adr/0015-terrain-level-of-detail.md) is the decision record and
+[`CONTEXT.md`](../CONTEXT.md) has the measurements. What it closed: the horizon
+is terrain rather than the datum sphere, cube-face edges are not holes, patch
+boundaries have no seam, and the three defects that came from measuring altitude
+from the datum are gone — every one of the zoo's twenty-four survey sites now
+bottoms out at its own detail floor, where two of Miranda's could not be drawn
+at any altitude at all.
+
+| Gap                                        | Consequence today                                                                       | Seam                                                                                                                              |
+| ------------------------------------------ | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Three noise bands                          | No craters, no tectonics — every world is the same rolling fBm at a different amplitude | The band stack and the per-body sketch, [TERRAIN-PLAN § 6](../TERRAIN-PLAN.md); `surfaceDetailFloor` deepens with them on its own |
+| One flat color per body                    | Terrain reads as geometry, never as a place                                             | Elevation, slope and latitude are already available per vertex                                                                    |
+| A mapped body's terrain is not its map     | Procedural ground under a photographic albedo, near the surface only                    | The DEM ingest ends the carve-out; Phase 3's material is what makes the patches wear the published map meanwhile                  |
+| The sphere-tier shell needs an albedo bake | Terrain is switched off past 8 px of relief, so an approach shows the sphere            | A per-face normal + albedo tile, baked in workers like any patch                                                                  |
+| The selection is not frustum-culled        | A whole disk is generated, of which the renderer draws about a third                    | The streamer has the camera; a generous cone would keep a turn from bursting                                                      |
+| Vertex attributes are float32              | 203 KB a patch, so a whole-disk selection is 45–126 MB                                  | Int8 normals and Int16 morph deltas are worth about half                                                                          |
+| The mesh is built on the main thread       | 0.25 ms a patch, four a frame                                                           | The worker already has the field; the mesh arithmetic has to move to `packages/universe` first, for the layer rule                |
+| Patch generation is over its budget        | 14.5 ms per bordered 65×65 patch against a documented ≤ 8 ms, before any geology        | `pnpm sim --terrain-baseline` is the measurement; amplitude floors and a GPU producer are the levers                              |
+| A coarse patch costs more than a fine one  | 20.7 ms at level 1 against 14.3 at level 12, for the same 4,761 samples                 | Consecutive samples of a coarse patch land in different noise lattice cells; a whole-disk selection pays it on the shell          |
 
 ---
 
@@ -140,8 +155,6 @@ flowchart TB
 | Gap                                   | Consequence                                       | Seam                                                                                                    |
 | ------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | Interest is a radius scan over cells  | Fine at 6 ly; a 100 ly query touches ~1,000 cells | `systemsWithin` already bounds and refuses oversized queries; a spatial index goes behind the same call |
-| No predictive loading                 | Patches pop in rather than pre-loading            | The streamer knows camera velocity; extrapolate the request set                                         |
-| No budget on generation per frame     | A fast descent can queue a burst                  | The pool measures queue latency; a budget belongs in the streamer                                       |
 | Simulation interest = render interest | Distant systems do not simulate at all            | `updateInterest` is the seam; a coarser tier for "simulated but not rendered" is the next step          |
 
 ### Simulation in a worker

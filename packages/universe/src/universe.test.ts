@@ -13,6 +13,7 @@ import {
   addressLabels,
   bodyAddress,
   formatAddress,
+  MAX_REGION_LEVEL,
   regionAddress,
   systemAddress,
 } from './address.ts'
@@ -49,12 +50,19 @@ import {
   faceToDirection,
   generateHeightfield,
   groundElevation,
+  HEIGHTFIELD_BORDER,
   HEIGHTFIELD_RESOLUTION,
+  heightfieldSample,
+  heightfieldStride,
   levelForSize,
   regionCentreDirection,
+  regionChildren,
   regionDirection,
   regionForDirection,
+  regionNeighbor,
+  regionParent,
   regionSize,
+  surfaceDetailFloor,
   surfaceRadius,
 } from './terrain.ts'
 
@@ -328,10 +336,352 @@ describe('cube-sphere terrain', () => {
     const field = generateHeightfield(planet.surface, {
       region,
       resolution: 5,
+      border: 0,
     })
     const corner = elevationAt(planet.surface, regionCentreDirection(region))
     expect(Number.isFinite(corner)).toBe(true)
     expect(field.elevations.length).toBe(25)
+  })
+
+  it('carries a border ring of the neighboring ground', () => {
+    const system = generateSystem(ROOT, MILKY_WAY, SOL)
+    const planet = [...walkBodies(system)].find(
+      (b) => b.surface.maxElevation > 0,
+    )
+    if (planet === undefined) throw new Error('expected a solid body')
+    const region = regionForDirection(Vec.normalize(vec3(0.2, -0.7, 0.4)), 6)
+    const field = generateHeightfield(planet.surface, {
+      region,
+      resolution: 9,
+    })
+    expect(field.border).toBe(HEIGHTFIELD_BORDER)
+    expect(heightfieldStride(field)).toBe(9 + 2 * HEIGHTFIELD_BORDER)
+    expect(field.elevations.length).toBe((9 + 2 * HEIGHTFIELD_BORDER) ** 2)
+
+    // The patch's own extremes ignore the border: they size the bounding volume
+    // the renderer culls against, and the border is ground the next patch draws.
+    let min = Infinity
+    let max = -Infinity
+    for (let row = 0; row < 9; row += 1) {
+      for (let col = 0; col < 9; col += 1) {
+        const value = heightfieldSample(field, row, col)
+        min = Math.min(min, value)
+        max = Math.max(max, value)
+      }
+    }
+    expect(field.minElevation).toBe(min)
+    expect(field.maxElevation).toBe(max)
+
+    // And the ring is the field one step outside, not a clamp of the edge.
+    // `fround` because Float32Array storage is the only step between them.
+    expect(heightfieldSample(field, -1, 4)).toBe(
+      Math.fround(
+        groundElevation(planet.surface, regionDirection(region, 0.5, -1 / 8)),
+      ),
+    )
+  })
+})
+
+describe('where the field stops having anything to add', () => {
+  it('finds a floor past which a patch is its parent, upsampled', () => {
+    /*
+     * The claim `surfaceDetailFloor` makes, checked against the field rather
+     * than against itself: at the floor, the middle of a grid cell is within
+     * tolerance of the bilinear interpolation of its corners — and one level
+     * *above* it, it is not. Both halves matter. Without the second, a function
+     * that returned `MAX_REGION_LEVEL` would pass.
+     */
+    const system = generateSystem(ROOT, MILKY_WAY, SOL)
+    const planet = [...walkBodies(system)].find(
+      (b) => b.surface.maxElevation > 0,
+    )
+    if (planet === undefined) throw new Error('expected a solid body')
+
+    const tolerance = 0.5
+    const floor = surfaceDetailFloor(
+      planet.radius,
+      planet.surface,
+      65,
+      tolerance,
+    )
+    expect(floor).toBeGreaterThan(0)
+    expect(floor).toBeLessThan(MAX_REGION_LEVEL)
+
+    const residual = (level: number): number => {
+      const half = 0.5 / 64
+      let peak = 0
+      for (let probe = 0; probe < 24; probe += 1) {
+        const z = 1 - (2 * probe + 1) / 24
+        const around = probe * Math.PI * (3 - Math.sqrt(5))
+        const ring = Math.sqrt(Math.max(0, 1 - z * z))
+        const region = regionForDirection(
+          vec3(Math.cos(around) * ring, z, Math.sin(around) * ring),
+          level,
+        )
+        const at = (s: number, t: number): number =>
+          groundElevation(planet.surface, regionDirection(region, s, t))
+        const corners =
+          at(0.5 - half, 0.5 - half) +
+          at(0.5 + half, 0.5 - half) +
+          at(0.5 - half, 0.5 + half) +
+          at(0.5 + half, 0.5 + half)
+        peak = Math.max(peak, Math.abs(at(0.5, 0.5) - corners / 4))
+      }
+      return peak
+    }
+
+    // One level of margin is added on top of the search, so the floor itself is
+    // comfortably under and the level two above it is not.
+    expect(residual(floor)).toBeLessThanOrEqual(tolerance)
+    expect(residual(floor - 2)).toBeGreaterThan(tolerance)
+  })
+
+  it('is not fooled by an ocean flattening the coarse probes', () => {
+    /*
+     * The sea clamp manufactures exact zeros, and at level 0 the twenty-four
+     * probes alias onto at most six face-center stencils — so an ocean world
+     * whose face centers are all submerged reads as "quiet at level 0" while
+     * its islands carry kilometers of relief. A search that trusts the first
+     * quiet level answers 1, and the streamer, which takes this as `maxLevel`,
+     * draws the whole body as six patches forever.
+     *
+     * This seed's Earth is such a world: seaLevel 0.55 puts the sea datum
+     * 544 m up and every coarse stencil under it. The bound is loose — the
+     * exact floor (9 today) moves with the band stack — but the trap's
+     * signature is exactly 1, so anything past the flooded coarse levels
+     * proves the walk carried on to dry ground.
+     */
+    const system = generateSystem(rootSeed('d'), MILKY_WAY, SOL)
+    const wet = [...walkBodies(system)].find(
+      (b) => b.surface.seaLevel !== null && b.surface.maxElevation > 0,
+    )
+    if (wet === undefined) throw new Error('expected an ocean world')
+    expect(surfaceDetailFloor(wet.radius, wet.surface)).toBeGreaterThan(1)
+  })
+
+  it('answers the same whatever order it is asked in', () => {
+    /*
+     * The memo key folded `resolution` and `tolerance` into a sum, so (65, 0.5)
+     * and (64, 1.5) collided and whichever call ran first won for both — a pure
+     * function of the seed whose answer depended on the order of the questions,
+     * which is the one thing generation may never do.
+     */
+    const system = generateSystem(ROOT, MILKY_WAY, SOL)
+    const planet = [...walkBodies(system)].find(
+      (b) => b.surface.maxElevation > 0,
+    )
+    if (planet === undefined) throw new Error('expected a solid body')
+    const fresh = { ...planet.surface }
+
+    const a = surfaceDetailFloor(planet.radius, planet.surface, 65, 0.5)
+    const b = surfaceDetailFloor(planet.radius, planet.surface, 64, 1.5)
+    // The same two questions, asked of an equal surface in the other order.
+    const b2 = surfaceDetailFloor(planet.radius, fresh, 64, 1.5)
+    const a2 = surfaceDetailFloor(planet.radius, fresh, 65, 0.5)
+    expect([a2, b2]).toEqual([a, b])
+    // And they are genuinely different answers, so the pair can fail.
+    expect(a).not.toBe(b)
+  })
+})
+
+describe('cross-face adjacency', () => {
+  /*
+   * The eight points where three cube faces meet are the classic bug farm, so
+   * these are properties over every face rather than examples on one.
+   */
+  const FACES = [0, 1, 2, 3, 4, 5]
+
+  it('steps to a region that shares an edge, on any face (property)', () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom(...FACES),
+        fc.integer({ min: 1, max: 5 }),
+        fc.nat(),
+        fc.nat(),
+        fc.constantFrom<readonly [number, number]>(
+          [1, 0],
+          [-1, 0],
+          [0, 1],
+          [0, -1],
+        ),
+        (face, level, ri, rj, [di, dj]) => {
+          const span = 2 ** level
+          const region = regionAddress(face, level, ri % span, rj % span)
+          const neighbor = regionNeighbor(region, di, dj)
+          expect(neighbor.level).toBe(level)
+          const separation = Math.acos(
+            Math.min(
+              1,
+              Vec.dot(
+                regionCentreDirection(region),
+                regionCentreDirection(neighbor),
+              ),
+            ),
+          )
+          /*
+           * One cell's angular width, with the cube warp's own slack. A cell at
+           * the middle of a face is ~1.6× the nominal π/2 / 2^level of one at a
+           * corner, so an edge step between the two is bounded by the larger.
+           */
+          expect(separation).toBeGreaterThan(0)
+          expect(separation).toBeLessThan((1.7 * (Math.PI / 2)) / span)
+        },
+      ),
+    )
+  })
+
+  it('is its own inverse across a face edge (property)', () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom(...FACES),
+        fc.integer({ min: 1, max: 8 }),
+        fc.nat(),
+        fc.nat(),
+        fc.constantFrom<readonly [number, number]>(
+          [1, 0],
+          [-1, 0],
+          [0, 1],
+          [0, -1],
+        ),
+        (face, level, ri, rj, [di, dj]) => {
+          const span = 2 ** level
+          const region = regionAddress(face, level, ri % span, rj % span)
+          const neighbor = regionNeighbor(region, di, dj)
+          /*
+           * Stepping back is *not* the negated step once the face has changed:
+           * the neighbor's axes are its own. Walking back is therefore stated as
+           * "one of my four neighbors is where I came from", which is the
+           * property that would actually break if the rotation were wrong.
+           */
+          const back = [
+            regionNeighbor(neighbor, 1, 0),
+            regionNeighbor(neighbor, -1, 0),
+            regionNeighbor(neighbor, 0, 1),
+            regionNeighbor(neighbor, 0, -1),
+          ]
+          expect(
+            back.some(
+              (candidate) =>
+                candidate.face === region.face &&
+                candidate.i === region.i &&
+                candidate.j === region.j,
+            ),
+          ).toBe(true)
+        },
+      ),
+    )
+  })
+
+  it('gives a cube-corner cell seven neighbors rather than eight', () => {
+    /*
+     * Face 0's (0, 0) cell sits on a cube corner where three faces meet, so the
+     * diagonal step off it names one of the three rather than a missing fourth.
+     * The ring is therefore seven distinct cells and one repeat — a caller that
+     * walks it has to tolerate that rather than assume eight.
+     */
+    const corner = regionAddress(0, 4, 0, 0)
+    const ring = new Set<string>()
+    for (const [di, dj] of [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+      [1, 1],
+      [1, -1],
+      [-1, 1],
+      [-1, -1],
+    ] as const) {
+      const n = regionNeighbor(corner, di, dj)
+      ring.add(`${n.face}.${n.i}.${n.j}`)
+    }
+    expect(ring.size).toBe(7)
+  })
+
+  it('puts the same vertices on a shared edge from both faces', () => {
+    /*
+     * The property the crack-free mesh rests on, and the one a rotation table
+     * gets wrong: the row of vertices along a cube-face edge has to be the
+     * *same points* whichever face generates it — not close, the same, because
+     * a shared vertex that disagrees in the last bit is a lit hairline.
+     *
+     * Stated without naming the rotation, so the test cannot agree with a wrong
+     * one: one of the neighbor's four edges, read in one of its two directions,
+     * is this edge exactly. Which one is the arithmetic under test.
+     */
+    const level = 4
+    const span = 2 ** level
+    const samples = 9
+    const edgeOf = (
+      region: ReturnType<typeof regionAddress>,
+      which: number,
+    ): string[] => {
+      const out: string[] = []
+      for (let k = 0; k < samples; k += 1) {
+        const a = k / (samples - 1)
+        const [s, t] =
+          which === 0
+            ? [0, a]
+            : which === 1
+              ? [1, a]
+              : which === 2
+                ? [a, 0]
+                : [a, 1]
+        const d = regionDirection(region, s, t)
+        out.push(`${d.x},${d.y},${d.z}`)
+      }
+      return out
+    }
+
+    for (const face of FACES) {
+      for (const [di, dj, mine] of [
+        [1, 0, 1],
+        [-1, 0, 0],
+        [0, 1, 3],
+        [0, -1, 2],
+      ] as const) {
+        const region = regionAddress(
+          face,
+          level,
+          di > 0 ? span - 1 : di < 0 ? 0 : 5,
+          dj > 0 ? span - 1 : dj < 0 ? 0 : 5,
+        )
+        const neighbor = regionNeighbor(region, di, dj)
+        expect(neighbor.face).not.toBe(face)
+        const target = edgeOf(region, mine).join('|')
+        const reversed = [...edgeOf(region, mine)].reverse().join('|')
+        const matches = [0, 1, 2, 3].filter((which) => {
+          const other = edgeOf(neighbor, which).join('|')
+          return other === target || other === reversed
+        })
+        expect(matches).toHaveLength(1)
+      }
+    }
+  })
+
+  it('walks up and down the quadtree consistently (property)', () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom(...FACES),
+        fc.integer({ min: 0, max: 10 }),
+        fc.nat(),
+        fc.nat(),
+        (face, level, ri, rj) => {
+          const span = 2 ** level
+          const region = regionAddress(face, level, ri % span, rj % span)
+          const children = regionChildren(region)
+          expect(new Set(children.map((c) => `${c.i}.${c.j}`)).size).toBe(4)
+          for (const child of children) {
+            expect(regionParent(child)).toEqual(region)
+            // A child's ground is inside its parent's: its center direction is
+            // in the parent at the parent's level.
+            expect(
+              regionForDirection(regionCentreDirection(child), level),
+            ).toEqual(region)
+          }
+          if (level === 0) expect(regionParent(region)).toBeNull()
+        },
+      ),
+    )
   })
 })
 
@@ -594,9 +944,7 @@ describe('the ground has one owner', () => {
     ] as const) {
       const row = Math.round(t * (HEIGHTFIELD_RESOLUTION - 1))
       const col = Math.round(s * (HEIGHTFIELD_RESOLUTION - 1))
-      const meshed = field.elevations[
-        row * HEIGHTFIELD_RESOLUTION + col
-      ] as number
+      const meshed = heightfieldSample(field, row, col)
       const physical =
         surfaceRadius(body, regionDirection(region, s, t)) - body.radius
       // Float32Array storage is the only thing between them, so the bound is

@@ -9,7 +9,11 @@ import {
   vec3,
   Vec,
 } from '@inertialref/spatial'
-import { type RegionAddress, regionAddress } from './address.ts'
+import {
+  MAX_REGION_LEVEL,
+  type RegionAddress,
+  regionAddress,
+} from './address.ts'
 import type { Body, SurfaceParameters } from './system.ts'
 
 /*
@@ -43,8 +47,13 @@ export const FACE_COUNT = 6
  * rendered wrong and nothing failed — the density was simply computed against
  * the wrong mountain.
  *
- * There are exactly two producers below. Neither can be reached without a spin
- * frame or a region address, which is what makes the brand worth its cost.
+ * `AGENTS.md` enumerates three producers — `bodyFixedDirection`,
+ * `geodeticDirection` and `regionDirection` — and that list is the enforcement
+ * mechanism, not a summary of it: none of the three can be reached without a
+ * spin frame, a latitude/longitude or a region address, which is what makes the
+ * brand worth its cost. `faceToDirection` below is the primitive `regionDirection`
+ * is built from and is branded for that reason; production code goes through
+ * `regionDirection`, so the list stays three long.
  */
 export type BodyFixedDirection = Brand<Vec3, 'body-fixed'>
 
@@ -129,7 +138,23 @@ export function regionCentreDirection(region: RegionAddress): Vec3 {
   return faceToDirection(region.face, u, v)
 }
 
-/** Direction of a normalized (s, t) ∈ [0,1]² position inside a region. */
+/**
+ * Direction of a normalized (s, t) position inside a region.
+ *
+ * `s` and `t` are in [0,1] over the region itself and **may run outside it**.
+ * That is not a tolerated overflow, it is the mechanism a bordered patch and a
+ * cross-face neighbor both rest on: the gnomonic map extends smoothly past a
+ * cube face's edge, and `normalize` of the extended coordinate lands on exactly
+ * the direction the adjacent face parameterizes at that point. Face 0 at
+ * u = 1 + ε is face 5 at u = −1/(1 + ε), which is inside face 5 by construction
+ * — so a patch that samples one row beyond its own edge is sampling its
+ * neighbor's first interior row, whichever face that neighbor is on, with no
+ * rotation table and no special case at a face corner.
+ *
+ * The one limit is range: past |u| ≈ 3 the gnomonic extension is approaching
+ * the perpendicular and the cell it names stops being adjacent to anything.
+ * Callers step by a border ring or by a cell, which is far inside that.
+ */
 export function regionDirection(
   region: RegionAddress,
   s: number,
@@ -139,6 +164,72 @@ export function regionDirection(
   const u = ((region.i + s) / span) * 2 - 1
   const v = ((region.j + t) / span) * 2 - 1
   return faceToDirection(region.face, u, v)
+}
+
+/**
+ * The region `di` cells along u and `dj` cells along v from this one, wrapping
+ * onto the adjacent cube face where the step leaves this one.
+ *
+ * The classic cube-sphere bug farm is the six-by-four table of edge rotations
+ * that says which of a neighbor's axes runs which way, and the eight points
+ * where three faces meet is where it is always wrong. There is no table here.
+ * The step is taken in the *source* face's extended coordinates, turned into a
+ * direction — which is the same direction whichever face claims it — and asked
+ * which region contains it. The rotation is a consequence of `directionToFace`
+ * picking the dominant axis, so it cannot disagree with the sampling in
+ * `regionDirection` or with `regionForDirection` in the streamer.
+ *
+ * At a cube corner three faces meet and there are seven neighbors, not eight:
+ * the diagonal step off the corner names one of the three faces rather than a
+ * missing fourth, and which one is a consequence of the dominant-axis tie-break.
+ * That is a real answer to a question with no answer, and callers that walk a
+ * ring have to tolerate a repeat rather than assume eight distinct cells.
+ */
+export function regionNeighbor(
+  region: RegionAddress,
+  di: number,
+  dj: number,
+): RegionAddress {
+  const span = 2 ** region.level
+  const i = region.i + di
+  const j = region.j + dj
+  if (i >= 0 && i < span && j >= 0 && j < span) {
+    return regionAddress(region.face, region.level, i, j)
+  }
+  return regionForDirection(
+    regionDirection(region, di + 0.5, dj + 0.5),
+    region.level,
+  )
+}
+
+/** The four regions this one subdivides into, in (i, j) order. */
+export function regionChildren(
+  region: RegionAddress,
+): readonly [RegionAddress, RegionAddress, RegionAddress, RegionAddress] {
+  invariant(
+    region.level < MAX_REGION_LEVEL,
+    `Region level ${region.level} cannot subdivide`,
+  )
+  const level = region.level + 1
+  const i = region.i * 2
+  const j = region.j * 2
+  return [
+    regionAddress(region.face, level, i, j),
+    regionAddress(region.face, level, i + 1, j),
+    regionAddress(region.face, level, i, j + 1),
+    regionAddress(region.face, level, i + 1, j + 1),
+  ]
+}
+
+/** The region one level up that contains this one, or null at a face root. */
+export function regionParent(region: RegionAddress): RegionAddress | null {
+  if (region.level === 0) return null
+  return regionAddress(
+    region.face,
+    region.level - 1,
+    Math.floor(region.i / 2),
+    Math.floor(region.j / 2),
+  )
 }
 
 /** Approximate edge length of a region on the ground, in meters. */
@@ -207,10 +298,149 @@ export function groundElevation(
   surface: SurfaceParameters,
   direction: Vec3,
 ): Meters {
+  const sea = seaDatumElevation(surface)
   const elevation = elevationAt(surface, direction)
+  return sea === null ? elevation : Math.max(elevation, sea)
+}
+
+/**
+ * The elevation the ocean surface sits at, or null on a dry world.
+ *
+ * Exported because "the single owner of the sea clamp" has to own the *number*
+ * as well as the comparison. A second reader — the survey's shore search, which
+ * has to score against the unclamped landform and therefore cannot go through
+ * `groundElevation` — copied the expression out and put the formula in two
+ * places, which is exactly the shape of the bug the docstring above remembers.
+ * Change the 0.55 or the `2s − 1` remap here and both move together.
+ */
+export function seaDatumElevation(surface: SurfaceParameters): Meters | null {
   const sea = surface.seaLevel
-  if (sea === null) return elevation
-  return Math.max(elevation, (sea * 2 - 1) * surface.maxElevation * 0.55)
+  return sea === null ? null : (sea * 2 - 1) * surface.maxElevation * 0.55
+}
+
+/**
+ * How much of a bump a patch may miss before refining it stops being worth a
+ * worker's time, in meters.
+ *
+ * Half a meter is the canonical floor the plan names for the elevation field
+ * itself, and the same number does for the mesh: a landing ship spans tens of
+ * meters, so ground that is right to within half a meter is ground.
+ */
+export const TERRAIN_DETAIL_TOLERANCE: Meters = 0.5
+
+/** Probe directions for `surfaceDetailFloor`, spread by the golden angle. */
+const DETAIL_PROBES = 24
+const detailFloorCache = new WeakMap<SurfaceParameters, Map<string, number>>()
+
+/**
+ * The subdivision level past which a patch is an upsample of its parent.
+ *
+ * Refinement is supposed to buy detail, and below some level this field has
+ * none left to sell. Measured on Mercury at the shipped three bands: a level-6
+ * patch misses 4.01 m of relief between its samples, a level-8 patch 0.35 m,
+ * and a level-12 patch **zero** to the last bit of a float. The streamer was
+ * asking for level 12 wherever the ground was close, which is sixteen times the
+ * patches of level 10 and identical output — 12.8 ms of worker apiece to
+ * generate a bilinear interpolation of something already in the cache.
+ *
+ * So the floor is measured rather than assumed, and measured from the field
+ * rather than from a model of it: at each level, take one grid cell of a patch
+ * at that level, and compare the middle of the cell against the bilinear
+ * interpolation of its corners. That difference *is* the detail refinement
+ * would add. Twenty-four probe directions spread by the golden angle, five
+ * samples each, and the search stops at the first level under tolerance whose
+ * stencils touched dry ground — a sea-flattened stencil is the clamp talking,
+ * not the field, and the walk carries past it. About 1,500 samples and five
+ * milliseconds for a body, memoized, which is a quarter of what deriving its
+ * survey sites costs.
+ *
+ * This lives beside `elevationAt` because it is a property of those bands and
+ * has to move when they do. Phase 2's geology puts crater rims and scarps into
+ * the field at scales it does not currently reach, and this will report a
+ * deeper floor on the same day, without anybody remembering to raise a
+ * constant.
+ *
+ * One level of margin is added on top, because twenty-four probes are an
+ * estimate of a maximum over a sphere and the cost of being one level shallow
+ * is ground that is right to a meter instead of to half of one.
+ */
+export function surfaceDetailFloor(
+  radius: Meters,
+  surface: SurfaceParameters,
+  resolution: number = HEIGHTFIELD_RESOLUTION,
+  tolerance: Meters = TERRAIN_DETAIL_TOLERANCE,
+): number {
+  const held = detailFloorCache.get(surface)
+  /*
+   * A string, because the arithmetic version collided. `radius * 1e6 +
+   * resolution + tolerance` folds three numbers additively, so (65, 0.5) and
+   * (64, 1.5) hash the same and whichever call ran first won for both — a pure
+   * function whose answer depended on the order it was asked in, which is the
+   * one thing generation may never do.
+   */
+  const key = `${radius}|${resolution}|${tolerance}`
+  const cached = held?.get(key)
+  if (cached !== undefined) return cached
+
+  const half = 0.5 / (resolution - 1)
+  const sea = seaDatumElevation(surface)
+  let floor = MAX_REGION_LEVEL
+  let flooded: number | null = null
+  let everAshore = sea === null
+  for (let level = 0; level <= MAX_REGION_LEVEL; level += 1) {
+    let peak = 0
+    let ashore = sea === null
+    for (let probe = 0; probe < DETAIL_PROBES; probe += 1) {
+      // Golden-angle spiral: deterministic, and spread rather than clustered at
+      // the poles the way a latitude/longitude lattice would be.
+      const z = 1 - (2 * probe + 1) / DETAIL_PROBES
+      const around = probe * Math.PI * (3 - Math.sqrt(5))
+      const ring = Math.sqrt(Math.max(0, 1 - z * z))
+      const region = regionForDirection(
+        vec3(Math.cos(around) * ring, z, Math.sin(around) * ring),
+        level,
+      )
+      const at = (s: number, t: number): number => {
+        const ground = groundElevation(surface, regionDirection(region, s, t))
+        if (sea !== null && ground > sea) ashore = true
+        return ground
+      }
+      const corners =
+        at(0.5 - half, 0.5 - half) +
+        at(0.5 + half, 0.5 - half) +
+        at(0.5 - half, 0.5 + half) +
+        at(0.5 + half, 0.5 + half)
+      const error = Math.abs(at(0.5, 0.5) - corners / 4)
+      if (error > peak) peak = error
+    }
+    /*
+     * A quiet level proves nothing when every stencil was at sea. The clamp
+     * manufactures exact zeros wherever a probe lands on ocean, and at level 0
+     * the twenty-four probes alias onto at most six face-center stencils — so
+     * an ocean world whose face centers are all submerged read as "the field
+     * has nothing to say" at level 0 and streamed its islands, with kilometers
+     * of relief, as six patches forever. A flooded quiet level keeps walking;
+     * it settles the floor only on a world with no dry ground at all, where
+     * the shallowest one is the honest answer.
+     */
+    if (peak <= tolerance) {
+      if (ashore) {
+        floor = level
+        break
+      }
+      if (flooded === null) flooded = level
+    }
+    if (ashore) everAshore = true
+  }
+  if (floor === MAX_REGION_LEVEL && !everAshore && flooded !== null) {
+    floor = flooded
+  }
+
+  const answer = Math.min(MAX_REGION_LEVEL, floor + 1)
+  const map = held ?? new Map<string, number>()
+  map.set(key, answer)
+  detailFloorCache.set(surface, map)
+  return answer
 }
 
 /**
@@ -277,46 +507,127 @@ export function surfaceRadius(
  */
 export const HEIGHTFIELD_RESOLUTION = 65
 
+/**
+ * Rings of samples generated outside the patch's own edge.
+ *
+ * A central difference needs a neighbor on both sides, so without any border
+ * the edge row falls back to a one-sided difference — half the gradient over
+ * half the span — and every patch boundary draws as a hairline of mis-shaded
+ * ground. That is one ring. The second is the morph: a patch about to hand over
+ * to its parent has to shade like its parent as well as sit where its parent
+ * sits, and the parent's normal is a difference across *two* of this patch's
+ * cells, so the outermost vertex reaches two samples out.
+ *
+ * Taking those rows from the neighboring *patch* is the other way to get them
+ * and is strictly worse: it makes a patch's geometry depend on which of its
+ * neighbors happen to be loaded, which is an order dependency in a system whose
+ * whole premise is that a patch is a pure function of its address.
+ *
+ * The cost is (69² − 65²) / 65² = 12.7% more samples, and it buys a patch that
+ * needs to know nothing about anybody.
+ */
+export const HEIGHTFIELD_BORDER = 2
+
 export interface HeightfieldRequest {
   readonly region: RegionAddress
-  /** Vertices per side; see HEIGHTFIELD_RESOLUTION. */
+  /** Vertices per side of the patch itself; see HEIGHTFIELD_RESOLUTION. */
   readonly resolution: number
+  /** Rings of samples outside the patch. Default `HEIGHTFIELD_BORDER`. */
+  readonly border?: number
 }
 
 export interface Heightfield {
   readonly region: RegionAddress
+  /** Vertices per side of the patch itself, excluding the border. */
   readonly resolution: number
-  /** Row-major elevations relative to the body datum, meters. */
+  readonly border: number
+  /**
+   * Row-major elevations relative to the body datum, meters.
+   *
+   * `(resolution + 2 · border)²` of them: sample (row, col) of the patch is at
+   * `(row + border) · stride + (col + border)`, and negative indices are the
+   * border. `heightfieldStride` and `heightfieldSample` are the two readers, so
+   * that arithmetic is written once.
+   */
   readonly elevations: Float32Array
+  /** Over the patch itself. The border is generated but not summarized. */
   readonly minElevation: Meters
   readonly maxElevation: Meters
+}
+
+/** Samples per row of a heightfield's array, border included. */
+export const heightfieldStride = (field: {
+  readonly resolution: number
+  readonly border: number
+}): number => field.resolution + 2 * field.border
+
+/**
+ * One sample, in patch coordinates: (0, 0) is the patch's first vertex and
+ * (−1, −1) is the border sample diagonally outside it.
+ */
+export function heightfieldSample(
+  field: Heightfield,
+  row: number,
+  col: number,
+): Meters {
+  const stride = heightfieldStride(field)
+  const r = row + field.border
+  const c = col + field.border
+  if (r < 0 || c < 0 || r >= stride || c >= stride) return 0
+  return field.elevations[r * stride + c] ?? 0
 }
 
 /**
  * Generate one terrain patch.
  *
- * This is the meaningful CPU work that runs in a worker: a 65×65 patch is 4,225
- * samples and each is 14 octaves of 3D noise. The result is a Float32Array
- * precisely so it can be transferred rather than copied back to the main thread.
+ * This is the meaningful CPU work that runs in a worker: a bordered 65×65 patch
+ * is 4,761 samples and each is 14 octaves of 3D noise. The result is a
+ * Float32Array precisely so it can be transferred rather than copied back to
+ * the main thread.
+ *
+ * The border samples run `s` and `t` outside [0,1], which `regionDirection`
+ * answers on the neighboring face — so the outer ring of a patch at the edge of
+ * a cube face is the first interior row of a patch on a different face, exactly
+ * equal to what that patch generates for itself. Nothing here knows that
+ * happened.
  */
 export function generateHeightfield(
   surface: SurfaceParameters,
   request: HeightfieldRequest,
 ): Heightfield {
   const { region, resolution } = request
+  const border = request.border ?? HEIGHTFIELD_BORDER
   invariant(
     resolution >= 2 && resolution <= 513,
     `Bad heightfield resolution ${resolution}`,
   )
-  const elevations = new Float32Array(resolution * resolution)
+  invariant(
+    Number.isInteger(border) && border >= 0 && border <= 4,
+    `Bad heightfield border ${border}`,
+  )
+  const stride = resolution + 2 * border
+  const elevations = new Float32Array(stride * stride)
+  const step = resolution - 1
   let min = Infinity
   let max = -Infinity
-  for (let row = 0; row < resolution; row += 1) {
-    const t = row / (resolution - 1)
-    for (let col = 0; col < resolution; col += 1) {
-      const s = col / (resolution - 1)
-      const elevation = groundElevation(surface, regionDirection(region, s, t))
-      elevations[row * resolution + col] = elevation
+  for (let row = -border; row < resolution + border; row += 1) {
+    const t = row / step
+    for (let col = -border; col < resolution + border; col += 1) {
+      const s = col / step
+      const index = (row + border) * stride + (col + border)
+      elevations[index] = groundElevation(
+        surface,
+        regionDirection(region, s, t),
+      )
+      // The extremes describe the patch, not the border: they size the bounding
+      // volume the renderer culls against, and a border sample is ground the
+      // next patch draws.
+      if (row < 0 || col < 0 || row >= resolution || col >= resolution) continue
+      // Read back rather than kept: the array is Float32 and the extremes have
+      // to bound *it*, not the float64 the generator computed. A bounding
+      // volume sized from a value the mesh does not contain is a volume that
+      // can be a rounding step too small.
+      const elevation = elevations[index] as number
       if (elevation < min) min = elevation
       if (elevation > max) max = elevation
     }
@@ -324,6 +635,7 @@ export function generateHeightfield(
   return {
     region,
     resolution,
+    border,
     elevations,
     minElevation: min,
     maxElevation: max,

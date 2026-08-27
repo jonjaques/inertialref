@@ -2,11 +2,13 @@ import {
   formatDistance,
   getLogger,
   type Meters,
+  type Radians,
   type Seconds,
 } from '@inertialref/shared'
 import {
   type FrameId,
   type Quat,
+  Quaternion as Q,
   UV,
   type UniverseVector,
   Vec,
@@ -14,9 +16,18 @@ import {
 } from '@inertialref/spatial'
 import {
   type Body,
+  bodyFixedFrameId,
   bodyFrameId,
   formatAddress,
+  geodeticDirection,
+  hasSolidSurface,
+  parseAddress,
+  findBody,
+  groundElevation,
   type StarSystem,
+  surfaceRadius,
+  type SurveySite,
+  surveySites,
   systemFrameId,
   type SystemId,
   type UniverseAddress,
@@ -30,11 +41,20 @@ import {
   approachState,
   clampDistance,
   clampElevation,
+  clampPitch,
+  clampStanceHeight,
   distanceBounds,
   framingDistance,
+  heightForScrub,
+  horizonPitch,
+  MIN_STANCE_HEIGHT,
   type ObserverState,
   observerPose,
+  scrubForHeight,
   shortestAngle,
+  type SurfaceStance,
+  surfaceHeightBounds,
+  surfaceStancePose,
   zoomFactorForNotches,
 } from '@inertialref/rendering'
 import { currentSystemOf, resolveDestination } from './travel.ts'
@@ -92,6 +112,27 @@ export interface ObserverTarget {
   readonly detail: string
 }
 
+/**
+ * Where the camera is standing, when it is standing rather than orbiting.
+ *
+ * Everything a panel needs to draw the descent controls, including the two
+ * numbers that only mean something down here: `scrub`, which is the slider's
+ * own position because the band is logarithmic, and `groundElevation`, which is
+ * what the terrain says is under your feet.
+ */
+export interface SurfaceStatus {
+  readonly stance: SurfaceStance
+  /** The scrub's position in [0, 1] for `stance.height`. */
+  readonly scrub: number
+  /** Elevation of the ground below the stance, relative to the datum. */
+  readonly groundElevation: Meters
+  /** Distance from the body's center to the eye. */
+  readonly radius: Meters
+  readonly heightText: string
+  /** The survey site the stance is on, when it was set from one. */
+  readonly site: string | null
+}
+
 /** Everything a panel needs to draw the observatory's state. */
 export interface ObserverStatus {
   readonly target: ObserverTarget | null
@@ -105,6 +146,8 @@ export interface ObserverStatus {
   readonly altitudeText: string
   /** How much of the frame height the target subtends, 0–1. */
   readonly fill: number
+  /** Non-null exactly while the camera is on the ground. See `stand`. */
+  readonly surface: SurfaceStatus | null
 }
 
 /**
@@ -145,6 +188,18 @@ export class Observatory {
   #desired: ObserverState = this.#state
   /** The lens the framing math assumes. Set by the host from its camera. */
   #fovDeg = 65
+  /**
+   * The surface arm's whole state: non-null exactly while standing.
+   *
+   * Not a mode flag beside the orbit state but *instead* of it — a nullable
+   * field, so "which arm owns the camera" is a question with one answer and
+   * cannot be inconsistent. The orbit state is left untouched underneath, which
+   * is what makes `leaveSurface` a restore with nothing to restore: the camera
+   * goes back to the framing it had before the descent, because it never left.
+   */
+  #stance: SurfaceStance | null = null
+  /** Which survey site the stance came from, when it came from one. */
+  #site: string | null = null
 
   constructor(host: HarnessHost) {
     this.#host = host
@@ -156,6 +211,11 @@ export class Observatory {
 
   get state(): ObserverState {
     return this.#state
+  }
+
+  /** Whether the camera is on the ground rather than in orbit. */
+  get standing(): boolean {
+    return this.#stance !== null
   }
 
   /**
@@ -170,6 +230,11 @@ export class Observatory {
   get eye(): UniverseVector | null {
     const target = this.#target
     if (target === null) return null
+    // The surface arm first, because when it holds the camera the orbit state
+    // underneath it is stale by design — a catalog sorting by distance from
+    // "the viewer" while the viewer is standing on Iapetus must not sort by
+    // where the viewer was before the descent.
+    if (this.#stance !== null) return this.#surfacePose()?.position ?? null
     const centre = this.#targetPosition(target)
     return centre === null ? null : observerPose(centre, this.#state).position
   }
@@ -197,6 +262,11 @@ export class Observatory {
     const target = this.#resolve(destination)
     const previous = this.#target
     this.#target = target
+    // Focusing something else is leaving the ground. A stance names a latitude
+    // and a longitude on one particular body, so carrying it across a change of
+    // target would put the camera at those coordinates on a different world.
+    this.#stance = null
+    this.#site = null
 
     const distance = clampDistance(
       framingDistance(
@@ -257,6 +327,8 @@ export class Observatory {
    */
   clear(): void {
     this.#target = null
+    this.#stance = null
+    this.#site = null
   }
 
   /** Orbit by a pointer drag, in pixels. */
@@ -332,23 +404,225 @@ export class Observatory {
     return distanceBounds(this.#target?.radius ?? 0)
   }
 
+  /* --------------------------------------------------------------------- */
+  /* The surface arm                                                        */
+  /* --------------------------------------------------------------------- */
+
+  /**
+   * Put the camera on the ground.
+   *
+   * Below `MIN_DISTANCE_RADII`, which the orbit arm refuses to go under and is
+   * right to: half a radius up is where a planetarium stops showing you a world
+   * and starts showing you ground with no horizon in it. What that clamp also
+   * prevented was ever *inspecting* a surface, so the only way to look at
+   * terrain was to fly a ship at it — which is the line in the plan's gap table
+   * that says iteration and testing both pay for it.
+   *
+   * Read-only like everything else here. No teleport, no clock, no entity
+   * write: it samples `surfaceRadius` and returns a camera pose, and
+   * `observatory.test.ts`'s state-hash comparison covers this arm too.
+   *
+   * **Entering is a cut, not a fly-to, and that is deliberate.** The orbit arm
+   * eases because a transition across fourteen decades has to read as a move;
+   * this one is the instrument a plate is captured through, and an ease means
+   * every capture has to wait an unspecified number of frames for a filter to
+   * settle before the picture is the picture. `ir.visit` returns and the frame
+   * after it is the frame you asked for.
+   *
+   * **It resolves before it commits, and the ordering is the whole of two
+   * bugs.** Calling `focus` first is the obvious shape and is wrong twice.
+   * `focus` re-solves the distance from `framingDistance`, so a `stand` on the
+   * body already held silently discarded the framing the user had zoomed to —
+   * and `leaveSurface` then "restored" a default nobody had chosen, which is
+   * exactly the thing four docstrings here promise it does not do. And because
+   * the surface check ran *after* the commit, `stand('s:SOL/b:5')` retargeted
+   * the camera to Saturn and only then threw "no surface to stand on", leaving
+   * the planetarium looking at a body the call had refused.
+   */
+  stand(
+    destination?: string,
+    options: {
+      readonly site?: string
+      readonly latitude?: Radians
+      readonly longitude?: Radians
+      readonly height?: Meters
+      readonly heading?: Radians
+      readonly pitch?: Radians
+    } = {},
+  ): ObserverStatus {
+    const wanted =
+      destination === undefined ? this.#target : this.#resolve(destination)
+    if (wanted === null) {
+      throw new Error('The observatory is not looking at anything')
+    }
+    const body = this.#bodyOf(wanted)
+    if (body === null) {
+      throw new Error(`${wanted.name} is not a body`)
+    }
+    if (!hasSolidSurface(body)) {
+      throw new Error(`${body.name} has no surface to stand on`)
+    }
+    // Before the focus below, with the no-surface check: every refusal has to
+    // come before anything commits, or a typo'd site retargets the planetarium
+    // and throws away the caller's framing on a call that then refuses.
+    const site =
+      options.site === undefined
+        ? undefined
+        : surveySites(body).find((one) => one.id === options.site)
+    if (options.site !== undefined && site === undefined) {
+      throw new Error(
+        `${body.name} has no site "${options.site}" — try ${surveySites(body)
+          .map((one) => one.id)
+          .join(', ')}`,
+      )
+    }
+    // Only now, and only if it is somewhere else. Re-focusing the address
+    // already held is what threw the framing away.
+    if (wanted.address !== this.#target?.address) {
+      this.focus(wanted.address, { ease: false })
+    }
+
+    const latitude = options.latitude ?? site?.latitude ?? 0
+    const longitude = options.longitude ?? site?.longitude ?? 0
+    const height = clampStanceHeight(
+      options.height ?? MIN_STANCE_HEIGHT,
+      body.radius,
+    )
+    this.#stance = {
+      latitude,
+      longitude,
+      height,
+      heading: options.heading ?? 0,
+      // Level with the horizon rather than level with the tangent plane. From
+      // 400 km up the horizon is 19.6° *below* the local horizontal, so a pitch
+      // of zero at the top of a descent is a picture of empty sky.
+      pitch: options.pitch ?? horizonPitch(body.radius, height),
+    }
+    this.#site = site?.id ?? null
+    log.info('observatory standing', {
+      address: this.#target?.address,
+      site: this.#site,
+      height,
+    })
+    return this.status()
+  }
+
+  /** Back to orbit, at whatever framing the camera had before the descent. */
+  leaveSurface(): ObserverStatus {
+    this.#stance = null
+    this.#site = null
+    return this.status()
+  }
+
+  /** Move the stance without changing the height or the heading. */
+  moveTo(site: string | { latitude: Radians; longitude: Radians }): void {
+    const stance = this.#stance
+    const body = this.#body()
+    if (stance === null || body === null) return
+    if (typeof site === 'string') {
+      const found = surveySites(body).find((one) => one.id === site)
+      if (found === undefined) return
+      this.#stance = {
+        ...stance,
+        latitude: found.latitude,
+        longitude: found.longitude,
+      }
+      this.#site = found.id
+      return
+    }
+    this.#stance = { ...stance, ...site }
+    this.#site = null
+  }
+
+  /**
+   * Set the height above the ground, meters.
+   *
+   * Direct manipulation, unfiltered, exactly like `drag` and for the same
+   * reason: this is a slider under a finger, and a damping filter between the
+   * finger and the picture is lag rather than easing.
+   */
+  setStanceHeight(height: Meters): void {
+    const stance = this.#stance
+    const body = this.#body()
+    if (stance === null || body === null) return
+    const next = clampStanceHeight(height, body.radius)
+    this.#stance = {
+      ...stance,
+      height: next,
+      // The horizon moves as you climb, so a pitch that was tracking it keeps
+      // tracking it. A pitch the user has aimed somewhere does not: the test is
+      // whether the current pitch is still the one the previous height implied.
+      pitch:
+        Math.abs(stance.pitch - horizonPitch(body.radius, stance.height)) < 1e-6
+          ? horizonPitch(body.radius, next)
+          : stance.pitch,
+    }
+  }
+
+  /** Set the height from a scrub position in [0, 1]. See `heightForScrub`. */
+  setStanceScrub(t: number): void {
+    const body = this.#body()
+    if (body === null) return
+    this.setStanceHeight(heightForScrub(body.radius, t))
+  }
+
+  /** Compass heading in radians: 0 is north, increasing toward east. */
+  setHeading(heading: Radians): void {
+    if (this.#stance === null) return
+    this.#stance = { ...this.#stance, heading }
+  }
+
+  /** Above the horizontal, radians. Clamped short of vertical. */
+  setPitch(pitch: Radians): void {
+    if (this.#stance === null) return
+    this.#stance = { ...this.#stance, pitch: clampPitch(pitch) }
+  }
+
+  /** The named places on the body being looked at. Empty for a star. */
+  sites(): readonly SurveySite[] {
+    const body = this.#body()
+    return body === null || !hasSolidSurface(body) ? [] : surveySites(body)
+  }
+
+  /** The height band the surface arm covers here. Panels draw sliders against it. */
+  stanceBounds(): { readonly min: Meters; readonly max: Meters } {
+    return surfaceHeightBounds(this.#target?.radius ?? 0)
+  }
+
   status(): ObserverStatus {
     const radius = this.#target?.radius ?? 0
     const altitude = Math.max(0, this.#state.distance - radius)
+    const surface = this.#surfaceStatus()
+    /*
+     * How much of the frame the body fills — and standing on it, that is all of
+     * it, whatever the orbit arm was left at.
+     *
+     * `state` and `desired` below stay the orbit arm's own held numbers on
+     * purpose: they are what `leaveSurface` returns to, and a reader asking for
+     * them is asking about that camera. `fill` is not like that. It is a
+     * property of the picture, and computing it from a distance the picture is
+     * not being taken at made the Object panel's readout describe where the
+     * viewer had been before the descent.
+     */
     const fill =
-      radius > 0 && this.#state.distance > radius
-        ? (2 * Math.asin(Math.min(1, radius / this.#state.distance)) * 180) /
-          Math.PI /
-          this.#fovDeg
-        : 0
+      surface !== null
+        ? 1
+        : radius > 0 && this.#state.distance > radius
+          ? (2 * Math.asin(Math.min(1, radius / this.#state.distance)) * 180) /
+            Math.PI /
+            this.#fovDeg
+          : 0
     return {
       target: this.#target,
       state: this.#state,
       desired: this.#desired,
       travelling: !this.#arrived(),
-      altitude,
-      altitudeText: formatDistance(altitude),
+      // Standing, the reader wants the height above the ground under their feet
+      // — not the distance from a datum the orbit arm was last left at.
+      altitude: surface?.stance.height ?? altitude,
+      altitudeText: formatDistance(surface?.stance.height ?? altitude),
       fill,
+      surface,
     }
   }
 
@@ -363,6 +637,8 @@ export class Observatory {
   sample(dt: Seconds): ObserverPose | null {
     const target = this.#target
     if (target === null) return null
+    // The surface arm short-circuits the ease entirely. See `stand`.
+    if (this.#stance !== null) return this.#surfacePose()
 
     if (!this.#arrived()) {
       this.#state = approachState(this.#state, this.#desired, dt, TRAVEL_TAU)
@@ -413,6 +689,105 @@ export class Observatory {
       // has been replaced under us by a save load. Losing the pose for a frame
       // is not worth throwing out of a render loop over.
       return null
+    }
+  }
+
+  /**
+   * The body being looked at, or null when it is a star or has gone away.
+   *
+   * Resolved on demand rather than held on `ObserverTarget`, because a `Body`
+   * is a snapshot of a generated system and the world underneath can be
+   * replaced by a save load. A held reference would keep the camera standing on
+   * a mountain belonging to a universe that no longer exists.
+   */
+  #body(): Body | null {
+    return this.#bodyOf(this.#target)
+  }
+
+  /**
+   * The same, for a target that has not been committed yet.
+   *
+   * `stand` has to know whether a body has a surface *before* it retargets the
+   * camera — see the ordering note there — and that means resolving a target
+   * this object is not holding.
+   */
+  #bodyOf(target: ObserverTarget | null): Body | null {
+    if (target === null || target.kind === 'star') return null
+    try {
+      const address = parseAddress(target.address)
+      if (address.kind !== 'body') return null
+      const system = this.#host.world.system(address.system)
+      if (system === undefined) return null
+      return findBody(system, address.body) ?? null
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * Where the eye is when it is standing, in universe coordinates.
+   *
+   * Two frames and they are not interchangeable. The offset and the orientation
+   * come out of `surfaceStancePose` in the body's **rotating** axes, so both are
+   * carried into universe axes by the `bf:` frame's pose — the `b:` frame's
+   * orbital pose does not turn, and using it would leave the camera fixed in
+   * inertial space while the mountain it is standing on rotates out from under
+   * it. That is the same bug the `BodyFixedDirection` brand exists to prevent,
+   * met one layer up where a brand cannot reach.
+   *
+   * `renderTime`, never `clock.time`, exactly as `#targetPosition` documents.
+   */
+  #surfacePose(): ObserverPose | null {
+    const stance = this.#stance
+    const body = this.#body()
+    if (stance === null || body === null) return null
+    const world = this.#host.world
+    let spin
+    try {
+      spin = world.frames.pose(
+        bodyFixedFrameId(body.address),
+        world.clock.renderTime,
+      )
+    } catch {
+      return null
+    }
+    const up = geodeticDirection(stance.latitude, stance.longitude)
+    const { offset, orientation } = surfaceStancePose(
+      up,
+      surfaceRadius(body, up),
+      stance,
+    )
+    return {
+      position: UV.translate(spin.position, Q.rotate(spin.orientation, offset)),
+      orientation: Q.multiply(spin.orientation, orientation),
+    }
+  }
+
+  #surfaceStatus(): SurfaceStatus | null {
+    const stance = this.#stance
+    const body = this.#body()
+    if (stance === null || body === null) return null
+    const up = geodeticDirection(stance.latitude, stance.longitude)
+    const ground = surfaceRadius(body, up)
+    return {
+      stance,
+      scrub: scrubForHeight(body.radius, stance.height),
+      /*
+       * The terrain's own elevation, not `surfaceRadius − body.radius`.
+       *
+       * `surfaceRadius` is `datumRadius + groundElevation`, and `datumRadius`
+       * is the measured *ellipsoid* on any body with a figure — so subtracting
+       * `body.radius` folds the figure offset into a number the panel prints as
+       * a terrain elevation. On Phobos that is about −3.5 km of "elevation" on a
+       * body with a kilometer of relief; on Haumea it reaches −513 km. Worse, the
+       * Surface panel prints it directly under site buttons showing
+       * `SurveySite.elevation`, which is this exact function — the same place,
+       * two numbers, kilometers apart.
+       */
+      groundElevation: groundElevation(body.surface, up),
+      radius: ground + stance.height,
+      heightText: formatDistance(stance.height),
+      site: this.#site,
     }
   }
 

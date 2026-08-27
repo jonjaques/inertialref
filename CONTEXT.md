@@ -362,6 +362,14 @@ again in a neighboring system.
   its own helper asked at `clock.time` too: the test and the code were wrong
   together. Two assertions agreeing is not two pieces of evidence when they share
   a mistake.
+- **`parseSpectralType('D10')` returned a subclass of 10** (27 Aug 2026),
+  against the field's 0–9.9 contract — the white-dwarf branch took whatever
+  digits followed the class letters while the ladder branch below already
+  degrades past 9.9 to null. The input is legitimate: a white dwarf's
+  temperature index is 50400/Teff, which runs past 9 for the coolest ones.
+  Found by the never-throws property on a fresh seed, months after the branch
+  was written — which is the argument for properties over vectors, and for
+  pinning the counterexample as a vector once one is found.
 
 ## The five spikes, measured (19 Aug 2026)
 
@@ -3627,7 +3635,7 @@ What it found, in the order it found it:
 
 - **Mercury's radius was the mean, not the equatorial.** 2,439.7 against JPL's
   2,440.53. 830 m, on the field whose contract is the equatorial radius and
-  whose neighbours in the same file are all equatorial.
+  whose neighbors in the same file are all equatorial.
 - **Deimos's mass was 2.4% high** — an older value than the GM the MAR097
   ephemeris fit gives.
 - **Nix's and Hydra's masses were double.** JPL's GM for both is small and badly
@@ -4211,9 +4219,9 @@ sorted outward now, over the `parent` field the survey already answers.
 **A promoted moon sorted by its own orbit.** Turning off "Asteroids" orphans
 their moons, and the design keeps an orphan rather than dropping it — losing Io
 because "Planets" is off would be a filter deciding what a moon is. But sorted
-by its own semi-major axis, a moon of an asteroid orbits at a kilometre or two
+by its own semi-major axis, a moon of an asteroid orbits at a kilometer or two
 and lands _above Mercury_: nine rocks nobody asked for at the head of the list,
-measured in kilometres in a column of AU. The sort key for a promoted body is
+measured in kilometers in a column of AU. The sort key for a promoted body is
 its parent's axis now, taken from the run before the filter.
 
 **`searchTargets` was interpolating a parsed record into a string.**
@@ -4277,6 +4285,365 @@ a one-field push and `release()` restores the mode's.
 Label density and the minor-body filter did _not_ become stance fields, and the
 line is worth stating: they are read by a DOM layer that already owns its own
 projection pass, not by `GameEngine.#step`.
+
+## The terrain rig, and the three defects it found on its first run (26 Aug 2026)
+
+Phase 0 of [`TERRAIN-PLAN.md`](TERRAIN-PLAN.md) § 9: the instrument every later
+phase is judged through, built before any of them so the phase that triples the
+per-sample cost has something to be a regression against. No generator changes.
+
+### What it is
+
+**A second observer arm.** `packages/rendering/src/surfaceStance.ts` is five
+numbers about a point _on_ the ground — where, how high, which way — against the
+orbit arm's three about a point in space. Its ceiling is
+`(MIN_DISTANCE_RADII − 1)` radii, which is exactly the orbit arm's floor, so the
+two meet with no band that is both or neither. The height scrub is logarithmic
+because the band is 2 m to 3,186 km on Earth: a linear slider puts its midpoint
+at 1,593 km, above the altitude terrain is drawn at at all, so the control that
+exists to reach two meters would be the one control that cannot. The default
+pitch tracks `acos(r / (r + h))` rather than zero — from 400 km the horizon is
+**19.79°** below level (the small-angle `√(2h/r)` gives 20.30°, 2.6% wrong and
+growing), so a level camera at the top of a descent is a picture of empty sky.
+
+**The selection rule left the browser.** `terrainWindow` is the streamer's
+request set as a pure function of (radius, distance, direction). Same rule, both
+of its limits intact and now named: `windowRadius`, and a `clipped` count for
+the patches a cube-face edge drops — five of nine over a corner. Nothing about
+the streamer's behavior changed; what changed is that "what would this camera
+ask for?" no longer needs a GPU, which is why the 1.0 ms terrain line in the
+frame budget has been a designed figure rather than a measured one.
+
+**Sites are derived, not authored.** A beam search over the field finds four —
+`summit`, `basin`, `shore` and `rough`, the last of them an escarpment search
+scored on gradient — and two are chosen outright for the renderer
+rather than the geology: `corner`, where three faces of the addressing cube meet,
+and `pole`, where the east/north basis is singular. A survey of _interesting_
+ground would never wander into either. 2,100 samples, ~20 ms, memoized per body.
+A hand-written latitude is stale the moment the generator moves; "the highest
+ground on this body" survives regeneration by construction.
+
+**A descent is arithmetic.** `ir.descend()` flies orbit → 2 m over a site and
+reports level churn, peak burst and cache behavior with no world, no pool and no
+renderer, so a console, `pnpm sim --terrain-baseline` and a Node test all get the
+same numbers.
+
+### The three defects, which share one cause
+
+`terrainLevelFor` and `terrainOpacity` are handed `distance − radius`. For a
+camera standing on the ground that is `groundElevation + height`, not `height`.
+**The streaming rules measure altitude from the datum**, and on a body with real
+relief the datum is kilometers from the ground.
+
+- **A mountain can be too tall to draw.** `terrainOpacity` fades out one octave
+  above `radius · 2^(4.5 − maxLevel)`. On Miranda that is **2,605 m**; the summit
+  the survey finds is **4,826 m**. Standing on it the streamer requests nothing,
+  draws nothing and leaves the datum sphere on screen — at every altitude,
+  including zero. Verified in Chrome: `ir.terrain()` reads
+  `level 10, opacity 0, patches 0` with Miranda at `surface` tier filling 70° of
+  the frame. Two of Miranda's six survey sites are ground that cannot be looked
+  at. Any body whose relief exceeds `2^(5.5 − maxLevel)` of its radius has this
+  hole somewhere, and Miranda's 4.2% is Verona Rupes rather than an exotic case.
+- **A summit streams at half resolution.** Two meters above Iapetus's highest
+  ground the streamer asks for level 11; two meters above its deepest basin it
+  asks for 12. Same body, same height above the ground.
+- **A level pass re-requests the world.** Flying level across Iapetus at fixed
+  height coarsens and re-refines as the ground beneath rises and falls. Nine
+  patches today; a few hundred once the quadtree covers the disk.
+
+None is fixed here — Phase 0 measures the build that exists, and the fix is
+already in the plan, because a screen-space error metric measures against the
+patch rather than against the datum. The tests pin the numbers so the fix is a
+diff rather than a rediscovery.
+
+### The baseline, measured
+
+`pnpm sim --terrain-baseline`, Node 26 on an M5, main thread. Zoo members are
+found rather than written down — Gliese 1061 d and b for the rocky archetypes,
+Iapetus and Miranda for the icy ones.
+
+| Measurement                         | Figure                                                        |
+| ----------------------------------- | ------------------------------------------------------------- |
+| Patch generation, 65×65, 14 octaves | **12.7–13.5 ms/patch**, 0.31–0.33 M samples/s, steady over 48 |
+| Descent orbit → 2 m, 128 steps      | 558–838 patch requests, 7–8 level changes                     |
+| Peak burst                          | **9** — one window, however the camera arrives                |
+| Cache hit rate, 64 heightfields     | **< 5%** on a tracked descent; the working set is hundreds    |
+| Terrain drawn                       | on the last **two levels only**; the rest is the datum sphere |
+| Patches on screen at level 12       | 9 patches, 38,025 vertices, 73,728 triangles                  |
+
+The generation figure is the one that matters and it **exceeds the documented
+budget by 60%**. `docs/design/technical.md` carried "≤ 8 ms per patch per
+worker — Measured; within" with no machine and no date beside it; every
+neighboring row names both. It is 12.8 ms here, before a single band of geology
+is added, and the plan's own estimate is that the band stack is 3–5× today's
+fourteen octaves. That moves Phase 5 (the GPU producer) from "adopt only if the
+measurements say so" to a condition the measurements have already met once.
+
+Not measured, and the summary says so rather than inventing them: frame cost,
+draw calls and the worker queue's real depth are browser facts and this is a
+Node process.
+
+### Two findings from building the zoo
+
+**No generated system within 25 ly of Sol contains an `icy-active` body.**
+Generated moons come out on orbits too circular for the eccentricity tide to
+register, so the zoo is a set of bodies rather than one system. Sol supplies both
+icy archetypes from unmapped moons — Iapetus and Miranda — and neither has a
+shipped map, so both are squarely inside the milestone's scope.
+
+**Every unmapped rocky body in Sol is generated with `maxElevation` of zero.**
+Eris, Makemake, Quaoar, Haumea and the rest are perfectly smooth spheres. That is
+why the rocky archetypes have to come from outside Sol, and it is a gap in the
+small-body generator rather than in the search.
+
+### Corrected while measuring
+
+Phobos reads **1.64 g/cm³** here, not the published 1.88, and the cause is data
+rather than arithmetic: the vendored half-extents are 13.3 × 11.9 × 9.8 km
+against a published 13.0 × 11.4 × 9.1, which is 13% more volume for the same
+mass. `volumetricMeanRadius` is right — it fixes the 1.52× volume error a sphere
+of `a` makes — and the test asserts that ratio rather than a figure this data
+cannot reach.
+
+### What the plates show
+
+Standing at Iapetus's north pole at two meters, in the planetarium, with no ship
+anywhere: Sol on the horizon with its lens ghosts, and a flat tilted plane of
+ground. That is today's three-band field at level 12 and it is the honest "before"
+plate — the last octave of noise is the smallest thing that exists. At 40 km the
+same camera sees a perfectly smooth limb, because the streamer has faded out
+entirely.
+
+## The quadtree covers the disk, and three things it had to learn first (27 Aug 2026)
+
+Phase 1 of [`TERRAIN-PLAN.md`](TERRAIN-PLAN.md) § 9. A 3×3 window at one level
+becomes a restricted, morphing quadtree walked from the six cube faces.
+[ADR-0015](docs/adr/0015-terrain-level-of-detail.md) is the decision record.
+
+### What it closed
+
+The horizon is terrain rather than the datum sphere. Cube-face edges are not
+holes — there is no neighborhood to fall off, because the traversal starts at
+all six faces and a patch samples one row past its own edge into whichever face
+owns it. Patch boundaries have no seam, because two rings of border make every
+normal a central difference. And **all three of the datum defects the rig found
+are gone**: every one of the zoo's twenty-four survey sites now bottoms out at
+its own detail floor, where two of Miranda's could not be drawn at any altitude
+including zero.
+
+The tests that pinned those three now assert their opposites, which is what the
+rig was built for.
+
+### Three measurements that changed the design
+
+**The deep levels were an upsample.** On Mercury a level-9 patch differs from
+the bilinear interpolation of its parent by **12 cm**, and levels 10 through 12
+by nothing a float can hold — the shipped three bands have no content below
+about 11 km on an Earth-sized body. The old rule saturated at level 12, which is
+sixteen times the patches of level 10 for identical output at 12.8 ms of worker
+apiece. `surfaceDetailFloor` measures the residual from the field itself — 24
+golden-angle probes, five samples each, memoized, ~5 ms — and lands between
+level 7 and 10 across the zoo. It sits beside `elevationAt` so Phase 2's bands
+move it without anybody raising a constant.
+
+**Per-node distortion and neighbor consistency are incompatible.** Measuring
+each region's true span describes a patch better than its level does, and
+correcting for it is what Zucker & Higashi is about. It also breaks the no-crack
+argument: a patch and its coarser neighbor are measured at different points on
+the cube face, where the gnomonic scale differs by up to **22% at level 2**,
+which leaves the finer patch 15% short of its neighbor's grid. The metric is
+nominal per level; the distortion costs over-tessellation near the cube's eight
+corners instead of a seam.
+
+**A coarse patch costs more per sample than a fine one.** 20.69 ms at level 1
+against 14.33 at level 12 for the same 4,761 samples — 0.23 against 0.33 M
+samples/s — because a level-1 patch's consecutive samples land in different
+noise lattice cells and a level-12 patch's share one. The window never saw this;
+a whole-disk selection generates the coarse shell too. The border itself costs
+exactly the 12.7% it should: 12.80 ms unbordered, 14.46 bordered, same rate.
+
+### Three defects the browser found, and one only a per-frame sample could
+
+**The morph closes one level and nothing wider.** A patch slides onto its
+_parent's_ grid, so a level L patch meeting a level L+1 patch arrives exactly on
+its vertices — and meeting a level L+2 patch arrives on a grid the coarser one
+has no vertex on. Unrestricted, standing on Miranda, **30 of 468 patch edges had
+a gap of two or more and the worst was six**, drawn as dashed black arcs along
+every level ring. The plan said "neighbor levels unconstrained for geometry (the
+morph handles it)"; that is the one line of it that was wrong. The tree is
+restricted to 2:1 now, in packed integer keys with no allocation in the ancestor
+walk, because the readable version cost 1.8 ms — sixteen times the traversal it
+was correcting.
+
+**Terrain was painting over the photographs.** Extended to the sphere tier, the
+level 0–2 shell drew Earth at two and a half radii as five flat tinted patches
+with the map underneath. Terrain is now gated on a body's relief covering more
+than eight pixels: past that the mesh and the datum sphere are the same picture,
+and the sphere already carries a normal map and, on four bodies in Sol, a
+photograph. Earth draws its map to 2,000 km of altitude and its ground below;
+Miranda keeps terrain to eight thousand kilometers, because there the relief is
+the shape of the body. The plan's unconditional shell wants Phase 3's per-face
+albedo bake under it, and this threshold is where that goes.
+
+**`buildPatch` was 6.26 ms.** Six frames of terrain budget for one patch, on the
+main thread, during a descent that wants four hundred — and all of it
+allocation: a `Vec3` per direction, per scaled position, per difference, and two
+three-element arrays per normal, about forty thousand short-lived objects per
+patch. Written in scalars against flat arrays it is **0.250 ms**, 25× faster,
+with the morph-endpoint and shared-edge properties unchanged.
+
+**A cache smaller than the working set does not degrade, it oscillates.** The
+terrain strobed at every altitude, and one `ir.terrain()` sample per frame says
+why in a line: `cached` pinned at exactly 512 while the draw set swung between
+19 patches at level 3 and 356 at level 9. 512 heightfields was sized against a
+3×3 window; a quadtree holds two selections at once — the drawn one and the
+request one, taken from where the eye is going — and together they are six
+hundred to twelve hundred regions. Every frame evicted ground the next frame
+wanted. **A still could not have shown this**; the sample could.
+
+### What the invariant audit found afterwards
+
+Three, and the first is the one worth remembering. **`surfaceDetailFloor`
+memoized on `radius * 1e6 + resolution + tolerance`**, which folds three numbers
+additively — so (65, 0.5) and (64, 1.5) collided and whichever call ran first
+won for both. A pure function of the seed whose answer depended on the order it
+was asked in, which is the one thing generation may never do. Nothing in
+production passed a non-default, so it was a trap rather than a bug; the four
+tests that referenced it used it as the expectation _and_, through
+`simulateDescent`'s default, as the input, so they would have passed had it
+returned a constant.
+
+**Refinement gated on the heightfield cache while drawing needs geometry.** The
+traversal drops a node the moment it refines, so a region whose field had
+arrived but whose mesh had not was covered by nothing — not itself, not the
+parent that had given way to it. 138 of 266 selected regions on arrival at a
+landable body. It gates on the mesh now.
+
+**A docstring argued an ordering the code did not produce**: `#request` claimed
+nearest-first inside a grouping kept by a stable sort, and there was no sort —
+the first eight regions a cold frame asked for on Earth at two meters were
+470–750 km away rather than the ground underfoot.
+
+### The numbers
+
+`pnpm sim --terrain-baseline`, Node 26 on an M5, and the browser through a CDP
+driver at 1600×900.
+
+| Measurement                         | Figure                                                                             |
+| ----------------------------------- | ---------------------------------------------------------------------------------- |
+| Patches selected, whole disk at 2 m | 236 Earth · 435 Miranda · 474 on an 11,536 km world; 623 at a descent's worst step |
+| Selection cost                      | **0.11–0.31 ms** against the plan's 0.5 ms line                                    |
+| Mesh build                          | **0.250 ms** a patch, four a frame                                                 |
+| Patch generation, bordered 65×65    | **14.5 ms**, 0.33 M samples/s — 80% over the documented ≤ 8 ms                     |
+| Frame, standing on Miranda's summit | **2.04 ms at 63.9 fps**, 438 patches, 1.85 M vertices, 3.59 M triangles            |
+| Steadiness, 200 consecutive frames  | 440 patches and level 9 every frame, nothing starved, nothing pending              |
+| Vertex buffers                      | 203 KB a patch, so **45–126 MB** for a disk                                        |
+
+The memory is the number to watch and the levers are named rather than pulled:
+packing the four attributes below float32 is worth about half, and frustum
+culling the selection about half again.
+
+### Two departures from the plan, deliberate
+
+**Mapped bodies keep streaming.** `surfaceRadius` is one function and the
+contact test lands a ship on procedural elevation whether or not the body has a
+photograph — Mars's is ±14.7 km against a sphere drawn 29.4 km under the datum,
+so a mapped body with no streamed ground is a ship parked fifteen kilometers
+above a smooth planet. The carve-out is about what may be claimed of a mapped
+surface, not about whether the ground under the landing gear is drawn. Phase 3
+owes those patches a material that wears the published map.
+
+**Terrain rides the body's render compression.** The opacity fade was hiding
+that the surface tier reaches more than eight radii while `NEAR_LIMIT` is two
+thousand kilometers, so patches at true meters against a compressed sphere are a
+different object at a different distance. `RenderPlacement` grew a dimensionless
+`compression` for it: `scale` is the drawn _radius_, and multiplying a patch's
+anchor by that put it 10^12 m away.
+
+### What the plates show
+
+Standing at two meters on Miranda's summit — the site that could not be looked
+at — a terrain horizon with a distant peak, ground unbroken from underfoot to
+the limb, no seam at any of the seven level boundaries on screen. At 3 km, the
+same ground graded from level 9 underfoot to level 2 at the horizon in one
+surface. Earth from two and a half radii is its own photograph again.
+
+## The review of the disk — keys that named too little, constants that had to agree (27 Aug 2026)
+
+An xhigh review read PR #27's whole diff from twelve angles and came back with
+fifteen verified findings, all fixed in one commit. Most of them are five
+mechanisms, each worth recognizing on sight in a neighboring system.
+
+**A cache key must name everything the value depends on, and three did not.**
+The patch mesh cache keyed on `face.level.i.j` with no body, so a retarget
+served Miranda's vertex buffers as Iapetus's ground for every colliding key.
+Worker heightfields committed with no generation guard, so results in flight
+across a `clear()` landed under keys the next world reuses — and sat in the
+drawn set's keep list, unevictable. The survey-sites hook keyed on
+`[engine, address]` when sites are a function of the seed, so a world
+replacement at the same address kept serving the old world's summits. Fourth
+face of the same die: `stand()` committed `focus()` before validating the
+site id, so a typo'd site moved the planetarium and then refused.
+
+**The detail floor believed the sea.** `surfaceDetailFloor` stopped at the
+first quiet level, and the sea clamp makes submerged stencils exactly flat —
+so an ocean world whose ~6 aliased level-0 face-center probes all land at sea
+reported floor 1, and the streamer capped the whole body there, silently,
+forever. `rootSeed('d')`'s Earth: seaLevel 0.55, 9.9 km of relief, 23–34%
+land, reported floor 1 against a true 9; 7 of 112 sampled ocean worlds trap
+the same way. The walk carries past sea-flattened levels now and that seed is
+pinned.
+
+**Extrapolate in the frame you sample in.** The prefetch pushed the eye
+forward in universe coordinates and converted with the body's current pose,
+so the body's orbital velocity — which a hovering camera shares — displaced
+the request set by v × 2 s: ~94.7 km east on Mercury, a phantom pyramid
+refined forever at 12.8 ms a patch while a real descent prefetched along the
+orbit instead of the ground track. This is the velocity form of "never sample
+terrain in inertial axes", which has now shipped three times in three
+disguises. Its sibling in the same commit: the streamer gated on
+`hasSolidSurface` alone, so figured bodies streamed patches on the spherical
+datum while the contact test, `surfaceRadius` and the stance camera use the
+measured ellipsoid — ground ~3.5 km above the eye on Phobos, and from orbit a
+spherical terrain shell floating around the shape model.
+
+**Two constants that must agree will drift; make one the other.**
+`GEOMETRY_KEPT` said it matched the streamer's cache and was 512 against 896
+— under the 623 patches a whole-disk drawn set reaches, so mesh retention was
+permanently inert on large worlds. The descent baseline's `DEFAULT_CACHE`
+copied the 512 the same PR retired for 2,304, so every regression figure
+described the oscillating configuration the change removed. `PITCH_LIMIT`
+restated `ELEVATION_LIMIT`'s argument with its own number. Each is now the
+other constant, or derived from it.
+
+**`Number.MAX_VALUE` rounds to Infinity in a float32 uniform**, and
+`Inf − Inf` is a NaN in the morph denominator — WGSL leaves `max(NaN, 1)`
+indeterminate, so "level-0 patches never morph" held by driver luck on the
+hardware at hand. A sentinel that must survive f32 has to be finite there:
+`NO_MORPH_DISTANCE = 1e30`.
+
+The rest, briefly: eviction called `geometry.dispose()` on geometries holding
+the session-wide shared index — three r182 destroys attribute GPU buffers
+with no refcount, so every eviction past the retention cap killed the 98 KB
+index under ~450 live meshes; the evictor kept less than the requester
+re-asked for every frame, a 12.8 ms-per-patch regeneration treadmill at the
+cache cap; `#forget()` reset three of seven selection mirrors, so
+`ir.terrain()` reported stale counters in exactly the states it exists to
+explain; and `harness.sites()` offered six clickable survey sites on Saturn,
+each of which threw.
+
+**The 2:1 test could not fail.** The crack property looked the coarser
+neighbor up by the parent key, which skips exactly the two-level mismatch
+`balance()` exists to prevent — deleting `balance()` left the whole suite
+green. The replacement pins a deterministic Miranda-radius case and was
+watched go red under that mutation. Third regression test here to fail the
+"can it fail" check, for a third reason.
+
+One found and deliberately left: `installSurfaceFrame`
+(`packages/universe/src/frames.ts`) negates east; the PR's `localTriad` is
+the correct increasing-longitude one. Flipping the old one rotates every
+restored landed save a half turn, so it wants its own change with a
+migration story, not a line in a fix pass.
 
 ## Known gaps
 

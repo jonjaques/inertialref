@@ -208,8 +208,11 @@ the stars were rotated out of alignment with the planets in front of them.
 
 ## Terrain meshing
 
-Patches are built from a heightfield into vertex buffers in render space. The
-resolution is `HEIGHTFIELD_RESOLUTION` (65), exported once and shared by the
+Patches are built from a heightfield into vertex buffers in **body-fixed axes,
+relative to the patch's own anchor** — the datum-sphere point at its middle. The
+pose goes back on at draw time, which is why a rebase costs nothing and why the
+ground does not slide away from a ship landed on a world orbiting at 52 km/s.
+The resolution is `HEIGHTFIELD_RESOLUTION` (65), exported once and shared by the
 streamer, the worker task and capability check 10 — which compares worker output
 to main-thread output sample by sample, and would otherwise be capable of
 comparing two differently sized grids and calling them equal.
@@ -228,14 +231,15 @@ sequenceDiagram
     participant B as buildPatch()
     participant G as GPU
 
-    S->>P: generateHeightfield(region, 65×65)
-    Note right of P: 4,225 samples ×<br/>14 octaves of 3D noise
+    S->>P: generateHeightfield(region, 65×65 + 2 border)
+    Note right of P: 4,761 samples ×<br/>14 octaves of 3D noise
     P-->>S: Float32Array (transferred, not copied)
-    S->>B: heightfield + body pose + origin
-    B->>B: positions in render space
-    B->>B: <b>finite-difference normals</b>
-    B-->>G: BufferAttributes
-    Note over S,G: heightfield is cached across rebases —<br/>only the mesh is rebuilt
+    S->>B: heightfield + body radius
+    B->>B: positions, anchor-relative
+    B->>B: <b>central-difference normals, everywhere</b>
+    B->>B: <b>morph target: the parent's grid</b>
+    B-->>G: BufferAttributes, one shared index buffer
+    Note over S,G: built once and never rebuilt —<br/>the vertices do not know where the planet is
 ```
 
 ### The normals bug
@@ -249,8 +253,47 @@ invisible. The fix is a second pass computing central differences over
 neighboring vertices. It is not a polish detail: without it, terrain generation
 has no observable effect.
 
-Patch edges use one-sided differences, which leaves a hairline seam between
-neighboring patches — [roadmap item](../roadmap.md#terrain).
+The difference has to be central **everywhere**, including the edge. A one-sided
+difference there is half the gradient over half the span, which draws as a lit
+hairline along every patch boundary — so a patch is generated with two rings of
+border outside it and the loop never asks where its edge is. Taking those rows
+from the neighboring _patch_ is the other way to get them and is strictly worse:
+it makes a patch's geometry depend on which of its neighbors happen to be loaded,
+which is an order dependency in a system whose premise is that a patch is a pure
+function of its address.
+
+### The morph, and why the shader's share of it is one `mix`
+
+Every patch also carries where each of its vertices goes when it hands over to
+its parent. That is the CDLOD morph: a vertex slides toward the position the
+parent's coarser grid holds for it, arriving exactly as the parent takes over, so
+the switch has nothing left to pop.
+
+It is exact rather than approximate, and for a reason worth stating. A child
+covers half its parent's side, 64 quads halved is 32, so **every even index of
+the child lands on a parent grid point** — and the field is a pure function of
+direction, so the elevation there is the same number both patches computed.
+Snapping each vertex to the even index below it therefore lands the whole patch
+on its parent's vertices. The normals morph too, over _two_ cells, which is one
+of the parent's: shading has to hand over with the geometry or the switch trades
+a pop for a shimmer.
+
+A TSL node graph cannot be evaluated in Node, so the arithmetic lives here and
+the shader's whole share of it is one `mix` between two attributes — and the
+endpoint is a claim about two `Float32Array`s that `terrainPatch.test.ts` checks
+directly.
+
+### Two things a couple of hundred patches made matter
+
+The **index buffer** is a function of the resolution alone — 24,576 indices,
+98 KB — so it is built once and shared. Per patch it was 20 MB of identical
+numbers and, worse, two hundred GPU buffers where one will do.
+
+The **inner loops are written in scalars against flat arrays**, which is not a
+style choice. The readable version — a `Vec3` per direction, per scaled position,
+per difference, and a pair of three-element arrays per normal — allocated about
+forty thousand short-lived objects per patch and cost **6.26 ms**, which is six
+frames of terrain budget for one patch. It is 0.25 ms now.
 
 ### The datum sphere sits _below_ the terrain
 

@@ -25,7 +25,8 @@ Reasoning: [ADR-0014](../../docs/adr/0014-the-record-with-holes-in-it.md),
   escape velocity, the synodic day, the parallax, the habitable zone.
 
 - **Nothing about the camera belongs here.** Range, fill, the orbit angles and the
-  frame id live in the author's Camera instrument.
+  frame id live in the author's Camera instrument; the descent controls live in the
+  planetarium's own Surface panel, for the same reason.
 
 - **Divide by the radius the body actually has.** `body.radius` is `a`. For the
   ninety-two bodies in Sol that are not spheroids it overstates the volume by up to

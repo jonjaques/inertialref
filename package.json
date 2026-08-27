@@ -15,6 +15,7 @@
     "preview:client": "pnpm --filter @inertialref/game preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:me": "vitest run --reporter=dot --reporter=vitest-nyancat-reporter",
     "typecheck": "tsc -p tsconfig.json && tsc -p apps/game/tsconfig.json && tsc -p apps/headless/tsconfig.json && tsc -p apps/server/tsconfig.json && tsc -p apps/ingest/tsconfig.json",
     "lint": "oxlint",
     "graph": "node scripts/check-graph.mjs",
@@ -42,6 +43,7 @@
     "typescript": "~6.0.2",
     "vite": "^8.2.0",
     "vitest": "^4.0.5",
+    "vitest-nyancat-reporter": "^1.0.0",
     "wawoff2": "^2.0.1"
   }
 }

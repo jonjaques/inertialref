@@ -185,7 +185,9 @@ pnpm sim --help                # all flags
   a rubble pile comes apart at.
 - A debug spacecraft with **6-DoF flight**, patched-conic gravity, atmospheric
   drag, sphere-of-influence frame transitions, and landing.
-- **Streamed cube-sphere terrain**, generated in a worker pool.
+- **Streamed cube-sphere terrain** — a restricted, morphing quadtree covering
+  the whole disk, seamless from orbit to standing height, generated in a worker
+  pool.
 - **Save and load to IndexedDB in under 800 bytes**, because a save is a reference
   and not a copy.
 - **Genuinely offline** — a service worker caches the app, and with the server
@@ -213,7 +215,7 @@ PASS  6. Frame transitions — entered b:g:milky-way/s:SOL/b:0 after traveling 8
 PASS  7. Precision near the surface — 1 inch resolved to 9.4 µm, 8.18 kpc from the galactic center
 PASS  8. Meter-scale rendering — 1 m separation survives float32 at 8.18 kpc
 PASS  9. Origin rebasing — 500 rebases, 2560 km of origin travel, zero drift
-PASS 10. Worker task — 4225 terrain samples generated in a worker, identical to local generation
+PASS 10. Worker task — 4761 terrain samples generated in a worker, identical to local generation
 PASS 11. Save round trip — 744 bytes restored to an identical state hash
 PASS 12. Frame-rate independence — identical state hash f38e988a at tick 513
 ```
@@ -384,7 +386,14 @@ Stated plainly, because discovering these by surprise is worse than reading them
   the true component count, so the simplification is visible rather than hidden.
 - **Gravity is patched-conic** — no n-body perturbation.
 - **Collision is ground contact only** — no hull, no entity-to-entity.
-- **Terrain patches do not stitch** across cube faces or between LOD levels yet.
+- **Terrain is geometry without geology, and the numbers are written down.**
+  The quadtree covers the whole disk — morphed, seamless, measured to the ground
+  rather than the datum — but what it refines is three noise bands and one flat
+  color per body, so every world is the same rolling fBm at a different
+  amplitude. Generating a bordered 65×65 patch costs 14.5 ms against a
+  documented ≤ 8 ms budget, and a whole-disk selection holds 45–126 MB of
+  float32 vertex buffers. `pnpm sim --terrain-baseline` prints all of it; the
+  [roadmap](docs/roadmap.md#terrain) has the seams.
 - **Almost nothing is measured on the target machine.** The dev dock's perf tab
   (`P`) plots frame time, engine time, draw calls, worker queue and heap, and can
   time GPU frames properly — but every number recorded so far is from an Apple M5

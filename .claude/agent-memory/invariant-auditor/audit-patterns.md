@@ -12,6 +12,66 @@ suspicion wastes the budget. These are the places violations have actually appea
 
 **How to apply:** Check these first, then sweep the rest.
 
+## Order-dependence hides in "found, not authored" fixtures
+
+The repository loves derived fixtures — a thing that searches the world instead of
+naming addresses, on the argument that a search survives regeneration. It is a good
+argument and it keeps producing the same bug: **the search reads mutable session state.**
+
+`terrainZoo` (`feat/the-terrain-rig`) considers `world.loadedSystems()` first, with no
+distance filter, then generates more only if short. So `ir.zoo()` from a session that has
+flown anywhere returns different bodies than a fresh one — measured: `rocky-airless` moves
+from `s:P223_4_0_8/b:1` to `s:P221_6_1_3/b:3.0` after twenty systems are loaded. The
+author knew (the headless runner orders `--terrain-baseline` _before_ `--self-test` for
+exactly this reason) but shipped the ordering hack rather than the fix.
+
+**The check:** for any function billed as a stable fixture, ask what it reads that is not
+the seed. `loadedSystems()`, `#target`, `clock.tick`, a module-level cache. Then prove it
+by loading extra systems before the call. The two-line reproduction is worth more than
+any amount of reading.
+
+## Two test idioms here that degenerate into assertions that cannot fail
+
+The house style labels an assertion by interpolating the subject into both sides:
+`expect(\`${name}: ${actual}\`).toBe(\`${name}: expected\`)`. When the expected half is
+copy-pasted it becomes `expect(\`${name}/${site.id}\`).toBe(\`${name}/${site.id}\`)`—`surveySites.test.ts:163`. Grep new test files for `expect(X).toBe(X)` where both
+templates are byte-identical.
+
+The other: a purity test on a memoized function. `surveySites` memoizes on a module-level
+`Map`, so calling it twice and comparing returns the same object reference — the test
+passes without `derive` ever running again. A purity test has to defeat the cache (vary a
+key field, or construct a second body with the same parameters).
+
+## `Observatory.focus` is not a pure retarget — anything calling it inherits its resets
+
+`focus` clears the stance, recomputes `distance` from `framingDistance(radius, fov,
+DEFAULT_FILL)` and, with `ease: false`, assigns `#state = #desired` outright. `stand`
+calls it unconditionally whenever a destination is passed — and `harness.visit` always
+passes one, even when it is the address already focused. Measured: framing 1,101,750 m →
+2,392,965 m across a `visit`/`ascend` round trip on Iapetus, which falsifies "back to the
+framing you left" in three docstrings and `docs/guides/harness.md`.
+
+**The check:** a new verb that delegates to `focus`, `clear` or `teleport` "to reuse the
+resolve step" almost always inherits a reset it did not want. Read the callee's whole
+body, not its first line.
+
+## `faceToDirection` is a fourth `BodyFixedDirection` producer AGENTS.md does not name
+
+The invariant enumerates three (`bodyFixedDirection`, `geodeticDirection`,
+`regionDirection`) and the enumeration _is_ the enforcement. `terrain.ts:62` exports a
+fourth and its own docstring says "there are exactly two producers below". Until
+`feat/the-terrain-rig` it was only used inside `terrain.ts` and in tests; `surveySites.ts`
+now calls it in production. Not a correctness bug — face-local UV is body-fixed by
+construction — but the list should say four or the call should go through
+`regionDirection`.
+
+## Design docs carry "Not built" tables that the diff silently falsifies
+
+`docs/design/planetarium.md` § "Not built" still lists "Surface-level free look — the
+observatory's floor is the datum sphere" after the branch that built it. `docs/design/`
+is cited by name from `AGENTS.md` invariants, so it is not optional prose. Cheap check:
+grep the design doc the touched invariant cites for the feature name.
+
 ## The mirror goes stale in one direction: AGENTS.md forward, rules back
 
 This is now the highest-yield check in the whole audit and it has fired twice.
@@ -89,6 +149,14 @@ else invalidates. This diff got it right; nothing would have caught it if it had
   Sol via `TEST_CATALOG`. So every `provenance === 'projected'` branch — which is exactly
   the population whose prose is most likely to slip into the engine's voice — is untested.
 
+## The tree can move under you mid-audit
+
+On the quadtree review the branch gained a commit and four files gained uncommitted edits
+while I was reading — a concurrent session fixing the stale-comment sites I was about to
+report. Re-run `git status` and `git log --oneline <base>..HEAD` _before writing the
+report_, and drop findings that the working tree already fixes. Reporting a fix that is in
+flight is the same cost as a false positive.
+
 ## What `pnpm graph` covers
 
 Acyclicity, layer order, and the no-third-party-runtime-deps ban in `packages/*`. It
@@ -97,6 +165,108 @@ reports "12 packages, no cycles, layering intact". It does **not** see a Three.j
 adapter — those stay manual. `pnpm lint` (oxlint) does catch `react/no-multi-comp`, so
 one-component-per-file rarely needs a manual pass; the Fast-Refresh half (a `.tsx`
 exporting a non-component constant) does not, and is worth a grep.
+
+## Memoization keys built by _addition_ are the order-dependence bug here
+
+`terrain.ts`'s `surfaceDetailFloor` keyed its memo `radius * 1e6 + resolution + tolerance`,
+so `(65, 0.5)` and `(64, 1.5)` collide and whichever call ran first won for both — measured
+9 vs 8 on `s:SOL/b:0`, same seed, same body. This is the "generation depends on order"
+invariant in its least visible form: the function is pure, the seed is derived from the
+address, and the defect is entirely in the cache.
+
+**The check:** for every new module-level `Map`/`WeakMap` in `packages/*`, read the key
+expression. Additive composites and template strings without separators are the tell. Prove
+it by calling twice in each order from two fresh processes — two lines, and it is the only
+way to see it, because every production caller usually passes the defaults and never
+collides.
+
+Fixed on `feat/the-quadtree-covers-the-disk`: the key is `${radius}|${resolution}|${tolerance}`
+now, separated, and `radius` is over-keying (the walk never reads it) rather than under-keying.
+
+## Running `packages/universe` standalone from /tmp is cheap and settles most claims
+
+`node --experimental-strip-types` runs the sources directly. Absolute imports of
+`packages/universe/src/{terrain,system,galaxy}.ts` + `catalog/fixture.ts` (`TEST_CATALOG`,
+**not** `testCatalog.ts`) + `catalogStub(TEST_CATALOG.stars[0])` reproduces the test
+fixtures in about fifteen lines. Used it to confirm the sea-clamp detail-floor fix goes
+red under the mutation (`rootSeed('d')` Earth: old walk 1, shipped walk 9) and to sweep
+572 generated bodies for a residual trap (none). A measured mutation beats reading the
+test.
+
+Trap: `rg -rn` is `--replace n`, not "recursive with line numbers". It silently rewrites
+the matched text in the output — `seedHex` printed back as `n` and nearly cost a false
+"this field does not exist" finding. Use `rg -n`.
+
+Recurring companion: the memoized function ships with **no test**, and the tests that do
+exist use it on both sides (as the expectation _and_, via a default parameter, as the input
+to the thing under test). `terrainRig.test.ts` asserts `descent bottoms out at
+surfaceDetailFloor(...)` while `simulateDescent`'s default `maxLevel` _is_
+`surfaceDetailFloor(...)` — tautological in the value, so it cannot see the collision.
+
+## "Ready" predicates that test a different cache than the one the drawer reads
+
+`terrainSelect`'s `ready` is documented as the thing that prevents holes: refine only into
+regions that are drawable. The streamer answered it with `#fields.has(key)` — the
+_heightfield_ cache — while `state()` skips any region whose `RenderPatch` has not been
+built, and `#build` builds 4 per frame against 8 fields arriving. A refined parent is
+dropped from the selection, so the gap is open sky. Measured on a landing: 204 selected /
+104 built at frame 40, worst 138 on arrival and 68 during a sustained descent.
+
+**The check, and it generalizes:** when a predicate names a precondition ("it is drawable",
+"it is loaded", "it is ready"), find the code that actually _consumes_ the thing and confirm
+it reads the same map. Two caches with a per-frame budget between them is the shape. The
+cheap proof is comparing the selected count against the drawn count over a few hundred
+headless frames — `game.terrain().patches` vs `game.terrainState().patches.length`.
+
+## An ordering argument in a docstring, with no sort in the code
+
+`#request`'s comment says "coarsest first and then nearest … the order is the argument … a
+stable sort keeps that grouping". There is no sort — it filters and slices 8. Measured, the
+first eight requests on Earth at 2 m are 470–750 km away, so the budget buys the horizon
+rather than the ground underfoot.
+
+Comments that _argue_ for a property are where to look, not comments that state one: the
+argument is written when the author has the property in mind, and the sort is what gets
+dropped in a later refactor. Grep the function for `sort`/`localeCompare` before believing
+it. `TerrainSelection.patches`'s "stable order: face, then quadrant, then depth" was wrong
+the same way in the same diff.
+
+## A fix pass's residue: the _guard_ is fixed, the _reader_ is not
+
+The highest-yield check on a "fifteen findings from the review" commit is not whether
+each fix works — they usually do — but whether the fix reaches every consumer of the
+thing it fixed. Two shapes, both found on `feat/the-quadtree-covers-the-disk`:
+
+- `useSurveySites` added `seedHex` to the effect's dependency array, so the effect
+  re-runs on a world replacement — but the render-time guard is still
+  `built.of === address ? built.sites : null`. The address is unchanged by a save load,
+  so the previous world's sites are returned for one paint, clickable. **Check: when a
+  key is widened, grep for every other place that key is compared.**
+- The streamer's `#previous` is nulled by `clear()`, but `update()` captures
+  `const previous = this.#previous` _above_ the retarget branch that calls `clear()`.
+  A local snapshot taken before an invalidating call outlives the invalidation.
+
+## "One constant instead of two that must agree" usually leaves a smaller twin
+
+The fix that retires `GEOMETRY_KEPT = 512` for `GEOMETRY_KEPT = GEOMETRY_CACHE` is
+right. But `packages/devtools` cannot import `apps/game`, so `descent.ts`'s
+`DEFAULT_CACHE = DEFAULT_MAX_PATCHES * 3` restates the streamer's own
+`FIELD_CACHE = DEFAULT_MAX_PATCHES * 3`. The number shrank from 512 to the multiplier
+`3`; the failure mode did not change, and nothing asserts the two agree.
+
+Companion: the _test_ keeps the retired number. `terrainRig.test.ts:305` still asserts
+`uniqueRegions > 512` under a comment that now names `DEFAULT_MAX_PATCHES * 3` (2,304).
+512 is below even one selection (768). **Grep the retired literal across tests, not just
+across source.**
+
+## A new gate in the code is a new branch in the docs' flowchart
+
+`terrainStreamer.#resolve` gained `&& body.figure === null`, which removes 92 of Sol's
+129 bodies plus every generated body under `ROUNDING_RADIUS` from streaming.
+`docs/concepts/streaming.md`'s Mermaid gate node still reads
+`"a solid body, relief over 8 px?"`, and ADR-0015's carve-out section is about _mapped_
+bodies only. Mermaid node labels are prose nobody greps. When a diff adds a term to a
+predicate, grep the docs for the predicate's other terms (`solid body`, `carve-out`).
 
 ## Cadence claims in comments are checkable arithmetic
 

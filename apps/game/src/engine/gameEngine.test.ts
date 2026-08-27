@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { createInlineWorker, createTaskRegistry } from '@inertialref/workers'
 import { MemorySaveStore } from '@inertialref/persistence'
+import { DEFAULT_MAX_PATCHES } from '@inertialref/rendering'
+import { DEFAULT_CACHE } from '@inertialref/devtools'
+import {
+  FIELD_CACHE,
+  GEOMETRY_CACHE,
+  type PlacedPatch,
+} from './terrainStreamer.ts'
 import { GameEngine } from './GameEngine.ts'
 
 /*
@@ -108,17 +115,39 @@ describe('the game engine, headless', () => {
     if (target === undefined) throw new Error('nowhere to land')
     game.harness.land(target.address, 0.35, -1.1)
 
-    // Enough frames for the inline pool to deliver the heightfields.
-    for (let i = 0; i < 30; i += 1) {
+    // Enough frames for the quadtree to bottom out. It refines progressively,
+    // so a patch chosen before it settles is a patch that gets refined away.
+    for (let i = 0; i < 150; i += 1) {
       game.frame(1 / 60)
       await new Promise((resolve) => setTimeout(resolve, 2))
     }
     expect(game.terrainState().patches.length).toBeGreaterThan(0)
 
+    /*
+     * One named patch, followed by its address.
+     *
+     * `patches[0]` was enough while the streamed set was a nine-patch window
+     * that arrived at once. A quadtree refines progressively and reorders as it
+     * does, so the first entry is a different piece of ground from frame to
+     * frame and the distance to it moves by kilometers for reasons that have
+     * nothing to do with what this test is about.
+     */
+    const anchorRegion = [...game.terrainState().patches].sort(
+      (a: PlacedPatch, b: PlacedPatch) =>
+        b.patch.region.level - a.patch.region.level,
+    )[0]!.patch.region
     const separation = (): number => {
       const scene = game.scene()
       const ship = scene?.entities.find((entity) => entity.isCamera)
-      const placed = game.terrainState().patches[0]
+      const placed = game
+        .terrainState()
+        .patches.find(
+          ({ patch }) =>
+            patch.region.face === anchorRegion.face &&
+            patch.region.level === anchorRegion.level &&
+            patch.region.i === anchorRegion.i &&
+            patch.region.j === anchorRegion.j,
+        )
       if (ship === undefined || placed === undefined)
         throw new Error('nothing to measure')
       return Math.hypot(
@@ -172,7 +201,9 @@ describe('the game engine, headless', () => {
       .find((candidate) => candidate.landable)
     if (target === undefined) throw new Error('nowhere to land')
     game.harness.land(target.address, 0.35, -1.1)
-    for (let i = 0; i < 40; i += 1) {
+    // Enough for the pyramid to arrive: the whole ladder is queued at once, but
+    // it is still a couple of hundred patches at 13 ms of generation apiece.
+    for (let i = 0; i < 120; i += 1) {
       game.frame(1 / 60)
       await new Promise((resolve) => setTimeout(resolve, 2))
     }
@@ -210,20 +241,32 @@ describe('the game engine, headless', () => {
         )
       }
     }
-    // One vertex spacing at level 12 on this body is about 17 m; 40 m leaves
-    // room for the chase camera's offset without admitting a displaced patch.
-    expect(nearest).toBeLessThan(40)
+    /*
+     * One vertex spacing at this body's own detail floor, plus room for the
+     * chase camera's offset.
+     *
+     * The streamer stops where the field stops having anything to say —
+     * `surfaceDetailFloor`, level 9 on this body, 117 m of spacing — because
+     * past that a patch is a bilinear interpolation of one already in the
+     * cache. 300 m is two of those spacings and still an order of magnitude
+     * inside the 1,542 m displacement this test exists to catch.
+     */
+    expect(nearest).toBeLessThan(300)
   }, 30_000)
 
-  it('streams no terrain from orbit, and fades it in on the way down', async () => {
+  it('streams coarse ground from orbit and refines it on the way down', async () => {
     /*
-     * From a 300 km orbit the 3×3 patch window is a lone raised tile on the
+     * From a 300 km orbit the 3×3 patch window was a lone raised tile on the
      * datum sphere — 11 km proud of it, since the sphere is sunk a full relief
-     * below the datum. The winding fix made that tile visible for the first
-     * time, floating on the planet like a sticker. Up there the sphere alone is
-     * the honest representation, so the streamer must not spend workers on
-     * patches nobody should see; through the fade band the ground comes back
-     * as a transparency ramp rather than a pop.
+     * below the datum. The honest representation up there was the sphere alone,
+     * so the streamer faded out and spent no workers; and because the fade
+     * measured altitude from the datum, a mountain tall enough could not be
+     * drawn at any altitude including zero.
+     *
+     * The quadtree covers the whole disk at every distance, so what changes on
+     * the way down is the *level*, not the presence. Orbit is a coarse shell,
+     * the ground is the field's own detail floor, and there is ground on screen
+     * throughout.
      */
     const game = engine()
     const target = game.harness
@@ -231,36 +274,94 @@ describe('the game engine, headless', () => {
       .find((candidate) => candidate.landable)
     if (target === undefined) throw new Error('nowhere to land')
 
-    game.harness.orbit(target.address, 300)
-    for (let i = 0; i < 10; i += 1) {
-      game.frame(1 / 60)
-      await new Promise((resolve) => setTimeout(resolve, 2))
+    const settle = async (frames: number) => {
+      for (let i = 0; i < frames; i += 1) {
+        game.frame(1 / 60)
+        await new Promise((resolve) => setTimeout(resolve, 2))
+      }
     }
-    const orbit = game.terrainState()
-    expect(orbit.opacity).toBe(0)
-    expect(orbit.patches.length).toBe(0)
-    expect(orbit.pending).toBe(0)
 
-    // 24 km up is inside the fade band on this body (fully solid below ~16 km,
-    // gone above ~32 km): terrain streams, but wears a partial opacity.
-    game.harness.orbit(target.address, 24)
-    for (let i = 0; i < 20; i += 1) {
-      game.frame(1 / 60)
-      await new Promise((resolve) => setTimeout(resolve, 2))
-    }
-    const descending = game.terrainState()
-    expect(descending.opacity).toBeGreaterThan(0)
-    expect(descending.opacity).toBeLessThan(1)
-    expect(descending.patches.length).toBeGreaterThan(0)
+    game.harness.orbit(target.address, 300)
+    await settle(40)
+    const orbit = game.terrain()
+    if (orbit === null) throw new Error('no terrain report')
+    expect(orbit.patches).toBeGreaterThan(0)
 
     game.harness.land(target.address, 0.35, -1.1)
-    for (let i = 0; i < 20; i += 1) {
-      game.frame(1 / 60)
-      await new Promise((resolve) => setTimeout(resolve, 2))
+    await settle(60)
+    const landed = game.terrain()
+    if (landed === null) throw new Error('no terrain report')
+    expect(landed.patches).toBeGreaterThan(0)
+    // Finer on the ground than from orbit, which is the whole of "one field at
+    // every distance": the same quadtree answered at two ranges.
+    expect(landed.level).toBeGreaterThan(orbit.level)
+    game.dispose()
+  }, 30_000)
+
+  it('holds the ground it has refined to, frame after frame', async () => {
+    /*
+     * The strobe, as an assertion.
+     *
+     * A cache smaller than the working set does not degrade, it oscillates. The
+     * streamer holds two selections at once — the drawn one and the request
+     * one, taken from where the eye is going — and sized against the 3×3
+     * window's 64 heightfields, every frame evicted ground the next frame
+     * wanted: the drawn set collapsed from 350 patches at level 9 to 19 at
+     * level 3, refined back over the following frames, and collapsed again.
+     * Terrain flickering at every altitude, with `cached` pinned at exactly the
+     * cap.
+     *
+     * A still cannot see this and neither can a settled reading. What sees it
+     * is the *sequence*: once a selection has converged it must not shrink,
+     * because nothing about a stationary camera has changed. The bound is
+     * generous — a few patches of churn as the body turns under the stance is
+     * ordinary — and the failure it was written for is a factor of eighteen.
+     */
+    const game = engine()
+    const target = game.harness
+      .targets()
+      .find((candidate) => candidate.landable)
+    if (target === undefined) throw new Error('nowhere to land')
+    game.harness.land(target.address, 0.35, -1.1)
+
+    const settle = async (frames: number) => {
+      for (let i = 0; i < frames; i += 1) {
+        game.frame(1 / 60)
+        await new Promise((resolve) => setTimeout(resolve, 2))
+      }
     }
-    const landed = game.terrainState()
-    expect(landed.opacity).toBe(1)
-    expect(landed.patches.length).toBeGreaterThan(0)
+    await settle(150)
+
+    const drawn: number[] = []
+    for (let i = 0; i < 60; i += 1) {
+      await settle(1)
+      drawn.push(game.terrain()?.patches ?? 0)
+    }
+
+    const peak = Math.max(...drawn)
+    expect(peak).toBeGreaterThan(100)
+    // A tenth is ordinary churn as the body turns under the stance. The failure
+    // this guards is a factor of eighteen.
+    expect(Math.min(...drawn)).toBeGreaterThan(peak * 0.9)
+
+    /*
+     * And the relationship the sequence above cannot see on this body.
+     *
+     * Mercury's whole-disk selection fits inside a flat 512-entry cache, so
+     * the behavioral test above passes with the defect reintroduced — the
+     * collapse needs a working set larger than the cache, which is Miranda
+     * rather than anything the headless SOL runner can land on. What has to
+     * hold on *every* body is the relationship: the streamer holds two
+     * selections at once, so its field cache cannot be smaller than two of
+     * them.
+     */
+    expect(FIELD_CACHE).toBeGreaterThan(DEFAULT_MAX_PATCHES * 2)
+    expect(GEOMETRY_CACHE).toBeGreaterThanOrEqual(DEFAULT_MAX_PATCHES)
+    // The baseline restates the streamer's multiplier because devtools cannot
+    // import apps/game; this is the assertion that keeps the twin honest — a
+    // retune of FIELD_CACHE alone silently un-calibrates every ir.descend
+    // cache figure.
+    expect(FIELD_CACHE).toBe(DEFAULT_CACHE)
     game.dispose()
   }, 30_000)
 

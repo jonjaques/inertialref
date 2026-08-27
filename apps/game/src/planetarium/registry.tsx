@@ -1,10 +1,11 @@
-import { Eye, Layers, Sun } from 'lucide-react'
+import { Eye, Layers, Mountain, Sun } from 'lucide-react'
 import type { DockPanelDefinition } from '../dock/panels.ts'
 import { Neighbourhood, StarBody } from '../icons/index.tsx'
 import type { PlanetariumContext } from './context.ts'
 import { CataloguePanel } from './CataloguePanel.tsx'
 import { ObjectPanel } from './ObjectPanel.tsx'
 import { PresetsPanel } from './PresetsPanel.tsx'
+import { SurfacePanel } from './SurfacePanel.tsx'
 import { TimePanel } from './TimePanel.tsx'
 import { ViewPanel } from './ViewPanel.tsx'
 
@@ -68,6 +69,17 @@ export function planetariumPanels(
       zone: 'right',
       hint: 'nine composed shots, the light, and the way out',
       render: () => <PresetsPanel {...context} />,
+    },
+    {
+      id: 'surface',
+      title: 'Surface',
+      // A mountain, because that is what the panel is for: the arm below the
+      // orbit clamp exists so terrain can be looked at, and terrain only exists
+      // down there.
+      icon: Mountain,
+      zone: 'right',
+      hint: 'stand on it — named sites, a descent from orbit to two meters',
+      render: () => <SurfacePanel {...context} />,
     },
     {
       id: 'time',

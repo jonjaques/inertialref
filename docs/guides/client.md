@@ -142,9 +142,16 @@ Node:
 
 - **`packages/rendering/src/observer.ts`** — orbit camera as arithmetic:
   drag, zoom, log-space easing, framing, phase angles. No world, no addresses.
+- **`packages/rendering/src/surfaceStance.ts`** — the second arm, on the same
+  terms: a stance on the ground to an offset and an orientation, the logarithmic
+  height scrub, the horizon pitch. It is handed the ground radius rather than
+  sampling one, because `packages/rendering` cannot reach `surfaceRadius` — which
+  is also what lets the descent probe walk a stance down a heightfield with no
+  world in the loop.
 - **`packages/devtools/src/observatory.ts`** — the same camera bound to a live
-  world. Exposed on the harness. Its `sample` _does_ touch the world, because
-  it is following something that moves.
+  world, and the one place that knows which arm holds it: a stance is nullable
+  rather than a flag beside the orbit state. Exposed on the harness. Its `sample`
+  _does_ touch the world, because it is following something that moves.
 - **`packages/devtools/src/orbitPaths.ts`** — orbit traces. A trace is
   relative to its primary and re-anchored to now (or a moon's trace is an
   open corkscrew). Each point is placed with the body's own radius (or render

@@ -54,6 +54,11 @@ Reasoning: `AGENTS.md` § "The rules that actually matter",
   compressing about it leaves a parallax error that sawtooths at the rebase cadence.
   Invisible on a planet filling the frame, and 0.8× its own angular radius on Phobos —
   the small moons appeared to vibrate in their orbits for exactly this reason.
+- **`placement.scale` is the drawn radius, not a factor.** A unit sphere wants it;
+  anything with its own metric geometry wants `placement.compression`, the
+  dimensionless ratio beside it. Terrain patches are true meters from their anchor,
+  and multiplying them by a radius put them 10^12 m away — the two fields are
+  adjacent and only one of them reads like a factor. ADR-0015.
 - **The datum sphere has one definition**, `packages/rendering/src/datum.ts`. `buildScene`
   and the boot prebake both call it; when they each typed the formula, they agreed only
   through a three-hop identity nothing asserted, and a rounding step apart is a silent

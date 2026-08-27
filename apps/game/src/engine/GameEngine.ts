@@ -64,6 +64,7 @@ import {
   type PresentationStack,
 } from './presentation.ts'
 import { TerrainStreamer, type TerrainState } from './terrainStreamer.ts'
+import type { TerrainReport } from '@inertialref/devtools'
 
 /*
  * The engine.
@@ -202,7 +203,16 @@ export class GameEngine implements PresentationHost {
    */
   readonly presentation: PresentationStack
   readonly saves: SaveStore
-  readonly terrain: TerrainStreamer
+  /*
+   * Private, because `terrain()` is now a `PresentationHost` member.
+   *
+   * The streamer itself is an implementation of this class and always was —
+   * nothing outside reached for it, and `terrainState()` was already the way in.
+   * The name is the harness's: `ir.terrain()` asks the host what the streamer
+   * holds, and the host cannot answer with the streamer object because that
+   * carries `Float32Array`s and the harness returns JSON.
+   */
+  readonly #terrain: TerrainStreamer
   /** Rolling per-frame samples for the performance overlay. */
   readonly metrics = new FrameMetrics()
 
@@ -247,6 +257,25 @@ export class GameEngine implements PresentationHost {
    */
   lensFlare = true
   fov = DEFAULT_FOV
+
+  /**
+   * The drawable height in physical pixels, for the terrain selection.
+   *
+   * A presentation input like `fov`, written by the scene from the drawing
+   * buffer, and read by the streamer to decide how much ground a patch's grid
+   * cell covers on *this* display. A two-times panel genuinely wants twice the
+   * patches for the same picture, and a selection measured against a nominal
+   * 1080 would leave it under-tessellated.
+   */
+  set viewportHeight(height: number) {
+    // Written every frame by the scene, so unchanged inputs return before
+    // allocating — otherwise a fresh viewport object churns per frame for a
+    // value that moves only on a resize or an fov change.
+    const fovY = (this.fov * Math.PI) / 180
+    const held = this.#terrain.viewport
+    if (held !== null && held.height === height && held.fovY === fovY) return
+    this.#terrain.viewport = { fovY, height }
+  }
 
   /*
    * How much of the lens's artifact stack is showing, 0..1 — the ghost chain,
@@ -386,6 +415,7 @@ export class GameEngine implements PresentationHost {
       host: {
         scene: () => this.#scene,
         frameStats: () => this.frameStats(),
+        terrain: () => this.terrain(),
         onWorldReplaced: () => this.#invalidateDerived(),
       },
     })
@@ -413,7 +443,7 @@ export class GameEngine implements PresentationHost {
       if (!stance.observatory) this.harness.observatory.clear()
     })
     this.saves = this.session.store
-    this.terrain = new TerrainStreamer(this.session.pool())
+    this.#terrain = new TerrainStreamer(this.session.pool())
     this.#start()
   }
 
@@ -451,7 +481,20 @@ export class GameEngine implements PresentationHost {
   }
 
   terrainState(): TerrainState {
-    return this.terrain.state()
+    return this.#terrain.state()
+  }
+
+  /**
+   * What the streamer holds this frame, as data the harness can return.
+   *
+   * The triangle count is summed from the drawn set rather than multiplied out
+   * from a constant. A patch is 64² quads and its resolution is a parameter, so
+   * a figure that quoted 8,192 would be the one number in the terrain baseline
+   * nobody re-measured.
+   */
+  terrain(): TerrainReport | null {
+    const { bodyAddress, ...rest } = this.#terrain.summary()
+    return { body: bodyAddress, ...rest }
   }
 
   /**
@@ -469,7 +512,7 @@ export class GameEngine implements PresentationHost {
     this.#starFieldWorld += 1
     this.orbits = []
     this.#orbitsSystems = ''
-    this.terrain.clear()
+    this.#terrain.clear()
     log.info('world replaced, derived state dropped', {
       tick: this.world.clock.tick,
     })
@@ -657,16 +700,23 @@ export class GameEngine implements PresentationHost {
       cinematic !== null ? cinematic.camera : (observed ?? undefined),
     )
 
-    const surfaceBody = this.#scene.terrainCandidates[0] ?? null
-    // `shot.renderTime`, not the clock: the snapshot presents the world one tick
-    // in the past, and terrain that disagrees with the ship about what time it
-    // is drifts from under it by 800 m at orbital speed.
-    this.terrain.update(
+    /*
+     * `shot.renderTime`, not the clock: the snapshot presents the world one tick
+     * in the past, and terrain that disagrees with the ship about what time it
+     * is drifts from under it by 800 m at orbital speed.
+     *
+     * The whole `RenderBody` rather than its address, because a patch has to
+     * ride the compression `placeAt` gave the body it sits on. Past
+     * `NEAR_LIMIT` the sphere is drawn nearer and smaller so its angular size
+     * survives, and terrain placed at true meters against it would be a
+     * different object at a different distance.
+     */
+    this.#terrain.update(
       this.world,
       shot.renderTime,
       eye,
       this.origin,
-      surfaceBody?.address ?? null,
+      this.#scene.terrainCandidates[0] ?? null,
     )
 
     this.#maybeSurveyStars(eye)

@@ -81,10 +81,10 @@ export const ELEVATION_LIMIT = Math.PI / 2 - 0.035
  * over every haze the model produces, generated as well as vendored, so the
  * number that has to change if a thicker one is authored is this one.
  *
- * **The ground.** Below about 1.011 radii the terrain streamer starts asking
- * the worker pool for a 3×3 window of patches (`terrainOpacity` fades in over
- * one octave from `radius · 2^-7.5`). Standing on a planet is what flight mode
- * is for; the planetarium wants the body as a body.
+ * **The ground.** The terrain streamer draws whenever a body's relief covers
+ * more than a few pixels, which on a planet is a long way out, and refines all
+ * the way to its own detail floor. Standing on one is what the surface arm and
+ * flight mode are for; the orbit arm wants the body as a body.
  *
  * **The frame.** At 1.5 radii a sphere subtends 84° of diameter, so at the
  * default 65° lens the limb is just off the edges and the disk is still
