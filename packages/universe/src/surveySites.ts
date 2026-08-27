@@ -6,11 +6,10 @@ import type { Body } from './system.ts'
 import {
   type BodyFixedDirection,
   elevationAt,
-  faceToDirection,
   FACE_COUNT,
-  groundElevation,
   regionDirection,
   regionForDirection,
+  seaDatumElevation,
 } from './terrain.ts'
 
 /*
@@ -90,13 +89,24 @@ interface Cell {
   readonly land: Meters
 }
 
+/**
+ * A cell, evaluated once.
+ *
+ * `groundElevation` calls `elevationAt` internally, so asking for both is
+ * fourteen octaves of noise run twice — over the ~2,100 cells a derivation
+ * visits that is the whole of its cost, doubled, in a function a React effect
+ * calls on every camera re-target. The clamp is a `Math.max` against a number
+ * the surface already carries, so deriving `ground` from `land` here is exact.
+ */
 const centreOf = (body: Body, region: RegionAddress): Cell => {
   const direction = regionDirection(region, 0.5, 0.5)
+  const land = elevationAt(body.surface, direction)
+  const sea = seaDatumElevation(body.surface)
   return {
     region,
     direction,
-    ground: groundElevation(body.surface, direction),
-    land: elevationAt(body.surface, direction),
+    ground: sea === null ? land : Math.max(land, sea),
+    land,
   }
 }
 
@@ -168,19 +178,6 @@ function seedGrid(body: Body): readonly Cell[] {
   return cells
 }
 
-/**
- * The elevation the ocean sits at, in the same units `elevationAt` returns.
- *
- * Taken from `groundElevation`'s clamp rather than re-derived, because the two
- * disagreeing is precisely the bug that put landing pads on the ocean datum
- * while the mesh drew the seabed underneath them.
- */
-const seaDatum = (body: Body): Meters | null => {
-  const sea = body.surface.seaLevel
-  if (sea === null) return null
-  return (sea * 2 - 1) * body.surface.maxElevation * 0.55
-}
-
 function siteAt(
   id: SurveySiteId,
   name: string,
@@ -223,7 +220,7 @@ const relative = (elevation: Meters): string =>
  * exactly the arithmetic Phase 1 is going to property-test. Treating them as
  * interior would seed the search from a made-up gradient.
  */
-function neighbourRelief(seeds: readonly Cell[]): Map<string, number> {
+function neighborRelief(seeds: readonly Cell[]): Map<string, number> {
   const span = 2 ** SEED_LEVEL
   const at = new Map<string, Cell>()
   for (const cell of seeds) {
@@ -251,7 +248,7 @@ function neighbourRelief(seeds: readonly Cell[]): Map<string, number> {
 
 function derive(body: Body): readonly SurveySite[] {
   const seeds = seedGrid(body)
-  const sea = seaDatum(body)
+  const sea = seaDatumElevation(body.surface)
 
   const summit = refine(
     body,
@@ -259,11 +256,24 @@ function derive(body: Body): readonly SurveySite[] {
     (cell) => cell.ground,
     (cell) => cell.ground,
   )
+  /*
+   * The lowest ground, scored on the *unclamped* landform for the same reason
+   * `shore` is — and the failure without it is worse there than here.
+   *
+   * `groundElevation` flattens the whole ocean onto one value, so on a body
+   * with water every ocean cell ties at exactly the sea datum. `refine`'s sort
+   * is stable, so a fully-tied beam keeps the first child of the first parent
+   * at every level and walks to the `(i·2, j·2)` corner: on Earth the "Abyss"
+   * came back at 0.00°, −45.00° and +545 m, *above* the datum and at the same
+   * coordinates as three other sites. Scoring the landform finds the deepest
+   * seabed, which is a real place; that the ground above it is the sea surface
+   * is a fact about the site rather than a defect in the search.
+   */
   const basin = refine(
     body,
     seeds,
-    (cell) => -cell.ground,
-    (cell) => -cell.ground,
+    (cell) => -cell.land,
+    (cell) => -cell.land,
   )
   /*
    * The coastline, scored on the *unclamped* landform.
@@ -283,7 +293,7 @@ function derive(body: Body): readonly SurveySite[] {
    * this finds the thing whose sides fall away fastest, which is where LOD,
    * normals and the contact test are all worked hardest.
    */
-  const relief = neighbourRelief(seeds)
+  const relief = neighborRelief(seeds)
   const rough = refine(
     body,
     seeds,
@@ -324,14 +334,21 @@ function derive(body: Body): readonly SurveySite[] {
       'corner',
       'Face Corner',
       'where three faces of the addressing cube meet — the hardest ground to stitch',
-      faceToDirection(0, 1, 1),
+      // Through `regionDirection`, not `faceToDirection`. Both are branded and
+      // the second is what the first calls, but `AGENTS.md` enumerates exactly
+      // three producers and that enumeration *is* the enforcement — a fourth
+      // one in production quietly makes the list understate by one. `(s, t) =
+      // (1, 1)` on a level-0 region is `(u, v) = (1, 1)`: the far corner of
+      // face 0, where three faces meet.
+      regionDirection(regionAddress(0, 0, 0, 0), 1, 1),
     ),
     siteInDirection(
       body,
       'pole',
       'North Pole',
       'the spin axis, where east and north stop being directions',
-      faceToDirection(2, 0, 0),
+      // The center of face 2 — `(u, v) = (0, 0)`, which is `+Y`.
+      regionDirection(regionAddress(2, 0, 0, 0), 0.5, 0.5),
     ),
   ]
 }

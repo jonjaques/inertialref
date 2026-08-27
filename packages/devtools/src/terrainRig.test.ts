@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
+import { LIGHT_YEAR } from '@inertialref/shared'
 import { Quaternion as Q, UV, Vec } from '@inertialref/spatial'
 import {
   bodyFixedFrameId,
@@ -8,6 +9,7 @@ import {
   SURFACE_ARCHETYPES,
   surfaceRadius,
   systemId,
+  systemsWithin,
   type Body,
 } from '@inertialref/universe'
 import { MIN_STANCE_HEIGHT, surfaceHeightBounds } from '@inertialref/rendering'
@@ -29,16 +31,33 @@ import { missingArchetypes, terrainZoo } from './terrainZoo.ts'
  * break first.
  */
 
+/*
+ * Sessions are torn down from `afterEach`, not from the end of a test body.
+ *
+ * Vitest aborts a body at the first failed expectation, so a trailing
+ * `session.dispose()` is the one line a failure guarantees will not run — and
+ * what leaks is an inline worker pool, a set of loaded systems and a batch of
+ * `surveySites` cache entries, for every test after it. A cascade of secondary
+ * failures from a leaked pool is indistinguishable from the original.
+ */
+const open: Session[] = []
+
 function live(): Session {
   const registry = createTaskRegistry()
   // No catalog, so `SOL_ONLY_CATALOG` — the galaxy outside Sol is entirely
   // procedural, which is what makes the zoo's search reproducible here without
   // shipping the packed asset into a unit test.
-  return openSession({
+  const session = openSession({
     seed: 'inertialref',
     workers: () => createInlineWorker(registry),
   })
+  open.push(session)
+  return session
 }
+
+afterEach(() => {
+  for (const session of open.splice(0)) session.dispose()
+})
 
 const bodyAt = (session: Session, address: string): Body => {
   const parsed = parseAddress(address)
@@ -60,7 +79,6 @@ describe('the terrain zoo', () => {
     const zoo = terrainZoo(session.world)
     expect(missingArchetypes(zoo)).toEqual([])
     expect(zoo.map((entry) => entry.archetype)).toEqual(SURFACE_ARCHETYPES)
-    session.dispose()
   })
 
   it('picks only bodies with terrain worth looking at', () => {
@@ -76,17 +94,46 @@ describe('the terrain zoo', () => {
       expect(entry.maxElevation).toBeGreaterThan(0)
       expect(entry.meanRadiusKm).toBeGreaterThanOrEqual(200)
     }
-    session.dispose()
   })
 
-  it('is a pure function of the world it is asked about', () => {
-    // Called twice with systems loaded in between — the search prefers what is
-    // already loaded, so an answer that depended on load order would drift.
+  it('does not depend on where the session has been', () => {
+    /*
+     * The regression this exists for, and the first version of it could not
+     * fail.
+     *
+     * It loaded `SOL` between the two calls — which is loaded in every session
+     * already, so `loadSystem` was a no-op, the world was byte-identical across
+     * both, and the assertion was `terrainZoo(w) === terrainZoo(w)`. It stayed
+     * green with the defect wide open: the search read `world.loadedSystems()`
+     * first, so a browser that had flown fifteen light years returned a
+     * different rocky pair from `pnpm sim` on the same seed.
+     *
+     * So the system loaded in between has to be one the zoo did *not* generate
+     * for itself. Twenty of them, from further out than the search's own radius
+     * — which is exactly the state an ordinary session is in after a few
+     * minutes of travel.
+     */
     const session = live()
     const first = terrainZoo(session.world)
-    session.world.loadSystem(systemId('SOL'))
+    const sol = session.world.loadSystem(systemId('SOL'))
+    let loaded = 0
+    for (const stub of systemsWithin(
+      session.world.galaxySeed,
+      session.world.catalog,
+      sol.position,
+      25 * LIGHT_YEAR,
+    )) {
+      if (loaded >= 20) break
+      if (stub.id === sol.id) continue
+      try {
+        session.world.loadSystem(stub.id)
+        loaded += 1
+      } catch {
+        continue
+      }
+    }
+    expect(loaded).toBe(20)
     expect(terrainZoo(session.world)).toEqual(first)
-    session.dispose()
   })
 })
 
@@ -123,19 +170,18 @@ describe('a simulated descent', () => {
         `${entry.name}: 12`,
       )
     }
-    session.dispose()
   })
 
-  it('streams a summit as though the camera were still kilometres up', () => {
+  it('streams a summit as though the camera were still kilometers up', () => {
     /*
      * Half of the datum finding.
      *
-     * Standing two metres above the highest ground on Iapetus, the streamer
+     * Standing two meters above the highest ground on Iapetus, the streamer
      * asks for level 11 rather than 12 — because `terrainLevelFor` is handed
      * `distance − radius`, which for a camera on the ground is
      * `groundElevation + height`, and that summit is 4.4 km above the datum. The
      * ground under your boots is streamed at half the resolution the same two
-     * metres would get in a basin.
+     * meters would get in a basin.
      *
      * Asserted as the pair rather than as one number, because the pair is what
      * makes it a defect rather than a constant: same body, same height above the
@@ -152,7 +198,6 @@ describe('a simulated descent', () => {
     }
     expect(last('basin')).toBe(12)
     expect(last('summit')).toBe(11)
-    session.dispose()
   })
 
   it('draws nothing at all on a mountain taller than the fade line', () => {
@@ -182,7 +227,6 @@ describe('a simulated descent', () => {
     // And the same descent into the basin is fine, which is what makes it a
     // property of the elevation rather than of the body.
     expect(drawn('basin')).toBeGreaterThan(80)
-    session.dispose()
   })
 
   it('coarsens on a level pass, because the level rule reads the datum', () => {
@@ -214,7 +258,6 @@ describe('a simulated descent', () => {
       (level, i) => i > 0 && level < (report.levels[i - 1] ?? 0),
     )
     expect(coarsenings.length).toBeGreaterThan(0)
-    session.dispose()
   })
 
   it('never asks for more than one window in a single step', () => {
@@ -255,7 +298,6 @@ describe('a simulated descent', () => {
        */
       expect(report.uniqueRegions).toBeGreaterThan(64 * 3)
     }
-    session.dispose()
   })
 
   it('is deterministic', () => {
@@ -267,7 +309,6 @@ describe('a simulated descent', () => {
       a.steps.map((step) => step.level),
     )
     expect(b.totalRequests).toBe(a.totalRequests)
-    session.dispose()
   })
 })
 
@@ -296,7 +337,6 @@ describe('the observatory on the ground', () => {
     harness.ascend()
 
     expect(session.world.stateHash()).toBe(before)
-    session.dispose()
   })
 
   it('puts the eye exactly the stance height above the ground', () => {
@@ -330,7 +370,7 @@ describe('the observatory on the ground', () => {
 
     const up = geodeticDirection(stance?.latitude ?? 0, stance?.longitude ?? 0)
     const ground = surfaceRadius(body, up)
-    // A millimetre in a radius of hundreds of kilometres: the float64 offset
+    // A millimeter in a radius of hundreds of kilometers: the float64 offset
     // arithmetic resolves far better than that, so a looser bound would let a
     // datum error through.
     expect(Vec.length(offset)).toBeCloseTo(ground + 120, 3)
@@ -347,7 +387,6 @@ describe('the observatory on the ground', () => {
      */
     const inSpin = Vec.normalize(Q.rotateInverse(spin.orientation, offset))
     expect(Vec.dot(inSpin, up)).toBeCloseTo(1, 9)
-    session.dispose()
   })
 
   it('takes degrees at the harness and radians below it', () => {
@@ -361,7 +400,6 @@ describe('the observatory on the ground', () => {
     const stance = harness.observerStatus()?.surface?.stance
     expect((stance?.latitude ?? 0) * (180 / Math.PI)).toBeCloseTo(45, 9)
     expect((stance?.longitude ?? 0) * (180 / Math.PI)).toBeCloseTo(-30, 9)
-    session.dispose()
   })
 
   it('leaves the ground when the camera is pointed somewhere else', () => {
@@ -379,7 +417,6 @@ describe('the observatory on the ground', () => {
     harness.look(zoo[1]?.address ?? '')
     expect(harness.observatory.standing).toBe(false)
     expect(harness.observerStatus()?.surface).toBeNull()
-    session.dispose()
   })
 
   it('clamps the descent to the band between the ground and the orbit arm', () => {
@@ -398,15 +435,48 @@ describe('the observatory on the ground', () => {
     expect(harness.observerStatus()?.surface?.stance.height).toBe(
       MIN_STANCE_HEIGHT,
     )
-    session.dispose()
   })
 
-  it('refuses a body with no surface to stand on', () => {
+  it('refuses a body with no surface, and leaves the camera where it was', () => {
     const session = live()
+    const { harness } = session
     // Saturn's bulk density is 687 kg/m³, so a classifier reading density alone
     // calls it an icy world. `hasSolidSurface` is what stops a descent aimed at
     // where the drag model stops integrating.
-    expect(() => session.harness.visit('s:SOL/b:5')).toThrow(/no surface/)
-    session.dispose()
+    harness.look('s:SOL/b:2')
+    const before = harness.observatory.target?.address
+    expect(() => harness.visit('s:SOL/b:5')).toThrow(/no surface/)
+    // The second half, and it is the half that was wrong: the refusal used to
+    // happen *after* `focus` had already committed, so a call that threw still
+    // left the planetarium looking at Saturn.
+    expect(harness.observatory.target?.address).toBe(before)
+  })
+
+  it('gives back the framing the descent started from', () => {
+    /*
+     * What `ascend` promises in four docstrings and the harness guide, and did
+     * not do.
+     *
+     * `stand` called `focus` unconditionally, and `focus` re-solves the distance
+     * from `framingDistance(radius, fov, DEFAULT_FILL)`. So descending from a
+     * framing the user had zoomed to and coming back up landed on the default
+     * instead — a restore of a value nobody had chosen, which is the same bug
+     * class `presentation.ts` was written to make unrepresentable.
+     *
+     * The Surface panel's site buttons take exactly this path: they call
+     * `visit(undefined, …)`, which resolves to the address already held.
+     */
+    const session = live()
+    const { harness } = session
+    const entry = terrainZoo(session.world)[0]
+    harness.look(entry?.address ?? '')
+    harness.observatory.setDistance(1_100_000, false)
+    const framing = harness.observatory.state.distance
+
+    harness.visit(entry?.address, { site: 'summit', height: 2 })
+    harness.visit(undefined, { site: 'basin', height: 2 })
+    harness.ascend()
+
+    expect(harness.observatory.state.distance).toBeCloseTo(framing, 6)
   })
 })

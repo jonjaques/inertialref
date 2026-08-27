@@ -14,11 +14,17 @@ import { solarSystem, SOL } from './solar/system.ts'
 import type { CatalogStar } from './catalog/index.ts'
 import type { Body } from './system.ts'
 import {
+  elevationAt,
   faceToDirection,
   groundElevation,
   regionForDirection,
 } from './terrain.ts'
-import { findSurveySite, SURVEY_LEVEL, surveySites } from './surveySites.ts'
+import {
+  findSurveySite,
+  SURVEY_LEVEL,
+  type SurveySite,
+  surveySites,
+} from './surveySites.ts'
 
 /*
  * Archetypes and survey sites, against the Solar System.
@@ -53,7 +59,7 @@ describe('surface archetypes', () => {
      * itself. Luna and Mercury are silicate and land far above it; Callisto,
      * Titan and Enceladus are half water and land below. Europa is the case the
      * threshold is *supposed* to get "wrong" and does not: at 3,013 it is a
-     * silicate body with a hundred kilometres of water on top, and it behaves
+     * silicate body with a hundred kilometers of water on top, and it behaves
      * like rock for everything terrain cares about.
      */
     expect(bulkDensity(find('Luna'))).toBeGreaterThan(3_000)
@@ -136,14 +142,72 @@ describe('surface archetypes', () => {
 describe('survey sites', () => {
   const bodies = ['Iapetus', 'Miranda', 'Titania', 'Rhea']
 
-  it('are a pure function of the body', () => {
-    for (const name of bodies) {
-      const body = find(name)
-      // Twice through the memo, and with another body's derivation in between
-      // so a cache that keyed on nothing would be caught.
-      const first = surveySites(body)
-      surveySites(find('Rhea'))
-      expect(surveySites(body)).toEqual(first)
+  it('key their cache on everything the answer depends on', () => {
+    /*
+     * What this can honestly test, and what it cannot.
+     *
+     * It was written as "are a pure function of the body" — two calls with
+     * another body's derivation in between — and that assertion is defeated by
+     * the memo it is standing in front of: the second call is a `CACHE.get`
+     * hit returning the *same array reference*, so `derive` never runs twice
+     * and a shared-stream draw inside it would sail through. `derive`'s purity
+     * is structural instead: it takes only `body` and calls field functions
+     * that are themselves pure, and `terrain.test.ts` owns those.
+     *
+     * The live risk is the cache *key*, which is hand-written and would fail
+     * silently — a body whose seed changed would get the previous body's
+     * mountains, with nothing to see. So that is what is checked: every field
+     * the derivation reads, moved one at a time.
+     */
+    const body = find('Iapetus')
+    const baseline = surveySites(body)
+    expect(surveySites(body)).toEqual(baseline)
+
+    const moved = {
+      seed: {
+        ...body,
+        surface: { ...body.surface, seed: find('Rhea').surface.seed },
+      },
+      maxElevation: {
+        ...body,
+        surface: {
+          ...body.surface,
+          maxElevation: body.surface.maxElevation * 2,
+        },
+      },
+      roughness: {
+        ...body,
+        surface: { ...body.surface, roughness: body.surface.roughness * 1.5 },
+      },
+      seaLevel: { ...body, surface: { ...body.surface, seaLevel: 0.4 } },
+      radius: { ...body, radius: body.radius * 1.1 },
+    }
+    for (const [field, variant] of Object.entries(moved)) {
+      // A fresh array is what "the key discriminated" looks like from out here;
+      // a shared key would return `baseline` by reference.
+      expect(`${field}: ${surveySites(variant) === baseline}`).toBe(
+        `${field}: false`,
+      )
+    }
+
+    /*
+     * And for the four the field function actually reads, the sites move.
+     *
+     * `radius` is deliberately not in this list. It is in the key because a
+     * datum that came to matter would be a silent wrong answer, and it is not
+     * here because `derive` reads only `body.surface` — so a body scaled by 10%
+     * has the same sites in the same places, and asserting otherwise would be
+     * asserting a bug.
+     */
+    for (const field of [
+      'seed',
+      'maxElevation',
+      'roughness',
+      'seaLevel',
+    ] as const) {
+      expect(`${field}: ${JSON.stringify(surveySites(moved[field]))}`).not.toBe(
+        `${field}: ${JSON.stringify(baseline)}`,
+      )
     }
   })
 
@@ -154,14 +218,20 @@ describe('survey sites', () => {
      * search and the coordinates come from `directionToGeodetic` of that
      * region's centre — so a rounding error or a transposed axis anywhere in
      * the round trip shows up here rather than as a camera two hundred
-     * kilometres from the mountain the panel named.
+     * kilometers from the mountain the panel named.
      */
     for (const name of bodies) {
       const body = find(name)
       for (const site of surveySites(body)) {
         const direction = geodeticDirection(site.latitude, site.longitude)
-        expect(`${name}/${site.id}`).toBe(`${name}/${site.id}`)
-        expect(regionForDirection(direction, SURVEY_LEVEL)).toEqual(site.region)
+        // The label goes *into* the assertion rather than beside it. Written as
+        // its own `expect`, it compared a string to itself — twenty-four
+        // guaranteed passes that no defect could turn red.
+        const where = `${name}/${site.id}`
+        expect({
+          where,
+          region: regionForDirection(direction, SURVEY_LEVEL),
+        }).toEqual({ where, region: site.region })
       }
     }
   })
@@ -198,6 +268,49 @@ describe('survey sites', () => {
       expect(`${name}: ${spread > body.surface.maxElevation * 0.5}`).toBe(
         `${name}: true`,
       )
+    }
+  })
+
+  it('find a real basin on a body with an ocean', () => {
+    /*
+     * The case the four dry moons above cannot reach, and it was broken.
+     *
+     * `groundElevation` clamps the whole ocean onto one value, so scoring the
+     * basin search on it ties every ocean cell exactly. `refine`'s sort is
+     * stable, so a fully-tied beam keeps the first child of the first parent at
+     * every level and walks to the `(i·2, j·2)` corner — Earth's "Abyss" came
+     * back at 0.00°, −45.00°, +545 m: above the datum, and at the same
+     * coordinates as `shore`, `corner` and `pole`. `summit − basin` stopped
+     * measuring relief, and the terrain baseline descends into `basin`
+     * precisely because it is supposed to be the low one.
+     *
+     * Asserted against the other sites rather than against a coordinate,
+     * because what went wrong is that they collapsed onto each other.
+     */
+    const earth = find('Earth')
+    expect(earth.surface.seaLevel).not.toBeNull()
+    const sites = surveySites(earth)
+    const at = (id: string): SurveySite =>
+      sites.find((one) => one.id === id) as SurveySite
+
+    for (const other of ['shore', 'corner', 'pole']) {
+      expect(
+        `basin vs ${other}: ${at('basin').latitude === at(other).latitude}`,
+      ).toBe(`basin vs ${other}: false`)
+    }
+    // And it is genuinely the deepest *landform*, which is what the search now
+    // scores. The ground above it is the sea surface, and that is a fact about
+    // the site rather than a defect.
+    const deepest = elevationAt(
+      earth.surface,
+      geodeticDirection(at('basin').latitude, at('basin').longitude),
+    )
+    for (const other of ['summit', 'shore', 'rough', 'corner', 'pole']) {
+      const land = elevationAt(
+        earth.surface,
+        geodeticDirection(at(other).latitude, at(other).longitude),
+      )
+      expect(`${other}: ${deepest < land}`).toBe(`${other}: true`)
     }
   })
 

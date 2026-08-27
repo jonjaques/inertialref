@@ -63,8 +63,10 @@ export interface BaselineEntry {
    * findings forced. `terrainOpacity` measures altitude from the datum, so on a
    * body with real relief a summit can sit above the fade line and draw nothing
    * at all — Miranda's does. Timing generation from a descent that requests no
-   * patches would report zero and read as free. A basin is below the datum by
-   * construction, so it always draws.
+   * patches would report zero and read as free. The basin is the lowest ground
+   * the survey found, which on a dry world is below the datum and on an ocean
+   * world is the sea surface — either way it is the site furthest from the fade
+   * ceiling, so it always draws.
    */
   readonly descent: DescentReport
   readonly generation: GenerationCost
@@ -136,21 +138,42 @@ export function terrainBaseline(
     }
     const descent = simulateDescent(body, { ...profile, site: 'basin' })
     const regions = descentRegions(descent)
-    // Warm up on patches that are then thrown away rather than on the first
-    // few of the measured set: including them biases the mean by ~15% on a
-    // 48-patch sample, which is larger than the difference a band would make.
-    measurePatchGeneration(
-      body,
-      regions.slice(0, WARMUP_PATCHES),
-      clock,
+    /*
+     * No clock, no generation.
+     *
+     * With `now === null` every timing is zero by construction and the summary
+     * says "not timed" — so running the pass anyway spent about 0.7 s per zoo
+     * body, 2.8 s a call, generating heightfields for numbers that were going
+     * to be zero. The request pattern is the half that is deterministic and it
+     * costs nothing; that is what an untimed caller gets.
+     *
+     * The warm-up is thrown away rather than counted, because including the
+     * first few calls into `generateHeightfield` in a fresh process biases the
+     * mean by ~15% on a 48-patch sample — larger than the difference a band
+     * would make.
+     */
+    let generation: GenerationCost = {
+      patches: 0,
       resolution,
-    )
-    const generation = measurePatchGeneration(
-      body,
-      regions.slice(WARMUP_PATCHES, WARMUP_PATCHES + limit),
-      clock,
-      resolution,
-    )
+      samples: 0,
+      totalMs: 0,
+      msPerPatch: 0,
+      samplesPerSecond: 0,
+    }
+    if (now !== null) {
+      measurePatchGeneration(
+        body,
+        regions.slice(0, WARMUP_PATCHES),
+        clock,
+        resolution,
+      )
+      generation = measurePatchGeneration(
+        body,
+        regions.slice(WARMUP_PATCHES, WARMUP_PATCHES + limit),
+        clock,
+        resolution,
+      )
+    }
     entries.push({
       zoo: entry,
       descent,

@@ -474,23 +474,8 @@ export class GameEngine implements PresentationHost {
    * the one number in the terrain baseline nobody re-measured.
    */
   terrain(): TerrainReport | null {
-    const state = this.#terrain.state()
-    let vertices = 0
-    let triangles = 0
-    for (const placed of state.patches) {
-      vertices += placed.patch.positions.length / 3
-      triangles += placed.patch.indices.length / 3
-    }
-    return {
-      body: state.bodyAddress,
-      level: state.level,
-      opacity: state.opacity,
-      patches: state.patches.length,
-      pending: state.pending,
-      cached: state.cached,
-      vertices,
-      triangles,
-    }
+    const { bodyAddress, ...rest } = this.#terrain.summary()
+    return { body: bodyAddress, ...rest }
   }
 
   /**

@@ -7,6 +7,7 @@ import {
   formatAddress,
   hasSolidSurface,
   isMappedSurface,
+  SOL,
   type StarSystem,
   type SurfaceArchetype,
   SURFACE_ARCHETYPES,
@@ -157,6 +158,18 @@ function entryFor(
  * session that has asked for the zoo has more systems loaded than one that has
  * not, which is visible in `ir.summary()` and is not a bug. It stops the moment
  * all four archetypes are filled.
+ *
+ * **What it must not do is read what is already loaded**, and the first version
+ * did. Considering `world.loadedSystems()` before generating anything makes the
+ * answer a function of where the session has been: a browser that had flown
+ * fifteen light years returned a different rocky pair from `pnpm sim`, on the
+ * same seed, because twenty extra systems were sitting in the world when the
+ * search ran. That is the "never make generation depend on order" rule exactly
+ * — generating a different object first changed this one's output — and it
+ * hollows out the whole point of a fixture, which is that the same places come
+ * back. The search is anchored at Sol and walks `systemsWithin` in its own
+ * sorted order instead, so the result is a function of the galaxy seed, the
+ * catalog, the radius and the budget, and of nothing else.
  */
 export function terrainZoo(
   world: World,
@@ -170,39 +183,40 @@ export function terrainZoo(
       if (!isZooCandidate(body, minRadius)) continue
       const archetype = surfaceArchetype(body, parentMass)
       const held = best.get(archetype)
-      // Strict `>`, so a tie keeps the body found first and the answer does not
-      // depend on which system happened to load first.
+      // Strict `>`, so a tie keeps the body found first — and since the search
+      // order is now fixed, "first" is a property of the galaxy rather than of
+      // the session.
       if (held === undefined || zooRelief(body) > zooRelief(held.body)) {
         best.set(archetype, { body, system })
       }
     }
   }
 
-  // Everything already loaded first, which in every session is at least Sol.
-  const loaded = world.loadedSystems()
-  for (const system of loaded) consider(system)
+  // Sol first, always and explicitly. It is in every catalog, it supplies both
+  // icy archetypes from unmapped moons, and anchoring there is what makes the
+  // answer the same in a console, in `pnpm sim` and in a test.
+  const sol = world.loadSystem(SOL)
+  consider(sol)
 
-  const origin = loaded[0]?.position
-  if (origin !== undefined && best.size < SURFACE_ARCHETYPES.length) {
-    const seen = new Set(loaded.map((system) => system.id as string))
-    let generated = 0
-    for (const stub of systemsWithin(
-      world.galaxySeed,
-      world.catalog,
-      origin,
-      (options.lightYears ?? DEFAULT_LIGHT_YEARS) * LIGHT_YEAR,
-    )) {
-      if (best.size >= SURFACE_ARCHETYPES.length) break
-      if (generated >= (options.systemBudget ?? DEFAULT_SYSTEM_BUDGET)) break
-      if (seen.has(stub.id as string)) continue
-      generated += 1
-      try {
-        consider(world.loadSystem(stub.id))
-      } catch {
-        // A stub that will not generate is a catalog problem, not a zoo
-        // problem; the search has eleven more to try.
-        continue
-      }
+  let generated = 0
+  for (const stub of systemsWithin(
+    world.galaxySeed,
+    world.catalog,
+    sol.position,
+    (options.lightYears ?? DEFAULT_LIGHT_YEARS) * LIGHT_YEAR,
+  )) {
+    if (best.size >= SURFACE_ARCHETYPES.length) break
+    if (generated >= (options.systemBudget ?? DEFAULT_SYSTEM_BUDGET)) break
+    if (stub.id === SOL) continue
+    generated += 1
+    try {
+      consider(world.loadSystem(stub.id))
+    } catch {
+      // A stub that will not generate is a catalog problem, not a zoo
+      // problem; the search has eleven more to try. Counted against the budget
+      // either way, so a run of bad stubs cannot turn the budget into a
+      // different number of *successful* generations on two different machines.
+      continue
     }
   }
 

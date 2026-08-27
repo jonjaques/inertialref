@@ -1,7 +1,7 @@
 import type { Meters } from '@inertialref/shared'
 
 /*
- * The Surface panel's vocabulary, in a `.ts` because its neighbour is a `.tsx`.
+ * The Surface panel's vocabulary, in a `.ts` because its neighbor is a `.tsx`.
  *
  * `react/no-multi-comp` is an error here and a `.tsx` that exports anything but
  * components is a file Fast Refresh gives up on — which in this app means a full
@@ -59,15 +59,15 @@ export const COMPASS: readonly {
 /**
  * A signed elevation, in the units the panel reads at.
  *
- * The sign is dropped below half a metre, and that is not fussiness: the datum
+ * The sign is dropped below half a meter, and that is not fussiness: the datum
  * plain sits at −0.4 m on Iapetus, which rounds to zero and printed as `−0 m` —
  * a minus sign in front of a zero, in a column where the sign is the whole
  * point of the reading.
  */
-export const elevationText = (metres: number): string => {
-  const magnitude = Math.abs(metres)
+export const elevationText = (meters: number): string => {
+  const magnitude = Math.abs(meters)
   if (magnitude < 0.5) return '0 m'
-  const sign = metres < 0 ? '−' : '+'
+  const sign = meters < 0 ? '−' : '+'
   return magnitude >= 1000
     ? `${sign}${(magnitude / 1000).toFixed(1)} km`
     : `${sign}${Math.round(magnitude)} m`

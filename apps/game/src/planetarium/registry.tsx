@@ -78,7 +78,7 @@ export function planetariumPanels(
       // down there.
       icon: Mountain,
       zone: 'right',
-      hint: 'stand on it — named sites, a descent from orbit to two metres',
+      hint: 'stand on it — named sites, a descent from orbit to two meters',
       render: () => <SurfacePanel {...context} />,
     },
     {

@@ -1,7 +1,7 @@
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
 import {
-  faceToDirection,
+  regionAddress,
   regionDirection,
   regionForDirection,
 } from '@inertialref/universe'
@@ -27,14 +27,22 @@ const radii = fc.double({ min: 1e5, max: 2e7, noNaN: true })
 /** Anywhere between standing on it and being far enough away to see nothing. */
 const distances = fc.double({ min: 1.000_001, max: 1e4, noNaN: true })
 
-/** A direction, produced the only way the brand permits. */
+/**
+ * A direction anywhere on the sphere, through a named producer.
+ *
+ * `regionDirection` on a level-0 region, where `(s, t)` maps to `(u, v)` as
+ * `2s − 1`. `faceToDirection` would be one call shorter and is branded too, but
+ * `AGENTS.md` enumerates three producers and that list is the enforcement
+ * mechanism — a test that reaches past it teaches the next reader the wrong
+ * habit.
+ */
 const directions = fc
   .tuple(
     fc.integer({ min: 0, max: 5 }),
-    fc.double({ min: -0.999, max: 0.999, noNaN: true }),
-    fc.double({ min: -0.999, max: 0.999, noNaN: true }),
+    fc.double({ min: 0.001, max: 0.999, noNaN: true }),
+    fc.double({ min: 0.001, max: 0.999, noNaN: true }),
   )
-  .map(([face, u, v]) => faceToDirection(face, u, v))
+  .map(([face, s, t]) => regionDirection(regionAddress(face, 0, 0, 0), s, t))
 
 describe('the terrain window', () => {
   it('reports exactly the level and opacity the LOD rule chooses', () => {
@@ -98,13 +106,13 @@ describe('the terrain window', () => {
      * patches out of nine. Asserting the number rather than "some are missing"
      * is what makes the fix visible as a diff.
      */
-    const corner = faceToDirection(0, 0.9999, 0.9999)
+    const corner = regionDirection(regionAddress(0, 0, 0, 0), 0.99995, 0.99995)
     const window = terrainWindow(EARTH, EARTH * 1.0002, corner)
     expect(window.clipped).toBe(5)
     expect(window.regions).toHaveLength(4)
 
     // And in the middle of a face nothing is lost at all.
-    const middle = faceToDirection(0, 0, 0)
+    const middle = regionDirection(regionAddress(0, 0, 0, 0), 0.5, 0.5)
     expect(terrainWindow(EARTH, EARTH * 1.0002, middle).clipped).toBe(0)
   })
 

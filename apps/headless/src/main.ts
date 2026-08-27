@@ -123,9 +123,11 @@ await session.store.write('headless', save)
 console.log(`save: ${save.length} bytes`)
 
 if (values['terrain-baseline'] === true) {
-  // Before the self-test, because the self-test loads Alpha Centauri and the
-  // zoo prefers what is already loaded — running it second would give the
-  // baseline a different neighbourhood to search than a fresh session has.
+  // Order-independent, and that is a property of the zoo rather than of this
+  // file: the search anchors at Sol and walks `systemsWithin` in its own sorted
+  // order, so the self-test loading Alpha Centauri first cannot change what the
+  // baseline finds. It stays above the self-test only because a reader wants
+  // the measurement before the twelve-line report, not because it has to.
   console.log(harness.terrainBaseline().text)
 }
 

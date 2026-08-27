@@ -23,6 +23,8 @@ import {
   type PatchPlacement,
   patchPlacement,
   type RenderPatch,
+  terrainLevelFor,
+  terrainOpacity,
   terrainPatchKey,
   terrainWindow,
 } from '@inertialref/rendering'
@@ -94,6 +96,42 @@ export class TerrainStreamer {
     this.#pool = pool
   }
 
+  /**
+   * How much geometry is held, without building a placement for any of it.
+   *
+   * `state()` maps every patch through `patchPlacement` — render-space
+   * arithmetic these counters throw away immediately — and the renderer already
+   * calls it once a frame. `ir.terrain()` asking through `state()` paid for a
+   * second complete placement pass it never read.
+   */
+  summary(): {
+    readonly bodyAddress: string | null
+    readonly level: number
+    readonly opacity: number
+    readonly pending: number
+    readonly cached: number
+    readonly patches: number
+    readonly vertices: number
+    readonly triangles: number
+  } {
+    let vertices = 0
+    let triangles = 0
+    for (const patch of this.#patches.values()) {
+      vertices += patch.positions.length / 3
+      triangles += patch.indices.length / 3
+    }
+    return {
+      bodyAddress: this.#bodyAddress,
+      level: this.#level,
+      opacity: this.#opacity,
+      pending: this.#inFlight.size,
+      cached: this.#fields.size,
+      patches: this.#patches.size,
+      vertices,
+      triangles,
+    }
+  }
+
   state(): TerrainState {
     const pose = this.#pose
     return {
@@ -149,6 +187,29 @@ export class TerrainStreamer {
     }
 
     const distance = UV.distance(camera, bodyPose.position)
+    /*
+     * The fade first, and the window only if there is one.
+     *
+     * Away from the ground the 3×3 window is a lone tile on the datum sphere,
+     * not a representation of the surface, so it is neither drawn nor worth a
+     * worker's time. The heightfield cache is kept: a descent should fade the
+     * ground in, not re-generate it.
+     *
+     * `terrainWindow` computes its regions whatever the opacity — deliberately,
+     * for the descent probe, which wants to know what the window *would* be at
+     * every altitude it passes through. That is the wrong bargain in a frame
+     * loop: opacity is only non-zero within about an octave of the surface, so
+     * on nearly every frame of every orbit, approach and interstellar view the
+     * streamer would run a gnomonic projection and allocate nine region objects
+     * to throw all of them away. The check is one multiply.
+     */
+    this.#opacity = terrainOpacity(body.radius, distance)
+    if (this.#opacity === 0) {
+      this.#level = terrainLevelFor(body.radius, distance)
+      this.#patches.clear()
+      return
+    }
+
     // Which patch of ground is under the camera. `bodyFixedDirection` is the
     // only producer of the branded direction the terrain functions accept, so
     // this cannot drift back to an inertial sample the way it once did.
@@ -159,16 +220,6 @@ export class TerrainStreamer {
     // when it moved.
     const window = terrainWindow(body.radius, distance, direction)
     this.#level = window.level
-
-    // Away from the ground the 3×3 window is a lone tile on the datum sphere,
-    // not a representation of the surface, so it is neither drawn nor worth a
-    // worker's time. The heightfield cache is kept: a descent should fade the
-    // ground in, not re-generate it.
-    this.#opacity = window.opacity
-    if (this.#opacity === 0) {
-      this.#patches.clear()
-      return
-    }
 
     const wanted = new Set<string>()
     for (const region of window.regions) {

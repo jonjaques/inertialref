@@ -23,6 +23,7 @@ import {
   hasSolidSurface,
   parseAddress,
   findBody,
+  groundElevation,
   type StarSystem,
   surfaceRadius,
   type SurveySite,
@@ -427,6 +428,16 @@ export class Observatory {
    * every capture has to wait an unspecified number of frames for a filter to
    * settle before the picture is the picture. `ir.visit` returns and the frame
    * after it is the frame you asked for.
+   *
+   * **It resolves before it commits, and the ordering is the whole of two
+   * bugs.** Calling `focus` first is the obvious shape and is wrong twice.
+   * `focus` re-solves the distance from `framingDistance`, so a `stand` on the
+   * body already held silently discarded the framing the user had zoomed to —
+   * and `leaveSurface` then "restored" a default nobody had chosen, which is
+   * exactly the thing four docstrings here promise it does not do. And because
+   * the surface check ran *after* the commit, `stand('s:SOL/b:5')` retargeted
+   * the camera to Saturn and only then threw "no surface to stand on", leaving
+   * the planetarium looking at a body the call had refused.
    */
   stand(
     destination?: string,
@@ -439,13 +450,22 @@ export class Observatory {
       readonly pitch?: Radians
     } = {},
   ): ObserverStatus {
-    if (destination !== undefined) this.focus(destination, { ease: false })
-    const body = this.#body()
+    const wanted =
+      destination === undefined ? this.#target : this.#resolve(destination)
+    if (wanted === null) {
+      throw new Error('The observatory is not looking at anything')
+    }
+    const body = this.#bodyOf(wanted)
     if (body === null) {
-      throw new Error('The observatory is not looking at a body')
+      throw new Error(`${wanted.name} is not a body`)
     }
     if (!hasSolidSurface(body)) {
       throw new Error(`${body.name} has no surface to stand on`)
+    }
+    // Only now, and only if it is somewhere else. Re-focusing the address
+    // already held is what threw the framing away.
+    if (wanted.address !== this.#target?.address) {
+      this.focus(wanted.address, { ease: false })
     }
 
     const site =
@@ -570,13 +590,26 @@ export class Observatory {
   status(): ObserverStatus {
     const radius = this.#target?.radius ?? 0
     const altitude = Math.max(0, this.#state.distance - radius)
-    const fill =
-      radius > 0 && this.#state.distance > radius
-        ? (2 * Math.asin(Math.min(1, radius / this.#state.distance)) * 180) /
-          Math.PI /
-          this.#fovDeg
-        : 0
     const surface = this.#surfaceStatus()
+    /*
+     * How much of the frame the body fills — and standing on it, that is all of
+     * it, whatever the orbit arm was left at.
+     *
+     * `state` and `desired` below stay the orbit arm's own held numbers on
+     * purpose: they are what `leaveSurface` returns to, and a reader asking for
+     * them is asking about that camera. `fill` is not like that. It is a
+     * property of the picture, and computing it from a distance the picture is
+     * not being taken at made the Object panel's readout describe where the
+     * viewer had been before the descent.
+     */
+    const fill =
+      surface !== null
+        ? 1
+        : radius > 0 && this.#state.distance > radius
+          ? (2 * Math.asin(Math.min(1, radius / this.#state.distance)) * 180) /
+            Math.PI /
+            this.#fovDeg
+          : 0
     return {
       target: this.#target,
       state: this.#state,
@@ -666,7 +699,17 @@ export class Observatory {
    * a mountain belonging to a universe that no longer exists.
    */
   #body(): Body | null {
-    const target = this.#target
+    return this.#bodyOf(this.#target)
+  }
+
+  /**
+   * The same, for a target that has not been committed yet.
+   *
+   * `stand` has to know whether a body has a surface *before* it retargets the
+   * camera — see the ordering note there — and that means resolving a target
+   * this object is not holding.
+   */
+  #bodyOf(target: ObserverTarget | null): Body | null {
     if (target === null || target.kind === 'star') return null
     try {
       const address = parseAddress(target.address)
@@ -727,10 +770,19 @@ export class Observatory {
     return {
       stance,
       scrub: scrubForHeight(body.radius, stance.height),
-      // Against the datum the whole body shares, not against `body.radius`:
-      // on a figured body those differ by the figure, and the number a reader
-      // wants is the one the dossier and the mesh both quote.
-      groundElevation: ground - body.radius,
+      /*
+       * The terrain's own elevation, not `surfaceRadius − body.radius`.
+       *
+       * `surfaceRadius` is `datumRadius + groundElevation`, and `datumRadius`
+       * is the measured *ellipsoid* on any body with a figure — so subtracting
+       * `body.radius` folds the figure offset into a number the panel prints as
+       * a terrain elevation. On Phobos that is about −3.5 km of "elevation" on a
+       * body with a kilometer of relief; on Haumea it reaches −513 km. Worse, the
+       * Surface panel prints it directly under site buttons showing
+       * `SurveySite.elevation`, which is this exact function — the same place,
+       * two numbers, kilometers apart.
+       */
+      groundElevation: groundElevation(body.surface, up),
       radius: ground + stance.height,
       heightText: formatDistance(stance.height),
       site: this.#site,

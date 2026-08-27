@@ -43,8 +43,13 @@ export const FACE_COUNT = 6
  * rendered wrong and nothing failed — the density was simply computed against
  * the wrong mountain.
  *
- * There are exactly two producers below. Neither can be reached without a spin
- * frame or a region address, which is what makes the brand worth its cost.
+ * `AGENTS.md` enumerates three producers — `bodyFixedDirection`,
+ * `geodeticDirection` and `regionDirection` — and that list is the enforcement
+ * mechanism, not a summary of it: none of the three can be reached without a
+ * spin frame, a latitude/longitude or a region address, which is what makes the
+ * brand worth its cost. `faceToDirection` below is the primitive `regionDirection`
+ * is built from and is branded for that reason; production code goes through
+ * `regionDirection`, so the list stays three long.
  */
 export type BodyFixedDirection = Brand<Vec3, 'body-fixed'>
 
@@ -207,10 +212,24 @@ export function groundElevation(
   surface: SurfaceParameters,
   direction: Vec3,
 ): Meters {
+  const sea = seaDatumElevation(surface)
   const elevation = elevationAt(surface, direction)
+  return sea === null ? elevation : Math.max(elevation, sea)
+}
+
+/**
+ * The elevation the ocean surface sits at, or null on a dry world.
+ *
+ * Exported because "the single owner of the sea clamp" has to own the *number*
+ * as well as the comparison. A second reader — the survey's shore search, which
+ * has to score against the unclamped landform and therefore cannot go through
+ * `groundElevation` — copied the expression out and put the formula in two
+ * places, which is exactly the shape of the bug the docstring above remembers.
+ * Change the 0.55 or the `2s − 1` remap here and both move together.
+ */
+export function seaDatumElevation(surface: SurfaceParameters): Meters | null {
   const sea = surface.seaLevel
-  if (sea === null) return elevation
-  return Math.max(elevation, (sea * 2 - 1) * surface.maxElevation * 0.55)
+  return sea === null ? null : (sea * 2 - 1) * surface.maxElevation * 0.55
 }
 
 /**

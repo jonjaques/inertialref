@@ -25,10 +25,21 @@ import { useEngine } from '../state/engineStore.ts'
 
 export type SurveySiteRow = ReturnType<GameEngine['harness']['sites']>[number]
 
+/**
+ * The sites, or `null` while the search has not run for this body yet.
+ *
+ * `null` and `[]` are different answers and the panel draws different things
+ * for them. The effect runs after paint, so on the render where the target
+ * changes there is no list yet — returning `[]` there made the Surface panel
+ * replace itself with "no ground here yet — pick a solid body" for one frame on
+ * *every* body switch, including switches to bodies that have six sites. That
+ * is the same distinction `Fact.value` makes between "none" and "not measured",
+ * one layer up.
+ */
 export function useSurveySites(
   engine: GameEngine,
   requested: string | null,
-): readonly SurveySiteRow[] {
+): readonly SurveySiteRow[] | null {
   const looking = useEngine(
     (snapshot) => snapshot.observer?.target?.address ?? null,
   )
@@ -62,5 +73,5 @@ export function useSurveySites(
     }
   }, [engine, address])
 
-  return built.of === address ? built.sites : []
+  return built.of === address ? built.sites : null
 }

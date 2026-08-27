@@ -147,7 +147,7 @@ describe('the stance pose', () => {
             pitch: 0,
           })
           // Relative, not absolute: at 2e7 m of ground radius, float64 still
-          // resolves millimetres, but the assertion should not pretend to more
+          // resolves millimeters, but the assertion should not pretend to more
           // precision than the magnitude carries.
           expect(Vec.length(offset) / (ground + height)).toBeCloseTo(1, 12)
         },

@@ -59,12 +59,21 @@ export function SurfacePanel({ engine, target }: PlanetariumContext) {
     })),
   )
 
-  if (stance.kind === 'star' || sites.length === 0) {
+  if (stance.kind === 'star') {
     return (
       <p className="type-ui text-pretty text-slate-400">
-        {stance.kind === 'star'
-          ? 'a star has no surface — pick a body and this panel fills in'
-          : 'no ground here yet — pick a solid body'}
+        a star has no surface — pick a body and this panel fills in
+      </p>
+    )
+  }
+  // `null` is "the survey has not run yet", which is one frame after every
+  // target change; `[]` is "this body has no sites". Drawing the empty state
+  // for the first put "no ground here yet" on screen for a body with six.
+  if (sites === null) return null
+  if (sites.length === 0) {
+    return (
+      <p className="type-ui text-pretty text-slate-400">
+        no ground here yet — pick a solid body
       </p>
     )
   }

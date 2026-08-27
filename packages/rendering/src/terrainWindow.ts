@@ -21,7 +21,7 @@ import { terrainLevelFor, terrainOpacity } from './lod.ts'
  * The rule itself is unchanged, including both of its limits, because Phase 0
  * measures the build that exists rather than the one that is coming. A window
  * that is 3×3 patches wide at one level is not a planet; patches that fall off
- * the edge of a cube face are dropped rather than wrapped onto their neighbour.
+ * the edge of a cube face are dropped rather than wrapped onto their neighbor.
  * Both are named here — `windowRadius` and `clipped` — so the phase that fixes
  * them has a number to move rather than a comment to delete.
  */

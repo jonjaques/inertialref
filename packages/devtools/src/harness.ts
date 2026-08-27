@@ -910,21 +910,27 @@ export class GameHarness {
       }
       case 'descent': {
         /*
-         * The terrain rig's own scenario: orbit to two metres over every zoo
+         * The terrain rig's own scenario: orbit to two meters over every zoo
          * body, on paper.
          *
          * The only scenario that moves no ship and runs no physics, because
          * that is what it is proving — the descent is a camera and a selection
          * rule, so it produces the same numbers here, in a browser console and
-         * in a Node test. The camera is left standing on the last body's summit
-         * so that a host which draws has something on screen when it returns.
+         * in a Node test.
+         *
+         * The camera is left in the last body's *basin*, not on its summit,
+         * for the reason this phase measured: a summit above the fade line
+         * draws nothing, and the zoo's declaration order puts `icy-active`
+         * last — which on this seed is Miranda, whose summit is exactly that
+         * hole. "Something on screen when it returns" would have been a bare
+         * datum sphere.
          */
         const zoo = this.zoo()
         if (zoo.length === 0) throw new Error('the terrain zoo came back empty')
         const reports = zoo.map((entry) => this.descend(entry.address))
         const last = zoo[zoo.length - 1]
         if (last !== undefined) {
-          this.visit(last.address, { site: 'summit', height: 2 })
+          this.visit(last.address, { site: 'basin', height: 2 })
         }
         return this.#scenarioResult(
           name,
@@ -1002,7 +1008,7 @@ export class GameHarness {
   /**
    * The cinematic state at a reference frame, without moving the playhead.
    *
-   * For anything that needs a *neighbouring* frame rather than the one on
+   * For anything that needs a *neighboring* frame rather than the one on
    * screen — the track overlay finite-differences the hull's camera-relative
    * offset either side of it to get a velocity. `cutsceneSample` cannot serve
    * that: it is the host's per-frame ask and re-bases the playhead on every

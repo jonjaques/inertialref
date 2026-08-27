@@ -150,6 +150,14 @@ export interface GenerationCost {
   readonly samplesPerSecond: number
 }
 
+/**
+ * How close to a pole a ground track may run, radians.
+ *
+ * The same margin `ELEVATION_LIMIT` and `PITCH_LIMIT` use, for a different
+ * reason: this one is not a singularity but a sign flip. See the clamp below.
+ */
+const POLE_LIMIT = Math.PI / 2 - 1e-6
+
 const DEFAULT_STEPS = 128
 const DEFAULT_TRACK_DEGREES = 10
 /** The streamer's own cap, `terrainStreamer.ts`. Kept in step by the baseline. */
@@ -233,7 +241,21 @@ export function simulateDescent(
     // The track closes as the descent proceeds: the camera arrives *at* the
     // site rather than passing over it and landing somewhere else.
     const offset = track * (1 - t)
-    const latitude = target.latitude + offset * 0.5
+    /*
+     * Clamped, because a track that runs past a pole is not a track.
+     *
+     * `geodeticDirection` takes `cos(latitude)`, which goes negative past ±90°
+     * and reflects the direction through the axis onto the opposite meridian.
+     * A descent onto the `pole` site with the default 10° of track therefore
+     * started at 95° — five degrees past the pole on the anti-meridian — and
+     * every level, opacity and patch figure for those steps described ground
+     * the caller never asked about. The excess goes into longitude, where a
+     * wrap is what a meridian is for.
+     */
+    const latitude = Math.max(
+      -POLE_LIMIT,
+      Math.min(POLE_LIMIT, target.latitude + offset * 0.5),
+    )
     const longitude = target.longitude + offset
     const direction = geodeticDirection(latitude, longitude)
     const distance = surfaceRadius(body, direction) + height
@@ -265,7 +287,11 @@ export function simulateDescent(
         }
       }
     }
-    if (window.clipped > 0) clippedSteps += 1
+    // Only where it costs something. Above the fade the window is computed but
+    // neither requested nor drawn, so a face edge cutting it takes nothing —
+    // and counting those made the summary read "34 of 128 steps drawn; 61 steps
+    // lost patches to a face edge", which is 61 steps that lost nothing.
+    if (window.clipped > 0 && window.opacity > 0) clippedSteps += 1
     if (requestedRegions.length > peakBurst) peakBurst = requestedRegions.length
 
     out.push({
