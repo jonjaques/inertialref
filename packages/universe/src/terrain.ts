@@ -330,7 +330,7 @@ export const TERRAIN_DETAIL_TOLERANCE: Meters = 0.5
 
 /** Probe directions for `surfaceDetailFloor`, spread by the golden angle. */
 const DETAIL_PROBES = 24
-const detailFloorCache = new WeakMap<SurfaceParameters, Map<number, number>>()
+const detailFloorCache = new WeakMap<SurfaceParameters, Map<string, number>>()
 
 /**
  * The subdivision level past which a patch is an upsample of its parent.
@@ -369,7 +369,14 @@ export function surfaceDetailFloor(
   tolerance: Meters = TERRAIN_DETAIL_TOLERANCE,
 ): number {
   const held = detailFloorCache.get(surface)
-  const key = radius * 1e6 + resolution + tolerance
+  /*
+   * A string, because the arithmetic version collided. `radius * 1e6 +
+   * resolution + tolerance` folds three numbers additively, so (65, 0.5) and
+   * (64, 1.5) hash the same and whichever call ran first won for both — a pure
+   * function whose answer depended on the order it was asked in, which is the
+   * one thing generation may never do.
+   */
+  const key = `${radius}|${resolution}|${tolerance}`
   const cached = held?.get(key)
   if (cached !== undefined) return cached
 
@@ -404,7 +411,7 @@ export function surfaceDetailFloor(
   }
 
   const answer = Math.min(MAX_REGION_LEVEL, floor + 1)
-  const map = held ?? new Map<number, number>()
+  const map = held ?? new Map<string, number>()
   map.set(key, answer)
   detailFloorCache.set(surface, map)
   return answer

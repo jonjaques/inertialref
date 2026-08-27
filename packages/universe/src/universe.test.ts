@@ -13,6 +13,7 @@ import {
   addressLabels,
   bodyAddress,
   formatAddress,
+  MAX_REGION_LEVEL,
   regionAddress,
   systemAddress,
 } from './address.ts'
@@ -61,6 +62,7 @@ import {
   regionNeighbor,
   regionParent,
   regionSize,
+  surfaceDetailFloor,
   surfaceRadius,
 } from './terrain.ts'
 
@@ -377,6 +379,85 @@ describe('cube-sphere terrain', () => {
         groundElevation(planet.surface, regionDirection(region, 0.5, -1 / 8)),
       ),
     )
+  })
+})
+
+describe('where the field stops having anything to add', () => {
+  it('finds a floor past which a patch is its parent, upsampled', () => {
+    /*
+     * The claim `surfaceDetailFloor` makes, checked against the field rather
+     * than against itself: at the floor, the middle of a grid cell is within
+     * tolerance of the bilinear interpolation of its corners — and one level
+     * *above* it, it is not. Both halves matter. Without the second, a function
+     * that returned `MAX_REGION_LEVEL` would pass.
+     */
+    const system = generateSystem(ROOT, MILKY_WAY, SOL)
+    const planet = [...walkBodies(system)].find(
+      (b) => b.surface.maxElevation > 0,
+    )
+    if (planet === undefined) throw new Error('expected a solid body')
+
+    const tolerance = 0.5
+    const floor = surfaceDetailFloor(
+      planet.radius,
+      planet.surface,
+      65,
+      tolerance,
+    )
+    expect(floor).toBeGreaterThan(0)
+    expect(floor).toBeLessThan(MAX_REGION_LEVEL)
+
+    const residual = (level: number): number => {
+      const half = 0.5 / 64
+      let peak = 0
+      for (let probe = 0; probe < 24; probe += 1) {
+        const z = 1 - (2 * probe + 1) / 24
+        const around = probe * Math.PI * (3 - Math.sqrt(5))
+        const ring = Math.sqrt(Math.max(0, 1 - z * z))
+        const region = regionForDirection(
+          vec3(Math.cos(around) * ring, z, Math.sin(around) * ring),
+          level,
+        )
+        const at = (s: number, t: number): number =>
+          groundElevation(planet.surface, regionDirection(region, s, t))
+        const corners =
+          at(0.5 - half, 0.5 - half) +
+          at(0.5 + half, 0.5 - half) +
+          at(0.5 - half, 0.5 + half) +
+          at(0.5 + half, 0.5 + half)
+        peak = Math.max(peak, Math.abs(at(0.5, 0.5) - corners / 4))
+      }
+      return peak
+    }
+
+    // One level of margin is added on top of the search, so the floor itself is
+    // comfortably under and the level two above it is not.
+    expect(residual(floor)).toBeLessThanOrEqual(tolerance)
+    expect(residual(floor - 2)).toBeGreaterThan(tolerance)
+  })
+
+  it('answers the same whatever order it is asked in', () => {
+    /*
+     * The memo key folded `resolution` and `tolerance` into a sum, so (65, 0.5)
+     * and (64, 1.5) collided and whichever call ran first won for both — a pure
+     * function of the seed whose answer depended on the order of the questions,
+     * which is the one thing generation may never do.
+     */
+    const system = generateSystem(ROOT, MILKY_WAY, SOL)
+    const planet = [...walkBodies(system)].find(
+      (b) => b.surface.maxElevation > 0,
+    )
+    if (planet === undefined) throw new Error('expected a solid body')
+    const fresh = { ...planet.surface }
+
+    const a = surfaceDetailFloor(planet.radius, planet.surface, 65, 0.5)
+    const b = surfaceDetailFloor(planet.radius, planet.surface, 64, 1.5)
+    // The same two questions, asked of an equal surface in the other order.
+    const b2 = surfaceDetailFloor(planet.radius, fresh, 64, 1.5)
+    const a2 = surfaceDetailFloor(planet.radius, fresh, 65, 0.5)
+    expect([a2, b2]).toEqual([a, b])
+    // And they are genuinely different answers, so the pair can fail.
+    expect(a).not.toBe(b)
   })
 })
 

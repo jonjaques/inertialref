@@ -448,7 +448,21 @@ export class TerrainStreamer {
     // that has not arrived costs detail rather than leaving a hole.
     const drawn = selectTerrain(eye, {
       ...options,
-      ready: (region) => this.#fields.has(this.#key(region)),
+      /*
+       * Geometry, not the heightfield.
+       *
+       * `state()` can only place a patch it has vertex buffers for, and the
+       * traversal *drops* a node the moment it refines — so a region whose
+       * field had arrived but whose mesh had not was covered by nothing at
+       * all: not by itself, and not by the parent that had already given way
+       * to it. Measured on arrival at a landable body, 138 of 266 selected
+       * regions had no geometry, which is half the visible disk missing.
+       *
+       * Gating on the mesh means refinement advances exactly as fast as
+       * `#build` can feed it, which is the honest rate, and the picture is
+       * never short of ground.
+       */
+      ready: (region) => this.#patches.has(this.#key(region)),
     })
     this.#drawn = drawn.patches
     this.#deepest = drawn.deepestLevel
@@ -473,7 +487,19 @@ export class TerrainStreamer {
       options,
     )
 
-    this.#build(drawn.patches, surface)
+    /*
+     * What is drawn now and has no mesh yet, then the rung below it. The
+     * second half is what makes the ladder climb: with refinement gated on
+     * geometry, a node whose children have fields but no meshes is starved
+     * until something builds them, and nothing else would.
+     */
+    this.#build(
+      [
+        ...drawn.patches.map((patch) => patch.region),
+        ...drawn.starved.flatMap((region) => [...regionChildren(region)]),
+      ],
+      surface,
+    )
     /*
      * The draw set first, then the ideal one.
      *
@@ -487,8 +513,14 @@ export class TerrainStreamer {
      */
     this.#request(
       [
-        // What is drawn now and has no geometry yet.
-        ...drawn.patches.map((patch) => patch.region),
+        // What is drawn now and has no field yet, nearest first — a frame's
+        // budget should buy the ground being looked at rather than whichever
+        // cube face the traversal happened to emit first. Sorted here rather
+        // than in `#request`, because sorting the whole list would dissolve
+        // the grouping these three lines exist to create.
+        ...[...drawn.patches]
+          .sort((a, b) => a.distance - b.distance)
+          .map((patch) => patch.region),
         // What the drawn set is waiting on to refine.
         ...drawn.starved.flatMap((region) => [...regionChildren(region)]),
         // And the whole pyramid under the ideal selection, shallow first.
@@ -581,12 +613,12 @@ export class TerrainStreamer {
     }
   }
 
-  /** Build geometry for drawn patches that do not have it yet, under budget. */
-  #build(drawn: readonly SelectedPatch[], body: Body): void {
+  /** Build geometry for the regions that need it next, under budget. */
+  #build(wanted: readonly RegionAddress[], body: Body): void {
     let built = 0
-    for (const selected of drawn) {
+    for (const region of wanted) {
       if (built >= BUILDS_PER_FRAME) return
-      const key = this.#key(selected.region)
+      const key = this.#key(region)
       if (this.#patches.has(key)) continue
       const field = this.#fields.get(key)
       if (field === undefined) continue
@@ -595,7 +627,7 @@ export class TerrainStreamer {
       this.#patches.set(
         key,
         buildPatch({
-          region: selected.region,
+          region,
           resolution: HEIGHTFIELD_RESOLUTION,
           border: field.border,
           elevations: field.elevations,
@@ -607,13 +639,12 @@ export class TerrainStreamer {
   }
 
   /**
-   * Queue the missing heightfields, coarsest first and then nearest.
+   * Queue the missing heightfields, in the order the caller asked for them.
    *
-   * The order is the argument. The list arrives as the draw set followed by the
-   * ideal one, and within each the nearest goes first — so a frame's budget
-   * buys the ground being looked at rather than whichever cube face the walk
-   * started on, and it buys the patch that is *drawn* before the patch that
-   * will replace it. A stable sort keeps that grouping.
+   * The order is the argument and it belongs to the caller: the list arrives as
+   * the drawn set nearest-first, then the rung the drawn set is waiting on,
+   * then the ideal selection's pyramid shallow-first. Sorting here would
+   * dissolve exactly that grouping, so this only filters and takes.
    */
   #request(wanted: readonly RegionAddress[], body: Body): void {
     if (this.#pool === null) return

@@ -266,7 +266,14 @@ export interface SelectedPatch {
 }
 
 export interface TerrainSelection {
-  /** Everything to draw, in a stable order: face, then quadrant, then depth. */
+  /**
+   * Everything to draw.
+   *
+   * Deterministic — the same eye and body give the same array, which is the
+   * property that matters — but the order is the traversal's own and is not
+   * sorted by anything a caller would want. A streamer spending a per-frame
+   * budget on it has to order it itself.
+   */
   readonly patches: readonly SelectedPatch[]
   readonly deepestLevel: number
   readonly shallowestLevel: number
@@ -441,6 +448,7 @@ export function selectTerrain(
     ready,
     consider,
     starved,
+    seen: new Set(starved.map((region) => regionKey(region))),
   })
 
   let deepest = 0
@@ -500,6 +508,9 @@ const RING: readonly (readonly [number, number])[] = [
  * strings that was 1.8 ms — sixteen times the cost of the traversal it is
  * correcting, and over the frame budget by itself.
  */
+const regionKey = (region: RegionAddress): number | string =>
+  packed(region.face, region.level, region.i, region.j)
+
 const packed = (
   face: number,
   level: number,
@@ -547,6 +558,7 @@ function balance(
     readonly ready?: (region: RegionAddress) => boolean
     readonly consider: (region: RegionAddress) => Node | null
     readonly starved: RegionAddress[]
+    readonly seen: Set<number | string>
   },
 ): readonly Node[] {
   let current = nodes
@@ -608,7 +620,13 @@ function balance(
       }
       const children = regionChildren(node.region)
       if (context.ready !== undefined && !children.every(context.ready)) {
-        context.starved.push(node.region)
+        // Once, however many passes it stays starved for: this list is a work
+        // queue for the streamer and a counter in `ir.terrain()`, and a node
+        // repeated per pass over-reports both.
+        if (!context.seen.has(regionKey(node.region))) {
+          context.seen.add(regionKey(node.region))
+          context.starved.push(node.region)
+        }
         next.push(node)
         continue
       }

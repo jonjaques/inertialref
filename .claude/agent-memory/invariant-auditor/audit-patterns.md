@@ -149,6 +149,14 @@ else invalidates. This diff got it right; nothing would have caught it if it had
   Sol via `TEST_CATALOG`. So every `provenance === 'projected'` branch — which is exactly
   the population whose prose is most likely to slip into the engine's voice — is untested.
 
+## The tree can move under you mid-audit
+
+On the quadtree review the branch gained a commit and four files gained uncommitted edits
+while I was reading — a concurrent session fixing the stale-comment sites I was about to
+report. Re-run `git status` and `git log --oneline <base>..HEAD` _before writing the
+report_, and drop findings that the working tree already fixes. Reporting a fix that is in
+flight is the same cost as a false positive.
+
 ## What `pnpm graph` covers
 
 Acyclicity, layer order, and the no-third-party-runtime-deps ban in `packages/*`. It
@@ -157,6 +165,54 @@ reports "12 packages, no cycles, layering intact". It does **not** see a Three.j
 adapter — those stay manual. `pnpm lint` (oxlint) does catch `react/no-multi-comp`, so
 one-component-per-file rarely needs a manual pass; the Fast-Refresh half (a `.tsx`
 exporting a non-component constant) does not, and is worth a grep.
+
+## Memoization keys built by _addition_ are the order-dependence bug here
+
+`terrain.ts`'s `surfaceDetailFloor` keyed its memo `radius * 1e6 + resolution + tolerance`,
+so `(65, 0.5)` and `(64, 1.5)` collide and whichever call ran first won for both — measured
+9 vs 8 on `s:SOL/b:0`, same seed, same body. This is the "generation depends on order"
+invariant in its least visible form: the function is pure, the seed is derived from the
+address, and the defect is entirely in the cache.
+
+**The check:** for every new module-level `Map`/`WeakMap` in `packages/*`, read the key
+expression. Additive composites and template strings without separators are the tell. Prove
+it by calling twice in each order from two fresh processes — two lines, and it is the only
+way to see it, because every production caller usually passes the defaults and never
+collides.
+
+Recurring companion: the memoized function ships with **no test**, and the tests that do
+exist use it on both sides (as the expectation _and_, via a default parameter, as the input
+to the thing under test). `terrainRig.test.ts` asserts `descent bottoms out at
+surfaceDetailFloor(...)` while `simulateDescent`'s default `maxLevel` _is_
+`surfaceDetailFloor(...)` — tautological in the value, so it cannot see the collision.
+
+## "Ready" predicates that test a different cache than the one the drawer reads
+
+`terrainSelect`'s `ready` is documented as the thing that prevents holes: refine only into
+regions that are drawable. The streamer answered it with `#fields.has(key)` — the
+_heightfield_ cache — while `state()` skips any region whose `RenderPatch` has not been
+built, and `#build` builds 4 per frame against 8 fields arriving. A refined parent is
+dropped from the selection, so the gap is open sky. Measured on a landing: 204 selected /
+104 built at frame 40, worst 138 on arrival and 68 during a sustained descent.
+
+**The check, and it generalizes:** when a predicate names a precondition ("it is drawable",
+"it is loaded", "it is ready"), find the code that actually _consumes_ the thing and confirm
+it reads the same map. Two caches with a per-frame budget between them is the shape. The
+cheap proof is comparing the selected count against the drawn count over a few hundred
+headless frames — `game.terrain().patches` vs `game.terrainState().patches.length`.
+
+## An ordering argument in a docstring, with no sort in the code
+
+`#request`'s comment says "coarsest first and then nearest … the order is the argument … a
+stable sort keeps that grouping". There is no sort — it filters and slices 8. Measured, the
+first eight requests on Earth at 2 m are 470–750 km away, so the budget buys the horizon
+rather than the ground underfoot.
+
+Comments that _argue_ for a property are where to look, not comments that state one: the
+argument is written when the author has the property in mind, and the sort is what gets
+dropped in a later refactor. Grep the function for `sort`/`localeCompare` before believing
+it. `TerrainSelection.patches`'s "stable order: face, then quadrant, then depth" was wrong
+the same way in the same diff.
 
 ## Cadence claims in comments are checkable arithmetic
 

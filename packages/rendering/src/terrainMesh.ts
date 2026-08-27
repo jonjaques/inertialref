@@ -130,6 +130,17 @@ export function buildPatch(input: PatchInput): RenderPatch {
     border >= 2,
     `A patch needs two rings of border to morph; got ${border}`,
   )
+  /*
+   * The morph snaps to `index & ~1`, which lands on a parent vertex only
+   * because a child covers half its parent's side and `resolution - 1` is even
+   * — 64 quads halved is 32. An even resolution would leave the snapped index
+   * somewhere the parent has no vertex, and the morph would silently stop
+   * being exact rather than fail.
+   */
+  invariant(
+    resolution % 2 === 1,
+    `A patch resolution must be odd so the morph lands on the parent's grid; got ${resolution}`,
+  )
   const stride = heightfieldStride({ resolution, border })
   invariant(
     elevations.length === stride * stride,

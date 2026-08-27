@@ -482,9 +482,9 @@ export class GameEngine implements PresentationHost {
    * What the streamer holds this frame, as data the harness can return.
    *
    * The triangle count is summed from the drawn set rather than multiplied out
-   * from a constant: a patch is 64² quads today and will not be once patches
-   * carry a border row, and a figure that silently kept quoting 8,192 would be
-   * the one number in the terrain baseline nobody re-measured.
+   * from a constant. A patch is 64² quads and its resolution is a parameter, so
+   * a figure that quoted 8,192 would be the one number in the terrain baseline
+   * nobody re-measured.
    */
   terrain(): TerrainReport | null {
     const { bodyAddress, ...rest } = this.#terrain.summary()
