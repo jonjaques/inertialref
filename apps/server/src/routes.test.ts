@@ -31,6 +31,7 @@ describe('worker routing', () => {
       '/',
       '/index.html',
       '/assets/index-a1b2c3d4.js',
+      '/assets/index-a1b2c3d4.js.map',
       '/favicon.svg',
       '/apibut-not-really',
       '/ws/extra',

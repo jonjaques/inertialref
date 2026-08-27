@@ -22,7 +22,7 @@
     "brand:check": "node scripts/brand/build.mjs --check",
     "media:pull": "node scripts/media.mjs pull",
     "media:push": "node scripts/media.mjs push",
-    "sim": "node apps/headless/src/main.ts",
+    "sim": "node --inspect=127.0.0.1:9229 apps/headless/src/main.ts",
     "catalog:fetch": "node apps/ingest/src/main.ts fetch",
     "catalog:report": "node apps/ingest/src/main.ts report",
     "catalog:build": "node apps/ingest/src/main.ts build",
