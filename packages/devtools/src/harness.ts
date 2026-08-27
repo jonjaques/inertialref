@@ -918,19 +918,19 @@ export class GameHarness {
          * rule, so it produces the same numbers here, in a browser console and
          * in a Node test.
          *
-         * The camera is left in the last body's *basin*, not on its summit,
-         * for the reason this phase measured: a summit above the fade line
-         * draws nothing, and the zoo's declaration order puts `icy-active`
-         * last — which on this seed is Miranda, whose summit is exactly that
-         * hole. "Something on screen when it returns" would have been a bare
-         * datum sphere.
+         * The camera is left on the last body's *summit*, which is the place
+         * this milestone's first phase made visitable. Phase 0 had to leave it
+         * in a basin: the zoo's declaration order puts `icy-active` last, which
+         * on this seed is Miranda, and Miranda's summit stands 4,826 m over a
+         * fade line at 2,605 m — so "something on screen when it returns" was a
+         * bare datum sphere. There is no fade, and the summit is ground.
          */
         const zoo = this.zoo()
         if (zoo.length === 0) throw new Error('the terrain zoo came back empty')
         const reports = zoo.map((entry) => this.descend(entry.address))
         const last = zoo[zoo.length - 1]
         if (last !== undefined) {
-          this.visit(last.address, { site: 'basin', height: 2 })
+          this.visit(last.address, { site: 'summit', height: 2 })
         }
         return this.#scenarioResult(
           name,
@@ -1182,7 +1182,8 @@ export class GameHarness {
     log.info('descent simulated', {
       body: report.body,
       site: report.site,
-      levelChanges: report.levelChanges,
+      levels: report.levels.join('→'),
+      peakDrawn: report.peakDrawn,
       peakBurst: report.peakBurst,
     })
     return { ...report, text }

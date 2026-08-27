@@ -28,10 +28,12 @@ import {
 } from '@inertialref/universe'
 import {
   buildPatch,
+  DEFAULT_VIEWPORT,
   type PatchPlacement,
   patchPlacement,
   type RenderBody,
   type RenderPatch,
+  pixelsPerRadian,
   type SelectedPatch,
   selectTerrain,
   type TerrainEye,
@@ -125,13 +127,48 @@ function pyramid(leaves: readonly SelectedPatch[]): readonly RegionAddress[] {
 /**
  * Patches to turn into geometry in one frame.
  *
- * This is main-thread work inside the frame — 4,761 directions and a normal
- * pass — so it is the one part of streaming that can show up as a hitch rather
- * than as latency. Two is a few hundred microseconds. Moving the whole build
- * into the worker is the obvious next step and is a payload change rather than
- * an algorithm one.
+ * This is main-thread work inside the frame — 4,761 directions and two normal
+ * passes — so it is the one part of streaming that shows up as a hitch rather
+ * than as latency. It is **0.25 ms** a patch, so four of them is a millisecond,
+ * and a cold whole-disk selection of 450 fills in about 110 frames — which is
+ * roughly what the worker pool takes to generate them anyway.
+ *
+ * It was 6.26 ms a patch before the mesh loops were written in scalars, which
+ * is six frames of terrain budget for one patch and the reason this constant
+ * was 2. Moving the build into the worker entirely is the next step and is a
+ * payload change rather than an algorithm one; it is not free, because
+ * `packages/workers` and `packages/rendering` are the same layer and the mesh
+ * arithmetic would have to move down to `packages/universe` first.
  */
-const BUILDS_PER_FRAME = 2
+const BUILDS_PER_FRAME = 4
+
+/**
+ * How many pixels a body's relief must cover before terrain is drawn at all.
+ *
+ * The one thing the quadtree is *for* is that the silhouette and the shading
+ * are the ground rather than a sphere pretending to be it. Past the distance
+ * where a body's whole relief is a pixel wide, that claim is empty: the mesh
+ * and the datum sphere are the same picture, and the sphere already carries a
+ * normal map and, on four bodies in Sol, a photograph.
+ *
+ * Without this, Earth at two and a half radii is five level-0 patches of flat
+ * tinted ground over the top of the map — a generated picture replacing a
+ * measured one, which is precisely the doctrine's inversion. With it, Earth
+ * draws its map until 2,000 km of altitude and its ground below that, and
+ * Miranda — 10 km of relief on a 236 km moon — keeps terrain out to eight
+ * thousand kilometers, because there the relief is genuinely the shape of the
+ * body.
+ *
+ * The plan's unconditional sphere-tier shell wants Phase 3's per-face normal
+ * and albedo bake underneath it. That is what would let a level-0 patch carry
+ * something the sphere does not, and this threshold is where it goes when it
+ * arrives.
+ *
+ * The cost is a switch rather than a fade, and the size of the switch is this
+ * number: one pixel of silhouette, against the whole ground appearing that the
+ * opacity fade traded for a transparency ramp.
+ */
+const TERRAIN_RELIEF_PIXELS = 8
 
 /** Heightfields held. 512 bordered 65×65 fields is about 10 MB. */
 const FIELD_CACHE = 512
@@ -370,11 +407,21 @@ export class TerrainStreamer {
     }
     this.#colour = surface.appearance.colour
 
+    const viewport = this.viewport ?? DEFAULT_VIEWPORT
+    const eye = this.#eye(surface, spinPose, bodyPose.position, camera)
+    const height = Math.max(1, eye.distance - eye.radius)
+    if (
+      (eye.relief * pixelsPerRadian(viewport)) / height <
+      TERRAIN_RELIEF_PIXELS
+    ) {
+      this.#forget()
+      return
+    }
+
     const options = {
       maxLevel: surfaceDetailFloor(surface.radius, surface.surface),
-      viewport: this.viewport ?? undefined,
+      viewport,
     }
-    const eye = this.#eye(surface, spinPose, bodyPose.position, camera)
 
     // What to draw: refine only into ground already in the cache, so a patch
     // that has not arrived costs detail rather than leaving a hole.

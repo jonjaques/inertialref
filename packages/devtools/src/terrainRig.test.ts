@@ -282,14 +282,15 @@ describe('a simulated descent', () => {
       })
       expect(`${entry.name}: ${report.saturatedSteps}`).toBe(`${entry.name}: 0`)
       /*
-       * The measured ceiling, on the worst body in the zoo: an 11,536 km world
-       * with 44 km of relief, whose detail floor is level 12 and which
-       * therefore has thirteen levels between the horizon and the ground. 298
-       * patches there; the rest of the zoo is well under two hundred. The bound
-       * is what `DEFAULT_MAX_PATCHES` has to stay clear of, and the assertion
-       * is here so that a change to either is a change to a number.
+       * The measured ceiling, and the number `DEFAULT_MAX_PATCHES` has to stay
+       * clear of. It is set by the *balance* rather than by the error
+       * tolerance: a restricted quadtree grading from the level underfoot out
+       * to the level at the horizon costs 410 to 480 patches on a body with
+       * seven or eight levels between the two, and changing the tolerance moves
+       * it by a few percent. The assertion is here so that a change to either
+       * is a change to a number rather than a surprise in a frame.
        */
-      expect(`${entry.name}: ${report.peakDrawn < 320}`).toBe(
+      expect(`${entry.name}: ${report.peakDrawn < 700}`).toBe(
         `${entry.name}: true`,
       )
       const wanted = report.steps.reduce((sum, step) => sum + step.wanted, 0)

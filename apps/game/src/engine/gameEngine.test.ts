@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createInlineWorker, createTaskRegistry } from '@inertialref/workers'
 import { MemorySaveStore } from '@inertialref/persistence'
+import type { PlacedPatch } from './terrainStreamer.ts'
 import { GameEngine } from './GameEngine.ts'
 
 /*
@@ -108,17 +109,39 @@ describe('the game engine, headless', () => {
     if (target === undefined) throw new Error('nowhere to land')
     game.harness.land(target.address, 0.35, -1.1)
 
-    // Enough frames for the inline pool to deliver the heightfields.
-    for (let i = 0; i < 30; i += 1) {
+    // Enough frames for the quadtree to bottom out. It refines progressively,
+    // so a patch chosen before it settles is a patch that gets refined away.
+    for (let i = 0; i < 150; i += 1) {
       game.frame(1 / 60)
       await new Promise((resolve) => setTimeout(resolve, 2))
     }
     expect(game.terrainState().patches.length).toBeGreaterThan(0)
 
+    /*
+     * One named patch, followed by its address.
+     *
+     * `patches[0]` was enough while the streamed set was a nine-patch window
+     * that arrived at once. A quadtree refines progressively and reorders as it
+     * does, so the first entry is a different piece of ground from frame to
+     * frame and the distance to it moves by kilometers for reasons that have
+     * nothing to do with what this test is about.
+     */
+    const anchorRegion = [...game.terrainState().patches].sort(
+      (a: PlacedPatch, b: PlacedPatch) =>
+        b.patch.region.level - a.patch.region.level,
+    )[0]!.patch.region
     const separation = (): number => {
       const scene = game.scene()
       const ship = scene?.entities.find((entity) => entity.isCamera)
-      const placed = game.terrainState().patches[0]
+      const placed = game
+        .terrainState()
+        .patches.find(
+          ({ patch }) =>
+            patch.region.face === anchorRegion.face &&
+            patch.region.level === anchorRegion.level &&
+            patch.region.i === anchorRegion.i &&
+            patch.region.j === anchorRegion.j,
+        )
       if (ship === undefined || placed === undefined)
         throw new Error('nothing to measure')
       return Math.hypot(

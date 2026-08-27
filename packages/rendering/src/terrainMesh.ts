@@ -139,34 +139,40 @@ export function buildPatch(input: PatchInput): RenderPatch {
   // The datum point at the middle of the patch. Subtracting it is what keeps
   // the vertices small enough for float32 to hold meter-scale relief.
   const anchor = Vec.scale(regionDirection(region, 0.5, 0.5), bodyRadius)
+  const anchorX = anchor.x
+  const anchorY = anchor.y
+  const anchorZ = anchor.z
 
   /*
    * The border rows carry positions too, and they are needed only to difference
    * against — so they live in a scratch grid in float64 rather than in the
    * patch. Float64 because a normal is a difference of two nearby numbers and
    * the whole point of the anchor is that those numbers are close together.
+   *
+   * Everything below this line is written in scalars against flat arrays, which
+   * is not a style choice. A patch is 4,761 samples, and the readable version —
+   * a `Vec3` per direction, per scaled position, per difference, and a pair of
+   * three-element arrays per normal — allocated about 40,000 short-lived
+   * objects and cost **6.26 ms**. That is six frames' worth of terrain budget
+   * for one patch, on the main thread, in the middle of a descent that wants
+   * four hundred of them.
    */
   const extended = new Float64Array(stride * stride * 3)
   const step = resolution - 1
   for (let row = -border; row < resolution + border; row += 1) {
     const t = row / step
     for (let col = -border; col < resolution + border; col += 1) {
-      const s = col / step
       const sample = (row + border) * stride + (col + border)
-      const direction = regionDirection(region, s, t)
-      const elevation = elevations[sample] ?? 0
-      const local = Vec.sub(
-        Vec.scale(direction, bodyRadius + elevation),
-        anchor,
-      )
-      extended[sample * 3] = local.x
-      extended[sample * 3 + 1] = local.y
-      extended[sample * 3 + 2] = local.z
+      // `regionDirection` rather than the face arithmetic inlined: it is the
+      // named producer of a body-fixed direction and the one place the cube
+      // convention lives. It is also the only allocation left in this loop.
+      const direction = regionDirection(region, col / step, t)
+      const radius = bodyRadius + (elevations[sample] ?? 0)
+      extended[sample * 3] = direction.x * radius - anchorX
+      extended[sample * 3 + 1] = direction.y * radius - anchorY
+      extended[sample * 3 + 2] = direction.z * radius - anchorZ
     }
   }
-
-  const at = (row: number, col: number, axis: number): number =>
-    extended[((row + border) * stride + (col + border)) * 3 + axis] ?? 0
 
   const count = resolution * resolution
   const positions = new Float32Array(count * 3)
@@ -184,9 +190,10 @@ export function buildPatch(input: PatchInput): RenderPatch {
   for (let row = 0; row < resolution; row += 1) {
     for (let col = 0; col < resolution; col += 1) {
       const index = row * resolution + col
-      const x = at(row, col, 0)
-      const y = at(row, col, 1)
-      const z = at(row, col, 2)
+      const sample = ((row + border) * stride + (col + border)) * 3
+      const x = extended[sample] as number
+      const y = extended[sample + 1] as number
+      const z = extended[sample + 2] as number
       positions[index * 3] = x
       positions[index * 3 + 1] = y
       positions[index * 3 + 2] = z
@@ -197,7 +204,7 @@ export function buildPatch(input: PatchInput): RenderPatch {
       if (y > highY) highY = y
       if (z > highZ) highZ = z
 
-      writeNormal(at, anchor, row, col, 1, normals, index)
+      writeNormal(extended, stride, border, row, col, 1, normals, index, anchor)
 
       /*
        * The parent's grid holds a vertex at every *even* index of this one:
@@ -209,12 +216,23 @@ export function buildPatch(input: PatchInput): RenderPatch {
        */
       const evenRow = row & ~1
       const evenCol = col & ~1
-      morphPositions[index * 3] = at(evenRow, evenCol, 0)
-      morphPositions[index * 3 + 1] = at(evenRow, evenCol, 1)
-      morphPositions[index * 3 + 2] = at(evenRow, evenCol, 2)
+      const even = ((evenRow + border) * stride + (evenCol + border)) * 3
+      morphPositions[index * 3] = extended[even] as number
+      morphPositions[index * 3 + 1] = extended[even + 1] as number
+      morphPositions[index * 3 + 2] = extended[even + 2] as number
       // Two cells, because that is one of the parent's. Shading has to hand
       // over with the geometry or the switch trades a pop for a shimmer.
-      writeNormal(at, anchor, evenRow, evenCol, 2, morphNormals, index)
+      writeNormal(
+        extended,
+        stride,
+        border,
+        evenRow,
+        evenCol,
+        2,
+        morphNormals,
+        index,
+        anchor,
+      )
     }
   }
 
@@ -249,42 +267,46 @@ export function buildPatch(input: PatchInput): RenderPatch {
  * ask where the edge is.
  */
 function writeNormal(
-  at: (row: number, col: number, axis: number) => number,
-  anchor: Vec3,
+  extended: Float64Array,
+  stride: number,
+  border: number,
   row: number,
   col: number,
   reach: number,
   out: Float32Array,
   index: number,
+  anchor: Vec3,
 ): void {
-  const du = [
-    at(row, col + reach, 0) - at(row, col - reach, 0),
-    at(row, col + reach, 1) - at(row, col - reach, 1),
-    at(row, col + reach, 2) - at(row, col - reach, 2),
-  ] as const
-  const dv = [
-    at(row + reach, col, 0) - at(row - reach, col, 0),
-    at(row + reach, col, 1) - at(row - reach, col, 1),
-    at(row + reach, col, 2) - at(row - reach, col, 2),
-  ] as const
+  const here = (row + border) * stride + (col + border)
+  const east = (here + reach) * 3
+  const west = (here - reach) * 3
+  const north = (here + reach * stride) * 3
+  const south = (here - reach * stride) * 3
 
-  let nx = du[1] * dv[2] - du[2] * dv[1]
-  let ny = du[2] * dv[0] - du[0] * dv[2]
-  let nz = du[0] * dv[1] - du[1] * dv[0]
+  const dux = (extended[east] as number) - (extended[west] as number)
+  const duy = (extended[east + 1] as number) - (extended[west + 1] as number)
+  const duz = (extended[east + 2] as number) - (extended[west + 2] as number)
+  const dvx = (extended[north] as number) - (extended[south] as number)
+  const dvy = (extended[north + 1] as number) - (extended[south + 1] as number)
+  const dvz = (extended[north + 2] as number) - (extended[south + 2] as number)
+
+  let nx = duy * dvz - duz * dvy
+  let ny = duz * dvx - dux * dvz
+  let nz = dux * dvy - duy * dvx
   const length = Math.hypot(nx, ny, nz)
+
+  const centre = here * 3
+  const rx = anchor.x + (extended[centre] as number)
+  const ry = anchor.y + (extended[centre + 1] as number)
+  const rz = anchor.z + (extended[centre + 2] as number)
+
   if (length === 0) {
     // Degenerate only where the field is exactly flat over five samples, and
     // then radial is the answer rather than a fallback.
-    const radial = Vec.normalize(
-      Vec.add(anchor, {
-        x: at(row, col, 0),
-        y: at(row, col, 1),
-        z: at(row, col, 2),
-      }),
-    )
-    out[index * 3] = radial.x
-    out[index * 3 + 1] = radial.y
-    out[index * 3 + 2] = radial.z
+    const radial = Math.hypot(rx, ry, rz) || 1
+    out[index * 3] = rx / radial
+    out[index * 3 + 1] = ry / radial
+    out[index * 3 + 2] = rz / radial
     return
   }
 
@@ -296,12 +318,7 @@ function writeNormal(
    * — but it is a cheap one, and the one thing that would silently invert a
    * patch is a face convention changing under it.
    */
-  const radial = Vec.add(anchor, {
-    x: at(row, col, 0),
-    y: at(row, col, 1),
-    z: at(row, col, 2),
-  })
-  const sign = nx * radial.x + ny * radial.y + nz * radial.z < 0 ? -1 : 1
+  const sign = nx * rx + ny * ry + nz * rz < 0 ? -1 : 1
   out[index * 3] = nx * sign
   out[index * 3 + 1] = ny * sign
   out[index * 3 + 2] = nz * sign

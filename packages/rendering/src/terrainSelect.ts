@@ -7,6 +7,7 @@ import {
   regionAddress,
   regionChildren,
   regionDirection,
+  regionNeighbor,
   regionSize,
 } from '@inertialref/universe'
 
@@ -81,30 +82,25 @@ export const pixelsPerRadian = (viewport: TerrainViewport): number =>
 /**
  * How many pixels one grid cell of a patch may cover before it is refined.
  *
- * The dial the whole cost sits on, and it is quadratic: the patches kept at
- * each level are the ones inside the parent's range and outside their own, and
- * a body has eight to thirteen levels of them. It also sets the *memory*, and
- * the patch resolution does not — halve the grid and the count quadruples, so
- * the vertices are a function of this and the level span alone.
+ * Less of a dial than it looks, once the tree is restricted. A balanced
+ * quadtree grading from the level underfoot out to the level at the horizon has
+ * a floor of its own — measured over the zoo, 410 to 450 patches whatever the
+ * tolerance — and below about sixteen pixels the error predicate starts adding
+ * on top of it: 6 px is 549 patches on Miranda against 435 at 16, and 32 px
+ * saves four. So this sits where the two curves meet.
  *
- * Measured on the zoo's largest world, 11,536 km with 44 km of relief and
- * thirteen levels between the horizon and its detail floor: 8 px is 1,850
- * patches, 16 px is **462** and 94 MB of vertex buffers, 24 px is **205** and
- * 42 MB. Twenty-four is where the memory sits down, and the smaller zoo bodies
- * come out between 120 and 205.
- *
- * What it costs is 24-pixel triangles at the distance a patch is chosen at,
- * on a field whose finest octave is coarser than one cell already — so the mesh
- * is a faithful fit to a smooth surface rather than an undersampled one. Phase
- * 2 puts detail at scales this would miss, and it is the number that moves
- * first when it does. Packing the four vertex attributes below float32 is the
- * other lever and is worth about half the memory.
+ * Measured at 16 px, at a 60° field over 1080 px: 236 patches on Earth, 435 on
+ * Miranda, 474 on the zoo's 11,536 km world — 45 to 96 MB of vertex buffers and
+ * 1.9 to 4.0 M triangles selected, of which the renderer's own frustum culling
+ * draws roughly a third. Packing the four vertex attributes below float32 is
+ * worth about half the memory and frustum-culling the *selection* about half
+ * again; both are measured-before-optimized rather than done here.
  *
  * The near field does not depend on this at all: the patch underfoot is at
  * `maxLevel`, where the predicate is switched off, so what this decides is how
  * fast detail falls away with distance.
  */
-export const DEFAULT_CELL_PIXELS = 24
+export const DEFAULT_CELL_PIXELS = 16
 
 /**
  * The deepest level to ask for when the caller does not say.
@@ -120,13 +116,13 @@ export const DEFAULT_MAX_LEVEL = 12
 /**
  * How many patches may be selected at once.
  *
- * A safety net rather than a working limit: a whole-disk selection at
- * `DEFAULT_CELL_PIXELS`, against a level floor the field itself sets, settles
- * between 58 and 181 across the zoo. The cap exists so that a body with
- * implausible relief, or a caller asking for two-pixel cells, degrades by one
- * level everywhere rather than by trying to draw the planet.
+ * A safety net rather than a working limit. A restricted whole-disk selection
+ * settles between 236 and 474 across the zoo at two meters, and the worst
+ * single step of a descent onto the zoo's 11,536 km world reaches **623** — so
+ * the cap is above that with room, and a body with implausible relief degrades
+ * by one level everywhere rather than by trying to draw the planet.
  */
-export const DEFAULT_MAX_PATCHES = 512
+export const DEFAULT_MAX_PATCHES = 768
 
 /**
  * Where a patch starts and finishes sliding onto its parent's grid, as
@@ -440,9 +436,16 @@ export function selectTerrain(
     frontier = next
   }
 
+  const balanced = balance(done, {
+    maxLevel,
+    ready,
+    consider,
+    starved,
+  })
+
   let deepest = 0
   let shallowest = maxLevel
-  const patches = done.map((node) => {
+  const patches = balanced.map((node) => {
     if (node.region.level > deepest) deepest = node.region.level
     if (node.region.level < shallowest) shallowest = node.region.level
     /*
@@ -467,8 +470,158 @@ export function selectTerrain(
     visited,
     culled,
     starved,
-    saturated,
+    saturated: saturated || patches.length > maxPatches,
   }
+}
+
+/** The eight neighbors a balanced quadtree has to agree with. */
+const RING: readonly (readonly [number, number])[] = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+  [1, 1],
+  [1, -1],
+  [-1, 1],
+  [-1, -1],
+]
+
+/**
+ * A region as one number, for the maps the balance pass lives in.
+ *
+ * Levels to twelve keep `i` and `j` under 4,096, which packs a whole address
+ * into 2.9e9 — exact in a double, and free to compare. Deeper than that it
+ * falls back to a string, which is slower and correct; nothing asks for deeper
+ * than twelve today because `surfaceDetailFloor` does not return it.
+ *
+ * The reason this is not `terrainPatchKey`: the balance pass builds a key for
+ * every node's eight neighbors and for every ancestor of every node, which on
+ * a whole-disk selection is nine thousand of them per pass. Built as template
+ * strings that was 1.8 ms — sixteen times the cost of the traversal it is
+ * correcting, and over the frame budget by itself.
+ */
+const packed = (
+  face: number,
+  level: number,
+  i: number,
+  j: number,
+): number | string =>
+  level <= 12
+    ? ((face * 32 + level) * 4096 + i) * 4096 + j
+    : `${face}.${level}.${i}.${j}`
+
+/**
+ * Refine until no patch touches one more than one level finer than itself.
+ *
+ * **The morph closes a one-level gap and nothing wider**, which is the thing
+ * this phase learned by looking at it. A patch slides onto its *parent's* grid,
+ * so where a level L patch meets a level L+1 patch the finer one arrives
+ * exactly on the coarser one's vertices and there is no seam. Where it meets a
+ * level L+2 patch, the finer one arrives on the L+1 grid — which the L patch
+ * has no vertex on — and the difference is a hairline of open sky.
+ *
+ * It was measurable and not rare. Standing on Miranda, 30 of 468 patch edges
+ * had a gap of two levels or more and the worst was **six**, drawn as dashed
+ * black arcs along each level ring. The cause is the refine test using a node's
+ * *nearest* point: a node whose near corner is close refines while its neighbor
+ * does not, and the difference compounds at every level below.
+ *
+ * A wide enough LOD band removes it by construction — measured, the tree comes
+ * out balanced on its own once a level's band is 3.7 patches wide or more. That
+ * costs 500 to 1,000 patches for one disk against 300 to 600, so the band stays
+ * narrow and the tree is restricted here instead. It is the classical answer
+ * and the same 2:1 rule Transvoxel's transition cells assume.
+ *
+ * Neighbors are checked around the whole ring rather than across the four
+ * edges: a corner-only mismatch is a single vertex, and a single vertex is a
+ * single visible point of sky.
+ *
+ * A node that must split but whose children have not arrived stays where it is
+ * and is counted as starved — a transient seam beats a hole, and the request
+ * set names those children first.
+ */
+function balance(
+  nodes: readonly Node[],
+  context: {
+    readonly maxLevel: number
+    readonly ready?: (region: RegionAddress) => boolean
+    readonly consider: (region: RegionAddress) => Node | null
+    readonly starved: RegionAddress[]
+  },
+): readonly Node[] {
+  let current = nodes
+  for (let pass = 0; pass <= context.maxLevel; pass += 1) {
+    /*
+     * The deepest selected level anywhere under each region, for every region
+     * that has one. A region absent from this is covered by something coarser,
+     * which can never be the finer half of a mismatch.
+     *
+     * Walked by halving `i` and `j` rather than through `regionParent`, because
+     * an allocation per ancestor per node per pass is most of what this used to
+     * cost and none of it is read.
+     */
+    const depth = new Map<number | string, number>()
+    for (const node of current) {
+      const { face } = node.region
+      let { level, i, j } = node.region
+      const deepest = level
+      while (level >= 0) {
+        const key = packed(face, level, i, j)
+        const held = depth.get(key)
+        if (held !== undefined && held >= deepest) break
+        depth.set(key, deepest)
+        level -= 1
+        i >>= 1
+        j >>= 1
+      }
+    }
+
+    const next: Node[] = []
+    let split = false
+    for (const node of current) {
+      const { face, level, i, j } = node.region
+      let mismatched = false
+      if (level < context.maxLevel) {
+        const span = 2 ** level
+        for (const [di, dj] of RING) {
+          const ni = i + di
+          const nj = j + dj
+          // The step stays on this face almost everywhere, and there the key is
+          // arithmetic. Only a face edge needs the gnomonic round trip.
+          const key =
+            ni >= 0 && ni < span && nj >= 0 && nj < span
+              ? packed(face, level, ni, nj)
+              : (() => {
+                  const beside = regionNeighbor(node.region, di, dj)
+                  return packed(beside.face, beside.level, beside.i, beside.j)
+                })()
+          const beside = depth.get(key)
+          if (beside !== undefined && beside - level >= 2) {
+            mismatched = true
+            break
+          }
+        }
+      }
+      if (!mismatched) {
+        next.push(node)
+        continue
+      }
+      const children = regionChildren(node.region)
+      if (context.ready !== undefined && !children.every(context.ready)) {
+        context.starved.push(node.region)
+        next.push(node)
+        continue
+      }
+      split = true
+      for (const child of children) {
+        const seen = context.consider(child)
+        if (seen !== null) next.push(seen)
+      }
+    }
+    current = next
+    if (!split) break
+  }
+  return current
 }
 
 /** The streamer's cache key for a patch: one definition, three readers. */
