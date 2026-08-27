@@ -302,6 +302,11 @@ ir.load(text) // → Result<stateHash, error>
 
 ## Driving from an automated browser session
 
+[`scripts/drive.mjs`](../../scripts/drive.mjs) is the driver — the Chrome
+DevTools Protocol against a Chrome it launches itself, never an extension in
+somebody's own browser. `pnpm drive --help`, and the
+[`drive` skill](../../.claude/skills/drive/SKILL.md) for the traps.
+
 The pattern that works well:
 
 ```mermaid
@@ -319,7 +324,10 @@ sequenceDiagram
 ```
 
 Read state back as JSON and assert on it. A screenshot tells you something
-rendered; `ir.status()` tells you _what_.
+rendered; `ir.status()` tells you _what_. `--sample <n>` reads one value per
+animation frame from inside the page, which is the only way to see something
+that moves — a strobe, a level churn, a stall — because a still cannot show it
+and a round trip per frame is longer than a frame.
 
 ---
 

@@ -70,25 +70,42 @@ rather than authored, so they survive regeneration.
 
 ---
 
-## Browser gotchas
+## The browser, when only a GPU will do
 
-These are the browser, not bugs in the clock:
+[`scripts/drive.mjs`](../../scripts/drive.mjs) is the one way in. It speaks the
+Chrome DevTools Protocol to a Chrome it launches itself, on its own profile and
+port, so it needs no focus and does not touch the browser a person is using.
 
-1. **Hard-reload after a source edit, then wait about 18 seconds.** HMR does
-   not reliably rebuild the renderer. A spinner on black is boot, not failure;
-   wait for the renderer-ready log before judging a capture.
-2. **Activate the page before reading state.** Chrome suspends
-   `requestAnimationFrame` while an automation window is occluded. After a
-   cutscene seek, capture once to activate and render, wait 2–4 seconds for
-   asynchronous textures, then capture again. The second frame is the evidence.
-3. **Open a new tab when a tab wedges.** Reloading the existing tab is not
-   always enough to recover its GPU state.
-4. **Shrink width when window height will not grow.** Browser automation can
-   refuse a requested `innerHeight`; a 1509×992 window produces a 1509×849
-   16:9 viewport without depending on a height increase.
+```bash
+node scripts/drive.mjs --js "ir.look('g:milky-way/s:SOL/b:5')" \
+                       --wait 3000 --shot saturn.jpg
+node scripts/drive.mjs --sample 240 --sample-js "ir.terrain()"
+node scripts/drive.mjs --down
+```
 
-A freshly reloaded page that is not focused can remain at tick 0. Focus it
-before diagnosing the clock.
+Steps run in the order written, in one session, and Chrome stays up between
+invocations — boot is about ten seconds and every call after the first attaches
+to the booted page in well under one. Batch the steps rather than paying a
+process per question. `--help` lists them all.
+
+These are the browser, not bugs in the clock, and the driver handles the first
+three; they are here because they explain what it is doing:
+
+1. **`requestAnimationFrame` is suspended while the window is occluded.** Focus
+   emulation is what makes the page render anyway. Without it boot never leaves
+   "first light…" and every capture is the boot cover.
+2. **Every screenshot is taken twice.** The first capture activates the page and
+   draws the frame, so alone it shows the state _before_ the step that preceded
+   it. The second is the evidence. After a cutscene seek, wait 2–4 seconds more
+   for asynchronous textures.
+3. **HMR does not reliably rebuild the renderer.** After a source edit,
+   `--reload`. A tab that has taken a dozen hot updates draws its HUD with
+   `engine.gl` null, which looks like a rendering bug and is not one.
+4. **A wedged Chrome needs `--down` and a fresh start.** Reloading is not always
+   enough to recover its GPU state.
+
+Readiness is `window.engine.gl`, not `window.ir` — the harness appears seconds
+earlier, so a probe on it captures an unlit canvas.
 
 ---
 

@@ -8,6 +8,7 @@
     "dev": "node scripts/dev.mjs",
     "dev:client": "pnpm --filter @inertialref/game dev",
     "dev:server": "pnpm --filter @inertialref/server run dev",
+    "drive": "node scripts/drive.mjs",
     "format": "prettier -w .",
     "format:check": "prettier -c .",
     "build": "node scripts/media.mjs pull --optional && pnpm typecheck && pnpm --filter @inertialref/game build",
