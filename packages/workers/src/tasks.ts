@@ -186,11 +186,14 @@ export interface HeightfieldRequestPayload {
   readonly seaLevel: number | null
   readonly region: RegionAddress
   readonly resolution: number
+  /** Rings of samples outside the patch. Omitted means `HEIGHTFIELD_BORDER`. */
+  readonly border?: number
 }
 
 export interface HeightfieldResponse {
   readonly region: RegionAddress
   readonly resolution: number
+  readonly border: number
   readonly elevations: Float32Array
   readonly minElevation: number
   readonly maxElevation: number
@@ -201,7 +204,14 @@ export const generateHeightfieldTask = defineTask<
   HeightfieldResponse
 >({
   name: 'universe.generateHeightfield',
-  version: 1,
+  /*
+   * 2: the response carries a border ring and the array is no longer
+   * `resolution²`. A worker running version 1 would hand back an array the
+   * mesh builder indexes as though the first row were the patch's own edge,
+   * which is a patch shifted by one sample rather than a failure — so the
+   * version is what makes the mismatch loud.
+   */
+  version: 2,
   run(payload) {
     const seed: Seed = parseSeed(payload.surfaceSeed)
     const field: Heightfield = generateHeightfield(
@@ -219,11 +229,13 @@ export const generateHeightfieldTask = defineTask<
           payload.region.j,
         ),
         resolution: payload.resolution,
+        border: payload.border,
       },
     )
     return {
       region: field.region,
       resolution: field.resolution,
+      border: field.border,
       elevations: field.elevations,
       minElevation: field.minElevation,
       maxElevation: field.maxElevation,

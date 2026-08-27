@@ -258,6 +258,19 @@ export class GameEngine implements PresentationHost {
   lensFlare = true
   fov = DEFAULT_FOV
 
+  /**
+   * The drawable height in physical pixels, for the terrain selection.
+   *
+   * A presentation input like `fov`, written by the scene from the drawing
+   * buffer, and read by the streamer to decide how much ground a patch's grid
+   * cell covers on *this* display. A two-times panel genuinely wants twice the
+   * patches for the same picture, and a selection measured against a nominal
+   * 1080 would leave it under-tessellated.
+   */
+  set viewportHeight(height: number) {
+    this.#terrain.viewport = { fovY: (this.fov * Math.PI) / 180, height }
+  }
+
   /*
    * How much of the lens's artifact stack is showing, 0..1 — the ghost chain,
    * not the glow and the streak, which are always the whole point.
@@ -681,16 +694,23 @@ export class GameEngine implements PresentationHost {
       cinematic !== null ? cinematic.camera : (observed ?? undefined),
     )
 
-    const surfaceBody = this.#scene.terrainCandidates[0] ?? null
-    // `shot.renderTime`, not the clock: the snapshot presents the world one tick
-    // in the past, and terrain that disagrees with the ship about what time it
-    // is drifts from under it by 800 m at orbital speed.
+    /*
+     * `shot.renderTime`, not the clock: the snapshot presents the world one tick
+     * in the past, and terrain that disagrees with the ship about what time it
+     * is drifts from under it by 800 m at orbital speed.
+     *
+     * The whole `RenderBody` rather than its address, because a patch has to
+     * ride the compression `placeAt` gave the body it sits on. Past
+     * `NEAR_LIMIT` the sphere is drawn nearer and smaller so its angular size
+     * survives, and terrain placed at true meters against it would be a
+     * different object at a different distance.
+     */
     this.#terrain.update(
       this.world,
       shot.renderTime,
       eye,
       this.origin,
-      surfaceBody?.address ?? null,
+      this.#scene.terrainCandidates[0] ?? null,
     )
 
     this.#maybeSurveyStars(eye)

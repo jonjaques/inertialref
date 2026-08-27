@@ -1,9 +1,10 @@
 # TERRAIN-PLAN — procedural terrain from orbit to on foot
 
 An engineering plan for the terrain milestone: growing the three-band
-heightfield into a geology, and the single-level 3×3 patch window into a
-planet that holds together from orbit down to standing at the foot of a
-mountain. Written 26 Aug 2026 against a clean `main`, the measured budgets in
+heightfield into a geology, the single-level 3×3 patch window into a planet
+that holds together from orbit down to standing at the foot of a mountain, and
+the field-of-view constant the whole refinement predicate rests on into a lens
+with an aperture on it. Written 26 Aug 2026 against a clean `main`, the measured budgets in
 [`docs/design/technical.md`](docs/design/technical.md), and a survey of the
 2025–26 state of the art (sources inline throughout). Where a claim is a
 judgment rather than a measurement, it says so.
@@ -54,7 +55,7 @@ The foundations are real and none of them move.
 | Elevation as a pure function of (seed, direction)         | `terrain.ts:165` `elevationAt`                                          | The whole determinism regime; also the only thing that makes planetary scale storable at all (§ 4)                           |
 | `BodyFixedDirection` brand                                | `terrain.ts:49`                                                         | Sampling in inertial axes has shipped twice as a bug                                                                         |
 | One owner of the sea clamp                                | `terrain.ts:206` `groundElevation`                                      | Physics and mesh agree on where the ocean is                                                                                 |
-| Worker-generated heightfields, transferred not copied     | `packages/workers/src/tasks.ts:199`                                     | Capability check 10 proves worker ≡ main thread. The cost is **12.8 ms/patch**, not the ≤ 8 ms the budget claimed — see § 10 |
+| Worker-generated heightfields, transferred not copied     | `packages/workers/src/tasks.ts:199`                                     | Capability check 10 proves worker ≡ main thread. The cost is **12.8 ms/patch**, not the ≤ 8 ms the budget claimed — see § 11 |
 | Reconciling streamer, heightfield cache across rebases    | `apps/game/src/engine/terrainStreamer.ts`                               | Loading is an ordinary operation, not a mode                                                                                 |
 | Body-fixed, anchor-relative patch vertices                | `packages/rendering/src/terrainMesh.ts:62`                              | Baking pose into vertices was ~865 m/frame of ground slide                                                                   |
 | Eye-relative log compression, angular size exact          | `packages/rendering/src/placement.ts:115`                               | Measured from anywhere else, small bodies vibrate                                                                            |
@@ -71,17 +72,18 @@ materials exist only in `apps/game`; `packages/universe` may not read a file.
 
 What stands between today and "rich terrain from orbit to on foot":
 
-| Gap                                                                                               | Consequence today                                                                                                                                                                                                                                                                                                                                 |
-| ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| One LOD level, 3×3 patches, no cross-face wrap (`terrainWindow.ts`, `windowRadius` and `clipped`) | The visible ground is a few patches wide; face edges are holes; the horizon is the datum sphere                                                                                                                                                                                                                                                   |
-| No stitching or morphing (`terrainMesh.ts:174` one-sided edge normals)                            | Hairline seams now; cracks the moment two levels coexist                                                                                                                                                                                                                                                                                          |
-| Three noise bands                                                                                 | No craters, no tectonics, no volcanism — every world is the same rolling fBm at a different amplitude                                                                                                                                                                                                                                             |
-| One flat color per body                                                                           | Terrain reads as geometry, never as a place; no biomes, no materials                                                                                                                                                                                                                                                                              |
-| Procgen bodies are featureless at `sphere` tier                                                   | The world you approach is not the world you land on — relief appears only below the streaming threshold                                                                                                                                                                                                                                           |
-| No scatter                                                                                        | Nothing at human scale; the last octave of noise is the smallest thing that exists                                                                                                                                                                                                                                                                |
-| Planetarium clamps at 1.5 radii (`observer.ts:98`)                                                | ~~No way to _inspect_ a surface without flying a ship to it~~ — closed by Phase 0's surface arm                                                                                                                                                                                                                                                   |
-| No terrain perf baseline                                                                          | ~~The 1.0 ms terrain line is designed, not enforced~~ — measured by Phase 0; see § 10                                                                                                                                                                                                                                                             |
-| **The streaming rules measure altitude from the datum**                                           | `terrainLevelFor` and `terrainOpacity` take `distance − radius`, which for a camera on the ground is `groundElevation + height`. A summit streams a level coarse; a summit above `radius · 2^(5.5 − maxLevel)` is **not drawn at all** — two of Miranda's six survey sites are ground that cannot be looked at, at any altitude. Found by Phase 0 |
+| Gap                                                                                               | Consequence today                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| One LOD level, 3×3 patches, no cross-face wrap (`terrainWindow.ts`, `windowRadius` and `clipped`) | The visible ground is a few patches wide; face edges are holes; the horizon is the datum sphere                                                                                                                                                                                                                                                                                                                                                                                                          |
+| No stitching or morphing (`terrainMesh.ts:174` one-sided edge normals)                            | Hairline seams now; cracks the moment two levels coexist                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Three noise bands                                                                                 | No craters, no tectonics, no volcanism — every world is the same rolling fBm at a different amplitude                                                                                                                                                                                                                                                                                                                                                                                                    |
+| One flat color per body                                                                           | Terrain reads as geometry, never as a place; no biomes, no materials                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Procgen bodies are featureless at `sphere` tier                                                   | The world you approach is not the world you land on — relief appears only below the streaming threshold                                                                                                                                                                                                                                                                                                                                                                                                  |
+| No scatter                                                                                        | Nothing at human scale; the last octave of noise is the smallest thing that exists                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Planetarium clamps at 1.5 radii (`observer.ts:98`)                                                | ~~No way to _inspect_ a surface without flying a ship to it~~ — closed by Phase 0's surface arm                                                                                                                                                                                                                                                                                                                                                                                                          |
+| No terrain perf baseline                                                                          | ~~The 1.0 ms terrain line is designed, not enforced~~ — measured by Phase 0; see § 11                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| **The streaming rules measure altitude from the datum**                                           | `terrainLevelFor` and `terrainOpacity` take `distance − radius`, which for a camera on the ground is `groundElevation + height`. A summit streams a level coarse; a summit above `radius · 2^(5.5 − maxLevel)` is **not drawn at all** — two of Miranda's six survey sites are ground that cannot be looked at, at any altitude. Found by Phase 0                                                                                                                                                        |
+| **There is no lens, so the screen-space-error predicate guesses one**                             | The engine states its field of view in nine places and three values, and `selectTerrain` reads none of them — it assumes 60° over 1080 px, which is neither the flight lens nor the cinematic one. Across the shipped controls the predicate's own scale spans 16×, four levels of refinement and 263× the patches, into a 384-patch cap that degrades the whole disk silently. Aperture, f-number and focus do not exist at all, and [art](docs/design/art.md#photo-mode) commits to all three. See § 8 |
 
 ---
 
@@ -343,7 +345,220 @@ floating origin and eye-relative compression are untouched.
 
 ---
 
-## 8. Landing controls, harnesses, and sims
+## 8. The lens
+
+The screen-space-error predicate is a statement about optics, and the engine
+has no lens to make it with.
+
+`selectTerrain` refines while one grid cell of a patch subtends more than
+`cellPixels`, which is `pixelsPerRadian(viewport) / cellPixels` against the
+node's distance. Every patch count in this plan, the 1.0 ms line, the
+`maxPatches` cap and the level the horizon settles at are functions of that one
+number — and it arrives from `DEFAULT_VIEWPORT`, a 60° vertical field over
+1080 pixels that is neither the flight lens (65°), nor the cinematic one (45°),
+nor anything the field-of-view slider's 20–110° passes through except in
+transit. The seam is already there and correctly documented; what is missing is
+the object to put in it.
+
+### The lens is stated nine times, in three values
+
+| Site                                                         | Says                               | For                           |
+| ------------------------------------------------------------ | ---------------------------------- | ----------------------------- |
+| `apps/game/src/engine/GameEngine.ts:90` `DEFAULT_FOV`        | 65°                                | the flight camera             |
+| `apps/game/src/App.tsx:557` the `<Canvas camera>` prop       | 65°                                | R3F's camera at construction  |
+| `packages/devtools/src/observatory.ts:190` `#fovDeg`         | 65°, re-pushed every step          | the framing solver's standoff |
+| `packages/devtools/src/cutscenes/tngIntro.ts:103` `FOV`      | 45°                                | the cinematic lens            |
+| `apps/game/src/render/flare.ts:380`                          | `camera.fov ?? 65`                 | flare placement               |
+| `apps/game/src/render/warpEffects.ts:333` and `:512`         | `camera.fov ?? 45`                 | the streaks                   |
+| `apps/game/src/planetarium/project.ts:40`                    | `camera.fov ?? 65`                 | label projection              |
+| `packages/rendering/src/terrainSelect.ts` `DEFAULT_VIEWPORT` | 60° over 1080 px                   | **the SSE predicate**         |
+| `packages/rendering/src/lod.ts:37`                           | "~0.2 mrad ... at a 60 degree FOV" | the representation thresholds |
+
+Three of those are fallbacks that fire exactly when the camera is not a
+`PerspectiveCamera` — which is when the picture is least like the one they
+assume — and two of them disagree with each other by 20°. The one that matters
+most for this plan is the eighth, because it is not a fallback: it is the
+predicate's only source of optics, and it is a guess.
+
+### What the guess costs, in patches
+
+Arithmetic from the shipped constants — `pixelsPerRadian = height / (2·tan(fov/2))`,
+`scale = pixelsPerRadian / cellPixels` at `cellPixels` 6 — not a measurement. A
+node refines while `distance < spacing · scale`, so doubling `scale` is one more
+level of refinement everywhere on the visible disk, and the patch count goes as
+its square.
+
+| Configuration                                         | Lens | Pixels | px/rad | `scale` | vs assumed | Patch demand |
+| ----------------------------------------------------- | ---- | ------ | ------ | ------- | ---------- | ------------ |
+| `DEFAULT_VIEWPORT` — what the baseline measures       | 60°  | 1080   | 935    | 156     | 1.00×      | 1.00×        |
+| Flight default, 1000×760 window on a 2× display       | 65°  | 1520   | 1193   | 199     | 1.28×      | 1.63×        |
+| The same, if the 4× AA drawing buffer is used instead | 65°  | 3040   | 2386   | 398     | 2.55×      | 6.5×         |
+| Telephoto end of the shipped slider                   | 20°  | 1520   | 4310   | 718     | 4.61×      | 21×          |
+| Wide end of it                                        | 110° | 1520   | 532    | 89      | 0.57×      | 0.32×        |
+| Wide, on a 760 px buffer at device ratio 1            | 110° | 760    | 266    | 44      | 0.28×      | 0.08×        |
+
+Sixteen times, four levels of refinement, and 263× the patches between the two
+ends of controls a player reaches with two sliders — against a `maxPatches` of
+384 whose whole job is to be a safety net rather than a working limit. The
+field-of-view slider reaches it on its own, and what the cap does when it is
+reached is degrade the entire disk by a level, silently. § 11's 12.8 ms is the
+cost of one patch; how many there are is the number nothing currently states.
+
+None of this is an argument for clamping the slider. It is the argument for the
+predicate reading the lens the picture is actually taken with, and for the
+baseline measuring the same one.
+
+### The decisions
+
+**A lens is a lens, not an angle.** The canonical fields are focal length,
+sensor gauge, zoom, f-number, focus distance, shutter and gain; the field of
+view is derived from the first three. The reverse does not work: an angle cannot
+produce a depth of field, an Airy disk, or an exposure, and
+[art](docs/design/art.md) commits to all three — _"aperture and focal length —
+real depth of field and real diffraction"_, and exposure _"quoted in real
+units"_. Given 65° there is no f/2.8 and no 19 mm; given 18.84 mm on a 24 mm
+gauge, 65° is one line.
+
+**The gauge is the sensor's vertical extent, and it is fixed.** Three's
+`filmGauge` is the _long_ side and `getFilmHeight()` divides it by the aspect
+ratio, so `setFocalLength` yields an angle that changes when the window does —
+correct for a strip of 35 mm film cropped to a format, wrong for a sensor. A
+lens whose angle moved on a resize would move the terrain selection, the
+observatory's standoff and every composed shot with it. `CameraRig` therefore
+writes `camera.fov`, which Three treats as vertical and aspect-independent, and
+never touches `filmGauge` or `setFocalLength`. The horizontal field is derived
+where it is needed, from the viewport, which is where the aspect ratio lives.
+
+**Every shipped composition keeps its exact angle.** A 24 mm gauge puts the
+flight lens at 18.84 mm and the cinematic one at 28.97 mm, and neither is a
+round number. Taking the nearest millimeter for tidiness moves the flight field
+from 65° to 64.6°, and `framingDistance` goes as `1/tan(fov/2)`, so every framed
+body and every `SHOTS` bookmark stands off 0.85% further for a reason that
+appears nowhere in the diff. `tng-intro`'s beats are worse than that: they are
+fitted frame by frame against a reference edit whose measured criteria are
+tests. So the conversion is a change of representation with the angle held
+bit-identical, and `lensForFov(deg, gauge)` is what every existing call site
+converts through, once.
+
+**Zoom multiplies the focal length. It is not the dolly, and neither is
+framing.** Three distinct acts, currently sharing one control:
+
+| Act         | Changes                  | Parallax | Where it is today                     |
+| ----------- | ------------------------ | -------- | ------------------------------------- |
+| **Zoom**    | focal length × `zoom`    | no       | the field-of-view slider, unnamed     |
+| **Dolly**   | the camera's distance    | yes      | the planetarium's wheel and pinch     |
+| **Framing** | distance, to hold a size | yes      | `frameTarget`, on `F` and on a preset |
+
+`planetarium/ViewPanel.tsx:135` tells the player that narrowing the lens "pulls
+the camera back rather than magnifying" and that "the subject stays the same
+size". It does not: `Observatory.setFov` records the angle and nothing
+re-solves the standoff until the next `focus` or `frameTarget`. The copy
+describes a coupling nobody wired, which is what happens when three acts share
+one number and no object owns it. Phase 1.5 gives the panel all three and makes
+the sentence true of the one it belongs to.
+
+**The circle of confusion is a display pixel, not a film convention.** The
+1/1500-of-the-diagonal rule is a claim about a 10×8 print at 25 cm; this image
+is looked at through whatever drawing buffer the browser has. `c` is therefore
+`gauge · tolerance / heightPixels`, which on a 24 mm gauge over 1520 px at a
+1.5 px tolerance is 23.7 µm — close enough to the 29 µm full-frame convention
+to be a sanity check rather than a coincidence, and it moves with the display
+the way the blur it predicts actually does.
+
+**The terrain viewport is display pixels, not the drawing buffer's.**
+`App.tsx` multiplies the device ratio by `aaDprFactor`, so at 4× AA the buffer
+is twice the display in each axis. Supersampling raises the sample count, not
+the detail a viewer can resolve, and feeding the raw buffer height into the SSE
+predicate asks for 6.5× the patches to render geometry the resolve filter
+averages away. The lens divides `aaDprFactor` back out; the place to spend on
+sharper terrain is `cellPixels`, where it is a decision with a number on it.
+
+**One producer, one lens.** `AGENTS.md` already forbids a second producer of
+the camera pose, with the precedence **cutscene, then observatory, then the
+ship**. The lens follows the same order through the same code: a
+`CinematicSample` carries a lens rather than a bare `fov`, the observatory reads
+`engine.lens` instead of being pushed a scalar every step, and the flight lens
+is the fallback. The three `?? 65` / `?? 45` fallbacks are deleted rather than
+reconciled — a consumer that cannot see the lens is a bug, not a case to have a
+default for.
+
+### What the model produces
+
+Derived, in `packages/rendering/src/lens.ts` — arithmetic, no Three.js,
+Node-tested, the same bargain `cinematic.ts` and `observer.ts` make.
+
+| Quantity                 | From                         | At the flight lens (18.84 mm, f/2.8, 1520 px) |
+| ------------------------ | ---------------------------- | --------------------------------------------- |
+| Vertical field of view   | `2·atan(gauge / 2f)`         | 65.0°                                         |
+| Aperture diameter        | `f / N`                      | 6.7 mm                                        |
+| Circle of confusion      | `gauge · 1.5 / height`       | 23.7 µm                                       |
+| Hyperfocal distance      | `f²/(N·c) + f`               | 5.3 m                                         |
+| Near limit, focused at ∞ | `H`                          | 5.3 m                                         |
+| Airy disk on the sensor  | `2.44·λ·N`, λ = 550 nm       | 3.8 µm against a 15.8 µm pixel                |
+| Diffraction-limited past | `pitch / (2.44·λ)`           | f/11.8                                        |
+| Angular resolution       | `1.22·λ / D`                 | 0.10 mrad                                     |
+| Exposure value           | `log₂(N²/t) − log₂(ISO/100)` | EV 8.9 at 1/60 s, ISO 100                     |
+
+Two of those settle scope on the spot.
+
+**Depth of field can never affect terrain.** The hyperfocal distance is 5.3 m at
+the flight lens and 70 m at the telephoto end, so at any planetary distance
+everything is at infinity and sharp. Defocus is a near-field and photo-mode
+effect — the hull, the cockpit, a rock two meters away — which is why the blur
+_pass_ can be deferred without blocking a single terrain phase while the
+_parameters_ cannot: diffraction and exposure act at every scale, and the
+photo-mode brief in [art](docs/design/art.md#photo-mode) needs all of them.
+
+**The representation thresholds have a real number to be measured against.**
+`lod.ts:37` reads "~0.2 mrad is roughly a pixel at a 60 degree FOV on a 1080p
+display". A pixel there is `atan(1/935)` — 1.07 mrad, five times larger — so the
+`billboard` threshold's angular _radius_ of 2e-4 is a body about a third of a
+pixel across. The constant is doing a real job, because a star is always
+sub-pixel and must still draw; the sentence beside it is not arithmetic. Once
+the lens exists, `LOD_THRESHOLDS.billboard` is `pixelAngle(lens, viewport)`
+scaled by a stated tolerance, and the tier a body draws at follows the lens it
+is being looked at through, which is what it was always claiming to do.
+
+### What Phase 1.5 lands
+
+1. **`packages/rendering/src/lens.ts`** — the `Lens` record, a `Viewport` in
+   display pixels, and every derivation in the table above. `LENS_PRESETS`
+   carries `flight` and `cinematic`; `lensForFov` is the one-way bridge every
+   existing angle converts through.
+2. **`engine.lens` replaces `engine.fov`**, resolved by the pose's own
+   precedence. `CinematicSample.fov` becomes a lens; `Observatory` reads one.
+3. **The fallbacks die.** `flare.ts`, `warpEffects.ts` and `project.ts` take the
+   engine's lens. `CameraRig` writes `camera.fov` from it and nothing else does.
+4. **`selectTerrain` takes the lens.** `TerrainViewport` is derived by one
+   function so there is a single conversion, and `DEFAULT_VIEWPORT` becomes the
+   flight lens at a stated baseline resolution rather than an unrelated 60°.
+5. **The streamer passes the live lens**, with `aaDprFactor` divided out.
+   `ir.terrain()` reports the lens the selection was made against.
+6. **The HUD panels become lens panels** — focal length with the angle beside
+   it, zoom, f-stop, focus, and the derived readouts. The planetarium gets
+   zoom, dolly and hold-framing as three controls.
+7. **The persisted `camera.fov` migrates to `camera.lens`**, guarded the way
+   every restored preference is, with the old scalar read once.
+8. **`ir.lens()`**, the lens in `ir.status()`, and the lens on a shot bookmark —
+   which is the record the photo-mode metadata seam eventually stamps.
+
+**Deferred, with the seam named:** the defocus pass (numbers now, blur in the
+art milestone — it cannot touch terrain); exposure _adaptation_ and the
+Direct/Composite modes ([art](docs/design/art.md#the-two-camera-modes) owns
+them, and the lens is what they will read); diffraction spikes driven by
+`blades` in `flare.ts`, which already draws the artifact and only needs the
+parameter; anamorphic squeeze, distortion and chromatic aberration.
+
+**Done means:** one producer of the lens, provable by grep; the terrain baseline
+re-measured against the flight lens with the delta from the old assumption
+written down rather than adjusted for; every shipped composition's standoff
+unchanged to the last bit; the selection's patch count across the whole slider
+range differing by the ratio the arithmetic above predicts, with `saturated`
+false at both ends or the number that makes it true recorded.
+
+---
+
+## 9. Landing controls, harnesses, and sims
 
 This is deliberately Phase 0, not an afterthought: every later phase is
 judged through this rig.
@@ -415,10 +630,25 @@ Phase 5 lands.
   `surfaceRadius` at shared samples, above the canonical floor.
 - Physics unchanged where terrain is unchanged: the state hash of a flying
   session is bit-identical before and after every rendering-only phase.
+- The lens round-trips: `verticalFov(lensForFov(θ))` returns θ across the
+  slider's whole 20–110° range, and the vertical field is invariant under every
+  aspect ratio while the horizontal one follows it exactly.
+- `pixelsPerRadian(lens, viewport) · pixelAngle(lens, viewport)` is 1, which is
+  the one identity the SSE predicate and the LOD thresholds both stand on.
+- Depth of field is monotonic in focal length and in f-number, the far limit is
+  infinite at and beyond hyperfocal focus, and the near limit never exceeds it.
+- **Every shipped composition is unmoved by the conversion**: the standoff
+  `framingDistance` solves, each `SHOTS` bookmark's placement, and every
+  `tng-intro` beat's framing are identical before and after the lens exists.
+  This is the test that protects criteria fitted frame by frame against a
+  reference edit, and it is why the angles are preserved exactly rather than
+  rounded to tidy focal lengths.
+- The terrain selection is a function of the lens and not of the drawing
+  buffer: at a fixed display size, `aaDprFactor` changes no patch it returns.
 
 ---
 
-## 9. Phases
+## 10. Phases
 
 Each phase is a shippable PR train with its own plates and its own green
 gate; nothing waits for the whole plan.
@@ -429,7 +659,7 @@ verbs (`ir.sites`, `ir.visit`, `ir.ascend`, `ir.descend`, `ir.terrain`,
 descent scenario and `pnpm sim --terrain-baseline`. No generator changes. The
 numbers and the three defects it found are in
 [`CONTEXT.md`](CONTEXT.md#the-terrain-rig-and-the-three-defects-it-found-on-its-first-run-26-aug-2026);
-the two that change this plan are folded into § 3 and § 10 above.
+the two that change this plan are folded into § 3 and § 11 above.
 
 Two things it could not deliver as written, stated rather than quietly dropped.
 **Frame cost and draw calls are still unmeasured** — they are browser facts, the
@@ -448,6 +678,26 @@ and the opacity fade. Today's three-band field, unchanged — infrastructure
 and geology do not land in one PR. _Done means:_ no cracks and no pops on
 descent (properties + plates), horizon coverage, selection < 0.5 ms, frame
 terrain cost within the 1.0 ms line at the zoo's worst site.
+
+**Phase 1.5 — the lens.** § 8, in full: `packages/rendering/src/lens.ts` and
+its derivations, `engine.lens` under the pose's own precedence, the three
+`?? 65` / `?? 45` fallbacks deleted, `selectTerrain` and the streamer reading
+the real lens in display pixels, `LOD_THRESHOLDS.billboard` derived from the
+pixel angle, the lens panels, the preference migration and `ir.lens()`. No
+generator changes and no new geometry.
+
+It is half a phase and it is numbered like one because it is _between_ the
+quadtree and the geology rather than beside them. After Phase 1 the predicate
+that decides how much terrain exists is live and reads a guess; before Phase 2
+the geology is measured, plated and signed off against whatever that predicate
+selected. A band stack tuned against a 60° assumption and then looked at
+through a 20° lens is 21× the patches at four levels finer, and the taste
+judgment in Phase 2 — "reads as a Moon, not as noise" — is made from plates
+that would have been composed through the wrong optics. The cheap moment to
+fix that is after the machinery exists and before anything is judged with it.
+
+_Done means:_ § 8's "done means", plus the terrain baseline re-run and its
+numbers restated against the flight lens rather than adjusted toward it.
 
 **Phase 2 — the geology.** New procedural primitives, grammar, sketch, band
 stack, archetypes; terrain algorithm v2 in one bump; golden vectors extended;
@@ -481,7 +731,7 @@ mapped-body carve-out; CBT if draw submission ever dominates.
 
 ---
 
-## 10. Risks, stated as such
+## 11. Risks, stated as such
 
 - **Per-sample cost, and it is already over.** Phase 0 measured **12.8 ms** per
   65×65 patch against a documented ≤ 8 ms that carried no machine and no date —
@@ -503,10 +753,28 @@ mapped-body carve-out; CBT if draw submission ever dominates.
   read as texture. The zoo plate reviews are the control; the published
   anchors in § 6 are what "correct" means; the judgment is acknowledged as
   judgment.
+- **Every terrain number moves on the day the lens lands**, because they were
+  all measured through a lens the game does not use. That is the point of the
+  phase and it is still a risk: the honest response is to re-measure and
+  restate, and the dishonest one — scaling the old figures by the ratio in
+  § 8's table — would look identical in a diff. The baseline command is what
+  makes re-measuring cheaper than arithmetic.
+- **The cutscene is the one file with fitted numbers in it.** `tng-intro`'s
+  beats are solved against a frame-analyzed reference and its criteria are
+  tests, so the lens conversion there is a representation change with the angle
+  held bit-identical, proved by the compositions test above. A rounded focal
+  length is the way this becomes a week of re-fitting.
+- **A derived `billboard` threshold changes what the sky draws.** Deriving it
+  from the pixel angle is right and it moves the point at which a distant star
+  becomes a billboard, which is visible in exactly the picture nobody diffs.
+  It is a plate review at two lenses, not a unit test.
+- **The lens is presentation and must stay there.** It lives in
+  `packages/rendering`, never on an entity, never in a save beyond a
+  preference, and the state hash of a flying session does not know it exists.
 
 ---
 
-## 11. Documentation obligations
+## 12. Documentation obligations
 
 An ADR for the terrain architecture (grammar/sketch/band-stack, the
 canonical-versus-presentational floor, the density reframe, the GPU-as-cache
@@ -515,6 +783,19 @@ rule) — the decisions here that a future change would otherwise relitigate.
 the quadtree obsoletes them; [roadmap § terrain](docs/roadmap.md#terrain) and
 the content bible updated as phases land; a `CONTEXT.md` entry per phase with
 the numbers that settled it; golden vectors extended at the v2 bump.
+
+A second ADR for the lens, because § 8 settles things a later change would
+otherwise relitigate one call site at a time: that focal length and gauge are
+canonical and the field of view is derived, that the gauge is vertical and
+fixed so the angle survives a resize, that zoom, dolly and framing are three
+acts, that the circle of confusion is a display pixel, and that the lens has
+one producer under the pose's own precedence. `AGENTS.md` gains the last of
+those as an invariant beside the camera-producer rule it mirrors, with the
+path-scoped one-liner in `.claude/rules/rendering.md`;
+[art § photo mode](docs/design/art.md#photo-mode) and
+[planetarium § the camera](docs/design/planetarium.md#the-camera) are updated
+to describe the controls that exist rather than the one slider that stood in
+for them.
 
 ---
 
@@ -525,3 +806,5 @@ the numbers that settled it; golden vectors extended at the v2 bump.
 - [Streaming](docs/concepts/streaming.md) · [Rendering](docs/concepts/rendering.md) — the systems it grows
 - [ADR-0005](docs/adr/0005-procedural-seeds.md) · [ADR-0013](docs/adr/0013-measured-figures.md) · [ADR-0014](docs/adr/0014-the-record-with-holes-in-it.md)
 - [On foot](docs/design/onfoot.md) — the mode the canonical floor eventually answers to
+- [Art](docs/design/art.md) — the sensor fiction § 8 implements, and the photo mode that spends it
+- [ADR-0010](docs/adr/0010-cinematic-director.md) — the other camera the lens has to serve

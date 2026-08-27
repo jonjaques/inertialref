@@ -7,6 +7,7 @@ import {
   geodeticDirection,
   parseAddress,
   SURFACE_ARCHETYPES,
+  surfaceDetailFloor,
   surfaceRadius,
   systemId,
   systemsWithin,
@@ -142,50 +143,46 @@ describe('a simulated descent', () => {
     /*
      * What "orbit to on foot" costs today, as levels. The profile starts at the
      * orbit arm's floor and ends at two meters, so it passes through every level
-     * `terrainLevelFor` can produce and ends saturated at its cap.
+     * the selection can produce and ends at the field's own detail floor.
      *
-     * `trackDegrees: 0`, because the ground track is what breaks monotonicity —
-     * see the next test. Straight down, the level is a function of height alone
-     * and a descent must never coarsen.
+     * `trackDegrees: 0`, because straight down the deepest level is a function
+     * of height alone and a descent must never coarsen. It may now *hold* a
+     * level for several steps where the old rule stepped every octave, because
+     * refinement is per patch: the ring under the camera deepens before the ring
+     * beyond it does, and the report's deepest level is the first of those.
      */
     const session = live()
     for (const entry of terrainZoo(session.world)) {
-      const report = simulateDescent(bodyAt(session, entry.address), {
-        // Into a basin, so that the summit's own elevation does not stand
-        // between the camera and the bottom of the ladder — see the two tests
-        // below, which are about exactly that.
-        site: 'basin',
-        trackDegrees: 0,
-      })
+      const body = bodyAt(session, entry.address)
+      const floor = surfaceDetailFloor(body.radius, body.surface)
+      const report = simulateDescent(body, { site: 'basin', trackDegrees: 0 })
       const levels = report.levels
-      expect(`${entry.name}: ${levels.length > 6}`).toBe(`${entry.name}: true`)
+      expect(`${entry.name}: ${levels.length > 4}`).toBe(`${entry.name}: true`)
       for (let i = 1; i < levels.length; i += 1) {
         expect(
           `${entry.name}: ${(levels[i] ?? 0) > (levels[i - 1] ?? 0)}`,
         ).toBe(`${entry.name}: true`)
       }
-      // Into a basin the ladder saturates at the cap. Onto a summit it does
-      // not, and the next two tests are what that costs.
       expect(`${entry.name}: ${levels[levels.length - 1]}`).toBe(
-        `${entry.name}: 12`,
+        `${entry.name}: ${floor}`,
       )
     }
   })
 
-  it('streams a summit as though the camera were still kilometers up', () => {
+  it('streams a summit exactly as it streams a basin', () => {
     /*
-     * Half of the datum finding.
+     * Half of the datum finding, now the other way round.
      *
-     * Standing two meters above the highest ground on Iapetus, the streamer
-     * asks for level 11 rather than 12 — because `terrainLevelFor` is handed
-     * `distance − radius`, which for a camera on the ground is
-     * `groundElevation + height`, and that summit is 4.4 km above the datum. The
-     * ground under your boots is streamed at half the resolution the same two
-     * meters would get in a basin.
+     * Phase 0 measured this pair at 11 and 12: standing two meters above
+     * Iapetus's highest ground the streamer asked for a level coarser than the
+     * same two meters over its deepest basin, because `terrainLevelFor` was
+     * handed `distance − radius` — which for a camera on the ground is
+     * `groundElevation + height`, and that summit is 4.4 km above the datum.
      *
-     * Asserted as the pair rather than as one number, because the pair is what
-     * makes it a defect rather than a constant: same body, same height above the
-     * ground, two different levels.
+     * The quadtree measures a node against the shell of ground it can hold
+     * rather than against the datum sphere, so an eye inside that shell is on
+     * the ground wherever the ground happens to be. Still asserted as a pair,
+     * because the pair is what makes it a property rather than a constant.
      */
     const session = live()
     const icy = terrainZoo(session.world).find(
@@ -196,107 +193,115 @@ describe('a simulated descent', () => {
       const report = simulateDescent(body, { site, trackDegrees: 0 })
       return report.levels[report.levels.length - 1] ?? -1
     }
-    expect(last('basin')).toBe(12)
-    expect(last('summit')).toBe(11)
+    const floor = surfaceDetailFloor(body.radius, body.surface)
+    expect(last('basin')).toBe(floor)
+    expect(last('summit')).toBe(floor)
   })
 
-  it('draws nothing at all on a mountain taller than the fade line', () => {
+  it('draws a mountain that used to be too tall to draw', () => {
     /*
-     * The other half, and the one that is a hole rather than a degradation.
+     * The other half, and the one that was a hole rather than a degradation.
      *
-     * `terrainOpacity` fades out over one octave above `radius · 2^(4.5−12)`,
+     * `terrainOpacity` faded out over one octave above `radius · 2^(4.5−12)`,
      * measured — again — from the datum. On Miranda that cutoff is 2,605 m and
-     * the summit the survey found is 4,826 m, so standing on it the streamer
-     * requests nothing, draws nothing, and leaves the datum sphere on screen.
-     * Two of Miranda's six survey sites are ground that cannot be looked at, at
-     * any altitude, including zero.
+     * the summit the survey finds is 4,826 m, so standing on it the streamer
+     * requested nothing, drew nothing, and left the datum sphere on screen: two
+     * of six survey sites were ground that could not be looked at at any
+     * altitude, including zero. It is not an exotic case, it is Verona Rupes on
+     * a 236 km moon.
      *
-     * It is a small moon with 10 km of relief on a 236 km radius, which is 4.2%
-     * — and that is not an exotic case, it is Verona Rupes. Any body whose
-     * relief exceeds `2^(5.5−maxLevel)` of its radius has this hole somewhere.
+     * There is no fade any more, and nothing about the selection knows the
+     * datum. Every site bottoms out at the same floor, including the two that
+     * were holes.
      */
     const session = live()
     const active = terrainZoo(session.world).find(
       (entry) => entry.archetype === 'icy-active',
     )
     const body = bodyAt(session, active?.address ?? '')
-    const drawn = (site: string): number =>
-      simulateDescent(body, { site, trackDegrees: 0 }).drawnSteps
-    expect(drawn('summit')).toBe(0)
-    expect(drawn('rough')).toBe(0)
-    // And the same descent into the basin is fine, which is what makes it a
-    // property of the elevation rather than of the body.
-    expect(drawn('basin')).toBeGreaterThan(80)
+    const floor = surfaceDetailFloor(body.radius, body.surface)
+    for (const site of ['summit', 'rough', 'basin']) {
+      const report = simulateDescent(body, { site, trackDegrees: 0 })
+      expect(`${site}: ${report.levels[report.levels.length - 1]}`).toBe(
+        `${site}: ${floor}`,
+      )
+      // And there is ground drawn at every step of the way down, which is the
+      // sentence the fade made false.
+      for (const step of report.steps) {
+        expect(`${site}@${step.index}: ${step.wanted > 0}`).toBe(
+          `${site}@${step.index}: true`,
+        )
+      }
+    }
   })
 
-  it('coarsens on a level pass, because the level rule reads the datum', () => {
+  it('holds its level on a pass across a peak and a basin', () => {
     /*
-     * A finding, pinned so it stays a decision rather than a surprise.
+     * The third of Phase 0's findings, inverted.
      *
-     * `terrainLevelFor` takes `distance − radius`, and the distance to a camera
-     * standing on the ground is `surfaceRadius + height`. So the altitude it
-     * sees is `groundElevation + height` — the elevation of the ground *under*
-     * the camera, not the height above it. On Iapetus, whose relief is 10 km
-     * against a 735 km radius, flying level from a peak into a basin drops that
-     * number by up to 20 km and coarsens the level by a step: the whole window
-     * is discarded and re-requested while the camera has not changed height at
-     * all.
+     * `terrainLevelFor` took `distance − radius`, so flying level across
+     * Iapetus — 10 km of relief on a 735 km radius — moved that number by up to
+     * 20 km and coarsened the whole window by a step as the ground rose and fell
+     * beneath a camera that had not changed height at all. Nine patches thrown
+     * away and re-requested, which was harmless at nine and would not have been
+     * at two hundred.
      *
-     * Harmless today, when a window is nine patches. Not harmless in Phase 1,
-     * where it is a few hundred — and the fix is already in the plan, because a
-     * screen-space error metric measures against the patch rather than against
-     * the datum.
+     * A pass at fixed height now holds its deepest level, because the level a
+     * patch is drawn at depends on the distance to *that patch* and standing on
+     * a mountain is standing on the ground.
      */
     const session = live()
     const icy = terrainZoo(session.world).find(
       (entry) => entry.archetype === 'icy-dead',
     )
-    const report = simulateDescent(bodyAt(session, icy?.address ?? ''), {
+    const body = bodyAt(session, icy?.address ?? '')
+    const report = simulateDescent(body, {
+      fromHeight: 2,
+      toHeight: 2,
       trackDegrees: 10,
     })
-    const coarsenings = report.levels.filter(
-      (level, i) => i > 0 && level < (report.levels[i - 1] ?? 0),
-    )
-    expect(coarsenings.length).toBeGreaterThan(0)
+    expect(report.levels).toEqual([
+      surfaceDetailFloor(body.radius, body.surface),
+    ])
+    expect(report.levelChanges).toBe(0)
   })
 
-  it('never asks for more than one window in a single step', () => {
+  it('keeps the whole disk inside a budget, on every zoo body', () => {
     /*
-     * The single-level window's one virtue, stated as a bound so that Phase 1
-     * has to move it deliberately. Nine patches is a full window and no step can
-     * ask for more, because the streamer asks for exactly what is missing from a
-     * window that is nine patches wide however the camera got there.
-     *
-     * The *total* is a much larger number — the ground track slides the window
-     * continuously, so most steps miss on one or two patches even at a stable
-     * level. That total is a baseline figure rather than an assertion; what is
-     * asserted is that every patch the window wanted is accounted for as either
-     * a request or a hit, which is what would break first if the key or the
-     * eviction came apart.
+     * The window's virtue was that it could never ask for more than nine
+     * patches; its vice was that nine patches is not a planet. What replaces
+     * that bound is a measured one, and it is the number Phase 1 is judged on:
+     * a whole-disk selection at the shipped tolerance is a couple of hundred
+     * patches, the budget never bites, and every patch the selection wanted is
+     * accounted for as a request or a hit.
      */
     const session = live()
     for (const entry of terrainZoo(session.world)) {
       const report = simulateDescent(bodyAt(session, entry.address), {
         site: 'basin',
       })
-      expect(`${entry.name}: ${report.peakBurst}`).toBe(`${entry.name}: 9`)
-      const wanted = report.steps
-        .filter((step) => step.opacity > 0)
-        .reduce((sum, step) => sum + step.wanted, 0)
+      expect(`${entry.name}: ${report.saturatedSteps}`).toBe(`${entry.name}: 0`)
+      /*
+       * The measured ceiling, on the worst body in the zoo: an 11,536 km world
+       * with 44 km of relief, whose detail floor is level 12 and which
+       * therefore has thirteen levels between the horizon and the ground. 298
+       * patches there; the rest of the zoo is well under two hundred. The bound
+       * is what `DEFAULT_MAX_PATCHES` has to stay clear of, and the assertion
+       * is here so that a change to either is a change to a number.
+       */
+      expect(`${entry.name}: ${report.peakDrawn < 320}`).toBe(
+        `${entry.name}: true`,
+      )
+      const wanted = report.steps.reduce((sum, step) => sum + step.wanted, 0)
       expect(report.totalRequests + report.cacheHits).toBe(wanted)
       expect(report.uniqueRegions).toBeLessThanOrEqual(report.totalRequests)
       /*
-       * And the cache is beaten by the descent, which is a finding rather than
-       * a defect in the cache.
-       *
-       * A descent touches several hundred distinct regions and the streamer
-       * holds 64 heightfields, so the working set is multiples of the cache
-       * before eviction policy enters into it — the measured hit rate is under
-       * 5%. The assertion is on the *cause*, because that is the sentence that
-       * stays true: Phase 1's prefetch and budget have to be sized against the
-       * number of regions a descent visits, not against a window's worth.
+       * And the descent's working set is still multiples of the cache, which is
+       * a finding rather than a defect in the cache: what a descent touches is
+       * thousands of regions, so the streamer's 512 heightfields are sized to
+       * hold the *selection* and its lookahead rather than the journey.
        */
-      expect(report.uniqueRegions).toBeGreaterThan(64 * 3)
+      expect(report.uniqueRegions).toBeGreaterThan(512)
     }
   })
 

@@ -172,7 +172,9 @@ describe('the game engine, headless', () => {
       .find((candidate) => candidate.landable)
     if (target === undefined) throw new Error('nowhere to land')
     game.harness.land(target.address, 0.35, -1.1)
-    for (let i = 0; i < 40; i += 1) {
+    // Enough for the pyramid to arrive: the whole ladder is queued at once, but
+    // it is still a couple of hundred patches at 13 ms of generation apiece.
+    for (let i = 0; i < 120; i += 1) {
       game.frame(1 / 60)
       await new Promise((resolve) => setTimeout(resolve, 2))
     }
@@ -210,20 +212,33 @@ describe('the game engine, headless', () => {
         )
       }
     }
-    // One vertex spacing at level 12 on this body is about 17 m; 40 m leaves
-    // room for the chase camera's offset without admitting a displaced patch.
-    expect(nearest).toBeLessThan(40)
+    /*
+     * One vertex spacing at this body's own detail floor, plus room for the
+     * chase camera's offset.
+     *
+     * The bound moved with the floor: the streamer used to saturate at level 12
+     * and 17 m of spacing, and now stops where the field stops having anything
+     * to say — level 9 on this body, 117 m — because past that a patch is a
+     * bilinear interpolation of one already in the cache. 300 m is two of those
+     * and still an order of magnitude inside the 1,542 m this test was written
+     * to catch.
+     */
+    expect(nearest).toBeLessThan(300)
   }, 30_000)
 
-  it('streams no terrain from orbit, and fades it in on the way down', async () => {
+  it('streams coarse ground from orbit and refines it on the way down', async () => {
     /*
-     * From a 300 km orbit the 3×3 patch window is a lone raised tile on the
+     * From a 300 km orbit the 3×3 patch window was a lone raised tile on the
      * datum sphere — 11 km proud of it, since the sphere is sunk a full relief
-     * below the datum. The winding fix made that tile visible for the first
-     * time, floating on the planet like a sticker. Up there the sphere alone is
-     * the honest representation, so the streamer must not spend workers on
-     * patches nobody should see; through the fade band the ground comes back
-     * as a transparency ramp rather than a pop.
+     * below the datum. The honest representation up there was the sphere alone,
+     * so the streamer faded out and spent no workers; and because the fade
+     * measured altitude from the datum, a mountain tall enough could not be
+     * drawn at any altitude including zero.
+     *
+     * The quadtree covers the whole disk at every distance, so what changes on
+     * the way down is the *level*, not the presence. Orbit is a coarse shell,
+     * the ground is the field's own detail floor, and there is ground on screen
+     * throughout.
      */
     const game = engine()
     const target = game.harness
@@ -231,36 +246,27 @@ describe('the game engine, headless', () => {
       .find((candidate) => candidate.landable)
     if (target === undefined) throw new Error('nowhere to land')
 
-    game.harness.orbit(target.address, 300)
-    for (let i = 0; i < 10; i += 1) {
-      game.frame(1 / 60)
-      await new Promise((resolve) => setTimeout(resolve, 2))
+    const settle = async (frames: number) => {
+      for (let i = 0; i < frames; i += 1) {
+        game.frame(1 / 60)
+        await new Promise((resolve) => setTimeout(resolve, 2))
+      }
     }
-    const orbit = game.terrainState()
-    expect(orbit.opacity).toBe(0)
-    expect(orbit.patches.length).toBe(0)
-    expect(orbit.pending).toBe(0)
 
-    // 24 km up is inside the fade band on this body (fully solid below ~16 km,
-    // gone above ~32 km): terrain streams, but wears a partial opacity.
-    game.harness.orbit(target.address, 24)
-    for (let i = 0; i < 20; i += 1) {
-      game.frame(1 / 60)
-      await new Promise((resolve) => setTimeout(resolve, 2))
-    }
-    const descending = game.terrainState()
-    expect(descending.opacity).toBeGreaterThan(0)
-    expect(descending.opacity).toBeLessThan(1)
-    expect(descending.patches.length).toBeGreaterThan(0)
+    game.harness.orbit(target.address, 300)
+    await settle(40)
+    const orbit = game.terrain()
+    if (orbit === null) throw new Error('no terrain report')
+    expect(orbit.patches).toBeGreaterThan(0)
 
     game.harness.land(target.address, 0.35, -1.1)
-    for (let i = 0; i < 20; i += 1) {
-      game.frame(1 / 60)
-      await new Promise((resolve) => setTimeout(resolve, 2))
-    }
-    const landed = game.terrainState()
-    expect(landed.opacity).toBe(1)
-    expect(landed.patches.length).toBeGreaterThan(0)
+    await settle(60)
+    const landed = game.terrain()
+    if (landed === null) throw new Error('no terrain report')
+    expect(landed.patches).toBeGreaterThan(0)
+    // Finer on the ground than from orbit, which is the whole of "one field at
+    // every distance": the same quadtree answered at two ranges.
+    expect(landed.level).toBeGreaterThan(orbit.level)
     game.dispose()
   }, 30_000)
 

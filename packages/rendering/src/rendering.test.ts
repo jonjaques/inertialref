@@ -23,13 +23,7 @@ import {
   walkBodies,
 } from '@inertialref/universe'
 import { generateHeightfield } from '@inertialref/universe'
-import {
-  angularRadius,
-  selectLod,
-  starColor,
-  terrainLevelFor,
-  terrainOpacity,
-} from './lod.ts'
+import { angularRadius, selectLod, starColor } from './lod.ts'
 import {
   compressDistance,
   NEAR_LIMIT,
@@ -79,56 +73,6 @@ describe('LOD selection', () => {
     expect(selectLod(radius, 1e10)).toBe('billboard')
     expect(selectLod(radius, 1e9)).toBe('sphere')
     expect(selectLod(radius, radius * 4)).toBe('surface')
-  })
-
-  it('asks for finer terrain as altitude drops', () => {
-    const radius = 6.371e6
-    const high = terrainLevelFor(radius, radius + 1e6)
-    const low = terrainLevelFor(radius, radius + 1e3)
-    expect(low).toBeGreaterThan(high)
-    expect(terrainLevelFor(radius, radius + 1)).toBeLessThanOrEqual(12)
-  })
-
-  it('hides streamed terrain from orbit and fades it in on the way down', () => {
-    /*
-     * The streamed set is a fixed 3×3 window, so from altitude it is a lone
-     * raised tile on the datum sphere — invisible for as long as the winding
-     * bug culled terrain from above, and a floating sticker the moment that
-     * was fixed. The rule: fully present exactly where `terrainLevelFor`
-     * saturates at its maximum, gone one octave of altitude above that.
-     */
-    const radius = 2.864333e6 // the first planet, where this was observed
-    const full = radius * 2 ** (4.5 - 12)
-
-    // Landed and anywhere at full streaming detail: solid ground.
-    expect(terrainOpacity(radius, radius + 1)).toBe(1)
-    expect(terrainOpacity(radius, radius + full * 0.99)).toBe(1)
-    // A 300 km orbit: nothing at all, so the streamer can skip the workers.
-    expect(terrainOpacity(radius, radius + 300_000)).toBe(0)
-    // In the fade band it is genuinely between, which is the landing transition.
-    const mid = terrainOpacity(radius, radius + full * 1.5)
-    expect(mid).toBeGreaterThan(0)
-    expect(mid).toBeLessThan(1)
-
-    // Presence and level saturation are the same boundary: partially or fully
-    // hidden terrain is exactly the terrain that would have streamed coarse.
-    fc.assert(
-      fc.property(
-        fc.double({ min: 1e5, max: 1e8, noNaN: true }),
-        fc.double({ min: 0, max: 25, noNaN: true }),
-        (r, exponent) => {
-          const altitude = r * 2 ** -exponent
-          const opacity = terrainOpacity(r, r + altitude)
-          if (opacity === 1) expect(terrainLevelFor(r, r + altitude)).toBe(12)
-          if (terrainLevelFor(r, r + altitude) < 12)
-            expect(opacity).toBeLessThan(1)
-          // And it never increases with altitude.
-          expect(terrainOpacity(r, r + altitude * 2)).toBeLessThanOrEqual(
-            opacity,
-          )
-        },
-      ),
-    )
   })
 
   it('gives hot stars blue light and cool stars red', () => {
@@ -568,6 +512,7 @@ describe('terrain mesh', () => {
     const patch = buildPatch({
       region,
       resolution: 17,
+      border: field.border,
       elevations: field.elevations,
       bodyRadius: planet.radius,
     })
@@ -583,29 +528,34 @@ describe('terrain mesh', () => {
       expect(Math.abs(patch.positions[i] as number)).toBeLessThan(1e5)
     }
 
-    // Put the pose back on: every vertex is then at the planet's radius plus
-    // its own elevation, measured from the body's center in render space.
-    const placement = patchPlacement(
-      patch,
-      origin,
-      bodyPose.position,
-      Q.IDENTITY,
-    )
+    /*
+     * Put the pose back on: every vertex is then at the planet's radius plus
+     * its own elevation, measured from the body's center in render space.
+     *
+     * Checked at a scale of 1 and again compressed, because terrain has to ride
+     * whatever `placeAt` did to the body it belongs to. Above `NEAR_LIMIT` the
+     * body is drawn nearer and smaller so its angular size survives, and a patch
+     * placed at true meters against a sphere placed at compressed ones is not
+     * slightly wrong — it is a different object at a different distance.
+     */
     const bodyInRender = toRenderSpace(origin, bodyPose.position)
-    for (let i = 0; i < patch.positions.length; i += 3) {
-      const local = vec3(
-        patch.positions[i] as number,
-        patch.positions[i + 1] as number,
-        patch.positions[i + 2] as number,
-      )
-      const world = Vec.add(
-        placement.position,
-        Q.rotate(placement.orientation, local),
-      )
-      const r = Vec.length(Vec.sub(world, bodyInRender))
-      expect(Math.abs(r - planet.radius)).toBeLessThanOrEqual(
-        planet.surface.maxElevation * 1.5,
-      )
+    for (const scale of [1, 0.03]) {
+      const placement = patchPlacement(patch, bodyInRender, Q.IDENTITY, scale)
+      for (let i = 0; i < patch.positions.length; i += 3) {
+        const local = vec3(
+          patch.positions[i] as number,
+          patch.positions[i + 1] as number,
+          patch.positions[i + 2] as number,
+        )
+        const world = Vec.add(
+          placement.position,
+          Vec.scale(Q.rotate(placement.orientation, local), placement.scale),
+        )
+        const r = Vec.length(Vec.sub(world, bodyInRender)) / scale
+        expect(Math.abs(r - planet.radius)).toBeLessThanOrEqual(
+          planet.surface.maxElevation * 1.5,
+        )
+      }
     }
     /*
      * Normals follow the relief, not the datum sphere.
@@ -687,6 +637,7 @@ describe('terrain mesh', () => {
         const patch = buildPatch({
           region,
           resolution,
+          border: field.border,
           elevations: field.elevations,
           bodyRadius: planet.radius,
         })

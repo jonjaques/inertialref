@@ -7,6 +7,7 @@ import {
   catalogStub,
   generateCell,
   galaxySeedOf,
+  HEIGHTFIELD_BORDER,
   MILKY_WAY,
   TEST_CATALOG,
 } from '@inertialref/universe'
@@ -208,7 +209,10 @@ describe('terrain task', () => {
     }
     const result = await p.run(generateHeightfieldTask, payload)
     expect(result.elevations).toBeInstanceOf(Float32Array)
-    expect(result.elevations.length).toBe(33 * 33)
+    // Bordered: two rings outside the patch, which the mesh differences
+    // against so its edge normals are central rather than one-sided.
+    expect(result.border).toBe(HEIGHTFIELD_BORDER)
+    expect(result.elevations.length).toBe(37 * 37)
     expect(result.maxElevation).toBeLessThanOrEqual(8_000 * 1.2)
     // Declared as transferable, which is what keeps a planet's worth of patches
     // from being copied twice per frame.
