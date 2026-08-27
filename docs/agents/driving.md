@@ -43,7 +43,7 @@ frame with Jupiter; only one leaves you in orbit of it.
 ## Terrain, without a browser
 
 The streamer's selection rule is a pure function
-([`terrainWindow`](../concepts/streaming.md#terrain-streaming)), so what a camera
+([`selectTerrain`](../concepts/streaming.md#terrain-streaming)), so what a camera
 would ask for is arithmetic rather than an observation. Every verb here runs
 headlessly and gives the same numbers in a console, in `pnpm sim` and in a test.
 

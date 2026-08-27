@@ -24,6 +24,7 @@ Fourteen decisions that are expensive to reverse. Each records the **context**, 
 | [0012](0012-dockable-panels.md)             | Dockable panels             | accepted     | Panels move between four zones. The layout is a value and the moves are property-tested arithmetic; the drag library is only an input device.              |
 | [0013](0013-measured-figures.md)            | Measured figures            | accepted     | A body gravity never rounded off carries its measured figure as a radius grid, and the generated case and the measured case are the same case.             |
 | [0014](0014-the-record-with-holes-in-it.md) | The record with holes in it | accepted     | A field nothing has measured is a row saying so, with the reason — written in the universe's voice, never the engine's.                                    |
+| [0015](0015-terrain-level-of-detail.md)     | Terrain level of detail     | accepted     | A restricted, morphing quadtree over a detail floor measured from the field — and the morph closes one level, which is why the tree is restricted at all.  |
 
 ---
 
@@ -45,6 +46,7 @@ flowchart TB
     A12["<b>0012</b><br/>dockable panels"]
     A13["<b>0013</b><br/>measured figures"]
     A14["<b>0014</b><br/>the record with holes"]
+    A15["<b>0015</b><br/>terrain level of detail"]
 
     A1 -->|"precision already solved,<br/>so frames are free to be<br/>about motion"| A2
     A1 -->|"canonical → GPU"| A3
@@ -66,6 +68,9 @@ flowchart TB
     A3 -->|"the drawn radius is<br/>what a mesh normalizes to"| A13
     A13 -->|"null means round,<br/>never unknown"| A14
     A12 -->|"the panel that<br/>reads the record"| A14
+    A5 -->|"the field decides<br/>where refining stops"| A15
+    A3 -->|"a patch rides the body's<br/>own compression"| A15
+    A4 -->|"a patch is addressed<br/>before it exists"| A15
 
     style A1 fill:#0369a1,stroke:#0c4a6e,color:#fff
     style A8 fill:#334155,stroke:#1e293b,color:#94a3b8,stroke-dasharray: 5 5
@@ -73,6 +78,7 @@ flowchart TB
     style A11 fill:#0e7490,stroke:#155e75,color:#fff
     style A13 fill:#0e7490,stroke:#155e75,color:#fff
     style A14 fill:#0e7490,stroke:#155e75,color:#fff
+    style A15 fill:#0e7490,stroke:#155e75,color:#fff
 ```
 
 Four dependencies are worth noticing because they are not obvious:

@@ -6,7 +6,7 @@
 > often, and existence is separated from being loaded.
 >
 > Code: `packages/simulation/src/world.ts` (`updateInterest`),
-> `packages/rendering/src/terrainWindow.ts`,
+> `packages/rendering/src/terrainSelect.ts`,
 > `apps/game/src/engine/terrainStreamer.ts`
 
 ---
@@ -81,46 +81,96 @@ The streamer is asked, every frame, what should be visible, and reconciles.
 
 ```mermaid
 flowchart TB
-    CAM["camera position"] --> BODY{"is a body<br/>at 'surface' LOD?"}
-    BODY -->|no| CLEAR["clear everything"]
-    BODY -->|yes| LEVEL["level = f(radius, distance to the <i>datum</i>)<br/><i>finer as you descend — see the limits below</i>"]
-    LEVEL --> CENTRE["region under the camera<br/><i>in body-fixed axes</i>"]
-    CENTRE --> BLOCK["3×3 block around it"]
-    BLOCK --> RECON{"for each wanted region"}
-    RECON -->|"cached heightfield"| MESH["rebuild mesh if the<br/>origin generation changed"]
-    RECON -->|"not cached"| JOB["submit a worker job<br/><i>deduplicated by key</i>"]
+    CAM["camera position"] --> BODY{"a solid body,<br/>relief over 8 px?"}
+    BODY -->|no| CLEAR["clear everything<br/><i>the sphere is the honest picture</i>"]
+    BODY -->|yes| WALK["walk the quadtree from the six cube faces"]
+    WALK --> REFINE{"one grid cell<br/>over 16 px?"}
+    REFINE -->|"yes, and the children are cached"| WALK
+    REFINE -->|no| BALANCE["restrict to a 2:1 balance<br/><i>the morph closes one level, not two</i>"]
+    BALANCE --> DRAW["the draw set"]
+    WALK --> AHEAD["the same walk from where<br/>the eye will be in 2 s"]
+    AHEAD --> QUEUE["queue the pyramid under it,<br/>coarsest first, 8 a frame"]
+    QUEUE --> JOB["worker: bordered heightfield"]
     JOB --> CACHE["cache the heightfield"]
-    RECON --> EVICT["drop meshes nobody wants (heightfields survive until the cache passes 64)"]
+    CACHE --> MESH["build geometry, 4 a frame"]
 
     style JOB fill:#065f46,stroke:#064e3b,color:#fff
+    style BALANCE fill:#0369a1,stroke:#0c4a6e,color:#fff
 ```
 
-**The selection rule is not in the streamer.** Everything above the reconcile
-step — the level, the fade, the region under the camera and the block around it —
-is `terrainWindow` in `packages/rendering`: a pure function of radius, distance
-and a body-fixed direction. The streamer calls it once a frame and owns only the
-cache, the worker jobs and the meshes. That split is what makes "what would this
-camera ask for?" answerable without a GPU, and it is why the terrain budget has
-measured numbers in it at all — the browser asks the question once a frame,
-`ir.descend` asks it a few hundred times in a millisecond
-([harness](../guides/harness.md#measuring-terrain)).
+**The selection rule is not in the streamer.** Everything above the queue — the
+traversal, the error predicate, the horizon cull, the balance and the morph
+bands — is `selectTerrain` in `packages/rendering`: a pure function of a body's
+radius and relief, an eye distance and a body-fixed direction. The streamer
+calls it twice a frame and owns only the cache, the worker jobs and the meshes.
+That split is what makes "what would this camera ask for?" answerable without a
+GPU, and it is why the terrain budget has measured numbers in it at all — the
+browser asks the question once a frame, `ir.descend` asks it a few hundred times
+in a millisecond ([harness](../guides/harness.md#measuring-terrain)).
 
-Both of the rule's limits are named there rather than implied. `windowRadius` is
-the 1 that makes the block 3×3. `clipped` counts the patches that fall off the
-edge of a cube face — zero almost everywhere, and five of nine over a face
-corner, where three faces meet and the window is a third of the ground it should
-be. A count rather than a boolean, because the count is the size of the hole.
+### The four rules the traversal follows
 
-**What is cached, and why that split:** heightfields are cached; meshes are not.
-A [floating-origin rebase](rendering.md#the-floating-origin) invalidates every
-vertex position but not a single elevation sample — and the elevations are the
-expensive half (14 octaves of 3D noise per sample). So a rebase rebuilds meshes
-from cached noise, which is cheap.
+**Refine while a patch's own grid cell is coarser than the screen can tell.**
+Ulrich's screen-space-error predicate wants the mesh's true vertical deviation,
+and on a planet that number is startlingly small — Earth's relief is two parts
+in a thousand of a cube face, and a patch's 64 quads cut it by another 64. So
+the error is a patch's _sample spacing_, the way Cesium's shipping tiles carry
+it: the size of the smallest thing a patch can express.
+
+**Stop where the field stops.** Past some level a patch is a bilinear upsample
+of its parent — on Mercury a level-9 patch differs from one by 12 cm, and levels
+10 through 12 by nothing a float can hold. `surfaceDetailFloor` measures that
+per body from the field itself rather than assuming it, and it lands between
+level 7 and 10 across the zoo against the 12 the old rule saturated at.
+
+**Measure to the ground, not the datum.** A node is a cone of directions crossed
+with the shell `[radius − relief, radius + relief]` that ground can occupy, and
+the distance is to the nearest point of _that_ — zero when the eye is inside the
+shell, which is what standing on the ground means.
+
+**Keep neighbors within one level.** The [CDLOD](rendering.md#terrain-meshing)
+morph slides a patch onto its _parent's_ grid, so it closes a one-level gap
+exactly and a two-level gap not at all. An unrestricted tree produced gaps of up
+to six, drawn as dashed black arcs along every level ring; the tree is restricted
+to 2:1, which is the classical answer and the rule Transvoxel's transition cells
+assume.
+
+**What is cached, and why that split:** heightfields are cached and so is the
+geometry built from them. A [floating-origin rebase](rendering.md#the-floating-origin)
+invalidates neither: patch vertices are body-fixed and anchor-relative, so the
+pose goes back on at draw time rather than into the buffer.
+
+A cache smaller than the working set does not degrade, it **oscillates** — and
+the streamer holds two selections at once, the drawn one and the request one,
+which diverge because the second is taken from where the eye is going. Sized at
+a flat 512 against a working set of six hundred, every frame evicted ground the
+next frame wanted: the draw set collapsed from 350 patches to 19 and refined
+back, over and over, which is terrain strobing at every altitude. Both caps come
+from the selection's own ceiling now.
 
 Patch keys are `body|face.level.i.j` — `terrainPatchKey`, one definition and
 three readers — so the same patch is never requested twice concurrently, and the
-request set is stable while the player hovers, meaning most frames submit nothing
-at all.
+request set is stable while the player hovers.
+
+### What is drawn while it loads
+
+Refinement only enters ground that is already in the cache, so a patch whose
+field has not arrived is never a hole: its parent is drawn instead, covering the
+same ground more coarsely. A descent therefore _sharpens_ rather than filling
+in. The request set is taken from where the eye will be in two seconds and asks
+for the whole pyramid under it, coarsest first — without the ancestors it would
+climb one worker round trip per level, and a streamer starting empty would draw
+six cube faces and stay there until a level-nine patch arrived.
+
+### Where terrain is not drawn
+
+A body's relief has to cover more than eight pixels before any of this runs.
+Past that distance the mesh and the datum sphere are the same picture, and the
+sphere already carries a normal map and, on four bodies in Sol, a photograph —
+so drawing generated ground over it replaces a measured picture with an invented
+one. Earth draws its map down to 2,000 km of altitude and its ground below that;
+Miranda, with 10 km of relief on a 236 km radius, keeps terrain out to eight
+thousand kilometers, because there the relief _is_ the shape of the body.
 
 ---
 
@@ -159,28 +209,23 @@ gone.
 
 ## Current limits
 
-| Limit                                           | Consequence                                                                                                  | Roadmap                                      |
-| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------- |
-| Interest is a radius scan over generation cells | Fine at 6 ly; a spatial index is needed for large radii                                                      | [roadmap](../roadmap.md#streaming-and-scale) |
-| Terrain is a 3×3 block at a single level        | No mixed-resolution quadtree, so the horizon is limited                                                      | [roadmap](../roadmap.md#terrain)             |
-| Patches do not stitch across faces or levels    | Hairline seams at boundaries                                                                                 | [roadmap](../roadmap.md#terrain)             |
-| The level and the fade measure from the datum   | A summit streams a level coarse, and one above `radius · 2^(5.5 − maxLevel)` is not drawn at all — see below | [roadmap](../roadmap.md#terrain)             |
-| No prediction of where the player is going      | Patches pop in rather than pre-loading                                                                       | [roadmap](../roadmap.md#streaming-and-scale) |
+| Limit                                            | Consequence                                                                 | Roadmap                                      |
+| ------------------------------------------------ | --------------------------------------------------------------------------- | -------------------------------------------- |
+| Interest is a radius scan over generation cells  | Fine at 6 ly; a spatial index is needed for large radii                     | [roadmap](../roadmap.md#streaming-and-scale) |
+| The selection is not frustum-culled              | A whole disk is generated, of which the renderer draws about a third        | [roadmap](../roadmap.md#terrain)             |
+| Vertex attributes are float32                    | 203 KB a patch, so a whole-disk selection is 45–126 MB                      | [roadmap](../roadmap.md#terrain)             |
+| The mesh is built on the main thread             | 0.25 ms a patch, budgeted at four a frame; the worker already has the field | [roadmap](../roadmap.md#terrain)             |
+| Three noise bands and one flat color per body    | The ground reads as geometry rather than as a place                         | [roadmap](../roadmap.md#terrain)             |
+| A mapped body's terrain is not its published map | Procedural ground under a photographic albedo, near the surface only        | [roadmap](../roadmap.md#terrain)             |
 
-**The datum is not the ground, and the streaming rules measure from it.**
-`terrainLevelFor` and `terrainOpacity` are handed `distance − radius`; for a
-camera standing on the surface that is `groundElevation + height`, not `height`.
-On a body with real relief the two are kilometers apart, and three things follow.
-A summit streams one level coarser than a basin at the same height above the
-ground. A level pass at fixed height coarsens and re-refines as the ground below
-rises and falls. And a mountain can be too tall to draw at all: the fade ends one
-octave above `radius · 2^(4.5 − maxLevel)`, which on Miranda is 2,605 m against a
-highest point of 4,826 m, so standing on that summit the streamer asks for
-nothing, draws nothing, and leaves the datum sphere on screen. Any body whose
-relief exceeds `2^(5.5 − maxLevel)` of its radius has the hole somewhere, and
-Miranda's 4.2% is Verona Rupes rather than an exotic case. The fix is a
-screen-space error metric, which measures against the patch instead —
-[roadmap](../roadmap.md#terrain).
+**The morph closes one level, and that is a constraint rather than a setting.**
+A vertex slides toward the position its _parent's_ grid holds for it, so where
+two levels meet the finer patch arrives exactly on the coarser one's vertices.
+Where three levels meet it arrives on a grid the coarser patch has no vertex on,
+and the difference is a hairline of open sky. A wide enough LOD band removes the
+possibility by construction — measured, the tree balances itself once a level's
+band is 3.7 patches wide — but that costs 500 to 1,000 patches for one disk
+against 300 to 600, so the band stays narrow and the tree is restricted instead.
 
 ---
 

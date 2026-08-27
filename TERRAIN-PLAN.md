@@ -124,7 +124,10 @@ Patches carry a border row so normals never need a neighbor
 ([Proland's](http://proland.inrialpes.fr/doc/proland-4.0/core/html/index.html)
 cheapest seam-killer), and each level adds only its own octave band over the
 upsampled parent, so a mountain seen from orbit _sharpens_ on descent rather
-than appearing. Geometry clipmaps are viewer-centric and fight tile
+than appearing. The morph closes a **one-level** gap and nothing wider — it
+lands a patch on its parent's grid, not on its grandparent's — so the tree has
+to be restricted to 2:1; Phase 1 measured gaps of up to six without it.
+Geometry clipmaps are viewer-centric and fight tile
 addressing; [concurrent binary trees](https://arxiv.org/abs/2407.02215)
 (KSP2's terrain) are the end-game only after generation itself lives on the
 GPU. Both rejected here, the second with a revisit condition.
@@ -308,9 +311,8 @@ only for the far side and the pre-stream instant. `terrainOpacity`'s fade-in
 retires with the single-level window that needed it.
 
 **Selection** walks the quadtree once per frame against the presentation eye:
-screen-space error with the cube-face correction, neighbor levels
-unconstrained for geometry (the morph handles it) but clamped to ±1 for the
-border/texture handoff, horizon-occlusion-point culling
+screen-space error, neighbor levels restricted to ±1 because that is what the
+morph can close, horizon-occlusion-point culling
 ([Cesium's construction](https://cesium.com/blog/2013/04/25/horizon-culling/))
 so the far half of the planet costs nothing, and a per-frame generation
 budget with a velocity-extrapolated prefetch so a fast descent queues ahead
