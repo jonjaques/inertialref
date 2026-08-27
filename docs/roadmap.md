@@ -116,7 +116,7 @@ flowchart TB
     NOW["<b>today</b><br/>restricted quadtree, whole disk<br/>morphed, seamless, one field<br/>at every distance"]
     C["<b>the geology</b><br/>craters, plates, volcanism<br/>from a per-body sketch"]
     D["<b>the face</b><br/>biomes, splat materials,<br/>the orbital albedo bake"]
-    E["<b>the ground</b><br/>metre-scale levels,<br/>rock scatter"]
+    E["<b>the ground</b><br/>meter-scale levels,<br/>rock scatter"]
     F["<b>the GPU producer</b><br/>TSL compute tiles"]
 
     NOW --> C --> D --> E

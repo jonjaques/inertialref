@@ -436,6 +436,29 @@ describe('where the field stops having anything to add', () => {
     expect(residual(floor - 2)).toBeGreaterThan(tolerance)
   })
 
+  it('is not fooled by an ocean flattening the coarse probes', () => {
+    /*
+     * The sea clamp manufactures exact zeros, and at level 0 the twenty-four
+     * probes alias onto at most six face-center stencils — so an ocean world
+     * whose face centers are all submerged reads as "quiet at level 0" while
+     * its islands carry kilometers of relief. A search that trusts the first
+     * quiet level answers 1, and the streamer, which takes this as `maxLevel`,
+     * draws the whole body as six patches forever.
+     *
+     * This seed's Earth is such a world: seaLevel 0.55 puts the sea datum
+     * 544 m up and every coarse stencil under it. The bound is loose — the
+     * exact floor (9 today) moves with the band stack — but the trap's
+     * signature is exactly 1, so anything past the flooded coarse levels
+     * proves the walk carried on to dry ground.
+     */
+    const system = generateSystem(rootSeed('d'), MILKY_WAY, SOL)
+    const wet = [...walkBodies(system)].find(
+      (b) => b.surface.seaLevel !== null && b.surface.maxElevation > 0,
+    )
+    if (wet === undefined) throw new Error('expected an ocean world')
+    expect(surfaceDetailFloor(wet.radius, wet.surface)).toBeGreaterThan(1)
+  })
+
   it('answers the same whatever order it is asked in', () => {
     /*
      * The memo key folded `resolution` and `tolerance` into a sum, so (65, 0.5)

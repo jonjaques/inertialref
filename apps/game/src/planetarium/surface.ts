@@ -1,4 +1,5 @@
 import type { Meters } from '@inertialref/shared'
+import { MIN_STANCE_HEIGHT } from '@inertialref/rendering'
 
 /*
  * The Surface panel's vocabulary, in a `.ts` because its neighbor is a `.tsx`.
@@ -30,7 +31,11 @@ export interface DescentRung {
  * the bottom the terrain milestone has to hold up at.
  */
 export const DESCENT_RUNGS: readonly DescentRung[] = [
-  { label: 'Ground', height: 2, why: 'eye height — the bottom of the range' },
+  {
+    label: 'Ground',
+    height: MIN_STANCE_HEIGHT,
+    why: 'eye height — the bottom of the range',
+  },
   { label: 'Low', height: 120, why: 'above the rocks, below the ridgeline' },
   { label: 'Pass', height: 2_000, why: 'a low pass over a mountain range' },
   { label: 'Approach', height: 40_000, why: 'the horizon curves' },

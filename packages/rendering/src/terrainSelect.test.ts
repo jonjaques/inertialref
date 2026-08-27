@@ -15,6 +15,7 @@ import {
   DEFAULT_VIEWPORT,
   MORPH_END,
   MORPH_START,
+  NO_MORPH_DISTANCE,
   nodeDistance,
   pixelsPerRadian,
   regionCone,
@@ -295,7 +296,9 @@ describe('the terrain quadtree', () => {
               )
             }
             if (patch.region.level === 0) {
-              expect(patch.morphEnd).toBe(Infinity)
+              // The no-morph sentinel is finite on purpose: Infinity reaches
+              // the shader's `Inf − Inf` denominator as a NaN.
+              expect(patch.morphEnd).toBe(NO_MORPH_DISTANCE)
               continue
             }
             expect(patch.morphEnd / (patch.spacing * scale)).toBeCloseTo(
@@ -329,6 +332,84 @@ describe('the terrain quadtree', () => {
               )
             }
           }
+        },
+      ),
+    )
+  })
+
+  it('never puts a patch beside a neighbor more than one level away', () => {
+    /*
+     * The 2:1 restriction, asked directly — the morph can close a one-level
+     * gap and nothing wider, so this is the invariant the balance pass exists
+     * to enforce. The crack property above cannot ask it: it finds a coarser
+     * neighbor by its *parent* key and skips the pair when the neighbor is two
+     * levels down, which is exactly the violation. Here the drawn patch
+     * covering each edge-neighbor is found by walking its ancestors, so a
+     * mismatch of two fails rather than being skipped.
+     *
+     * A deterministic case and then the property, because the violations live
+     * in pockets a hundred random draws routinely miss: with `balance()`
+     * deleted, this eye — Miranda's radius, a sixteenth of it up, aimed
+     * inside face 0 — yields a gap of two, and the property alone stays
+     * green. The pinned case is what makes removing the pass a red test.
+     */
+    const twoToOne = (eye: TerrainEye): void => {
+      const selection = selectTerrain(eye)
+      const byKey = new Map(
+        selection.patches.map((patch) => [
+          terrainPatchKey('b', patch.region),
+          patch,
+        ]),
+      )
+      for (const patch of selection.patches) {
+        for (const [di, dj] of [
+          [1, 0],
+          [-1, 0],
+          [0, 1],
+          [0, -1],
+        ] as const) {
+          // The drawn patch covering the neighbor's ground, at whatever
+          // level the selection drew it. Nothing found means the ground is
+          // beyond the horizon (or held finer, which the finer patch's own
+          // iteration checks from its side).
+          let cover = regionNeighbor(patch.region, di, dj) as ReturnType<
+            typeof regionNeighbor
+          > | null
+          let held
+          while (
+            cover !== null &&
+            (held = byKey.get(terrainPatchKey('b', cover))) === undefined
+          ) {
+            cover = regionParent(cover)
+          }
+          if (held === undefined) continue
+          expect(patch.region.level - held.region.level).toBeLessThanOrEqual(1)
+        }
+      }
+    }
+
+    twoToOne(
+      eyeAt(
+        MIRANDA.radius,
+        MIRANDA.radius * 0.002,
+        MIRANDA.radius / 16,
+        regionDirection(regionAddress(0, 0, 0, 0), 0.25, 0.75),
+      ),
+    )
+    fc.assert(
+      fc.property(
+        fc.double({ min: 1e5, max: 2e7, noNaN: true }),
+        fc.double({ min: 0, max: 20, noNaN: true }),
+        directions,
+        (radius, exponent, direction) => {
+          twoToOne(
+            eyeAt(
+              radius,
+              radius * 0.002,
+              Math.max(2, radius * 2 ** -exponent),
+              direction,
+            ),
+          )
         },
       ),
     )

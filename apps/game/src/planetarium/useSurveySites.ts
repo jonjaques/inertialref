@@ -44,6 +44,14 @@ export function useSurveySites(
     (snapshot) => snapshot.observer?.target?.address ?? null,
   )
   const address = looking ?? requested
+  /*
+   * The world's identity, not just the body's. A save load or a new game keeps
+   * both `engine` and the address string — `s:SOL/b:2` names Earth in every
+   * world — while the seed under them changes, and a survey keyed on the
+   * address alone kept serving the previous universe's summit and basin
+   * coordinates. The seed is the input the sites are actually a function of.
+   */
+  const seed = useEngine((snapshot) => snapshot.status?.world.seedHex ?? null)
 
   /*
    * The list and the address it is a list *of*, carried together.
@@ -71,7 +79,7 @@ export function useSurveySites(
       // would take the whole overlay through the error boundary.
       setBuilt({ of: address, sites: [] })
     }
-  }, [engine, address])
+  }, [engine, address, seed])
 
   return built.of === address ? built.sites : null
 }

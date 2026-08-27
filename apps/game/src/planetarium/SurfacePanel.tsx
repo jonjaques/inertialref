@@ -1,5 +1,9 @@
 import { formatDistance } from '@inertialref/shared'
-import { compassDegrees, horizonPitch } from '@inertialref/rendering'
+import {
+  compassDegrees,
+  horizonPitch,
+  MIN_STANCE_HEIGHT,
+} from '@inertialref/rendering'
 import { Slider } from '@/components/ui/slider'
 import { Action } from '../hud/Action.tsx'
 import { Section } from '../hud/Section.tsx'
@@ -82,9 +86,20 @@ export function SurfacePanel({ engine, target }: PlanetariumContext) {
     // Through the harness rather than the observatory, so the console verb and
     // this button are the same call and cannot drift on the degrees/radians
     // boundary. `ir.visit` takes degrees; the arm below it takes radians.
+    //
+    // A site switch while standing carries the whole stance, not half of it:
+    // `stand` rebuilds from its defaults, so an unstated heading and pitch
+    // arrive due-north at the horizon while the height is preserved — aim
+    // silently discarded on every site button.
     engine.harness.visit(undefined, {
       site,
-      height: stance.standing ? stance.height : 2,
+      height: stance.standing ? stance.height : MIN_STANCE_HEIGHT,
+      ...(stance.standing
+        ? {
+            heading: (stance.heading * 180) / Math.PI,
+            pitch: (stance.pitch * 180) / Math.PI,
+          }
+        : {}),
     })
   }
 

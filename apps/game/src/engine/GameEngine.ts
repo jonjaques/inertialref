@@ -268,7 +268,13 @@ export class GameEngine implements PresentationHost {
    * 1080 would leave it under-tessellated.
    */
   set viewportHeight(height: number) {
-    this.#terrain.viewport = { fovY: (this.fov * Math.PI) / 180, height }
+    // Written every frame by the scene, so unchanged inputs return before
+    // allocating — otherwise a fresh viewport object churns per frame for a
+    // value that moves only on a resize or an fov change.
+    const fovY = (this.fov * Math.PI) / 180
+    const held = this.#terrain.viewport
+    if (held !== null && held.height === height && held.fovY === fovY) return
+    this.#terrain.viewport = { fovY, height }
   }
 
   /*

@@ -348,9 +348,11 @@ const detailFloorCache = new WeakMap<SurfaceParameters, Map<string, number>>()
  * at that level, and compare the middle of the cell against the bilinear
  * interpolation of its corners. That difference *is* the detail refinement
  * would add. Twenty-four probe directions spread by the golden angle, five
- * samples each, and the search stops at the first level under tolerance — about
- * 1,500 samples and five milliseconds for a body, memoized, which is a quarter
- * of what deriving its survey sites costs.
+ * samples each, and the search stops at the first level under tolerance whose
+ * stencils touched dry ground — a sea-flattened stencil is the clamp talking,
+ * not the field, and the walk carries past it. About 1,500 samples and five
+ * milliseconds for a body, memoized, which is a quarter of what deriving its
+ * survey sites costs.
  *
  * This lives beside `elevationAt` because it is a property of those bands and
  * has to move when they do. Phase 2's geology puts crater rims and scarps into
@@ -381,9 +383,13 @@ export function surfaceDetailFloor(
   if (cached !== undefined) return cached
 
   const half = 0.5 / (resolution - 1)
+  const sea = seaDatumElevation(surface)
   let floor = MAX_REGION_LEVEL
+  let flooded: number | null = null
+  let everAshore = sea === null
   for (let level = 0; level <= MAX_REGION_LEVEL; level += 1) {
     let peak = 0
+    let ashore = sea === null
     for (let probe = 0; probe < DETAIL_PROBES; probe += 1) {
       // Golden-angle spiral: deterministic, and spread rather than clustered at
       // the poles the way a latitude/longitude lattice would be.
@@ -394,8 +400,11 @@ export function surfaceDetailFloor(
         vec3(Math.cos(around) * ring, z, Math.sin(around) * ring),
         level,
       )
-      const at = (s: number, t: number): number =>
-        groundElevation(surface, regionDirection(region, s, t))
+      const at = (s: number, t: number): number => {
+        const ground = groundElevation(surface, regionDirection(region, s, t))
+        if (sea !== null && ground > sea) ashore = true
+        return ground
+      }
       const corners =
         at(0.5 - half, 0.5 - half) +
         at(0.5 + half, 0.5 - half) +
@@ -404,10 +413,27 @@ export function surfaceDetailFloor(
       const error = Math.abs(at(0.5, 0.5) - corners / 4)
       if (error > peak) peak = error
     }
+    /*
+     * A quiet level proves nothing when every stencil was at sea. The clamp
+     * manufactures exact zeros wherever a probe lands on ocean, and at level 0
+     * the twenty-four probes alias onto at most six face-center stencils — so
+     * an ocean world whose face centers are all submerged read as "the field
+     * has nothing to say" at level 0 and streamed its islands, with kilometers
+     * of relief, as six patches forever. A flooded quiet level keeps walking;
+     * it settles the floor only on a world with no dry ground at all, where
+     * the shallowest one is the honest answer.
+     */
     if (peak <= tolerance) {
-      floor = level
-      break
+      if (ashore) {
+        floor = level
+        break
+      }
+      if (flooded === null) flooded = level
     }
+    if (ashore) everAshore = true
+  }
+  if (floor === MAX_REGION_LEVEL && !everAshore && flooded !== null) {
+    floor = flooded
   }
 
   const answer = Math.min(MAX_REGION_LEVEL, floor + 1)

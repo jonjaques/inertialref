@@ -53,7 +53,10 @@ import {
   vec3,
   vec4,
 } from 'three/tsl'
-import type { AtmosphereRecipe } from '@inertialref/rendering'
+import {
+  type AtmosphereRecipe,
+  NO_MORPH_DISTANCE,
+} from '@inertialref/rendering'
 
 /*
  * Every material the scene draws, as node graphs.
@@ -630,5 +633,10 @@ export function createTerrainMaterial(): MeshStandardNodeMaterial {
 }
 
 const ZERO = new Vector3()
-/** Both ends past any distance: a patch with no parent never morphs. */
-const NO_MORPH = new Vector2(Number.MAX_VALUE, Number.MAX_VALUE)
+/**
+ * Both ends past any distance: a patch with no parent never morphs. The
+ * selection's own finite sentinel, because `Number.MAX_VALUE` rounds to
+ * Infinity in the float32 uniform and `Inf − Inf` is a NaN in the morph
+ * denominator — see `NO_MORPH_DISTANCE`.
+ */
+const NO_MORPH = new Vector2(NO_MORPH_DISTANCE, NO_MORPH_DISTANCE)

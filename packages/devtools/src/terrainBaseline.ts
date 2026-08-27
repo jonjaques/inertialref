@@ -108,9 +108,10 @@ const TIMED_PATCHES = 48
 /**
  * Patches generated and thrown away before the clock starts.
  *
- * Twelve rather than four, because the timed set is no longer 48 neighbors at
- * one level: a whole-disk selection asks for every level between the horizon
- * and the ground, and the first few are the coarse ones.
+ * Twelve, because the timed set spans levels: a whole-disk selection asks for
+ * every level between the horizon and the ground, and the first patches of a
+ * run are the coarse ones — a warmup of four leaves the timer opening on
+ * level-0 outliers.
  */
 const WARMUP_PATCHES = 12
 

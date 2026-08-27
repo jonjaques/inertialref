@@ -216,7 +216,7 @@ describe('survey sites', () => {
      * The site's region and its latitude/longitude have to be the same place.
      * They are computed from opposite ends — the region comes out of the beam
      * search and the coordinates come from `directionToGeodetic` of that
-     * region's centre — so a rounding error or a transposed axis anywhere in
+     * region's center — so a rounding error or a transposed axis anywhere in
      * the round trip shows up here rather than as a camera two hundred
      * kilometers from the mountain the panel named.
      */

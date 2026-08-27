@@ -290,9 +290,28 @@ export interface TerrainSelection {
    * `ready` was given, which is the question the request set asks.
    */
   readonly starved: readonly RegionAddress[]
-  /** True when `maxPatches` stopped the refinement a level early. */
+  /**
+   * True when `maxPatches` stopped the refinement a level early — or when the
+   * balance pass, which never leaves a 2:1 violation unsplit, carried a
+   * saturated selection past the cap. The cap is a safety net, not a bound:
+   * an unsplit violation is a lit crack, which is strictly worse than a
+   * flagged overrun.
+   */
   readonly saturated: boolean
 }
+
+/**
+ * The morph band of a patch with no parent: both ends past any distance.
+ *
+ * Finite on purpose. `Infinity` survives the float32 uniform upload, and the
+ * material's morph factor divides by `max(morphEnd − morphStart, 1)` — which
+ * for an infinite band is `max(Inf − Inf, 1)` = `max(NaN, 1)`, a result WGSL
+ * leaves indeterminate. On hardware whose `max` propagates the NaN, every
+ * level-0 patch of the orbital shell renders as garbage. At 1e30 meters the
+ * subtraction stays finite, the factor saturates to zero, and "never morph"
+ * is arithmetic rather than driver luck.
+ */
+export const NO_MORPH_DISTANCE: Meters = 1e30
 
 /** Below this the arithmetic divides by something indistinguishable from zero. */
 const MIN_DISTANCE: Meters = 1
@@ -466,8 +485,8 @@ export function selectTerrain(
       region: node.region,
       spacing: node.spacing,
       distance: node.distance,
-      morphStart: root ? Infinity : node.range * MORPH_START,
-      morphEnd: root ? Infinity : node.range * MORPH_END,
+      morphStart: root ? NO_MORPH_DISTANCE : node.range * MORPH_START,
+      morphEnd: root ? NO_MORPH_DISTANCE : node.range * MORPH_END,
     }
   })
 
@@ -568,9 +587,9 @@ function balance(
      * that has one. A region absent from this is covered by something coarser,
      * which can never be the finer half of a mismatch.
      *
-     * Walked by halving `i` and `j` rather than through `regionParent`, because
-     * an allocation per ancestor per node per pass is most of what this used to
-     * cost and none of it is read.
+     * Walked by halving `i` and `j` rather than through `regionParent`, which
+     * allocates a fresh address per ancestor per node per pass, none of it
+     * read — the halving walk is the same arithmetic without the objects.
      */
     const depth = new Map<number | string, number>()
     for (const node of current) {

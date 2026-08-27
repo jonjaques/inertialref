@@ -28,6 +28,7 @@ import {
   type EntityId,
   findBody,
   formatAddress,
+  hasSolidSurface,
   installSurfaceFrame,
   isLandable,
   parseAddress,
@@ -44,7 +45,7 @@ import {
   restoreSave,
   serializeSave,
 } from '@inertialref/persistence'
-import type { RenderScene } from '@inertialref/rendering'
+import { MIN_STANCE_HEIGHT, type RenderScene } from '@inertialref/rendering'
 import type { PoolStats, WorkerPool } from '@inertialref/workers'
 import type { AuthorityPort, AuthorityStatus } from '@inertialref/net'
 import { describeDrift, type VersionDrift } from '@inertialref/protocol'
@@ -930,7 +931,10 @@ export class GameHarness {
         const reports = zoo.map((entry) => this.descend(entry.address))
         const last = zoo[zoo.length - 1]
         if (last !== undefined) {
-          this.visit(last.address, { site: 'summit', height: 2 })
+          this.visit(last.address, {
+            site: 'summit',
+            height: MIN_STANCE_HEIGHT,
+          })
         }
         return this.#scenarioResult(
           name,
@@ -1100,6 +1104,11 @@ export class GameHarness {
     region: string
   }[] {
     const body = this.#requireBody(address)
+    // The observatory's own gate: a giant's SurfaceParameters run through the
+    // survey without complaint, but every row would be a place `visit` refuses
+    // to stand — six clickable throws in the Surface panel. An empty list is
+    // the answer the panel draws an honest empty state for.
+    if (!hasSolidSurface(body)) return []
     return surveySites(body).map((site) => ({
       id: site.id,
       name: site.name,
@@ -1175,9 +1184,26 @@ export class GameHarness {
    */
   descend(
     address?: string,
-    options: DescentOptions = {},
+    options: Omit<DescentOptions, 'latitude' | 'longitude'> & {
+      /** Degrees at this boundary, like every harness verb — see `visit`. */
+      readonly latitude?: number
+      readonly longitude?: number
+    } = {},
   ): DescentReport & { readonly text: string } {
-    const report = simulateDescent(this.#requireBody(address), options)
+    // Degrees here, radians below — the same boundary `visit` states. Passing
+    // the numbers straight through let `ir.sites()` output (degrees) land in
+    // `geodeticDirection` as radians: a report about ground wrapped ~2,578°
+    // from the place the caller named, with no error anywhere.
+    const { latitude, longitude, ...rest } = options
+    const report = simulateDescent(this.#requireBody(address), {
+      ...rest,
+      ...(latitude === undefined
+        ? {}
+        : { latitude: (latitude * Math.PI) / 180 }),
+      ...(longitude === undefined
+        ? {}
+        : { longitude: (longitude * Math.PI) / 180 }),
+    })
     const text = summarizeDescent(report)
     log.info('descent simulated', {
       body: report.body,

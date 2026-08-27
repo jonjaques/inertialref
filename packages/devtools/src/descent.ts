@@ -13,6 +13,7 @@ import {
   surveySites,
 } from '@inertialref/universe'
 import {
+  DEFAULT_MAX_PATCHES,
   MIN_STANCE_HEIGHT,
   selectTerrain,
   surfaceHeightBounds,
@@ -69,7 +70,7 @@ export interface DescentOptions {
    * window traverse ground the way an arrival actually does.
    */
   readonly trackDegrees?: number
-  /** The streamer's heightfield cache size. Default 512, which is today's. */
+  /** The streamer's heightfield cache size. Default: the streamer's own cap. */
   readonly cacheSize?: number
   /**
    * Deepest level to refine to. Default is the body's own `surfaceDetailFloor`
@@ -200,8 +201,16 @@ const POLE_LIMIT = Math.PI / 2 - 1e-6
 
 const DEFAULT_STEPS = 128
 const DEFAULT_TRACK_DEGREES = 10
-/** The streamer's own cap, `terrainStreamer.ts`. Kept in step by the baseline. */
-const DEFAULT_CACHE = 512
+/*
+ * The streamer's own cap: `FIELD_CACHE` is three times the largest selection,
+ * derived here from the same `DEFAULT_MAX_PATCHES` rather than copied as a
+ * number — the copy shipped stale on the day it was written, so the baseline
+ * simulated a cache a quarter of the one that streams, and every cache-hit
+ * figure described a configuration that no longer exists. (`devtools` cannot
+ * import `apps/game`, so the multiplier is the one thing restated; the
+ * streamer's docstring owns why it is three.)
+ */
+const DEFAULT_CACHE = DEFAULT_MAX_PATCHES * 3
 
 /**
  * Where the descent aims, from whatever the caller named.

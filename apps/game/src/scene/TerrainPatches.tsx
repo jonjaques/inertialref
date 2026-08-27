@@ -13,6 +13,7 @@ import {
 import { HEIGHTFIELD_RESOLUTION } from '@inertialref/universe'
 import { patchIndices } from '@inertialref/rendering'
 import type { GameEngine } from '../engine/GameEngine.ts'
+import { GEOMETRY_CACHE } from '../engine/terrainStreamer.ts'
 import { createTerrainMaterial } from '../render/materials.ts'
 import { warmAtMount, warmCompile, warmRenderer } from '../render/warmup.ts'
 
@@ -100,7 +101,8 @@ export function TerrainPatches({ engine }: { engine: GameEngine }) {
      * The selection is measured in pixels, so it needs the drawing buffer
      * rather than the CSS size — a two-times display genuinely wants twice the
      * patches for the same picture. Written every frame because a resize is not
-     * an event this component subscribes to, and the assignment is a compare.
+     * an event this component subscribes to; the setter compares and returns
+     * before doing anything when nothing changed.
      */
     engine.viewportHeight = gl.domElement.height
     const state = engine.terrainState()
@@ -111,10 +113,22 @@ export function TerrainPatches({ engine }: { engine: GameEngine }) {
     const seen = new Set<string>()
 
     for (const placed of state.patches) {
-      const { patch, placement } = placed
-      const key = `${patch.region.face}.${patch.region.level}.${patch.region.i}.${patch.region.j}`
+      const { patch, placement, key } = placed
       seen.add(key)
       let mesh = meshes.get(key)
+      /*
+       * The key carries the body, but not the world: a save load with a
+       * different seed streams the same `s:SOL/b:2` region keys over ground
+       * that is no longer the same ground. The streamer rebuilds its
+       * `RenderPatch`es on `clear()`, so a retained mesh whose patch is not
+       * *this* patch is stale geometry wearing a current key — rebuild it.
+       */
+      if (mesh !== undefined && mesh.userData.patch !== patch) {
+        mesh.removeFromParent()
+        disposeKeepingSharedIndex(mesh)
+        meshes.delete(key)
+        mesh = undefined
+      }
       if (mesh === undefined) {
         const geometry = new BufferGeometry()
         geometry.setAttribute(
@@ -148,6 +162,7 @@ export function TerrainPatches({ engine }: { engine: GameEngine }) {
         mesh = new Mesh(geometry, material)
         mesh.userData.eyeLocal = new Vector3()
         mesh.userData.morphBand = new Vector2()
+        mesh.userData.patch = patch
         meshes.set(key, mesh)
       }
       if (mesh.parent === null) container.add(mesh)
@@ -186,7 +201,7 @@ export function TerrainPatches({ engine }: { engine: GameEngine }) {
       // Kept, not disposed: the streamer still holds this patch's geometry, and
       // a camera that turns back should find the ground where it left it.
       if (meshes.size > GEOMETRY_KEPT) {
-        mesh.geometry.dispose()
+        disposeKeepingSharedIndex(mesh)
         meshes.delete(key)
       }
     }
@@ -196,9 +211,28 @@ export function TerrainPatches({ engine }: { engine: GameEngine }) {
 }
 
 /**
+ * Dispose a patch's geometry without taking the shared index down with it.
+ *
+ * Every patch geometry holds the one session-wide index attribute, and the
+ * renderer's dispose path destroys the GPU buffer of every attribute the
+ * geometry references — the index included, with no reference count. Disposing
+ * one evicted mesh would destroy the index buffer under every patch still
+ * drawn, which re-uploads it next frame: the exact per-patch churn the shared
+ * attribute exists to avoid. Detaching the index first limits the dispose to
+ * the buffers this mesh actually owns.
+ */
+function disposeKeepingSharedIndex(mesh: Mesh): void {
+  mesh.geometry.setIndex(null)
+  mesh.geometry.dispose()
+}
+
+/**
  * Meshes held after they leave the drawn set.
  *
- * Matched to the streamer's own geometry cache: it stops handing out patches
- * past that point, so anything held here beyond it can never be asked for again.
+ * The streamer's own geometry cap, because the two caches describe the same
+ * patches: the streamer stops handing out geometry past `GEOMETRY_CACHE`, so
+ * anything held here beyond it can never be asked for again — and anything
+ * disposed here *below* it is ground the streamer still hands out, rebuilt and
+ * re-uploaded the next time the camera turns back.
  */
-const GEOMETRY_KEPT = 512
+const GEOMETRY_KEPT = GEOMETRY_CACHE

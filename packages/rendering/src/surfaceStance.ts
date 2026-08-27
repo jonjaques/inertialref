@@ -1,7 +1,7 @@
 import type { Meters, Radians } from '@inertialref/shared'
 import { type Quat, Vec, type Vec3, vec3 } from '@inertialref/spatial'
 import { lookAlong } from './cinematic.ts'
-import { MIN_DISTANCE_RADII } from './observer.ts'
+import { ELEVATION_LIMIT, MIN_DISTANCE_RADII } from './observer.ts'
 
 /*
  * The observer's other arm: standing on a surface instead of orbiting one.
@@ -51,12 +51,14 @@ export interface SurfaceStance {
 /**
  * How close to vertical the view may pitch, radians.
  *
- * The same argument as `ELEVATION_LIMIT` and the same margin. `lookAlong` levels
- * the horizon against the local up, so a view aimed exactly along it has no
- * horizon to level and rolls a half turn in one pointer-pixel. Two degrees is
- * invisible and removes the singularity instead of special-casing it.
+ * `ELEVATION_LIMIT` itself, not a restatement of it: the argument and the
+ * margin are the same — `lookAlong` levels the horizon against the local up,
+ * so a view aimed exactly along it has no horizon to level and rolls a half
+ * turn in one pointer-pixel — and two constants that must agree drift the
+ * first time one is retuned. Two degrees is invisible and removes the
+ * singularity instead of special-casing it.
  */
-export const PITCH_LIMIT = Math.PI / 2 - 0.035
+export const PITCH_LIMIT = ELEVATION_LIMIT
 
 /**
  * The lowest the eye may sit above the ground, meters.

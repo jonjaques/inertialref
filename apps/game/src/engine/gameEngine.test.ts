@@ -244,12 +244,11 @@ describe('the game engine, headless', () => {
      * One vertex spacing at this body's own detail floor, plus room for the
      * chase camera's offset.
      *
-     * The bound moved with the floor: the streamer used to saturate at level 12
-     * and 17 m of spacing, and now stops where the field stops having anything
-     * to say — level 9 on this body, 117 m — because past that a patch is a
-     * bilinear interpolation of one already in the cache. 300 m is two of those
-     * and still an order of magnitude inside the 1,542 m this test was written
-     * to catch.
+     * The streamer stops where the field stops having anything to say —
+     * `surfaceDetailFloor`, level 9 on this body, 117 m of spacing — because
+     * past that a patch is a bilinear interpolation of one already in the
+     * cache. 300 m is two of those spacings and still an order of magnitude
+     * inside the 1,542 m displacement this test exists to catch.
      */
     expect(nearest).toBeLessThan(300)
   }, 30_000)
@@ -347,15 +346,17 @@ describe('the game engine, headless', () => {
     /*
      * And the relationship the sequence above cannot see on this body.
      *
-     * Mercury's whole-disk selection fits inside the old flat cap, so the
-     * behavioural test passes with the defect reintroduced — the collapse
-     * needed a working set larger than the cache, which is Miranda rather than
-     * anything the headless SOL runner can land on. What has to hold on *every*
-     * body is the relationship: the streamer holds two selections at once, so
-     * its field cache cannot be smaller than two of them.
+     * Mercury's whole-disk selection fits inside a flat 512-entry cache, so
+     * the behavioral test above passes with the defect reintroduced — the
+     * collapse needs a working set larger than the cache, which is Miranda
+     * rather than anything the headless SOL runner can land on. What has to
+     * hold on *every* body is the relationship: the streamer holds two
+     * selections at once, so its field cache cannot be smaller than two of
+     * them.
      */
     expect(FIELD_CACHE).toBeGreaterThan(DEFAULT_MAX_PATCHES * 2)
     expect(GEOMETRY_CACHE).toBeGreaterThanOrEqual(DEFAULT_MAX_PATCHES)
+    game.dispose()
   }, 30_000)
 
   it('keeps sampling the cutscene through a frame with no player', () => {

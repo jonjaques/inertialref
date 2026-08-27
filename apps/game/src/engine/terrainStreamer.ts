@@ -2,6 +2,7 @@ import { getLogger, type Meters, type Seconds } from '@inertialref/shared'
 import { formatSeed } from '@inertialref/procedural'
 import {
   type FramePose,
+  localToUniverse,
   Quaternion as Q,
   type RenderOrigin,
   UV,
@@ -206,6 +207,14 @@ interface CachedField {
 /** A patch's static geometry, where it belongs this frame, and how it morphs. */
 export interface PlacedPatch {
   readonly patch: RenderPatch
+  /**
+   * `terrainPatchKey(body, region)` — the identity the renderer's mesh cache
+   * keys on. Carried here because the streamer computes it anyway and a cache
+   * key rebuilt from the region alone omits the body: retained meshes would
+   * collide across a retarget, and the six face roots collide on *every* pair
+   * of bodies.
+   */
+  readonly key: string
   readonly placement: PatchPlacement
   /**
    * The eye in this patch's own frame — body-fixed axes, anchor-relative, true
@@ -273,8 +282,26 @@ export class TerrainStreamer {
     eye: Vec3
   } | null = null
   #colour = { r: 0.61, g: 0.51, b: 0.4 }
-  /** Last eye, for the velocity the request set is extrapolated along. */
-  #previous: { camera: UniverseVector; time: Seconds } | null = null
+  /**
+   * Last eye in body-fixed axes, for the velocity the request set is
+   * extrapolated along.
+   *
+   * Body-fixed rather than universe coordinates, because the extrapolated
+   * point is converted with the body's *current* pose. A camera hovering over
+   * a body co-moves with it at the body's orbital velocity — 47 km/s at
+   * Mercury — so a universe-frame drift extrapolated two seconds ahead is a
+   * request set aimed ~94 km from the ground under the camera, forever. The
+   * body-fixed difference is the camera's track over the ground, which is the
+   * thing a prefetch should lead.
+   */
+  #previous: { eye: Vec3; time: Seconds } | null = null
+  /**
+   * Bumped by `clear()`. A worker answer landing after the world it was asked
+   * about is gone must be dropped: the keys carry the body address but not the
+   * seed, so a stale field would be served — and, sitting in the drawn set's
+   * keep list, never evicted.
+   */
+  #epoch = 0
 
   /**
    * The drawable height the selection is measured against, in physical pixels.
@@ -311,11 +338,13 @@ export class TerrainStreamer {
     readonly starved: number
     readonly saturated: boolean
   } {
+    let placed = 0
     let vertices = 0
     let triangles = 0
     for (const selected of this.#drawn) {
       const patch = this.#patches.get(this.#key(selected.region))
       if (patch === undefined) continue
+      placed += 1
       vertices += patch.positions.length / 3
       triangles += patch.indices.length / 3
     }
@@ -325,7 +354,11 @@ export class TerrainStreamer {
       shallowestLevel: this.#shallowest,
       pending: this.#inFlight.size,
       cached: this.#fields.size,
-      patches: this.#drawn.length,
+      // Placed, not selected: the report's contract is "built and placed this
+      // frame", and the selection can hold regions whose geometry is still in
+      // a worker. Counting those reported ground before any was drawn —
+      // `patches: 6` over zero vertices on a cold arrival.
+      patches: placed,
       vertices,
       triangles,
       visited: this.#visited,
@@ -340,10 +373,12 @@ export class TerrainStreamer {
     const patches: PlacedPatch[] = []
     if (pose !== null) {
       for (const selected of this.#drawn) {
-        const patch = this.#patches.get(this.#key(selected.region))
+        const key = this.#key(selected.region)
+        const patch = this.#patches.get(key)
         if (patch === undefined) continue
         patches.push({
           patch,
+          key,
           placement: patchPlacement(
             patch,
             pose.position,
@@ -382,7 +417,6 @@ export class TerrainStreamer {
     body: RenderBody | null,
   ): void {
     const previous = this.#previous
-    this.#previous = { camera, time: renderTime }
 
     if (body === null) {
       this.clear()
@@ -417,6 +451,8 @@ export class TerrainStreamer {
       return
     }
 
+    const eyeLocal = universeToLocal(spinPose, camera)
+    this.#previous = { eye: eyeLocal, time: renderTime }
     this.#pose = {
       position: body.placement.position,
       orientation: Q.multiply(
@@ -424,7 +460,7 @@ export class TerrainStreamer {
         spinPose.orientation,
       ),
       scale: body.placement.compression,
-      eye: universeToLocal(spinPose, camera),
+      eye: eyeLocal,
     }
     this.#colour = surface.appearance.colour
 
@@ -479,7 +515,7 @@ export class TerrainStreamer {
         surface,
         spinPose,
         bodyPose.position,
-        camera,
+        eyeLocal,
         renderTime,
         previous,
         eye,
@@ -488,16 +524,18 @@ export class TerrainStreamer {
     )
 
     /*
-     * What is drawn now and has no mesh yet, then the rung below it. The
-     * second half is what makes the ladder climb: with refinement gated on
-     * geometry, a node whose children have fields but no meshes is starved
-     * until something builds them, and nothing else would.
+     * The rung below the drawn set — what makes the ladder climb: with
+     * refinement gated on geometry, a node whose children have fields but no
+     * meshes is starved until something builds them, and nothing else would.
+     * Computed once because `#build`, `#request` and the evictor's keep set
+     * must agree on it — two spellings of this list is the build set quietly
+     * desynchronizing from the request set.
      */
+    const starvedChildren = drawn.starved.flatMap((region) =>
+      regionChildren(region),
+    )
     this.#build(
-      [
-        ...drawn.patches.map((patch) => patch.region),
-        ...drawn.starved.flatMap((region) => [...regionChildren(region)]),
-      ],
+      [...drawn.patches.map((patch) => patch.region), ...starvedChildren],
       surface,
     )
     /*
@@ -511,24 +549,22 @@ export class TerrainStreamer {
      * leaves, and nothing ever requests them. Coarse-first is also the right
      * order on its own merits — the ground appears immediately and sharpens.
      */
-    this.#request(
-      [
-        // What is drawn now and has no field yet, nearest first — a frame's
-        // budget should buy the ground being looked at rather than whichever
-        // cube face the traversal happened to emit first. Sorted here rather
-        // than in `#request`, because sorting the whole list would dissolve
-        // the grouping these three lines exist to create.
-        ...[...drawn.patches]
-          .sort((a, b) => a.distance - b.distance)
-          .map((patch) => patch.region),
-        // What the drawn set is waiting on to refine.
-        ...drawn.starved.flatMap((region) => [...regionChildren(region)]),
-        // And the whole pyramid under the ideal selection, shallow first.
-        ...pyramid(wanted.patches),
-      ],
-      surface,
-    )
-    this.#evict(drawn.patches, wanted.patches)
+    const requested = [
+      // What is drawn now and has no field yet, nearest first — a frame's
+      // budget should buy the ground being looked at rather than whichever
+      // cube face the traversal happened to emit first. Sorted here rather
+      // than in `#request`, because sorting the whole list would dissolve
+      // the grouping these three lines exist to create.
+      ...[...drawn.patches]
+        .sort((a, b) => a.distance - b.distance)
+        .map((patch) => patch.region),
+      // What the drawn set is waiting on to refine.
+      ...starvedChildren,
+      // And the whole pyramid under the ideal selection, shallow first.
+      ...pyramid(wanted.patches),
+    ]
+    this.#request(requested, surface)
+    this.#evict(requested)
   }
 
   #key(region: RegionAddress): string {
@@ -555,9 +591,13 @@ export class TerrainStreamer {
   /**
    * Where the eye will be, for the set that gets queued.
    *
-   * Linear in the observed motion between the last two frames, which is right
-   * for a descent and harmless for a hover — the extrapolation collapses to the
-   * present when the camera is still. A frame boundary that is not a frame — a
+   * Linear in the observed motion between the last two frames, *in body-fixed
+   * axes* — the frame the ground lives in. Measured in universe coordinates the
+   * drift is dominated by the body's own orbital velocity, which the camera
+   * shares while hovering, so the extrapolation aimed the request set tens of
+   * kilometers along the orbit instead of along the camera's track over the
+   * ground. Body-fixed, a hover collapses to the present and a descent leads
+   * where the descent is going. A frame boundary that is not a frame — a
    * teleport, a resumed tab — produces a velocity that means nothing, so a step
    * longer than a second or shorter than nothing falls back to the eye itself.
    */
@@ -565,18 +605,18 @@ export class TerrainStreamer {
     body: Body,
     spinPose: FramePose,
     centre: UniverseVector,
-    camera: UniverseVector,
+    eyeLocal: Vec3,
     time: Seconds,
-    previous: { camera: UniverseVector; time: Seconds } | null,
+    previous: { eye: Vec3; time: Seconds } | null,
     eye: TerrainEye,
   ): TerrainEye {
     if (previous === null) return eye
     const step = time - previous.time
     if (!(step > 0) || step > 1) return eye
-    const drift = UV.difference(camera, previous.camera)
-    const ahead = UV.translate(
-      camera,
-      Vec.scale(drift, PREFETCH_SECONDS / step),
+    const drift = Vec.sub(eyeLocal, previous.eye)
+    const ahead = localToUniverse(
+      spinPose,
+      Vec.add(eyeLocal, Vec.scale(drift, PREFETCH_SECONDS / step)),
     )
     return this.#eye(body, spinPose, centre, ahead)
   }
@@ -607,7 +647,17 @@ export class TerrainStreamer {
     const body = findBody(system, address.body)
     if (body === undefined) return null
     return {
-      surface: hasSolidSurface(body) ? body : null,
+      /*
+       * Solid, and no measured figure. Every patch is built on the spherical
+       * datum (`bodyRadius` in `#build`), but a figured body's ground — the
+       * contact test, `surfaceRadius`, the stance camera — is its measured
+       * ellipsoid, up to half a radius inside that sphere on Haumea. Streaming
+       * would draw a spherical shell floating around the shape model, with the
+       * standing camera inside the mesh. This is the plan's carve-out: deep
+       * terrain on figures is a projection problem, and until it is solved the
+       * figure's own shape model is the honest ground.
+       */
+      surface: hasSolidSurface(body) && body.figure === null ? body : null,
       bodyPose: world.frames.pose(bodyFrameId(body.address), time),
       spinPose: world.frames.pose(bodyFixedFrameId(body.address), time),
     }
@@ -660,6 +710,10 @@ export class TerrainStreamer {
 
     for (const region of missing) {
       const key = this.#key(region)
+      // Captured beside the key: a result that outlives its world is dropped
+      // rather than cached, because the key alone cannot tell a new seed's
+      // s:SOL/b:2 from the old one's.
+      const epoch = this.#epoch
       this.#inFlight.add(key)
       void this.#pool
         .run(generateHeightfieldTask, {
@@ -672,6 +726,7 @@ export class TerrainStreamer {
           border: HEIGHTFIELD_BORDER,
         })
         .then((result) => {
+          if (epoch !== this.#epoch) return
           this.#fields.set(key, {
             elevations: result.elevations,
             region,
@@ -688,20 +743,28 @@ export class TerrainStreamer {
   }
 
   /**
-   * Drop what neither set wants, once there is too much of it.
+   * Drop what the frame's request list does not name, once there is too much.
    *
    * Above the caps rather than every frame, because the two sets change by a
    * patch or two as the camera moves and evicting on that cadence would
    * regenerate the ground behind a camera that turned around. A `Map` iterates
    * in insertion order, so the oldest entry that nothing wants goes first.
+   *
+   * The keep set is the whole request list — drawn set, starved children,
+   * pyramid — rather than the two selections' leaves. `#request` re-asks for
+   * every rung of the pyramid every frame, so a keep set without them turns
+   * the cap into a treadmill: evict a rung, re-request it next frame,
+   * regenerate it at 12.8 ms, evict it again.
    */
-  #evict(
-    drawn: readonly SelectedPatch[],
-    wanted: readonly SelectedPatch[],
-  ): void {
+  #evict(requested: readonly RegionAddress[]): void {
+    if (
+      this.#fields.size <= FIELD_CACHE &&
+      this.#patches.size <= GEOMETRY_CACHE
+    ) {
+      return
+    }
     const keep = new Set<string>()
-    for (const selected of drawn) keep.add(this.#key(selected.region))
-    for (const selected of wanted) keep.add(this.#key(selected.region))
+    for (const region of requested) keep.add(this.#key(region))
 
     for (const key of this.#fields.keys()) {
       if (this.#fields.size <= FIELD_CACHE) break
@@ -713,16 +776,29 @@ export class TerrainStreamer {
     }
   }
 
-  /** Stop drawing, keep the cache. The body is here but the pipeline is not. */
+  /**
+   * Stop drawing, keep the cache. The body is here but the pipeline is not.
+   *
+   * Every selection mirror goes, not just the drawn set: `summary()` reads
+   * them after this, and a report that says `patches: 0` beside last frame's
+   * `visited`/`starved` counters is a diagnostic lying in exactly the states
+   * it exists to explain.
+   */
   #forget(): void {
     this.#drawn = []
     this.#deepest = 0
     this.#shallowest = 0
+    this.#visited = 0
+    this.#culled = 0
+    this.#starved = 0
+    this.#saturated = false
     this.#pose = null
   }
 
   /** Drop everything. The world was replaced; none of this describes it. */
   clear(): void {
+    // In-flight answers are for the world this discards; see `#epoch`.
+    this.#epoch += 1
     this.#fields.clear()
     this.#patches.clear()
     this.#bodyAddress = null

@@ -198,21 +198,20 @@ describe('a simulated descent', () => {
     expect(last('summit')).toBe(floor)
   })
 
-  it('draws a mountain that used to be too tall to draw', () => {
+  it('draws a summit that stands above any datum-measured cutoff', () => {
     /*
-     * The other half, and the one that was a hole rather than a degradation.
+     * The other half, and the one that is a hole rather than a degradation.
      *
-     * The streamed set used to fade out one octave above
-     * `radius · 2^(4.5 − maxLevel)`, measured — again — from the datum. On
-     * Miranda that cutoff is 2,605 m and the summit the survey finds is
-     * 4,826 m, so standing on it the streamer requested nothing, drew nothing,
-     * and left the datum sphere on screen: two of six survey sites were ground
-     * that could not be looked at at any altitude, including zero. Not an
-     * exotic case — Verona Rupes on a 236 km moon.
+     * A cutoff measured from the datum cannot draw this ground: Miranda's
+     * highest survey site stands 4,826 m over the datum, so any fade of the
+     * shape `radius · 2^(4.5 − maxLevel)` — 2,605 m here — classifies a camera
+     * *standing on the summit* as too high to stream, at every altitude
+     * including zero. Two of six survey sites become ground that cannot be
+     * looked at. Not an exotic case — Verona Rupes on a 236 km moon.
      *
-     * There is no fade any more, and nothing about the selection knows the
-     * datum. Every site bottoms out at the same floor, including the two that
-     * were holes.
+     * So nothing about the selection may know the datum: distance is measured
+     * to the shell of ground itself, and every site bottoms out at the same
+     * floor, the summit exactly as the basin.
      */
     const session = live()
     const active = terrainZoo(session.world).find(
@@ -297,10 +296,11 @@ describe('a simulated descent', () => {
       expect(report.totalRequests + report.cacheHits).toBe(wanted)
       expect(report.uniqueRegions).toBeLessThanOrEqual(report.totalRequests)
       /*
-       * And the descent's working set is still multiples of the cache, which is
-       * a finding rather than a defect in the cache: what a descent touches is
-       * thousands of regions, so the streamer's 512 heightfields are sized to
-       * hold the *selection* and its lookahead rather than the journey.
+       * And the journey still outruns any one selection, which is a finding
+       * rather than a defect in the cache: what a descent touches is thousands
+       * of regions, so the streamer's field cache is sized to hold the
+       * *selection* and its lookahead (`DEFAULT_MAX_PATCHES * 3`) rather than
+       * the whole descent.
        */
       expect(report.uniqueRegions).toBeGreaterThan(512)
     }
@@ -452,9 +452,8 @@ describe('the observatory on the ground', () => {
     harness.look('s:SOL/b:2')
     const before = harness.observatory.target?.address
     expect(() => harness.visit('s:SOL/b:5')).toThrow(/no surface/)
-    // The second half, and it is the half that was wrong: the refusal used to
-    // happen *after* `focus` had already committed, so a call that threw still
-    // left the planetarium looking at Saturn.
+    // The second half: the refusal has to come before `focus` commits, or a
+    // call that throws still leaves the planetarium looking at Saturn.
     expect(harness.observatory.target?.address).toBe(before)
   })
 
