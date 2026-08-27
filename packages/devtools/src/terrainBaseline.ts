@@ -71,14 +71,12 @@ export interface BaselineEntry {
   /**
    * The profile the timings come from: a descent into the basin.
    *
-   * The basin rather than the summit, and that is a decision the rig's own
-   * findings forced. `terrainOpacity` measures altitude from the datum, so on a
-   * body with real relief a summit can sit above the fade line and draw nothing
-   * at all — Miranda's does. Timing generation from a descent that requests no
-   * patches would report zero and read as free. The basin is the lowest ground
-   * the survey found, which on a dry world is below the datum and on an ocean
-   * world is the sea surface — either way it is the site furthest from the fade
-   * ceiling, so it always draws.
+   * The basin rather than the summit, which was forced when the streaming rules
+   * measured altitude from the datum: a summit could sit above the fade line
+   * and draw nothing at all — Miranda's did — so timing generation from it
+   * reported zero and read as free. Nothing measures from the datum any more
+   * and every site draws, but the basin is kept as the timed profile so the
+   * figure stays comparable with the one the rig first recorded.
    */
   readonly descent: DescentReport
   readonly generation: GenerationCost

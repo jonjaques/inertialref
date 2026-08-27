@@ -27,9 +27,9 @@ import {
  * named site and record what the terrain streamer is asked for on the way down.
  * It runs with no world, no worker pool, no renderer and no GPU, because
  * everything it needs is a `Body` and the selection rule — which is why
- * `terrainWindow` was pulled out of the streamer first. The same call therefore
- * runs in a browser console, in `pnpm sim`, and in a Node test, and all three
- * get the same numbers.
+ * `selectTerrain` lives in `packages/rendering` rather than in the streamer.
+ * The same call therefore runs in a browser console, in `pnpm sim`, and in a
+ * Node test, and all three get the same numbers.
  *
  * What it is for is the phrase "no terrain perf baseline" in the plan's gap
  * table. The 1.0 ms terrain line in the frame budget has always been designed

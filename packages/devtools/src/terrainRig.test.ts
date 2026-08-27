@@ -202,13 +202,13 @@ describe('a simulated descent', () => {
     /*
      * The other half, and the one that was a hole rather than a degradation.
      *
-     * `terrainOpacity` faded out over one octave above `radius · 2^(4.5−12)`,
-     * measured — again — from the datum. On Miranda that cutoff is 2,605 m and
-     * the summit the survey finds is 4,826 m, so standing on it the streamer
-     * requested nothing, drew nothing, and left the datum sphere on screen: two
-     * of six survey sites were ground that could not be looked at at any
-     * altitude, including zero. It is not an exotic case, it is Verona Rupes on
-     * a 236 km moon.
+     * The streamed set used to fade out one octave above
+     * `radius · 2^(4.5 − maxLevel)`, measured — again — from the datum. On
+     * Miranda that cutoff is 2,605 m and the summit the survey finds is
+     * 4,826 m, so standing on it the streamer requested nothing, drew nothing,
+     * and left the datum sphere on screen: two of six survey sites were ground
+     * that could not be looked at at any altitude, including zero. Not an
+     * exotic case — Verona Rupes on a 236 km moon.
      *
      * There is no fade any more, and nothing about the selection knows the
      * datum. Every site bottoms out at the same floor, including the two that
