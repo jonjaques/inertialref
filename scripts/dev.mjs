@@ -70,7 +70,9 @@ const CHILDREN = [
  */
 function withoutInspect(env) {
   const current = env.NODE_OPTIONS ?? ''
-  const cleaned = current.replace(/\s*--inspect(-brk)?(=\S+)?/g, '').trim()
+  const cleaned = current
+    .replace(/(^|\s)--inspect(?:-brk)?(?:=\S+)?(?=\s|$)/g, ' ')
+    .trim()
   const next = { ...env, FORCE_COLOR: '1' }
   if (cleaned === '') delete next.NODE_OPTIONS
   else next.NODE_OPTIONS = cleaned
