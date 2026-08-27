@@ -202,9 +202,41 @@ runtime is installed, type stripping fails at the first import.
 
 ---
 
+## Debugging
+
+Four configurations in [`.vscode/launch.json`](../../.vscode/launch.json),
+shared by VS Code and Cursor. The play button on **Launch Browser** starts
+the game.
+
+| Configuration      | Debuggee                                      | Port |
+| ------------------ | --------------------------------------------- | ---- |
+| **Launch Browser** | the client; the editor starts Vite + wrangler | 5173 |
+| **Attach Browser** | Chrome already running with remote debugging  | 9222 |
+| **Launch Node**    | `apps/headless` (`--self-test`)               | —    |
+| **Attach Node**    | `pnpm sim` (`node --inspect=127.0.0.1:9229`)  | 9229 |
+
+Launch Browser runs `node scripts/dev.mjs --ensure` as a background task. If
+5173 is already up, it reuses that process and does not kill it when debugging
+stops; if it is not, the task is `pnpm dev` and stopping debugging stops both
+children.
+
+Wrangler's workerd inspector is on **9230** so it does not steal Node's
+default. Press `d` in a wrangler terminal to open it. Source maps ship in
+`pnpm dev` and in the production JS (including the universe worker);
+`build.sourcemap: true` is the switch, and a build that omitted the
+`sourceMappingURL` comment fails the gate. Production CSS has no map — Vite 8
+minifies it with lightningcss and does not expose that option. Dev CSS maps
+are `css.devSourcemap`.
+
+The configurations, the inspect flag, and the inspector port are checked by
+`scripts/debug.test.mjs`. How to use them: [`.vscode/README.md`](../../.vscode/README.md).
+
+---
+
 ## Related
 
 - [Getting started](getting-started.md) — clone to flying
 - [Testing](testing.md) — what to test, and how
 - [Extending](extending.md) — adding a body type, a task, a save field
 - [Agent handbook](../agents/README.md)
+- [Editor debug configurations](../../.vscode/README.md)
