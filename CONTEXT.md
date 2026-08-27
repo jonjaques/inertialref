@@ -362,6 +362,14 @@ again in a neighboring system.
   its own helper asked at `clock.time` too: the test and the code were wrong
   together. Two assertions agreeing is not two pieces of evidence when they share
   a mistake.
+- **`parseSpectralType('D10')` returned a subclass of 10** (27 Aug 2026),
+  against the field's 0–9.9 contract — the white-dwarf branch took whatever
+  digits followed the class letters while the ladder branch below already
+  degrades past 9.9 to null. The input is legitimate: a white dwarf's
+  temperature index is 50400/Teff, which runs past 9 for the coolest ones.
+  Found by the never-throws property on a fresh seed, months after the branch
+  was written — which is the argument for properties over vectors, and for
+  pinning the counterexample as a vector once one is found.
 
 ## The five spikes, measured (19 Aug 2026)
 
@@ -4559,6 +4567,83 @@ at — a terrain horizon with a distant peak, ground unbroken from underfoot to
 the limb, no seam at any of the seven level boundaries on screen. At 3 km, the
 same ground graded from level 9 underfoot to level 2 at the horizon in one
 surface. Earth from two and a half radii is its own photograph again.
+
+## The review of the disk — keys that named too little, constants that had to agree (27 Aug 2026)
+
+An xhigh review read PR #27's whole diff from twelve angles and came back with
+fifteen verified findings, all fixed in one commit. Most of them are five
+mechanisms, each worth recognizing on sight in a neighboring system.
+
+**A cache key must name everything the value depends on, and three did not.**
+The patch mesh cache keyed on `face.level.i.j` with no body, so a retarget
+served Miranda's vertex buffers as Iapetus's ground for every colliding key.
+Worker heightfields committed with no generation guard, so results in flight
+across a `clear()` landed under keys the next world reuses — and sat in the
+drawn set's keep list, unevictable. The survey-sites hook keyed on
+`[engine, address]` when sites are a function of the seed, so a world
+replacement at the same address kept serving the old world's summits. Fourth
+face of the same die: `stand()` committed `focus()` before validating the
+site id, so a typo'd site moved the planetarium and then refused.
+
+**The detail floor believed the sea.** `surfaceDetailFloor` stopped at the
+first quiet level, and the sea clamp makes submerged stencils exactly flat —
+so an ocean world whose ~6 aliased level-0 face-center probes all land at sea
+reported floor 1, and the streamer capped the whole body there, silently,
+forever. `rootSeed('d')`'s Earth: seaLevel 0.55, 9.9 km of relief, 23–34%
+land, reported floor 1 against a true 9; 7 of 112 sampled ocean worlds trap
+the same way. The walk carries past sea-flattened levels now and that seed is
+pinned.
+
+**Extrapolate in the frame you sample in.** The prefetch pushed the eye
+forward in universe coordinates and converted with the body's current pose,
+so the body's orbital velocity — which a hovering camera shares — displaced
+the request set by v × 2 s: ~94.7 km east on Mercury, a phantom pyramid
+refined forever at 12.8 ms a patch while a real descent prefetched along the
+orbit instead of the ground track. This is the velocity form of "never sample
+terrain in inertial axes", which has now shipped three times in three
+disguises. Its sibling in the same commit: the streamer gated on
+`hasSolidSurface` alone, so figured bodies streamed patches on the spherical
+datum while the contact test, `surfaceRadius` and the stance camera use the
+measured ellipsoid — ground ~3.5 km above the eye on Phobos, and from orbit a
+spherical terrain shell floating around the shape model.
+
+**Two constants that must agree will drift; make one the other.**
+`GEOMETRY_KEPT` said it matched the streamer's cache and was 512 against 896
+— under the 623 patches a whole-disk drawn set reaches, so mesh retention was
+permanently inert on large worlds. The descent baseline's `DEFAULT_CACHE`
+copied the 512 the same PR retired for 2,304, so every regression figure
+described the oscillating configuration the change removed. `PITCH_LIMIT`
+restated `ELEVATION_LIMIT`'s argument with its own number. Each is now the
+other constant, or derived from it.
+
+**`Number.MAX_VALUE` rounds to Infinity in a float32 uniform**, and
+`Inf − Inf` is a NaN in the morph denominator — WGSL leaves `max(NaN, 1)`
+indeterminate, so "level-0 patches never morph" held by driver luck on the
+hardware at hand. A sentinel that must survive f32 has to be finite there:
+`NO_MORPH_DISTANCE = 1e30`.
+
+The rest, briefly: eviction called `geometry.dispose()` on geometries holding
+the session-wide shared index — three r182 destroys attribute GPU buffers
+with no refcount, so every eviction past the retention cap killed the 98 KB
+index under ~450 live meshes; the evictor kept less than the requester
+re-asked for every frame, a 12.8 ms-per-patch regeneration treadmill at the
+cache cap; `#forget()` reset three of seven selection mirrors, so
+`ir.terrain()` reported stale counters in exactly the states it exists to
+explain; and `harness.sites()` offered six clickable survey sites on Saturn,
+each of which threw.
+
+**The 2:1 test could not fail.** The crack property looked the coarser
+neighbor up by the parent key, which skips exactly the two-level mismatch
+`balance()` exists to prevent — deleting `balance()` left the whole suite
+green. The replacement pins a deterministic Miranda-radius case and was
+watched go red under that mutation. Third regression test here to fail the
+"can it fail" check, for a third reason.
+
+One found and deliberately left: `installSurfaceFrame`
+(`packages/universe/src/frames.ts`) negates east; the PR's `localTriad` is
+the correct increasing-longitude one. Flipping the old one rotates every
+restored landed save a half turn, so it wants its own change with a
+migration story, not a line in a fix pass.
 
 ## Known gaps
 
