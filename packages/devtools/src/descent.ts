@@ -340,9 +340,14 @@ export function descentRegions(
   const seen = new Set<string>()
   const out: RegionAddress[] = []
   for (const step of report.steps) {
-    void step
+    for (const region of step.requestedRegions) {
+      const key = `${region.face}.${region.level}.${region.i}.${region.j}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push(region)
+    }
   }
-  return out.length === 0 && seen.size === 0 ? out : out
+  return out
 }
 
 /** One line per level, for a console and for a `CONTEXT.md` entry. */

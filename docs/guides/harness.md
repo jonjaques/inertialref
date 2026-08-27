@@ -173,6 +173,58 @@ The built-in names include `full-face`, `gibbous`, `half`, `crescent`,
 
 ---
 
+## Standing on a body
+
+The observatory has a second arm, below the orbit camera's 1.5-radii clamp.
+`ir.visit` puts the camera on the ground and `ir.ascend` takes it back to the
+framing it left; both are camera moves, so `world.stateHash()` is untouched —
+`ir.land` is the one that teleports the ship.
+
+```js
+ir.sites(address?)                       // the named places on a body
+ir.visit(address?, { site, height })     // stand there. Degrees and metres
+ir.visit(address?, { latitude, longitude, heading, pitch })
+ir.observatory.setStanceScrub(0.5)       // the height slider, logarithmic
+ir.ascend()
+```
+
+Sites are derived from the body's own terrain rather than authored, so
+"the highest ground on this world" survives regeneration and is still the
+interesting place afterwards. Four come from a beam search — `summit`, `basin`,
+`shore`, `rough` — and two are chosen outright for the renderer: `corner`, where
+three faces of the addressing cube meet, and `pole`, where the east/north basis
+is singular.
+
+The height is set outright rather than eased, which is what makes a plate loop
+work: each `ir.visit` is the frame you asked for, with nothing settling in
+between.
+
+```js
+for (const height of [40000, 2000, 120, 2]) {
+  ir.visit('g:milky-way/s:SOL/b:5.6', { site: 'pole', height })
+  // capture here
+}
+```
+
+---
+
+## Measuring terrain
+
+```js
+ir.zoo() // one body per surface archetype, found rather than listed
+ir.descend(address?, { site, steps }) // fly a descent on paper
+ir.terrain() // what the live streamer holds this frame
+ir.terrainBaseline() // the zoo, its descents, and measured patch cost
+```
+
+`ir.descend` runs with no world state changed, no worker used and no frame
+drawn, so it produces the same level churn, peak burst and cache numbers in a
+browser console, in `pnpm sim --terrain-baseline` and in a Node test.
+`ir.terrain` is the counterpart: what the streamer actually has, which is
+`null` headlessly rather than a zero.
+
+---
+
 ## Scripted scenes
 
 ```js
@@ -197,6 +249,7 @@ await ir.scenario('orbit') // circular orbit, 300 km
 await ir.scenario('approach') // burning toward a world
 await ir.scenario('surface') // parked on the ground
 await ir.scenario('interstellar') // holding off Alpha Centauri
+await ir.scenario('descent') // orbit to 2 m over every zoo body, on paper
 ```
 
 Named, repeatable set-ups. Each returns the resulting status, so a test can

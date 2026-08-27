@@ -4278,6 +4278,133 @@ Label density and the minor-body filter did _not_ become stance fields, and the
 line is worth stating: they are read by a DOM layer that already owns its own
 projection pass, not by `GameEngine.#step`.
 
+## The terrain rig, and the three defects it found on its first run (26 Aug 2026)
+
+Phase 0 of [`TERRAIN-PLAN.md`](TERRAIN-PLAN.md) § 9: the instrument every later
+phase is judged through, built before any of them so the phase that triples the
+per-sample cost has something to be a regression against. No generator changes.
+
+### What it is
+
+**A second observer arm.** `packages/rendering/src/surfaceStance.ts` is five
+numbers about a point _on_ the ground — where, how high, which way — against the
+orbit arm's three about a point in space. Its ceiling is
+`(MIN_DISTANCE_RADII − 1)` radii, which is exactly the orbit arm's floor, so the
+two meet with no band that is both or neither. The height scrub is logarithmic
+because the band is 2 m to 3,186 km on Earth: a linear slider puts its midpoint
+at 1,593 km, above the altitude terrain is drawn at at all, so the control that
+exists to reach two metres would be the one control that cannot. The default
+pitch tracks `acos(r / (r + h))` rather than zero — from 400 km the horizon is
+**19.79°** below level (the small-angle `√(2h/r)` gives 20.30°, 2.6% wrong and
+growing), so a level camera at the top of a descent is a picture of empty sky.
+
+**The selection rule left the browser.** `terrainWindow` is the streamer's
+request set as a pure function of (radius, distance, direction). Same rule, both
+of its limits intact and now named: `windowRadius`, and a `clipped` count for
+the patches a cube-face edge drops — five of nine over a corner. Nothing about
+the streamer's behavior changed; what changed is that "what would this camera
+ask for?" no longer needs a GPU, which is why the 1.0 ms terrain line in the
+frame budget has been a designed figure rather than a measured one.
+
+**Sites are derived, not authored.** A beam search over the field finds four —
+summit, basin, shore, escarpment — and two are chosen outright for the renderer
+rather than the geology: `corner`, where three faces of the addressing cube meet,
+and `pole`, where the east/north basis is singular. A survey of _interesting_
+ground would never wander into either. 2,100 samples, ~20 ms, memoized per body.
+A hand-written latitude is stale the moment the generator moves; "the highest
+ground on this body" survives regeneration by construction.
+
+**A descent is arithmetic.** `ir.descend()` flies orbit → 2 m over a site and
+reports level churn, peak burst and cache behavior with no world, no pool and no
+renderer, so a console, `pnpm sim --terrain-baseline` and a Node test all get the
+same numbers.
+
+### The three defects, which share one cause
+
+`terrainLevelFor` and `terrainOpacity` are handed `distance − radius`. For a
+camera standing on the ground that is `groundElevation + height`, not `height`.
+**The streaming rules measure altitude from the datum**, and on a body with real
+relief the datum is kilometres from the ground.
+
+- **A mountain can be too tall to draw.** `terrainOpacity` fades out one octave
+  above `radius · 2^(4.5 − maxLevel)`. On Miranda that is **2,605 m**; the summit
+  the survey finds is **4,826 m**. Standing on it the streamer requests nothing,
+  draws nothing and leaves the datum sphere on screen — at every altitude,
+  including zero. Verified in Chrome: `ir.terrain()` reads
+  `level 10, opacity 0, patches 0` with Miranda at `surface` tier filling 70° of
+  the frame. Two of Miranda's six survey sites are ground that cannot be looked
+  at. Any body whose relief exceeds `2^(5.5 − maxLevel)` of its radius has this
+  hole somewhere, and Miranda's 4.2% is Verona Rupes rather than an exotic case.
+- **A summit streams at half resolution.** Two metres above Iapetus's highest
+  ground the streamer asks for level 11; two metres above its deepest basin it
+  asks for 12. Same body, same height above the ground.
+- **A level pass re-requests the world.** Flying level across Iapetus at fixed
+  height coarsens and re-refines as the ground beneath rises and falls. Nine
+  patches today; a few hundred once the quadtree covers the disk.
+
+None is fixed here — Phase 0 measures the build that exists, and the fix is
+already in the plan, because a screen-space error metric measures against the
+patch rather than against the datum. The tests pin the numbers so the fix is a
+diff rather than a rediscovery.
+
+### The baseline, measured
+
+`pnpm sim --terrain-baseline`, Node 26 on an M5, main thread. Zoo members are
+found rather than written down — Gliese 1061 d and b for the rocky archetypes,
+Iapetus and Miranda for the icy ones.
+
+| Measurement                         | Figure                                                        |
+| ----------------------------------- | ------------------------------------------------------------- |
+| Patch generation, 65×65, 14 octaves | **12.7–13.5 ms/patch**, 0.31–0.33 M samples/s, steady over 48 |
+| Descent orbit → 2 m, 128 steps      | 558–838 patch requests, 7–8 level changes                     |
+| Peak burst                          | **9** — one window, however the camera arrives                |
+| Cache hit rate, 64 heightfields     | **< 5%** on a tracked descent; the working set is hundreds    |
+| Terrain drawn                       | on the last **two levels only**; the rest is the datum sphere |
+| Patches on screen at level 12       | 9 patches, 38,025 vertices, 73,728 triangles                  |
+
+The generation figure is the one that matters and it **exceeds the documented
+budget by 60%**. `docs/design/technical.md` carried "≤ 8 ms per patch per
+worker — Measured; within" with no machine and no date beside it; every
+neighbouring row names both. It is 12.8 ms here, before a single band of geology
+is added, and the plan's own estimate is that the band stack is 3–5× today's
+fourteen octaves. That moves Phase 5 (the GPU producer) from "adopt only if the
+measurements say so" to a condition the measurements have already met once.
+
+Not measured, and the summary says so rather than inventing them: frame cost,
+draw calls and the worker queue's real depth are browser facts and this is a
+Node process.
+
+### Two findings from building the zoo
+
+**No generated system within 25 ly of Sol contains an `icy-active` body.**
+Generated moons come out on orbits too circular for the eccentricity tide to
+register, so the zoo is a set of bodies rather than one system. Sol supplies both
+icy archetypes from unmapped moons — Iapetus and Miranda — and neither has a
+shipped map, so both are squarely inside the milestone's scope.
+
+**Every unmapped rocky body in Sol is generated with `maxElevation` of zero.**
+Eris, Makemake, Quaoar, Haumea and the rest are perfectly smooth spheres. That is
+why the rocky archetypes have to come from outside Sol, and it is a gap in the
+small-body generator rather than in the search.
+
+### Corrected while measuring
+
+Phobos reads **1.64 g/cm³** here, not the published 1.88, and the cause is data
+rather than arithmetic: the vendored half-extents are 13.3 × 11.9 × 9.8 km
+against a published 13.0 × 11.4 × 9.1, which is 13% more volume for the same
+mass. `volumetricMeanRadius` is right — it fixes the 1.52× volume error a sphere
+of `a` makes — and the test asserts that ratio rather than a figure this data
+cannot reach.
+
+### What the plates show
+
+Standing at Iapetus's north pole at two metres, in the planetarium, with no ship
+anywhere: Sol on the horizon with its lens ghosts, and a flat tilted plane of
+ground. That is today's three-band field at level 12 and it is the honest "before"
+plate — the last octave of noise is the smallest thing that exists. At 40 km the
+same camera sees a perfectly smooth limb, because the streamer has faded out
+entirely.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

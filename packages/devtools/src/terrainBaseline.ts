@@ -42,15 +42,34 @@ import {
  * over it.
  */
 
+/** What a descent onto one survey site does, without generating anything. */
+export interface SiteProbe {
+  readonly id: string
+  readonly name: string
+  readonly elevation: Meters
+  /** Of the profile's steps, how many draw terrain at all. Zero is a hole. */
+  readonly drawnSteps: number
+  readonly steps: number
+  /** The deepest level the descent reaches. 12 is the cap. */
+  readonly finalLevel: number
+}
+
 export interface BaselineEntry {
   readonly zoo: ZooEntry
+  /**
+   * The profile the timings come from: a descent into the basin.
+   *
+   * The basin rather than the summit, and that is a decision the rig's own
+   * findings forced. `terrainOpacity` measures altitude from the datum, so on a
+   * body with real relief a summit can sit above the fade line and draw nothing
+   * at all — Miranda's does. Timing generation from a descent that requests no
+   * patches would report zero and read as free. A basin is below the datum by
+   * construction, so it always draws.
+   */
   readonly descent: DescentReport
   readonly generation: GenerationCost
-  readonly sites: readonly {
-    readonly id: string
-    readonly name: string
-    readonly elevation: Meters
-  }[]
+  /** Every survey site, flown, so the holes are visible rather than implied. */
+  readonly sites: readonly SiteProbe[]
 }
 
 export interface TerrainBaseline {
@@ -112,9 +131,10 @@ export function terrainBaseline(
   for (const entry of zoo) {
     const body = bodyFor(world, entry.address)
     if (body === null) continue
-    const descent = simulateDescent(body, {
+    const profile = {
       ...(options.steps === undefined ? {} : { steps: options.steps }),
-    })
+    }
+    const descent = simulateDescent(body, { ...profile, site: 'basin' })
     const regions = descentRegions(descent)
     // Warm up on patches that are then thrown away rather than on the first
     // few of the measured set: including them biases the mean by ~15% on a
@@ -135,11 +155,26 @@ export function terrainBaseline(
       zoo: entry,
       descent,
       generation,
-      sites: surveySites(body).map((site) => ({
-        id: site.id,
-        name: site.name,
-        elevation: site.elevation,
-      })),
+      // Every site flown, not just the one that was timed. A descent with no
+      // generation in it is a few hundred noise samples, so the whole survey
+      // costs less than one patch — and it is the only way the holes in the
+      // fade line show up as data rather than as a screenshot of a datum
+      // sphere that somebody has to notice.
+      sites: surveySites(body).map((site) => {
+        const flown = simulateDescent(body, {
+          ...profile,
+          site: site.id,
+          trackDegrees: 0,
+        })
+        return {
+          id: site.id,
+          name: site.name,
+          elevation: site.elevation,
+          drawnSteps: flown.drawnSteps,
+          steps: flown.steps.length,
+          finalLevel: flown.levels[flown.levels.length - 1] ?? -1,
+        }
+      }),
     })
   }
 
@@ -176,6 +211,15 @@ export function summarizeBaseline(baseline: TerrainBaseline): string {
             `(${(g.samplesPerSecond / 1e6).toFixed(2)} M samples/s)`
         : `  generation: not timed — the host supplied no clock`,
     )
+    lines.push('  sites, dropped straight onto:')
+    for (const site of entry.sites) {
+      const hole = site.drawnSteps === 0 ? '  ← NEVER DRAWN' : ''
+      lines.push(
+        `    ${site.id.padEnd(7)} ${String(Math.round(site.elevation)).padStart(7)} m  ` +
+          `drawn on ${String(site.drawnSteps).padStart(3)}/${site.steps} steps, ` +
+          `bottoms out at level ${site.finalLevel}${hole}`,
+      )
+    }
   }
   lines.push('')
   lines.push(

@@ -15,6 +15,7 @@
  *   pnpm sim --seed voyager --ticks 6400 --self-test
  *   pnpm sim --targets             # where can this session go?
  *   pnpm sim --goto b:2 --ticks 0  # and go there
+ *   pnpm sim --terrain-baseline    # what terrain costs, measured
  */
 import { parseArgs } from 'node:util'
 import { createConsoleSink, logHub } from '@inertialref/shared'
@@ -33,6 +34,14 @@ const OPTIONS = {
   /** Print the travel listing, which is also the answer to "what exists?". */
   targets: { type: 'boolean', default: false },
   'self-test': { type: 'boolean', default: false },
+  /**
+   * Walk the terrain zoo and print what a descent costs. See TERRAIN-PLAN § 9.
+   *
+   * Off by default because it generates systems and a few hundred heightfields
+   * — a couple of seconds, against the twenty milliseconds an ordinary run
+   * takes — and every other flag here is cheap enough to leave on.
+   */
+  'terrain-baseline': { type: 'boolean', default: false },
   quiet: { type: 'boolean', default: false },
   help: { type: 'boolean', default: false },
 } as const
@@ -75,7 +84,11 @@ const { harness, system, target } = session
 console.log(
   `InertialRef headless — seed "${session.world.seedText}", ${system.name}, target ${target.name}`,
 )
-await harness.scenario(values.scenario ?? 'orbit')
+// The detail, not just the side effect. Every scenario has always returned one
+// — "circular orbit 300 km above b:0" — and the runner dropped it on the floor,
+// which is why `--scenario descent`, whose whole output *is* the detail, came
+// back silent.
+console.log((await harness.scenario(values.scenario ?? 'orbit')).detail)
 
 // After the scenario, not instead of it: a scenario sets up a situation and
 // `--goto` says where to watch it from, so the two compose.
@@ -108,6 +121,13 @@ console.log(
 const save = serializeSave(captureSave(session.world, session.player()))
 await session.store.write('headless', save)
 console.log(`save: ${save.length} bytes`)
+
+if (values['terrain-baseline'] === true) {
+  // Before the self-test, because the self-test loads Alpha Centauri and the
+  // zoo prefers what is already loaded — running it second would give the
+  // baseline a different neighbourhood to search than a fresh session has.
+  console.log(harness.terrainBaseline().text)
+}
 
 if (values['self-test'] === true) {
   const report = await harness.selfTest()

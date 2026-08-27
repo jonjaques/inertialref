@@ -908,15 +908,39 @@ export class GameHarness {
         this.step(64)
         return this.#scenarioResult(name, before, 'holding off Alpha Centauri')
       }
+      case 'descent': {
+        /*
+         * The terrain rig's own scenario: orbit to two metres over every zoo
+         * body, on paper.
+         *
+         * The only scenario that moves no ship and runs no physics, because
+         * that is what it is proving — the descent is a camera and a selection
+         * rule, so it produces the same numbers here, in a browser console and
+         * in a Node test. The camera is left standing on the last body's summit
+         * so that a host which draws has something on screen when it returns.
+         */
+        const zoo = this.zoo()
+        if (zoo.length === 0) throw new Error('the terrain zoo came back empty')
+        const reports = zoo.map((entry) => this.descend(entry.address))
+        const last = zoo[zoo.length - 1]
+        if (last !== undefined) {
+          this.visit(last.address, { site: 'summit', height: 2 })
+        }
+        return this.#scenarioResult(
+          name,
+          before,
+          reports.map((report) => report.text).join('\n'),
+        )
+      }
       default:
         throw new Error(
-          `Unknown scenario "${name}". Try: orbit, approach, surface, interstellar`,
+          `Unknown scenario "${name}". Try: ${this.scenarios().join(', ')}`,
         )
     }
   }
 
   scenarios(): readonly string[] {
-    return ['orbit', 'approach', 'surface', 'interstellar']
+    return ['orbit', 'approach', 'surface', 'interstellar', 'descent']
   }
 
   /* --------------------------------------------------------------------- */
@@ -1243,6 +1267,15 @@ export class GameHarness {
       '  ir.trackOverlay(on?)          the reference track over a playing scene',
       '  ir.look(target)               planetarium: move the camera, not the ship',
       '  ir.observatory                the free camera itself — drag, zoom, setPhase',
+      '  ir.sites(address?)            the named places on a body, derived from its own terrain',
+      '  ir.visit(address?, {site, height, heading, pitch})',
+      '                                stand on it — a camera, not the ship; degrees and meters',
+      '  ir.ascend()                   back to orbit, at the framing you left',
+      '  ir.descend(address?, {site, steps})',
+      '                                fly a descent on paper: level churn, burst, cache',
+      '  ir.terrain()                  what the live streamer holds this frame',
+      '  ir.zoo()                      one body per surface archetype',
+      '  ir.terrainBaseline()          the zoo, its descents, and measured patch cost',
       '  ir.logs(n)',
     ].join('\n')
   }

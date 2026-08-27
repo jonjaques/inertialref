@@ -48,18 +48,18 @@ version bump ([ADR-0005](docs/adr/0005-procedural-seeds.md) § versioning).
 
 The foundations are real and none of them move.
 
-| Foundation                                                | Where                                                                   | Keep because                                                                                                   |
-| --------------------------------------------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| Cube-sphere quadtree addressing, levels 0–24              | `packages/universe/src/terrain.ts` (`RegionAddress`, `regionDirection`) | A stable integer address for every patch of ground at every LOD — streaming, seeds and scatter all hang off it |
-| Elevation as a pure function of (seed, direction)         | `terrain.ts:165` `elevationAt`                                          | The whole determinism regime; also the only thing that makes planetary scale storable at all (§ 4)             |
-| `BodyFixedDirection` brand                                | `terrain.ts:49`                                                         | Sampling in inertial axes has shipped twice as a bug                                                           |
-| One owner of the sea clamp                                | `terrain.ts:206` `groundElevation`                                      | Physics and mesh agree on where the ocean is                                                                   |
-| Worker-generated heightfields, transferred not copied     | `packages/workers/src/tasks.ts:199`                                     | ≤ 8 ms/patch measured, and capability check 10 proves worker ≡ main thread                                     |
-| Reconciling streamer, heightfield cache across rebases    | `apps/game/src/engine/terrainStreamer.ts`                               | Loading is an ordinary operation, not a mode                                                                   |
-| Body-fixed, anchor-relative patch vertices                | `packages/rendering/src/terrainMesh.ts:62`                              | Baking pose into vertices was ~865 m/frame of ground slide                                                     |
-| Eye-relative log compression, angular size exact          | `packages/rendering/src/placement.ts:115`                               | Measured from anywhere else, small bodies vibrate                                                              |
-| LOD tiers by angular size                                 | `packages/rendering/src/lod.ts:36`                                      | A gas giant at 1e9 m and a boulder at 10 m deserve the same treatment                                          |
-| `renderTime`, never `clock.time`, for anything in a frame | [ADR-0006](docs/adr/0006-simulation-clock.md)                           | The streamer already learned this the hard way                                                                 |
+| Foundation                                                | Where                                                                   | Keep because                                                                                                                 |
+| --------------------------------------------------------- | ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Cube-sphere quadtree addressing, levels 0–24              | `packages/universe/src/terrain.ts` (`RegionAddress`, `regionDirection`) | A stable integer address for every patch of ground at every LOD — streaming, seeds and scatter all hang off it               |
+| Elevation as a pure function of (seed, direction)         | `terrain.ts:165` `elevationAt`                                          | The whole determinism regime; also the only thing that makes planetary scale storable at all (§ 4)                           |
+| `BodyFixedDirection` brand                                | `terrain.ts:49`                                                         | Sampling in inertial axes has shipped twice as a bug                                                                         |
+| One owner of the sea clamp                                | `terrain.ts:206` `groundElevation`                                      | Physics and mesh agree on where the ocean is                                                                                 |
+| Worker-generated heightfields, transferred not copied     | `packages/workers/src/tasks.ts:199`                                     | Capability check 10 proves worker ≡ main thread. The cost is **12.8 ms/patch**, not the ≤ 8 ms the budget claimed — see § 10 |
+| Reconciling streamer, heightfield cache across rebases    | `apps/game/src/engine/terrainStreamer.ts`                               | Loading is an ordinary operation, not a mode                                                                                 |
+| Body-fixed, anchor-relative patch vertices                | `packages/rendering/src/terrainMesh.ts:62`                              | Baking pose into vertices was ~865 m/frame of ground slide                                                                   |
+| Eye-relative log compression, angular size exact          | `packages/rendering/src/placement.ts:115`                               | Measured from anywhere else, small bodies vibrate                                                                            |
+| LOD tiers by angular size                                 | `packages/rendering/src/lod.ts:36`                                      | A gas giant at 1e9 m and a boulder at 10 m deserve the same treatment                                                        |
+| `renderTime`, never `clock.time`, for anything in a frame | [ADR-0006](docs/adr/0006-simulation-clock.md)                           | The streamer already learned this the hard way                                                                               |
 
 And the layering: quadtree arithmetic and patch building stay in
 `packages/rendering` as plain data with Node tests; Three.js objects and TSL
@@ -71,16 +71,17 @@ materials exist only in `apps/game`; `packages/universe` may not read a file.
 
 What stands between today and "rich terrain from orbit to on foot":
 
-| Gap                                                                      | Consequence today                                                                                       |
-| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
-| One LOD level, 3×3 patches, no cross-face wrap (`terrainStreamer.ts:54`) | The visible ground is a few patches wide; face edges are holes; the horizon is the datum sphere         |
-| No stitching or morphing (`terrainMesh.ts:174` one-sided edge normals)   | Hairline seams now; cracks the moment two levels coexist                                                |
-| Three noise bands                                                        | No craters, no tectonics, no volcanism — every world is the same rolling fBm at a different amplitude   |
-| One flat color per body                                                  | Terrain reads as geometry, never as a place; no biomes, no materials                                    |
-| Procgen bodies are featureless at `sphere` tier                          | The world you approach is not the world you land on — relief appears only below the streaming threshold |
-| No scatter                                                               | Nothing at human scale; the last octave of noise is the smallest thing that exists                      |
-| Planetarium clamps at 1.5 radii (`observer.ts:98`)                       | No way to _inspect_ a surface without flying a ship to it — iteration and testing both pay for this     |
-| No terrain perf baseline                                                 | The 1.0 ms terrain line in the frame budget is designed, not enforced                                   |
+| Gap                                                                      | Consequence today                                                                                                                                                                                                                                                                                                                                 |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| One LOD level, 3×3 patches, no cross-face wrap (`terrainStreamer.ts:54`) | The visible ground is a few patches wide; face edges are holes; the horizon is the datum sphere                                                                                                                                                                                                                                                   |
+| No stitching or morphing (`terrainMesh.ts:174` one-sided edge normals)   | Hairline seams now; cracks the moment two levels coexist                                                                                                                                                                                                                                                                                          |
+| Three noise bands                                                        | No craters, no tectonics, no volcanism — every world is the same rolling fBm at a different amplitude                                                                                                                                                                                                                                             |
+| One flat color per body                                                  | Terrain reads as geometry, never as a place; no biomes, no materials                                                                                                                                                                                                                                                                              |
+| Procgen bodies are featureless at `sphere` tier                          | The world you approach is not the world you land on — relief appears only below the streaming threshold                                                                                                                                                                                                                                           |
+| No scatter                                                               | Nothing at human scale; the last octave of noise is the smallest thing that exists                                                                                                                                                                                                                                                                |
+| Planetarium clamps at 1.5 radii (`observer.ts:98`)                       | ~~No way to _inspect_ a surface without flying a ship to it~~ — closed by Phase 0's surface arm                                                                                                                                                                                                                                                   |
+| No terrain perf baseline                                                 | ~~The 1.0 ms terrain line is designed, not enforced~~ — measured by Phase 0; see § 10                                                                                                                                                                                                                                                             |
+| **The streaming rules measure altitude from the datum**                  | `terrainLevelFor` and `terrainOpacity` take `distance − radius`, which for a camera on the ground is `groundElevation + height`. A summit streams a level coarse; a summit above `radius · 2^(5.5 − maxLevel)` is **not drawn at all** — two of Miranda's six survey sites are ground that cannot be looked at, at any altitude. Found by Phase 0 |
 
 ---
 
@@ -348,16 +349,22 @@ This is deliberately Phase 0, not an afterthought: every later phase is
 judged through this rig.
 
 **The planetarium gets a surface arm.** The observatory currently clamps at
-1.5 radii (`packages/rendering/src/observer.ts:98`). A new pose solver in the
-same file takes (address, latitude, longitude, height above terrain, heading,
-pitch), asks the world for the spin pose at `renderTime`, samples
-`surfaceRadius`, and returns a camera pose — read-only, exactly as the
-planetarium invariant requires: no teleport, no clock, no entity write. The
-terrain streamer already keys off the presentation eye, so descending in the
-planetarium streams ground with no ship and no physics anywhere near it.
-Controls follow the shell rules (registry components, `useOverlay` for the
-dialog): a **Visit surface** action on the dossier, an altitude scrub from
-orbit to 2 m, and a site picker.
+1.5 radii (`packages/rendering/src/observer.ts:98`). A new pose solver in
+`surfaceStance.ts` takes (latitude, longitude, height above terrain, heading,
+pitch), and `Observatory.stand` asks the world for the spin pose at
+`renderTime`, samples `surfaceRadius`, and returns a camera pose — read-only,
+exactly as the planetarium invariant requires: no teleport, no clock, no entity
+write. The terrain streamer already keys off the presentation eye, so descending
+in the planetarium streams ground with no ship and no physics anywhere near it.
+Its ceiling is `(MIN_DISTANCE_RADII − 1)` radii, which is exactly the orbit
+arm's floor, so the two meet with no band that is both or neither.
+
+The controls are a **Surface panel** in the planetarium registry — a site
+picker, an altitude scrub from orbit to 2 m, and a compass. Not an action on the
+dossier, which is where this plan first put it: that panel is the _record_, and
+[`.claude/rules/record.md`](.claude/rules/record.md) is explicit that nothing
+about the camera belongs on it. Range, fill and the orbit angles were moved off
+it once already for that reason.
 
 **Sites are generated, not authored.** Each body derives a handful of named
 survey sites from its own sketch — highest peak, deepest basin, youngest
@@ -416,12 +423,22 @@ Phase 5 lands.
 Each phase is a shippable PR train with its own plates and its own green
 gate; nothing waits for the whole plan.
 
-**Phase 0 — the rig.** Observatory surface arm, harness verbs, zoo fixture,
-headless descent scenario, and the baseline: measured patch-generation
-throughput, streamer frame cost, draw calls and worst-case worker queue on
-the current build, recorded in `CONTEXT.md`. No generator changes. _Done
-means:_ a planetarium descent from orbit to 2 m over a zoo body, on today's
-terrain, captured as plates; budgets have numbers.
+**Phase 0 — the rig. Landed 26 Aug 2026.** Observatory surface arm, harness
+verbs (`ir.sites`, `ir.visit`, `ir.ascend`, `ir.descend`, `ir.terrain`,
+`ir.zoo`, `ir.terrainBaseline`), the Surface panel, the zoo, the headless
+descent scenario and `pnpm sim --terrain-baseline`. No generator changes. The
+numbers and the three defects it found are in
+[`CONTEXT.md`](CONTEXT.md#the-terrain-rig-and-the-three-defects-it-found-on-its-first-run-26-aug-2026);
+the two that change this plan are folded into § 3 and § 10 above.
+
+Two things it could not deliver as written, stated rather than quietly dropped.
+**Frame cost and draw calls are still unmeasured** — they are browser facts, the
+baseline runs in Node, and a fabricated figure is worse than none; what the
+browser did confirm is the live streamer's own readout, 9 patches / 38,025
+vertices / 73,728 triangles at level 12. And **the zoo is a set of bodies rather
+than one system**, because no generated system within 25 ly of Sol contains an
+`icy-active` body: generated moons come out on orbits too circular for the
+eccentricity tide to register.
 
 **Phase 1 — the quadtree.** Per-patch level selection by SSE, whole-disk
 coverage to the horizon, cross-face adjacency (the i/j rotation arithmetic,
@@ -466,11 +483,13 @@ mapped-body carve-out; CBT if draw submission ever dominates.
 
 ## 10. Risks, stated as such
 
-- **Per-sample cost.** The band stack is plausibly 3–5× today's 14 octaves.
-  The budget is the existing ≤ 8 ms per 65×65 patch per worker; amplitude
-  floors and early-outs are the lever, and Phase 0's baseline is what makes
-  the regression visible. If workers cannot hold it at Phase 4 volumes,
-  that is Phase 5's trigger, not a reason to thin the geology.
+- **Per-sample cost, and it is already over.** Phase 0 measured **12.8 ms** per
+  65×65 patch against a documented ≤ 8 ms that carried no machine and no date —
+  60% over, on today's fourteen octaves, before a single band is added. The band
+  stack is plausibly 3–5× that. Amplitude floors and early-outs are the lever;
+  the baseline is what makes the regression visible. This moves Phase 5 from
+  "adopt only if the measurements say so" to a condition the measurements have
+  already met once, and it is still not a reason to thin the geology.
 - **Draw calls.** A whole-disk mixed-level selection is a few hundred patches
   where today draws nine. Measured before optimized; per-level merging and
   the GPU producer are the known outs.
