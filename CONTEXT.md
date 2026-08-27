@@ -4493,6 +4493,29 @@ request one, taken from where the eye is going — and together they are six
 hundred to twelve hundred regions. Every frame evicted ground the next frame
 wanted. **A still could not have shown this**; the sample could.
 
+### What the invariant audit found afterwards
+
+Three, and the first is the one worth remembering. **`surfaceDetailFloor`
+memoized on `radius * 1e6 + resolution + tolerance`**, which folds three numbers
+additively — so (65, 0.5) and (64, 1.5) collided and whichever call ran first
+won for both. A pure function of the seed whose answer depended on the order it
+was asked in, which is the one thing generation may never do. Nothing in
+production passed a non-default, so it was a trap rather than a bug; the four
+tests that referenced it used it as the expectation _and_, through
+`simulateDescent`'s default, as the input, so they would have passed had it
+returned a constant.
+
+**Refinement gated on the heightfield cache while drawing needs geometry.** The
+traversal drops a node the moment it refines, so a region whose field had
+arrived but whose mesh had not was covered by nothing — not itself, not the
+parent that had given way to it. 138 of 266 selected regions on arrival at a
+landable body. It gates on the mesh now.
+
+**A docstring argued an ordering the code did not produce**: `#request` claimed
+nearest-first inside a grouping kept by a stable sort, and there was no sort —
+the first eight regions a cold frame asked for on Earth at two meters were
+470–750 km away rather than the ground underfoot.
+
 ### The numbers
 
 `pnpm sim --terrain-baseline`, Node 26 on an M5, and the browser through a CDP
