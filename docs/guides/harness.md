@@ -182,7 +182,7 @@ framing it left; both are camera moves, so `world.stateHash()` is untouched —
 
 ```js
 ir.sites(address?)                       // the named places on a body
-ir.visit(address?, { site, height })     // stand there. Degrees and metres
+ir.visit(address?, { site, height })     // stand there. Degrees and meters
 ir.visit(address?, { latitude, longitude, heading, pitch })
 ir.observatory.setStanceScrub(0.5)       // the height slider, logarithmic
 ir.ascend()

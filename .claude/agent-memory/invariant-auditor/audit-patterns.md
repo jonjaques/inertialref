@@ -12,6 +12,66 @@ suspicion wastes the budget. These are the places violations have actually appea
 
 **How to apply:** Check these first, then sweep the rest.
 
+## Order-dependence hides in "found, not authored" fixtures
+
+The repository loves derived fixtures — a thing that searches the world instead of
+naming addresses, on the argument that a search survives regeneration. It is a good
+argument and it keeps producing the same bug: **the search reads mutable session state.**
+
+`terrainZoo` (`feat/the-terrain-rig`) considers `world.loadedSystems()` first, with no
+distance filter, then generates more only if short. So `ir.zoo()` from a session that has
+flown anywhere returns different bodies than a fresh one — measured: `rocky-airless` moves
+from `s:P223_4_0_8/b:1` to `s:P221_6_1_3/b:3.0` after twenty systems are loaded. The
+author knew (the headless runner orders `--terrain-baseline` _before_ `--self-test` for
+exactly this reason) but shipped the ordering hack rather than the fix.
+
+**The check:** for any function billed as a stable fixture, ask what it reads that is not
+the seed. `loadedSystems()`, `#target`, `clock.tick`, a module-level cache. Then prove it
+by loading extra systems before the call. The two-line reproduction is worth more than
+any amount of reading.
+
+## Two test idioms here that degenerate into assertions that cannot fail
+
+The house style labels an assertion by interpolating the subject into both sides:
+`expect(\`${name}: ${actual}\`).toBe(\`${name}: expected\`)`. When the expected half is
+copy-pasted it becomes `expect(\`${name}/${site.id}\`).toBe(\`${name}/${site.id}\`)`—`surveySites.test.ts:163`. Grep new test files for `expect(X).toBe(X)` where both
+templates are byte-identical.
+
+The other: a purity test on a memoized function. `surveySites` memoizes on a module-level
+`Map`, so calling it twice and comparing returns the same object reference — the test
+passes without `derive` ever running again. A purity test has to defeat the cache (vary a
+key field, or construct a second body with the same parameters).
+
+## `Observatory.focus` is not a pure retarget — anything calling it inherits its resets
+
+`focus` clears the stance, recomputes `distance` from `framingDistance(radius, fov,
+DEFAULT_FILL)` and, with `ease: false`, assigns `#state = #desired` outright. `stand`
+calls it unconditionally whenever a destination is passed — and `harness.visit` always
+passes one, even when it is the address already focused. Measured: framing 1,101,750 m →
+2,392,965 m across a `visit`/`ascend` round trip on Iapetus, which falsifies "back to the
+framing you left" in three docstrings and `docs/guides/harness.md`.
+
+**The check:** a new verb that delegates to `focus`, `clear` or `teleport` "to reuse the
+resolve step" almost always inherits a reset it did not want. Read the callee's whole
+body, not its first line.
+
+## `faceToDirection` is a fourth `BodyFixedDirection` producer AGENTS.md does not name
+
+The invariant enumerates three (`bodyFixedDirection`, `geodeticDirection`,
+`regionDirection`) and the enumeration _is_ the enforcement. `terrain.ts:62` exports a
+fourth and its own docstring says "there are exactly two producers below". Until
+`feat/the-terrain-rig` it was only used inside `terrain.ts` and in tests; `surveySites.ts`
+now calls it in production. Not a correctness bug — face-local UV is body-fixed by
+construction — but the list should say four or the call should go through
+`regionDirection`.
+
+## Design docs carry "Not built" tables that the diff silently falsifies
+
+`docs/design/planetarium.md` § "Not built" still lists "Surface-level free look — the
+observatory's floor is the datum sphere" after the branch that built it. `docs/design/`
+is cited by name from `AGENTS.md` invariants, so it is not optional prose. Cheap check:
+grep the design doc the touched invariant cites for the feature name.
+
 ## The mirror goes stale in one direction: AGENTS.md forward, rules back
 
 This is now the highest-yield check in the whole audit and it has fired twice.

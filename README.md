@@ -384,7 +384,14 @@ Stated plainly, because discovering these by surprise is worse than reading them
   the true component count, so the simplification is visible rather than hidden.
 - **Gravity is patched-conic** — no n-body perturbation.
 - **Collision is ground contact only** — no hull, no entity-to-entity.
-- **Terrain patches do not stitch** across cube faces or between LOD levels yet.
+- **Terrain is the shallowest thing here, and the numbers are written down.**
+  Patches do not stitch across cube faces or between LOD levels. The streaming
+  rules measure altitude from the datum rather than from the ground, so on a body
+  with real relief a summit streams one level coarse — and one tall enough is not
+  drawn at all while you are standing on it. Generating a single 65×65 patch
+  costs 12.8 ms against a documented ≤ 8 ms budget, before any geology.
+  `pnpm sim --terrain-baseline` prints all of it; the
+  [roadmap](docs/roadmap.md#terrain) has the seams.
 - **Almost nothing is measured on the target machine.** The dev dock's perf tab
   (`P`) plots frame time, engine time, draw calls, worker queue and heap, and can
   time GPU frames properly — but every number recorded so far is from an Apple M5

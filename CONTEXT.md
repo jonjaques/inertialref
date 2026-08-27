@@ -3627,7 +3627,7 @@ What it found, in the order it found it:
 
 - **Mercury's radius was the mean, not the equatorial.** 2,439.7 against JPL's
   2,440.53. 830 m, on the field whose contract is the equatorial radius and
-  whose neighbours in the same file are all equatorial.
+  whose neighbors in the same file are all equatorial.
 - **Deimos's mass was 2.4% high** — an older value than the GM the MAR097
   ephemeris fit gives.
 - **Nix's and Hydra's masses were double.** JPL's GM for both is small and badly
@@ -4211,9 +4211,9 @@ sorted outward now, over the `parent` field the survey already answers.
 **A promoted moon sorted by its own orbit.** Turning off "Asteroids" orphans
 their moons, and the design keeps an orphan rather than dropping it — losing Io
 because "Planets" is off would be a filter deciding what a moon is. But sorted
-by its own semi-major axis, a moon of an asteroid orbits at a kilometre or two
+by its own semi-major axis, a moon of an asteroid orbits at a kilometer or two
 and lands _above Mercury_: nine rocks nobody asked for at the head of the list,
-measured in kilometres in a column of AU. The sort key for a promoted body is
+measured in kilometers in a column of AU. The sort key for a promoted body is
 its parent's axis now, taken from the run before the filter.
 
 **`searchTargets` was interpolating a parsed record into a string.**
@@ -4293,7 +4293,7 @@ orbit arm's three about a point in space. Its ceiling is
 two meet with no band that is both or neither. The height scrub is logarithmic
 because the band is 2 m to 3,186 km on Earth: a linear slider puts its midpoint
 at 1,593 km, above the altitude terrain is drawn at at all, so the control that
-exists to reach two metres would be the one control that cannot. The default
+exists to reach two meters would be the one control that cannot. The default
 pitch tracks `acos(r / (r + h))` rather than zero — from 400 km the horizon is
 **19.79°** below level (the small-angle `√(2h/r)` gives 20.30°, 2.6% wrong and
 growing), so a level camera at the top of a descent is a picture of empty sky.
@@ -4307,7 +4307,8 @@ ask for?" no longer needs a GPU, which is why the 1.0 ms terrain line in the
 frame budget has been a designed figure rather than a measured one.
 
 **Sites are derived, not authored.** A beam search over the field finds four —
-summit, basin, shore, escarpment — and two are chosen outright for the renderer
+`summit`, `basin`, `shore` and `rough`, the last of them an escarpment search
+scored on gradient — and two are chosen outright for the renderer
 rather than the geology: `corner`, where three faces of the addressing cube meet,
 and `pole`, where the east/north basis is singular. A survey of _interesting_
 ground would never wander into either. 2,100 samples, ~20 ms, memoized per body.
@@ -4324,7 +4325,7 @@ same numbers.
 `terrainLevelFor` and `terrainOpacity` are handed `distance − radius`. For a
 camera standing on the ground that is `groundElevation + height`, not `height`.
 **The streaming rules measure altitude from the datum**, and on a body with real
-relief the datum is kilometres from the ground.
+relief the datum is kilometers from the ground.
 
 - **A mountain can be too tall to draw.** `terrainOpacity` fades out one octave
   above `radius · 2^(4.5 − maxLevel)`. On Miranda that is **2,605 m**; the summit
@@ -4335,8 +4336,8 @@ relief the datum is kilometres from the ground.
   the frame. Two of Miranda's six survey sites are ground that cannot be looked
   at. Any body whose relief exceeds `2^(5.5 − maxLevel)` of its radius has this
   hole somewhere, and Miranda's 4.2% is Verona Rupes rather than an exotic case.
-- **A summit streams at half resolution.** Two metres above Iapetus's highest
-  ground the streamer asks for level 11; two metres above its deepest basin it
+- **A summit streams at half resolution.** Two meters above Iapetus's highest
+  ground the streamer asks for level 11; two meters above its deepest basin it
   asks for 12. Same body, same height above the ground.
 - **A level pass re-requests the world.** Flying level across Iapetus at fixed
   height coarsens and re-refines as the ground beneath rises and falls. Nine
@@ -4365,7 +4366,7 @@ Iapetus and Miranda for the icy ones.
 The generation figure is the one that matters and it **exceeds the documented
 budget by 60%**. `docs/design/technical.md` carried "≤ 8 ms per patch per
 worker — Measured; within" with no machine and no date beside it; every
-neighbouring row names both. It is 12.8 ms here, before a single band of geology
+neighboring row names both. It is 12.8 ms here, before a single band of geology
 is added, and the plan's own estimate is that the band stack is 3–5× today's
 fourteen octaves. That moves Phase 5 (the GPU producer) from "adopt only if the
 measurements say so" to a condition the measurements have already met once.
@@ -4398,7 +4399,7 @@ cannot reach.
 
 ### What the plates show
 
-Standing at Iapetus's north pole at two metres, in the planetarium, with no ship
+Standing at Iapetus's north pole at two meters, in the planetarium, with no ship
 anywhere: Sol on the horizon with its lens ghosts, and a flat tilted plane of
 ground. That is today's three-band field at level 12 and it is the honest "before"
 plate — the last octave of noise is the smallest thing that exists. At 40 km the

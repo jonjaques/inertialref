@@ -40,35 +40,35 @@ a production build. What follows is depth, not foundations.
 
 ## Status at a glance
 
-| Area                                | Status | Notes                                                                                                                                      |
-| ----------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| Universe coordinates and precision  | ✅     | [ADR-0001](adr/0001-universe-coordinates.md)                                                                                               |
-| Reference frames and transitions    | ✅     | [ADR-0002](adr/0002-reference-frames.md)                                                                                                   |
-| Render coordinates, floating origin | ✅     | [ADR-0003](adr/0003-render-coordinates.md)                                                                                                 |
-| Stable identity and addressing      | ✅     | [ADR-0004](adr/0004-entity-addressing.md)                                                                                                  |
-| Deterministic generation            | ✅     | Core proven; two inputs now — seed _and_ catalog version                                                                                   |
-| Real astronomical data              | ✅     | 7,123 systems and 702 planets within 150 ly; 129 Solar System bodies; [guide](guides/catalogue.md)                                         |
-| Measured body figures               | ✅     | 25 shape models from the PDS; generated figures everywhere else — [ADR-0013](adr/0013-measured-figures.md)                                 |
-| Simulation clock and determinism    | 🟡     | All of it except [replay](#replay-and-reconciliation)                                                                                      |
-| Simulation / rendering separation   | ✅     | Proven by `apps/headless`                                                                                                                  |
-| Worker architecture                 | ✅     | Pool, contracts, cancellation, instrumentation                                                                                             |
-| Offline-first                       | ✅     | Service worker + IndexedDB + migrations                                                                                                    |
-| Persistence model                   | 🟡     | Proven; [mutations](#persistent-mutations) unbuilt                                                                                         |
-| Streaming                           | 🟡     | Systems and terrain stream; [policy is naive](#streaming-and-scale)                                                                        |
-| Level of detail                     | 🟡     | Tiers exist; [terrain LOD](#terrain) is single-level                                                                                       |
-| Units and conventions               | ✅     |                                                                                                                                            |
-| Repository structure and layering   | ✅     | Enforced by `pnpm graph`                                                                                                                   |
-| Protocols and serialization         | 🟡     | Worker + save done; net, replay and binary unbuilt                                                                                         |
-| Observability                       | ✅     | All twelve inspectable fields                                                                                                              |
-| Automation and DX                   | 🟡     | Commands, docs, CI and the formatter done; [no save fixture](#automation-gaps)                                                             |
-| Testing                             | 🟡     | Strong; [replay and fixtures](#automation-gaps) missing                                                                                    |
-| Performance                         | 🟡     | Designed for, [barely measured](#performance-work)                                                                                         |
-| Multiplayer                         | ⛔     | Deferred. Seams only — [ADR-0008](adr/0008-multiplayer-partitions.md); the partition key is a live debug field                             |
-| Application shell and modes         | ✅     | Five modes, routes as the public surface — [ADR-0011](adr/0011-application-shell-and-modes.md)                                             |
-| Planetarium                         | ✅     | Free navigation, a folding and filterable catalog, the body record, orbit traces, labels, composed shots — [design](design/planetarium.md) |
-| Cinema player                       | ✅     | Transport, timecode and a frame-exact link over the cutscene format — [design](design/cinema.md)                                           |
-| Dockable panels                     | ✅     | Four zones, property-tested layout algebra — [ADR-0012](adr/0012-dockable-panels.md)                                                       |
-| Mobile                              | 🟡     | Looking works and is verified; piloting on a touchscreen is not designed                                                                   |
+| Area                                | Status | Notes                                                                                                                                                             |
+| ----------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Universe coordinates and precision  | ✅     | [ADR-0001](adr/0001-universe-coordinates.md)                                                                                                                      |
+| Reference frames and transitions    | ✅     | [ADR-0002](adr/0002-reference-frames.md)                                                                                                                          |
+| Render coordinates, floating origin | ✅     | [ADR-0003](adr/0003-render-coordinates.md)                                                                                                                        |
+| Stable identity and addressing      | ✅     | [ADR-0004](adr/0004-entity-addressing.md)                                                                                                                         |
+| Deterministic generation            | ✅     | Core proven; two inputs now — seed _and_ catalog version                                                                                                          |
+| Real astronomical data              | ✅     | 7,123 systems and 702 planets within 150 ly; 129 Solar System bodies; [guide](guides/catalogue.md)                                                                |
+| Measured body figures               | ✅     | 25 shape models from the PDS; generated figures everywhere else — [ADR-0013](adr/0013-measured-figures.md)                                                        |
+| Simulation clock and determinism    | 🟡     | All of it except [replay](#replay-and-reconciliation)                                                                                                             |
+| Simulation / rendering separation   | ✅     | Proven by `apps/headless`                                                                                                                                         |
+| Worker architecture                 | ✅     | Pool, contracts, cancellation, instrumentation                                                                                                                    |
+| Offline-first                       | ✅     | Service worker + IndexedDB + migrations                                                                                                                           |
+| Persistence model                   | 🟡     | Proven; [mutations](#persistent-mutations) unbuilt                                                                                                                |
+| Streaming                           | 🟡     | Systems and terrain stream; [policy is naive](#streaming-and-scale)                                                                                               |
+| Level of detail                     | 🟡     | Tiers exist; [terrain LOD](#terrain) is single-level                                                                                                              |
+| Units and conventions               | ✅     |                                                                                                                                                                   |
+| Repository structure and layering   | ✅     | Enforced by `pnpm graph`                                                                                                                                          |
+| Protocols and serialization         | 🟡     | Worker + save done; net, replay and binary unbuilt                                                                                                                |
+| Observability                       | ✅     | All twelve inspectable fields                                                                                                                                     |
+| Automation and DX                   | 🟡     | Commands, docs, CI and the formatter done; [no save fixture](#automation-gaps)                                                                                    |
+| Testing                             | 🟡     | Strong; [replay and fixtures](#automation-gaps) missing                                                                                                           |
+| Performance                         | 🟡     | Designed for, [barely measured](#performance-work)                                                                                                                |
+| Multiplayer                         | ⛔     | Deferred. Seams only — [ADR-0008](adr/0008-multiplayer-partitions.md); the partition key is a live debug field                                                    |
+| Application shell and modes         | ✅     | Five modes, routes as the public surface — [ADR-0011](adr/0011-application-shell-and-modes.md)                                                                    |
+| Planetarium                         | ✅     | Free navigation, a folding and filterable catalog, the body record, orbit traces, labels, composed shots, standing on a surface — [design](design/planetarium.md) |
+| Cinema player                       | ✅     | Transport, timecode and a frame-exact link over the cutscene format — [design](design/cinema.md)                                                                  |
+| Dockable panels                     | ✅     | Four zones, property-tested layout algebra — [ADR-0012](adr/0012-dockable-panels.md)                                                                              |
+| Mobile                              | 🟡     | Looking works and is verified; piloting on a touchscreen is not designed                                                                                          |
 
 ---
 

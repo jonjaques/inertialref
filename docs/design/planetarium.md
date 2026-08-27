@@ -27,9 +27,10 @@ running world**: you can leave a ship in orbit of Mars, spend ten minutes on
 Saturn's rings, and come back to find the ship exactly where it was with the
 same state hash. There is no "load a different mode".
 
-✅ **Built.** Camera, catalog with folds and class filters, orbit traces, labels,
-the body record, composed shots, dockable panels, touch. What is not built is
-listed at the bottom, along with the astronomy nothing has measured yet.
+✅ **Built.** Camera — in orbit and standing on the ground — catalog with folds
+and class filters, orbit traces, labels, the body record, composed shots,
+dockable panels, touch. What is not built is listed at the bottom, along with the
+astronomy nothing has measured yet.
 
 ---
 
@@ -58,6 +59,12 @@ Two things follow, and both are load-bearing:
 ---
 
 ## The camera
+
+Two arms, and which one holds the camera is a question with one answer: the
+orbit arm above 1.5 radii, the surface arm below it. They meet exactly, with no
+band that is both or neither.
+
+### In orbit
 
 Three numbers — **azimuth, elevation, distance** — around a chosen target. Not a
 free 6-DoF camera, and that is a decision rather than a limitation.
@@ -97,6 +104,52 @@ click reads as the interface reasserting itself over the player, and the
 _travelling_ is the thing worth seeing — a fly-to from Earth to Proxima that took
 no time would have taught nothing about four light years.
 
+### On the ground
+
+The orbit arm stops at 1.5 radii and is right to: half a radius up is where a
+planetarium stops showing you a world and starts showing you ground with no
+horizon in it. What that clamp also costs is the ability to _inspect_ a surface,
+because terrain only exists below the floor the camera cannot go under — and
+flying a ship at a mountain is a canonical change, a physics problem and several
+minutes.
+
+So there is a second arm. Five numbers about a point _on_ the ground — latitude,
+longitude, height, heading, pitch — against the orbit arm's three about a point
+in space. Its ceiling is half a radius, which is the orbit arm's floor, and a
+stance is nullable rather than a mode flag beside the orbit state, so the two
+cannot disagree about where the camera is.
+
+Three of its rules are decisions rather than details:
+
+- **Height is above the ground under you, never above the datum.** Terrain dips
+  below the datum as often as it rises above it, so a height above the datum puts
+  the camera underground on any peak and a kilometer up in any basin — the one
+  thing a control called altitude must never do.
+- **The scrub is logarithmic**, for the reason distance is, and worse: the band
+  is 2 m to 3,186 km on Earth. Linearly, the approach, the low pass and the
+  landing all live in the last pixel, so the control that exists to reach two
+  meters would be the one control that cannot.
+- **The default pitch tracks the horizon**, `acos(r / (r + h))`. From 400 km that
+  is 19.79° _below_ level, so a camera held level at the top of a descent is a
+  picture of empty sky. The small-angle `√(2h/r)` is 2.6% wrong there and grows.
+
+**Entering is a cut, not a fly-to**, which is the one place this arm disagrees
+with the one above it. The orbit arm eases because a move across fourteen decades
+has to read as a move. This arm is the instrument a plate is captured through,
+and an ease means every capture waits an unspecified number of frames for a
+filter to settle before the picture is the picture.
+
+**Where you can stand is found, not authored.** A seeded world has no place
+names, and typing coordinates into a sphere lands on the same undifferentiated
+mid-slope every time. A beam search over the body's own field finds four — the
+highest ground, the lowest, where the land crosses the sea, and the steepest —
+and two more are chosen for the renderer rather than for the geology: the corner
+where three faces of the addressing cube meet, and the pole, where the east/north
+basis is singular. A survey of interesting ground would never wander into either.
+Because they are derived, "the highest ground on this world" is still the
+interesting place after the generator changes, and a latitude written down last
+month is not.
+
 ---
 
 ## The tools
@@ -110,13 +163,16 @@ Everything is a **panel**, and every panel is dockable — see
 | **Object**  | What is this? The record — physical, orbit, rotation, air, light             |
 | **View**    | Names, orbit traces, the ship, the lens, the glare                           |
 | **Shots**   | Nine composed pictures, the light on its own, and the way out                |
+| **Surface** | What is it like down there? The named sites, the height scrub, and a compass |
 | **Time**    | Pause, warp, and what the clock is actually delivering                       |
 
 The camera's own readings — range, altitude, how much of the frame the subject
 fills, the two orbit angles, the frame id — are **not** in the object panel.
 They are facts about where you are standing rather than about the thing being
 looked at, and on a page about Mars they read as a debugger. They live in the
-author's Camera instrument, beside the lens they describe.
+author's Camera instrument, beside the lens they describe. The Surface panel is
+that rule applied once more: descending is a camera act, so it is a camera panel
+and not a section of the record.
 
 ### The catalog
 
@@ -293,14 +349,14 @@ address. The planetarium has no ship to be in.
 
 ## Not built
 
-| Thing                        | Note                                                                                                                              |
-| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| Bookmarks                    | ⬜ The address is already the whole record; the store is what is missing                                                          |
-| Measure between two objects  | ⬜ Shift-click two things, get a distance                                                                                         |
-| Surface-level free look      | ⬜ The observatory's floor is the datum sphere; standing on the ground is a flight mode                                           |
-| Export a still               | ⬜ Photo mode's export, without the ship                                                                                          |
-| Scale tiers beyond the local | ⬜ [galaxy](galaxy.md#scale-tiers) specifies three; the local one is what exists                                                  |
-| Survey status as a filter    | ⬜ [galaxy](galaxy.md#interactions) filters by what _you_ have visited. That is a gameplay fact and the planetarium has no player |
+| Thing                        | Note                                                                                                                                                           |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Bookmarks                    | ⬜ The address is already the whole record; the store is what is missing                                                                                       |
+| Measure between two objects  | ⬜ Shift-click two things, get a distance                                                                                                                      |
+| Walking the surface          | ⬜ The camera stands, turns and changes height. It does not travel across the ground: a stance is a coordinate, so a walk is a rule for changing one over time |
+| Export a still               | ⬜ Photo mode's export, without the ship                                                                                                                       |
+| Scale tiers beyond the local | ⬜ [galaxy](galaxy.md#scale-tiers) specifies three; the local one is what exists                                                                               |
+| Survey status as a filter    | ⬜ [galaxy](galaxy.md#interactions) filters by what _you_ have visited. That is a gameplay fact and the planetarium has no player                              |
 
 Filters over the catalog are ✅ built — by class and by survey radius. What is
 not built is the half of [galaxy](galaxy.md#interactions)'s set that is about

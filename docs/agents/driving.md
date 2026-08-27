@@ -15,6 +15,7 @@ the browser exposes as `window.ir`.
 ```bash
 pnpm sim --self-test              # twelve capability checks (~0.4s)
 pnpm sim --targets --goto b:2     # the same navigation from a terminal
+pnpm sim --terrain-baseline       # what terrain costs, measured (~2s)
 pnpm sim --help
 ```
 
@@ -36,6 +37,36 @@ await ir.scenario('surface')
 
 `ir.look` moves only a camera. `ir.goTo` teleports the ship. Both can fill the
 frame with Jupiter; only one leaves you in orbit of it.
+
+---
+
+## Terrain, without a browser
+
+The streamer's selection rule is a pure function
+([`terrainWindow`](../concepts/streaming.md#terrain-streaming)), so what a camera
+would ask for is arithmetic rather than an observation. Every verb here runs
+headlessly and gives the same numbers in a console, in `pnpm sim` and in a test.
+
+```js
+ir.zoo() // one body per surface archetype, found rather than listed
+ir.sites('g:milky-way/s:SOL/b:5.6') // the named places on a body
+ir.descend('g:milky-way/s:SOL/b:5.6', { site: 'summit' }) // orbit → 2 m, on paper
+ir.terrainBaseline() // the zoo, its descents, and measured patch cost
+```
+
+Standing on one runs anywhere; it is only worth doing where there is a picture.
+It moves a camera and nothing else:
+
+```js
+ir.visit('g:milky-way/s:SOL/b:5.6', { site: 'summit', height: 2 })
+ir.terrain() // what the live streamer holds this frame — null headlessly
+ir.ascend() // back to the framing the camera left
+```
+
+`ir.visit` stands a camera on the ground; `ir.land` teleports the ship onto it.
+The same distinction as `look` and `goTo`, one clamp lower. Sites are `summit`,
+`basin`, `shore`, `rough`, `corner` and `pole`, derived from the body's own field
+rather than authored, so they survive regeneration.
 
 ---
 
