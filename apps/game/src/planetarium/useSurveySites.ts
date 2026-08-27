@@ -63,23 +63,27 @@ export function useSurveySites(
    */
   const [built, setBuilt] = useState<{
     readonly of: string | null
+    readonly seed: string | null
     readonly sites: readonly SurveySiteRow[]
-  }>({ of: null, sites: [] })
+  }>({ of: null, seed: null, sites: [] })
 
   useEffect(() => {
     if (address === null) {
-      setBuilt({ of: null, sites: [] })
+      setBuilt({ of: null, seed: null, sites: [] })
       return
     }
     try {
-      setBuilt({ of: address, sites: engine.harness.sites(address) })
+      setBuilt({ of: address, seed, sites: engine.harness.sites(address) })
     } catch {
       // A star, an unloaded system, or a world a save replaced under us. An
       // empty list is what the panel already draws an empty state for; throwing
       // would take the whole overlay through the error boundary.
-      setBuilt({ of: address, sites: [] })
+      setBuilt({ of: address, seed, sites: [] })
     }
   }, [engine, address, seed])
 
-  return built.of === address ? built.sites : null
+  // The seed is part of the guard, not just the effect: a save load that keeps
+  // the address changes only the seed, and the paint between the load and the
+  // effect would otherwise serve the previous world's coordinates.
+  return built.of === address && built.seed === seed ? built.sites : null
 }

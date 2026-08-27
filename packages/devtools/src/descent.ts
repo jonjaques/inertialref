@@ -208,9 +208,11 @@ const DEFAULT_TRACK_DEGREES = 10
  * simulated a cache a quarter of the one that streams, and every cache-hit
  * figure described a configuration that no longer exists. (`devtools` cannot
  * import `apps/game`, so the multiplier is the one thing restated; the
- * streamer's docstring owns why it is three.)
+ * streamer's docstring owns why it is three. Exported so the engine's own
+ * test can assert the two stay equal — the restated multiplier is exactly
+ * the kind of twin that drifts.)
  */
-const DEFAULT_CACHE = DEFAULT_MAX_PATCHES * 3
+export const DEFAULT_CACHE = DEFAULT_MAX_PATCHES * 3
 
 /**
  * Where the descent aims, from whatever the caller named.

@@ -13,7 +13,11 @@ import {
   systemsWithin,
   type Body,
 } from '@inertialref/universe'
-import { MIN_STANCE_HEIGHT, surfaceHeightBounds } from '@inertialref/rendering'
+import {
+  DEFAULT_MAX_PATCHES,
+  MIN_STANCE_HEIGHT,
+  surfaceHeightBounds,
+} from '@inertialref/rendering'
 import { createInlineWorker, createTaskRegistry } from '@inertialref/workers'
 import { openSession, type Session } from './session.ts'
 import { simulateDescent } from './descent.ts'
@@ -297,12 +301,14 @@ describe('a simulated descent', () => {
       expect(report.uniqueRegions).toBeLessThanOrEqual(report.totalRequests)
       /*
        * And the journey still outruns any one selection, which is a finding
-       * rather than a defect in the cache: what a descent touches is thousands
-       * of regions, so the streamer's field cache is sized to hold the
-       * *selection* and its lookahead (`DEFAULT_MAX_PATCHES * 3`) rather than
-       * the whole descent.
+       * rather than a defect in the cache: what a descent touches exceeds the
+       * largest single frame's selection, so the streamer's field cache is
+       * sized to hold the *selection* and its lookahead (`DEFAULT_MAX_PATCHES
+       * * 3`) rather than the whole descent. One selection is the limit the
+       * assertion names; the cache is bigger than it and smaller than some
+       * journeys, which is the design, not a bound either way.
        */
-      expect(report.uniqueRegions).toBeGreaterThan(512)
+      expect(report.uniqueRegions).toBeGreaterThan(DEFAULT_MAX_PATCHES)
     }
   })
 

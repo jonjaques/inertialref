@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createInlineWorker, createTaskRegistry } from '@inertialref/workers'
 import { MemorySaveStore } from '@inertialref/persistence'
 import { DEFAULT_MAX_PATCHES } from '@inertialref/rendering'
+import { DEFAULT_CACHE } from '@inertialref/devtools'
 import {
   FIELD_CACHE,
   GEOMETRY_CACHE,
@@ -356,6 +357,11 @@ describe('the game engine, headless', () => {
      */
     expect(FIELD_CACHE).toBeGreaterThan(DEFAULT_MAX_PATCHES * 2)
     expect(GEOMETRY_CACHE).toBeGreaterThanOrEqual(DEFAULT_MAX_PATCHES)
+    // The baseline restates the streamer's multiplier because devtools cannot
+    // import apps/game; this is the assertion that keeps the twin honest — a
+    // retune of FIELD_CACHE alone silently un-calibrates every ir.descend
+    // cache figure.
+    expect(FIELD_CACHE).toBe(DEFAULT_CACHE)
     game.dispose()
   }, 30_000)
 

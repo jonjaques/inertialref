@@ -416,8 +416,6 @@ export class TerrainStreamer {
     origin: RenderOrigin,
     body: RenderBody | null,
   ): void {
-    const previous = this.#previous
-
     if (body === null) {
       this.clear()
       return
@@ -426,6 +424,11 @@ export class TerrainStreamer {
       this.clear()
       this.#bodyAddress = body.address
     }
+    // Read after the clears above, which null it on a retarget: a snapshot
+    // taken before them would difference this frame's eye in the new body's
+    // axes against the old body's — one frame of the request budget aimed
+    // tens of gigameters off.
+    const previous = this.#previous
 
     const resolved = this.#resolve(world, renderTime, body.address)
     if (resolved === null) return
@@ -434,8 +437,12 @@ export class TerrainStreamer {
      * Solid bodies only. A gas giant has no surface to stream and the tier must
      * never fire for one.
      *
-     * And *every* solid body, mapped or not — which is the one place this
-     * departs from the plan's carve-out, deliberately. Mapped Sol bodies keep
+     * And every solid *unfigured* body, mapped or not — which is the one place
+     * this departs from the plan's carve-out, deliberately. A figured body is
+     * the opposite trade: its measured ellipsoid is the shape the contact test
+     * and the stance camera use, so patches built on the spherical datum float
+     * kilometers off it — those bodies wait for a producer that samples the
+     * figure. Mapped Sol bodies keep
      * their own geology, and Phase 3 owes their patches a material that wears
      * the published map instead of a flat color. But the geometry cannot be
      * switched off for them, because `surfaceRadius` is one function and the
