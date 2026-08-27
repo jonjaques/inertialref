@@ -136,6 +136,13 @@ Violating one of these is a rewrite later, not a refactor.
   every far object a parallax error that sawtooths at the rebase cadence, which
   is small bodies visibly vibrating in their orbits.
   [ADR-0003](docs/adr/0003-render-coordinates.md).
+- **Never scale metric geometry by `placement.scale`.** It is the _drawn radius_
+  in meters, which is what a unit sphere wants; anything carrying its own
+  geometry wants `placement.compression`, the dimensionless ratio beside it.
+  Terrain is the case that found this: a patch's vertices are true meters from
+  its anchor, and multiplying them by a radius rather than a ratio put them
+  10^12 m away. The two fields sit next to each other and only one of them
+  reads like a factor. [ADR-0015](docs/adr/0015-terrain-level-of-detail.md).
 - **Never size or position chrome against the viewport.** No `100vh`, no
   `100vw`, no `env(safe-area-inset-*)` at a call site. `.hud-layer` spends the
   four insets as **offsets** — padding cannot do it, because an absolutely

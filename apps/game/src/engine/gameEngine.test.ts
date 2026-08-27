@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { createInlineWorker, createTaskRegistry } from '@inertialref/workers'
 import { MemorySaveStore } from '@inertialref/persistence'
-import type { PlacedPatch } from './terrainStreamer.ts'
+import { DEFAULT_MAX_PATCHES } from '@inertialref/rendering'
+import {
+  FIELD_CACHE,
+  GEOMETRY_CACHE,
+  type PlacedPatch,
+} from './terrainStreamer.ts'
 import { GameEngine } from './GameEngine.ts'
 
 /*
@@ -291,6 +296,66 @@ describe('the game engine, headless', () => {
     // every distance": the same quadtree answered at two ranges.
     expect(landed.level).toBeGreaterThan(orbit.level)
     game.dispose()
+  }, 30_000)
+
+  it('holds the ground it has refined to, frame after frame', async () => {
+    /*
+     * The strobe, as an assertion.
+     *
+     * A cache smaller than the working set does not degrade, it oscillates. The
+     * streamer holds two selections at once — the drawn one and the request
+     * one, taken from where the eye is going — and sized against the 3×3
+     * window's 64 heightfields, every frame evicted ground the next frame
+     * wanted: the drawn set collapsed from 350 patches at level 9 to 19 at
+     * level 3, refined back over the following frames, and collapsed again.
+     * Terrain flickering at every altitude, with `cached` pinned at exactly the
+     * cap.
+     *
+     * A still cannot see this and neither can a settled reading. What sees it
+     * is the *sequence*: once a selection has converged it must not shrink,
+     * because nothing about a stationary camera has changed. The bound is
+     * generous — a few patches of churn as the body turns under the stance is
+     * ordinary — and the failure it was written for is a factor of eighteen.
+     */
+    const game = engine()
+    const target = game.harness
+      .targets()
+      .find((candidate) => candidate.landable)
+    if (target === undefined) throw new Error('nowhere to land')
+    game.harness.land(target.address, 0.35, -1.1)
+
+    const settle = async (frames: number) => {
+      for (let i = 0; i < frames; i += 1) {
+        game.frame(1 / 60)
+        await new Promise((resolve) => setTimeout(resolve, 2))
+      }
+    }
+    await settle(150)
+
+    const drawn: number[] = []
+    for (let i = 0; i < 60; i += 1) {
+      await settle(1)
+      drawn.push(game.terrain()?.patches ?? 0)
+    }
+
+    const peak = Math.max(...drawn)
+    expect(peak).toBeGreaterThan(100)
+    // A tenth is ordinary churn as the body turns under the stance. The failure
+    // this guards is a factor of eighteen.
+    expect(Math.min(...drawn)).toBeGreaterThan(peak * 0.9)
+
+    /*
+     * And the relationship the sequence above cannot see on this body.
+     *
+     * Mercury's whole-disk selection fits inside the old flat cap, so the
+     * behavioural test passes with the defect reintroduced — the collapse
+     * needed a working set larger than the cache, which is Miranda rather than
+     * anything the headless SOL runner can land on. What has to hold on *every*
+     * body is the relationship: the streamer holds two selections at once, so
+     * its field cache cannot be smaller than two of them.
+     */
+    expect(FIELD_CACHE).toBeGreaterThan(DEFAULT_MAX_PATCHES * 2)
+    expect(GEOMETRY_CACHE).toBeGreaterThanOrEqual(DEFAULT_MAX_PATCHES)
   }, 30_000)
 
   it('keeps sampling the cutscene through a frame with no player', () => {

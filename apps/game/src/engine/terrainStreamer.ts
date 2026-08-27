@@ -185,7 +185,7 @@ const TERRAIN_RELIEF_PIXELS = 8
  *
  * A bordered 65×65 field is 19 KB, so this is about 44 MB.
  */
-const FIELD_CACHE = DEFAULT_MAX_PATCHES * 3
+export const FIELD_CACHE = DEFAULT_MAX_PATCHES * 3
 
 /**
  * Patch geometries held.
@@ -195,7 +195,7 @@ const FIELD_CACHE = DEFAULT_MAX_PATCHES * 3
  * A patch is 203 KB of vertex buffers, which is the expensive half of terrain's
  * memory and the half attribute packing would halve.
  */
-const GEOMETRY_CACHE = DEFAULT_MAX_PATCHES + 128
+export const GEOMETRY_CACHE = DEFAULT_MAX_PATCHES + 128
 
 interface CachedField {
   readonly elevations: Float32Array
