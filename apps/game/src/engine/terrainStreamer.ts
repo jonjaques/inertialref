@@ -17,16 +17,14 @@ import {
   HEIGHTFIELD_RESOLUTION,
   parseAddress,
   type RegionAddress,
-  regionAddress,
-  regionForDirection,
 } from '@inertialref/universe'
 import {
   buildPatch,
   type PatchPlacement,
   patchPlacement,
   type RenderPatch,
-  terrainLevelFor,
-  terrainOpacity,
+  terrainPatchKey,
+  terrainWindow,
 } from '@inertialref/rendering'
 import { generateHeightfieldTask, type WorkerPool } from '@inertialref/workers'
 
@@ -49,9 +47,6 @@ import { generateHeightfieldTask, type WorkerPool } from '@inertialref/workers'
  */
 
 const log = getLogger('game.terrain')
-
-/** How many rings of neighbors around the player's own region. */
-const RADIUS = 1
 
 interface CachedField {
   readonly elevations: Float32Array
@@ -154,38 +149,32 @@ export class TerrainStreamer {
     }
 
     const distance = UV.distance(camera, bodyPose.position)
-    // Away from the ground the 3×3 window is a lone tile on the datum sphere,
-    // not a representation of the surface, so it is neither drawn nor worth a
-    // worker's time. The heightfield cache is kept: a descent should fade the
-    // ground in, not re-generate it.
-    this.#opacity = terrainOpacity(body.radius, distance)
-    if (this.#opacity === 0) {
-      this.#patches.clear()
-      return
-    }
     // Which patch of ground is under the camera. `bodyFixedDirection` is the
     // only producer of the branded direction the terrain functions accept, so
     // this cannot drift back to an inertial sample the way it once did.
     const direction = bodyFixedDirection(spinPose, camera)
-    this.#level = terrainLevelFor(body.radius, distance)
+    // The selection rule itself lives in `packages/rendering`, where it can be
+    // asked a question without a browser — that is what makes `ir.descend` a
+    // measurement rather than a manual fly-down. Nothing about the rule changed
+    // when it moved.
+    const window = terrainWindow(body.radius, distance, direction)
+    this.#level = window.level
 
-    const centre = regionForDirection(direction, this.#level)
-    const span = 2 ** this.#level
+    // Away from the ground the 3×3 window is a lone tile on the datum sphere,
+    // not a representation of the surface, so it is neither drawn nor worth a
+    // worker's time. The heightfield cache is kept: a descent should fade the
+    // ground in, not re-generate it.
+    this.#opacity = window.opacity
+    if (this.#opacity === 0) {
+      this.#patches.clear()
+      return
+    }
+
     const wanted = new Set<string>()
-
-    for (let di = -RADIUS; di <= RADIUS; di += 1) {
-      for (let dj = -RADIUS; dj <= RADIUS; dj += 1) {
-        const i = centre.i + di
-        const j = centre.j + dj
-        // Patches that fall off the edge of a cube face belong to a different
-        // face; stitching those is a later refinement, so they are skipped
-        // rather than wrapped into the wrong place.
-        if (i < 0 || j < 0 || i >= span || j >= span) continue
-        const region = regionAddress(centre.face, this.#level, i, j)
-        const key = this.#key(bodyAddress, region)
-        wanted.add(key)
-        this.#ensure(key, body, region)
-      }
+    for (const region of window.regions) {
+      const key = terrainPatchKey(bodyAddress, region)
+      wanted.add(key)
+      this.#ensure(key, body, region)
     }
 
     for (const key of [...this.#patches.keys()]) {
@@ -278,7 +267,4 @@ export class TerrainStreamer {
     this.#opacity = 0
   }
 
-  #key(bodyAddress: string, region: RegionAddress): string {
-    return `${bodyAddress}|${region.face}.${region.level}.${region.i}.${region.j}`
-  }
 }
