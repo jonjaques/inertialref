@@ -141,10 +141,15 @@ export function parseSpectralType(raw: string): SpectralType {
   // `DA2` would otherwise survive the prefix loop unchanged and then read `D` as
   // a class with `A2` as a subclass, which parses but means nothing.
   if (/^D[ABCOQZXV]?/.test(rest)) {
-    const subclass = /^D[ABCOQZXV]*([0-9]+(?:\.[0-9])?)/.exec(rest)?.[1]
+    const digits = /^D[ABCOQZXV]*([0-9]+(?:\.[0-9])?)/.exec(rest)?.[1]
+    const index = digits === undefined ? null : Number.parseFloat(digits)
     return {
       spectralClass: 'D',
-      subclass: subclass === undefined ? null : Number.parseFloat(subclass),
+      // A white dwarf's temperature index is 50400/Teff, which runs past 9 for
+      // the coolest ones — a legitimate catalog string the subclass field's
+      // 0–9.9 contract cannot hold. Keep the class, drop the index, the same
+      // degradation the ladder below applies.
+      subclass: index !== null && index <= 9.9 ? index : null,
       luminosity: 'VII',
       source,
     }
