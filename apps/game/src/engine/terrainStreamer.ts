@@ -28,6 +28,7 @@ import {
 } from '@inertialref/universe'
 import {
   buildPatch,
+  DEFAULT_MAX_PATCHES,
   DEFAULT_VIEWPORT,
   type PatchPlacement,
   patchPlacement,
@@ -170,11 +171,31 @@ const BUILDS_PER_FRAME = 4
  */
 const TERRAIN_RELIEF_PIXELS = 8
 
-/** Heightfields held. 512 bordered 65×65 fields is about 10 MB. */
-const FIELD_CACHE = 512
+/**
+ * Heightfields held, as a multiple of the largest selection.
+ *
+ * **A cache smaller than the working set does not degrade, it oscillates.** At
+ * a flat 512 against a selection of six hundred, every frame evicted ground the
+ * next frame wanted: the draw set collapsed from 350 patches at level 9 to 19
+ * at level 3, refined back over the following frames, and collapsed again —
+ * terrain strobing at every altitude, with `cached` pinned at exactly the cap.
+ * The two sets in play are the drawn one and the request one, and they diverge
+ * by design because the second is taken from where the eye is *going*, so three
+ * times the cap is the working set with room to spare.
+ *
+ * A bordered 65×65 field is 19 KB, so this is about 44 MB.
+ */
+const FIELD_CACHE = DEFAULT_MAX_PATCHES * 3
 
-/** Patch geometries held. Beyond the drawn set this is what makes a turn free. */
-const GEOMETRY_CACHE = 512
+/**
+ * Patch geometries held.
+ *
+ * Only drawn patches get geometry, so the ceiling is the selection itself plus
+ * enough slack that a camera turning back finds the ground where it left it.
+ * A patch is 203 KB of vertex buffers, which is the expensive half of terrain's
+ * memory and the half attribute packing would halve.
+ */
+const GEOMETRY_CACHE = DEFAULT_MAX_PATCHES + 128
 
 interface CachedField {
   readonly elevations: Float32Array
