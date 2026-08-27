@@ -61,6 +61,9 @@ describe('spectral types', () => {
     // White dwarfs. `D` is a class of its own and must not fall through.
     ['DA2', 'D2', 'D', 2],
     ['DZ', 'D', 'D', null],
+    // A cool white dwarf's temperature index runs past the subclass range;
+    // the class survives, the index does not. Found by the property below.
+    ['D10', 'D', 'D', null],
     ['M3.5', 'M3.5', 'M', 3.5],
     ['K0III', 'K0III', 'K', 0],
     ['', '', null, null],

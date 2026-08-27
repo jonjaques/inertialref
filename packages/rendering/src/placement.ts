@@ -52,8 +52,17 @@ export const SHELL_SPAN: Meters = 2e6
 export interface RenderPlacement {
   /** Position in render space, meters, possibly compressed. */
   readonly position: Vec3
-  /** Multiplier for unit-radius geometry. */
+  /** Multiplier for unit-radius geometry — the drawn radius, in meters. */
   readonly scale: number
+  /**
+   * How much smaller than life the object is drawn. 1 in the near field.
+   *
+   * `scale` is the *drawn radius* and is what a unit sphere wants; anything
+   * with its own metric geometry wants this instead. Terrain is the case: a
+   * patch's vertices are true meters from the patch's anchor, and multiplying
+   * them by a radius rather than by a ratio puts them 10^12 m away.
+   */
+  readonly compression: number
   /** True distance from the eye, meters — never the compressed one. */
   readonly distance: Meters
   readonly tier: LodTier
@@ -146,6 +155,7 @@ export function placeAt(
     return {
       position: fromOrigin,
       scale: radius,
+      compression: 1,
       distance,
       tier,
       compressed: false,
@@ -159,6 +169,7 @@ export function placeAt(
     // so the object subtends exactly the angle it should. Only depth is a lie.
     position: Vec.add(eye, Vec.scale(offset, factor)),
     scale: radius * factor,
+    compression: factor,
     distance,
     tier,
     compressed: true,

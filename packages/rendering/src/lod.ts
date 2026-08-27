@@ -54,51 +54,20 @@ export function selectLod(radius: Meters, distance: Meters): LodTier {
   return 'point'
 }
 
-/**
- * Terrain subdivision level to stream at, from how much of the screen a meter
- * of ground occupies.
+/*
+ * `terrainLevelFor` and `terrainOpacity` were here, and both took
+ * `distance − radius` as the altitude. For a camera standing on the ground that
+ * is `elevation + height`, not `height`, so the streaming rules measured from
+ * the datum — a summit streamed a level coarse, a summit above
+ * `radius · 2^(5.5 − maxLevel)` was not drawn at any altitude including zero,
+ * and flying level re-requested the world as the ground rose beneath it. The
+ * fade existed because a 3×3 window is a sticker on the datum sphere rather
+ * than a picture of a planet, and there is no window any more.
  *
- * Returned as a level rather than a patch count so the caller can ask the
- * cube-sphere for exactly the regions it needs — the same addressing the
- * generator and the persistence layer use.
+ * Both are replaced by `terrainSelect.ts`, which measures to the ground and
+ * refines per patch. This note is here because a level and an opacity are the
+ * two things a reader coming from the streamer will look for in an LOD file.
  */
-export function terrainLevelFor(
-  radius: Meters,
-  distance: Meters,
-  maxLevel = 12,
-): number {
-  const altitude = Math.max(1, distance - radius)
-  // Roughly: halve the patch size for every halving of altitude.
-  const level = Math.round(Math.log2(radius / altitude)) + 4
-  return Math.min(maxLevel, Math.max(0, level))
-}
-
-/**
- * How present streamed terrain should be at this distance: 0 (not drawn, not
- * streamed) to 1 (fully solid), fading linearly in altitude between the two.
- *
- * The streamed set is a fixed 3×3 window of patches around the sub-camera
- * point, so away from the ground it degenerates into a lone raised tile on the
- * datum sphere — 11 km proud of it on the first planet, since the sphere is
- * sunk a full relief below the datum. The winding fix made that tile visible
- * from orbit for the first time; until the terrain quadtree covers the whole
- * disk, the honest representation up there is the sphere alone.
- *
- * Full presence starts where `terrainLevelFor` saturates at `maxLevel` —
- * altitude `radius · 2^(4.5 − maxLevel)` — because that is the boundary below
- * which the window stops changing size and starts being the ground rather than
- * a sticker on it. The fade spans one octave of altitude above that, which is
- * the same cadence the level selection itself moves at.
- */
-export function terrainOpacity(
-  radius: Meters,
-  distance: Meters,
-  maxLevel = 12,
-): number {
-  const altitude = Math.max(1, distance - radius)
-  const full = radius * 2 ** (4.5 - maxLevel)
-  return Math.min(1, Math.max(0, 2 - altitude / full))
-}
 
 /** Blackbody color of a star, approximate but monotonic in temperature. */
 export function starColor(temperature: number): {

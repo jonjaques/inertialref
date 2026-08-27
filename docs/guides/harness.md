@@ -193,7 +193,9 @@ Sites are derived from the body's own terrain rather than authored, so
 interesting place afterwards. Four come from a beam search — `summit`, `basin`,
 `shore`, `rough` — and two are chosen outright for the renderer: `corner`, where
 three faces of the addressing cube meet, and `pole`, where the east/north basis
-is singular.
+is singular. On a body with no solid surface `ir.sites` returns an empty list:
+a giant's parameters run through the survey without complaint, but every row
+would be a place `ir.visit` refuses to stand.
 
 The height is set outright rather than eased, which is what makes a plate loop
 work: each `ir.visit` is the frame you asked for, with nothing settling in
@@ -219,9 +221,14 @@ ir.terrainBaseline() // the zoo, its descents, and measured patch cost
 
 `ir.descend` runs with no world state changed, no worker used and no frame
 drawn, so it produces the same level churn, peak burst and cache numbers in a
-browser console, in `pnpm sim --terrain-baseline` and in a Node test.
+browser console, in `pnpm sim --terrain-baseline` and in a Node test. It takes
+`latitude` and `longitude` in degrees, the same boundary `ir.visit` states —
+`ir.sites` output pastes straight in, and radians begin below the harness.
+(`ir.land` is the one wart: it takes radians.)
 `ir.terrain` is the counterpart: what the streamer actually has, which is
-`null` headlessly rather than a zero.
+`null` headlessly rather than a zero. Its `patches` counts ground built and
+placed this frame, not the selection's length — a cold arrival reports zero
+patches over zero vertices rather than six regions still in a worker.
 
 ---
 

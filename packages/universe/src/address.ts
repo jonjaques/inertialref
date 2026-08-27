@@ -54,6 +54,17 @@ export const isSystemId = (text: string): text is SystemId =>
   ID_PATTERN.test(text)
 
 /**
+ * The deepest subdivision an address can carry.
+ *
+ * Twenty-four halvings of a cube face take an Earth-sized body from 10,000 km
+ * to 60 cm, which is the smallest ground a region has ever needed to name. It
+ * is a property of the address space rather than of the renderer: what the
+ * streamer will actually ask for is `surfaceDetailFloor`, which is a property
+ * of the field.
+ */
+export const MAX_REGION_LEVEL = 24
+
+/**
  * A cube-sphere surface region: which face, how deep the subdivision, and where
  * on that face's grid. Level n has 2^n cells per side.
  */
@@ -75,7 +86,7 @@ export function regionAddress(
     `Bad cube face ${face}`,
   )
   invariant(
-    Number.isInteger(level) && level >= 0 && level <= 24,
+    Number.isInteger(level) && level >= 0 && level <= MAX_REGION_LEVEL,
     `Bad region level ${level}`,
   )
   const span = 2 ** level

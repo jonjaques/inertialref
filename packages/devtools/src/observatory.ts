@@ -479,6 +479,9 @@ export class Observatory {
     if (!hasSolidSurface(body)) {
       throw new Error(`${body.name} has no surface to stand on`)
     }
+    // Before the focus below, with the no-surface check: every refusal has to
+    // come before anything commits, or a typo'd site retargets the planetarium
+    // and throws away the caller's framing on a call that then refuses.
     const site =
       options.site === undefined
         ? undefined

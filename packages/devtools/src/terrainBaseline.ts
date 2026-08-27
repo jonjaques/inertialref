@@ -6,6 +6,7 @@ import {
   parseAddress,
   type Body,
   type SurfaceArchetype,
+  surfaceDetailFloor,
   surveySites,
 } from '@inertialref/universe'
 import {
@@ -46,11 +47,22 @@ export interface SiteProbe {
   readonly id: string
   readonly name: string
   readonly elevation: Meters
-  /** Of the profile's steps, how many draw terrain at all. Zero is a hole. */
-  readonly drawnSteps: number
   readonly steps: number
-  /** The deepest level the descent reaches. 12 is the cap. */
+  /** The deepest level the descent reaches. */
   readonly finalLevel: number
+  /**
+   * The level the field itself says is the floor.
+   *
+   * Reaching it is the successor to "was terrain drawn at all", which was the
+   * question when the streamer faded out an octave above the ground and two of
+   * Miranda's six sites were ground that could not be looked at from any
+   * altitude. Terrain is now drawn everywhere, so the failure worth watching is
+   * a site that *bottoms out short* — ground the streaming rule refuses to
+   * resolve, for whatever reason the next one turns out to be.
+   */
+  readonly floorLevel: number
+  /** The most patches drawn at once on the way down — the frame at its worst. */
+  readonly peakDrawn: number
 }
 
 export interface BaselineEntry {
@@ -58,14 +70,12 @@ export interface BaselineEntry {
   /**
    * The profile the timings come from: a descent into the basin.
    *
-   * The basin rather than the summit, and that is a decision the rig's own
-   * findings forced. `terrainOpacity` measures altitude from the datum, so on a
-   * body with real relief a summit can sit above the fade line and draw nothing
-   * at all — Miranda's does. Timing generation from a descent that requests no
-   * patches would report zero and read as free. The basin is the lowest ground
-   * the survey found, which on a dry world is below the datum and on an ocean
-   * world is the sea surface — either way it is the site furthest from the fade
-   * ceiling, so it always draws.
+   * The basin rather than the summit, which was forced when the streaming rules
+   * measured altitude from the datum: a summit could sit above the fade line
+   * and draw nothing at all — Miranda's did — so timing generation from it
+   * reported zero and read as free. Nothing measures from the datum any more
+   * and every site draws, but the basin is kept as the timed profile so the
+   * figure stays comparable with the one the rig first recorded.
    */
   readonly descent: DescentReport
   readonly generation: GenerationCost
@@ -94,7 +104,15 @@ export interface TerrainBaseline {
  * times slower than the next one.
  */
 const TIMED_PATCHES = 48
-const WARMUP_PATCHES = 4
+/**
+ * Patches generated and thrown away before the clock starts.
+ *
+ * Twelve, because the timed set spans levels: a whole-disk selection asks for
+ * every level between the horizon and the ground, and the first patches of a
+ * run are the coarse ones — a warmup of four leaves the timer opening on
+ * level-0 outliers.
+ */
+const WARMUP_PATCHES = 12
 
 export interface BaselineOptions extends ZooOptions {
   readonly steps?: number
@@ -191,9 +209,10 @@ export function terrainBaseline(
           id: site.id,
           name: site.name,
           elevation: site.elevation,
-          drawnSteps: flown.drawnSteps,
           steps: flown.steps.length,
           finalLevel: flown.levels[flown.levels.length - 1] ?? -1,
+          floorLevel: surfaceDetailFloor(body.radius, body.surface),
+          peakDrawn: flown.peakDrawn,
         }
       }),
     })
@@ -244,11 +263,12 @@ export function summarizeBaseline(baseline: TerrainBaseline): string {
     )
     lines.push('  sites, dropped straight onto:')
     for (const site of entry.sites) {
-      const hole = site.drawnSteps === 0 ? '  ← NEVER DRAWN' : ''
+      const hole =
+        site.finalLevel < site.floorLevel ? '  ← SHORT OF THE FLOOR' : ''
       lines.push(
         `    ${site.id.padEnd(7)} ${String(Math.round(site.elevation)).padStart(7)} m  ` +
-          `drawn on ${String(site.drawnSteps).padStart(3)}/${site.steps} steps, ` +
-          `bottoms out at level ${site.finalLevel}${hole}`,
+          `bottoms out at level ${site.finalLevel} of ${site.floorLevel}, ` +
+          `peak ${String(site.peakDrawn).padStart(3)} patches${hole}`,
       )
     }
   }

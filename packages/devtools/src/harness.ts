@@ -28,13 +28,13 @@ import {
   type EntityId,
   findBody,
   formatAddress,
+  hasSolidSurface,
   installSurfaceFrame,
   isLandable,
   parseAddress,
   systemFrameId,
   systemId,
   type SystemId,
-  hasSolidSurface,
   surveySites,
   systemsWithin,
   walkBodies,
@@ -45,7 +45,7 @@ import {
   restoreSave,
   serializeSave,
 } from '@inertialref/persistence'
-import type { RenderScene } from '@inertialref/rendering'
+import { MIN_STANCE_HEIGHT, type RenderScene } from '@inertialref/rendering'
 import type { PoolStats, WorkerPool } from '@inertialref/workers'
 import type { AuthorityPort, AuthorityStatus } from '@inertialref/net'
 import { describeDrift, type VersionDrift } from '@inertialref/protocol'
@@ -919,19 +919,22 @@ export class GameHarness {
          * rule, so it produces the same numbers here, in a browser console and
          * in a Node test.
          *
-         * The camera is left in the last body's *basin*, not on its summit,
-         * for the reason this phase measured: a summit above the fade line
-         * draws nothing, and the zoo's declaration order puts `icy-active`
-         * last — which on this seed is Miranda, whose summit is exactly that
-         * hole. "Something on screen when it returns" would have been a bare
-         * datum sphere.
+         * The camera is left on the last body's *summit*, which is the place
+         * this milestone's first phase made visitable. Phase 0 had to leave it
+         * in a basin: the zoo's declaration order puts `icy-active` last, which
+         * on this seed is Miranda, and Miranda's summit stands 4,826 m over a
+         * fade line at 2,605 m — so "something on screen when it returns" was a
+         * bare datum sphere. There is no fade, and the summit is ground.
          */
         const zoo = this.zoo()
         if (zoo.length === 0) throw new Error('the terrain zoo came back empty')
         const reports = zoo.map((entry) => this.descend(entry.address))
         const last = zoo[zoo.length - 1]
         if (last !== undefined) {
-          this.visit(last.address, { site: 'basin', height: 2 })
+          this.visit(last.address, {
+            site: 'summit',
+            height: MIN_STANCE_HEIGHT,
+          })
         }
         return this.#scenarioResult(
           name,
@@ -1106,6 +1109,10 @@ export class GameHarness {
     region: string
   }[] {
     const body = this.#requireBody(address)
+    // The observatory's own gate: a giant's SurfaceParameters run through the
+    // survey without complaint, but every row would be a place `visit` refuses
+    // to stand — six clickable throws in the Surface panel. An empty list is
+    // the answer the panel draws an honest empty state for.
     if (!hasSolidSurface(body)) return []
     return surveySites(body).map((site) => ({
       id: site.id,
@@ -1196,24 +1203,33 @@ export class GameHarness {
       readonly longitude?: number
     } = {},
   ): DescentReport & { readonly text: string } {
+    // Degrees here, radians below — the same boundary `visit` states. Passing
+    // the numbers straight through let `ir.sites()` output (degrees) land in
+    // `geodeticDirection` as radians: a report about ground wrapped ~2,578°
+    // from the place the caller named, with no error anywhere.
+    const { latitude, longitude, ...rest } = options
     const body = this.#requireBody(address)
+    // The refusal `visit` makes, made here too: a probe that reports a descent
+    // onto a giant describes ground the camera declines to stand on, and the
+    // report reads as a measurement rather than a place that does not exist.
     if (!hasSolidSurface(body)) {
       throw new Error(`${body.name} has no surface to descend to`)
     }
     const report = simulateDescent(body, {
-      ...options,
-      ...(options.latitude === undefined
+      ...rest,
+      ...(latitude === undefined
         ? {}
-        : { latitude: (options.latitude * Math.PI) / 180 }),
-      ...(options.longitude === undefined
+        : { latitude: (latitude * Math.PI) / 180 }),
+      ...(longitude === undefined
         ? {}
-        : { longitude: (options.longitude * Math.PI) / 180 }),
+        : { longitude: (longitude * Math.PI) / 180 }),
     })
     const text = summarizeDescent(report)
     log.info('descent simulated', {
       body: report.body,
       site: report.site,
-      levelChanges: report.levelChanges,
+      levels: report.levels.join('→'),
+      peakDrawn: report.peakDrawn,
       peakBurst: report.peakBurst,
     })
     return { ...report, text }

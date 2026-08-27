@@ -258,6 +258,25 @@ export class GameEngine implements PresentationHost {
   lensFlare = true
   fov = DEFAULT_FOV
 
+  /**
+   * The drawable height in physical pixels, for the terrain selection.
+   *
+   * A presentation input like `fov`, written by the scene from the drawing
+   * buffer, and read by the streamer to decide how much ground a patch's grid
+   * cell covers on *this* display. A two-times panel genuinely wants twice the
+   * patches for the same picture, and a selection measured against a nominal
+   * 1080 would leave it under-tessellated.
+   */
+  set viewportHeight(height: number) {
+    // Written every frame by the scene, so unchanged inputs return before
+    // allocating — otherwise a fresh viewport object churns per frame for a
+    // value that moves only on a resize or an fov change.
+    const fovY = (this.fov * Math.PI) / 180
+    const held = this.#terrain.viewport
+    if (held !== null && held.height === height && held.fovY === fovY) return
+    this.#terrain.viewport = { fovY, height }
+  }
+
   /*
    * How much of the lens's artifact stack is showing, 0..1 — the ghost chain,
    * not the glow and the streak, which are always the whole point.
@@ -469,9 +488,9 @@ export class GameEngine implements PresentationHost {
    * What the streamer holds this frame, as data the harness can return.
    *
    * The triangle count is summed from the drawn set rather than multiplied out
-   * from a constant: a patch is 64² quads today and will not be once patches
-   * carry a border row, and a figure that silently kept quoting 8,192 would be
-   * the one number in the terrain baseline nobody re-measured.
+   * from a constant. A patch is 64² quads and its resolution is a parameter, so
+   * a figure that quoted 8,192 would be the one number in the terrain baseline
+   * nobody re-measured.
    */
   terrain(): TerrainReport | null {
     const { bodyAddress, ...rest } = this.#terrain.summary()
@@ -681,16 +700,23 @@ export class GameEngine implements PresentationHost {
       cinematic !== null ? cinematic.camera : (observed ?? undefined),
     )
 
-    const surfaceBody = this.#scene.terrainCandidates[0] ?? null
-    // `shot.renderTime`, not the clock: the snapshot presents the world one tick
-    // in the past, and terrain that disagrees with the ship about what time it
-    // is drifts from under it by 800 m at orbital speed.
+    /*
+     * `shot.renderTime`, not the clock: the snapshot presents the world one tick
+     * in the past, and terrain that disagrees with the ship about what time it
+     * is drifts from under it by 800 m at orbital speed.
+     *
+     * The whole `RenderBody` rather than its address, because a patch has to
+     * ride the compression `placeAt` gave the body it sits on. Past
+     * `NEAR_LIMIT` the sphere is drawn nearer and smaller so its angular size
+     * survives, and terrain placed at true meters against it would be a
+     * different object at a different distance.
+     */
     this.#terrain.update(
       this.world,
       shot.renderTime,
       eye,
       this.origin,
-      surfaceBody?.address ?? null,
+      this.#scene.terrainCandidates[0] ?? null,
     )
 
     this.#maybeSurveyStars(eye)

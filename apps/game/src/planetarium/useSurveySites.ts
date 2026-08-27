@@ -45,16 +45,13 @@ export function useSurveySites(
   )
   const address = looking ?? requested
   /*
-   * The seed, because an address is not enough to identify a world.
-   *
-   * A save load replaces the world underneath the same `engine` object and the
-   * same address string, so neither of the other two dependencies moves and the
-   * effect never re-fires — leaving six rows naming the previous universe's
-   * summit, each of which sends the camera to a latitude derived from a world
-   * that no longer exists. `surveySites` keys its memo on the surface seed, so
-   * the right list is one call away; it is simply never asked for.
+   * The world's identity, not just the body's. A save load or a new game keeps
+   * both `engine` and the address string — `s:SOL/b:2` names Earth in every
+   * world — while the seed under them changes, and a survey keyed on the
+   * address alone kept serving the previous universe's summit and basin
+   * coordinates. The seed is the input the sites are actually a function of.
    */
-  const seed = useEngine((snapshot) => snapshot.status?.world.seed ?? null)
+  const seed = useEngine((snapshot) => snapshot.status?.world.seedHex ?? null)
 
   /*
    * The list and the address it is a list *of*, carried together.
@@ -66,28 +63,33 @@ export function useSurveySites(
    */
   const [built, setBuilt] = useState<{
     readonly of: string | null
+    readonly seed: string | null
     readonly sites: readonly SurveySiteRow[]
-  }>({ of: null, sites: [] })
+  }>({ of: null, seed: null, sites: [] })
 
   useEffect(() => {
     if (address === null) {
-      setBuilt({ of: null, sites: [] })
+      setBuilt({ of: null, seed: null, sites: [] })
       return
     }
     try {
-      setBuilt({ of: address, sites: engine.harness.sites(address) })
+      setBuilt({ of: address, seed, sites: engine.harness.sites(address) })
     } catch {
       // A star, an unloaded system, or a world a save replaced under us. An
       // empty list is what the panel already draws an empty state for; throwing
       // would take the whole overlay through the error boundary.
-      setBuilt({ of: address, sites: [] })
+      setBuilt({ of: address, seed, sites: [] })
     }
   }, [engine, address, seed])
 
+  // The seed is part of the guard, not just the effect: a save load that keeps
+  // the address changes only the seed, and the paint between the load and the
+  // effect would otherwise serve the previous world's coordinates.
+  //
   // `null` for a null address too, and not `[]`. There is no body to have no
   // ground: drawing "no ground here yet — pick a solid body" for a session that
   // is looking at nothing is a claim about a body that does not exist, which is
   // the distinction the docstring above says this hook exists to keep.
   if (address === null) return null
-  return built.of === address ? built.sites : null
+  return built.of === address && built.seed === seed ? built.sites : null
 }

@@ -4,18 +4,22 @@ import {
   formatAddress,
   generateHeightfield,
   geodeticDirection,
+  HEIGHTFIELD_BORDER,
   HEIGHTFIELD_RESOLUTION,
   type RegionAddress,
+  surfaceDetailFloor,
   surfaceRadius,
   type SurveySite,
   surveySites,
 } from '@inertialref/universe'
 import {
+  DEFAULT_MAX_PATCHES,
   clampLatitude,
   MIN_STANCE_HEIGHT,
+  selectTerrain,
   surfaceHeightBounds,
+  type TerrainSelectOptions,
   terrainPatchKey,
-  terrainWindow,
 } from '@inertialref/rendering'
 
 /*
@@ -25,9 +29,9 @@ import {
  * named site and record what the terrain streamer is asked for on the way down.
  * It runs with no world, no worker pool, no renderer and no GPU, because
  * everything it needs is a `Body` and the selection rule — which is why
- * `terrainWindow` was pulled out of the streamer first. The same call therefore
- * runs in a browser console, in `pnpm sim`, and in a Node test, and all three
- * get the same numbers.
+ * `selectTerrain` lives in `packages/rendering` rather than in the streamer.
+ * The same call therefore runs in a browser console, in `pnpm sim`, and in a
+ * Node test, and all three get the same numbers.
  *
  * What it is for is the phrase "no terrain perf baseline" in the plan's gap
  * table. The 1.0 ms terrain line in the frame budget has always been designed
@@ -67,24 +71,36 @@ export interface DescentOptions {
    * window traverse ground the way an arrival actually does.
    */
   readonly trackDegrees?: number
-  /** The streamer's heightfield cache size. Default 64, which is today's. */
+  /** The streamer's heightfield cache size. Default: the streamer's own cap. */
   readonly cacheSize?: number
+  /**
+   * Deepest level to refine to. Default is the body's own `surfaceDetailFloor`
+   * — the level past which a patch is an upsample of its parent.
+   */
+  readonly maxLevel?: number
+  /** Pixels a grid cell may subtend before refining. Default 16. */
+  readonly cellPixels?: number
 }
 
 export interface DescentStep {
   readonly index: number
   /** Above the ground below the camera, meters. */
   readonly height: Meters
-  /** From the body's center, meters — what `terrainLevelFor` is given. */
+  /** From the body's center, meters. */
   readonly distance: Meters
   readonly latitude: Radians
   readonly longitude: Radians
+  /** Deepest and shallowest levels drawn together this step. */
   readonly level: number
-  readonly opacity: number
-  /** Patches the window wants this step. */
+  readonly shallowestLevel: number
+  /** Patches the selection wants this step. */
   readonly wanted: number
-  /** Patches that fell off the edge of a cube face and were dropped. */
-  readonly clipped: number
+  /** Nodes the traversal looked at — what the selection cost. */
+  readonly visited: number
+  /** Nodes dropped beyond the horizon. Most of a planet, most of the time. */
+  readonly culled: number
+  /** True when the patch budget stopped the refinement a level early. */
+  readonly saturated: boolean
   /** Of `wanted`, how many are not in the cache — the worker queue this step. */
   readonly requested: number
   /** Which ones. What `measurePatchGeneration` is handed to time the field. */
@@ -95,15 +111,16 @@ export interface DescentReport {
   readonly body: string
   readonly site: string
   readonly steps: readonly DescentStep[]
-  /** Every level the descent passed through, in order, deduplicated. */
+  /** Every level the descent's *deepest* patch passed through, deduplicated. */
   readonly levels: readonly number[]
   /**
-   * How many times the level changed.
+   * How many times the deepest level changed.
    *
-   * Every change throws away the whole window and asks for a fresh one, because
-   * a patch address at level n has no relationship to one at level n+1. On the
-   * current single-level streamer this is the *only* thing that causes a burst,
-   * which is why it is the headline number.
+   * The headline number of the window this replaced, because a level change
+   * there threw away all nine patches and asked for nine more. Here it is a
+   * far weaker signal and is kept for exactly that comparison: the quadtree
+   * refines one ring at a time, so a level change costs the patches at the new
+   * level near the camera rather than the whole set.
    */
   readonly levelChanges: number
   readonly uniqueRegions: number
@@ -111,10 +128,12 @@ export interface DescentReport {
   readonly cacheHits: number
   /** The largest number of patches asked for in one step. Phase 1's budget. */
   readonly peakBurst: number
-  /** Steps whose window was short of patches because a face edge cut it. */
-  readonly clippedSteps: number
-  /** Of `steps`, how many had terrain drawn at all — `opacity > 0`. */
-  readonly drawnSteps: number
+  /** The largest number drawn at once — the frame's terrain, at its worst. */
+  readonly peakDrawn: number
+  /** Steps where the patch budget bit. Should be none. */
+  readonly saturatedSteps: number
+  /** The most nodes the traversal ever walked, for the selection's own cost. */
+  readonly peakVisited: number
 }
 
 /**
@@ -127,8 +146,9 @@ export interface DescentReport {
  */
 export interface TerrainReport {
   readonly body: string | null
+  /** Deepest and shallowest levels drawn together this frame. */
   readonly level: number
-  readonly opacity: number
+  readonly shallowestLevel: number
   /** Patches with geometry built and placed this frame. */
   readonly patches: number
   /** Patches whose heightfield is out at a worker. */
@@ -139,9 +159,30 @@ export interface TerrainReport {
   readonly vertices: number
   /** Triangles in the same set. One draw call per patch, today. */
   readonly triangles: number
+  /** Nodes the traversal walked, and how many the horizon took. */
+  readonly visited: number
+  readonly culled: number
+  /** Nodes drawn coarse because a child's heightfield had not arrived yet. */
+  readonly starved: number
+  /** True when the patch budget stopped the refinement a level early. */
+  readonly saturated: boolean
 }
 
-/** Timing for the CPU half of a patch, measured rather than budgeted. */
+/**
+ * Timing for the CPU half of a patch, measured rather than budgeted.
+ *
+ * The rate is **not** constant across levels, which is a property of the field
+ * rather than of the loop: a level-12 patch's 4,761 samples are clustered
+ * inside a handful of the noise's lattice cells, and a level-1 patch's land in
+ * a different cell every time. Measured on the same body and the same grid,
+ * 14.33 ms at level 12 against 20.69 ms at level 1 — 0.33 against 0.23 M
+ * samples per second for identical work.
+ *
+ * The 3×3 window never saw this, because it only ever generated patches at the
+ * camera's own level. A whole-disk selection generates the coarse shell too,
+ * so the figure a descent reports is a mixed-level average and is the honest
+ * one for the streamer.
+ */
 export interface GenerationCost {
   readonly patches: number
   readonly resolution: number
@@ -153,8 +194,18 @@ export interface GenerationCost {
 
 const DEFAULT_STEPS = 128
 const DEFAULT_TRACK_DEGREES = 10
-/** The streamer's own cap, `terrainStreamer.ts`. Kept in step by the baseline. */
-const DEFAULT_CACHE = 64
+/*
+ * The streamer's own cap: `FIELD_CACHE` is three times the largest selection,
+ * derived here from the same `DEFAULT_MAX_PATCHES` rather than copied as a
+ * number — the copy shipped stale on the day it was written, so the baseline
+ * simulated a cache a quarter of the one that streams, and every cache-hit
+ * figure described a configuration that no longer exists. (`devtools` cannot
+ * import `apps/game`, so the multiplier is the one thing restated; the
+ * streamer's docstring owns why it is three. Exported so the engine's own
+ * test can assert the two stay equal — the restated multiplier is exactly
+ * the kind of twin that drifts.)
+ */
+export const DEFAULT_CACHE = DEFAULT_MAX_PATCHES * 3
 
 /**
  * Where the descent aims, from whatever the caller named.
@@ -233,15 +284,23 @@ export function simulateDescent(
   /*
    * The cache, as a plain insertion-ordered set of keys.
    *
-   * A `Map` iterates in insertion order, so evicting the first key is
+   * A `Set` iterates in insertion order, so evicting the first key is
    * first-in-first-out — which is *not* what the streamer does. The streamer
-   * keeps whatever is in its window and drops what is not, above a floor of 64.
-   * FIFO is the pessimistic version of the same policy, so a hit rate here is a
-   * lower bound on the real one, and saying so is more useful than modelling a
-   * cache whose replacement rule is about to be rewritten anyway.
+   * keeps whatever either of its two selections wants and drops the oldest of
+   * the rest, above a floor. FIFO is the pessimistic version of the same
+   * policy, so a hit rate here is a lower bound on the real one.
    */
   const cache = new Set<string>()
   const everRequested = new Set<string>()
+  /*
+   * The level floor the streamer would use: measured from the field rather than
+   * fixed at 12, because past it a patch is a bilinear upsample of its parent.
+   * Passed explicitly so a descent report says which floor produced it.
+   */
+  const select: TerrainSelectOptions = {
+    maxLevel: options.maxLevel ?? surfaceDetailFloor(body.radius, body.surface),
+    cellPixels: options.cellPixels,
+  }
 
   const out: DescentStep[] = []
   const levels: number[] = []
@@ -249,8 +308,9 @@ export function simulateDescent(
   let requests = 0
   let hits = 0
   let peakBurst = 0
-  let clippedSteps = 0
-  let drawnSteps = 0
+  let peakDrawn = 0
+  let peakVisited = 0
+  let saturatedSteps = 0
 
   for (let index = 0; index < steps; index += 1) {
     const t = index / (steps - 1)
@@ -268,8 +328,8 @@ export function simulateDescent(
      * meridian.
      * A descent onto the `pole` site with the default 10° of track would
      * otherwise start at 95° — five degrees past the pole on the anti-meridian
-     * — and every level, opacity and patch figure for those steps would
-     * describe ground the caller never asked about. Longitude is left to run:
+     * — and every level and patch figure for those steps would describe ground
+     * the caller never asked about. Longitude is left to run:
      * a wrap is what a meridian is for.
      */
     const latitude = clampLatitude(target.latitude + offset * 0.5)
@@ -277,39 +337,43 @@ export function simulateDescent(
     const direction = geodeticDirection(latitude, longitude)
     const distance = surfaceRadius(body, direction) + height
 
-    const window = terrainWindow(body.radius, distance, direction)
+    const selection = selectTerrain(
+      {
+        radius: body.radius,
+        relief: body.surface.maxElevation,
+        distance,
+        direction,
+      },
+      select,
+    )
     const previous = levels[levels.length - 1]
-    if (previous === undefined) levels.push(window.level)
-    else if (previous !== window.level) {
-      levels.push(window.level)
+    if (previous === undefined) levels.push(selection.deepestLevel)
+    else if (previous !== selection.deepestLevel) {
+      levels.push(selection.deepestLevel)
       levelChanges += 1
     }
 
     const requestedRegions: RegionAddress[] = []
-    if (window.opacity > 0) {
-      drawnSteps += 1
-      for (const region of window.regions) {
-        const key = terrainPatchKey(address, region)
-        if (cache.has(key)) {
-          hits += 1
-          continue
-        }
-        requestedRegions.push(region)
-        requests += 1
-        everRequested.add(key)
-        cache.add(key)
-        if (cache.size > cacheSize) {
-          const oldest = cache.values().next().value
-          if (oldest !== undefined) cache.delete(oldest)
-        }
+    for (const patch of selection.patches) {
+      const key = terrainPatchKey(address, patch.region)
+      if (cache.has(key)) {
+        hits += 1
+        continue
+      }
+      requestedRegions.push(patch.region)
+      requests += 1
+      everRequested.add(key)
+      cache.add(key)
+      if (cache.size > cacheSize) {
+        const oldest = cache.values().next().value
+        if (oldest !== undefined) cache.delete(oldest)
       }
     }
-    // Only where it costs something. Above the fade the window is computed but
-    // neither requested nor drawn, so a face edge cutting it takes nothing —
-    // and counting those made the summary read "34 of 128 steps drawn; 61 steps
-    // lost patches to a face edge", which is 61 steps that lost nothing.
-    if (window.clipped > 0 && window.opacity > 0) clippedSteps += 1
     if (requestedRegions.length > peakBurst) peakBurst = requestedRegions.length
+    if (selection.patches.length > peakDrawn)
+      peakDrawn = selection.patches.length
+    if (selection.visited > peakVisited) peakVisited = selection.visited
+    if (selection.saturated) saturatedSteps += 1
 
     out.push({
       index,
@@ -317,10 +381,12 @@ export function simulateDescent(
       distance,
       latitude,
       longitude,
-      level: window.level,
-      opacity: window.opacity,
-      wanted: window.regions.length,
-      clipped: window.clipped,
+      level: selection.deepestLevel,
+      shallowestLevel: selection.shallowestLevel,
+      wanted: selection.patches.length,
+      visited: selection.visited,
+      culled: selection.culled,
+      saturated: selection.saturated,
       requested: requestedRegions.length,
       requestedRegions,
     })
@@ -336,8 +402,9 @@ export function simulateDescent(
     totalRequests: requests,
     cacheHits: hits,
     peakBurst,
-    clippedSteps,
-    drawnSteps,
+    peakDrawn,
+    saturatedSteps,
+    peakVisited,
   }
 }
 
@@ -362,10 +429,18 @@ export function measurePatchGeneration(
 ): GenerationCost {
   const started = now()
   for (const region of regions) {
-    generateHeightfield(body.surface, { region, resolution })
+    generateHeightfield(body.surface, {
+      region,
+      resolution,
+      border: HEIGHTFIELD_BORDER,
+    })
   }
   const totalMs = now() - started
-  const samples = regions.length * resolution * resolution
+  // The border is generated too — 12.7% more samples than the patch's own grid
+  // — and a rate quoted against the interior would flatter the generator by
+  // exactly that, which is the kind of drift the baseline exists to catch.
+  const stride = resolution + 2 * HEIGHTFIELD_BORDER
+  const samples = regions.length * stride * stride
   return {
     patches: regions.length,
     resolution,
@@ -410,11 +485,11 @@ export function summarizeDescent(report: DescentReport): string {
     )
   return [
     `${report.body} → ${report.site}: ${report.steps.length} steps, ` +
-      `levels ${report.levels.join('→')}, ${report.levelChanges} changes`,
+      `deepest level ${report.levels.join('→')}, ${report.levelChanges} changes`,
     `  ${report.totalRequests} requests / ${report.uniqueRegions} unique / ` +
       `${report.cacheHits} cache hits, peak burst ${report.peakBurst}`,
-    `  terrain drawn on ${report.drawnSteps} of ${report.steps.length} steps; ` +
-      `${report.clippedSteps} steps lost patches to a face edge`,
+    `  peak ${report.peakDrawn} patches drawn, ${report.peakVisited} nodes ` +
+      `walked; budget bit on ${report.saturatedSteps} steps`,
     ...lines,
   ].join('\n')
 }

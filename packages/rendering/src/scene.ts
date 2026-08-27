@@ -281,8 +281,23 @@ export function buildScene(
     }),
   )
 
+  /*
+   * `sphere` as well as `surface`, which is the whole "one field at every
+   * distance" claim in one filter.
+   *
+   * The surface tier begins at an angular radius of 0.12, which is a body
+   * already filling a good part of the view. Below it a procedural body was a
+   * smooth colored ball, and the relief only appeared once you were close
+   * enough to stream — so the world you approached was not the world you landed
+   * on. The quadtree answers the sphere tier with its own level 0–2 shell,
+   * which is six to a few dozen patches, so the cost of extending the range is
+   * a rounding error against what the surface tier already asks for.
+   */
   const terrainCandidates = bodies
-    .filter((body) => body.placement.tier === 'surface')
+    .filter(
+      (body) =>
+        body.placement.tier === 'surface' || body.placement.tier === 'sphere',
+    )
     .sort((a, b) => a.placement.distance - b.placement.distance)
 
   return {
