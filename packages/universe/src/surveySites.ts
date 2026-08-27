@@ -124,7 +124,11 @@ function refine(
   body: Body,
   seeds: readonly Cell[],
   seedScore: (cell: Cell) => number,
-  score: (cell: Cell, parent: Cell) => number,
+  // Defaulted to the seed score, because three of the four searches are
+  // absolute and writing the same lambda twice is how the two passes come to
+  // disagree about what "best" means. `rough` is the one that has to differ,
+  // and it is the one that visibly supplies both.
+  score: (cell: Cell, parent: Cell) => number = seedScore,
 ): Cell {
   /*
    * The seed pass scores differently from the refinements, and it has to.
@@ -250,12 +254,7 @@ function derive(body: Body): readonly SurveySite[] {
   const seeds = seedGrid(body)
   const sea = seaDatumElevation(body.surface)
 
-  const summit = refine(
-    body,
-    seeds,
-    (cell) => cell.ground,
-    (cell) => cell.ground,
-  )
+  const summit = refine(body, seeds, (cell) => cell.ground)
   /*
    * The lowest ground, scored on the *unclamped* landform for the same reason
    * `shore` is — and the failure without it is worse there than here.
@@ -269,12 +268,7 @@ function derive(body: Body): readonly SurveySite[] {
    * seabed, which is a real place; that the ground above it is the sea surface
    * is a fact about the site rather than a defect in the search.
    */
-  const basin = refine(
-    body,
-    seeds,
-    (cell) => -cell.land,
-    (cell) => -cell.land,
-  )
+  const basin = refine(body, seeds, (cell) => -cell.land)
   /*
    * The coastline, scored on the *unclamped* landform.
    *
@@ -284,7 +278,7 @@ function derive(body: Body): readonly SurveySite[] {
    * actually crosses the datum, and where it crosses is the shore.
    */
   const nearDatum = (cell: Cell): number => -Math.abs(cell.land - (sea ?? 0))
-  const shore = refine(body, seeds, nearDatum, nearDatum)
+  const shore = refine(body, seeds, nearDatum)
   /*
    * The steepest step the search found.
    *
@@ -390,10 +384,22 @@ export function surveySites(body: Body): readonly SurveySite[] {
   const hit = CACHE.get(key)
   if (hit !== undefined) return hit
   const sites = derive(body)
-  // A plain size cap, not an LRU: the working set is one body's worth and the
-  // cost of a miss is milliseconds. An eviction policy here would be machinery
-  // in front of a rounding error.
-  if (CACHE.size >= CACHE_LIMIT) CACHE.clear()
+  /*
+   * First in, first out — one entry per miss, never the whole map.
+   *
+   * A `Map` iterates in insertion order, so this is the whole of the policy and
+   * an LRU would be machinery in front of a rounding error. What it must not do
+   * is clear: the working set is not one body's worth. Sol alone generates 129
+   * bodies and 125 of them have a surface, so browsing its moons — the picker's
+   * whole use case — crosses the cap, and clearing there throws away 64
+   * derivations to admit one. From that point every revisit is a fresh search
+   * instead of a map lookup, which is the failure that reads as the panel
+   * getting slower the longer it is used.
+   */
+  if (CACHE.size >= CACHE_LIMIT) {
+    const oldest = CACHE.keys().next().value
+    if (oldest !== undefined) CACHE.delete(oldest)
+  }
   CACHE.set(key, sites)
   return sites
 }

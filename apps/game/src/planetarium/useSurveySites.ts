@@ -85,5 +85,11 @@ export function useSurveySites(
   // The seed is part of the guard, not just the effect: a save load that keeps
   // the address changes only the seed, and the paint between the load and the
   // effect would otherwise serve the previous world's coordinates.
+  //
+  // `null` for a null address too, and not `[]`. There is no body to have no
+  // ground: drawing "no ground here yet — pick a solid body" for a session that
+  // is looking at nothing is a claim about a body that does not exist, which is
+  // the distinction the docstring above says this hook exists to keep.
+  if (address === null) return null
   return built.of === address && built.seed === seed ? built.sites : null
 }

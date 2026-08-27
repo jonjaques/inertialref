@@ -83,6 +83,15 @@ const isLive = (pathname) =>
 const isImmutable = (pathname) =>
   pathname.startsWith('/assets/') || pathname.startsWith('/media/')
 
+/*
+ * Source maps sit next to hashed chunks, so `/assets/` would otherwise
+ * cache-first them. They are a debugger fetch, not a cold-start asset:
+ * DevTools asks the network when a breakpoint needs them, and pinning the
+ * original source in every player's Cache Storage buys nothing the game
+ * uses offline.
+ */
+const isSourceMap = (pathname) => pathname.endsWith('.map')
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
@@ -144,6 +153,7 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url)
   if (url.origin !== self.location.origin) return
   if (isLive(url.pathname)) return
+  if (isSourceMap(url.pathname)) return
   /*
    * Range requests, for the material sets the design admits later. A 206 stored
    * whole is served back as if it were the complete resource, which corrupts

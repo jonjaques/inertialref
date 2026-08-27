@@ -204,10 +204,10 @@ export class GameEngine implements PresentationHost {
   readonly presentation: PresentationStack
   readonly saves: SaveStore
   /*
-   * Private, because `terrain()` is now a `PresentationHost` member.
+   * Private, because `terrain()` is the `PresentationHost` member and
+   * `terrainState()` is the renderer's way in. Nothing outside reaches for the
+   * streamer itself.
    *
-   * The streamer itself is an implementation of this class and always was —
-   * nothing outside reached for it, and `terrainState()` was already the way in.
    * The name is the harness's: `ir.terrain()` asks the host what the streamer
    * holds, and the host cannot answer with the streamer object because that
    * carries `Float32Array`s and the harness returns JSON.

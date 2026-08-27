@@ -321,8 +321,8 @@ export class TerrainStreamer {
    *
    * `state()` maps every patch through `patchPlacement` — render-space
    * arithmetic these counters throw away immediately — and the renderer already
-   * calls it once a frame. `ir.terrain()` asking through `state()` paid for a
-   * second complete placement pass it never read.
+   * calls it once a frame. Answering `ir.terrain()` through `state()` would be
+   * a second complete placement pass whose only output is a count.
    */
   summary(): {
     readonly bodyAddress: string | null

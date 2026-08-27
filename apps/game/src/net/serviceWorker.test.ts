@@ -175,6 +175,9 @@ describe('the service worker', () => {
     expect(handled(sw, request('/assets/big.bin', { range: true }))).toBe(false)
     expect(handled(sw, request('/', { method: 'POST' }))).toBe(false)
     expect(handled(sw, request('https://cdn.example.com/thing.js'))).toBe(false)
+    // Source maps live next to hashed chunks, so `/assets/` would otherwise
+    // cache-first them. They are a debugger fetch, not a cold-start asset.
+    expect(handled(sw, request('/assets/index-a1b2c3d4.js.map'))).toBe(false)
     // Chrome's devtools issues this while inspecting a cache; answering it with
     // a normal fetch throws, and the throw looks like a failed page load.
     expect(

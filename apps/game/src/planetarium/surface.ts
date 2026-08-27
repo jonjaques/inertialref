@@ -1,5 +1,5 @@
-import type { Meters } from '@inertialref/shared'
 import { MIN_STANCE_HEIGHT } from '@inertialref/rendering'
+import type { Meters } from '@inertialref/shared'
 
 /*
  * The Surface panel's vocabulary, in a `.ts` because its neighbor is a `.tsx`.
@@ -33,6 +33,10 @@ export interface DescentRung {
 export const DESCENT_RUNGS: readonly DescentRung[] = [
   {
     label: 'Ground',
+    // The constant, not the number it currently is. `clampStanceHeight` lifts
+    // anything below it silently, so a literal here would leave the rung
+    // labelled "the bottom of the range" naming something else the first time
+    // the near plane moves.
     height: MIN_STANCE_HEIGHT,
     why: 'eye height — the bottom of the range',
   },
@@ -64,16 +68,23 @@ export const COMPASS: readonly {
 /**
  * A signed elevation, in the units the panel reads at.
  *
- * The sign is dropped below half a meter, and that is not fussiness: the datum
- * plain sits at −0.4 m on Iapetus, which rounds to zero and printed as `−0 m` —
- * a minus sign in front of a zero, in a column where the sign is the whole
- * point of the reading.
+ * The unit is chosen against the *rounded* magnitude rather than the raw one,
+ * and the sign against the result. Both are the same rule: what is printed
+ * decides, not what was measured. Choosing on the raw value puts `+1000 m` in
+ * a column beside `+1.0 km` for two readings 0.3 m apart, and taking the sign
+ * from the raw value puts `−0 m` under a site button — a minus in front of a
+ * zero, in a column where the sign is the whole point of the reading. The datum
+ * plain on Iapetus sits at −0.4 m, so that one is not hypothetical.
+ *
+ * A non-finite reading prints as no reading. It arrives from a body resolved
+ * mid-save-load, and `+NaN m` under a site button is worse than a dash.
  */
 export const elevationText = (meters: number): string => {
+  if (!Number.isFinite(meters)) return '—'
   const magnitude = Math.abs(meters)
   if (magnitude < 0.5) return '0 m'
   const sign = meters < 0 ? '−' : '+'
-  return magnitude >= 1000
+  return magnitude >= 999.5
     ? `${sign}${(magnitude / 1000).toFixed(1)} km`
     : `${sign}${Math.round(magnitude)} m`
 }

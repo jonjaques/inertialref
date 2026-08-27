@@ -468,7 +468,7 @@ export function surfaceDetailFloor(
  * 21 km of polar flattening is the largest case that can be landed on, and
  * changing it moves the ground under every existing save.
  */
-function datumRadius(body: Body, direction: Vec3): Meters {
+export function datumRadius(body: Body, direction: Vec3): Meters {
   const figure = body.figure
   if (figure === null) return body.radius
   /*

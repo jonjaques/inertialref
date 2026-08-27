@@ -70,12 +70,49 @@ export const PITCH_LIMIT = ELEVATION_LIMIT
  */
 export const MIN_STANCE_HEIGHT: Meters = 2
 
+/*
+ * The clamps below are total, and `Number.isFinite` is why.
+ *
+ * A comparison chain lets NaN straight through — `NaN < min` and `NaN > max`
+ * are both false — and every one of these numbers reaches the camera pose. A
+ * NaN height throws `Universe offset must be finite` out of `UV.translate`
+ * inside the per-frame `sample`, taking the render loop with it; a NaN pitch or
+ * heading is quieter and worse, because `lookAlong` returns a NaN quaternion and
+ * the frame goes black with nothing in the console. `setStanceScrub`,
+ * `setStanceHeight`, `setHeading` and `setPitch` are all public verbs, and a
+ * capture script computing a height from `Number(input)` produces NaN without
+ * trying. `observer.ts`'s `setFov` guards the same way for the same reason.
+ */
 export const clampPitch = (pitch: number): number =>
-  pitch < -PITCH_LIMIT
-    ? -PITCH_LIMIT
-    : pitch > PITCH_LIMIT
-      ? PITCH_LIMIT
-      : pitch
+  !Number.isFinite(pitch)
+    ? 0
+    : pitch < -PITCH_LIMIT
+      ? -PITCH_LIMIT
+      : pitch > PITCH_LIMIT
+        ? PITCH_LIMIT
+        : pitch
+
+/**
+ * How close to a pole a stance may sit, radians.
+ *
+ * Not a singularity but a sign flip: `geodeticDirection` takes `cos(latitude)`,
+ * which goes negative past ±90° and reflects the direction through the axis
+ * onto the opposite meridian. A stance recorded at 91°N therefore stands at
+ * 89°N on the far side of the world while reporting 91°N, so the camera and
+ * every reading taken from it describe different ground. The margin only has to
+ * survive the arithmetic, which is why it is 1e-6 rather than the two degrees
+ * `PITCH_LIMIT` needs for a roll singularity.
+ */
+export const LATITUDE_LIMIT = Math.PI / 2 - 1e-6
+
+export const clampLatitude = (latitude: number): number =>
+  !Number.isFinite(latitude)
+    ? 0
+    : latitude < -LATITUDE_LIMIT
+      ? -LATITUDE_LIMIT
+      : latitude > LATITUDE_LIMIT
+        ? LATITUDE_LIMIT
+        : latitude
 
 /**
  * The height band the surface arm covers for a body of this radius.
@@ -95,6 +132,7 @@ export function surfaceHeightBounds(radius: Meters): {
 
 export function clampStanceHeight(height: Meters, radius: Meters): Meters {
   const { min, max } = surfaceHeightBounds(radius)
+  if (!Number.isFinite(height)) return min
   return height < min ? min : height > max ? max : height
 }
 
@@ -109,7 +147,7 @@ export function clampStanceHeight(height: Meters, radius: Meters): Meters {
  */
 export function heightForScrub(radius: Meters, t: number): Meters {
   const { min, max } = surfaceHeightBounds(radius)
-  const clamped = t < 0 ? 0 : t > 1 ? 1 : t
+  const clamped = !Number.isFinite(t) ? 0 : t < 0 ? 0 : t > 1 ? 1 : t
   return min * (max / min) ** clamped
 }
 
@@ -188,12 +226,12 @@ export function surfaceStancePose(
  * The pitch that puts the horizon on the middle of the frame from `height`.
  *
  * Below the horizon, and by more than people expect: from 2 m up on an
- * Earth-sized body the horizon is 0.045° down, and from 400 km it is 19.6°.
+ * Earth-sized body the horizon is 0.045° down, and from 400 km it is 19.79°.
  * A scrub that held pitch at zero from orbit to the ground would therefore
  * spend the top of its travel aimed at empty sky — the body is *below* you up
  * there — so the descent control tracks this instead. `acos(r / (r + h))` is
- * the exact dip to the tangent point; the small-angle version is wrong by a
- * factor of two at orbital heights.
+ * the exact dip to the tangent point; the small-angle `√(2h/r)` reads 20.30° at
+ * the same height, 2.6% high and growing with `h`.
  */
 export function horizonPitch(radius: Meters, height: Meters): Radians {
   if (!(radius > 0) || !(height > 0)) return 0

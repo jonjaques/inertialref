@@ -1,5 +1,12 @@
 import { execSync } from 'node:child_process'
-import { closeSync, openSync, readdirSync, readSync } from 'node:fs'
+import {
+  closeSync,
+  existsSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  readSync,
+} from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { defineConfig, loadEnv } from 'vite'
 import react, { reactCompilerPreset } from '@vitejs/plugin-react'
@@ -87,6 +94,56 @@ function reportAnalytics(mode: string): void {
 }
 
 /**
+ * Fail the production build if it did not actually *deliver* source maps.
+ *
+ * `build.sourcemap: true` is the switch; this is the check that it took.
+ * `hidden` writes `.map` files and omits the `sourceMappingURL` comment, so
+ * DevTools never fetches them — a deployed site that looks debuggable from
+ * the asset list and is not. The comment is the delivery; the sibling file
+ * is the payload. Both have to exist for every hashed JS asset, including
+ * the universe worker.
+ *
+ * CSS is not in this check. Vite 8 minifies it with lightningcss and strips
+ * `sourceMap` from the options the user can set, so a production CSS file
+ * has no map even when `build.sourcemap` is true. Dev CSS maps are
+ * `css.devSourcemap`. Copied `public/` files (`sw.js`) are not compiled
+ * and are not in `assets/`.
+ */
+function requireSourceMaps() {
+  return {
+    name: 'inertialref:require-source-maps',
+    apply: 'build' as const,
+    /*
+     * `writeBundle`, not `closeBundle`. Vite 8 closes an empty environment
+     * before the client write, and throwing there aborts the real build
+     * with "0 modules transformed". Skip a directory that does not exist
+     * yet; the client write is the one that has files to check.
+     */
+    writeBundle() {
+      const dir = fileURLToPath(new URL('./dist/assets', import.meta.url))
+      if (!existsSync(dir)) return
+      const names = readdirSync(dir)
+      const scripts = names.filter(
+        (name) => name.endsWith('.js') && !name.endsWith('.map'),
+      )
+      if (scripts.length === 0) return
+      for (const name of scripts) {
+        const text = readFileSync(`${dir}/${name}`, 'utf8')
+        if (!text.includes('sourceMappingURL'))
+          throw new Error(
+            `dist/assets/${name} has no sourceMappingURL — the debugger ` +
+              'cannot map it. build.sourcemap must be true, not hidden.',
+          )
+        if (!names.includes(`${name}.map`))
+          throw new Error(
+            `dist/assets/${name} points at a source map that was not emitted`,
+          )
+      }
+    },
+  }
+}
+
+/**
  * Refuse to bundle a git-lfs pointer in place of a model.
  *
  * `render/shipModels.ts` pulls `data/models/*.glb` in through
@@ -147,12 +204,23 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [
       requireRealModels(),
+      requireSourceMaps(),
       react(),
       // React Compiler handles memoisation, so components here do not hand-write
       // useMemo/useCallback around render work.
       babel({ presets: [reactCompilerPreset()] }),
       tailwindcss(),
     ],
+    /*
+     * Source maps in every mode. Vite's defaults are the opposite: JS maps in
+     * `pnpm dev` only, nothing for CSS, and `build.sourcemap: false` — so a
+     * production deploy, and `pnpm preview`, ship minified bundles the
+     * debugger cannot map. `true` rather than `hidden` so the file carries
+     * `sourceMappingURL` and DevTools actually fetches the sibling `.map`.
+     * The repository is public; original source is not a secret the bundle
+     * was keeping.
+     */
+    css: { devSourcemap: true },
     define: {
       __BUILD_ID__: JSON.stringify(buildId()),
     },
@@ -182,6 +250,7 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       target: 'es2023',
+      sourcemap: true,
     },
   }
 })

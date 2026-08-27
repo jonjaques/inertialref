@@ -15,6 +15,7 @@ import {
 } from '@inertialref/universe'
 import {
   DEFAULT_MAX_PATCHES,
+  LATITUDE_LIMIT,
   MIN_STANCE_HEIGHT,
   surfaceHeightBounds,
 } from '@inertialref/rendering'
@@ -458,21 +459,22 @@ describe('the observatory on the ground', () => {
     harness.look('s:SOL/b:2')
     const before = harness.observatory.target?.address
     expect(() => harness.visit('s:SOL/b:5')).toThrow(/no surface/)
-    // The second half: the refusal has to come before `focus` commits, or a
-    // call that throws still leaves the planetarium looking at Saturn.
+    // The second half, and it is the half that matters: a refusal resolves
+    // before it commits, so a call that throws leaves the planetarium looking
+    // at what it was already looking at rather than at Saturn.
     expect(harness.observatory.target?.address).toBe(before)
   })
 
   it('gives back the framing the descent started from', () => {
     /*
-     * What `ascend` promises in four docstrings and the harness guide, and did
-     * not do.
+     * What `ascend` promises in four docstrings and the harness guide.
      *
-     * `stand` called `focus` unconditionally, and `focus` re-solves the distance
-     * from `framingDistance(radius, fov, DEFAULT_FILL)`. So descending from a
-     * framing the user had zoomed to and coming back up landed on the default
-     * instead — a restore of a value nobody had chosen, which is the same bug
-     * class `presentation.ts` was written to make unrepresentable.
+     * `focus` re-solves the distance from `framingDistance(radius, fov,
+     * DEFAULT_FILL)`, so `stand` calls it only when the target is somewhere
+     * else. Calling it unconditionally makes a descent from a framing the user
+     * zoomed to come back up on the default instead — a restore of a value
+     * nobody chose, the bug class `presentation.ts` exists to make
+     * unrepresentable.
      *
      * The Surface panel's site buttons take exactly this path: they call
      * `visit(undefined, …)`, which resolves to the address already held.
@@ -489,5 +491,171 @@ describe('the observatory on the ground', () => {
     harness.ascend()
 
     expect(harness.observatory.state.distance).toBeCloseTo(framing, 6)
+  })
+
+  it('gives it back through a wheel and a drag on the ground', () => {
+    /*
+     * The other half of the same promise, and the half a gesture reaches.
+     *
+     * `sample` returns the surface pose while a stance is held, so a drag or a
+     * notch down here changes nothing on screen — and `useObserverInput` wires
+     * both straight to the orbit arm with no idea which one is drawing. Left
+     * unrefused they rewrite the state `ascend` returns to, and the ascent
+     * eases to a framing nobody chose.
+     */
+    const session = live()
+    const { harness } = session
+    const entry = terrainZoo(session.world)[0]
+    harness.look(entry?.address ?? '')
+    harness.observatory.setDistance(1_100_000, false)
+    const framing = harness.observatory.state.distance
+    const azimuth = harness.observatory.state.azimuth
+
+    harness.visit(entry?.address, { site: 'summit', height: 2 })
+    harness.observatory.zoomNotches(5)
+    harness.observatory.drag(200, 50)
+    harness.observatory.frameTarget(0.9)
+    harness.ascend()
+
+    expect(harness.observatory.state.distance).toBeCloseTo(framing, 6)
+    expect(harness.observatory.state.azimuth).toBeCloseTo(azimuth, 9)
+    expect(harness.observerStatus()?.travelling).toBe(false)
+  })
+
+  it('refuses a site it does not have, and leaves the camera where it was', () => {
+    // The same property as the no-surface refusal, on the branch after it: the
+    // site lookup is the last thing that can fail, so it has to fail before the
+    // retarget commits rather than after.
+    const session = live()
+    const { harness } = session
+    const zoo = terrainZoo(session.world)
+    harness.look(zoo[0]?.address ?? '')
+    const before = harness.observatory.target?.address
+    expect(() => harness.visit(zoo[1]?.address, { site: 'nope' })).toThrow(
+      /no site/,
+    )
+    expect(harness.observatory.target?.address).toBe(before)
+    expect(harness.observatory.standing).toBe(false)
+  })
+
+  it('survives a non-finite number arriving through any of its setters', () => {
+    /*
+     * All four are public verbs and every one of them lands in the camera pose.
+     *
+     * A comparison chain lets NaN through — `NaN < min` and `NaN > max` are
+     * both false — and a NaN height throws `Universe offset must be finite` out
+     * of `UV.translate` inside the per-frame `sample`, taking the render loop
+     * with it. A NaN heading or pitch is quieter and worse: `lookAlong` returns
+     * a NaN quaternion, so the frame is black with nothing in the console.
+     */
+    const session = live()
+    const { harness } = session
+    const entry = terrainZoo(session.world)[0]
+    harness.visit(entry?.address, { site: 'summit', height: 120 })
+
+    harness.observatory.setStanceScrub(Number.NaN)
+    harness.observatory.setStanceHeight(Number.NaN)
+    harness.observatory.setHeading(Number.NaN)
+    harness.observatory.setPitch(Number.NaN)
+
+    const pose = harness.observerSample(1 / 60)
+    expect(pose).not.toBeNull()
+    for (const value of [
+      pose?.position.ox,
+      pose?.position.oy,
+      pose?.position.oz,
+      pose?.orientation.w,
+      pose?.orientation.x,
+      pose?.orientation.y,
+      pose?.orientation.z,
+    ]) {
+      expect(Number.isFinite(value ?? Number.NaN)).toBe(true)
+    }
+    const stance = harness.observerStatus()?.surface?.stance
+    expect(Number.isFinite(stance?.height ?? Number.NaN)).toBe(true)
+    expect(Number.isFinite(stance?.heading ?? Number.NaN)).toBe(true)
+    expect(Number.isFinite(stance?.pitch ?? Number.NaN)).toBe(true)
+  })
+
+  it('holds a stance short of the pole, at the limit the probe uses', () => {
+    /*
+     * `geodeticDirection` takes `cos(latitude)`, which goes negative past ±90°
+     * and reflects the direction through the axis onto the opposite meridian.
+     * Recorded unclamped, a stance at 91°N stands at 89°N on the far side of
+     * the world while reporting 91°N — and `simulateDescent`, the probe whose
+     * whole job is to predict this camera, clamps the same input, so the two
+     * would describe different ground for the same number.
+     */
+    const session = live()
+    const { harness } = session
+    const entry = terrainZoo(session.world)[0]
+    harness.visit(entry?.address, { latitude: 91, longitude: 0, height: 2 })
+    const stance = harness.observerStatus()?.surface?.stance
+    expect(stance?.latitude).toBeCloseTo(LATITUDE_LIMIT, 12)
+
+    const flown = harness.descend(entry?.address, {
+      latitude: 91,
+      longitude: 0,
+      trackDegrees: 0,
+    })
+    expect(flown.steps[0]?.latitude).toBeCloseTo(stance?.latitude ?? 0, 12)
+  })
+
+  it('moves between sites without resetting the heading or the tilt', () => {
+    // What the Surface panel's site buttons take once the camera is already
+    // down: `stand` reads an absent heading as north and an absent pitch as the
+    // horizon, so going through it would overwrite the two controls beside it.
+    const session = live()
+    const { harness } = session
+    const entry = terrainZoo(session.world)[0]
+    harness.visit(entry?.address, { site: 'summit', height: 120 })
+    harness.observatory.setHeading(1.2)
+    harness.observatory.setPitch(0.4)
+    harness.observatory.moveTo('basin')
+
+    const surface = harness.observerStatus()?.surface
+    expect(surface?.site).toBe('basin')
+    expect(surface?.stance.heading).toBeCloseTo(1.2, 9)
+    expect(surface?.stance.pitch).toBeCloseTo(0.4, 9)
+    expect(surface?.stance.height).toBeCloseTo(120, 9)
+  })
+})
+
+describe('the terrain verbs on a body with no ground', () => {
+  it('list no sites and refuse a descent on a gas giant', () => {
+    /*
+     * `surveySites` derives from `body.surface`, which every body carries —
+     * Saturn included. Without the predicate at this boundary the Surface panel
+     * draws six clickable cards for ground `visit` refuses, and the panel's own
+     * "pick a solid body" empty state is unreachable for the bodies it is for.
+     */
+    const session = live()
+    const { harness } = session
+    expect(harness.sites('s:SOL/b:5')).toEqual([])
+    expect(() => harness.descend('s:SOL/b:5')).toThrow(/no surface/)
+    expect(harness.sites('s:SOL/b:2')).toHaveLength(6)
+  })
+
+  it('take the same addresses every other verb takes', () => {
+    // One resolver. `parseAddress` alone accepts only the galaxy-qualified
+    // form, which made these two the only verbs in the console with their own
+    // address vocabulary.
+    const session = live()
+    const { harness } = session
+    expect(harness.sites('s:SOL/b:2')).toEqual(
+      harness.sites('g:milky-way/s:SOL/b:2'),
+    )
+  })
+
+  it('take degrees, like every other verb that names a latitude', () => {
+    // `DescentOptions` below the harness is radians and `Radians` is a bare
+    // `number`, so a latitude copied out of `ir.sites()` — which prints degrees
+    // — was read as radians and described ground 2,578° away.
+    const session = live()
+    const report = session.harness.descend('s:SOL/b:2', {
+      latitude: 45,
+      longitude: -30,
+    })
+    expect(report.site).toBe('45.00°, -30.00°')
   })
 })

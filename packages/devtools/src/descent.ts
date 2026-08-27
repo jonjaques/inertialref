@@ -14,6 +14,7 @@ import {
 } from '@inertialref/universe'
 import {
   DEFAULT_MAX_PATCHES,
+  clampLatitude,
   MIN_STANCE_HEIGHT,
   selectTerrain,
   surfaceHeightBounds,
@@ -191,14 +192,6 @@ export interface GenerationCost {
   readonly samplesPerSecond: number
 }
 
-/**
- * How close to a pole a ground track may run, radians.
- *
- * The same margin `ELEVATION_LIMIT` and `PITCH_LIMIT` use, for a different
- * reason: this one is not a singularity but a sign flip. See the clamp below.
- */
-const POLE_LIMIT = Math.PI / 2 - 1e-6
-
 const DEFAULT_STEPS = 128
 const DEFAULT_TRACK_DEGREES = 10
 /*
@@ -220,6 +213,14 @@ export const DEFAULT_CACHE = DEFAULT_MAX_PATCHES * 3
  * An explicit latitude and longitude beats a site id, and a site id beats the
  * default, which is the summit — the place a plate of a terrain change is most
  * likely to show it.
+ *
+ * Each angle overrides on its own, and an unknown site id throws: both are what
+ * `Observatory.stand` does with the same two options, and a probe that answered
+ * a different question from the camera would be measuring the wrong ground.
+ * Substituting the first site for a typo is the worst of the three, because the
+ * first site is the summit and this phase's own finding is that a summit above
+ * the fade line requests nothing — a mistyped `basin` would come back as a
+ * generation cost of zero and read as free.
  */
 export function descentTarget(
   body: Body,
@@ -229,18 +230,34 @@ export function descentTarget(
   readonly longitude: Radians
   readonly name: string
 } {
-  if (options.latitude !== undefined && options.longitude !== undefined) {
+  const sites = surveySites(body)
+  const site =
+    options.site === undefined
+      ? undefined
+      : sites.find((one) => one.id === options.site)
+  if (options.site !== undefined && site === undefined) {
+    throw new Error(
+      `${body.name} has no site "${options.site}" — try ${sites
+        .map((one) => one.id)
+        .join(', ')}`,
+    )
+  }
+  if (options.latitude !== undefined || options.longitude !== undefined) {
+    const latitude = options.latitude ?? site?.latitude ?? 0
+    const longitude = options.longitude ?? site?.longitude ?? 0
     return {
-      latitude: options.latitude,
-      longitude: options.longitude,
-      name: `${((options.latitude * 180) / Math.PI).toFixed(2)}°, ${((options.longitude * 180) / Math.PI).toFixed(2)}°`,
+      latitude,
+      longitude,
+      name: `${((latitude * 180) / Math.PI).toFixed(2)}°, ${((longitude * 180) / Math.PI).toFixed(2)}°`,
     }
   }
-  const sites = surveySites(body)
-  const wanted = options.site ?? 'summit'
-  const site =
-    sites.find((one) => one.id === wanted) ?? (sites[0] as SurveySite)
-  return { latitude: site.latitude, longitude: site.longitude, name: site.name }
+  const chosen =
+    site ?? (sites.find((one) => one.id === 'summit') as SurveySite)
+  return {
+    latitude: chosen.latitude,
+    longitude: chosen.longitude,
+    name: chosen.name,
+  }
 }
 
 /**
@@ -304,18 +321,18 @@ export function simulateDescent(
     /*
      * Clamped, because a track that runs past a pole is not a track.
      *
-     * `geodeticDirection` takes `cos(latitude)`, which goes negative past ±90°
-     * and reflects the direction through the axis onto the opposite meridian.
-     * A descent onto the `pole` site with the default 10° of track therefore
-     * started at 95° — five degrees past the pole on the anti-meridian — and
-     * every level and patch figure for those steps described ground the caller
-     * never asked about. The excess goes into longitude, where a wrap is what a
-     * meridian is for.
+     * Through `clampLatitude`, the same limit `Observatory.stand` holds a stance
+     * to, so a latitude means the same place in the probe and in the camera it
+     * predicts. `geodeticDirection` takes `cos(latitude)`, which goes negative
+     * past ±90° and reflects the direction through the axis onto the opposite
+     * meridian.
+     * A descent onto the `pole` site with the default 10° of track would
+     * otherwise start at 95° — five degrees past the pole on the anti-meridian
+     * — and every level and patch figure for those steps would describe ground
+     * the caller never asked about. Longitude is left to run:
+     * a wrap is what a meridian is for.
      */
-    const latitude = Math.max(
-      -POLE_LIMIT,
-      Math.min(POLE_LIMIT, target.latitude + offset * 0.5),
-    )
+    const latitude = clampLatitude(target.latitude + offset * 0.5)
     const longitude = target.longitude + offset
     const direction = geodeticDirection(latitude, longitude)
     const distance = surfaceRadius(body, direction) + height

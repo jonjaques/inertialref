@@ -89,6 +89,21 @@
   "observability": { "enabled": true },
 
   /*
+   * Client source maps are files in `apps/game/dist` and ride with the asset
+   * store. This flag is the *script*: Wrangler uploads the Worker's own map
+   * so Cloudflare can remap stack traces in logs. It is not the client maps;
+   * those are already in the asset directory once Vite writes them.
+   */
+  "upload_source_maps": true,
+
+  /*
+   * Wrangler's inspector defaults to 9229, which is Node's `--inspect` default.
+   * `pnpm sim` binds that port; Attach Node is aimed at it. workerd listens
+   * here instead so the two can run together.
+   */
+  "dev": { "inspector_port": 9230 },
+
+  /*
    * The site's object storage (docs/hosting.md H-8).
    *
    * It holds what the repository will not carry: today, one piece of

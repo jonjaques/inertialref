@@ -2,7 +2,6 @@ import type { Meters } from '@inertialref/shared'
 import type { World } from '@inertialref/simulation'
 import {
   findBody,
-  formatAddress,
   HEIGHTFIELD_RESOLUTION,
   parseAddress,
   type Body,
@@ -144,7 +143,6 @@ export function terrainBaseline(
 ): TerrainBaseline {
   const resolution = options.resolution ?? HEIGHTFIELD_RESOLUTION
   const limit = options.timedPatches ?? TIMED_PATCHES
-  const clock = now ?? ((): number => 0)
   const zoo = terrainZoo(world, options)
 
   const entries: BaselineEntry[] = []
@@ -182,13 +180,13 @@ export function terrainBaseline(
       measurePatchGeneration(
         body,
         regions.slice(0, WARMUP_PATCHES),
-        clock,
+        now,
         resolution,
       )
       generation = measurePatchGeneration(
         body,
         regions.slice(WARMUP_PATCHES, WARMUP_PATCHES + limit),
-        clock,
+        now,
         resolution,
       )
     }
@@ -224,7 +222,11 @@ export function terrainBaseline(
     seed: world.seedText,
     resolution,
     entries,
-    missing: missingArchetypes(zoo),
+    // From what was measured, not from what was found. An entry whose address
+    // will not resolve a second time is skipped above, and reporting `missing`
+    // against the zoo would then print three archetypes with no warning — which
+    // is the exact failure the zoo exists to prevent.
+    missing: missingArchetypes(entries.map((entry) => entry.zoo)),
     timed: now !== null,
   }
 }
@@ -247,11 +249,17 @@ export function summarizeBaseline(baseline: TerrainBaseline): string {
     lines.push(`  ${entry.zoo.detail}`)
     lines.push(summarizeDescent(entry.descent))
     const g = entry.generation
+    // `patches === 0` is a timing of nothing, and it prints as zero — which is
+    // the one number the module header says is worse than none. It happens on a
+    // short profile, where the descent asks for fewer regions than the warm-up
+    // discards, so it has to be said rather than divided.
     lines.push(
-      baseline.timed
-        ? `  generation: ${g.msPerPatch.toFixed(2)} ms/patch over ${g.patches} patches ` +
-            `(${(g.samplesPerSecond / 1e6).toFixed(2)} M samples/s)`
-        : `  generation: not timed — the host supplied no clock`,
+      !baseline.timed
+        ? `  generation: not timed — the host supplied no clock`
+        : g.patches === 0
+          ? `  generation: not timed — the descent asked for too few patches`
+          : `  generation: ${g.msPerPatch.toFixed(2)} ms/patch over ${g.patches} patches ` +
+            `(${(g.samplesPerSecond / 1e6).toFixed(2)} M samples/s)`,
     )
     lines.push('  sites, dropped straight onto:')
     for (const site of entry.sites) {
@@ -274,7 +282,4 @@ export function summarizeBaseline(baseline: TerrainBaseline): string {
 /** Just the zoo's addresses, for a capture script's loop. */
 export const baselineAddresses = (
   baseline: TerrainBaseline,
-): readonly string[] =>
-  baseline.entries.map((entry) =>
-    formatAddress(parseAddress(entry.zoo.address)),
-  )
+): readonly string[] => baseline.entries.map((entry) => entry.zoo.address)

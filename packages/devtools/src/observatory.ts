@@ -18,6 +18,7 @@ import {
   type Body,
   bodyFixedFrameId,
   bodyFrameId,
+  datumRadius,
   formatAddress,
   geodeticDirection,
   hasSolidSurface,
@@ -41,6 +42,7 @@ import {
   approachState,
   clampDistance,
   clampElevation,
+  clampLatitude,
   clampPitch,
   clampStanceHeight,
   distanceBounds,
@@ -331,8 +333,20 @@ export class Observatory {
     this.#site = null
   }
 
+  /*
+   * The orbit arm's writers refuse while the surface arm holds the camera.
+   *
+   * `sample` short-circuits to `#surfacePose` when a stance is held, so a drag,
+   * a wheel notch or a preset down here changes nothing on screen — and every
+   * one of them is wired straight through by `useObserverInput`, which has no
+   * idea which arm is drawing. Without the refusal the gesture silently rewrites
+   * the state `leaveSurface` returns to, so a scroll while standing lands the
+   * ascent on a framing nobody chose and leaves `travelling` true forever,
+   * because `sample` never runs the ease that would clear it.
+   */
   /** Orbit by a pointer drag, in pixels. */
   drag(dxPixels: number, dyPixels: number, sensitivity = 1): void {
+    if (this.#stance !== null) return
     // Both are written, not just the desired: a drag is direct manipulation and
     // must not lag a damping filter. Easing is for travel, not for the hand.
     this.#desired = applyDrag(this.#desired, dxPixels, dyPixels, sensitivity)
@@ -341,6 +355,7 @@ export class Observatory {
 
   /** Zoom by a ratio. Above 1 retreats. */
   zoom(factor: number): void {
+    if (this.#stance !== null) return
     const radius = this.#target?.radius ?? 0
     this.#desired = applyZoom(this.#desired, factor, radius)
     // The wheel eases while the drag does not, because a wheel arrives in
@@ -355,6 +370,7 @@ export class Observatory {
 
   /** Set the distance directly — the panel's slider and the presets. */
   setDistance(distance: Meters, ease = true): void {
+    if (this.#stance !== null) return
     const radius = this.#target?.radius ?? 0
     this.#desired = {
       ...this.#desired,
@@ -365,6 +381,7 @@ export class Observatory {
 
   /** Set the orbit angles directly, in radians. */
   setAngles(azimuth: number, elevation: number, ease = true): void {
+    if (this.#stance !== null) return
     this.#desired = {
       ...this.#desired,
       azimuth,
@@ -477,12 +494,18 @@ export class Observatory {
       )
     }
     // Only now, and only if it is somewhere else. Re-focusing the address
-    // already held is what threw the framing away.
+    // already held throws the framing away, and committing before the last
+    // refusal leaves the camera on a body the call declined to stand on.
     if (wanted.address !== this.#target?.address) {
       this.focus(wanted.address, { ease: false })
     }
 
-    const latitude = options.latitude ?? site?.latitude ?? 0
+    // Clamped to the same limit `simulateDescent` clamps to, and for the same
+    // reason: past ±90° `cos(latitude)` flips sign and the eye stands on the
+    // anti-meridian while the stance reports the number it was handed. The
+    // probe exists to predict this camera, so the two cannot disagree about
+    // what a latitude means.
+    const latitude = clampLatitude(options.latitude ?? site?.latitude ?? 0)
     const longitude = options.longitude ?? site?.longitude ?? 0
     const height = clampStanceHeight(
       options.height ?? MIN_STANCE_HEIGHT,
@@ -494,9 +517,9 @@ export class Observatory {
       height,
       heading: options.heading ?? 0,
       // Level with the horizon rather than level with the tangent plane. From
-      // 400 km up the horizon is 19.6° *below* the local horizontal, so a pitch
-      // of zero at the top of a descent is a picture of empty sky.
-      pitch: options.pitch ?? horizonPitch(body.radius, height),
+      // 400 km up the horizon is 19.79° *below* the local horizontal, so a
+      // pitch of zero at the top of a descent is a picture of empty sky.
+      pitch: clampPitch(options.pitch ?? horizonPitch(body.radius, height)),
     }
     this.#site = site?.id ?? null
     log.info('observatory standing', {
@@ -519,19 +542,23 @@ export class Observatory {
     const stance = this.#stance
     const body = this.#body()
     if (stance === null || body === null) return
-    if (typeof site === 'string') {
-      const found = surveySites(body).find((one) => one.id === site)
-      if (found === undefined) return
+    if (typeof site !== 'string') {
       this.#stance = {
         ...stance,
-        latitude: found.latitude,
-        longitude: found.longitude,
+        latitude: clampLatitude(site.latitude),
+        longitude: site.longitude,
       }
-      this.#site = found.id
+      this.#site = null
       return
     }
-    this.#stance = { ...stance, ...site }
-    this.#site = null
+    const found = surveySites(body).find((one) => one.id === site)
+    if (found === undefined) return
+    this.#stance = {
+      ...stance,
+      latitude: found.latitude,
+      longitude: found.longitude,
+    }
+    this.#site = found.id
   }
 
   /**
@@ -568,7 +595,10 @@ export class Observatory {
 
   /** Compass heading in radians: 0 is north, increasing toward east. */
   setHeading(heading: Radians): void {
-    if (this.#stance === null) return
+    // A heading has no bound to clamp to — it wraps — so the only thing to
+    // refuse is the one value that is not an angle. See the note above
+    // `clampPitch`: NaN here is a NaN quaternion and a black frame.
+    if (this.#stance === null || !Number.isFinite(heading)) return
     this.#stance = { ...this.#stance, heading }
   }
 
@@ -576,6 +606,27 @@ export class Observatory {
   setPitch(pitch: Radians): void {
     if (this.#stance === null) return
     this.#stance = { ...this.#stance, pitch: clampPitch(pitch) }
+  }
+
+  /**
+   * Put the horizon across the middle of the frame from where the eye is now.
+   *
+   * The height comes from the stance rather than from a caller, because a panel
+   * reads the stance out of an 8 Hz sample: a control that solved the dip from
+   * the height it last *saw* would aim at 0.045° after a scrub to 400 km, and —
+   * worse — `setStanceHeight` decides whether to keep tracking the horizon by
+   * comparing the pitch it holds against the dip the current height implies, so
+   * a pitch solved from a stale height fails that test forever after and the
+   * tracking never resumes.
+   */
+  levelToHorizon(): void {
+    const stance = this.#stance
+    const body = this.#body()
+    if (stance === null || body === null) return
+    this.#stance = {
+      ...stance,
+      pitch: horizonPitch(body.radius, stance.height),
+    }
   }
 
   /** The named places on the body being looked at. Empty for a star. */
@@ -768,7 +819,10 @@ export class Observatory {
     const body = this.#body()
     if (stance === null || body === null) return null
     const up = geodeticDirection(stance.latitude, stance.longitude)
-    const ground = surfaceRadius(body, up)
+    // One elevation sample, not two. `surfaceRadius` is `datumRadius +
+    // groundElevation`, so asking for both the radius and the elevation the way
+    // they read is fourteen octaves of noise run twice, eight times a second.
+    const elevation = groundElevation(body.surface, up)
     return {
       stance,
       scrub: scrubForHeight(body.radius, stance.height),
@@ -784,8 +838,8 @@ export class Observatory {
        * `SurveySite.elevation`, which is this exact function — the same place,
        * two numbers, kilometers apart.
        */
-      groundElevation: groundElevation(body.surface, up),
-      radius: ground + stance.height,
+      groundElevation: elevation,
+      radius: datumRadius(body, up) + elevation + stance.height,
       heightText: formatDistance(stance.height),
       site: this.#site,
     }
