@@ -81,7 +81,7 @@ The streamer is asked, every frame, what should be visible, and reconciles.
 
 ```mermaid
 flowchart TB
-    CAM["camera position"] --> BODY{"a solid body,<br/>relief over 8 px?"}
+    CAM["camera position"] --> BODY{"a solid, unfigured body,<br/>relief over 8 px?"}
     BODY -->|no| CLEAR["clear everything<br/><i>the sphere is the honest picture</i>"]
     BODY -->|yes| WALK["walk the quadtree from the six cube faces"]
     WALK --> REFINE{"one grid cell<br/>over 16 px?"}
@@ -120,8 +120,12 @@ it: the size of the smallest thing a patch can express.
 **Stop where the field stops.** Past some level a patch is a bilinear upsample
 of its parent — on Mercury a level-9 patch differs from one by 12 cm, and levels
 10 through 12 by nothing a float can hold. `surfaceDetailFloor` measures that
-per body from the field itself rather than assuming it, and it lands between
-level 7 and 10 across the zoo against the 12 the old rule saturated at.
+per body from the field itself rather than assuming it, and it lands at level 9
+or 10 across the zoo against the 12 the old rule saturated at. A quiet level
+settles the walk only if its stencils touched dry ground: the sea clamp
+manufactures exact zeros over open water, so a submerged probe set is the clamp
+talking rather than the field — an ocean world read that way streams its
+islands, with kilometers of relief, as six patches forever.
 
 **Measure to the ground, not the datum.** A node is a cone of directions crossed
 with the shell `[radius − relief, radius + relief]` that ground can occupy, and
@@ -146,7 +150,11 @@ which diverge because the second is taken from where the eye is going. Sized at
 a flat 512 against a working set of six hundred, every frame evicted ground the
 next frame wanted: the draw set collapsed from 350 patches to 19 and refined
 back, over and over, which is terrain strobing at every altitude. Both caps come
-from the selection's own ceiling now.
+from the selection's own ceiling now, and eviction keeps everything the frame's
+request list names — the drawn set, the starved children, the whole pyramid —
+because the pyramid is re-asked for every frame: a keep set of the two
+selections' leaves alone turns the cap into a treadmill that evicts a rung,
+re-requests it, and regenerates it at 14.5 ms a patch.
 
 Patch keys are `body|face.level.i.j` — `terrainPatchKey`, one definition and
 three readers — so the same patch is never requested twice concurrently, and the
@@ -160,7 +168,11 @@ same ground more coarsely. A descent therefore _sharpens_ rather than filling
 in. The request set is taken from where the eye will be in two seconds and asks
 for the whole pyramid under it, coarsest first — without the ancestors it would
 climb one worker round trip per level, and a streamer starting empty would draw
-six cube faces and stay there until a level-nine patch arrived.
+six cube faces and stay there until a level-nine patch arrived. The velocity
+behind that extrapolation is measured in body-fixed axes, because a hovering
+camera co-moves with the body at its orbital velocity — 47 km/s at Mercury —
+so a universe-frame drift pushed two seconds ahead aims the request set ~94 km
+along the orbit rather than along the camera's track over the ground.
 
 ### Where terrain is not drawn
 
@@ -171,6 +183,14 @@ so drawing generated ground over it replaces a measured picture with an invented
 one. Earth draws its map down to 2,000 km of altitude and its ground below that;
 Miranda, with 10 km of relief on a 236 km radius, keeps terrain out to eight
 thousand kilometers, because there the relief _is_ the shape of the body.
+
+A body with a measured figure streams no terrain at all. Every patch is built
+on the spherical datum, but a figured body's ground — the contact test,
+`surfaceRadius`, the standing camera — is its measured ellipsoid, up to half a
+radius inside that sphere on Haumea, so streamed patches would be a spherical
+shell floating around the shape model with the standing camera inside the mesh.
+Deep terrain on figures is a projection problem the terrain plan defers; until
+it is solved, the figure's own shape model is the honest ground.
 
 ---
 

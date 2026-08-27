@@ -132,7 +132,7 @@ cross-face sampling, bordered patches, the CDLOD morph, prefetch and budget.
 [`CONTEXT.md`](../CONTEXT.md) has the measurements. What it closed: the horizon
 is terrain rather than the datum sphere, cube-face edges are not holes, patch
 boundaries have no seam, and the three defects that came from measuring altitude
-from the datum are gone — every one of the zoo's thirty-six survey sites now
+from the datum are gone — every one of the zoo's twenty-four survey sites now
 bottoms out at its own detail floor, where two of Miranda's could not be drawn
 at any altitude at all.
 
@@ -155,8 +155,6 @@ at any altitude at all.
 | Gap                                   | Consequence                                       | Seam                                                                                                    |
 | ------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | Interest is a radius scan over cells  | Fine at 6 ly; a 100 ly query touches ~1,000 cells | `systemsWithin` already bounds and refuses oversized queries; a spatial index goes behind the same call |
-| No predictive loading                 | Patches pop in rather than pre-loading            | The streamer knows camera velocity; extrapolate the request set                                         |
-| No budget on generation per frame     | A fast descent can queue a burst                  | The pool measures queue latency; a budget belongs in the streamer                                       |
 | Simulation interest = render interest | Distant systems do not simulate at all            | `updateInterest` is the seam; a coarser tier for "simulated but not rendered" is the next step          |
 
 ### Simulation in a worker

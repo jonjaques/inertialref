@@ -45,10 +45,12 @@ from one by 12 cm and levels 10 through 12 by nothing a float can hold — so th
 old rule's saturation at level 12 was asking for sixteen times the patches of
 level 10 to produce identical output, at 12.8 ms of worker apiece.
 `surfaceDetailFloor` measures the residual from the field itself — 24
-golden-angle probes, five samples each, memoized, about five milliseconds — and
-lands between level 7 and 10 across the zoo. It lives beside `elevationAt`
-because it is a property of those bands: when Phase 2's geology puts detail at
-scales they do not currently reach, it reports a deeper floor the same day.
+golden-angle probes, five samples each, memoized, about five milliseconds,
+counting a quiet level only when its stencils touched dry ground, because the
+sea clamp manufactures exact zeros over open water — and lands at level 9 or 10
+across the zoo. It lives beside `elevationAt` because it is a property of those
+bands: when Phase 2's geology puts detail at scales they do not currently
+reach, it reports a deeper floor the same day.
 
 **Distance is measured to the ground.** A node is a cone of directions crossed
 with the shell `[radius − relief, radius + relief]` that ground can occupy, and
@@ -123,7 +125,7 @@ about whether the ground under the landing gear is drawn.
 
 ## Consequences
 
-**The three datum defects are gone**, and every one of the zoo's thirty-six
+**The three datum defects are gone**, and every one of the zoo's twenty-four
 survey sites bottoms out at its own detail floor. The tests that pinned them
 assert their opposites.
 

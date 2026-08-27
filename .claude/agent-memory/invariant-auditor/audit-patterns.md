@@ -180,6 +180,23 @@ it by calling twice in each order from two fresh processes — two lines, and it
 way to see it, because every production caller usually passes the defaults and never
 collides.
 
+Fixed on `feat/the-quadtree-covers-the-disk`: the key is `${radius}|${resolution}|${tolerance}`
+now, separated, and `radius` is over-keying (the walk never reads it) rather than under-keying.
+
+## Running `packages/universe` standalone from /tmp is cheap and settles most claims
+
+`node --experimental-strip-types` runs the sources directly. Absolute imports of
+`packages/universe/src/{terrain,system,galaxy}.ts` + `catalog/fixture.ts` (`TEST_CATALOG`,
+**not** `testCatalog.ts`) + `catalogStub(TEST_CATALOG.stars[0])` reproduces the test
+fixtures in about fifteen lines. Used it to confirm the sea-clamp detail-floor fix goes
+red under the mutation (`rootSeed('d')` Earth: old walk 1, shipped walk 9) and to sweep
+572 generated bodies for a residual trap (none). A measured mutation beats reading the
+test.
+
+Trap: `rg -rn` is `--replace n`, not "recursive with line numbers". It silently rewrites
+the matched text in the output — `seedHex` printed back as `n` and nearly cost a false
+"this field does not exist" finding. Use `rg -n`.
+
 Recurring companion: the memoized function ships with **no test**, and the tests that do
 exist use it on both sides (as the expectation _and_, via a default parameter, as the input
 to the thing under test). `terrainRig.test.ts` asserts `descent bottoms out at
@@ -213,6 +230,43 @@ argument is written when the author has the property in mind, and the sort is wh
 dropped in a later refactor. Grep the function for `sort`/`localeCompare` before believing
 it. `TerrainSelection.patches`'s "stable order: face, then quadrant, then depth" was wrong
 the same way in the same diff.
+
+## A fix pass's residue: the _guard_ is fixed, the _reader_ is not
+
+The highest-yield check on a "fifteen findings from the review" commit is not whether
+each fix works — they usually do — but whether the fix reaches every consumer of the
+thing it fixed. Two shapes, both found on `feat/the-quadtree-covers-the-disk`:
+
+- `useSurveySites` added `seedHex` to the effect's dependency array, so the effect
+  re-runs on a world replacement — but the render-time guard is still
+  `built.of === address ? built.sites : null`. The address is unchanged by a save load,
+  so the previous world's sites are returned for one paint, clickable. **Check: when a
+  key is widened, grep for every other place that key is compared.**
+- The streamer's `#previous` is nulled by `clear()`, but `update()` captures
+  `const previous = this.#previous` _above_ the retarget branch that calls `clear()`.
+  A local snapshot taken before an invalidating call outlives the invalidation.
+
+## "One constant instead of two that must agree" usually leaves a smaller twin
+
+The fix that retires `GEOMETRY_KEPT = 512` for `GEOMETRY_KEPT = GEOMETRY_CACHE` is
+right. But `packages/devtools` cannot import `apps/game`, so `descent.ts`'s
+`DEFAULT_CACHE = DEFAULT_MAX_PATCHES * 3` restates the streamer's own
+`FIELD_CACHE = DEFAULT_MAX_PATCHES * 3`. The number shrank from 512 to the multiplier
+`3`; the failure mode did not change, and nothing asserts the two agree.
+
+Companion: the _test_ keeps the retired number. `terrainRig.test.ts:305` still asserts
+`uniqueRegions > 512` under a comment that now names `DEFAULT_MAX_PATCHES * 3` (2,304).
+512 is below even one selection (768). **Grep the retired literal across tests, not just
+across source.**
+
+## A new gate in the code is a new branch in the docs' flowchart
+
+`terrainStreamer.#resolve` gained `&& body.figure === null`, which removes 92 of Sol's
+129 bodies plus every generated body under `ROUNDING_RADIUS` from streaming.
+`docs/concepts/streaming.md`'s Mermaid gate node still reads
+`"a solid body, relief over 8 px?"`, and ADR-0015's carve-out section is about _mapped_
+bodies only. Mermaid node labels are prose nobody greps. When a diff adds a term to a
+predicate, grep the docs for the predicate's other terms (`solid body`, `carve-out`).
 
 ## Cadence claims in comments are checkable arithmetic
 

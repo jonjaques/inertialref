@@ -4427,7 +4427,7 @@ holes — there is no neighborhood to fall off, because the traversal starts at
 all six faces and a patch samples one row past its own edge into whichever face
 owns it. Patch boundaries have no seam, because two rings of border make every
 normal a central difference. And **all three of the datum defects the rig found
-are gone**: every one of the zoo's thirty-six survey sites now bottoms out at
+are gone**: every one of the zoo's twenty-four survey sites now bottoms out at
 its own detail floor, where two of Miranda's could not be drawn at any altitude
 including zero.
 
