@@ -115,7 +115,7 @@ export const PAGES: readonly PageMeta[] = [
     path: DOCS,
     title: 'Documentation',
     description:
-      'How InertialRef works and why: ten mechanisms, fifteen decision records, the design bible, and a generated reference for every export of the engine.',
+      'How InertialRef works and why: ten mechanisms, sixteen decision records, the design bible, and a generated reference for every export of the engine.',
     index: true,
   },
   {

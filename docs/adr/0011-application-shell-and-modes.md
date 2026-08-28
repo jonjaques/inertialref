@@ -35,15 +35,15 @@ path by a pure function.**
   _inside_ the HUD layer, as a sibling of the canvas. No navigation can reach
   the renderer.
 - **Two route tables, not one.** _Mode_ routes (`/`, `/play/:mode`,
-  `/planetarium`, `/cinema/:scene?`) decide what owns the camera and what chrome
-  is on screen. _Overlay_ routes (`/settings/:section?`, `/about`, `/sign-in`,
-  `/sign-up`, `/profile`, `/auth/callback`) are dialogs drawn over a mode. A
-  link into an overlay carries the mode's own location as `state.background`, so
-  opening settings does not unmount the mode behind it.
+  `/planetarium`, `/cinema/:scene?`, `/docs/*`) decide what owns the camera and
+  what chrome is on screen. _Overlay_ routes (`/settings/:section?`, `/about`,
+  `/sign-in`, `/sign-up`, `/profile`, `/auth/callback`) are dialogs drawn over a
+  mode. A link into an overlay carries the mode's own location as
+  `state.background`, so opening settings does not unmount the mode behind it.
 - **`modeForPath(pathname)` is a pure function** in `apps/game/src/pages/paths.ts`,
-  returning one of `menu | flight | planetarium | cinema`. Mode is never held in
-  React state: a reload, a back button and a pasted link therefore land in the
-  same place by construction, and the claim is testable in Node.
+  returning one of `menu | flight | planetarium | cinema | docs`. Mode is never
+  held in React state: a reload, a back button and a pasted link therefore land
+  in the same place by construction, and the claim is testable in Node.
 - **The camera has one precedence order, in one place.** `GameEngine.#step`
   resolves it: **cutscene, then observatory, then the ship.** Each override is a
   presentation eye handed to `buildScene`, which is the seam ADR-0010 already

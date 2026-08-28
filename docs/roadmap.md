@@ -263,14 +263,19 @@ so there is still nothing that can fail a pull request for getting slower.
 The overlay earned itself on the first day: it found that the simulation clock
 capped time warp at 7.5× while the UI offered 100,000×.
 
-Also unaddressed: the client bundle is 1.90 MB raw (**541.4 KB gzip / 412.7 KB
-brotli**, measured 2026-08-21), dominated by Three.js, with no code splitting. It
-grew 177 KB gzip
-with the WebGPU migration — the node system and the WebGPU backend — and roughly
-150 KB raw of that is dead weight: React Three Fiber imports `three`, which pulls
-in the classic `WebGLRenderer` that nothing uses, because the WebGL _fallback_
-here is `WebGPURenderer`'s own backend. Dropping R3F or code-splitting would both
-recover it. The budget is 900 KB gzip with splitting, so this is inside it.
+Also unaddressed: the entry chunk is 2.48 MB raw (**747.0 KB gzip / 583.8 KB
+brotli**, measured 2026-08-27), dominated by Three.js. Roughly 150 KB raw of it
+is dead weight: React Three Fiber imports `three`, which pulls in the classic
+`WebGLRenderer` that nothing uses, because the WebGL _fallback_ here is
+`WebGPURenderer`'s own backend. Dropping R3F or splitting the renderer out would
+both recover it. The budget is 900 KB gzip, so this is inside it.
+
+**One split exists, and it is not the application's.** The documentation's
+diagrams import Mermaid dynamically, which brings 116 further chunks —
+3.28 MB raw, 954.0 KB gzip, Mermaid's own parsers plus cytoscape, dagre and
+KaTeX. None carries a first-party module, and nobody fetches one until they open
+a documentation page that has a diagram on it. Nothing in `apps/game/src` is
+lazily loaded, so a reader arriving at `/` still pays the whole entry chunk.
 
 **Two numbers arrived from [the spikes](spikes.md) and both belong here.**
 
