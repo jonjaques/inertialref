@@ -40,10 +40,11 @@ Most of `.claude/` runs without being asked.
   invariants but Claude Code does not auto-load it. `AGENTS.md` stays canonical
   and carries the reasoning; the rules carry only the imperative. The contract is
   [`.claude/rules/README.md`](.claude/rules/README.md).
-  Two rules carry no `paths:` and are therefore in context from the first turn:
-  `branching.md`, because the first commit happens before any directory rule
-  would fire, and `writing.md`, because a commit message is not a file a glob
-  can match.
+  Three rules carry no `paths:` and are therefore in context from the first
+  turn: `branching.md`, because the first commit happens before any directory
+  rule would fire; `writing.md`, because a commit message is not a file a glob
+  can match; and `browser.md`, because "check the app" is answered by picking a
+  tool before anything has been opened.
 - **The session knows what tree it is in.** `SessionStart` fetches `origin`,
   fast-forwards local `main` when it can do so without a checkout, and states
   the branch, the uncommitted count, and the distance from `origin/main`. It
@@ -66,13 +67,13 @@ Most of `.claude/` runs without being asked.
   does **not** fire for subagents: an agent working in a worktree must run
   `pnpm install --frozen-lockfile --prefer-offline` itself, first.
 
-| Skill          | For                                                       |
-| -------------- | --------------------------------------------------------- |
-| `/drive`       | Driving the game: harness, headless runner, browser traps |
-| `/ship`        | Check → commit → draft PR → watch CI → ready. You invoke  |
-| `/parallel`    | Fanning work across worktrees. Never auto-invoked         |
-| `/adr`         | Writing an ADR in house style                             |
-| `/context-log` | Appending to `CONTEXT.md`                                 |
+| Skill          | For                                                     |
+| -------------- | ------------------------------------------------------- |
+| `/drive`       | Driving the game: harness, headless runner, CDP driver  |
+| `/ship`        | Rebase → check → audit → verify → PR, ready. You invoke |
+| `/parallel`    | Fanning work across worktrees. Never auto-invoked       |
+| `/adr`         | Writing an ADR in house style                           |
+| `/context-log` | Appending to `CONTEXT.md`                               |
 
 | Agent                  | For                                               |
 | ---------------------- | ------------------------------------------------- |
@@ -104,6 +105,8 @@ import.
   replaced. History has three homes — `CONTEXT.md`, an ADR, and the commit
   message of the change itself.
 - Commit each coherent piece as it goes green, without asking. Push and the
-  pull request are `/ship`.
+  pull request are `/ship`, which rebases onto `origin/main` first — `main`
+  enforces linear history and takes squash merges only. Reviewing the result is
+  `/code-review`, which the user invokes; `/ship` never does.
 - Report completion as: Implemented / Architecture decisions / Tests and
   verification / Known limitations / Recommended next step.

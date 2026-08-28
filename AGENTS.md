@@ -263,6 +263,9 @@ source. It is a safety net. The full `pnpm check` gates the push and
 `IR_SKIP_GATE=1` disables the hook.
 
 Commit each coherent piece as it goes green rather than one lump at the end,
-and cut the branch at the first commit, off `origin/main`. Pushing and the
-pull request are `ship`, which opens the PR as a draft and marks it ready only
-once CI is green. [Working](docs/agents/working.md) § "Starting work".
+and cut the branch at the first commit, off `origin/main`. `main` enforces
+linear history and takes squash merges only, so rebase onto `origin/main`
+before pushing — never merge into the branch. Pushing and the pull request are
+`ship`, which rebases, gates, audits, verifies in a browser, and then opens the
+PR ready for review; `/code-review` is a separate command the user runs on it.
+[Working](docs/agents/working.md) § "Starting work".
