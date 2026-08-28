@@ -17,6 +17,7 @@ import {
   SIGN_IN,
   SIGN_UP,
 } from './paths.ts'
+import { KeymapProvider } from '../input/KeymapProvider.tsx'
 import { OverlayRoutes } from './OverlayRoutes.tsx'
 
 /*
@@ -54,12 +55,25 @@ const state = {
   },
 }
 
+/*
+ * The keymap provider is part of the stack, so it is part of the render.
+ *
+ * A dialog claims the `dialog` context and takes `Escape` while it is up, which
+ * means it calls `useKeyContext` — and a component that reaches for the
+ * dispatcher outside a provider is a component that would throw in the browser
+ * too. Stubbing the context instead would assert against the stub; this asserts
+ * that the tree `main.tsx` builds is the tree these pages render in.
+ */
 const at = (path: string): string =>
   renderToStaticMarkup(
     createElement(
-      MemoryRouter,
-      { initialEntries: [path] },
-      createElement(OverlayRoutes, state),
+      KeymapProvider,
+      null,
+      createElement(
+        MemoryRouter,
+        { initialEntries: [path] },
+        createElement(OverlayRoutes, state),
+      ),
     ),
   )
 
@@ -94,7 +108,10 @@ describe('the routed dialogs', () => {
     // The reason sections are routes at all: "turn off the lens flare" is much
     // easier to answer with a link than with three sentences of navigation.
     expect(at(settingsSection('camera'))).toContain('65°')
-    expect(at(settingsSection('controls'))).toContain('flight assist')
+    // A row per action, from the one table — and the chord beside it, which is
+    // the half that could not exist while the bindings were string literals in
+    // five files.
+    expect(at(settingsSection('controls'))).toContain('Flight Assist')
   })
 
   it('falls back rather than 404ing on a section it has never heard of', () => {

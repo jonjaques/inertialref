@@ -29,7 +29,16 @@ import { type Chord, chord, chordEquals, parseChord } from './chord.ts'
  */
 
 export type KeyContext =
-  'global' | 'flight' | 'planetarium' | 'standing' | 'cinema' | 'docs'
+  | 'global'
+  | 'flight'
+  | 'planetarium'
+  | 'standing'
+  | 'cinema'
+  | 'docs'
+  /** A routed dialog, open over whatever mode is behind it. */
+  | 'dialog'
+  /** A scripted scene playing. Every routed page unmounts under one. */
+  | 'cutscene'
 
 /**
  * Every set of contexts that can be live at one moment.
@@ -41,13 +50,31 @@ export type KeyContext =
  * "two actions with one chord in one of these", which is a stronger and simpler
  * claim than any pairwise rule about which contexts are disjoint.
  */
-export const LIVE_SETS: readonly (readonly KeyContext[])[] = [
+const MODE_SETS: readonly (readonly KeyContext[])[] = [
   ['global', 'flight'],
   ['global', 'planetarium'],
   ['global', 'planetarium', 'standing'],
   ['global', 'cinema'],
   ['global', 'docs'],
 ]
+
+/**
+ * The two layers that can sit over a mode, and never over each other.
+ *
+ * A routed dialog leaves the mode mounted behind it — that is what the
+ * background location is for — so `dialog` genuinely coexists with every mode.
+ * A cutscene does not: every routed page unmounts under one, along with the
+ * rest of the chrome, so a dialog and a cutscene are not a state this app has.
+ */
+const MODAL_LAYERS: readonly (readonly KeyContext[])[] = [
+  [],
+  ['dialog'],
+  ['cutscene'],
+]
+
+export const LIVE_SETS: readonly (readonly KeyContext[])[] = MODE_SETS.flatMap(
+  (mode) => MODAL_LAYERS.map((layer) => [...mode, ...layer]),
+)
 
 /**
  * How specific a context is, for deciding which of two live actions wins.
@@ -67,6 +94,8 @@ const SPECIFICITY: Readonly<Record<KeyContext, number>> = {
   flight: 1,
   planetarium: 1,
   standing: 2,
+  cutscene: 3,
+  dialog: 3,
 }
 
 export interface ActionDefinition {
@@ -349,6 +378,19 @@ export const ACTIONS: readonly ActionDefinition[] = [
     { shiftScales: true, yieldsToFocus: true },
   ),
   press('cinema.library', 'The Library', 'Cinema', 'cinema', chord('Escape')),
+
+  /* -------------------------------- docs -------------------------------- */
+  press('docs.search', 'Search the Docs', 'Reading', 'docs', chord('Slash'), {
+    hint: 'the reading room’s own search, in place of the catalog’s',
+  }),
+
+  /* ------------------------- over everything ---------------------------- */
+  press('overlay.close', 'Close', 'Dialogs', 'dialog', chord('Escape'), {
+    hint: 'the platform’s gesture, and the reason Escape is not rebindable',
+  }),
+  press('cutscene.skip', 'Skip', 'Dialogs', 'cutscene', chord('Escape'), {
+    hint: 'stop the scene and put the ship back where it was',
+  }),
 ]
 
 export type ActionId = string

@@ -67,6 +67,15 @@ export class KeymapStore {
   /** Every action currently held down, so a blur can release all of them. */
   readonly #held = new Set<ActionId>()
   readonly #watchers = new Set<() => void>()
+  /**
+   * Told about every key press, before anything is resolved.
+   *
+   * The cinema's idle timer is the caller: "was there keyboard activity" is a
+   * question about the keyboard rather than about any binding, and a listener
+   * of its own for it would be a second `keydown` on the window for a question
+   * this object already has the answer to.
+   */
+  readonly #activity = new Set<() => void>()
   /** What a physical key is called on the keyboard actually attached. */
   #layout: ReadonlyMap<string, string> | null = null
 
@@ -109,6 +118,12 @@ export class KeymapStore {
     for (const watcher of this.#watchers) watcher()
   }
 
+  /** Called on every key press, whatever it turns out to mean. */
+  watchActivity(watcher: () => void): () => void {
+    this.#activity.add(watcher)
+    return () => this.#activity.delete(watcher)
+  }
+
   claim(claim: ContextClaim): () => void {
     this.#claims.add(claim)
     return () => {
@@ -147,6 +162,9 @@ export class KeymapStore {
   }
 
   handleKeyDown(event: KeyboardEvent): void {
+    // Before every refusal below: the cinema's idle timer wants to know that
+    // somebody is still here, and typing into a field is still being here.
+    for (const watcher of this.#activity) watcher()
     // A key typed into the search box is not a camera command. The focus check
     // is here rather than in the table because "is something else listening" is
     // a fact about the document, not about the key.

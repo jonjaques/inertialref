@@ -18,6 +18,8 @@ import {
   PLANETARIUM_SHIP,
   usePersistentState,
 } from '../state/preferences.ts'
+import { useChromeHidden } from '../hud/chrome.ts'
+import { useEngine } from '../state/engineStore.ts'
 import { QUERY } from '../pages/paths.ts'
 import type { PlanetariumContext } from './context.ts'
 import { planetariumPanels } from './registry.tsx'
@@ -71,6 +73,30 @@ export function PlanetariumMode({
   )
   const [flare, setFlare] = usePersistentState(PLANETARIUM_FLARE)
   const [notice, setNotice] = useState<string | null>(null)
+  /*
+   * Whether the primary drag and the arrow keys look instead of orbiting.
+   *
+   * Session state rather than a preference, and the two ways in are why: the
+   * secondary button always looks, so a mouse never needs this — it is the only
+   * way in on a phone and with a keyboard alone. Somebody who turned it on for
+   * one picture has not said anything about the next session, and a planetarium
+   * that opened with the drag doing something other than orbiting would be a
+   * mode whose primary gesture had silently changed.
+   */
+  const [freeLook, setFreeLook] = useState(false)
+  const chromeHidden = useChromeHidden()
+  /*
+   * Whether the camera is on the ground, sampled with the rest of the status.
+   *
+   * A boolean, so it bails out of the re-render with `Object.is` — the whole
+   * observer status is a fresh object graph eight times a second and selecting
+   * it here would rebuild this mode at that rate.
+   */
+  const standing = useEngine(
+    (snapshot) =>
+      snapshot.observer?.surface !== null &&
+      snapshot.observer?.surface !== undefined,
+  )
 
   /*
    * The mode's stance: what it wants drawn while it is on screen.
@@ -215,6 +241,9 @@ export function PlanetariumMode({
     onPick,
     onFrame: () => engine.harness.observatory.frameTarget(DEFAULT_FILL),
     onReset: () => focus(DEFAULT_TARGET),
+    standing,
+    freeLook,
+    onFreeLook: setFreeLook,
   })
 
   return (
@@ -258,12 +287,15 @@ export function PlanetariumMode({
 
       {/* The aiming point. Small, dim and always there: it is the answer to
           "what will a click hit", and in a mode with no ship it is the only
-          thing anchoring the center of the frame. */}
-      <div className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-        <div className="size-1.5 rounded-full border border-sky-300/40" />
-      </div>
+          thing anchoring the center of the frame. Chrome, so `Shift+H` clears
+          it — the labels above are content and stay. */}
+      {!chromeHidden && (
+        <div className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+          <div className="size-1.5 rounded-full border border-sky-300/40" />
+        </div>
+      )}
 
-      {notice !== null && (
+      {notice !== null && !chromeHidden && (
         <p className="pointer-events-none absolute top-14 left-1/2 -translate-x-1/2 rounded border border-rose-500/40 bg-slate-950/85 px-3 py-1 type-readout text-rose-200 backdrop-blur">
           {notice}
         </p>

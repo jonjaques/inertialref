@@ -6,6 +6,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { createConsoleSink, logHub } from '@inertialref/shared'
 import { startAnalytics } from './analytics.ts'
 import App from './App.tsx'
+import { KeymapProvider } from './input/KeymapProvider.tsx'
 import { registerServiceWorker } from './net/registerServiceWorker.ts'
 import { BUILD_ID } from './build.ts'
 import { loadStarCatalog } from './engine/catalogAsset.ts'
@@ -172,7 +173,12 @@ try {
            * and the reasoning.
            */}
           <TooltipProvider>
-            <App catalog={catalog} />
+            {/* Above the router and outside every mode: the keyboard outlives
+                a navigation, and rebuilding the one window listener per route
+                would drop a held axis at the moment the mode changed. */}
+            <KeymapProvider>
+              <App catalog={catalog} />
+            </KeymapProvider>
           </TooltipProvider>
         </MotionConfig>
       </BrowserRouter>

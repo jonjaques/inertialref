@@ -8,7 +8,6 @@ import {
   delta,
   GESTURE_START,
   gestureStep,
-  keyAction,
   pinchFactor,
   type Point,
   spread,
@@ -226,59 +225,16 @@ describe('one step of a gesture', () => {
   })
 })
 
-describe('the keyboard', () => {
-  it('orbits, zooms, frames and resets', () => {
-    expect(keyAction({ key: 'ArrowLeft' })?.kind).toBe('orbit')
-    expect(keyAction({ key: '=' })?.kind).toBe('zoom')
-    expect(keyAction({ key: 'f' })?.kind).toBe('frame')
-    expect(keyAction({ key: 'Home' })?.kind).toBe('reset')
-    expect(keyAction({ key: 'q' })).toBeNull()
-  })
-
-  it('zooms in on plus and out on minus', () => {
-    // Sign errors here are invisible in review and immediately obvious in use.
-    const inward = keyAction({ key: '+' })
-    const outward = keyAction({ key: '-' })
-    expect(inward?.kind === 'zoom' && inward.notches).toBeLessThan(0)
-    expect(outward?.kind === 'zoom' && outward.notches).toBeGreaterThan(0)
-  })
-
-  it('zooms by the same amount in both directions', () => {
-    /*
-     * `+` is Shift-`=`, so a `shiftKey` read as a magnitude modifier is always
-     * set for it and never set for `−`: the two keys the help text names
-     * differed by a factor of four, and pressing one then the other did not
-     * return the camera to where it started. The event carries the shift a
-     * `+` needed to be typed at all — it is not a second gesture.
-     */
-    const inward = keyAction({ key: '+', shiftKey: true })
-    const outward = keyAction({ key: '-' })
-    expect(inward?.kind === 'zoom' && inward.notches).toBe(
-      outward?.kind === 'zoom' ? -outward.notches : Number.NaN,
-    )
-    // ...and the unshifted glyphs mean exactly the same thing as the shifted
-    // ones, because on some layouts they are how the key is reached at all.
-    expect(keyAction({ key: '=' })).toEqual(inward)
-    expect(keyAction({ key: '_', shiftKey: true })).toEqual(outward)
-  })
-
-  it('treats shift as a magnitude, not a different action', () => {
-    const slow = keyAction({ key: 'ArrowRight' })
-    const fast = keyAction({ key: 'ArrowRight', shiftKey: true })
-    expect(slow?.kind).toBe(fast?.kind)
-    expect(fast?.kind === 'orbit' && fast.dx).toBeGreaterThan(
-      slow?.kind === 'orbit' ? slow.dx : 0,
-    )
-  })
-
-  it('leaves the platform its own shortcuts', () => {
-    // Cmd-left is the back gesture and Ctrl-plus is the page zoom. Swallowing
-    // either to pan a camera is breaking the browser to move a planet.
-    expect(keyAction({ key: 'ArrowLeft', metaKey: true })).toBeNull()
-    expect(keyAction({ key: '=', ctrlKey: true })).toBeNull()
-    expect(keyAction({ key: 'ArrowUp', altKey: true })).toBeNull()
-  })
-})
+/*
+ * The planetarium's keys are `input/keymap.test.ts` now.
+ *
+ * They were a `keyAction` switch here, and the tests around it were about the
+ * two things a switch could get wrong: that `+` and `−` step by the same
+ * amount, and that Shift is a magnitude rather than a second action. Both are
+ * structural now rather than asserted — `observe.in` and `observe.out` each
+ * issue one notch, and `shiftScales` is a field on the action — so the claims
+ * moved to the table's own tests along with the platform refusals.
+ */
 
 describe('picking', () => {
   it('prefers what the pointer is inside, largest first', () => {

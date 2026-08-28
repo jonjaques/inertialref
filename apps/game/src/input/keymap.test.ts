@@ -41,22 +41,38 @@ describe('the default table', () => {
     ).toEqual([])
   })
 
-  it('shadows exactly one global act, and it is the one it means to', () => {
+  it('shadows only the four outer acts it means to', () => {
     /*
-     * `Space` is pause everywhere and the cinema player's transport, and the
-     * cinema's claim is the better one while you are in it. That is the bug the
-     * six listeners had — both handlers ran, `clock.paused` flipped twice, and
-     * the documented control did nothing at all with nothing in the console —
-     * expressed as an ordering instead of as two handlers hoping not to meet.
+     * A shadow is an inner context taking a chord an outer one also holds, and
+     * every one of these is the design rather than an accident:
      *
-     * Pinned to the exact list, so a second shadow has to be argued for here
-     * rather than discovered in a mode where a key quietly stopped working.
+     *   `Space`   pause everywhere, the transport in the cinema. This is the
+     *             bug the six listeners had — both handlers ran, `clock.paused`
+     *             flipped twice, and the documented control did nothing at all
+     *             with nothing to see in the console. It is an ordering now.
+     *   `Escape`  the library in the cinema, and a dialog or a running scene
+     *             takes it back while one is up. That is the platform's
+     *             gesture, and the reason Escape is not rebindable.
+     *   `/`       the catalog's search, and the reading room's own where there
+     *             is no catalog.
+     *
+     * Deduplicated because a shadow repeats in every live set that contains
+     * both contexts, and the claim is about the pairs rather than about how
+     * many arrangements they appear in. Pinned exactly, so a fifth has to be
+     * argued for here rather than discovered in a mode where a key quietly
+     * stopped working.
      */
-    expect(
+    const shadows = new Set(
       collisions(resolveBindings())
         .filter((one) => one.kind === 'shadowed')
         .map((one) => `${formatChord(one.chord)}: ${one.ids.join(' over ')}`),
-    ).toEqual(['Space: cinema.play over time.pause'])
+    )
+    expect([...shadows].sort()).toEqual([
+      'Escape: cutscene.skip over cinema.library',
+      'Escape: overlay.close over cinema.library',
+      'Slash: docs.search over nav.goTo',
+      'Space: cinema.play over time.pause',
+    ])
   })
 
   it('gives every action a unique id and a group', () => {

@@ -4,8 +4,8 @@ import { describeOutput, type RendererDescription } from '../render/output.ts'
 import { AuthoritySection } from './AuthoritySection.tsx'
 import { NetworkSection } from './NetworkSection.tsx'
 import { Row } from './Row.tsx'
+import { KeySheet } from '../input/KeySheet.tsx'
 import { Section } from './Section.tsx'
-import { CONTROL_HELP } from './useShipControls.ts'
 
 /*
  * The debug readout.
@@ -253,14 +253,10 @@ export function TelemetryPanel({
       {network}
 
       <Section id="tel.controls" title="Controls">
-        <div className="grid grid-cols-[5.5rem_1fr] gap-x-2">
-          {CONTROL_HELP.map(([key, description]) => (
-            <div key={key} className="contents">
-              <span className="text-slate-400">{key}</span>
-              <span className="text-slate-400">{description}</span>
-            </div>
-          ))}
-        </div>
+        {/* Derived from the keymap rather than restated, so a rebind is on this
+            panel in the same commit that stores it. Flight and the global acts
+            only — the whole sheet is `?`, from any mode. */}
+        <KeySheet contexts={['global', 'flight']} />
         <div className="mt-2 text-slate-400">
           console: <span className="text-sky-300">ir.help()</span> ·{' '}
           <span className="text-sky-300">ir.targets()</span> ·{' '}

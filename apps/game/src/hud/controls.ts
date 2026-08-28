@@ -279,6 +279,14 @@ export interface HudRenderState {
 export interface HudCommands {
   readonly togglePause: () => void
   readonly warp: (direction: number) => void
+  /**
+   * Back to one second per second, in one press.
+   *
+   * Not `warp(-1)` repeated: the ladder is seven rungs, so leaving 100,000×
+   * costs six presses and six notices. The transport strip has had the button
+   * since the dock existed and the keyboard has not had the key.
+   */
+  readonly realTime: () => void
   readonly toggleAssist: () => void
   readonly killRotation: () => void
   readonly save: () => void

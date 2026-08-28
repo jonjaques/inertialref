@@ -4,8 +4,10 @@ import type { HarnessStatus } from '@inertialref/devtools'
 import { Workspace } from '../dock/Workspace.tsx'
 import type { DevWorkspace } from '../dock/workspace.ts'
 import type { GameEngine } from '../engine/GameEngine.ts'
+import { useChromeHidden } from '../hud/chrome.ts'
 import { ErrorBoundary } from '../hud/ErrorBoundary.tsx'
 import { FlightStrip } from '../hud/FlightStrip.tsx'
+import { useFlightContext } from '../hud/useShipControls.ts'
 import { DeferredMultiplayer } from './DeferredMultiplayer.tsx'
 import { NotConnected } from './NotConnected.tsx'
 
@@ -63,23 +65,34 @@ export function FlightMode({
     [engine],
   )
 
+  // The axes are live here and nowhere else. The planetarium binds the arrows
+  // to orbiting a camera and `F` to framing a target, and both are flight axes.
+  useFlightContext()
+  const chromeHidden = useChromeHidden()
+
   if (play === 'multiplayer') return <DeferredMultiplayer />
 
   return (
     <>
-      <ErrorBoundary
-        what="the flight strip"
-        className="type-readout pointer-events-auto absolute bottom-3 left-3 max-w-[calc(100%-1.5rem)]"
-      >
-        <FlightStrip status={status} />
-      </ErrorBoundary>
+      {/* The strip and the reticle are chrome, so `Shift+H` clears them. The
+          workspace puts itself away — see `hud/chrome.ts`. */}
+      {!chromeHidden && (
+        <>
+          <ErrorBoundary
+            what="the flight strip"
+            className="type-readout pointer-events-auto absolute bottom-3 left-3 max-w-[calc(100%-1.5rem)]"
+          >
+            <FlightStrip status={status} />
+          </ErrorBoundary>
 
-      {/* The aiming reticle. Center of frame, and the only permanent piece of
-          cockpit chrome this build has — `docs/design/ux.md` specifies the rest
-          and none of it is built. */}
-      <div className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-        <div className="size-4 rounded-full border border-sky-300/40" />
-      </div>
+          {/* The aiming reticle. Center of frame, and the only permanent piece
+              of cockpit chrome this build has — `docs/design/ux.md` specifies
+              the rest and none of it is built. */}
+          <div className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+            <div className="size-4 rounded-full border border-sky-300/40" />
+          </div>
+        </>
+      )}
 
       {play === 'online' && <NotConnected />}
 

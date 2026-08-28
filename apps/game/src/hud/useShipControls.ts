@@ -1,6 +1,7 @@
-import { useEffect, useRef } from 'react'
+import { useRef } from 'react'
 import type { GameEngine } from '../engine/GameEngine.ts'
-import { isOverlayControl, isTyping } from './focus.ts'
+import { useAction, useActions, useKeyContext } from '../input/useKeymap.ts'
+import type { ActionId } from '../input/keymap.ts'
 
 /*
  * Keyboard flight.
@@ -10,6 +11,13 @@ import { isOverlayControl, isTyping } from './focus.ts'
  * moves the ship — a keydown handler that nudged a position would make flight
  * behavior depend on key-repeat rate, which is the input equivalent of tying
  * physics to the frame rate.
+ *
+ * What is left of this hook is that arithmetic. Which key produces which axis
+ * is `input/keymap.ts`, and it has to be: the planetarium binds the arrows to
+ * orbiting a camera and `F` to framing a target, and both are flight axes here.
+ * Two window listeners claiming one key is not a conflict anybody can diagnose
+ * — the ship simply drifts while you look at Saturn — and the contexts are what
+ * make it impossible rather than merely avoided.
  */
 
 export interface ControlBindings {
@@ -21,213 +29,81 @@ export interface ControlBindings {
   readonly onLoad: () => void
 }
 
-const AXIS_KEYS: Readonly<
+/** Which axis each held flight action drives, and which way. */
+const AXES: Readonly<
   Record<
     string,
     [axis: 'translation' | 'rotation', index: 0 | 1 | 2, sign: number]
   >
 > = {
-  KeyW: ['translation', 2, 1],
-  KeyS: ['translation', 2, -1],
-  KeyD: ['translation', 0, 1],
-  KeyA: ['translation', 0, -1],
-  KeyR: ['translation', 1, 1],
-  KeyF: ['translation', 1, -1],
-  ArrowUp: ['rotation', 0, 1],
-  ArrowDown: ['rotation', 0, -1],
-  ArrowLeft: ['rotation', 1, 1],
-  ArrowRight: ['rotation', 1, -1],
-  KeyQ: ['rotation', 2, 1],
-  KeyE: ['rotation', 2, -1],
+  'flight.fore': ['translation', 2, 1],
+  'flight.aft': ['translation', 2, -1],
+  'flight.right': ['translation', 0, 1],
+  'flight.left': ['translation', 0, -1],
+  'flight.up': ['translation', 1, 1],
+  'flight.down': ['translation', 1, -1],
+  'flight.pitchUp': ['rotation', 0, 1],
+  'flight.pitchDown': ['rotation', 0, -1],
+  'flight.yawLeft': ['rotation', 1, 1],
+  'flight.yawRight': ['rotation', 1, -1],
+  'flight.rollLeft': ['rotation', 2, 1],
+  'flight.rollRight': ['rotation', 2, -1],
 }
 
-/*
- * `isTyping` and `isOverlayControl` moved to `hud/focus.ts`, because three
- * window-level listeners now need them — this one, the workspace keys, and
- * the cinema transport — and a forked guard is how a new editable target gets
- * added to one copy and not the others.
- *
- * The typing refusal exists because the overlay grew a text field for
- * addresses: without it, typing `SOL` fires the retro thruster twice and
- * toggles nothing you meant.
- *
- * Only `Space` asks `isOverlayControl` here, and it is the one key that has
- * to: it is the pause key *and* how a keyboard activates a focused button.
- * `F5` and `F9` deliberately do not ask. No control in the overlay responds
- * to either, so declining them would not activate anything; it would hand the
- * key back to the browser, and F5 is Reload. Losing the session because focus
- * happened to be on a dock button is worse than the thing that would fix.
- */
-
-export interface ControlOptions {
-  /**
-   * Whether the flight axes are live.
-   *
-   * Off outside the flight modes, and it has to be: the planetarium binds the
-   * arrow keys to orbiting a camera and `F` to framing a target, and both are
-   * flight axes here. Two window-level handlers claiming the same key is not a
-   * conflict a user can diagnose — the ship simply drifts while they look at
-   * Saturn.
-   */
-  readonly axes: boolean
-  /**
-   * Whether `Space` pauses the simulation here.
-   *
-   * Off in the cinema mode, and for the same reason `axes` exists — except
-   * that this one is invisible rather than merely confusing. The player binds
-   * Space to its own transport, both handlers are on `window`, and neither
-   * `preventDefault` stops the other (only `stopImmediatePropagation` would):
-   * one press flipped `clock.paused` twice and nothing moved. A dead transport
-   * control with no error anywhere.
-   *
-   * The rest of the bindings stay live in every mode, because warping, saving
-   * and loading mean the same thing wherever you are.
-   */
-  readonly pause: boolean
-}
+const AXIS_IDS = Object.keys(AXES) as readonly ActionId[]
 
 export function useShipControls(
   engine: GameEngine,
   bindings: ControlBindings,
-  options: ControlOptions = { axes: true, pause: true },
 ): void {
+  /*
+   * Which axes are held, as a Set the dispatcher fills through the edges.
+   *
+   * A ref rather than state: this changes on every key and the vector it
+   * produces goes straight at the engine, so a re-render would be work for a
+   * value no component reads. The dispatcher releases everything on a blur and
+   * on the context leaving, so the set cannot be left with a thruster in it.
+   */
   const held = useRef(new Set<string>())
-  const axes = options.axes
-  const pause = options.pause
-  // The bindings close over React state, so a new object arrives on every
-  // render — several times a second while the HUD polls. Reading them through a
-  // ref keeps one subscription for the life of the engine instead of tearing
-  // down and rebuilding three window listeners at the HUD's refresh rate.
-  const latest = useRef(bindings)
-  useEffect(() => {
-    latest.current = bindings
+
+  const apply = (): void => {
+    const translation: [number, number, number] = [0, 0, 0]
+    const rotation: [number, number, number] = [0, 0, 0]
+    for (const id of held.current) {
+      const binding = AXES[id]
+      if (binding === undefined) continue
+      const [axis, index, sign] = binding
+      if (axis === 'translation') translation[index] += sign
+      else rotation[index] += sign
+    }
+    engine.setControl(translation, rotation)
+  }
+
+  useActions(AXIS_IDS, (id, event) => {
+    if (event.phase === 'down') held.current.add(id)
+    else held.current.delete(id)
+    apply()
   })
 
-  useEffect(() => {
-    // The set is captured once here rather than read through the ref in the
-    // cleanup: a ref's `.current` at teardown is not necessarily the one this
-    // effect has been filling, and the keys this effect must release are the
-    // ones it collected.
-    const heldKeys = held.current
-    const apply = (): void => {
-      const translation: [number, number, number] = [0, 0, 0]
-      const rotation: [number, number, number] = [0, 0, 0]
-      for (const code of heldKeys) {
-        const binding = AXIS_KEYS[code]
-        if (binding === undefined) continue
-        const [axis, index, sign] = binding
-        if (axis === 'translation') translation[index] += sign
-        else rotation[index] += sign
-      }
-      engine.setControl(translation, rotation)
-    }
-
-    const down = (event: KeyboardEvent): void => {
-      if (event.repeat || isTyping(event)) return
-      if (axes && event.code in AXIS_KEYS) {
-        heldKeys.add(event.code)
-        apply()
-        event.preventDefault()
-        return
-      }
-      switch (event.code) {
-        case 'KeyZ':
-          latest.current.onToggleAssist()
-          break
-        case 'KeyX':
-          latest.current.onKillRotation()
-          break
-        case 'Space':
-          // The focused control's activation wins, and the mode's own
-          // transport wins — see `isOverlayControl` and `ControlOptions.pause`.
-          if (!pause || isOverlayControl(event)) break
-          latest.current.onPause()
-          event.preventDefault()
-          break
-        case 'BracketRight':
-          latest.current.onWarp(1)
-          break
-        case 'BracketLeft':
-          latest.current.onWarp(-1)
-          break
-        case 'F5':
-          latest.current.onSave()
-          event.preventDefault()
-          break
-        case 'F9':
-          latest.current.onLoad()
-          event.preventDefault()
-          break
-        /*
-         * `H`, `G` and `P` are deliberately absent, and they are still bound.
-         *
-         * They are about what is on screen rather than about the ship, and
-         * what is on screen is now a per-mode workspace rather than one dock
-         * `App` owns — so they moved to `dock/useWorkspaceKeys.ts`, beside the
-         * state they change. Routing them from here would mean an event bus in
-         * place of a function call.
-         *
-         * None of them is `Tab`, which is the part worth keeping written down.
-         * Tab was the original binding for the collapse, guarded by "unless
-         * focus is already in the overlay" — and that guard could never open.
-         * On load `document.activeElement` is `<body>`, whose
-         * `closest('.hud-layer')` is null, so the guard was false, the dock
-         * toggled and `preventDefault` canceled the browser's focus move.
-         * Every subsequent Tab did the same, and with no `tabIndex` on the
-         * canvas there was no focusable element outside the layer to bootstrap
-         * from: focus could never enter the overlay at all, and every focus
-         * ring and `aria-expanded` in it was unreachable by keyboard.
-         *
-         * There is no version of this that keeps both. Tab is how a browser
-         * moves focus and a window-level `preventDefault` always wins, so a
-         * mode that binds it owns focus navigation whether it means to or not.
-         * Tab goes back to the browser; the panes get a letter.
-         */
-        default:
-          break
-      }
-    }
-
-    const up = (event: KeyboardEvent): void => {
-      if (heldKeys.delete(event.code)) apply()
-    }
-    // Releasing focus with keys held would otherwise leave the drive burning.
-    const blur = (): void => {
-      heldKeys.clear()
-      apply()
-    }
-
-    window.addEventListener('keydown', down)
-    window.addEventListener('keyup', up)
-    window.addEventListener('blur', blur)
-    return () => {
-      window.removeEventListener('keydown', down)
-      window.removeEventListener('keyup', up)
-      window.removeEventListener('blur', blur)
-      // Leaving a mode with keys held would otherwise leave the drive burning
-      // for the rest of the session, with nothing on screen still listening for
-      // the key-up that would stop it.
-      if (heldKeys.size > 0) {
-        heldKeys.clear()
-        engine.setControl([0, 0, 0], [0, 0, 0])
-      }
-    }
-  }, [engine, axes, pause])
+  useAction('flight.assist', () => bindings.onToggleAssist())
+  useAction('flight.kill', () => bindings.onKillRotation())
+  useAction('time.pause', () => bindings.onPause())
+  useAction('time.faster', () => bindings.onWarp(1))
+  useAction('time.slower', () => bindings.onWarp(-1))
+  useAction('session.save', () => bindings.onSave())
+  useAction('session.load', () => bindings.onLoad())
 }
 
-export const CONTROL_HELP: readonly (readonly [string, string])[] = [
-  ['W / S', 'main drive fore / aft'],
-  ['A / D', 'translate left / right'],
-  ['R / F', 'translate up / down'],
-  ['↑ ↓ ← →', 'pitch / yaw'],
-  ['Q / E', 'roll'],
-  ['Z', 'flight assist'],
-  ['X', 'kill rotation'],
-  ['Space', 'pause'],
-  ['[ / ]', 'time warp'],
-  ['F5 / F9', 'save / load'],
-  ['G', 'the navigate panel'],
-  ['P', 'the perf panel'],
-  ['H', 'hide both panes, or bring them back'],
-  ['Tab', 'move between the controls on screen'],
-]
+/**
+ * Say the flight axes are live for as long as this is mounted.
+ *
+ * A hook of its own rather than an option on the one above, because the two
+ * answer different questions: `App` owns the transport verbs in every mode, and
+ * only a flight mode owns the axes. As an option it was a boolean threaded
+ * through the shell that turned a whole listener off — which is also how
+ * `pause: false` came to exist for the cinema, a special case the contexts now
+ * make unnecessary.
+ */
+export function useFlightContext(): void {
+  useKeyContext({ context: 'flight' })
+}

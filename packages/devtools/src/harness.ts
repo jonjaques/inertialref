@@ -1138,6 +1138,23 @@ export class GameHarness {
     return this.#observatory.focus(destination, options ?? {})
   }
 
+  /**
+   * Turn the head, in degrees, without moving the camera.
+   *
+   * The free-look offset as a harness verb, so every act a planetarium button
+   * offers is reachable from a script — which is what makes a plate a command
+   * rather than a gesture. Zero is the composed aim itself: `ir.aim(0, 0)` is
+   * the way back to whatever the pose is looking at.
+   *
+   * Standing, the offset *is* the heading and the pitch, so this drives those
+   * instead — a compass bearing and an angle above the horizon, which is what
+   * `ir.visit` already takes.
+   */
+  aim(yaw = 0, pitch = 0): ObserverStatus {
+    this.#observatory.setLook((yaw * Math.PI) / 180, (pitch * Math.PI) / 180)
+    return this.#observatory.status()
+  }
+
   /* --------------------------------------------------------------------- */
   /* Terrain                                                                */
   /* --------------------------------------------------------------------- */
@@ -1396,6 +1413,7 @@ export class GameHarness {
       '  ir.stopCutscene() / ir.seekCutscene(frame) / ir.cutsceneStatus()',
       '  ir.trackOverlay(on?)          the reference track over a playing scene',
       '  ir.look(target)               planetarium: move the camera, not the ship',
+      '  ir.aim(yawDeg, pitchDeg)      turn the head without moving the camera',
       '  ir.observatory                the free camera itself — drag, zoom, setPhase',
       '  ir.sites(address?)            the named places on a body, derived from its own terrain',
       '  ir.visit(address?, {site, height, heading, pitch})',

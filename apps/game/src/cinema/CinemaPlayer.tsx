@@ -12,8 +12,9 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { GameEngine } from '../engine/GameEngine.ts'
-import { FOCUS_RING, isOverlayControl, isTyping } from '../hud/focus.ts'
+import { FOCUS_RING } from '../hud/focus.ts'
 import { FrameScrubber } from '../hud/FrameScrubber.tsx'
+import { useAction, useActions, useKeyContext } from '../input/useKeymap.ts'
 import { TransportButton } from '../hud/TransportButton.tsx'
 import { useScrubber } from '../hud/useScrubber.ts'
 import { useEngine } from '../state/engineStore.ts'
@@ -184,44 +185,30 @@ export function CinemaPlayer({
     open(0, true)
   }, [id, navigate, open])
 
-  /* Space plays and pauses, the arrows step. What a player's keys always are. */
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent): void => {
-      /*
-       * The same two refusals every window-level listener here makes, and
-       * this one went without them for as long as no text field could exist
-       * beside the player. The workspace changed that: the Navigate panel's
-       * address input is one disclosure away, and typing a space into it
-       * toggled the scene while `preventDefault` ate the character. The
-       * overlay guard is the Space-on-a-focused-button rule from
-       * `useShipControls`, plus the arrows — Radix gives a focused slider and
-       * a toggle group arrow keys of their own, and two handlers stepping on
-       * one keystroke seeks twice.
-       */
-      if (isTyping(event) || isOverlayControl(event)) return
-      const status = engine.cutscene.sample()
-      if (status === null) return
-      const step = event.shiftKey ? secondStep(status.fps) : 1
-      switch (event.key) {
-        case ' ':
-          event.preventDefault()
-          toggle()
-          break
-        case 'ArrowLeft':
-          event.preventDefault()
-          seek(Math.max(0, Math.floor(status.frame) - step))
-          break
-        case 'ArrowRight':
-          event.preventDefault()
-          seek(Math.floor(status.frame) + step)
-          break
-        default:
-          break
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [engine, seek, toggle])
+  /*
+   * Space plays and pauses, the arrows step. What a player's keys always are.
+   *
+   * `cinema` is a context rather than a listener, which is what removes the
+   * special case that used to live in `App`: the player's Space is the *same*
+   * key as the global pause, so both handlers ran and one press flipped
+   * `clock.paused` twice — the documented transport did nothing at all with
+   * nothing to see in the console. The context is more specific, so it wins,
+   * and the shell no longer has to be told that this mode exists.
+   *
+   * The two refusals every window listener here used to make are the
+   * dispatcher's now: `isTyping` for the address field one disclosure away, and
+   * `yieldsToFocus` for Space on a focused button and the arrows on a focused
+   * Radix control.
+   */
+  useKeyContext({ context: 'cinema' })
+  useAction('cinema.play', toggle)
+  useActions(['cinema.back', 'cinema.forward'], (action, event) => {
+    const status = engine.cutscene.sample()
+    if (status === null) return
+    const step = event.shift ? secondStep(status.fps) : 1
+    const frame = Math.floor(status.frame)
+    seek(action === 'cinema.back' ? Math.max(0, frame - step) : frame + step)
+  })
 
   if (failed !== null) {
     return (

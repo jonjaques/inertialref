@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { Search } from 'lucide-react'
-import { FOCUS_RING, isTyping } from '../hud/focus.ts'
+import { FOCUS_RING } from '../hud/focus.ts'
+import { useAction, useKeyContext } from '../input/useKeymap.ts'
 import type { DocWing } from './content.ts'
 import { loadSearchIndex, type SearchIndex } from './content.ts'
 import { searchDocs, type SearchHit } from './search.ts'
@@ -46,31 +47,19 @@ export function DocsSearch({ wings }: { wings: readonly DocWing[] }) {
    * no flight controls bound over it, so the single key is free here in a way
    * it is not anywhere else in this application.
    */
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent): void => {
-      if (event.key !== '/' || isTyping(event)) return
-      /*
-       * Not while a dialog is open over the reading room.
-       *
-       * The mode stays mounted behind one — that is the whole point of the
-       * background location — so this listener is still on the window while
-       * Settings is up, and `isTyping` says nothing about it: focus during a
-       * dialog sits on a switch, a button or the body, none of which are
-       * editable. Ungated, a slash typed in Settings moves focus to a field
-       * behind the scrim, and these dialogs deliberately have no focus trap to
-       * fight it back (`pages/OverlayPage.tsx`).
-       *
-       * Asked of the document rather than of the event's target, because the
-       * common case is focus on `<body>`, which is not inside the dialog and
-       * would pass a `closest` check.
-       */
-      if (document.querySelector('[role="dialog"]') !== null) return
-      event.preventDefault()
-      field.current?.focus()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  /*
+   * `/` focuses the field, and the reading room says so by being a context.
+   *
+   * Two things this replaces. The listener checked for an open dialog on every
+   * keystroke, because a slash typed in Settings moved focus to a field behind
+   * the scrim and these dialogs deliberately have no focus trap to fight it
+   * back; the `dialog` context is more specific than `docs`, so the dispatcher
+   * settles it without anybody querying the document. And the shell had to know
+   * that this mode exists in order to keep `Space` from pausing the simulation
+   * behind the words — that is `mutes` now, said here, once.
+   */
+  useKeyContext({ context: 'docs', mutes: ['time.pause'] })
+  useAction('docs.search', () => field.current?.focus())
 
   const warm = (): void => {
     if (index !== null || loading) return

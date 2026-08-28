@@ -6,6 +6,7 @@ import { CameraPanel } from './CameraPanel.tsx'
 import type { DevContext } from './context.ts'
 import { ErrorBoundary } from './ErrorBoundary.tsx'
 import { GraphicsPanel } from './GraphicsPanel.tsx'
+import { KeymapProvider } from '../input/KeymapProvider.tsx'
 import { devPanels } from './registry.tsx'
 import { TargetRow } from './TargetRow.tsx'
 import { type Connection, DISCONNECTED } from '../net/health.ts'
@@ -60,6 +61,7 @@ function devContext(
     commands: {
       togglePause: () => {},
       warp: () => {},
+      realTime: () => {},
       toggleAssist: () => {},
       killRotation: () => {},
       save: () => {},
@@ -86,7 +88,15 @@ function devContext(
 function panelMarkup(context: DevContext, id: string): string {
   const panel = devPanels(context).find((entry) => entry.id === id)
   if (panel === undefined) throw new Error(`no ${id} panel in the registry`)
-  return renderToStaticMarkup(createElement('div', null, panel.render()))
+  // Inside the provider, because a panel that prints a key reads the live
+  // binding for it — the same tree `main.tsx` builds.
+  return renderToStaticMarkup(
+    createElement(
+      KeymapProvider,
+      null,
+      createElement('div', null, panel.render()),
+    ),
+  )
 }
 
 describe('the author’s instruments', () => {

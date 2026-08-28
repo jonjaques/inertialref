@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useKeymap } from '../input/useKeymap.ts'
 
 /**
  * How long chrome stays up after the pointer stops, while a scene is running.
@@ -27,6 +28,7 @@ const IDLE_MS = 2_600
  */
 export function useTransportIdle(active: boolean): boolean {
   const [idle, setIdle] = useState(false)
+  const keymap = useKeymap()
 
   useEffect(() => {
     if (!active) {
@@ -42,16 +44,22 @@ export function useTransportIdle(active: boolean): boolean {
     // `pointerdown` as well as move: a stationary touch tap produces no
     // pointermove and a phone has no keys, so without it the faded chrome —
     // the mode's only way out — could never be summoned back on touch.
+    //
+    // The keyboard comes through the dispatcher rather than a listener of its
+    // own: "was there keyboard activity" is a question about the keyboard, and
+    // the object that owns the one `keydown` in this app already has the
+    // answer. It fires before every refusal, so typing into a field still
+    // counts as being here.
     window.addEventListener('pointermove', wake)
     window.addEventListener('pointerdown', wake)
-    window.addEventListener('keydown', wake)
+    const release = keymap.watchActivity(wake)
     return () => {
       window.clearTimeout(timer)
       window.removeEventListener('pointermove', wake)
       window.removeEventListener('pointerdown', wake)
-      window.removeEventListener('keydown', wake)
+      release()
     }
-  }, [active])
+  }, [active, keymap])
 
   return idle
 }

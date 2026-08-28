@@ -39,6 +39,7 @@ import {
   anglesForPhase,
   angularRadius,
   applyDrag,
+  applyLook,
   applyZoom,
   approachState,
   clampDistance,
@@ -47,14 +48,19 @@ import {
   clampPitch,
   clampStanceHeight,
   distanceBounds,
+  DRAG_RADIANS_PER_PIXEL,
   framingDistance,
   heightForScrub,
   horizonPitch,
+  isCentred,
+  type LookOffset,
+  NO_LOOK,
   MIN_STANCE_HEIGHT,
   type ObserverState,
   observerPose,
   type Lens,
   LENS_PRESETS,
+  pixelAngle,
   scrubForHeight,
   shortestAngle,
   type SurfaceStance,
@@ -144,6 +150,10 @@ export interface SurfaceStatus {
 export interface ObserverStatus {
   readonly target: ObserverTarget | null
   readonly state: ObserverState
+  /** Where the head is turned, relative to what the pose aims at. */
+  readonly look: LookOffset
+  /** Whether the head is turned at all — what the panel's readout keys off. */
+  readonly aimed: boolean
   /** Where the camera is easing to. Equal to `state` once it has arrived. */
   readonly desired: ObserverState
   /** True while a fly-to is still visibly moving. */
@@ -205,6 +215,22 @@ export class Observatory {
   #stance: SurfaceStance | null = null
   /** Which survey site the stance came from, when it came from one. */
   #site: string | null = null
+  /**
+   * Where the head is turned, relative to whatever the pose aims at.
+   *
+   * The orbit arm aims at the target's center by construction, so without this
+   * there is no way to look at a limb, at a moon beside the disk, or at the sky
+   * at all. It is an *offset* rather than a replacement, so a composition still
+   * means what it says and the viewer turns their head from there.
+   *
+   * **Cleared by whatever replaces the pose, and by nothing else.** A focus, a
+   * frame, a home, a shot, a preset — those are new pictures. A drag, a dolly,
+   * a wheel notch and leaving and re-entering the mode are not, so a viewer who
+   * turned to look at Io beside Jupiter is still looking at Io after the wheel.
+   * The surface arm keeps its offset in the stance's own heading and pitch,
+   * which is what those two numbers already are.
+   */
+  #look: LookOffset = NO_LOOK
 
   constructor(host: HarnessHost) {
     this.#host = host
@@ -241,7 +267,9 @@ export class Observatory {
     // where the viewer was before the descent.
     if (this.#stance !== null) return this.#surfacePose()?.position ?? null
     const centre = this.#targetPosition(target)
-    return centre === null ? null : observerPose(centre, this.#state).position
+    return centre === null
+      ? null
+      : observerPose(centre, this.#state, this.#look).position
   }
 
   /**
@@ -289,6 +317,10 @@ export class Observatory {
     // target would put the camera at those coordinates on a different world.
     this.#stance = null
     this.#site = null
+    // A focus is a new picture, so the head goes back to center. The other
+    // three writers that replace a pose — `frameTarget`, `setAngles` and
+    // `stand` — do the same; a drag, a dolly and a wheel notch do not.
+    this.#look = NO_LOOK
 
     const distance = clampDistance(
       framingDistance(
@@ -351,6 +383,7 @@ export class Observatory {
     this.#target = null
     this.#stance = null
     this.#site = null
+    this.#look = NO_LOOK
   }
 
   /*
@@ -399,20 +432,38 @@ export class Observatory {
     if (!ease) this.#state = this.#desired
   }
 
-  /** Set the orbit angles directly, in radians. */
-  setAngles(azimuth: number, elevation: number, ease = true): void {
+  /**
+   * Set the orbit angles directly — the panel's presets and every composition.
+   *
+   * The one writer that takes a look offset with the angles, because a
+   * composition that aims at a limb or a specular point is *two* numbers about
+   * the pose and one about the head. Absent, the head goes back to center: a
+   * composed picture replaces the pose, so carrying a viewer's free look into
+   * it would frame something other than what the composition names.
+   */
+  setAngles(
+    azimuth: number,
+    elevation: number,
+    ease = true,
+    look: LookOffset = NO_LOOK,
+  ): void {
     if (this.#stance !== null) return
     this.#desired = {
       ...this.#desired,
       azimuth,
       elevation: clampElevation(elevation),
     }
+    this.#look = look
     if (!ease) this.#state = this.#desired
   }
 
   /** Re-frame the current target so it fills `fill` of the frame height. */
   frameTarget(fill = DEFAULT_FILL): void {
     if (this.#target === null) return
+    // `F` is a new picture of the subject, so the head comes back to it. This
+    // is the difference between framing and dollying, and it is the whole
+    // reason the two have separate verbs.
+    this.#look = NO_LOOK
     this.setDistance(
       framingDistance(
         this.#target.radius,
@@ -420,6 +471,80 @@ export class Observatory {
         fill,
       ),
     )
+  }
+
+  /* --------------------------------------------------------------------- */
+  /* Free look                                                              */
+  /* --------------------------------------------------------------------- */
+
+  /** Where the head is turned, relative to what the pose aims at. */
+  get look(): LookOffset {
+    return this.#look
+  }
+
+  /**
+   * Turn the head by a drag, in pixels.
+   *
+   * On the ground the offset *is* the heading and the pitch, which the stance
+   * already holds — so this is the one verb that writes through both arms, and
+   * the orbit writers' refusal does not apply to it. A drag on Miranda's summit
+   * previously did nothing at all: the orbit writers refused while standing and
+   * nothing else listened.
+   *
+   * `sensitivity` is `pixelAngle(lens, viewport) / DRAG_RADIANS_PER_PIXEL` when
+   * a caller has a display, which makes the ground under the pointer follow the
+   * pointer at any lens. Solved here rather than at the call site because the
+   * observatory already reads the lens and a second reader of it is a second
+   * idea of the optics.
+   */
+  turn(dxPixels: number, dyPixels: number): void {
+    const sensitivity = this.dragSensitivity()
+    const stance = this.#stance
+    if (stance !== null) {
+      const k = DRAG_RADIANS_PER_PIXEL * sensitivity
+      this.#stance = {
+        ...stance,
+        // The same grab metaphor the orbit uses: the ground follows the hand.
+        heading: stance.heading - dxPixels * k,
+        pitch: clampPitch(stance.pitch + dyPixels * k),
+      }
+      return
+    }
+    this.#look = applyLook(this.#look, dxPixels, dyPixels, sensitivity)
+  }
+
+  /** Aim the head at an absolute offset, radians. `ir.aim`. */
+  setLook(yaw: number, pitch: number): void {
+    const stance = this.#stance
+    if (stance !== null) {
+      this.#stance = { ...stance, heading: yaw, pitch: clampPitch(pitch) }
+      return
+    }
+    this.#look = { yaw, pitch: clampElevation(pitch) }
+  }
+
+  /** Back to whatever the pose aims at. */
+  centre(): void {
+    if (this.#stance !== null) {
+      this.levelToHorizon()
+      return
+    }
+    this.#look = NO_LOOK
+  }
+
+  /**
+   * Radians of camera motion per pixel of pointer, over the reference rate.
+   *
+   * A drag moves the picture by the pixels dragged at any lens, which
+   * `DRAG_RADIANS_PER_PIXEL` alone cannot do: it is a constant, so at 8× zoom a
+   * 100 px drag swings the frame through forty field-widths. 1 when there is no
+   * display to measure — headlessly the gesture is a number in a script rather
+   * than a hand on a surface.
+   */
+  dragSensitivity(): number {
+    const view = this.#host.lensView?.()
+    if (view === null || view === undefined) return 1
+    return pixelAngle(view.lens, view.viewport) / DRAG_RADIANS_PER_PIXEL
   }
 
   /**
@@ -548,6 +673,9 @@ export class Observatory {
       pitch: clampPitch(options.pitch ?? horizonPitch(body.radius, height)),
     }
     this.#site = site?.id ?? null
+    // The stance carries its own heading and pitch, so the orbit arm's offset
+    // would come back on the ascent aimed at something nobody chose.
+    this.#look = NO_LOOK
     log.info('observatory standing', {
       address: this.#target?.address,
       site: this.#site,
@@ -696,6 +824,8 @@ export class Observatory {
       target: this.#target,
       state: this.#state,
       desired: this.#desired,
+      look: this.#look,
+      aimed: !isCentred(this.#look),
       travelling: !this.#arrived(),
       // Standing, the reader wants the height above the ground under their feet
       // — not the distance from a datum the orbit arm was last left at.
@@ -728,7 +858,7 @@ export class Observatory {
 
     const centre = this.#targetPosition(target)
     if (centre === null) return null
-    return observerPose(centre, this.#state)
+    return observerPose(centre, this.#state, this.#look)
   }
 
   /** Whether the ease has close enough that holding it open is noise. */
