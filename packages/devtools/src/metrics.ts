@@ -101,11 +101,26 @@ export class Series {
     let min = Infinity
     let max = -Infinity
     let total = 0
+    /*
+     * `Math.min`/`Math.max` rather than `<`/`>`, because the comparisons are
+     * not a total order over signed zeros: `-0 < 0` is false, so a running
+     * minimum built from `<` keeps whichever zero it saw first. Over a window
+     * holding both, `min` came back `+0` where `Math.min` gives `-0` and `max`
+     * came back `-0` where `Math.max` gives `+0` — the same defect twice, in
+     * opposite directions.
+     *
+     * The statistic is meant to be the one a caller would compute from a plain
+     * array, and "the minimum, except for signed zero" is not a specification
+     * anybody can hold in their head. Nothing sampled here is ever a negative
+     * zero — these are frame times, draw calls and heap bytes — so the cost is
+     * a pair of intrinsic calls in a loop that runs at the rate a human reads,
+     * and the gain is a contract with no footnote on it.
+     */
     for (let i = 0; i < this.#count; i += 1) {
       const value = this.#samples[i] ?? 0
       scratch[i] = value
-      if (value < min) min = value
-      if (value > max) max = value
+      min = Math.min(min, value)
+      max = Math.max(max, value)
       total += value
     }
     // `subarray` is a view, so this sorts in place and allocates nothing.

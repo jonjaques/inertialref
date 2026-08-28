@@ -18,6 +18,18 @@ function window(values: readonly number[], capacity: number): number[] {
   return values.filter(Number.isFinite).slice(-capacity)
 }
 
+/**
+ * Ascending, and a total order — which `(a, b) => a - b` is not.
+ *
+ * `0 - -0` is `0`, so the subtraction comparator calls the two zeros equal and
+ * `Array.prototype.sort` leaves them in input order. A `Float64Array` sorts
+ * them apart, `-0` first, which is what `Series` does and what a percentile
+ * off that window therefore reports — so an oracle built on the subtraction
+ * disagrees with a correct implementation on any window holding both.
+ */
+const ascending = (a: number, b: number): number =>
+  a === b ? (Object.is(a, -0) ? -1 : Object.is(b, -0) ? 1 : 0) : a - b
+
 function fill(values: readonly number[], capacity: number): Series {
   const series = new Series(capacity)
   for (const value of values) series.push(value)
@@ -41,6 +53,27 @@ describe('Series', () => {
     )
   })
 
+  it('reports the same zero a plain array would', () => {
+    /*
+     * The property above finds this only when fast-check happens to draw both
+     * zeros into one window, which is why it passed for months and then failed
+     * once, on a seed. Stated as an example it is checked every run.
+     *
+     * `toBe` is `Object.is`, so it separates the two — and it should, because
+     * `Math.min(0, -0)` is `-0` and a running minimum built from `<` cannot
+     * produce it: `-0 < 0` is false. `max` had the same defect pointing the
+     * other way, and nothing had reported it because the property stops at the
+     * first failed assertion.
+     */
+    const both = fill([0, -0], 2).summarise()
+    expect(both.min).toBe(Math.min(0, -0))
+    expect(both.max).toBe(Math.max(0, -0))
+
+    const reversed = fill([-0, 0], 2).summarise()
+    expect(reversed.min).toBe(Math.min(-0, 0))
+    expect(reversed.max).toBe(Math.max(-0, 0))
+  })
+
   it('agrees with a plain array on every statistic', () => {
     fc.assert(
       fc.property(
@@ -50,7 +83,7 @@ describe('Series', () => {
           const expected = window(values, capacity)
           if (expected.length === 0) return
           const stats = fill(values, capacity).summarise()
-          const sorted = [...expected].sort((a, b) => a - b)
+          const sorted = [...expected].sort(ascending)
           const rank = Math.min(
             sorted.length - 1,
             Math.ceil(0.95 * sorted.length) - 1,
