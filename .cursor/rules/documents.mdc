@@ -1,0 +1,8 @@
+---
+globs: docs/**/*.md,scripts/docs/**,AGENTS.md
+alwaysApply: false
+---
+
+Apply the canonical documents rule:
+
+@.claude/rules/documents.md

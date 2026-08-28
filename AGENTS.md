@@ -189,6 +189,14 @@ Violating one of these is a rewrite later, not a refactor.
   `apps/game/src/components/ui/*.tsx`.
 - **Never hand-roll a control the registry already has.** Go through
   `hud/Action.tsx`, `hud/SwitchRow.tsx`, or `hud/TransportButton.tsx`.
+- **Never add a markdown file under `docs/` without listing it in
+  `scripts/docs/wings.mjs`.** Everything there is published at `/docs` and the
+  wing table is what says where, so a file no wing lists is one the site cannot
+  place — `pnpm docs:build` refuses rather than guessing, and takes `pnpm build`
+  and `pnpm check` with it. An ADR is the common case, and the rule has already
+  caught its own author: the record arguing for the documentation site was the
+  one page the site would not publish.
+  [ADR-0016](docs/adr/0016-documentation-as-a-mode.md).
 - **Never let a cinematic effect fire off a script.** An effect is staging.
   It belongs in `CinematicEffects`, where a shot turns it on, and it is 0
   everywhere else. [Cinematics](docs/guides/cinematics.md).
