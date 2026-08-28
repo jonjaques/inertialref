@@ -27,9 +27,15 @@ import {
   buildScene,
   type CinematicEffects,
   type CinematicTextState,
+  type Lens,
+  LENS_PRESETS,
+  type LensView,
+  lodThresholds,
   NO_EFFECTS,
   originForCamera,
   type RenderScene,
+  verticalFovDegrees,
+  type Viewport,
 } from '@inertialref/rendering'
 import {
   surveyRegionTask,
@@ -82,12 +88,17 @@ import type { TerrainReport } from '@inertialref/devtools'
 const log = getLogger('game.engine')
 
 /**
- * The camera's vertical field of view, degrees. One definition: the `<Canvas>`
- * starts from it, the camera panel's slider resets to it, and `CameraRig`
- * applies whatever the panel chose — three places that must agree on what
- * "default" means.
+ * The lens the game is flown behind — 18.84 mm on a 24 mm gauge, which is 65°.
+ *
+ * One definition: the `<Canvas>` starts from its angle, the camera panel's
+ * reset returns to it, and `CameraRig` applies whatever the panel chose. It is
+ * a `Lens` rather than the bare angle it was because an angle cannot carry an
+ * aperture, a focus or an exposure, and the panel now shows all three.
  */
-export const DEFAULT_FOV = 65
+export const DEFAULT_LENS: Lens = LENS_PRESETS.flight
+
+/** The same lens as an angle, for the two places Three.js wants degrees. */
+export const DEFAULT_FOV_DEG = verticalFovDegrees(DEFAULT_LENS)
 
 const EMPTY_STAR_FIELD: StarField = {
   positions: [],
@@ -108,7 +119,8 @@ const STARFIELD_HYSTERESIS = 8 * LIGHT_YEAR
  */
 export interface CinematicView {
   readonly frame: number
-  readonly fov: number
+  /** The shot's own lens. `engine.lens` resolves it against the flight one. */
+  readonly lens: Lens
   readonly camera: { readonly position: Vec3; readonly orientation: Quat }
   readonly ship: {
     readonly position: Vec3
@@ -256,25 +268,78 @@ export class GameEngine implements PresentationHost {
    * would be lost with it.
    */
   lensFlare = true
-  fov = DEFAULT_FOV
 
   /**
-   * The drawable height in physical pixels, for the terrain selection.
+   * The player's own lens — what the flight camera is looking through.
    *
-   * A presentation input like `fov`, written by the scene from the drawing
-   * buffer, and read by the streamer to decide how much ground a patch's grid
-   * cell covers on *this* display. A two-times panel genuinely wants twice the
-   * patches for the same picture, and a selection measured against a nominal
-   * 1080 would leave it under-tessellated.
+   * Written by the shell from the persisted preference, exactly as `lensFlare`
+   * is. It is not `lens`: a script's lens outranks it, and the resolution of
+   * that order is the getter below rather than a field anyone can overwrite.
    */
-  set viewportHeight(height: number) {
+  flightLens: Lens = DEFAULT_LENS
+
+  /**
+   * The lens this frame is composed through.
+   *
+   * **One producer, under the pose's own precedence.** `AGENTS.md` forbids a
+   * second producer of the camera and orders the arms *cutscene, then
+   * observatory, then the ship*; the optics follow the same order through the
+   * same code, because a picture composed through one lens and measured through
+   * another is exactly the class of bug this phase exists to close. The
+   * observatory has no lens of its own — it solves a standoff against whatever
+   * the camera panel is set to, which is the flight lens — so the order has two
+   * arms rather than three.
+   *
+   * A getter rather than a field: `this.cinematic` is written once per frame by
+   * `#step`, and a mirrored copy would be a second thing to keep in step.
+   */
+  get lens(): Lens {
+    return this.cinematic?.lens ?? this.flightLens
+  }
+
+  /**
+   * The lens and the pixels it lands on, for anything that needs both.
+   *
+   * `null` until the scene has reported a drawing buffer, which is the honest
+   * answer before the first frame: a circle of confusion is a claim about a
+   * display, and there is no display yet.
+   */
+  lensView(): LensView | null {
+    const viewport = this.#viewport
+    return viewport === null ? null : { lens: this.lens, viewport }
+  }
+
+  /**
+   * How much bigger the drawing buffer is than the display, per axis.
+   *
+   * 2 at 4× AA, 1 otherwise, written by the shell beside `lensFlare`.
+   * Supersampling raises the sample count, not the detail a viewer can
+   * resolve — so feeding the raw buffer height into the terrain predicate asks
+   * for 6.5× the patches to draw geometry the resolve filter averages away.
+   * The place to spend on sharper terrain is `cellPixels`.
+   */
+  supersample = 1
+
+  #viewport: Viewport | null = null
+
+  /**
+   * The drawing buffer's size, from the scene, in buffer pixels.
+   *
+   * Divided back down to display pixels here rather than at the call site,
+   * because the scene knows the buffer and the engine knows what made it that
+   * size. A two-times *display* genuinely wants twice the patches for the same
+   * picture and keeps them; a two-times *supersample* does not.
+   */
+  set viewportPixels(size: { width: number; height: number }) {
     // Written every frame by the scene, so unchanged inputs return before
     // allocating — otherwise a fresh viewport object churns per frame for a
-    // value that moves only on a resize or an fov change.
-    const fovY = (this.fov * Math.PI) / 180
-    const held = this.#terrain.viewport
-    if (held !== null && held.height === height && held.fovY === fovY) return
-    this.#terrain.viewport = { fovY, height }
+    // value that moves only on a resize.
+    const factor = Math.max(1, this.supersample)
+    const width = Math.max(1, Math.round(size.width / factor))
+    const height = Math.max(1, Math.round(size.height / factor))
+    const held = this.#viewport
+    if (held !== null && held.width === width && held.height === height) return
+    this.#viewport = { width, height }
   }
 
   /*
@@ -416,6 +481,7 @@ export class GameEngine implements PresentationHost {
         scene: () => this.#scene,
         frameStats: () => this.frameStats(),
         terrain: () => this.terrain(),
+        lensView: () => this.lensView(),
         onWorldReplaced: () => this.#invalidateDerived(),
       },
     })
@@ -617,11 +683,9 @@ export class GameEngine implements PresentationHost {
      * `delta` rather than simulation time: the fly-to easing is a presentation
      * filter, and a planetarium in which pausing the clock also froze a
      * transition mid-flight would be a bug in every screenshot taken while
-     * paused. The observatory is asked for its lens first so that a field of
-     * view changed in a panel reframes the target rather than merely cropping
-     * it.
+     * paused. It reads the lens off this engine when it needs one, so there is
+     * no longer a scalar to push in here first.
      */
-    this.harness.observatory.setFov(this.fov)
     const observed =
       cinematic === null ? this.harness.observerSample(delta) : null
 
@@ -662,7 +726,7 @@ export class GameEngine implements PresentationHost {
         ? null
         : {
             frame: cinematic.frame,
-            fov: cinematic.fov,
+            lens: cinematic.lens,
             camera: {
               position: toRenderSpace(this.origin, cinematic.camera.position),
               orientation: orientationToRenderSpace(
@@ -693,11 +757,20 @@ export class GameEngine implements PresentationHost {
      */
     if (player === null || camera === undefined) return
 
+    /*
+     * The lens reaches the scene as thresholds, so the tier a body draws at
+     * follows the optics it is being looked at through — a telephoto resolves a
+     * distant moon into a sphere at a distance a wide lens still draws as a
+     * point. Only the point-to-billboard step moves; `lod.ts` says why the
+     * other two do not.
+     */
+    const viewport = this.#viewport
     this.#scene = buildScene(
       shot,
       this.origin,
       player,
       cinematic !== null ? cinematic.camera : (observed ?? undefined),
+      viewport === null ? undefined : lodThresholds(this.lens, viewport),
     )
 
     /*
@@ -711,6 +784,11 @@ export class GameEngine implements PresentationHost {
      * survives, and terrain placed at true meters against it would be a
      * different object at a different distance.
      */
+    // The lens the selection is made against, set beside the eye it is made
+    // from. Both are per-frame presentation inputs and neither is the
+    // streamer's to decide.
+    this.#terrain.lens = this.lens
+    this.#terrain.viewport = viewport
     this.#terrain.update(
       this.world,
       shot.renderTime,

@@ -4,14 +4,19 @@ import { useStore } from 'zustand'
 import { AnimatePresence, motion } from 'motion/react'
 import { useLocation } from 'react-router'
 import type { StarCatalog } from '@inertialref/universe'
-import { DEFAULT_FOV, GameEngine } from './engine/GameEngine.ts'
+import { lensForFov } from '@inertialref/rendering'
+import {
+  DEFAULT_FOV_DEG,
+  DEFAULT_LENS,
+  GameEngine,
+} from './engine/GameEngine.ts'
 import type {
   CameraState,
   GraphicsState,
   HudCommands,
   HudRenderState,
 } from './hud/controls.ts'
-import { FOV_MAX, FOV_MIN } from './hud/controls.ts'
+import { FOV_MAX, FOV_MIN, isLens } from './hud/controls.ts'
 import { BootOverlay } from './hud/BootOverlay.tsx'
 import { CutsceneOverlay } from './hud/CutsceneOverlay.tsx'
 import { ErrorBoundary } from './hud/ErrorBoundary.tsx'
@@ -21,6 +26,7 @@ import { useCoarsePointer } from './hud/viewport.ts'
 import {
   isBoolean,
   numberWithin,
+  readPreference,
   oneOf,
   usePersistentState,
 } from './hud/panelState.ts'
@@ -205,13 +211,25 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
     '2x',
     oneOf(AA_LEVELS),
   )
-  // The same range the camera panel's slider offers. A stored value outside it
-  // is not a field of view somebody nearly asked for; it reaches `engine.fov`
-  // and the projection matrix behind it.
-  const [fov, setFov] = usePersistentState(
-    'camera.fov',
-    DEFAULT_FOV,
-    numberWithin(FOV_MIN, FOV_MAX),
+  /*
+   * The lens, and the one preference in here that has changed shape.
+   *
+   * `camera.fov` held a single angle; `camera.lens` holds the instrument. The
+   * old key is read once, through `lensForFov`, so a player who moved the
+   * slider before this landed keeps the picture they chose and gains an
+   * aperture they did not — and the new key becomes canonical the first time
+   * they touch it. `isLens` guards the seven numbers the way `numberWithin`
+   * guarded the one: `localStorage` outlives the code that wrote it, and a
+   * focal length of zero is a division rather than a wide lens.
+   */
+  const [lens, setLens] = usePersistentState(
+    'camera.lens',
+    DEFAULT_LENS,
+    isLens,
+    () => {
+      const held = readPreference('camera.fov', numberWithin(FOV_MIN, FOV_MAX))
+      return held === null ? null : lensForFov(held)
+    },
   )
   const [dynamicRangeHigh, setDynamicRangeHigh] = useState(
     () => window.matchMedia(EXTENDED_RANGE_QUERY).matches,
@@ -265,8 +283,12 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
 
   useEffect(() => {
     engine.lensFlare = lensFlare
-    engine.fov = fov
-  }, [engine, lensFlare, fov])
+    engine.flightLens = lens
+    // What the drawing buffer is multiplied by, so the terrain predicate can
+    // divide it back out: supersampling raises the sample count, not the detail
+    // a viewer can resolve. See `GameEngine.supersample`.
+    engine.supersample = aaDprFactor(aa)
+  }, [engine, lensFlare, lens, aa])
 
   useEffect(() => {
     const unsubscribe = monitor.subscribe(setConnection)
@@ -439,7 +461,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
       flash(`anti-aliasing ${level}`)
     },
   }
-  const cameraState: CameraState = { fov, onFov: setFov }
+  const cameraState: CameraState = { lens, onLens: setLens }
   const renderState: HudRenderState = {
     preference: hdr,
     output,
@@ -560,7 +582,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
         // A logarithmic depth buffer makes this range workable; a linear one
         // would have no usable precision anywhere in it. The flag itself moved
         // into the factory, because it is a constructor parameter there.
-        camera={{ fov: DEFAULT_FOV, near: 0.05, far: 1e10 }}
+        camera={{ fov: DEFAULT_FOV_DEG, near: 0.05, far: 1e10 }}
         // The device ratio capped by what kind of machine this is, times the
         // supersampling factor. A number rather than a range because `4x` must
         // *raise* the buffer above the device ratio, which a clamp can only
@@ -697,8 +719,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
               <ModeRoutes
                 engine={engine}
                 status={status}
-                fov={fov}
-                onFov={setFov}
+                camera={cameraState}
                 dev={dev}
               />
             </ErrorBoundary>

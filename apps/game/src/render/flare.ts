@@ -27,6 +27,7 @@ import {
   uv,
   vec3,
 } from 'three/tsl'
+import { type Lens, verticalFov } from '@inertialref/rendering'
 import { edgeFade, type FlareVisibility, ghostPosition } from './flareMath.ts'
 
 /*
@@ -303,6 +304,18 @@ export interface LensFlare {
      * the whole frame in a mode that had never asked for an eclipse.
      */
     coronaDrive: number,
+    /**
+     * The lens the frame is composed through — `engine.lens`.
+     *
+     * It was `camera.fov ?? 65`, and the fallback fired exactly when the camera
+     * was not a `PerspectiveCamera`: the frames least like the picture 65°
+     * describes were the frames that assumed it. The flare's quads are placed
+     * at a fixed camera-space depth and sized by `tan(fov/2)`, so a lens the
+     * host has changed and this has not puts the ghost chain somewhere other
+     * than on the line through frame center, which is the one thing the whole
+     * artifact stack is.
+     */
+    lens: Lens,
   ): void
   dispose(): void
 }
@@ -345,6 +358,7 @@ export function createLensFlare(): LensFlare {
       occlusion,
       artifacts,
       coronaDrive,
+      lens,
     ) {
       // Behind test in view space; NDC alone cannot tell front from back.
       view
@@ -377,7 +391,7 @@ export function createLensFlare(): LensFlare {
       group.position.copy(camera.position)
       group.quaternion.copy(camera.quaternion)
 
-      const tanHalf = Math.tan(((camera.fov ?? 65) * Math.PI) / 360)
+      const tanHalf = Math.tan(verticalFov(lens) / 2)
       const aspect = camera.aspect ?? 1
       const frameHeight = 2 * tanHalf * PLANE
       // A star that subtends real angle blooms wider than a point: the glow

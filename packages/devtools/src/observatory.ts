@@ -52,11 +52,14 @@ import {
   MIN_STANCE_HEIGHT,
   type ObserverState,
   observerPose,
+  type Lens,
+  LENS_PRESETS,
   scrubForHeight,
   shortestAngle,
   type SurfaceStance,
   surfaceHeightBounds,
   surfaceStancePose,
+  verticalFovDegrees,
   zoomFactorForNotches,
 } from '@inertialref/rendering'
 import { currentSystemOf, resolveDestination } from './travel.ts'
@@ -188,8 +191,6 @@ export class Observatory {
   #target: ObserverTarget | null = null
   #state: ObserverState = { azimuth: 0.6, elevation: 0.25, distance: 1e9 }
   #desired: ObserverState = this.#state
-  /** The lens the framing math assumes. Set by the host from its camera. */
-  #fovDeg = 65
   /**
    * The surface arm's whole state: non-null exactly while standing.
    *
@@ -241,11 +242,20 @@ export class Observatory {
     return centre === null ? null : observerPose(centre, this.#state).position
   }
 
-  /** The host's current vertical field of view; framing depends on it. */
-  setFov(fovDeg: number): void {
-    if (Number.isFinite(fovDeg) && fovDeg > 1 && fovDeg < 179) {
-      this.#fovDeg = fovDeg
-    }
+  /**
+   * The lens the framing math is solved against.
+   *
+   * Read from the host rather than pushed into here every step, which is what
+   * `setFov` was: a scalar copied out of the engine once a frame into a private
+   * field, so the observatory held its own idea of the optics and the only
+   * thing keeping the two in step was that nobody had forgotten the call. The
+   * lens has one producer — `GameEngine`, under the pose's own precedence — and
+   * a consumer that cannot see it is a bug rather than a case to have a default
+   * for. The fallback here is the flight lens because a headless host has no
+   * camera panel, not because the value is uncertain.
+   */
+  get #lens(): Lens {
+    return this.#host.lensView?.()?.lens ?? LENS_PRESETS.flight
   }
 
   /**
@@ -273,7 +283,7 @@ export class Observatory {
     const distance = clampDistance(
       framingDistance(
         target.radius,
-        this.#fovDeg,
+        verticalFovDegrees(this.#lens),
         options.fill ?? DEFAULT_FILL,
       ),
       target.radius,
@@ -393,7 +403,13 @@ export class Observatory {
   /** Re-frame the current target so it fills `fill` of the frame height. */
   frameTarget(fill = DEFAULT_FILL): void {
     if (this.#target === null) return
-    this.setDistance(framingDistance(this.#target.radius, this.#fovDeg, fill))
+    this.setDistance(
+      framingDistance(
+        this.#target.radius,
+        verticalFovDegrees(this.#lens),
+        fill,
+      ),
+    )
   }
 
   /**
@@ -661,7 +677,7 @@ export class Observatory {
         : radius > 0 && this.#state.distance > radius
           ? (2 * Math.asin(Math.min(1, radius / this.#state.distance)) * 180) /
             Math.PI /
-            this.#fovDeg
+            verticalFovDegrees(this.#lens)
           : 0
     return {
       target: this.#target,

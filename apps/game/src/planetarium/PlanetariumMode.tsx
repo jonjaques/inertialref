@@ -5,6 +5,7 @@ import type { PerspectiveCamera } from 'three/webgpu'
 import { DEFAULT_FILL } from '@inertialref/devtools'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import type { OrbitScope, StanceHandle } from '../engine/presentation.ts'
+import type { CameraState } from '../hud/controls.ts'
 import { Workspace } from '../dock/Workspace.tsx'
 import type { DevWorkspace } from '../dock/workspace.ts'
 import {
@@ -41,13 +42,11 @@ const DEFAULT_TARGET = 's:SOL/b:2'
 
 export function PlanetariumMode({
   engine,
-  fov,
-  onFov,
+  camera,
   dev,
 }: {
   engine: GameEngine
-  fov: number
-  onFov: (fov: number) => void
+  camera: CameraState
   dev: DevWorkspace
 }) {
   const [params, setParams] = useSearchParams()
@@ -196,8 +195,16 @@ export function PlanetariumMode({
     onShip: setShip,
     flare,
     onFlare: setFlare,
-    fov,
-    onFov,
+    camera,
+    // The dolly and the framing, as the observatory's own verbs. The wheel and
+    // the pinch already reach the first through `useObserverInput`; this is the
+    // same act with a button on it, for a pointer that has neither.
+    dolly: (notches: number) => {
+      engine.harness.observatory.zoomNotches(notches)
+    },
+    holdFraming: () => {
+      engine.harness.observatory.frameTarget()
+    },
   } satisfies PlanetariumContext)
 
   /*
@@ -216,7 +223,12 @@ export function PlanetariumMode({
       if (scene === null || view === null) return
       const size = { width: window.innerWidth, height: window.innerHeight }
       const hit = pick(
-        projectScene(scene, view.camera as PerspectiveCamera, size),
+        projectScene(
+          scene,
+          view.camera as PerspectiveCamera,
+          size,
+          engine.lens,
+        ),
         point,
       )
       if (hit !== null) focus(hit.address)

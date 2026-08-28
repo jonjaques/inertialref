@@ -1,6 +1,9 @@
-import { Aperture, Orbit, Rocket, Tag } from 'lucide-react'
+import { Aperture, Move3d, Orbit, Rocket, Tag } from 'lucide-react'
+import { verticalFovDegrees } from '@inertialref/rendering'
 import { Slider } from '@/components/ui/slider'
-import { FovSlider } from '../hud/FovSlider.tsx'
+import { Action } from '../hud/Action.tsx'
+import { LENS_CHANNELS } from '../hud/controls.ts'
+import { LensSlider } from '../hud/LensSlider.tsx'
 import { OptionGroup } from '../hud/OptionGroup.tsx'
 import { Section } from '../hud/Section.tsx'
 import { SwitchRow } from '../hud/SwitchRow.tsx'
@@ -47,8 +50,9 @@ export function ViewPanel({
   onShip,
   flare,
   onFlare,
-  fov,
-  onFov,
+  camera,
+  dolly,
+  holdFraming,
 }: PlanetariumContext) {
   return (
     <div className="flex flex-col gap-1">
@@ -124,20 +128,62 @@ export function ViewPanel({
         />
       </Section>
 
-      <Section id="planetarium.view.lens" title="Lens" trailing={`${fov}°`}>
+      <Section
+        id="planetarium.view.lens"
+        title="Lens"
+        trailing={`${verticalFovDegrees(camera.lens).toFixed(0)}°`}
+      >
+        {/*
+         * Three acts, three controls, and the split is the whole section.
+         *
+         * They shared one slider, and the copy under it told the reader that
+         * narrowing the lens "pulls the camera back rather than magnifying" and
+         * that "the subject stays the same size". It did not: the angle was
+         * recorded and nothing re-solved the standoff until the next focus. A
+         * lens change *is* a magnification; a dolly is the one that changes
+         * parallax; holding the framing is a solve. Each sentence below is now
+         * true of the control it sits under.
+         */}
         <div className="flex flex-col gap-1">
           <span className="type-ui flex items-center gap-1.5 text-slate-400">
             <StellarSpan aria-hidden className="size-3.5 shrink-0" />
-            Field of View
-            <span className="ml-auto text-slate-300 tabular-nums">{fov}°</span>
+            {LENS_CHANNELS.zoom.label}
+            <span className="type-readout ml-auto text-slate-300">
+              {LENS_CHANNELS.zoom.format(camera.lens)}
+            </span>
           </span>
-          <FovSlider fov={fov} onFov={onFov} />
-          {/* A lens choice is a framing choice here, not just a crop: the
-              observatory solves its distance against this angle, so narrowing
-              the lens pulls the camera back rather than magnifying. */}
+          <LensSlider channel="zoom" camera={camera} />
           <p className="type-ui text-pretty text-slate-400">
-            the camera re-solves its distance, so the subject stays the same
-            size
+            magnifies without moving the camera — no parallax, the same picture
+            cropped closer
+          </p>
+        </div>
+
+        <div className="mt-2 flex flex-col gap-1">
+          <span className="type-ui flex items-center gap-1.5 text-slate-400">
+            <Move3d aria-hidden className="size-3.5 shrink-0" />
+            Dolly
+            <span className="ml-auto flex gap-1">
+              <Action
+                label="In"
+                title="Move the camera toward the subject"
+                onClick={() => dolly(2)}
+              />
+              <Action
+                label="Out"
+                title="Move the camera away from the subject"
+                onClick={() => dolly(-2)}
+              />
+              <Action
+                label="Hold Framing"
+                title="Re-solve the distance so the subject fills the frame at this lens"
+                onClick={holdFraming}
+              />
+            </span>
+          </span>
+          <p className="type-ui text-pretty text-slate-400">
+            moves the camera — the limb turns and the moons shift against the
+            disk. Hold Framing solves the distance instead of choosing it.
           </p>
         </div>
 

@@ -2,6 +2,7 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { type Location, MemoryRouter } from 'react-router'
 import { describe, expect, it } from 'vitest'
+import { LENS_PRESETS } from '@inertialref/rendering'
 import {
   ABOUT,
   AUTH_CALLBACK,
@@ -45,7 +46,7 @@ const state = {
     aa: '2x' as const,
     onAa: () => {},
   },
-  camera: { fov: 65, onFov: () => {} },
+  camera: { lens: LENS_PRESETS.flight, onLens: () => {} },
   render: {
     preference: 'auto' as const,
     output: null,

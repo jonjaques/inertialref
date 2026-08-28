@@ -25,7 +25,12 @@ import {
   vec2,
   vec3,
 } from 'three/tsl'
-import { apparentWidth, smooth } from '@inertialref/rendering'
+import {
+  apparentWidth,
+  smooth,
+  verticalFov,
+  verticalFovDegrees,
+} from '@inertialref/rendering'
 import type { CinematicView } from '../engine/GameEngine.ts'
 
 /*
@@ -330,7 +335,10 @@ export function createWarpEffects(hullLength: () => number): WarpEffects {
       group.position.copy(camera.position)
       group.quaternion.copy(camera.quaternion)
 
-      const tanHalf = Math.tan(((camera.fov ?? 45) * Math.PI) / 360)
+      // The script's own lens, off the sample that is already in hand. It was
+      // `camera.fov ?? 45` — a second statement of the cinematic angle, in a
+      // file that had no way to know a script had changed it.
+      const tanHalf = Math.tan(verticalFov(view.lens) / 2)
       const aspect = camera.aspect ?? 16 / 9
       const frameHeight = 2 * tanHalf * PLANE
       const place = (mesh: Mesh, nx: number, ny: number): void => {
@@ -509,7 +517,7 @@ export function createWarpEffects(hullLength: () => number): WarpEffects {
       const hullWidth = apparentWidth(
         L,
         Math.max(distanceTo(camera, ship.position), 1),
-        camera.fov ?? 45,
+        verticalFovDegrees(view.lens),
         aspect,
       )
       const collapsed = 1 - between(hullWidth, 0.45, 0.95)

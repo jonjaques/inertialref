@@ -18,6 +18,7 @@ import {
   DEFAULT_VIEWPORT,
   clampLatitude,
   type Lens,
+  type LensView,
   MIN_STANCE_HEIGHT,
   selectTerrain,
   surfaceHeightBounds,
@@ -174,6 +175,15 @@ export interface DescentReport {
  */
 export interface TerrainReport {
   readonly body: string | null
+  /**
+   * The optics the selection was made against.
+   *
+   * Every count below is a function of it — the patch demand goes as the square
+   * of the pixels-per-radian — so a terrain readout that did not say which lens
+   * produced it was a number nobody could compare with the one they took
+   * yesterday. Null before the host has drawn a frame.
+   */
+  readonly lens: LensView | null
   /** Deepest and shallowest levels drawn together this frame. */
   readonly level: number
   readonly shallowestLevel: number

@@ -1,10 +1,16 @@
 import { Slider } from '@/components/ui/slider'
-import { FOV_MAX, FOV_MIN } from './controls.ts'
+import { LENS_CHANNELS, type CameraState, type LensChannelId } from './controls.ts'
 import { releaseFocus } from './focus.ts'
 
 /**
- * The lens, as one slider — shared by the camera panel and the planetarium's
- * view panel, which had two of these with the range written out twice.
+ * One channel of the lens, as one slider — shared by the camera panel and the
+ * planetarium's view panel, which had two copies of the range written out.
+ *
+ * A channel id rather than four components, because `react/no-multi-comp` is an
+ * error here and four sliders that differ only in their arithmetic would be
+ * four files. The arithmetic is in `controls.ts`, where it can be tested
+ * without a renderer, and this is the part that cannot: a padded hit area over
+ * a thin track.
  *
  * Radix's `Slider` rather than `<input type="range">`, and the reason is the
  * track: a range input's thumb is sized by the user agent — which SC 2.5.8
@@ -13,22 +19,27 @@ import { releaseFocus } from './focus.ts'
  * which works and is a hack. Radix draws both, so the padded hit area and the
  * 6 px visible track are different boxes on purpose.
  */
-export function FovSlider({
-  fov,
-  onFov,
+export function LensSlider({
+  channel,
+  camera,
 }: {
-  fov: number
-  onFov: (fov: number) => void
+  channel: LensChannelId
+  camera: CameraState
 }) {
+  const spec = LENS_CHANNELS[channel]
+  // A thousand steps over a logarithmic travel: fine enough that the readout
+  // moves on every arrow key at the narrow end, coarse enough that the value is
+  // an integer the slider can hold rather than a float it rounds.
+  const STEPS = 1000
   return (
     <Slider
-      min={FOV_MIN}
-      max={FOV_MAX}
+      min={0}
+      max={STEPS}
       step={1}
-      value={[fov]}
-      aria-label="Field of view, degrees"
+      value={[Math.round(spec.scrub(camera.lens) * STEPS)]}
+      aria-label={spec.description}
       onValueChange={([next]) => {
-        if (next !== undefined) onFov(next)
+        if (next !== undefined) camera.onLens(spec.at(camera.lens, next / STEPS))
       }}
       // A pointer that grabbed the thumb has the keyboard; hand it back, the
       // same as every other control in the overlay. Not on `onValueChange`,

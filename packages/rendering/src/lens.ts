@@ -251,6 +251,20 @@ export const LENS_PRESETS = {
   cinematic: lensForFov(CINEMATIC_FOV),
 } as const satisfies Record<string, Lens>
 
+/**
+ * A lens and the pixels it lands on — everything a derivation needs.
+ *
+ * The pair travels together because half the interesting quantities need both:
+ * the circle of confusion, the depth of field and the pixel angle are all
+ * claims about a lens *on a display*, and a consumer given only the lens would
+ * have to find the viewport somewhere else, which is where a second producer
+ * comes from.
+ */
+export interface LensView {
+  readonly lens: Lens
+  readonly viewport: Viewport
+}
+
 /** Aperture diameter, millimeters: `f / N`. 6.7 mm at the flight lens. */
 export const apertureDiameter = (lens: Lens): Millimeters =>
   effectiveFocalLength(lens) / Math.max(0.1, lens.fStop)

@@ -1,5 +1,9 @@
 import { Vector3, type PerspectiveCamera } from 'three/webgpu'
-import type { RenderScene } from '@inertialref/rendering'
+import {
+  type Lens,
+  type RenderScene,
+  verticalFov,
+} from '@inertialref/rendering'
 import type { PickCandidate } from './pick.ts'
 
 /*
@@ -35,9 +39,21 @@ export function projectScene(
   scene: RenderScene,
   camera: PerspectiveCamera,
   size: { readonly width: number; readonly height: number },
+  /**
+   * The lens the frame is composed through — `engine.lens`, never the camera's
+   * own `fov`.
+   *
+   * It was `camera.fov ?? 65`, and the fallback fired exactly when the camera
+   * was not a `PerspectiveCamera`, which is when the picture is least like the
+   * one 65° describes. A label drawn at one radius and a click resolved against
+   * another is the bug this module's header is about; reading the lens from a
+   * different producer than the one that set the projection is how that
+   * happens.
+   */
+  lens: Lens,
 ): PickCandidate[] {
   const halfHeight = size.height / 2
-  const tanHalfFov = Math.tan(((camera.fov ?? 65) * Math.PI) / 360)
+  const tanHalfFov = Math.tan(verticalFov(lens) / 2)
   const candidates: PickCandidate[] = []
 
   const add = (

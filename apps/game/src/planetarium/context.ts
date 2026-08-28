@@ -1,5 +1,6 @@
 import type { GameEngine } from '../engine/GameEngine.ts'
 import type { OrbitScope } from '../engine/presentation.ts'
+import type { CameraState } from '../hud/controls.ts'
 import type { LabelDensity } from './layers.ts'
 
 /*
@@ -36,6 +37,19 @@ export interface PlanetariumContext {
   /** How much of the lens's artifact stack is showing, 0..1. */
   readonly flare: number
   readonly onFlare: (amount: number) => void
-  readonly fov: number
-  readonly onFov: (fov: number) => void
+  /** The lens, and the only writer of it — see `hud/controls.ts`. */
+  readonly camera: CameraState
+  /**
+   * Move the camera in or out by `notches` of the wheel's own step.
+   *
+   * The *dolly*, which is not the zoom and not the framing. Three acts shared
+   * one control here and the copy under the lens slider described a coupling
+   * nobody had wired: narrowing the lens recorded an angle and nothing
+   * re-solved the standoff, so the subject did not "stay the same size" — it
+   * grew. Each act now has its own control and the sentence is true of the one
+   * it belongs to.
+   */
+  readonly dolly: (notches: number) => void
+  /** Re-solve the standoff so the subject fills the frame at the current lens. */
+  readonly holdFraming: () => void
 }

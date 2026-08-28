@@ -6,7 +6,11 @@ import type {
   PointLight,
 } from 'three/webgpu'
 import { Vector3 } from 'three/webgpu'
-import { chaseCameraPosition, chaseOffsetFor } from '@inertialref/rendering'
+import {
+  chaseCameraPosition,
+  chaseOffsetFor,
+  verticalFovDegrees,
+} from '@inertialref/rendering'
 import type { GameEngine } from '../engine/GameEngine.ts'
 
 /** Reused per frame; a light direction is not worth an allocation at 144 Hz. */
@@ -109,9 +113,10 @@ export function CameraRig({ engine }: { engine: GameEngine }) {
      * eye (`buildScene` was handed the same pose), so the chase offset must
      * not be applied on top — a director frames shots and an observatory
      * frames bodies, and neither wants a ship 14 m in front of the lens. The
-     * flight FOV yields to a script's lens the same way; the observatory uses
-     * the flight lens deliberately, because its framing math is solved
-     * against whatever the camera panel is set to.
+     * flight lens yields to a script's the same way — `engine.lens` resolves
+     * that order once — and the observatory uses the flight lens deliberately,
+     * because its framing math is solved against whatever the camera panel is
+     * set to.
      */
     const cinematic = engine.cinematic
 
@@ -134,12 +139,20 @@ export function CameraRig({ engine }: { engine: GameEngine }) {
 
     const override = cinematic ?? engine.observer
 
-    // The camera panel's field of view, applied here rather than pushed at
-    // the camera from React: the canvas remounts on an HDR change and R3F
-    // builds a fresh camera, so the engine's value is the durable one and
-    // this is the only place that writes it. Guarded, because
-    // `updateProjectionMatrix` every frame is waste.
-    const fov = cinematic === null ? engine.fov : cinematic.fov
+    /*
+     * The lens, applied here rather than pushed at the camera from React: the
+     * canvas remounts on an HDR change and R3F builds a fresh camera, so the
+     * engine's value is the durable one and this is the only place that writes
+     * it. Guarded, because `updateProjectionMatrix` every frame is waste.
+     *
+     * `camera.fov`, and never `filmGauge`/`setFocalLength`. Three's gauge is
+     * the sensor's *long* side and `getFilmHeight()` divides it by the aspect
+     * ratio, so a focal length pushed through that route yields an angle that
+     * changes on a resize — which would move the terrain selection, the
+     * observatory's standoff and every composed shot with it. `fov` is the
+     * vertical field and aspect-independent, which is what the lens states.
+     */
+    const fov = verticalFovDegrees(engine.lens)
     const perspective = camera as PerspectiveCamera
     if (perspective.isPerspectiveCamera && perspective.fov !== fov) {
       perspective.fov = fov

@@ -49,6 +49,14 @@ export function numberWithin(min: number, max: number): Accept<number> {
     value <= max
 }
 
+/**
+ * The sentinel `read` returns when there is nothing stored.
+ *
+ * A distinct object rather than `undefined`, because `undefined` is a value a
+ * caller may legitimately store and `null` is one `JSON.parse` returns.
+ */
+const MISSING: unique symbol = Symbol('missing')
+
 function read<T>(key: string, fallback: T, accept?: Accept<T>): T {
   try {
     const stored = window.localStorage.getItem(PREFIX + key)
@@ -85,12 +93,45 @@ function read<T>(key: string, fallback: T, accept?: Accept<T>): T {
  * thread, for a value that changes forty times a second. An effect runs after
  * the commit, which is the moment the claim was about.
  */
+/**
+ * One stored preference, read once, without a hook.
+ *
+ * For a key that is being *migrated away from*: the value is wanted at the
+ * moment a new key is found absent and never again, and a `usePersistentState`
+ * for it would keep an obsolete key alive in the component's state and write it
+ * back. `null` means absent or unbelievable, which the caller treats the same.
+ */
+export function readPreference<T>(key: string, accept: Accept<T>): T | null {
+  const held = read<T | null>(key, null, (value): value is T | null =>
+    value === null ? true : accept(value),
+  )
+  return held
+}
+
 export function usePersistentState<T>(
   key: string,
   initial: T,
   accept?: Accept<T>,
+  /**
+   * What to do when the key is absent but an older shape of it is not.
+   *
+   * A preference that changes shape has three possible behaviors and only one
+   * of them is honest: silently reset (the player's choice is gone), read the
+   * old key forever (the new one never becomes canonical), or read the old key
+   * *once*, which is this. It runs inside the lazy initializer, so it happens
+   * exactly at the moment the fallback would have been used, and the new key is
+   * written the first time the value actually changes — which keeps "never
+   * chose" meaning the default, as above.
+   *
+   * Returning `null` means there was nothing to migrate.
+   */
+  migrate?: () => T | null,
 ): [T, (value: T | ((previous: T) => T)) => void] {
-  const [value, setValue] = useState<T>(() => read(key, initial, accept))
+  const [value, setValue] = useState<T>(() => {
+    const stored = read(key, MISSING as T, accept)
+    if (stored !== (MISSING as T)) return stored
+    return migrate?.() ?? initial
+  })
   /*
    * What is already on disk, so an unchanged value is not rewritten.
    *

@@ -10,7 +10,8 @@ import { devPanels } from './registry.tsx'
 import { TargetRow } from './TargetRow.tsx'
 import { type Connection, DISCONNECTED } from '../net/health.ts'
 import { AA_LEVELS, OUTPUT_PREFERENCES } from '../render/output.ts'
-import { FOV_MAX, FOV_MIN } from './controls.ts'
+import { LENS_PRESETS, lensForFov } from '@inertialref/rendering'
+import { FOCAL_MAX, FOCAL_MIN } from './controls.ts'
 
 /*
  * A smoke test for the author's instruments, in Node, with no DOM.
@@ -53,7 +54,7 @@ function devContext(
       aa: '2x',
       onAa: () => {},
     },
-    camera: { fov: 65, onFov: () => {} },
+    camera: { lens: LENS_PRESETS.flight, onLens: () => {} },
     connection: DISCONNECTED,
     onCheckConnection: () => {},
     commands: {
@@ -259,14 +260,27 @@ describe('the author’s instruments', () => {
     expect(graphics).not.toContain('auto →')
 
     const camera = renderToStaticMarkup(
-      createElement(CameraPanel, { camera: { fov: 42, onFov: () => {} } }),
+      createElement(CameraPanel, {
+        camera: { lens: lensForFov(42), onLens: () => {} },
+      }),
     )
+    // The focal length is what the panel is about, and the angle rides beside
+    // it — 42° is 31.3 mm on the 24 mm gauge.
+    expect(camera).toContain('31.3 mm')
     expect(camera).toContain('42°')
     expect(camera).toContain('Reset')
-    // The slider carries the value it will write, and the range it is bounded
-    // to — `FOV_MIN`/`FOV_MAX`, which three surfaces now read from one place.
-    expect(camera).toContain(`aria-valuemin="${FOV_MIN}"`)
-    expect(camera).toContain(`aria-valuemax="${FOV_MAX}"`)
+    // All four channels are drawn, not just the focal length: an aperture the
+    // depth-of-field readout depends on and no control for it is a readout
+    // nobody can move.
+    for (const channel of ['Focal Length', 'Zoom', 'Aperture', 'Focus'])
+      expect(camera).toContain(channel)
+    // The travel is the scrub, not the value — a logarithmic slider whose
+    // `aria` range was the millimetres would announce a position it does not
+    // hold. `FOCAL_MIN`/`FOCAL_MAX` are the ends it maps onto.
+    expect(camera).toContain('aria-valuemin="0"')
+    expect(camera).toContain('aria-valuemax="1000"')
+    expect(FOCAL_MIN).toBeCloseTo(8.4, 1)
+    expect(FOCAL_MAX).toBeCloseTo(68.06, 1)
   })
 
   it('renders every destination the harness offers', () => {

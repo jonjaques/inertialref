@@ -29,8 +29,11 @@ import {
 } from '@inertialref/universe'
 import {
   buildPatch,
+  DEFAULT_LENS,
   DEFAULT_MAX_PATCHES,
   DEFAULT_VIEWPORT,
+  type Lens,
+  type LensView,
   type PatchPlacement,
   patchPlacement,
   type RenderBody,
@@ -39,8 +42,8 @@ import {
   type SelectedPatch,
   selectTerrain,
   type TerrainEye,
-  type TerrainViewport,
   terrainPatchKey,
+  type Viewport,
 } from '@inertialref/rendering'
 import { generateHeightfieldTask, type WorkerPool } from '@inertialref/workers'
 
@@ -302,15 +305,27 @@ export class TerrainStreamer {
    * keep list, never evicted.
    */
   #epoch = 0
+  /**
+   * What the last selection was actually made against, for `ir.terrain()`.
+   *
+   * The resolved pair rather than the two nullable fields above: a readout
+   * saying "no lens" while the streamer was quietly using the flight default
+   * would be a different claim from the one the numbers beside it describe.
+   */
+  #lensView: LensView | null = null
 
   /**
-   * The drawable height the selection is measured against, in physical pixels.
+   * The optics the selection is measured against.
    *
-   * A presentation input like `fov`, set by the scene from the drawing buffer,
-   * and it belongs to the streamer rather than to the selection because a
-   * two-times display genuinely wants twice the patches for the same picture.
+   * Presentation inputs, written by the engine each frame under the pose's own
+   * precedence — a cutscene's lens outranks the flight one, and the terrain a
+   * scripted shot selects is the terrain that shot's lens asks for. The
+   * viewport is in *display* pixels with any supersampling already divided out;
+   * a two-times display genuinely wants twice the patches for the same picture
+   * and a two-times supersample does not.
    */
-  viewport: TerrainViewport | null = null
+  lens: Lens | null = null
+  viewport: Viewport | null = null
 
   constructor(pool: WorkerPool | null) {
     this.#pool = pool
@@ -337,6 +352,7 @@ export class TerrainStreamer {
     readonly culled: number
     readonly starved: number
     readonly saturated: boolean
+    readonly lens: LensView | null
   } {
     let placed = 0
     let vertices = 0
@@ -365,6 +381,7 @@ export class TerrainStreamer {
       culled: this.#culled,
       starved: this.#starved,
       saturated: this.#saturated,
+      lens: this.#lensView,
     }
   }
 
@@ -471,11 +488,13 @@ export class TerrainStreamer {
     }
     this.#colour = surface.appearance.colour
 
+    const lens = this.lens ?? DEFAULT_LENS
     const viewport = this.viewport ?? DEFAULT_VIEWPORT
+    this.#lensView = { lens, viewport }
     const eye = this.#eye(surface, spinPose, bodyPose.position, camera)
     const height = Math.max(1, eye.distance - eye.radius)
     if (
-      (eye.relief * pixelsPerRadian(viewport)) / height <
+      (eye.relief * pixelsPerRadian(lens, viewport)) / height <
       TERRAIN_RELIEF_PIXELS
     ) {
       this.#forget()
@@ -484,6 +503,7 @@ export class TerrainStreamer {
 
     const options = {
       maxLevel: surfaceDetailFloor(surface.radius, surface.surface),
+      lens,
       viewport,
     }
 

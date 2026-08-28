@@ -1,3 +1,10 @@
+import {
+  DEFAULT_GAUGE,
+  effectiveFocalLength,
+  type Lens,
+  lensForFov,
+  verticalFovDegrees,
+} from '@inertialref/rendering'
 import type { AaLevel, OutputPreference } from '../render/output.ts'
 import type { RendererDescription } from '../render/output.ts'
 
@@ -20,18 +27,179 @@ import type { RendererDescription } from '../render/output.ts'
 /**
  * The field-of-view range, once.
  *
- * 20° is a telephoto; past 110° everything fisheyes. Stated here because three
- * places need it and they must agree: the camera panel's slider, the
- * planetarium's own lens control, and the guard on the persisted value in
- * `App`. A stored 5000° is not a field of view somebody nearly asked for — it
- * reaches `engine.fov` and the projection matrix behind it.
+ * 20° is a telephoto; past 110° everything fisheyes. Stated as angles even
+ * though the lens is canonically a focal length, because the *limits* are
+ * perceptual claims about a picture and a focal length is only a claim about a
+ * picture once you know the gauge. Both ends are converted below.
  */
 export const FOV_MIN = 20
 export const FOV_MAX = 110
 
+/** The same two limits as glass, on a 24 mm gauge: 8.40 mm and 68.06 mm. */
+export const FOCAL_MIN = lensForFov(FOV_MAX).focalLength
+export const FOCAL_MAX = lensForFov(FOV_MIN).focalLength
+
+/**
+ * Zoom's range, as a multiplier on the focal length.
+ *
+ * From 1 rather than from below it, because zooming *out* past the widest
+ * focal length is the focal-length control's job and two ways to reach the same
+ * picture is how a panel ends up with two disagreeing readouts of it.
+ */
+export const ZOOM_MIN = 1
+export const ZOOM_MAX = 8
+
+/** f/1.4 wide open to f/22 stopped down — a fast prime's full range. */
+export const F_STOP_MIN = 1.4
+export const F_STOP_MAX = 22
+
+/**
+ * The focus band, meters, with infinity at the top of the travel.
+ *
+ * Half a meter is closer than any camera in this game gets to anything; a
+ * kilometer is past hyperfocal for every lens on the slider, so everything
+ * beyond it is the same picture and the last position says so by being ∞.
+ */
+export const FOCUS_MIN = 0.5
+export const FOCUS_MAX = 1000
+
+/**
+ * Slider positions are logarithmic in the value, and every channel here is.
+ *
+ * A linear focal-length slider spends two thirds of its travel between 30 and
+ * 68 mm, where the angle changes by 20°, and gives the wide end — where it
+ * changes by 50° — the last third. Logarithmic makes a fixed drag a fixed
+ * *ratio*, which is what a stop is on the aperture ring and what a zoom is by
+ * definition.
+ */
+const scrubOf = (value: number, min: number, max: number): number =>
+  Math.log(Math.min(max, Math.max(min, value)) / min) / Math.log(max / min)
+
+const valueOf = (scrub: number, min: number, max: number): number =>
+  min * (max / min) ** Math.min(1, Math.max(0, scrub))
+
+/** One thing on the lens a slider can move. */
+export interface LensChannel {
+  readonly label: string
+  /** Where the lens's current value sits on the travel, 0..1. */
+  readonly scrub: (lens: Lens) => number
+  /** The lens with this channel moved to a position on the travel. */
+  readonly at: (lens: Lens, scrub: number) => Lens
+  /** What the panel prints beside the label. */
+  readonly format: (lens: Lens) => string
+  /** What a screen reader is told the slider is. */
+  readonly description: string
+}
+
+/**
+ * The four channels, as data rather than as four components.
+ *
+ * `react/no-multi-comp` is an error here and four sliders that differ only in
+ * their arithmetic are four files under any other arrangement. The arithmetic
+ * is the part worth testing anyway, and none of it can be tested through a
+ * component.
+ */
+export const LENS_CHANNELS = {
+  focal: {
+    label: 'Focal Length',
+    description: 'Focal length, millimeters',
+    scrub: (lens) => scrubOf(lens.focalLength, FOCAL_MIN, FOCAL_MAX),
+    at: (lens, scrub) => ({
+      ...lens,
+      focalLength: valueOf(scrub, FOCAL_MIN, FOCAL_MAX),
+    }),
+    // The angle beside the millimetres, because the angle is what somebody
+    // composing a shot is actually choosing and the millimetres are what the
+    // depth of field and the diffraction below are computed from.
+    format: (lens) =>
+      `${lens.focalLength.toFixed(1)} mm · ${verticalFovDegrees({ ...lens, zoom: 1 }).toFixed(0)}°`,
+  },
+  zoom: {
+    label: 'Zoom',
+    description: 'Zoom, as a multiple of the focal length',
+    scrub: (lens) => scrubOf(lens.zoom, ZOOM_MIN, ZOOM_MAX),
+    at: (lens, scrub) => ({
+      ...lens,
+      zoom: valueOf(scrub, ZOOM_MIN, ZOOM_MAX),
+    }),
+    format: (lens) =>
+      `${lens.zoom.toFixed(2)}× · ${verticalFovDegrees(lens).toFixed(0)}°`,
+  },
+  aperture: {
+    label: 'Aperture',
+    description: 'Aperture, as an f-number',
+    scrub: (lens) => scrubOf(lens.fStop, F_STOP_MIN, F_STOP_MAX),
+    at: (lens, scrub) => ({
+      ...lens,
+      fStop: valueOf(scrub, F_STOP_MIN, F_STOP_MAX),
+    }),
+    format: (lens) =>
+      `f/${lens.fStop.toFixed(1)} · ⌀ ${(effectiveFocalLength(lens) / lens.fStop).toFixed(1)} mm`,
+  },
+  focus: {
+    label: 'Focus',
+    description: 'Focus distance, meters',
+    // Infinity is the top of the travel rather than a value on it: every
+    // distance past a kilometer is the same picture at every lens here, and a
+    // slider that could only ever *approach* the setting the camera spends its
+    // whole life at would be a control with a defect in it.
+    scrub: (lens) =>
+      Number.isFinite(lens.focus)
+        ? scrubOf(lens.focus, FOCUS_MIN, FOCUS_MAX) * 0.98
+        : 1,
+    at: (lens, scrub) => ({
+      ...lens,
+      focus:
+        scrub >= 0.99 ? Infinity : valueOf(scrub / 0.98, FOCUS_MIN, FOCUS_MAX),
+    }),
+    format: (lens) =>
+      Number.isFinite(lens.focus)
+        ? `${lens.focus < 10 ? lens.focus.toFixed(1) : lens.focus.toFixed(0)} m`
+        : '∞',
+  },
+} as const satisfies Record<string, LensChannel>
+
+export type LensChannelId = keyof typeof LENS_CHANNELS
+
+/**
+ * What a restored `camera.lens` has to prove before it is believed.
+ *
+ * The same argument as every other guard in `panelState.ts`, with more surface:
+ * `localStorage` outlives the code that wrote it, and a lens is seven numbers
+ * where the field of view was one. A focal length of zero is a division; a NaN
+ * anywhere in here is a NaN projection matrix and a frame that draws nothing.
+ */
+export const isLens = (value: unknown): value is Lens => {
+  if (typeof value !== 'object' || value === null) return false
+  const lens = value as Record<string, unknown>
+  const within = (key: string, min: number, max: number): boolean => {
+    const held = lens[key]
+    return (
+      typeof held === 'number' &&
+      Number.isFinite(held) &&
+      held >= min &&
+      held <= max
+    )
+  }
+  return (
+    within('focalLength', FOCAL_MIN * 0.99, FOCAL_MAX * 1.01) &&
+    within('gauge', DEFAULT_GAUGE, DEFAULT_GAUGE) &&
+    within('zoom', ZOOM_MIN, ZOOM_MAX) &&
+    within('fStop', F_STOP_MIN, F_STOP_MAX) &&
+    within('shutter', 1 / 8000, 30) &&
+    within('iso', 25, 409_600) &&
+    // The one field that is legitimately not finite, and the reason this guard
+    // is written out rather than reduced to "every value is a finite number".
+    (lens.focus === null ||
+      (typeof lens.focus === 'number' &&
+        (lens.focus === Infinity ||
+          (lens.focus >= FOCUS_MIN && lens.focus <= FOCUS_MAX))))
+  )
+}
+
 export interface CameraState {
-  readonly fov: number
-  readonly onFov: (fov: number) => void
+  readonly lens: Lens
+  readonly onLens: (lens: Lens) => void
 }
 
 export interface GraphicsState {

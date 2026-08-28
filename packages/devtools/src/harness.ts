@@ -45,7 +45,13 @@ import {
   restoreSave,
   serializeSave,
 } from '@inertialref/persistence'
-import { MIN_STANCE_HEIGHT, type RenderScene } from '@inertialref/rendering'
+import {
+  type LensReadout,
+  lensReadout,
+  type LensView,
+  MIN_STANCE_HEIGHT,
+  type RenderScene,
+} from '@inertialref/rendering'
 import type { PoolStats, WorkerPool } from '@inertialref/workers'
 import type { AuthorityPort, AuthorityStatus } from '@inertialref/net'
 import { describeDrift, type VersionDrift } from '@inertialref/protocol'
@@ -170,6 +176,17 @@ export interface PresentationHost {
   scene(): RenderScene | null
   frameStats(): FrameStats | null
   /**
+   * The lens the picture is being taken with, and the pixels it lands on.
+   *
+   * A getter rather than a setter for the same reason `world` is: the engine
+   * resolves the lens every frame under the pose's own precedence — a script's
+   * lens, then the flight one — and a host that pushed a copy in here would
+   * hold a second producer of it, which is the rule this phase exists to keep.
+   * The observatory reads it to solve a standoff; `ir.lens()` reads it to print
+   * one. Absent headlessly, where there is no camera and no display.
+   */
+  lensView(): LensView | null
+  /**
    * What the terrain streamer is doing this frame.
    *
    * The one number in the terrain rig that cannot be derived: `simulateDescent`
@@ -190,6 +207,16 @@ export interface HarnessStatus {
   readonly workers: PoolStats | null
   readonly frame: FrameStats | null
   readonly authority: AuthorityStatus | null
+  /**
+   * The lens the frame was composed through, fully derived.
+   *
+   * On `status` rather than only on `ir.lens()` because it is what makes a
+   * captured still reproducible: a plate is a body, a pose *and* an optical
+   * setup, and the third has never been written down. `ir.shot` returns this
+   * object, so a bookmark carries the lens it was taken with — which is the
+   * record the photo-mode metadata seam eventually stamps.
+   */
+  readonly lens: LensReadout | null
 }
 
 export interface ScenarioResult {
@@ -246,7 +273,21 @@ export class GameHarness {
       workers: this.#host.pool()?.stats() ?? null,
       frame: this.#host.frameStats?.() ?? null,
       authority: this.#host.authority?.().status() ?? null,
+      lens: this.lens(),
     }
+  }
+
+  /**
+   * The camera's optics, as an instrument: focal length, aperture, the derived
+   * depth of field, the diffraction limit and the exposure.
+   *
+   * Null headlessly, where there is no display to resolve a circle of confusion
+   * against — the honest answer rather than a plausible one taken at a nominal
+   * resolution nobody is looking at.
+   */
+  lens(): LensReadout | null {
+    const view = this.#host.lensView?.() ?? null
+    return view === null ? null : lensReadout(view.lens, view.viewport)
   }
 
   /** Compact one-line summary, for a quick look from a console. */
@@ -1327,6 +1368,7 @@ export class GameHarness {
       '  ir.descend(address?, {site, steps})',
       '                                fly a descent on paper: level churn, burst, cache',
       '  ir.terrain()                  what the live streamer holds this frame',
+      '  ir.lens()                     the camera as an instrument: mm, f-stop, depth of field',
       '  ir.zoo()                      one body per surface archetype',
       '  ir.terrainBaseline()          the zoo, its descents, and measured patch cost',
       '  ir.logs(n)',

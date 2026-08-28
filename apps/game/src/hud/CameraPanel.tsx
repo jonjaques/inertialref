@@ -1,22 +1,33 @@
 import { formatDistance } from '@inertialref/shared'
-import { compassDegrees } from '@inertialref/rendering'
-import { DEFAULT_FOV } from '../engine/GameEngine.ts'
+import {
+  compassDegrees,
+  lensReadout,
+  verticalFovDegrees,
+} from '@inertialref/rendering'
+import { DEFAULT_LENS } from '../engine/GameEngine.ts'
 import { useEngine, useShallow } from '../state/engineStore.ts'
 import { Action } from './Action.tsx'
-import type { CameraState } from './controls.ts'
-import { FovSlider } from './FovSlider.tsx'
+import { type CameraState, LENS_CHANNELS } from './controls.ts'
+import { LensSlider } from './LensSlider.tsx'
 import { Row } from './Row.tsx'
 import { Section } from './Section.tsx'
 
 /*
  * The camera, as an adjustable instrument — and where it is pointed.
  *
- * The field of view is the one lens decision in every screenshot: 65° is the
- * flying default, and it is also why a planet filling the frame from close up
- * wears a magnified cap of itself. A photographic comparison sometimes wants
- * the longer lens, and reloading to test one is how nobody ever tests one.
- * The slider writes `engine.fov`; `CameraRig` applies it, so the value
- * survives the canvas remounting under an HDR change.
+ * A lens rather than an angle, and the panel is the argument for it: an angle
+ * has no aperture, no focus and no exposure, and `docs/design/art.md` commits
+ * to all three. 18.84 mm on a 24 mm gauge is the flying default and is also why
+ * a planet filling the frame from close up wears a magnified cap of itself. A
+ * photographic comparison sometimes wants the longer lens, and reloading to
+ * test one is how nobody ever tests one. The sliders write `engine.flightLens`;
+ * `CameraRig` applies it, so the value survives the canvas remounting under an
+ * HDR change.
+ *
+ * The readouts under them are the derivations, and two of them settle scope on
+ * sight: the hyperfocal distance is meters, so everything at planetary range is
+ * sharp and defocus can never be a terrain problem, and the diffraction limit
+ * is f/12, so the aperture is a free control until it is not.
  *
  * The observatory readout below it moved here out of the planetarium's object
  * panel, and the move is the point rather than a tidy-up. Range, altitude,
@@ -61,30 +72,99 @@ export function CameraPanel({ camera }: { camera: CameraState }) {
     }),
   )
 
+  /*
+   * The viewport the derived readouts are resolved against, and only it.
+   *
+   * A circle of confusion is a claim about a *display*, so the panel asks the
+   * engine what the picture is actually landing on rather than assuming a
+   * nominal one. The whole `LensReadout` is a fresh object graph on every one
+   * of the eight samples a second and would never bail out of a re-render; two
+   * numbers behind `useShallow` change on a resize and at no other time, and
+   * the derivation from them is arithmetic this panel can do itself.
+   */
+  const viewport = useEngine(
+    useShallow((snapshot) => snapshot.status?.lens?.viewport ?? null),
+  )
+  const view = viewport === null ? null : lensReadout(camera.lens, viewport)
+
   return (
     <div>
       <Section
         id="camera.lens"
-        title="Field of View"
-        trailing={`${camera.fov}°`}
+        title="Lens"
+        trailing={`${camera.lens.focalLength.toFixed(0)} mm`}
       >
-        <div className="flex items-center gap-2">
-          <FovSlider fov={camera.fov} onFov={camera.onFov} />
-          <span className="w-9 shrink-0 text-right text-slate-300 tabular-nums">
-            {camera.fov}°
+        {(['focal', 'zoom', 'aperture', 'focus'] as const).map((channel) => (
+          <div key={channel} className="flex items-center gap-2">
+            <span className="type-ui w-20 shrink-0 text-slate-400">
+              {LENS_CHANNELS[channel].label}
+            </span>
+            <LensSlider channel={channel} camera={camera} />
+            <span className="type-readout w-28 shrink-0 text-right text-slate-300">
+              {LENS_CHANNELS[channel].format(camera.lens)}
+            </span>
+          </div>
+        ))}
+        <div className="mt-1 flex items-center justify-between gap-2">
+          <span className="text-slate-400">
+            Narrow reads like a telephoto photograph; wide is for flying. The
+            bookmarks in navigate → shots were composed at{' '}
+            {verticalFovDegrees(DEFAULT_LENS).toFixed(0)}°.
           </span>
           <Action
             label="Reset"
-            title={`Back to the ${DEFAULT_FOV}° flying default`}
-            disabled={camera.fov === DEFAULT_FOV}
-            onClick={() => camera.onFov(DEFAULT_FOV)}
+            title={`Back to the ${verticalFovDegrees(DEFAULT_LENS).toFixed(0)}° flying default`}
+            disabled={
+              camera.lens.focalLength === DEFAULT_LENS.focalLength &&
+              camera.lens.zoom === DEFAULT_LENS.zoom &&
+              camera.lens.fStop === DEFAULT_LENS.fStop &&
+              camera.lens.focus === DEFAULT_LENS.focus
+            }
+            onClick={() => camera.onLens(DEFAULT_LENS)}
           />
         </div>
-        <div className="mt-1 text-slate-400">
-          Narrow reads like a telephoto photograph; wide is for flying. The
-          bookmarks in navigate → shots were composed at {DEFAULT_FOV}°.
-        </div>
       </Section>
+
+      {view !== null && (
+        <Section
+          id="camera.optics"
+          title="Optics"
+          trailing={`${view.verticalFovDegrees.toFixed(1)}°`}
+        >
+          <Row
+            label="Field"
+            value={`${view.verticalFovDegrees.toFixed(1)}° V · ${view.horizontalFovDegrees.toFixed(1)}° H`}
+          />
+          <Row
+            label="Sharp from"
+            value={
+              view.depthOfField.far === Infinity
+                ? `${formatDistance(view.depthOfField.near)} to ∞`
+                : `${formatDistance(view.depthOfField.near)} to ${formatDistance(view.depthOfField.far)}`
+            }
+          />
+          <Row
+            label="Hyperfocal"
+            value={formatDistance(view.depthOfField.hyperfocal)}
+          />
+          <Row
+            label="Circle of confusion"
+            value={`${(view.circleOfConfusion * 1000).toFixed(1)} µm on a ${(view.pixelPitch * 1000).toFixed(1)} µm pixel`}
+          />
+          <Row
+            label="Airy disk"
+            value={`${(view.airyDiameter * 1000).toFixed(1)} µm — diffraction-limited past f/${view.diffractionLimit.toFixed(1)}`}
+          />
+          <Row
+            label="Resolution"
+            value={`${view.pixelAngleMrad.toFixed(2)} mrad/px · ${view.angularResolutionMrad.toFixed(2)} mrad optical`}
+          />
+          <Row
+            label="Exposure"
+            value={`EV ${view.exposureValue.toFixed(1)} at 1/${Math.round(1 / camera.lens.shutter)} s, ISO ${camera.lens.iso}`}
+          />
+        </Section>
+      )}
 
       {eye !== null && (
         <>

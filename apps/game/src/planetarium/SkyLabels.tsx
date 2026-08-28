@@ -145,6 +145,7 @@ export function SkyLabels({
         scene,
         view.camera as PerspectiveCamera,
         size,
+        engine.lens,
       )
         .filter(
           (candidate) =>
@@ -201,9 +202,12 @@ export function SkyLabels({
       if (scene === null || view === null) return
       const size = viewportSize()
       const projected = new Map(
-        projectScene(scene, view.camera as PerspectiveCamera, size).map(
-          (candidate) => [candidate.address, candidate],
-        ),
+        projectScene(
+          scene,
+          view.camera as PerspectiveCamera,
+          size,
+          engine.lens,
+        ).map((candidate) => [candidate.address, candidate]),
       )
       for (const [address, node] of nodes.current) {
         const at = projected.get(address)
