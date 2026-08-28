@@ -499,7 +499,13 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
     // it to its own transport, so both handlers ran and one press flipped
     // `clock.paused` twice — the documented play/pause control did nothing at
     // all, with nothing to see in the console.
-    { axes: mode === 'flight', pause: mode !== 'cinema' },
+    //
+    // The reading room is the other claim on Space, and it is the browser's:
+    // `docs` is the one mode that is a scrolling document, where Space is page
+    // down. Bound here it is neither — `preventDefault` takes the scroll and
+    // the press pauses the simulation behind the words instead, which is a
+    // control nobody reading a page asked for and nothing on screen explains.
+    { axes: mode === 'flight', pause: mode !== 'cinema' && mode !== 'docs' },
   )
 
   /*

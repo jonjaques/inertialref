@@ -75,3 +75,4 @@ every touch of its directory, and the thing it is competing with for attention i
 | `server.md`      | the Worker, net, protocol or persistence                      |
 | `testing.md`     | any `*.test.ts`                                               |
 | `site.md`        | the document head, `public/`, the brand pipeline, analytics   |
+| `documents.md`   | any markdown under `docs/`, or the documentation build        |

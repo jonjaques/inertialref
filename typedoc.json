@@ -1,0 +1,82 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+
+  /* One TypeScript program over the twelve engine packages, under the root
+     `tsconfig.json` — the same one `pnpm typecheck` runs — so the reference
+     describes the code under the settings the code is compiled with.
+     `noUncheckedIndexedAccess` and `verbatimModuleSyntax` both change what a
+     signature says, and a reference generated under looser options documents a
+     library that is not this one.
+
+     `packages` rather than `resolve` as the entry point strategy: it reads each
+     `package.json`, so a module in the output is named `@inertialref/spatial`
+     and carries that package's own description, instead of being called
+     `spatial/src/index` after the path it happened to be found at. */
+  "entryPointStrategy": "packages",
+  "entryPoints": ["packages/*"],
+  "packageOptions": {
+    "entryPoints": ["src/index.ts"],
+    "tsconfig": "../../tsconfig.json",
+
+    /* Repeated here because under the `packages` strategy each package is
+       converted by its own sub-application, and a root option is not inherited
+       by one. Left out, the links come back pointing at
+       `blob/<the commit in the checkout>/`, which is a permalink to a revision
+       and not what the comment below asks for. */
+    "sourceLinkTemplate": "https://github.com/jonjaques/inertialref/blob/main/{path}#L{line}"
+  },
+
+  /* No output target is configured here, and that is the point of the whole
+     arrangement. `scripts/docs/build.mjs` calls TypeDoc through its Node API
+     and serializes the project in process, because the site renders these pages
+     itself (`scripts/docs/api.mjs`, `apps/game/src/docs/`): the reflection tree
+     is the complete model — every signature, every comment part, every resolved
+     `{@link}` target, every source position — and drawing it in the interface's
+     own components is what makes an API page and a prose page the same page
+     with different content in it, rather than a themed site next door.
+
+     `pnpm exec typedoc --json out.json` still works, and is how to look at what
+     this file produces. */
+
+  /* `main`, written into the template literally rather than as
+     `{gitRevision}`. These links are read from a deployed site that outlives
+     the build that produced it, so a permalink to the exact revision rots into
+     a 404 the moment history is rewritten — and what a reader wants from "view
+     source" is the file as it stands. `{gitRevision}` resolves to the commit
+     TypeDoc found in the checkout, which is the opposite of that. */
+  "sourceLinkTemplate": "https://github.com/jonjaques/inertialref/blob/main/{path}#L{line}",
+
+  "excludeInternal": true,
+  "excludePrivate": true,
+  "excludeExternals": true,
+  "readme": "none",
+  "includeVersion": false,
+  "sort": ["kind", "alphabetical"],
+  "categorizeByGroup": false,
+
+  /* A broken cross-reference fails the build. `{@link Observatory}` pointing at
+     a symbol that has been renamed produces, in every other configuration, a
+     page that renders the words and links nowhere — and a documentation site
+     whose internal links quietly stop working is worse than one that never had
+     them.
+
+     Half of it is here and half is in `scripts/docs/build.mjs`: `convert()`
+     does not run these, only `app.validate(project)` does, and it reports
+     through the logger rather than by throwing. Set here alone the whole block
+     is configured and inert.
+
+     `notDocumented` stays off. It is the only one of these that is a judgement
+     rather than a fact: this codebase comments what is not obvious and
+     deliberately declines to restate what is, and turning that into a build
+     failure would be a policy nobody agreed to. */
+  "validation": {
+    "notExported": true,
+    "invalidLink": true,
+    "invalidPath": true,
+    "rewrittenLink": true,
+    "unusedMergeModuleWith": true,
+    "notDocumented": false
+  },
+
+  "logLevel": "Warn"
+}

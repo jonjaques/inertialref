@@ -32,11 +32,13 @@ export default defineConfig({
   test: {
     environment: 'node',
     /*
-     * `scripts/` is here for one file: the gate on `index.html`, which is the
-     * only public-surface artifact `pnpm brand` checks rather than generates.
-     * The build scripts are `.mjs` — they import `site.ts` under Node's type
-     * stripping — so their tests are too, and the pattern is deliberately
-     * narrow rather than `scripts/**\/*.test.*`.
+     * `scripts/` is here for the two build scripts that decide something rather
+     * than only emitting it: the gate on `index.html`, which is the only
+     * public-surface artifact `pnpm brand` checks rather than generates, and the
+     * route table the documentation build maps every file and every link
+     * through. Both are `.mjs` — they import `site.ts` under Node's type
+     * stripping — so their tests are too, and the pattern stays narrow rather
+     * than `scripts/**\/*.test.*`.
      */
     include: [
       'packages/*/src/**/*.test.ts',

@@ -35,6 +35,7 @@ clicking.
 | `/play/multiplayer`                                  | [The persistent universe](modes.md#persistent-universe--deferred) ⛔ | `flight`      |
 | `/planetarium?at=…`                                  | [The planetarium](planetarium.md)                                    | `planetarium` |
 | `/cinema`, `/cinema/:id`                             | [The cinema player](cinema.md)                                       | `cinema`      |
+| `/docs`, `/docs/*`                                   | The documentation, over a masthead framed on a real body             | `docs`        |
 | `/settings/:section?`                                | Display, camera, controls                                            | _a dialog_    |
 | `/about`                                             | What this is                                                         | _a dialog_    |
 | `/sign-in`, `/sign-up`, `/profile`, `/auth/callback` | Accounts ⬜                                                          | _a dialog_    |

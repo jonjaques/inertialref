@@ -68,6 +68,10 @@ Status: accepted · <D Mon YYYY>
 ## After writing it
 
 - Add it to `docs/adr/README.md`.
+- **Add it to `scripts/docs/wings.mjs`**, in the Decision Records group, with a short
+  label. Every markdown file under `docs/` is published at `/docs` and the wing table is
+  what says where, so an unlisted one fails `pnpm docs:build` — and with it `pnpm build`
+  and `pnpm check`. ADR-0016 caught its own author this way.
 - If the ADR creates an invariant an agent could violate without reading it, add the
   one-line imperative to `AGENTS.md` § "The rules that actually matter" **and** to the
   matching `.claude/rules/*.md`, plus a row in `docs/agents/invariants.md` — see the

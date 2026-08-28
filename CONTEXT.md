@@ -29,22 +29,22 @@ server **stopped**, the page still loads from the service worker and passes
 ~1.25M simulation ticks/s for one entity; the headless runner does ~100–105k ticks/s
 including frame resolution.
 
-| Package         | Layer | State                                                                           |
-| --------------- | ----- | ------------------------------------------------------------------------------- |
-| `shared`        | 0     | done — units, brands, invariants, structured logging                            |
-| `spatial`       | 1     | done — UniverseVector, frame graph, floating origin                             |
-| `procedural`    | 1     | done — PRNG, hierarchical seeds, noise, algorithm versions                      |
-| `physics`       | 2     | done — Kepler, rigid body, atmosphere, thrusters                                |
-| `universe`      | 3     | done — addressing, star catalog, generation, terrain, frames                    |
-| `simulation`    | 4     | done — clock, entities, flight, streaming, snapshots                            |
-| `protocol`      | 4     | done — validation combinators, wire and save schemas                            |
-| `workers`       | 5     | done — typed tasks, ports, pool, four tasks                                     |
-| `persistence`   | 5     | done — save/restore, migration chain, store port                                |
-| `net`           | 5     | done — authority port, local authority; remote + channel are H4                 |
-| `rendering`     | 5     | done — LOD, depth compression, terrain meshing                                  |
-| `devtools`      | 6     | done — inspection, twelve capability checks, harness, `openSession`             |
-| `apps/game`     | —     | done — React + R3F client on `WebGPURenderer`/TSL, worker pool, IndexedDB saves |
-| `apps/headless` | —     | done — Node runner, ~100–105k ticks/s, `pnpm sim --self-test`                   |
+| Package         | Layer | State                                                                                                                         |
+| --------------- | ----- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `shared`        | 0     | done — units, brands, invariants, structured logging                                                                          |
+| `spatial`       | 1     | done — UniverseVector, frame graph, floating origin                                                                           |
+| `procedural`    | 1     | done — PRNG, hierarchical seeds, noise, algorithm versions                                                                    |
+| `physics`       | 2     | done — Kepler, rigid body, atmosphere, thrusters                                                                              |
+| `universe`      | 3     | done — addressing, star catalog, generation, terrain, frames                                                                  |
+| `simulation`    | 4     | done — clock, entities, flight, streaming, snapshots                                                                          |
+| `protocol`      | 4     | done — validation combinators, wire and save schemas                                                                          |
+| `workers`       | 5     | done — typed tasks, ports, pool, four tasks                                                                                   |
+| `persistence`   | 5     | done — save/restore, migration chain, store port                                                                              |
+| `net`           | 5     | done — authority port, local authority; remote + channel are H4                                                               |
+| `rendering`     | 5     | done — LOD, depth compression, terrain meshing                                                                                |
+| `devtools`      | 6     | done — inspection, twelve capability checks, harness, `openSession`                                                           |
+| `apps/game`     | —     | done — React + R3F client on `WebGPURenderer`/TSL, worker pool, IndexedDB saves; `/docs` is the documentation site (ADR-0016) |
+| `apps/headless` | —     | done — Node runner, ~100–105k ticks/s, `pnpm sim --self-test`                                                                 |
 
 ## Decisions that are expensive to reverse
 
@@ -214,6 +214,15 @@ Each of these was invisible in a running browser and caught by a test or by
 driving the harness. They are listed because the same mistake is easy to make
 again in a neighboring system.
 
+- **A generated filename that preserved case**, on a case-insensitive
+  filesystem. The API reference exports `Vec3` and `vec3`, `Session` and
+  `session`, and twenty-two more pairs that differ only in case; on APFS those
+  are one file, so 904 pages produced 878 and the twenty-six that vanished were
+  whichever of each pair was written second. On Linux — CI, and the deploy build
+  — all 904 survived, so the two environments produced different sites from the
+  same commit and neither reported anything. Page filenames are lowercase with a
+  digest of the route appended, and the manifest carries the name so nothing has
+  to re-derive it. `scripts/docs/routes.test.mjs` fails if either half is undone.
 - Terrain sampled in **inertial** rather than body-fixed axes: mountains stood
   still while the planet rotated under them.
 - **No ground contact at all**: a ship dropped from orbit flew through the
@@ -4765,6 +4774,76 @@ by prefix, which is the ordinary end of a rebase, so the flow it was protecting
 would have stalled on its own guardrail. It is narrowed to `git push -f`;
 everything else falls to the existing prompt, and `main` stays protected by the
 `git push … main` matcher and by the ruleset's own `non_fast_forward` rule.
+
+## A hundred and twenty thousand words go inside the application (27 Aug 2026)
+
+`docs/` had been readable in exactly one place — GitHub, by somebody who already
+knew the repository existed. `/docs` is now a mode: 904 pages, of which 71 are
+the markdown in this repository and 820 are exports of `packages/*` rendered
+from TypeDoc's reflection tree. [ADR-0016](docs/adr/0016-documentation-as-a-mode.md)
+carries the decision and the four alternatives it beat; what follows is what the
+building measured.
+
+**The masthead is where all the surprises were.** The design is a band of live
+simulation across the top of every page, and the observatory centres its subject
+in the _whole canvas_ — so a framing that fills half the frame puts the body
+entirely behind the reading plate and leaves the dark cap of a disk in the band.
+Every intuition about `fill` is therefore backwards here: the working values are
+**above 1**, so the body overfills the canvas and the band cuts a slice out of
+it near the top, where there is a limb, an atmosphere and a terminator instead
+of the top of a circle.
+
+The tilts are negative for the same class of reason. Tilt rolls the camera out
+of the star's plane, so a positive one puts the camera above it and the lit face
+below — behind the plate. Measured at 1600x900 on Earth: `phase -135, tilt +14`
+is the night side across the masthead, and `phase -135, tilt -30` is the
+terminator with the sun in frame beside it and the anamorphic streak running the
+width of the band. The five wings frame Earth, Saturn, Mars, Jupiter and
+Neptune.
+
+**`s:SOL` cannot be a masthead subject.** A star has no limb to cut a band out
+of: at any framing that keeps it clear of the plate it is a point of light
+behind the plate and the band is black, and at a framing large enough to reach
+the band it is a wall of blown white behind the title. Neptune took the
+reference wing instead.
+
+**The presentation watchdog fires on a legitimately dark scene.** Cold-loading
+`/docs` on a framing whose visible slice is a planet's night side sampled as
+black, so `render/presentationWatchdog.ts` climbed its whole ladder, rebuilt the
+renderer once and gave up — correctly, by its own design, and for nothing. The
+framings above are bright enough that it no longer fires, but the interaction is
+worth knowing: a _dark by intent_ first frame is indistinguishable from a
+canvas that never presented.
+
+**Numbers.** The build takes about eight seconds, almost all of it TypeDoc
+converting twelve packages under the root `tsconfig.json`. The staged output is
+6.2 MB: a 180 KB manifest fetched before the navigation can be drawn, a 572 KB
+search index fetched on the first keystroke and not before, and 904 page bodies
+of which the largest is 100 KB (`hosting`, which is mostly Mermaid and shell).
+Mermaid code-splits into its own chunks and is imported only on a page with a
+diagram.
+
+**The reading plate is `slate-950/92` over a blur, and that alpha is measured.**
+`.hud-layer` clamps the canvas to standard range, so the brightest thing that
+can be behind a paragraph is diffuse white; 8% of it composites to about
+`#202428`, where `slate-300` body text is 9.9:1. The contents drawer on a phone
+is the one **opaque** surface in the interface: at 97% the article behind it was
+still legible as text, because prose is high-frequency in a way a starfield is
+not, and 3% of `slate-300` reads as a second column of words while measuring as
+nothing.
+
+**Two things tried and dropped.** The masthead carried the document's own lead
+under its title, which reads well in a search result and badly on the page it
+came from — `concepts/coordinates` stated its opening sentence in the masthead
+and again eight lines below it, where the author put it. And the API index rows
+carried a kind column, which under a heading that already says `Interfaces`
+repeats the word fourteen times and carries nothing.
+
+**A stop list has to travel with the index it was applied to.** The matcher
+requires every term, and the build drops `the`, `and`, `for` and forty more from
+every page's vocabulary — so a query keeping one of them requires a term nothing
+can satisfy and returns nothing at all. "The harness" found it. `search.json`
+now ships its own list and `tokenize` filters against it.
 
 ## Known gaps
 

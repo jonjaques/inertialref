@@ -143,8 +143,19 @@ export function decodeRecord<T>(
 export const decodeNumberRecord = decodeRecord(decodeNumber)
 export const decodeStringRecord = decodeRecord(decodeString)
 
-type Shape = Readonly<Record<string, Decoder<unknown>>>
-type Decoded<S extends Shape> = {
+/**
+ * A field-by-field description of an object to decode.
+ *
+ * Exported because `decodeObject` names it in its own signature. A type that
+ * appears in a public signature is public whether or not it is exported — the
+ * only thing withholding the name changes is that a caller cannot write it
+ * down, and the API reference has to render it as an opaque word rather than
+ * as a link.
+ */
+export type Shape = Readonly<Record<string, Decoder<unknown>>>
+
+/** What a {@link Shape} decodes to: each field, at the type its decoder yields. */
+export type Decoded<S extends Shape> = {
   readonly [K in keyof S]: S[K] extends Decoder<infer T> ? T : never
 }
 

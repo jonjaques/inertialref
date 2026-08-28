@@ -277,7 +277,7 @@ packages/
 data/catalog/        the packed star catalog, committed, CC BY-SA 4.0
 docs/                concepts, ADRs, guides, and the design bible
 scripts/             the graph check, the dev orchestrator, the browser driver,
-                     the brand build and the media sync
+                     the brand build, the media sync and the documentation build
 ```
 
 Every package below `apps/` runs unchanged in the browser main thread, a Web
@@ -302,7 +302,8 @@ in `packages/*`.
 | `pnpm lint`                   | **oxlint**, not eslint (`oxlint --fix` applies autofixes)               |
 | `pnpm graph`                  | Dependency layering + cycle check, and prints the graph                 |
 | `pnpm brand`                  | Re-render every icon, the share card and the crawler files              |
-| `pnpm build`                  | Optional media pull, `typecheck`, then `vite build`                     |
+| `pnpm docs:build`             | Render `docs/` and every export of `packages/*` into the site's `/docs` |
+| `pnpm build`                  | Optional media pull, `docs:build`, `typecheck`, then `vite build`       |
 | **`pnpm check`**              | **The gate: graph → brand → format → lint → typecheck → test → build.** |
 | `pnpm sim --self-test`        | Headless run plus the twelve capability checks                          |
 | `pnpm vitest run <substring>` | A single test file                                                      |
@@ -358,13 +359,19 @@ Read it before changing anything. Agents should continue in
 [`docs/`](docs/README.md) is the map. Voice and where each audience should look
 are in [`docs/STYLE.md`](docs/STYLE.md).
 
+Every page below is also readable at
+[`/docs`](https://inertialref.jonjaques.com/docs) — the same markdown, rendered
+by `pnpm docs:build` alongside a generated reference for every export of
+`packages/*`, and read over a live scene rather than beside a screenshot of one.
+The markdown in this repository is the source; the site has no copy of its own.
+
 |                                                   |                                                                          |
 | ------------------------------------------------- | ------------------------------------------------------------------------ |
 | [Getting started](docs/guides/getting-started.md) | Run it, drive it, and five things to try                                 |
 | [Vision and scope](docs/vision.md)                | What this is for, and the principles behind it                           |
 | [Architecture](docs/architecture.md)              | The system in one sitting                                                |
 | [Concepts](docs/README.md#concepts)               | How each mechanism works, and why                                        |
-| [ADRs](docs/adr/README.md)                        | Fourteen decisions that are expensive to reverse                         |
+| [ADRs](docs/adr/README.md)                        | Sixteen decisions that are expensive to reverse                          |
 | [Development](docs/guides/development.md)         | Commands, toolchain, conventions                                         |
 | [The harness](docs/guides/harness.md)             | The scriptable API, in full                                              |
 | [Testing](docs/guides/testing.md)                 | Property tests, golden vectors, state hashes                             |

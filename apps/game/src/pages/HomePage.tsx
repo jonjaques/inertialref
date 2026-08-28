@@ -1,13 +1,13 @@
 import { useEffect } from 'react'
 import { motion } from 'motion/react'
-import { Info, SlidersHorizontal } from 'lucide-react'
+import { BookText, Info, SlidersHorizontal } from 'lucide-react'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { Logomark } from '../icons/Logomark.tsx'
 import { FooterLink } from './FooterLink.tsx'
 import { ModeLink } from './ModeLink.tsx'
 import { ModeRow } from './ModeRow.tsx'
 import { ENTERABLE, WITHHELD } from './modes.ts'
-import { ABOUT, SETTINGS } from './paths.ts'
+import { ABOUT, DOCS, SETTINGS } from './paths.ts'
 
 /*
  * The front door.
@@ -353,6 +353,7 @@ export function HomePage({ engine }: { engine: GameEngine }) {
             state of the project is stated now, in a sentence rather than in a
             label that reads like uptime. */}
         <footer className="type-ui flex max-w-[33rem] flex-wrap items-center gap-x-5 gap-y-2">
+          <FooterLink to={DOCS} icon={BookText} label="Documentation" />
           <FooterLink to={SETTINGS} icon={SlidersHorizontal} label="Settings" />
           <FooterLink to={ABOUT} icon={Info} label="About" />
         </footer>

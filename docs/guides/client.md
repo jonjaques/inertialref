@@ -90,14 +90,24 @@ change every frame otherwise renders once and freezes. See
 
 ## Mode is a function of the path
 
-Four modes, each answering "who owns the camera" differently:
+Five modes, each answering "who owns the camera" differently:
 
-| Mode          | Path                      | Camera                    | Code                                                   |
-| ------------- | ------------------------- | ------------------------- | ------------------------------------------------------ |
-| `menu`        | `/`, and any unknown path | the observatory, drifting | `pages/HomePage.tsx`                                   |
-| `flight`      | `/play/:mode`             | the ship's chase rule     | `flight/`                                              |
-| `planetarium` | `/planetarium?at=…`       | the observatory           | `planetarium/`, `packages/devtools/src/observatory.ts` |
-| `cinema`      | `/cinema/:scene?t=&play=` | the cutscene director     | `cinema/`                                              |
+| Mode          | Path                      | Camera                                 | Code                                                   |
+| ------------- | ------------------------- | -------------------------------------- | ------------------------------------------------------ |
+| `menu`        | `/`, and any unknown path | the observatory, drifting              | `pages/HomePage.tsx`                                   |
+| `flight`      | `/play/:mode`             | the ship's chase rule                  | `flight/`                                              |
+| `planetarium` | `/planetarium?at=…`       | the observatory                        | `planetarium/`, `packages/devtools/src/observatory.ts` |
+| `cinema`      | `/cinema/:scene?t=&play=` | the cutscene director                  | `cinema/`                                              |
+| `docs`        | `/docs/*`                 | the observatory, on the wing's framing | `docs/`                                                |
+
+The documentation is one route with a splat, not a table of pages. Its
+addresses mirror the repository's directory tree, so enumerating them here
+would be a second copy of `scripts/docs/wings.mjs` that nothing keeps in step;
+the mode reads the path and the manifest decides whether it names anything. The
+masthead pushes a presentation stance once for the whole visit and only re-aims
+the observatory between wings — releasing and re-pushing per wing hands the
+camera back to whatever is underneath for a frame, which reads as a cut to the
+ship's chase view in the middle of a navigation.
 
 The current mode is `modeForPath(resolvedLocation(location).pathname)` in
 `pages/paths.ts`. It is not React state. A reload, a back button, and a

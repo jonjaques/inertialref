@@ -217,12 +217,27 @@ self.addEventListener('fetch', (event) => {
   )
 })
 
+/**
+ * Whether a 200 is actually the application shell wearing another file's URL.
+ *
+ * The Worker serves this origin with `not_found_handling:
+ * single-page-application`, so a request for a staged file the asset store does
+ * not have yet comes back as `index.html` with a **200** — and every navigation
+ * is answered in its own branch above, so nothing that reaches here is
+ * legitimately HTML. Stored, that shell is served from Cache Storage in place
+ * of the file for the life of the cache: `docs/content.ts` asks for a page's
+ * JSON, gets markup, and the reader sees "no such page" for a page that exists
+ * until the next deploy rotates the cache name.
+ */
+const isShell = (response) =>
+  (response.headers.get('content-type') ?? '').startsWith('text/html')
+
 /** Fetch, and keep the answer if it is one worth keeping. */
 function fetchAndStore(request, event) {
   return fetch(request).then((response) => {
     // Only real, complete, same-origin responses. An opaque or error response
     // stored here would be served forever in place of the thing it failed to be.
-    if (response.ok && response.type === 'basic') {
+    if (response.ok && response.type === 'basic' && !isShell(response)) {
       const copy = response.clone()
       event.waitUntil(caches.open(CACHE).then((c) => c.put(request, copy)))
     }

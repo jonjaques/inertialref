@@ -195,6 +195,21 @@ describe('the mode a path runs in', () => {
     expect(modeForPath('/planetarium')).toBe('planetarium')
     expect(modeForPath('/cinema')).toBe('cinema')
     expect(modeForPath('/cinema/tng-intro')).toBe('cinema')
+    expect(modeForPath('/docs')).toBe('docs')
+    expect(modeForPath('/docs/concepts/frames')).toBe('docs')
+    expect(modeForPath('/docs/api/spatial/Sector')).toBe('docs')
+  })
+
+  /*
+   * The documentation's arm is tested for its *boundary* as well as its match,
+   * because it is the first predicate in the chain and it is the only one whose
+   * prefix is a common English word. Without the slash, `startsWith('/docs')`
+   * claims every future route that happens to begin with those five letters,
+   * and the reading room would open on it with no page to draw.
+   */
+  it('does not claim a path that merely starts the same way', () => {
+    expect(modeForPath('/docsomething')).toBe('menu')
+    expect(modeForPath('/docs-archive')).toBe('menu')
   })
 
   it('answers `menu` for an overlay, which is what a cold load means', () => {
