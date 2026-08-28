@@ -42,7 +42,7 @@ import {
   withAttitude,
 } from '@inertialref/rendering'
 import type { CutsceneScript, PreparedCutscene } from '../cutscene.ts'
-import { placeShot, type ShotDefinition } from '../shots.ts'
+import { placeShot, standoffShot } from '../shots.ts'
 
 /*
  * The demonstration cutscene: a shot-for-shot study of the 1987 television
@@ -1048,20 +1048,6 @@ function buildStage(world: World): Stage {
   const jupiter = require('Jupiter')
   const saturn = require('Saturn')
 
-  /** A standoff in the body's own frame: distance in radii, phase, elevation. */
-  const shot = (
-    distanceRadii: number,
-    phaseDeg: number,
-    elevationDeg: number,
-  ): ShotDefinition => ({
-    name: 'cinematic',
-    description: '',
-    distanceRadii,
-    phaseDeg,
-    elevationDeg,
-    aim: 'centre',
-  })
-
   const at = (
     body: Body,
     position: UniverseVector,
@@ -1071,7 +1057,7 @@ function buildStage(world: World): Stage {
   ): UniverseVector => {
     const toStar = Vec.normalize(UV.difference(sun, position))
     const placement = placeShot(
-      shot(distanceRadii, phaseDeg, elevationDeg),
+      standoffShot(distanceRadii, phaseDeg, elevationDeg),
       body.radius,
       toStar,
     )

@@ -704,9 +704,9 @@ export class GameHarness {
     return this.status()
   }
 
-  /** The camera bookmarks `shot` can frame. */
+  /** The compositions `shot` can frame. */
   shots(): readonly { name: string; description: string }[] {
-    return SHOTS.map(({ name, description }) => ({ name, description }))
+    return SHOTS.map(({ id, why }) => ({ name: id, description: why }))
   }
 
   /** Park the player on the ground at a latitude/longitude, ready to fly. */
@@ -1382,7 +1382,7 @@ export class GameHarness {
       '  ir.bodies() / ir.systemsNearby(ly)',
       '  ir.orbit(address, altitudeKm) / ir.land(address, lat, lon)',
       '  ir.shot(name, address?)       frame a camera bookmark: ' +
-        SHOTS.map((s) => s.name).join(', '),
+        SHOTS.map((s) => s.id).join(', '),
       '  ir.shots()                    the bookmarks, described',
       '  ir.face(address)              point the nose at something',
       '  ir.goToSystem(id, au) / ir.burnToward(address, throttle)',

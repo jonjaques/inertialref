@@ -2,9 +2,13 @@ import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
 import { Vec, vec3 } from '@inertialref/spatial'
 import {
+  FLIGHT_FOV,
+  FOV_MAX,
+  FOV_MIN,
   framingDistance,
   LENS_PRESETS,
   lensForFov,
+  standoffRadii,
   verticalFovDegrees,
 } from '@inertialref/rendering'
 import { openSession } from './session.ts'
@@ -73,21 +77,32 @@ describe('the angle the compositions were solved at', () => {
 describe('the shot bookmarks', () => {
   it('are placed in body radii, so no lens can move them', () => {
     /*
-     * The strongest form this claim can take, and it is a property of
-     * `shots.ts` rather than of the conversion: a bookmark's standoff is
-     * `distanceRadii` times the body's own radius, so the lens does not enter
-     * the arithmetic at all. That is deliberate — `shots.ts` argues it at
+     * The strongest form this claim can take, and it is a property of the
+     * composition rather than of the conversion: a bookmark's standoff is a
+     * multiple of the body's own radius, so the lens does not enter the
+     * arithmetic at all. That is deliberate — `compositions.ts` argues it at
      * length — and it is exactly why the bookmarks survived a phase that moved
      * every other number about the camera. Pinned here because "the lens is not
      * an input" is easy to break by adding one.
+     *
+     * Stated over the seven that *declare* radii rather than over the whole
+     * list, which is the honest form of it now that the two lists are one: a
+     * drawn framing names a fill and is supposed to move with the lens, and
+     * asserting otherwise over it would be asserting the opposite of its
+     * design. The count is pinned so that a composition converted from radii
+     * to fill cannot quietly leave this test with nothing to check.
      */
     const radius = 6_371_000
-    for (const shot of SHOTS) {
-      const placed = placeShot(shot, radius, vec3(1, 0, 0))
-      expect(Vec.length(placed.position) / radius).toBeCloseTo(
-        shot.distanceRadii,
-        6,
-      )
+    const fixed = SHOTS.filter((shot) => shot.standoff.kind === 'radii')
+    expect(fixed).toHaveLength(7)
+    for (const shot of fixed) {
+      for (const fov of [FOV_MIN, FLIGHT_FOV, FOV_MAX]) {
+        const placed = placeShot(shot, radius, vec3(1, 0, 0), Infinity, fov)
+        expect(Vec.length(placed.position) / radius).toBeCloseTo(
+          standoffRadii(shot, fov),
+          6,
+        )
+      }
     }
   })
 })
