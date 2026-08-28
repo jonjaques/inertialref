@@ -25,14 +25,15 @@
  *  - A real window, not `--headless`. Headless macOS Chrome falls back to a
  *    software WebGPU adapter, and a software adapter is not the thing under test.
  *
- * The expensive thing here is boot — about twenty seconds of shader warm and
- * body build. So Chrome is left running between invocations and a second call
- * attaches to the booted page instead of reloading it. That is what makes a
+ * The expensive thing here is boot — about eleven seconds of shader warm and
+ * body build, on top of the dev server's own start. So Chrome is left running
+ * between invocations and a second call attaches to the booted page instead of
+ * reloading it: measured, 17 s cold against 70 ms warm. That is what makes a
  * batch of steps worth writing on one command line:
  *
  *     node scripts/drive.mjs --js "ir.look('g:milky-way/s:SOL/b:2')" \
  *                            --wait 2000 --shot earth.jpg
- *     node scripts/drive.mjs --js "ir.terrain()"        # ~1 s, page still hot
+ *     node scripts/drive.mjs --js "ir.terrain()"        # 70 ms, page still hot
  *     node scripts/drive.mjs --down                     # when finished
  *
  * Steps run in the order they are written, so one process does a whole
@@ -132,7 +133,7 @@ Session flags:
   --max-px <n>       longest edge of a written shot, default 1568; 0 for native
   --quality <n>      JPEG quality, default 88
   --json             one JSON object of every step result, instead of lines
-  --quiet            step output only
+  --quiet            step results only — no progress narration
 
 Lifecycle:
 
@@ -140,7 +141,7 @@ Lifecycle:
   --down             close the Chrome and the dev server this rig started
 
 Chrome stays up between invocations and the next call attaches to the booted
-page, so the twenty-second boot is paid once. --down when you are finished.`
+page: 17 s cold, 70 ms warm. --down when you are finished.`
 
 const { values, tokens } = parseArgs({
   options: OPTIONS,
@@ -164,8 +165,18 @@ const SERVE = values.serve === true
 const STATE = path.join(RIG, `session-${PORT}.json`)
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+/**
+ * Two channels, because they answer to different flags. `say` is what a step
+ * returned and is the reason the command was run; `note` is the rig narrating
+ * itself, which `--quiet` exists to silence. Routing both through one writer
+ * made `--quiet` swallow the answer as well as the narration.
+ */
 const say = (line) => {
-  if (!values.quiet && !values.json) process.stdout.write(`${line}\n`)
+  if (!values.json) process.stdout.write(`${line}\n`)
+}
+const note = (line) => {
+  if (!values.quiet) say(line)
 }
 
 /*
@@ -206,7 +217,7 @@ const answers = async (url) =>
 async function serve(state) {
   if (await answers(URL_)) return state.serverPid ?? null
   if (!SERVE) throw new Error(`nothing is serving ${URL_}; run \`pnpm dev\``)
-  say(
+  note(
     `starting pnpm dev — log: ${path.relative(ROOT, path.join(RIG, 'dev.log'))}`,
   )
   await mkdir(RIG, { recursive: true })
@@ -348,7 +359,7 @@ async function boot(send, { force }) {
   const here = await evaluate(send, 'return location.pathname').catch(() => '')
   const wanted = new URL(URL_).pathname
   if (ready && !force && here === wanted) {
-    say('attached to a booted page')
+    note('attached to a booted page')
     return
   }
   // Always a full navigate, never HMR: a WebGPURenderer does not survive a
@@ -373,7 +384,7 @@ async function boot(send, { force }) {
     if (!covered) break
     await sleep(500)
   }
-  say(`renderer ready in ${((Date.now() - started) / 1000).toFixed(1)} s`)
+  note(`renderer ready in ${((Date.now() - started) / 1000).toFixed(1)} s`)
 }
 
 /* ---------------------------------------------------------------- steps ---- */
