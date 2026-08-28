@@ -276,7 +276,8 @@ packages/
   devtools           inspection, capability checks, harness          (6)
 data/catalog/        the packed star catalog, committed, CC BY-SA 4.0
 docs/                concepts, ADRs, guides, and the design bible
-scripts/             the dependency-graph checker
+scripts/             the graph check, the dev orchestrator, the browser driver,
+                     the brand build and the media sync
 ```
 
 Every package below `apps/` runs unchanged in the browser main thread, a Web
@@ -305,6 +306,7 @@ in `packages/*`.
 | **`pnpm check`**              | **The gate: graph → brand → format → lint → typecheck → test → build.** |
 | `pnpm sim --self-test`        | Headless run plus the twelve capability checks                          |
 | `pnpm vitest run <substring>` | A single test file                                                      |
+| `pnpm drive --help`           | Drive Chrome over the DevTools Protocol — `--js`, `--shot`, `--sample`  |
 
 **Do not report a task complete without `pnpm check` passing.** CI runs exactly
 that command, so there is no separate list of CI stages to drift out of step.

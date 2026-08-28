@@ -315,7 +315,7 @@ sequenceDiagram
     participant P as page
 
     A->>P: navigate
-    A->>P: wait (RAF is throttled while backgrounded)
+    A->>P: wait (textures stream in after a look or a seek)
     A->>P: ir.scenario('surface')
     A->>P: ir.step(20000)
     A->>P: JSON.stringify(ir.status())

@@ -7,10 +7,12 @@ without reconstructing it from a one-liner.
 Path-scoped copies in [`.claude/rules/`](../../.claude/rules/README.md) carry
 only the imperative. If a copy disagrees, `AGENTS.md` wins.
 
-`branching.md` and `writing.md` are the two exceptions and have no row here. They
-are unscoped process rules, not invariants about the code, and they mirror
-[`working.md`](working.md) § "Starting work" and [`docs/STYLE.md`](../STYLE.md).
-A rule missing from this table is one of those two, not drift.
+`branching.md`, `writing.md` and `browser.md` are the three exceptions and have
+no row here. They are unscoped process rules, not invariants about the code, and
+they mirror [`working.md`](working.md) § "Starting work",
+[`docs/STYLE.md`](../STYLE.md) and the
+[`drive` skill](../../.claude/skills/drive/SKILL.md). A rule missing from this
+table is one of those three, not drift.
 
 | Invariant                                                 | Technical home                                                                                             |
 | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
