@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DocEntry, DocManifest, DocWing, SearchIndex } from './content.ts'
+import { DocsMissingError, loadManifest } from './content.ts'
 import {
   groupFor,
   neighbours,
@@ -274,5 +275,45 @@ describe('search', () => {
 
   it('honours the limit', () => {
     expect(searchDocs(INDEX, 'frame', 2)).toHaveLength(2)
+  })
+})
+
+/* ------------------------------------------------------------------------- */
+/* Fetching                                                                   */
+/* ------------------------------------------------------------------------- */
+
+/*
+ * The one thing about the transport that cannot be seen in a browser, because
+ * it only happens on the deployment.
+ *
+ * The Worker serves this origin with `not_found_handling:
+ * single-page-application`, so a request for a file the asset store does not
+ * have comes back as `index.html` with a **200**. The dev server answers 404,
+ * so every local run takes the branch production never takes.
+ */
+describe('a staged file that is not there', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  const answer = (init: ResponseInit & { body?: string }) =>
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(init.body ?? '<!doctype html><html></html>', init),
+      ),
+    )
+
+  it('reads the shell served for a missing path as a miss, not as content', async () => {
+    answer({ status: 200, headers: { 'content-type': 'text/html' } })
+    await expect(loadManifest()).rejects.toBeInstanceOf(DocsMissingError)
+  })
+
+  /* And the error is the one with the fix in it, rather than whatever
+     `JSON.parse` says about a `<`. */
+  it('says how to generate the content it could not find', async () => {
+    answer({ status: 200, headers: { 'content-type': 'text/html' } })
+    await expect(loadManifest()).rejects.toThrow('pnpm docs:build')
   })
 })

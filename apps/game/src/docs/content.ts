@@ -237,13 +237,35 @@ export function loadPage(entry: DocEntry): Promise<DocPage> {
   return promise
 }
 
-/** A 404, kept apart from every other reason a fetch can fail. */
+/** A miss, kept apart from every other reason a fetch can fail. */
 class NotFound extends Error {}
 
+/**
+ * One staged file, or a miss.
+ *
+ * **A miss is detected by content type as well as by status, and that is not a
+ * heuristic.** The Worker serves this origin with
+ * `not_found_handling: single-page-application`, so the asset store answers a
+ * path it does not have with `index.html` and a **200** — there is no status
+ * code to test. Nothing under `/doc-content/` is ever HTML, so an HTML answer
+ * to a request for a `.json` is unambiguous. `apps/server/src/serveMedia.ts`
+ * reached the same conclusion for `/media/` and carries the longer argument.
+ *
+ * Trusting the 200 costs both of the things this distinction is for: the
+ * manifest's absence would arrive as a JSON parse error rather than as
+ * `DocsMissingError` and its exact fix, and `loadPage`'s re-fetch past the
+ * cache — the one that recovers the window after a deploy where a fresh
+ * manifest names a page the cache has not seen — would never fire.
+ *
+ * `404` stays in the test because the dev server does answer with one, and
+ * because the deployment is not the only thing that ever serves these.
+ */
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init)
   if (response.status === 404) throw new NotFound(url)
   if (!response.ok)
     throw new Error(`${url} answered ${response.status} ${response.statusText}`)
+  if ((response.headers.get('content-type') ?? '').startsWith('text/html'))
+    throw new NotFound(url)
   return (await response.json()) as T
 }
