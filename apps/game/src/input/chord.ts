@@ -47,19 +47,24 @@ export const chord = (
 })
 
 /**
- * The keys no binding may take, whatever the editor is asked for.
+ * The keys the editor will not capture, whatever it is asked for.
  *
  * `Tab` is how a browser moves focus and a window-level `preventDefault` always
  * wins, so a mode that binds it owns focus navigation whether it means to or
  * not — `useShipControls` documents the session where every focus ring in the
  * overlay was unreachable by keyboard for exactly this reason. `Escape` closes
  * a dialog and skips a cutscene, which are the platform's gesture and the one
- * act that must never be rebindable away. `F11` and `F12` are full screen and
+ * act that must never be rebindable *away*. `F11` and `F12` are full screen and
  * devtools.
+ *
+ * A refusal to *rebind*, not a refusal to dispatch. The default table binds
+ * `Escape` to the cinema library because that is what Escape means there, and
+ * `parseChord` rejects a stored one because the editor would never have written
+ * it — the two claims are different and the second is a storage guard.
  */
 export const REFUSED_CODES: readonly string[] = ['Tab', 'Escape', 'F11', 'F12']
 
-/** Whether a chord may be bound at all. */
+/** Whether the editor may bind this chord. */
 export const isBindable = (candidate: Chord): boolean =>
   !REFUSED_CODES.includes(candidate.code) && candidate.code !== ''
 
@@ -77,11 +82,11 @@ export function chordFromEvent(event: {
   // A modified key is on its way somewhere else. Declining it here rather than
   // per-action is what keeps `Cmd+R` a reload in every mode.
   if (event.ctrlKey || event.metaKey) return null
-  const candidate = chord(event.code, {
-    shift: event.shiftKey,
-    alt: event.altKey,
-  })
-  return isBindable(candidate) ? candidate : null
+  if (event.code === '') return null
+  // `REFUSED_CODES` is deliberately not applied here. It says what the editor
+  // will not bind, and `Escape` is bound by default in the cinema; refusing to
+  // *read* it would leave that binding with nothing to fire it.
+  return chord(event.code, { shift: event.shiftKey, alt: event.altKey })
 }
 
 /**

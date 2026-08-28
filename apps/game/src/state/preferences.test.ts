@@ -92,7 +92,7 @@ describe('the census', () => {
      * below is a preference the export silently does not carry — which presents
      * as a setting that does not travel, on a machine, weeks later.
      */
-    const declared = Object.values(preferences).filter(
+    const declared = (Object.values(preferences) as unknown[]).filter(
       (value): value is { key: string } =>
         typeof value === 'object' &&
         value !== null &&
@@ -109,7 +109,7 @@ describe('the census', () => {
   })
 
   it('lists every family, and no family shadows a key', () => {
-    const declared = Object.values(preferences).filter(
+    const declared = (Object.values(preferences) as unknown[]).filter(
       (value): value is { prefix: string } =>
         typeof value === 'object' &&
         value !== null &&
