@@ -64,10 +64,16 @@ export function useDocsFraming(
 
   /*
    * Destructured, because the effect below keys on the four *values* rather
-   * than on the object. The manifest hands back a fresh `framing` on every
-   * render, so an effect keyed on its identity would re-aim the camera and
-   * restart the phase ramp eight times a second — a masthead that never
-   * finishes arriving.
+   * than on the object.
+   *
+   * Not because the object churns per render — it does not. `loadManifest`
+   * memoizes its promise, `useManifest` holds the one resolved object, and
+   * `wingFor` returns a member of `manifest.wings`, so `wing.framing` is the
+   * same reference for the life of the session. What the values survive is the
+   * manifest being *replaced*: a second fetch, or a wing whose framing is
+   * unchanged arriving inside a new object, would re-aim the camera and restart
+   * the phase ramp for no change at all. The dependency is what the camera is
+   * actually pointed at, so that is what it is written as.
    */
   const address = framing?.address
   const phase = framing?.phase

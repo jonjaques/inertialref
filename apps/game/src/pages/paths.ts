@@ -85,7 +85,7 @@ export const AUTH_CALLBACK = '/auth/callback'
 /**
  * What the engine is *doing*, which is not the same as what is on screen.
  *
- * Four values, and each one is a different answer to "who owns the camera":
+ * Five values, and each one is a different answer to "who owns the camera":
  *
  * | mode          | camera            | ship drawn | chrome                    |
  * | ------------- | ----------------- | ---------- | ------------------------- |

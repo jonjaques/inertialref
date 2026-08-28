@@ -129,16 +129,19 @@ interface OutputEntry {
  * Neither is code anyone would set a breakpoint in, neither is fixable from
  * this repository, and the check exists so that *our* source stays mappable.
  *
- * Deliberately narrow. One first-party module in the chunk and it is ours
- * again, and a chunk whose module list is unavailable counts as ours too — the
- * failure this guards against is silent, so the check is worth more than the
- * false positive.
+ * Deliberately narrow, in three ways that each close a hole. One first-party
+ * module in the chunk and it is ours again. A chunk whose module list is
+ * unavailable counts as ours too, because the failure this guards against is
+ * silent and the check is worth more than the false positive. And the virtual
+ * prefix is `\0vite/` rather than `\0`: any plugin may emit a virtual module,
+ * and the first one here that does would otherwise be first-party source in a
+ * chunk this check had stopped looking at.
  */
 function hasNoSourceOfOurs(chunk: OutputEntry | undefined): boolean {
   const ids = chunk?.moduleIds ?? Object.keys(chunk?.modules ?? {})
   return (
     ids.length > 0 &&
-    ids.every((id) => id.includes('node_modules') || id.startsWith('\0'))
+    ids.every((id) => id.includes('node_modules') || id.startsWith('\0vite/'))
   )
 }
 

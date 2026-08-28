@@ -49,6 +49,22 @@ export function DocsSearch({ wings }: { wings: readonly DocWing[] }) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       if (event.key !== '/' || isTyping(event)) return
+      /*
+       * Not while a dialog is open over the reading room.
+       *
+       * The mode stays mounted behind one — that is the whole point of the
+       * background location — so this listener is still on the window while
+       * Settings is up, and `isTyping` says nothing about it: focus during a
+       * dialog sits on a switch, a button or the body, none of which are
+       * editable. Ungated, a slash typed in Settings moves focus to a field
+       * behind the scrim, and these dialogs deliberately have no focus trap to
+       * fight it back (`pages/OverlayPage.tsx`).
+       *
+       * Asked of the document rather than of the event's target, because the
+       * common case is focus on `<body>`, which is not inside the dialog and
+       * would pass a `closest` check.
+       */
+      if (document.querySelector('[role="dialog"]') !== null) return
       event.preventDefault()
       field.current?.focus()
     }

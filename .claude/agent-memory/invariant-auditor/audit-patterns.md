@@ -274,3 +274,61 @@ predicate, grep the docs for the predicate's other terms (`solid body`, `carve-o
 on a bucket taken out of that snapshot cannot fire faster than 8 Hz, whatever its bucket
 width says. Time warp ceiling is 100,000× (`hud/warp.test.ts`). Multiply before believing
 a comment that quotes a millisecond figure.
+
+## The last commit on a docs-adjacent branch is the one that breaks the build
+
+`feat/the-docs-join-the-site` added a hand-maintained allow-list
+(`scripts/docs/wings.mjs`) and a gate that fails the build on any `docs/**.md` no
+wing claims. The *next* commit on the same branch added
+`docs/adr/0016-documentation-as-a-mode.md` — the ADR for the feature — and did not
+list it. `pnpm docs:build` throws (`build.mjs:236 assertNothingUnlisted`), and
+`pnpm build` runs `docs:build` first, so `pnpm check` is red.
+
+**The check, and it is thirty seconds:** run the tests for the *new* gate, not the
+whole suite. `pnpm vitest run <the new test file>`. A feature that ships an
+exhaustiveness gate over a directory will be violated by the documentation commit
+that follows it, because the author is thinking about prose by then. Do this
+*last*, after the tree has stopped moving.
+
+## Count words in doc headers drift on every row added
+
+`AGENTS.md`-adjacent prose likes to open a table with its own cardinality —
+"Fourteen decisions", "Four values, and each one is a different answer". Nothing
+greps these. `docs/adr/README.md:3` was already off by one before this branch and
+is off by two after; `paths.ts:88`'s `MODES` docstring said "Four values" over a
+five-row table it had just gained, in the same hunk.
+
+**Cheap check:** for every table the diff adds a row to, grep the paragraph above
+it for a number word. `rg -n 'One|Two|Three|Four|Five|Six|Seven|Eight|Nine|Ten|Eleven|Twelve|Thirteen|Fourteen|Fifteen|Sixteen'`
+over the touched markdown is enough.
+
+## A comment's *reason* can be false while its code is right
+
+`useDocsFraming.ts` destructures `framing` into four values "because the manifest
+hands back a fresh `framing` on every render … eight times a second". Neither half
+is true: `loadManifest` memoizes the promise, `useManifest` stores the resolved
+object and `wingFor` returns a member of `manifest.wings`, so the identity is
+stable — and `DocsMode` subscribes to no engine slice, so it never re-renders at
+`PANEL_HZ` at all. The destructuring is still the right call. This repository's
+comments are load-bearing enough that a false premise is a finding on its own: the
+next agent "simplifies" against it.
+
+**The check:** a comment that cites a cadence (`8 Hz`, `every render`, `every
+frame`) is arithmetic — find the subscription that would produce it. Usually there
+isn't one.
+
+## `<Routes location={x}>` already rebinds `useLocation` for the whole subtree
+
+Nearly filed "DocsMode reads `resolvedLocation(...).pathname` but the raw
+`useLocation().hash` one line below, so opening a dialog over a fragment link
+resets the scroll". It cannot happen: react-router's `useRoutesImpl` wraps the
+rendered matches in a `LocationContext.Provider` carrying `locationArg`
+(`react-router@8/dist/development/lib/hooks.js:612`), and `ModeRoutes` renders
+`<Routes location={resolvedLocation(useLocation())}>`. So *every* `useLocation()`
+inside a mode already returns the background. `resolvedLocation` at a mode's root
+is a defensive no-op, and `useOverlay.keep` re-wraps the *mode's* location rather
+than chaining, so it cannot double-unwrap either.
+
+Read the node_modules source before filing a raw-pathname finding inside a mode.
+The rule still binds anything rendered *outside* `ModeRoutes` — the shell bar, the
+dock, `App`.

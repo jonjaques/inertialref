@@ -75,7 +75,7 @@ export const WINGS = [
     id: 'concepts',
     label: 'Concepts',
     blurb:
-      'The ten mechanisms that carry the architecture, and the fifteen decisions underneath them.',
+      'The ten mechanisms that carry the architecture, and the sixteen decisions underneath them.',
     framing: { address: 's:SOL/b:5', phase: -122, tilt: -26, fill: 1.5 },
     groups: [
       {
@@ -115,6 +115,7 @@ export const WINGS = [
             'Holes in the Record',
           ],
           ['docs/adr/0015-terrain-level-of-detail.md', 'Terrain Detail'],
+          ['docs/adr/0016-documentation-as-a-mode.md', 'Documentation'],
         ],
       },
     ],
