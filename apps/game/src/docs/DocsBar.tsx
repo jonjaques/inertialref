@@ -38,6 +38,15 @@ export function DocsBar({
   const wing = manifest === null ? undefined : wingFor(manifest, route)
   const parent = parentOf(wing, route)
   const wingHome = wing?.home ?? DOCS
+  /*
+   * The last crumb, which has to say something.
+   *
+   * A route the manifest does not list still has a wing — the masthead needs a
+   * framing to draw while the article explains — so the trail was rendering
+   * "Docs > Start Here >" with a chevron pointing at nothing. Empty only while
+   * the manifest is still in flight, when there is no trail yet either.
+   */
+  const here = page?.title ?? (manifest === null ? '' : 'Not Found')
 
   return (
     <div className="doc-bar sticky top-0 z-30 border-y border-slate-800/80 bg-slate-950/95 backdrop-blur">
@@ -115,9 +124,9 @@ export function DocsBar({
           <span
             aria-current="page"
             className="min-w-0 truncate text-slate-200"
-            title={page?.title ?? ''}
+            title={here}
           >
-            {page?.title ?? ''}
+            {here}
           </span>
         </nav>
 

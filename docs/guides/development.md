@@ -21,7 +21,8 @@ pnpm typecheck        # five tsconfig projects
 pnpm lint             # oxlint, not eslint
 pnpm graph            # dependency layering and cycle check
 pnpm brand            # regenerate brand artifacts from design/brand/brandmark.svg
-pnpm build            # optional media pull, typecheck, then Vite build
+pnpm docs:build       # render docs/ and packages/* into the documentation site
+pnpm build            # optional media pull, docs, typecheck, then Vite build
 pnpm check            # graph, brand, format, lint, typecheck, test, build
 
 pnpm sim --self-test           # headless run plus the twelve capability checks
@@ -167,6 +168,17 @@ share card, the web manifest, `robots.txt`, `sitemap.xml`, or
 card has a second source, `design/brand/og-plate.png` — a captured frame of the
 renderer that its type is composited over. `scripts/brand/og.mjs` carries the
 framing it was shot at, so it can be shot again.
+
+**The documentation site** at `/docs` is generated. `pnpm docs:build` renders
+every markdown file under `docs/`, plus `AGENTS.md`, and every export of
+`packages/*` through TypeDoc, into `apps/game/public/doc-content/` — which is
+gitignored, staged by `pnpm build` before the client build, and fetched at
+runtime. Editing a page means editing the markdown; the site has no copy of
+its own. Two things it will refuse to do: a markdown file under `docs/` that
+no wing in `scripts/docs/wings.mjs` lists fails the build rather than
+publishing nowhere, and a `{@link}` pointing at a renamed symbol fails it
+rather than rendering as words that link to nothing. `scripts/docs/build.mjs`
+carries the rest.
 
 **Site metadata** is duplicated on purpose: `src/site.ts` for the running
 client, `index.html` for scrapers that do not run JavaScript, and
