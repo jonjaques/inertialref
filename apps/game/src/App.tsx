@@ -4,19 +4,13 @@ import { useStore } from 'zustand'
 import { AnimatePresence, motion } from 'motion/react'
 import { useLocation } from 'react-router'
 import type { StarCatalog } from '@inertialref/universe'
-import { lensForFov } from '@inertialref/rendering'
-import {
-  DEFAULT_FOV_DEG,
-  DEFAULT_LENS,
-  GameEngine,
-} from './engine/GameEngine.ts'
+import { DEFAULT_FOV_DEG, GameEngine } from './engine/GameEngine.ts'
 import type {
   CameraState,
   GraphicsState,
   HudCommands,
   HudRenderState,
 } from './hud/controls.ts'
-import { FOV_MAX, FOV_MIN, isLens, reviveLens } from './hud/controls.ts'
 import { BootOverlay } from './hud/BootOverlay.tsx'
 import { CutsceneOverlay } from './hud/CutsceneOverlay.tsx'
 import { ErrorBoundary } from './hud/ErrorBoundary.tsx'
@@ -24,12 +18,13 @@ import { isTyping } from './hud/focus.ts'
 import { TrackOverlay } from './hud/TrackOverlay.tsx'
 import { useCoarsePointer } from './hud/viewport.ts'
 import {
-  isBoolean,
-  numberWithin,
-  readPreference,
-  oneOf,
+  CAMERA_LENS,
+  DEBUG_ON,
+  RENDER_AA,
+  RENDER_HDR,
+  RENDER_LENS_FLARE,
   usePersistentState,
-} from './hud/panelState.ts'
+} from './state/preferences.ts'
 import { devPanels } from './hud/registry.tsx'
 import { nextWarp } from './hud/warp.ts'
 import { useShipControls } from './hud/useShipControls.ts'
@@ -47,12 +42,10 @@ import {
   type RendererHandle,
 } from './render/createRenderer.ts'
 import {
-  AA_LEVELS,
   type AaLevel,
   aaAntialias,
   aaDprFactor,
   dprCeiling,
-  OUTPUT_PREFERENCES,
   type OutputPreference,
   type RendererDescription,
 } from './render/output.ts'
@@ -169,7 +162,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    * so a first-time visitor should never meet it. Persisted, because somebody
    * who turned it on is working, and a reload is part of working.
    */
-  const [debug, setDebug] = usePersistentState('debug.on', false, isBoolean)
+  const [debug, setDebug] = usePersistentState(DEBUG_ON)
   /*
    * Every restored preference is checked against what this build accepts.
    *
@@ -190,27 +183,15 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    * directions. Persisted, because a player who turned it off did not mean
    * "until the next reload".
    */
-  const [hdr, setHdr] = usePersistentState<OutputPreference>(
-    'render.hdr',
-    'auto',
-    oneOf(OUTPUT_PREFERENCES),
-  )
+  const [hdr, setHdr] = usePersistentState(RENDER_HDR)
   /*
    * The graphics and camera panels' knobs. Persisted like the HDR override —
    * a lens flare turned off to chase an artifact should stay off across the
    * reload that tests the fix — and mirrored onto plain engine fields below,
    * because the frame loop reads them and must not touch React to do it.
    */
-  const [lensFlare, setLensFlare] = usePersistentState(
-    'render.lensFlare',
-    true,
-    isBoolean,
-  )
-  const [aa, setAa] = usePersistentState<AaLevel>(
-    'render.aa',
-    '2x',
-    oneOf(AA_LEVELS),
-  )
+  const [lensFlare, setLensFlare] = usePersistentState(RENDER_LENS_FLARE)
+  const [aa, setAa] = usePersistentState(RENDER_AA)
   /*
    * The lens, and the one preference in here that has changed shape.
    *
@@ -222,18 +203,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    * guarded the one: `localStorage` outlives the code that wrote it, and a
    * focal length of zero is a division rather than a wide lens.
    */
-  const [lens, setLens] = usePersistentState(
-    'camera.lens',
-    DEFAULT_LENS,
-    isLens,
-    () => {
-      const held = readPreference('camera.fov', numberWithin(FOV_MIN, FOV_MAX))
-      return held === null ? null : lensForFov(held)
-    },
-    // JSON has no infinity, and a lens focused at infinity is the ordinary
-    // case. See `reviveLens`.
-    reviveLens,
-  )
+  const [lens, setLens] = usePersistentState(CAMERA_LENS)
   const [dynamicRangeHigh, setDynamicRangeHigh] = useState(
     () => window.matchMedia(EXTENDED_RANGE_QUERY).matches,
   )

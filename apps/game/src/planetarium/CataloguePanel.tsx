@@ -4,7 +4,12 @@ import { Input } from '@/components/ui/input'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { useTravelTargets } from '../hud/useTravelTargets.ts'
 import { FOCUS_RING, releaseFocus } from '../hud/focus.ts'
-import { isBoolean, oneOf, usePersistentState } from '../hud/panelState.ts'
+import {
+  CATALOGUE_CLASSES,
+  CATALOGUE_FILTERING,
+  CATALOGUE_RADIUS,
+  usePersistentState,
+} from '../state/preferences.ts'
 import { CatalogueRow } from './CatalogueRow.tsx'
 import { NeighbourhoodRail } from './NeighbourhoodRail.tsx'
 import type { PlanetariumContext } from './context.ts'
@@ -15,7 +20,7 @@ import {
   neighbours,
   systemOfAddress,
 } from './catalogue.ts'
-import { ALL_CLASSES, OBJECT_CLASSES } from './kinds.ts'
+import { ALL_CLASSES, OBJECT_CLASSES, RADII } from './kinds.ts'
 
 /*
  * Everything within reach, and a way through it.
@@ -45,7 +50,6 @@ import { ALL_CLASSES, OBJECT_CLASSES } from './kinds.ts'
  */
 
 /** How far the survey reaches. The radii a person actually asks for. */
-const RADII = ['5', '10', '25', '50'] as const
 
 /**
  * How many systems the list will draw at once.
@@ -58,36 +62,14 @@ const RADII = ['5', '10', '25', '50'] as const
  */
 const MAX_SYSTEMS = 200
 
-/** Where it opens: far enough to hold the nearest half-dozen stars. */
-const DEFAULT_RADIUS = '10'
-
 /** One allocation for every collapsed group, rather than one per group. */
 const NOTHING_VISIBLE: ReadonlySet<string> = new Set()
 
 export function CataloguePanel({ engine, target, focus }: PlanetariumContext) {
   const [query, setQuery] = useState('')
-  const [radius, setRadius] = usePersistentState<string>(
-    'planetarium.catalogue.radius',
-    DEFAULT_RADIUS,
-    oneOf(RADII),
-  )
-  const [classes, setClasses] = usePersistentState<readonly string[]>(
-    'planetarium.catalogue.classes',
-    ALL_CLASSES,
-    // Membership in the live set, not merely "an array of strings". The point
-    // of a validator here is the value that survives a *rename* — a stored id
-    // no chip answers to parses perfectly and quietly hides a whole class.
-    (value): value is readonly string[] =>
-      Array.isArray(value) &&
-      value.every(
-        (one) => typeof one === 'string' && ALL_CLASSES.includes(one),
-      ),
-  )
-  const [filtering, setFiltering] = usePersistentState(
-    'planetarium.catalogue.filtering',
-    false,
-    isBoolean,
-  )
+  const [radius, setRadius] = usePersistentState(CATALOGUE_RADIUS)
+  const [classes, setClasses] = usePersistentState(CATALOGUE_CLASSES)
+  const [filtering, setFiltering] = usePersistentState(CATALOGUE_FILTERING)
   /*
    * The systems the reader has decided about, and what they decided.
    *

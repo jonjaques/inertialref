@@ -183,3 +183,13 @@ export function starColour(colour: TravelTarget['colour']): string | null {
   }
   return `rgb(${channel(colour.r)} ${channel(colour.g)} ${channel(colour.b)})`
 }
+
+/**
+ * The survey radii the catalog offers, light years.
+ *
+ * Here rather than in the panel that draws them, because
+ * `state/preferences.ts` declares the stored radius and guards it against this
+ * list — a stored `"25"` from a build that offered one is a chip that renders
+ * as selected with nothing behind it.
+ */
+export const RADII = ['5', '10', '25', '50'] as const

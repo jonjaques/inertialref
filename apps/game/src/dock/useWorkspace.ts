@@ -1,15 +1,15 @@
 import { useEffect, useState } from 'react'
 import {
+  BOTH_OPEN,
   type DockLayout,
   type DockZone,
   dropIndex,
   EMPTY_LAYOUT,
-  isDockLayout,
   isPane,
   movePanel,
   normalizeLayout,
+  type PaneState,
   type PaneZone,
-  PANE_ZONES,
   slotIndex,
   togglePanel,
   zoneOf,
@@ -19,14 +19,19 @@ import {
   type FloatPoint,
   type FloatPositions,
   type FloatSize,
-  isFloatPositions,
   NO_FLOATS,
   nudgeFloat,
   placeFloat,
   pruneFloats,
 } from './floating.ts'
 import { type DockPanelDefinition, layoutOf } from './panels.ts'
-import { usePersistentState } from '../hud/panelState.ts'
+import {
+  DOCK_COLLAPSED,
+  DOCK_FLOATS,
+  DOCK_LAYOUT,
+  DOCK_PANES,
+  usePersistentState,
+} from '../state/preferences.ts'
 
 /*
  * Everything the workspace remembers, in one hook.
@@ -36,7 +41,7 @@ import { usePersistentState } from '../hud/panelState.ts'
  * repairable on its own: a layout whose panel ids moved on is worth keeping
  * even when the float positions beside it are nonsense, and a single blob
  * would throw all four away together the first time any one of them failed its
- * guard. That is the same argument `hud/panelState.ts` already makes about a
+ * guard. That is the same argument `state/accept.ts` already makes about a
  * stored tab name, applied to a workspace.
  *
  * Normalizing happens on *read* rather than only on write, for the reason
@@ -45,21 +50,6 @@ import { usePersistentState } from '../hud/panelState.ts'
  * today's build adds a panel — and the write that would have repaired it may
  * never come.
  */
-
-/** The panes' open state. Both open is the arrangement a fresh visitor gets. */
-export type PaneState = { readonly [Z in PaneZone]: boolean }
-
-const BOTH_OPEN: PaneState = { left: true, right: true }
-
-const isPaneState = (value: unknown): value is PaneState =>
-  typeof value === 'object' &&
-  value !== null &&
-  PANE_ZONES.every(
-    (zone) => typeof (value as Record<string, unknown>)[zone] === 'boolean',
-  )
-
-const isStringArray = (value: unknown): value is readonly string[] =>
-  Array.isArray(value) && value.every((id) => typeof id === 'string')
 
 /**
  * The box a stored float position is re-clamped against before it is believed.
@@ -136,26 +126,10 @@ export function useWorkspace(
   panels: readonly DockPanelDefinition[],
 ): Workspace {
   const known = layoutOf(panels)
-  const [storedLayout, setLayout] = usePersistentState<DockLayout>(
-    `dock.layout.${key}`,
-    EMPTY_LAYOUT,
-    isDockLayout,
-  )
-  const [storedFloats, setFloats] = usePersistentState<FloatPositions>(
-    `dock.floats.${key}`,
-    NO_FLOATS,
-    isFloatPositions,
-  )
-  const [collapsed, setCollapsed] = usePersistentState<readonly string[]>(
-    `dock.collapsed.${key}`,
-    [],
-    isStringArray,
-  )
-  const [panes, setPanes] = usePersistentState<PaneState>(
-    `dock.panes.${key}`,
-    BOTH_OPEN,
-    isPaneState,
-  )
+  const [storedLayout, setLayout] = usePersistentState(DOCK_LAYOUT.of(key))
+  const [storedFloats, setFloats] = usePersistentState(DOCK_FLOATS.of(key))
+  const [collapsed, setCollapsed] = usePersistentState(DOCK_COLLAPSED.of(key))
+  const [panes, setPanes] = usePersistentState(DOCK_PANES.of(key))
 
   const layout = normalizeLayout(storedLayout, known)
 

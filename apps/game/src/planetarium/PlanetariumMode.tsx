@@ -4,19 +4,23 @@ import { useSearchParams } from 'react-router'
 import type { PerspectiveCamera } from 'three/webgpu'
 import { DEFAULT_FILL } from '@inertialref/devtools'
 import type { GameEngine } from '../engine/GameEngine.ts'
-import type { OrbitScope, StanceHandle } from '../engine/presentation.ts'
+import type { StanceHandle } from '../engine/presentation.ts'
 import type { CameraState } from '../hud/controls.ts'
 import { Workspace } from '../dock/Workspace.tsx'
 import type { DevWorkspace } from '../dock/workspace.ts'
 import {
-  isBoolean,
-  numberWithin,
+  PLANETARIUM_FLARE,
+  PLANETARIUM_LABEL_DENSITY,
+  PLANETARIUM_LABEL_MINOR,
+  PLANETARIUM_LABELS,
+  PLANETARIUM_ORBIT_SCOPE,
+  PLANETARIUM_ORBITS,
+  PLANETARIUM_SHIP,
   usePersistentState,
-} from '../hud/panelState.ts'
+} from '../state/preferences.ts'
 import { QUERY } from '../pages/paths.ts'
 import type { PlanetariumContext } from './context.ts'
 import { planetariumPanels } from './registry.tsx'
-import { isLabelDensity, isOrbitScope, type LabelDensity } from './layers.ts'
 import { pick } from './pick.ts'
 import { projectScene } from './project.ts'
 import { SkyLabels } from './SkyLabels.tsx'
@@ -53,49 +57,19 @@ export function PlanetariumMode({
   const requested = params.get(QUERY.at)
 
   const [target, setTarget] = useState<string | null>(null)
-  const [labels, setLabels] = usePersistentState(
-    'planetarium.labels',
-    true,
-    isBoolean,
-  )
-  const [orbits, setOrbits] = usePersistentState(
-    'planetarium.orbits',
-    true,
-    isBoolean,
-  )
-  const [ship, setShip] = usePersistentState(
-    'planetarium.ship',
-    false,
-    isBoolean,
-  )
+  const [labels, setLabels] = usePersistentState(PLANETARIUM_LABELS)
+  const [orbits, setOrbits] = usePersistentState(PLANETARIUM_ORBITS)
+  const [ship, setShip] = usePersistentState(PLANETARIUM_SHIP)
   const [labelDensity, setLabelDensity] = usePersistentState(
-    'planetarium.labelDensity',
-    'normal' as LabelDensity,
-    isLabelDensity,
+    PLANETARIUM_LABEL_DENSITY,
   )
   const [labelMinor, setLabelMinor] = usePersistentState(
-    'planetarium.labelMinor',
-    false,
-    isBoolean,
+    PLANETARIUM_LABEL_MINOR,
   )
   const [orbitScope, setOrbitScope] = usePersistentState(
-    'planetarium.orbitScope',
-    'context' as OrbitScope,
-    isOrbitScope,
+    PLANETARIUM_ORBIT_SCOPE,
   )
-  /*
-   * Glare starts where the flight modes have it, which is all the way up.
-   *
-   * `numberWithin` rather than a bare number check: a stored value reaches
-   * `flareArtifacts` and from there the composite, and `panelState.ts` is
-   * explicit that a value from a build that meant something else is not a value
-   * somebody nearly chose.
-   */
-  const [flare, setFlare] = usePersistentState(
-    'planetarium.flare',
-    1,
-    numberWithin(0, 1),
-  )
+  const [flare, setFlare] = usePersistentState(PLANETARIUM_FLARE)
   const [notice, setNotice] = useState<string | null>(null)
 
   /*
