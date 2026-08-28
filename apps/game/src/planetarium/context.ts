@@ -42,14 +42,25 @@ export interface PlanetariumContext {
   /**
    * Move the camera in or out by `notches` of the wheel's own step.
    *
-   * The *dolly*, which is not the zoom and not the framing. Three acts shared
-   * one control here and the copy under the lens slider described a coupling
-   * nobody had wired: narrowing the lens recorded an angle and nothing
-   * re-solved the standoff, so the subject did not "stay the same size" — it
-   * grew. Each act now has its own control and the sentence is true of the one
-   * it belongs to.
+   * The *dolly*, which is not the zoom and not the framing. One control cannot
+   * be all three: a zoom magnifies and moves nothing, a dolly changes every
+   * parallax in the frame, and holding a subject's size is a solve for the
+   * distance that does it at whatever lens is fitted. Narrowing the lens
+   * re-solves no standoff on its own — `focus` and `frameTarget` store the
+   * distance they solve — so "the subject stays the same size" is true of the
+   * solve and false of the other two. Each act has its own control, and the
+   * sentence under it is about that act.
    */
   readonly dolly: (notches: number) => void
-  /** Re-solve the standoff so the subject fills the frame at the current lens. */
-  readonly holdFraming: () => void
+  /**
+   * Solve the standoff that fills the frame with the subject at this lens.
+   *
+   * The *framing* act, and it solves rather than restores: `DEFAULT_FILL` of
+   * the frame height at whatever lens is fitted, which is what `F` and the
+   * shot presets run. Nothing stores the fill a viewer dollied to, so this
+   * cannot put one back — and a control labelled for an intent the code does
+   * not keep would be the panel describing a coupling nobody wired all over
+   * again.
+   */
+  readonly frameSubject: () => void
 }

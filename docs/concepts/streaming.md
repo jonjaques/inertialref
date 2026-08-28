@@ -120,12 +120,15 @@ it: the size of the smallest thing a patch can express.
 "What the screen can tell" is a statement about optics, and it reads the lens
 the picture is actually taken with — [ADR-0017](../adr/0017-the-lens.md). A
 fixed angle would be right for exactly one setting of the field-of-view slider
-and four levels wrong at its ends; the patch demand climbs steeply with the
-pixels-per-radian, so the assumption would decide how much terrain exists rather
-than the picture deciding it. Not as its square, which is what the
-arithmetic suggests: refinement runs out of _levels_ at `surfaceDetailFloor`
-before it runs out of budget, and the telephoto end of the slider measures 1.9×
-to 3.2× the flight lens's demand rather than thirteen times it. The viewport is
+and three levels wrong across it — six once the zoom channel is counted; the
+patch demand climbs steeply with the pixels-per-radian, so the assumption would
+decide how much terrain exists rather than the picture deciding it. Not as its
+square, which is what the arithmetic suggests: refinement runs out of _levels_ at
+`surfaceDetailFloor` before it runs out of budget, and the telephoto end of the
+slider measures 1.9× to 3.2× the flight lens's demand rather than thirteen times
+it. Racking the zoom out on top of that is the one corner where the floor is
+reached and the square bites again — 20° at 8× wants 20,174 patches against a cap
+of 768, so the disk goes a level coarse on every step and says so. The viewport is
 in **display** pixels with any supersampling divided back out: 4× AA raises the
 sample count, not the
 detail a viewer can resolve, and feeding the raw buffer in asks for 6.5× the

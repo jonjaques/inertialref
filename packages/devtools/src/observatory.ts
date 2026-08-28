@@ -37,6 +37,7 @@ import {
 } from '@inertialref/universe'
 import {
   anglesForPhase,
+  angularRadius,
   applyDrag,
   applyZoom,
   approachState,
@@ -59,6 +60,7 @@ import {
   type SurfaceStance,
   surfaceHeightBounds,
   surfaceStancePose,
+  verticalFov,
   verticalFovDegrees,
   zoomFactorForNotches,
 } from '@inertialref/rendering'
@@ -679,13 +681,16 @@ export class Observatory {
      * not being taken at made the Object panel's readout describe where the
      * viewer had been before the descent.
      */
+    // A ratio of two angles, so it is taken in radians and `angularRadius`
+    // owns the half of it that `lod.ts` also asks for. Written out in degrees
+    // it carries two 180/π factors that cancel, which is one edit away from
+    // the panel and the LOD tier disagreeing about a body's angular size.
     const fill =
       surface !== null
         ? 1
         : radius > 0 && this.#state.distance > radius
-          ? (2 * Math.asin(Math.min(1, radius / this.#state.distance)) * 180) /
-            Math.PI /
-            verticalFovDegrees(this.#lens)
+          ? (2 * angularRadius(radius, this.#state.distance)) /
+            verticalFov(this.#lens)
           : 0
     return {
       target: this.#target,

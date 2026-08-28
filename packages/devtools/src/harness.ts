@@ -183,8 +183,10 @@ export interface PresentationHost {
    * resolves the lens every frame under the pose's own precedence — a script's
    * lens, then the flight one — and a host that pushed a copy in here would
    * hold a second producer of it, which is the rule this phase exists to keep.
-   * The observatory reads it to solve a standoff; `ir.lens()` reads it to print
-   * one. Absent headlessly, where there is no camera and no display.
+   * `ir.lens()` reads it to print the instrument; the terrain predicate reads it
+   * to measure one. The observatory does not — it takes `framingLens()` below,
+   * and the block there says why. Absent headlessly, where there is no camera
+   * and no display.
    */
   lensView(): LensView | null
   /**
@@ -1269,8 +1271,29 @@ export class GameHarness {
     if (!hasSolidSurface(body)) {
       throw new Error(`${body.name} has no surface to descend to`)
     }
+    /*
+     * The lens the host is actually looking through, unless the caller names
+     * one.
+     *
+     * `simulateDescent` otherwise answers for the flight lens over 1920×1080
+     * while `ir.terrain()` beside it reports a live selection made at whatever
+     * the camera panel is set to — up to three levels and 1.9× to 3.2× the
+     * patches apart, with nothing in either report saying they are answers to
+     * different questions. The pair is what the seam exists for: one says what
+     * *would* be asked for, the other what is held, and the two disagreeing is
+     * the interesting case only when they are asked at the same lens.
+     */
+    const live = this.#host.lensView?.() ?? null
+    const optics =
+      live === null
+        ? {}
+        : {
+            lens: rest.lens ?? live.lens,
+            viewport: rest.viewport ?? live.viewport,
+          }
     const report = simulateDescent(body, {
       ...rest,
+      ...optics,
       ...(latitude === undefined
         ? {}
         : { latitude: (latitude * Math.PI) / 180 }),

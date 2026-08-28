@@ -503,9 +503,11 @@ Node-tested, the same bargain `cinematic.ts` and `observer.ts` make.
 
 Two of those settle scope on the spot.
 
-**Depth of field can never affect terrain.** The hyperfocal distance is 5.3 m at
-the flight lens and 70 m at the telephoto end, so at any planetary distance
-everything is at infinity and sharp. Defocus is a near-field and photo-mode
+**Depth of field does not reach terrain at any lens the game is flown behind.**
+The hyperfocal distance is 5.3 m at the flight lens and 70 m at the telephoto end
+of the focal-length slider, so at any planetary distance everything is at
+infinity and sharp. It climbs to 4.5 km with the zoom racked out, which is the
+one corner of the controls the blur pass will owe an answer to. Defocus is a near-field and photo-mode
 effect — the hull, the cockpit, a rock two meters away — which is why the blur
 _pass_ can be deferred without blocking a single terrain phase while the
 _parameters_ cannot: diffraction and exposure act at every scale, and the
@@ -700,7 +702,7 @@ quadtree and the geology rather than beside them. After Phase 1 the predicate
 that decides how much terrain exists is live and reads a guess; before Phase 2
 the geology is measured, plated and signed off against whatever that predicate
 selected. A band stack tuned against a 60° assumption and then looked at
-through a 20° lens is four levels finer and two to three times the patches, and
+through a 20° lens is nearly two levels finer and two to three times the patches, and
 the taste judgment in Phase 2 — "reads as a Moon, not as noise" — is made from
 plates that would have been composed through the wrong optics. The cheap moment to
 fix that is after the machinery exists and before anything is judged with it.

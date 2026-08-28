@@ -67,15 +67,17 @@ import {
  *
  * A node refines while `distance < spacing · scale` and `scale` goes as
  * `pixelsPerRadian`, so doubling it is one more level of refinement everywhere
- * on the visible disk — 16× of scale between the two ends of controls a player
- * reaches with two sliders, which is four levels. The patches do not follow the
- * square of it: refinement runs out of *levels* at `surfaceDetailFloor` before
- * it runs out of budget, so the telephoto end measures 1.9× to 3.2× the demand
- * rather than the 263× the arithmetic suggests — `DEFAULT_MAX_PATCHES` below
- * carries the counts. That is why the predicate takes the lens the picture is
- * actually composed through rather than a nominal angle: a fixed one is right
- * for exactly one setting of the field-of-view slider and wrong by four levels
- * at its ends.
+ * on the visible disk. The focal-length control spans 8.1× of it — 378 px/rad
+ * at 110° to 3,062 at 20° — which is three levels, and the zoom channel
+ * multiplies another 8× for six levels across the two sliders together. The
+ * patches do not follow the square of it: refinement runs out of *levels* at
+ * `surfaceDetailFloor` before it runs out of budget, so 20° at zoom 1 measures
+ * 1.9× to 3.2× the demand rather than the 66× the arithmetic suggests —
+ * `DEFAULT_MAX_PATCHES` below carries the counts, including the corner where
+ * the floor is reached and the square starts to bite again. That is why the
+ * predicate takes the lens the picture is actually composed through rather than
+ * a nominal angle: a fixed one is right for exactly one setting of the two
+ * controls and wrong by six levels at their ends.
  *
  * `LENS_PRESETS.flight` over `BASELINE_VIEWPORT` — 65° over 1080 display
  * pixels, which is 848 px/rad. The streamer passes the live lens; this is what
@@ -137,6 +139,15 @@ export const DEFAULT_MAX_LEVEL = 12
  * deliberately and where one level coarser is a 4-pixel error rather than a
  * 2-pixel one. The number is here so that the next person to want it raised
  * knows what they are buying.
+ *
+ * **The zoom channel goes three levels past that, and no cap covers it.** At 20°
+ * with the zoom racked to 8× the picture is a 2.5° field at 24,500 px/rad, and
+ * Miranda's basin descent wants **20,174** patches — 26× the cap, `saturated` on
+ * every step of the descent rather than on two thirds of them. That is a
+ * telephoto held on a subject rather than a lens anything is flown behind, and
+ * the honest answer is the one the cap already gives: the disk goes coarse, by a
+ * stated amount, rather than the frame going away. It is recorded here because
+ * the counts above stop at zoom 1 and the controls do not.
  */
 export const DEFAULT_MAX_PATCHES = 768
 

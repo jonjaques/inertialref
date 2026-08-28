@@ -3,10 +3,11 @@ import { createInlineWorker, createTaskRegistry } from '@inertialref/workers'
 import { MemorySaveStore } from '@inertialref/persistence'
 import {
   DEFAULT_MAX_PATCHES,
+  framingDistance,
   lensForFov,
   verticalFovDegrees,
 } from '@inertialref/rendering'
-import { DEFAULT_CACHE } from '@inertialref/devtools'
+import { DEFAULT_CACHE, DEFAULT_FILL } from '@inertialref/devtools'
 import {
   FIELD_CACHE,
   GEOMETRY_CACHE,
@@ -117,10 +118,30 @@ describe('the game engine, headless', () => {
     // falls back to the flight preset — which would hide the very thing this
     // asserts. A headless engine has no `TerrainPatches` to report a buffer.
     game.viewportPixels = { width: 1920, height: 1080 }
+    /*
+     * Off the default, and that is what gives this test teeth.
+     *
+     * `Observatory.#lens` falls back to `LENS_PRESETS.flight` when the host
+     * offers no `framingLens`, and `flightLens` starts life as exactly that
+     * object — so left at the default, every assertion below holds whether the
+     * port is wired or not, and deleting the wire is green. At 30° the fallback
+     * is a different lens and a missing wire is a different standoff.
+     */
+    game.flightLens = lensForFov(30)
     game.frame(1 / 60)
     const observatory = game.harness.observatory
 
     observatory.focus('s:SOL/b:2')
+    // The standoff the *flight* lens asks for, stated rather than assumed: a
+    // test that only compares two readings passes when both are wrong. The
+    // radius comes off the target, because the body is the world's Earth
+    // rather than the constant.
+    const framed = observatory.status()
+    expect(framed.target).not.toBeNull()
+    expect(framed.desired.distance).toBeCloseTo(
+      framingDistance(framed.target!.radius, 30, DEFAULT_FILL),
+      -3,
+    )
     // `desired`, not `state`: `focus` solves the standoff into the first and
     // eases the second toward it, so a reading taken before the ease runs
     // reports where the camera *was*.

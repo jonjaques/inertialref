@@ -77,7 +77,7 @@ framing.** Three acts that shared one control:
 | ----------- | ------------------------ | -------- | ------------------------------------- |
 | **Zoom**    | focal length × `zoom`    | no       | the lens sliders, in both panels      |
 | **Dolly**   | the camera's distance    | yes      | the wheel, the pinch, and two buttons |
-| **Framing** | distance, to hold a size | yes      | `F`, a preset, and **Hold Framing**   |
+| **Framing** | distance, to fill a size | yes      | `F`, a preset, and **Frame**          |
 
 The planetarium's View panel told the reader that narrowing the lens "pulls the
 camera back rather than magnifying" and that "the subject stays the same size".
@@ -185,6 +185,16 @@ the field's own detail cannot spend the square.
 **The cap binds at the telephoto end and nowhere else.** 60–84% of a descent's
 steps at 20° are one level coarser than the predicate asked for, flagged
 `saturated`. Every lens a player flies with clears it with room.
+
+**The zoom channel goes three levels past the table, and no cap covers it.** The
+rows above are all at zoom 1, because that is where the field-of-view slider
+ends; the zoom control multiplies another 8× onto the focal length, so 20° at 8×
+is a 2.5° field at 24,500 px/rad. Measured, Miranda's basin descent wants
+**20,174** patches there — 26× the cap, `saturated` on 128 of 128 steps rather
+than on 92. That is a telephoto held on a subject rather than a lens anything is
+flown behind, and the answer is the one the cap already gives: the disk goes
+coarse by a stated amount and reports that it did. It is recorded because the
+measurement stops where the controls do not.
 
 **A distant body's tier now follows the lens.** Atlas at 104,146 km draws as a
 `point` at 110° and as a `billboard` at 20° — which is what the threshold always

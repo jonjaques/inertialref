@@ -7,14 +7,16 @@ import type { Meters, Radians, Seconds } from '@inertialref/shared'
  * composed through one lens and measured through another. The terrain
  * screen-space-error predicate is what makes that expensive rather than untidy:
  * it refines while a patch's grid cell subtends more than `cellPixels`, so the
- * pixels-per-radian decides how much terrain exists — and across the shipped
- * controls that number spans 16×, which is four levels of refinement everywhere
- * on the visible disk. The patch demand does not go as the square of it, which
- * is the tempting reading: refinement runs out of *levels* at
- * `surfaceDetailFloor` before it runs out of budget, so the telephoto end
- * measures 1.9× to 3.2× the patches rather than 263×. Four levels is still the
- * whole disk, and a predicate reading anything but the lens the picture is
- * actually taken with is a guess with all of it riding on it.
+ * pixels-per-radian decides how much terrain exists. Across the focal-length
+ * control alone that number spans 8.1× — 378 px/rad at 110° to 3,062 at 20° —
+ * which is three levels of refinement everywhere on the visible disk, and the
+ * zoom channel multiplies another 8× on top of it for six levels end to end.
+ * The patch demand does not go as the square of it, which is the tempting
+ * reading: refinement runs out of *levels* at `surfaceDetailFloor` before it
+ * runs out of budget, so 20° at zoom 1 measures 1.9× to 3.2× the patches rather
+ * than 66×. Three levels is still the whole disk, and a predicate reading
+ * anything but the lens the picture is actually taken with is a guess with all
+ * of it riding on it.
  *
  * **A lens is a lens, not an angle.** The canonical fields are focal length,
  * sensor gauge, zoom, f-number, focus distance, shutter and gain; the field of
@@ -228,6 +230,36 @@ export function lensForFov(
 }
 
 /**
+ * Every number a lens carries, finite and positive where it has to be.
+ *
+ * The guard belongs to the object rather than to any one writer of it, because
+ * a lens reaches the projection matrix from four directions — a slider, a
+ * restored preference, a cutscene script and `window.engine` — and only the
+ * first two pass through `lensForFov` or a storage predicate. A NaN focal
+ * length is a NaN vertical field and a frame that draws nothing anywhere; a
+ * zero one is floored to `MIN_FOCAL`, which is a 179.99° field rather than an
+ * error. The expensive case is the observatory: `framingDistance` of NaN
+ * survives `clampDistance` — both of its comparisons are false — and `focus`
+ * *stores* the standoff it solves, so one bad assignment parks the planetarium
+ * at a NaN position permanently, with nothing in the console.
+ *
+ * `focus` is the one field that is legitimately infinite. A lens racked to the
+ * stop is where this camera spends its whole life.
+ */
+export const isUsableLens = (lens: Lens): boolean =>
+  Number.isFinite(lens.focalLength) &&
+  lens.focalLength > 0 &&
+  Number.isFinite(lens.gauge) &&
+  lens.gauge > 0 &&
+  Number.isFinite(lens.zoom) &&
+  lens.zoom > 0 &&
+  Number.isFinite(lens.fStop) &&
+  lens.fStop > 0 &&
+  Number.isFinite(lens.shutter) &&
+  Number.isFinite(lens.iso) &&
+  (lens.focus === Infinity || Number.isFinite(lens.focus))
+
+/**
  * The exposure triangle every preset starts from.
  *
  * f/2.8 at 1/60 s and ISO 100 is EV 8.9 — an interior, which is what a cockpit
@@ -287,13 +319,20 @@ export const circleOfConfusion = (
 /**
  * Focus here and everything from half this distance to infinity is sharp.
  *
- * 5.37 m at the flight lens and 71 m at the telephoto end of the slider — which
- * settles a scope question on the spot: **depth of field can never affect
- * terrain.** At any planetary distance everything is past hyperfocal and sharp,
+ * 5.37 m at the flight lens over a 1520 px buffer, and 69.9 m at the telephoto
+ * end of the focal-length slider — which settles a scope question on the spot:
+ * **depth of field does not reach terrain at any lens the game is flown
+ * behind.** At any planetary distance everything is past hyperfocal and sharp,
  * so defocus is a near-field and photo-mode effect (the hull, the cockpit, a
  * rock two meters away). That is why the blur *pass* can be deferred without
  * blocking a terrain phase while the *parameters* cannot — diffraction and
  * exposure act at every scale.
+ *
+ * It climbs with the glass, and the zoom channel is where it stops being a
+ * near-field number: 68 mm at 8× is 544 mm effective and a hyperfocal of
+ * **4.47 km**, so a viewer standing on a moon with the telephoto racked out has
+ * ground inside the near limit. That corner is what the blur pass owes an answer
+ * to when it arrives; it is not a reason to hold the parameters back.
  */
 export function hyperfocalDistance(lens: Lens, viewport: Viewport): Meters {
   const f = effectiveFocalLength(lens)

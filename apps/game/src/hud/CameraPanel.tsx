@@ -1,10 +1,10 @@
 import { formatDistance } from '@inertialref/shared'
 import {
   compassDegrees,
+  effectiveFocalLength,
   lensReadout,
-  verticalFovDegrees,
 } from '@inertialref/rendering'
-import { DEFAULT_LENS } from '../engine/GameEngine.ts'
+import { DEFAULT_FOV_DEG, DEFAULT_LENS } from '../engine/GameEngine.ts'
 import { useEngine, useShallow } from '../state/engineStore.ts'
 import { Action } from './Action.tsx'
 import { type CameraState, LENS_CHANNELS } from './controls.ts'
@@ -25,9 +25,11 @@ import { Section } from './Section.tsx'
  * HDR change.
  *
  * The readouts under them are the derivations, and two of them settle scope on
- * sight: the hyperfocal distance is meters, so everything at planetary range is
- * sharp and defocus can never be a terrain problem, and the diffraction limit
- * is f/12, so the aperture is a free control until it is not.
+ * sight. The hyperfocal distance is 5.4 m at the flight lens, so everything at
+ * planetary range is sharp — it climbs with the glass, to 4.5 km at the
+ * telephoto end with the zoom racked out, which is the one corner of the
+ * controls where defocus reaches the ground. And the diffraction limit is f/12,
+ * so the aperture is a free control until it is not.
  *
  * The observatory readout below it moved here out of the planetarium's object
  * panel, and the move is the point rather than a tidy-up. Range, altitude,
@@ -92,7 +94,10 @@ export function CameraPanel({ camera }: { camera: CameraState }) {
       <Section
         id="camera.lens"
         title="Lens"
-        trailing={`${camera.lens.focalLength.toFixed(0)} mm`}
+        // After zoom — what the picture is actually taken at, and what every
+        // reading in the Optics section below is computed from. The glass alone
+        // reads 19 mm beside an 8.5° field, which is two lenses on one panel.
+        trailing={`${effectiveFocalLength(camera.lens).toFixed(0)} mm`}
       >
         {(['focal', 'zoom', 'aperture', 'focus'] as const).map((channel) => (
           <div key={channel} className="flex items-center gap-2">
@@ -109,11 +114,11 @@ export function CameraPanel({ camera }: { camera: CameraState }) {
           <span className="text-slate-400">
             Narrow reads like a telephoto photograph; wide is for flying. The
             bookmarks in navigate → shots were composed at{' '}
-            {verticalFovDegrees(DEFAULT_LENS).toFixed(0)}°.
+            {DEFAULT_FOV_DEG.toFixed(0)}°.
           </span>
           <Action
             label="Reset"
-            title={`Back to the ${verticalFovDegrees(DEFAULT_LENS).toFixed(0)}° flying default`}
+            title={`Back to the ${DEFAULT_FOV_DEG.toFixed(0)}° flying default`}
             disabled={
               camera.lens.focalLength === DEFAULT_LENS.focalLength &&
               camera.lens.zoom === DEFAULT_LENS.zoom &&
@@ -152,9 +157,9 @@ export function CameraPanel({ camera }: { camera: CameraState }) {
             value={`⌀ ${view.apertureDiameter.toFixed(1)} mm`}
           />
           {/* A blur circle against the pixel it has to hide inside, and an Airy
-              disk against the f-number where it stops fitting. Both are
-              two-number comparisons and both were one row of prose that the
-              panel truncated at the ellipsis. */}
+              disk against the f-number where it stops fitting. Two-number
+              comparisons, so they are two columns rather than a sentence the
+              panel would truncate at the ellipsis. */}
           <Row
             label="Blur circle"
             value={`${(view.circleOfConfusion * 1000).toFixed(1)} µm / ${(view.pixelPitch * 1000).toFixed(1)} µm px`}

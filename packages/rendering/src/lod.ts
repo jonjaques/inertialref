@@ -48,12 +48,20 @@ export interface LodThresholds {
  *
  * Stated as a fraction of the pixel angle rather than as a constant, because a
  * constant can only be right at one lens: at the flight lens over the baseline
- * this is 1.97e-4 of angular radius, and at the telephoto end of the slider it
- * is a quarter of that. The arithmetic is easy to get wrong by an order of
- * magnitude — a pixel at 60° over 1080 px is `atan(1/935)`, 1.07 mrad, not the
- * 0.2 mrad it is tempting to call one.
+ * this is 1.97e-4 of angular radius, at 20° it is 5.44e-5 — a third of it — and
+ * with the zoom channel racked out it is 6.8e-6. The arithmetic is easy to get
+ * wrong by an order of magnitude — a pixel at 60° over 1080 px is `atan(1/935)`,
+ * 1.07 mrad, not the 0.2 mrad it is tempting to call one.
  */
 export const BILLBOARD_PIXEL_FRACTION = 1 / 3
+
+/**
+ * Where a body stops being an impostor and becomes a drawn disk.
+ *
+ * Named because the clamp below has to hold it too, and two spellings of the
+ * same number is how a ceiling comes to sit above the thing it is clamping to.
+ */
+const SPHERE_THRESHOLD: Radians = 2e-3
 
 /**
  * The three thresholds, resolved against a lens.
@@ -64,17 +72,30 @@ export const BILLBOARD_PIXEL_FRACTION = 1 / 3
  * player who narrows the lens to a telephoto has not moved closer to the
  * planet. Only the point-to-billboard step is a statement about pixels.
  *
- * This is an injectable that earns it. There was one before, threaded through
- * six signatures inside a `SceneConfig`, and nothing in the repository ever
- * constructed one other than the default; the lens is the first caller with a
- * reason, and the default is still what every caller without one gets.
+ * This is an injectable that earns it: the lens is the one caller with a reason
+ * to construct a set of its own, and every caller without one gets
+ * `LOD_THRESHOLDS` below. An injectable nobody but the default constructs is a
+ * parameter charged to every signature it threads through, which is what the
+ * shape of `selectLod`, `placeAt` and `buildScene` is guarding against.
  */
 export const lodThresholds = (
   lens: Lens,
   viewport: Viewport,
 ): LodThresholds => ({
-  billboard: (pixelAngle(lens, viewport) * BILLBOARD_PIXEL_FRACTION) / 2,
-  sphere: 2e-3,
+  /*
+   * Never above `sphere`, because `selectLod` tests the three in order and a
+   * billboard threshold that overtook the sphere one would delete the tier
+   * rather than widen it — every body under 0.12 rad would answer `point`, and
+   * `Bodies.tsx` gates clouds, rings and the atmosphere shell on not being one.
+   * A pixel is 1.07 mrad at the flight lens over 1080 px and the crossing is at
+   * a viewport 106 px tall, which a window can be dragged to and a canvas
+   * measures while it is laying out.
+   */
+  billboard: Math.min(
+    SPHERE_THRESHOLD,
+    (pixelAngle(lens, viewport) * BILLBOARD_PIXEL_FRACTION) / 2,
+  ),
+  sphere: SPHERE_THRESHOLD,
   surface: 0.12,
 })
 

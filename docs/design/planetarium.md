@@ -89,7 +89,9 @@ controls.** Zoom multiplies the focal length: it magnifies and changes no
 parallax, so the limb does not turn and the moons do not shift against the disk.
 A dolly moves the camera and changes all of that. Framing is a solve — the
 standoff that makes the subject fill a stated fraction of the frame at whatever
-lens is fitted, which is what `F` and **Hold Framing** run.
+lens is fitted, which is what `F` and **Frame** run. It solves rather than
+restores: nothing stores the fill a viewer dollied to, so the control is
+labelled for the act it performs.
 
 One control cannot describe all three without saying something false about two
 of them — "the subject stays the same size" is a claim about the solve alone,

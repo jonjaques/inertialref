@@ -63,6 +63,24 @@ export const FOCUS_MIN = 0.5
 export const FOCUS_MAX = 1000
 
 /**
+ * How many positions a lens slider has, and why the channels need to know.
+ *
+ * Fine enough that the readout moves on every arrow key, coarse enough that the
+ * position is an integer the slider can hold rather than a float it rounds. It
+ * lives here rather than in the component because one channel's arithmetic
+ * depends on it: `focus` spends its top position on infinity, so the finite
+ * band has to end exactly one step below the top. Written as a fraction of the
+ * travel instead, the sentinel swallows a band of positions that all resolve
+ * back to it, and the thumb springs back under every arrow key — from the
+ * default lens, which is focused at infinity, the control cannot be moved at
+ * all.
+ */
+export const LENS_SLIDER_STEPS = 1000
+
+/** The travel `focus` leaves for finite distances: everything below the top step. */
+const FOCUS_FINITE_BAND = (LENS_SLIDER_STEPS - 1) / LENS_SLIDER_STEPS
+
+/**
  * Slider positions are logarithmic in the value, and every channel here is.
  *
  * A linear focal-length slider spends two thirds of its travel between 30 and
@@ -107,8 +125,8 @@ export const LENS_CHANNELS = {
       ...lens,
       focalLength: valueOf(scrub, FOCAL_MIN, FOCAL_MAX),
     }),
-    // The angle beside the millimetres, because the angle is what somebody
-    // composing a shot is actually choosing and the millimetres are what the
+    // The angle beside the millimeters, because the angle is what somebody
+    // composing a shot is actually choosing and the millimeters are what the
     // depth of field and the diffraction below are computed from.
     format: (lens) =>
       `${lens.focalLength.toFixed(1)} mm · ${verticalFovDegrees({ ...lens, zoom: 1 }).toFixed(0)}°`,
@@ -144,14 +162,21 @@ export const LENS_CHANNELS = {
     // distance past a kilometer is the same picture at every lens here, and a
     // slider that could only ever *approach* the setting the camera spends its
     // whole life at would be a control with a defect in it.
+    //
+    // It is exactly *one* position, and that is the whole of the arithmetic
+    // below. A sentinel band wider than a step is a band the thumb cannot rest
+    // in: every position inside it maps back to infinity, the controlled value
+    // snaps the thumb to the top, and the arrow keys move nothing.
     scrub: (lens) =>
       Number.isFinite(lens.focus)
-        ? scrubOf(lens.focus, FOCUS_MIN, FOCUS_MAX) * 0.98
+        ? scrubOf(lens.focus, FOCUS_MIN, FOCUS_MAX) * FOCUS_FINITE_BAND
         : 1,
     at: (lens, scrub) => ({
       ...lens,
       focus:
-        scrub >= 0.99 ? Infinity : valueOf(scrub / 0.98, FOCUS_MIN, FOCUS_MAX),
+        scrub >= 1
+          ? Infinity
+          : valueOf(scrub / FOCUS_FINITE_BAND, FOCUS_MIN, FOCUS_MAX),
     }),
     format: (lens) =>
       Number.isFinite(lens.focus)

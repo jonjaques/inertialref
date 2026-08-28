@@ -159,7 +159,9 @@ Violating one of these is a rewrite later, not a refactor.
   order may depend on a later one resolving. Only the last needs a player.
 - **Never add a second producer of the lens.** It follows the camera's own
   precedence through the same code — a `CinematicSample` carries a `Lens`, the
-  observatory reads `engine.lensView()`, and the flight lens is the fallback.
+  observatory reads `framingLens()` — the flight lens alone, because it is the
+  arm that only produces a camera when the cutscene arm is null — and the flight
+  lens is the fallback.
   The field of view is _derived_ from focal length, gauge and zoom and is never
   stored beside them; `CameraRig` writes `camera.fov` and nothing else does,
   never `filmGauge` or `setFocalLength`, because Three's gauge is the sensor's

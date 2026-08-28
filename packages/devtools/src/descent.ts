@@ -179,10 +179,13 @@ export interface TerrainReport {
   /**
    * The optics the selection was made against.
    *
-   * Every count below is a function of it — the patch demand goes as the square
-   * of the pixels-per-radian — so a terrain readout that did not say which lens
-   * produced it was a number nobody could compare with the one they took
-   * yesterday. Null before the host has drawn a frame.
+   * Every count below is a function of it — measured, the telephoto end of the
+   * field-of-view slider asks for 1.9× to 3.2× what the flight lens does, and
+   * `terrainSelect.ts` says why that is not the square the arithmetic suggests.
+   * So a terrain readout without the optics beside it is a number nobody can
+   * compare with the one they took yesterday. Null when nothing is being
+   * selected: before the host has drawn a frame, and after the streamer lets a
+   * body go.
    */
   readonly lens: LensView | null
   /** Deepest and shallowest levels drawn together this frame. */

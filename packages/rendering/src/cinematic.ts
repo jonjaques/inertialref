@@ -139,9 +139,9 @@ export interface CinematicSample {
   /**
    * The lens the shot is taken with — a cinematic one, not the flight lens.
    *
-   * A whole `Lens` rather than the bare angle it used to be, because the lens
-   * has one producer under the pose's own precedence and this is the first arm
-   * of it: `GameEngine` resolves `cutscene, then observatory, then the ship`
+   * A whole `Lens` rather than a bare angle, because the lens has one producer
+   * under the pose's own precedence and this is the first arm of it:
+   * `GameEngine` resolves `cutscene, then observatory, then the ship`
    * for the *camera*, and the optics have to follow the same order through the
    * same code or the picture is composed through one lens and measured through
    * another. It is also what lets a shot carry an aperture and a focus, which

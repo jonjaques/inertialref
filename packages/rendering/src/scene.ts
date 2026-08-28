@@ -20,7 +20,12 @@ import type {
 } from '@inertialref/simulation'
 import type { BodyAppearance, EntityId } from '@inertialref/universe'
 import { atmosphereShellRatio, ringScales, sunkSphereRadius } from './datum.ts'
-import { type LodThresholds, type LodTier, starColor } from './lod.ts'
+import {
+  LOD_THRESHOLDS,
+  type LodThresholds,
+  type LodTier,
+  starColor,
+} from './lod.ts'
 import { placeAt, type RenderPlacement } from './placement.ts'
 
 /*
@@ -189,6 +194,21 @@ export function buildScene(
    */
   const eyeRender = toRenderSpace(origin, camera.position)
 
+  /*
+   * Never cull something the lens says should draw.
+   *
+   * `CULL_ANGLE` was safely an order of magnitude under a fixed billboard
+   * threshold; the threshold now follows the optics, and the shipped controls
+   * reach a 2.5° field where it is 6.8e-6 — below the constant. Past that
+   * crossing a narrower lens buys nothing, because every body it newly promotes
+   * to a billboard has already been dropped here, one step earlier and for a
+   * reason that has nothing to do with the picture.
+   */
+  const cullAngle = Math.min(
+    CULL_ANGLE,
+    (thresholds ?? LOD_THRESHOLDS).billboard,
+  )
+
   const bodies: RenderBody[] = []
   for (const body of snapshot.bodies) {
     // `datum.ts` owns why the sphere is sunk and by how much. It is a
@@ -202,7 +222,7 @@ export function buildScene(
       eyeRender,
       thresholds,
     )
-    if (placement.angularRadius < CULL_ANGLE) continue
+    if (placement.angularRadius < cullAngle) continue
     // Ring radii are authored in meters from the body's center and leave as
     // multiples of the drawn sphere, which is not the body's radius.
     const rings = body.appearance.rings

@@ -275,7 +275,7 @@ describe('the author’s instruments', () => {
     for (const channel of ['Focal Length', 'Zoom', 'Aperture', 'Focus'])
       expect(camera).toContain(channel)
     // The travel is the scrub, not the value — a logarithmic slider whose
-    // `aria` range was the millimetres would announce a position it does not
+    // `aria` range was the millimeters would announce a position it does not
     // hold. `FOCAL_MIN`/`FOCAL_MAX` are the ends it maps onto.
     expect(camera).toContain('aria-valuemin="0"')
     expect(camera).toContain('aria-valuemax="1000"')

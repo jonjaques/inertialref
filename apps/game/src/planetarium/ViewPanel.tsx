@@ -52,7 +52,7 @@ export function ViewPanel({
   onFlare,
   camera,
   dolly,
-  holdFraming,
+  frameSubject,
 }: PlanetariumContext) {
   return (
     <div className="flex flex-col gap-1">
@@ -144,7 +144,32 @@ export function ViewPanel({
          * the same size" is true only of the solve. Each sentence below sits
          * under the act it describes.
          */}
+        {/*
+         * Both halves of the magnification, because `zoom` starts at 1×.
+         *
+         * It is a multiplier on the glass, so on its own it reaches the
+         * telephoto end and nothing wider than whatever focal length is fitted
+         * — and this panel is where somebody composing a wide picture of a
+         * ringed planet is standing. Without the focal-length channel beside
+         * it, the 110° end of the range `docs/design/ux.md` offers is reachable
+         * only from the author's dock.
+         */}
         <div className="flex flex-col gap-1">
+          <span className="type-ui flex items-center gap-1.5 text-slate-400">
+            <StellarSpan aria-hidden className="size-3.5 shrink-0" />
+            {LENS_CHANNELS.focal.label}
+            <span className="type-readout ml-auto text-slate-300">
+              {LENS_CHANNELS.focal.format(camera.lens)}
+            </span>
+          </span>
+          <LensSlider channel="focal" camera={camera} />
+          <p className="type-ui text-pretty text-slate-400">
+            the glass: wide takes in the whole system, long is a photograph of
+            one body
+          </p>
+        </div>
+
+        <div className="mt-2 flex flex-col gap-1">
           <span className="type-ui flex items-center gap-1.5 text-slate-400">
             <StellarSpan aria-hidden className="size-3.5 shrink-0" />
             {LENS_CHANNELS.zoom.label}
@@ -179,16 +204,22 @@ export function ViewPanel({
                 title="Move the camera away from the subject"
                 onClick={() => dolly(2)}
               />
+              {/* "Frame", not "Hold Framing". It solves the distance at
+                  which the subject fills `DEFAULT_FILL` of the height at the
+                  lens now fitted — the same solve `F` runs — and it does not
+                  restore a fill the viewer had dollied to, because nothing
+                  stores one. A button labelled for an intent the code does not
+                  keep is worse than one labelled for the act it performs. */}
               <Action
-                label="Hold Framing"
-                title="Re-solve the distance so the subject fills the frame at this lens"
-                onClick={holdFraming}
+                label="Frame"
+                title="Solve the distance that fills the frame with the subject at this lens"
+                onClick={frameSubject}
               />
             </span>
           </span>
           <p className="type-ui text-pretty text-slate-400">
             moves the camera — the limb turns and the moons shift against the
-            disk. Hold Framing solves the distance instead of choosing it.
+            disk. Frame solves that distance instead of choosing it.
           </p>
         </div>
 

@@ -130,8 +130,8 @@ export function placeAt(
    * Where the representation changes, for the lens this frame is taken with.
    *
    * Only the point-to-billboard step moves with it, and only because that step
-   * is a claim about pixels. A caller with no lens gets the flight one, which
-   * is what every caller had before there was a lens to have.
+   * is a claim about pixels. A caller with no lens gets the flight one over the
+   * baseline viewport, which is what `LOD_THRESHOLDS` states.
    */
   thresholds?: LodThresholds,
 ): RenderPlacement {

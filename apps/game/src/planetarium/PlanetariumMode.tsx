@@ -202,7 +202,7 @@ export function PlanetariumMode({
     dolly: (notches: number) => {
       engine.harness.observatory.zoomNotches(notches)
     },
-    holdFraming: () => {
+    frameSubject: () => {
       engine.harness.observatory.frameTarget()
     },
   } satisfies PlanetariumContext)

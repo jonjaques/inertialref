@@ -27,6 +27,7 @@ import {
   buildScene,
   type CinematicEffects,
   type CinematicTextState,
+  isUsableLens,
   type Lens,
   LENS_PRESETS,
   type LensView,
@@ -91,9 +92,9 @@ const log = getLogger('game.engine')
  * The lens the game is flown behind — 18.84 mm on a 24 mm gauge, which is 65°.
  *
  * One definition: the `<Canvas>` starts from its angle, the camera panel's
- * reset returns to it, and `CameraRig` applies whatever the panel chose. It is
- * a `Lens` rather than the bare angle it was because an angle cannot carry an
- * aperture, a focus or an exposure, and the panel now shows all three.
+ * reset returns to it, and `CameraRig` applies whatever the panel chose. A
+ * `Lens` rather than a bare angle because an angle cannot carry an aperture, a
+ * focus or an exposure, and the panel shows all three.
  */
 export const DEFAULT_LENS: Lens = LENS_PRESETS.flight
 
@@ -262,8 +263,8 @@ export class GameEngine implements PresentationHost {
    *
    * Plain fields like `showShip`, and for the same reason: the frame loop
    * reads them every frame, React persists and edits them, and neither side
-   * needs the other to re-render. `fov` is applied by `CameraRig` rather than
-   * written to the camera here, because the camera belongs to R3F and is
+   * needs the other to re-render. The lens is applied by `CameraRig` rather
+   * than written to the camera here, because the camera belongs to R3F and is
    * replaced whenever the canvas remounts — a value pushed at a camera object
    * would be lost with it.
    */
@@ -275,8 +276,24 @@ export class GameEngine implements PresentationHost {
    * Written by the shell from the persisted preference, exactly as `lensFlare`
    * is. It is not `lens`: a script's lens outranks it, and the resolution of
    * that order is the getter below rather than a field anyone can overwrite.
+   *
+   * **The setter declines a lens it cannot use and keeps the last good one**,
+   * which is the guard the framing solver used to make on the angle it was
+   * pushed. This is public on an object `App` hands to `window.engine`, so a
+   * capture script computing a focal length from `Number(input)` reaches it
+   * without a slider or a storage predicate in the way; `isUsableLens` carries
+   * what a NaN costs, and the worst of it — a NaN standoff, stored — outlives
+   * the assignment.
    */
-  flightLens: Lens = DEFAULT_LENS
+  #flightLens: Lens = DEFAULT_LENS
+
+  get flightLens(): Lens {
+    return this.#flightLens
+  }
+
+  set flightLens(lens: Lens) {
+    if (isUsableLens(lens)) this.#flightLens = lens
+  }
 
   /**
    * The lens this frame is composed through.
@@ -294,7 +311,18 @@ export class GameEngine implements PresentationHost {
    * `#step`, and a mirrored copy would be a second thing to keep in step.
    */
   get lens(): Lens {
-    return this.cinematic?.lens ?? this.flightLens
+    return this.cinematic?.lens ?? this.#flightLens
+  }
+
+  /**
+   * The flight lens alone — what the observatory's framing solver reads.
+   *
+   * Separate from `lensView` because that one resolves cutscene-first, and the
+   * observatory produces a camera only when the cutscene arm is null. See
+   * `Observatory.#lens` for the standoff error the composed lens would cause.
+   */
+  framingLens(): Lens {
+    return this.#flightLens
   }
 
   /**
@@ -304,17 +332,6 @@ export class GameEngine implements PresentationHost {
    * answer before the first frame: a circle of confusion is a claim about a
    * display, and there is no display yet.
    */
-  /**
-   * The flight lens alone — what the observatory's framing solver reads.
-   *
-   * Separate from `lensView` because that one resolves cutscene-first, and the
-   * observatory produces a camera only when the cutscene arm is null. See
-   * `Observatory.#lens` for the 43% standoff error the composed lens caused.
-   */
-  framingLens(): Lens {
-    return this.flightLens
-  }
-
   lensView(): LensView | null {
     const viewport = this.#viewport
     return viewport === null ? null : { lens: this.lens, viewport }
@@ -493,7 +510,7 @@ export class GameEngine implements PresentationHost {
         frameStats: () => this.frameStats(),
         terrain: () => this.terrain(),
         lensView: () => this.lensView(),
-        framingLens: () => this.flightLens,
+        framingLens: () => this.framingLens(),
         onWorldReplaced: () => this.#invalidateDerived(),
       },
     })
@@ -776,13 +793,13 @@ export class GameEngine implements PresentationHost {
      * point. Only the point-to-billboard step moves; `lod.ts` says why the
      * other two do not.
      */
-    const viewport = this.#viewport
+    const view = this.lensView()
     this.#scene = buildScene(
       shot,
       this.origin,
       player,
       cinematic !== null ? cinematic.camera : (observed ?? undefined),
-      viewport === null ? undefined : lodThresholds(this.lens, viewport),
+      view === null ? undefined : lodThresholds(view.lens, view.viewport),
     )
 
     /*
@@ -797,10 +814,10 @@ export class GameEngine implements PresentationHost {
      * different object at a different distance.
      */
     // The lens the selection is made against, set beside the eye it is made
-    // from. Both are per-frame presentation inputs and neither is the
-    // streamer's to decide.
-    this.#terrain.lens = this.lens
-    this.#terrain.viewport = viewport
+    // from. A per-frame presentation input and not the streamer's to decide,
+    // and the *pair* rather than its halves — a lens measured over a viewport
+    // it never landed on is a selection nobody can reproduce.
+    this.#terrain.lensView = view
     this.#terrain.update(
       this.world,
       shot.renderTime,

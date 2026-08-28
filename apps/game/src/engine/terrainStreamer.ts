@@ -32,7 +32,6 @@ import {
   DEFAULT_LENS,
   DEFAULT_MAX_PATCHES,
   DEFAULT_VIEWPORT,
-  type Lens,
   type LensView,
   type PatchPlacement,
   patchPlacement,
@@ -43,7 +42,6 @@ import {
   selectTerrain,
   type TerrainEye,
   terrainPatchKey,
-  type Viewport,
 } from '@inertialref/rendering'
 import { generateHeightfieldTask, type WorkerPool } from '@inertialref/workers'
 
@@ -81,6 +79,19 @@ import { generateHeightfieldTask, type WorkerPool } from '@inertialref/workers'
  */
 
 const log = getLogger('game.terrain')
+
+/**
+ * What the selection is measured against before a display has reported itself.
+ *
+ * The flight lens over the baseline, which is the same pair `LOD_THRESHOLDS`
+ * resolves to — so in the frames before `TerrainPatches` has a drawing buffer,
+ * the tier a body draws at and the ground selected under it are statements
+ * about one camera rather than two.
+ */
+const DEFAULT_LENS_VIEW: LensView = {
+  lens: DEFAULT_LENS,
+  viewport: DEFAULT_VIEWPORT,
+}
 
 /**
  * How far ahead of the camera the request set is taken, in seconds.
@@ -317,15 +328,23 @@ export class TerrainStreamer {
   /**
    * The optics the selection is measured against.
    *
-   * Presentation inputs, written by the engine each frame under the pose's own
+   * A presentation input, written by the engine each frame under the pose's own
    * precedence — a cutscene's lens outranks the flight one, and the terrain a
    * scripted shot selects is the terrain that shot's lens asks for. The
    * viewport is in *display* pixels with any supersampling already divided out;
    * a two-times display genuinely wants twice the patches for the same picture
    * and a two-times supersample does not.
+   *
+   * **One field rather than two, because the pair is what a selection is made
+   * against and half of it is not an answer.** Nullable independently, a live
+   * cinematic lens could be measured over the 1920×1080 baseline on a display
+   * that is neither — a `LensView` that never existed, reported by
+   * `ir.terrain()` as the one the numbers beside it came from. `null` here
+   * resolves to the same flight-lens default `selectLod` falls back to, so the
+   * bodies and the ground under them agree about the optics in every frame,
+   * including the ones before a drawing buffer has been reported.
    */
-  lens: Lens | null = null
-  viewport: Viewport | null = null
+  lensView: LensView | null = null
 
   constructor(pool: WorkerPool | null) {
     this.#pool = pool
@@ -488,9 +507,8 @@ export class TerrainStreamer {
     }
     this.#colour = surface.appearance.colour
 
-    const lens = this.lens ?? DEFAULT_LENS
-    const viewport = this.viewport ?? DEFAULT_VIEWPORT
-    this.#lensView = { lens, viewport }
+    const { lens, viewport } = this.lensView ?? DEFAULT_LENS_VIEW
+    this.#lensView = this.lensView ?? DEFAULT_LENS_VIEW
     const eye = this.#eye(surface, spinPose, bodyPose.position, camera)
     const height = Math.max(1, eye.distance - eye.radius)
     if (
@@ -820,6 +838,9 @@ export class TerrainStreamer {
     this.#starved = 0
     this.#saturated = false
     this.#pose = null
+    // The lens is a selection mirror like the rest: reporting one beside
+    // `patches: 0` claims a selection was made against it, and none was.
+    this.#lensView = null
   }
 
   /** Drop everything. The world was replaced; none of this describes it. */

@@ -1,8 +1,8 @@
 import { Vector3, type PerspectiveCamera } from 'three/webgpu'
 import {
   type Lens,
+  pixelsPerRadian,
   type RenderScene,
-  verticalFov,
 } from '@inertialref/rendering'
 import type { PickCandidate } from './pick.ts'
 
@@ -52,8 +52,12 @@ export function projectScene(
    */
   lens: Lens,
 ): PickCandidate[] {
-  const halfHeight = size.height / 2
-  const tanHalfFov = Math.tan(verticalFov(lens) / 2)
+  // The one identity every screen-space radius here is: an angle times the
+  // pixels a radian covers. Spelled `halfHeight / tan(fov/2)` it is the same
+  // number by a different route, and `SkyLabels` draws its marks from this call
+  // while the pick test resolves clicks against it — two spellings is two
+  // chances for a guard added to one to be missing from the other.
+  const perRadian = pixelsPerRadian(lens, size)
   const candidates: PickCandidate[] = []
 
   const add = (
@@ -77,7 +81,7 @@ export function projectScene(
       kind,
       x: (scratch.x * 0.5 + 0.5) * size.width,
       y: (1 - (scratch.y * 0.5 + 0.5)) * size.height,
-      radius: range > 0 ? (worldRadius / range / tanHalfFov) * halfHeight : 0,
+      radius: range > 0 ? (worldRadius / range) * perRadian : 0,
       offscreen,
     })
   }

@@ -1042,8 +1042,9 @@ describe('cutscene director lifecycle', () => {
      * `Math.max(0, Math.min(NaN, n))` is `NaN`. It reaches `epoch`, which is
      * computed once and never again, so every later frame is `NaN` too: the
      * end test never fires, the scene never terminates, and it renders black
-     * with no way out but a reload. Declined rather than clamped, matching
-     * `Observatory.setFov` — the seek is simply not performed.
+     * with no way out but a reload. Declined rather than clamped, the way
+     * `surfaceStance.ts` declines a height it cannot stand at — the seek is
+     * simply not performed.
      */
     const { harness, at } = playing()
     at(500)

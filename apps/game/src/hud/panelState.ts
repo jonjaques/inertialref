@@ -73,6 +73,21 @@ function read<T>(key: string, fallback: T, accept?: Accept<T>): T {
 }
 
 /**
+ * One stored preference, read once, without a hook.
+ *
+ * For a key that is being *migrated away from*: the value is wanted at the
+ * moment a new key is found absent and never again, and a `usePersistentState`
+ * for it would keep an obsolete key alive in the component's state and write it
+ * back. `null` means absent or unbelievable, which the caller treats the same.
+ */
+export function readPreference<T>(key: string, accept: Accept<T>): T | null {
+  const held = read<T | null>(key, null, (value): value is T | null =>
+    value === null ? true : accept(value),
+  )
+  return held
+}
+
+/**
  * A preference that outlives a reload.
  *
  * The setter is `useState`'s own, so it takes a value *or* an updater — and the
@@ -93,21 +108,6 @@ function read<T>(key: string, fallback: T, accept?: Accept<T>): T {
  * thread, for a value that changes forty times a second. An effect runs after
  * the commit, which is the moment the claim was about.
  */
-/**
- * One stored preference, read once, without a hook.
- *
- * For a key that is being *migrated away from*: the value is wanted at the
- * moment a new key is found absent and never again, and a `usePersistentState`
- * for it would keep an obsolete key alive in the component's state and write it
- * back. `null` means absent or unbelievable, which the caller treats the same.
- */
-export function readPreference<T>(key: string, accept: Accept<T>): T | null {
-  const held = read<T | null>(key, null, (value): value is T | null =>
-    value === null ? true : accept(value),
-  )
-  return held
-}
-
 export function usePersistentState<T>(
   key: string,
   initial: T,
