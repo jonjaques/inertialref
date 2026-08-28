@@ -3,10 +3,11 @@ import type { HarnessStatus } from '@inertialref/devtools'
 import type { DevWorkspace } from '../dock/workspace.ts'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { CinemaMode } from '../cinema/CinemaMode.tsx'
+import { DocsMode } from '../docs/DocsMode.tsx'
 import { FlightMode } from '../flight/FlightMode.tsx'
 import { PlanetariumMode } from '../planetarium/PlanetariumMode.tsx'
 import { HomePage } from './HomePage.tsx'
-import { CINEMA, HOME, PLANETARIUM, resolvedLocation } from './paths.ts'
+import { CINEMA, DOCS, HOME, PLANETARIUM, resolvedLocation } from './paths.ts'
 
 /*
  * The mode route table — one of two, and the split is the whole design:
@@ -87,6 +88,18 @@ export function ModeRoutes(props: ModeRouteProps) {
             dev={props.dev}
           />
         }
+      />
+      {/*
+       * One route for the whole section, and the splat is the point: the
+       * documentation's own addresses mirror the repository's directory tree,
+       * which is four levels deep and grows a page every time somebody writes
+       * one. A route table that enumerated them would be a second copy of
+       * `scripts/docs/wings.mjs` that nothing keeps in step, so the mode reads
+       * the path and the manifest decides whether it names anything.
+       */}
+      <Route
+        path={`${DOCS}/*`}
+        element={<DocsMode engine={props.engine} dev={props.dev} />}
       />
       <Route
         path={CINEMA}

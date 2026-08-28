@@ -109,6 +109,39 @@ function reportAnalytics(mode: string): void {
  * `css.devSourcemap`. Copied `public/` files (`sw.js`) are not compiled
  * and are not in `assets/`.
  */
+/** As much of a rolled-up chunk as the check below needs to identify it. */
+interface OutputEntry {
+  readonly moduleIds?: readonly string[]
+  readonly modules?: Readonly<Record<string, unknown>>
+}
+
+/**
+ * A chunk with none of this repository's source in it.
+ *
+ * Two kinds turn up and neither is a regression in the build's settings.
+ * **A dependency's own split**: Mermaid code-splits its diagram parsers, and the
+ * pre-built ESM it publishes carries no `sourceMappingURL` at all, so nineteen
+ * `architecture-*.js`-shaped files arrive already unmappable. **Vite's own
+ * runtime helper**: `\0vite/preload-helper.js` is a virtual module the bundler
+ * writes for dynamic imports, which the documentation section's lazy Mermaid
+ * import is the first thing here to need.
+ *
+ * Neither is code anyone would set a breakpoint in, neither is fixable from
+ * this repository, and the check exists so that *our* source stays mappable.
+ *
+ * Deliberately narrow. One first-party module in the chunk and it is ours
+ * again, and a chunk whose module list is unavailable counts as ours too — the
+ * failure this guards against is silent, so the check is worth more than the
+ * false positive.
+ */
+function hasNoSourceOfOurs(chunk: OutputEntry | undefined): boolean {
+  const ids = chunk?.moduleIds ?? Object.keys(chunk?.modules ?? {})
+  return (
+    ids.length > 0 &&
+    ids.every((id) => id.includes('node_modules') || id.startsWith('\0'))
+  )
+}
+
 function requireSourceMaps() {
   return {
     name: 'inertialref:require-source-maps',
@@ -119,7 +152,7 @@ function requireSourceMaps() {
      * with "0 modules transformed". Skip a directory that does not exist
      * yet; the client write is the one that has files to check.
      */
-    writeBundle() {
+    writeBundle(_options: unknown, bundle: Record<string, OutputEntry>) {
       const dir = fileURLToPath(new URL('./dist/assets', import.meta.url))
       if (!existsSync(dir)) return
       const names = readdirSync(dir)
@@ -129,11 +162,13 @@ function requireSourceMaps() {
       if (scripts.length === 0) return
       for (const name of scripts) {
         const text = readFileSync(`${dir}/${name}`, 'utf8')
-        if (!text.includes('sourceMappingURL'))
+        if (!text.includes('sourceMappingURL')) {
+          if (hasNoSourceOfOurs(bundle[`assets/${name}`])) continue
           throw new Error(
             `dist/assets/${name} has no sourceMappingURL — the debugger ` +
               'cannot map it. build.sourcemap must be true, not hidden.',
           )
+        }
         if (!names.includes(`${name}.map`))
           throw new Error(
             `dist/assets/${name} points at a source map that was not emitted`,

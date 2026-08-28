@@ -1,6 +1,11 @@
 import { Link, useLocation } from 'react-router'
 import { motion } from 'motion/react'
-import { PanelLeft, PanelRight, SlidersHorizontal } from 'lucide-react'
+import {
+  BookText,
+  PanelLeft,
+  PanelRight,
+  SlidersHorizontal,
+} from 'lucide-react'
 import { Separator } from '@/components/ui/separator'
 import {
   Tooltip,
@@ -9,7 +14,7 @@ import {
 } from '@/components/ui/tooltip'
 import { FOCUS_RING } from '../hud/focus.ts'
 import { Logomark } from '../icons/Logomark.tsx'
-import { HOME, overlayState, SETTINGS } from '../pages/paths.ts'
+import { DOCS, HOME, overlayState, SETTINGS } from '../pages/paths.ts'
 import { MenuToggle } from './MenuToggle.tsx'
 import type { PanelGroup } from './panels.ts'
 import { isOpen, type Workspace } from './useWorkspace.ts'
@@ -144,6 +149,30 @@ export function IrMenu({
       })}
 
       <Separator orientation="vertical" className="mx-0.5 !h-4 bg-slate-800" />
+
+      {/*
+       * The documentation, from wherever you are.
+       *
+       * A plain link and deliberately not an overlay's: the reading room is a
+       * *mode*, so going there leaves this one exactly as clicking the mark
+       * does. It is beside the settings rather than beside the mark because the
+       * bar answers three questions left to right and this is the third — what
+       * else is there — which is also why it does not appear on the front
+       * door's two doors. The menu offers what you can fly; this offers what
+       * you can read.
+       */}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Link
+            to={DOCS}
+            aria-label="Documentation"
+            className={`flex size-7 shrink-0 items-center justify-center rounded text-slate-400 transition-colors hover:bg-slate-800/60 hover:text-sky-200 ${FOCUS_RING}`}
+          >
+            <BookText aria-hidden className="size-4" />
+          </Link>
+        </TooltipTrigger>
+        <TooltipContent side="top">Documentation</TooltipContent>
+      </Tooltip>
 
       {/*
        * Settings carries the current location as its `state`, which is what

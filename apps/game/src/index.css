@@ -642,3 +642,1039 @@ a {
   src: url('./assets/fonts/TNG_Credits.woff2') format('woff2');
   font-display: block;
 }
+
+/* ------------------------------------------------------------------------- */
+/* The reading room                                                           */
+/* ------------------------------------------------------------------------- */
+
+/*
+ * `apps/game/src/docs/` draws a documentation section over the same canvas as
+ * every other mode, and it is the one surface here made of markup this
+ * repository did not write by hand: `scripts/docs/build.mjs` renders seventy
+ * markdown files and eight hundred exports into HTML at build time, so there is
+ * no component to hang a className on. That is why this block exists and why it
+ * is long — a `<p>` inside `.doc-prose` has to be typeset by a selector or not
+ * at all.
+ *
+ * **The type is bigger than the interface's, deliberately.** The nine steps
+ * above are an instrument panel's: `type-body` is 13 px because it is read in
+ * glances, beside a starfield, in a 19 rem column. This is a hundred and twenty
+ * thousand words somebody reads in one sitting. A panel is scanned and a
+ * document is read, and setting a document at a panel's size is how a
+ * documentation site ends up technically correct and physically tiring.
+ *
+ * So the prose steps below are the same three faces at reading sizes, and
+ * nothing else about the system moves: the ramp, the one accent, the two radii
+ * and the hairlines are what they are everywhere else.
+ */
+
+/* --- Layout ------------------------------------------------------------- */
+
+/*
+ * The page's own gutter, shared by the masthead, the bar and the grid so that a
+ * title, a breadcrumb and a paragraph all begin on the same vertical line. Two
+ * selectors rather than a second class at three call sites, because the value
+ * being identical is the whole point and a class that could be forgotten is a
+ * value that will eventually differ.
+ */
+.doc-measure,
+.doc-grid {
+  /* Named, because the drawer has to reach back out through it — a panel inset
+     from one edge by a gutter it cannot see the width of is a panel with a
+     stripe of the page down its side. */
+  --doc-gutter: 1.25rem;
+  margin-inline: auto;
+  width: 100%;
+  max-width: 88rem;
+  padding-inline: var(--doc-gutter);
+}
+
+@media (min-width: 640px) {
+  .doc-measure,
+  .doc-grid {
+    --doc-gutter: 2.5rem;
+  }
+}
+
+/*
+ * The reading surface.
+ *
+ * `slate-950/92` over a blur, and both halves are measured rather than chosen.
+ * `.hud-layer` clamps the canvas behind this to standard range, so the
+ * brightest thing that can ever be behind a paragraph is diffuse white — which
+ * composites through 8% to about `#202428`, where `slate-300` body text is
+ * 9.9:1. The blur is what stops the *motion* behind it from being legible as
+ * motion, which is the half that matters for reading rather than for contrast.
+ *
+ * Not opaque, because the scene is the reason this section is inside the
+ * application rather than beside it, and a reader who scrolls past a star
+ * should be able to tell.
+ */
+.doc-plate {
+  position: relative;
+  background: rgb(2 6 23 / 0.92);
+  backdrop-filter: blur(14px);
+  /* Reaches the bottom of the reading area even when the document is two
+     paragraphs long, so a short page is a page rather than a card. The horizon
+     and the bar are the six rem it does not have. */
+  min-height: calc(var(--doc-view, 44rem) - 6rem);
+}
+
+.doc-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 1024px) {
+  .doc-grid {
+    grid-template-columns: 14.5rem minmax(0, 1fr);
+    column-gap: 3rem;
+  }
+}
+
+/* The third column arrives later than the second, because it is the one that
+   can be done without: the rail is how you get anywhere and the contents are
+   how you get around one page. 1360 is where 14.5 + 44 + 13 rem plus the
+   gutters stops squeezing the measure. */
+@media (min-width: 1360px) {
+  .doc-grid {
+    grid-template-columns: 14.5rem minmax(0, 1fr) 13rem;
+  }
+}
+
+.doc-article {
+  min-width: 0;
+  /* The bottom is generous because the IR menu is drawn over it by a sibling
+     and cannot push anything: without this the last line of every document is
+     behind the bar that leads out of the section. */
+  padding-block: 2.25rem 6rem;
+}
+
+/*
+ * The masthead's ground.
+ *
+ * A radial gradient anchored under the type rather than a column of black down
+ * the left edge, and the difference is the top of the band: a left-to-right
+ * linear scrim is at full strength all the way up, so the corner of the frame
+ * where the limb and the flare actually are was covered by the darkest part of
+ * a gradient that had nothing to darken there. This reaches zero in every
+ * direction, so the scrim exists exactly where the words are and the sky is
+ * uninterrupted everywhere else.
+ *
+ * Anchored at `12% 92%` — the bottom left, where the title, the lead and the
+ * figures sit, because the masthead is `items-end`. The stops are measured
+ * against the worst case rather than picked: `.hud-layer` clamps the canvas to
+ * standard range, so the brightest thing that can be behind the title is
+ * diffuse white, and 0.94 of `slate-950` over it composites to about `#191c24`
+ * — 12.6:1 for the `slate-50` title and 9.4:1 for the `slate-300` lead, both
+ * well past their bars. By 62% of the ellipse the ground is a third and there
+ * is no text left to carry; by 84% there is nothing at all.
+ *
+ * The ellipse is wider than the element (`130%`) so its falloff happens off the
+ * right edge instead of inside the frame, where a visible circular edge over a
+ * starfield reads as a lens artifact the renderer did not draw.
+ */
+.doc-masthead-scrim {
+  background: radial-gradient(
+    130% 150% at 12% 92%,
+    rgb(2 6 23 / 0.94) 0%,
+    rgb(2 6 23 / 0.88) 30%,
+    rgb(2 6 23 / 0.55) 52%,
+    rgb(2 6 23 / 0.22) 68%,
+    rgb(2 6 23 / 0) 84%
+  );
+}
+
+/* --- The rail, and the contents ------------------------------------------ */
+
+/*
+ * Two layouts from one element. Above 1024 it is a sticky column; below, it is
+ * a drawer the bar opens, in flow at the top of the plate so nothing here is
+ * positioned against the viewport (AGENTS.md). `--doc-view` is the reading
+ * area's measured height, published by `DocsMode` — a sticky column with no
+ * ceiling pins at its top and runs off the bottom of the screen with no way to
+ * reach the rest of it.
+ */
+.doc-rail {
+  display: none;
+}
+
+.doc-rail-open {
+  display: block;
+  position: sticky;
+  top: 3rem;
+  z-index: 20;
+  max-height: calc(var(--doc-view, 44rem) - 8rem);
+  overflow-y: auto;
+  /* Out through the plate's gutter and back in as padding, so the drawer's
+     ground reaches both edges while its entries stay on the page's own margin. */
+  margin-inline: calc(-1 * var(--doc-gutter, 1.25rem));
+  padding: 0.75rem var(--doc-gutter, 1.25rem) 1rem;
+  border-bottom: 1px solid var(--color-slate-800);
+  /*
+   * Opaque, and the one surface in this interface that is.
+   *
+   * Everything else here is translucent because it sits over the *scene*, where
+   * a panel that hides the sky defeats the reason the sky is there. This sits
+   * over a paragraph. At 97% the article behind it was still legible as text —
+   * 3% of `slate-300` is a ghost that measures as nothing and reads as a second
+   * column of words, because prose is high-frequency in a way a starfield is
+   * not. The Legibility-Over-Glass Rule says which one wins.
+   */
+  background: var(--color-slate-950);
+}
+
+@media (min-width: 1024px) {
+  .doc-rail,
+  .doc-rail-open {
+    display: block;
+    position: sticky;
+    top: 3rem;
+    z-index: auto;
+    align-self: start;
+    max-height: calc(var(--doc-view, 44rem) - 4.5rem);
+    overflow-y: auto;
+    margin-inline: 0;
+    padding: 2.25rem 0.5rem 2rem 0;
+    border-bottom: 0;
+    background: none;
+  }
+}
+
+.doc-contents {
+  display: none;
+}
+
+@media (min-width: 1360px) {
+  .doc-contents {
+    display: block;
+  }
+
+  .doc-contents-inner {
+    position: sticky;
+    top: 3rem;
+    max-height: calc(var(--doc-view, 44rem) - 4.5rem);
+    overflow-y: auto;
+    padding: 2.25rem 0 2rem;
+  }
+}
+
+/* `<summary>`'s marker is a platform triangle in a palette this system does not
+   own; the chevron beside it is the icon set every other disclosure here uses. */
+.doc-rail-group > summary {
+  list-style: none;
+}
+
+.doc-rail-group > summary::-webkit-details-marker {
+  display: none;
+}
+
+.doc-rail-group[open] > summary .doc-rail-chevron {
+  transform: rotate(90deg);
+}
+
+/*
+ * The clear button inside the search field.
+ *
+ * WebKit draws one for `type="search"` and it is a light-grey glyph in nobody's
+ * palette, sitting inside a control this system otherwise draws entirely — the
+ * same class of thing as the scrollbar and the caret in `index.css` above, and
+ * the cheapest tell that a page was assembled rather than built. It cannot be
+ * recoloured, so it is replaced: the native appearance is dropped and the box
+ * is filled with `currentColor` through a mask of lucide's `x`, at the same
+ * 24-unit grid and 1.5 stroke as every other icon in the interface.
+ */
+.doc-bar input[type='search']::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 0.75rem;
+  width: 0.75rem;
+  cursor: pointer;
+  background-color: currentColor;
+  opacity: 0.55;
+  transition: opacity 150ms;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.5' stroke-linecap='round'%3E%3Cpath d='M18 6 6 18M6 6l12 12'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+}
+
+.doc-bar input[type='search']::-webkit-search-cancel-button:hover {
+  opacity: 1;
+}
+
+/* --- States -------------------------------------------------------------- */
+
+/* The shape of a paragraph, arriving. A spinner would be a second thing to
+   look at in a place where the answer is about to be text. */
+.doc-skeleton {
+  height: 0.9rem;
+  margin-bottom: 0.85rem;
+  border-radius: 0.25rem;
+  background: var(--color-slate-800);
+  opacity: 0.55;
+  animation: doc-breathe 1.8s ease-in-out infinite;
+}
+
+@keyframes doc-breathe {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .doc-skeleton {
+    animation: none;
+  }
+}
+
+.doc-notice {
+  max-width: 44rem;
+  border: 1px solid var(--color-slate-700);
+  border-radius: 0.5rem;
+  background: rgb(15 23 42 / 0.6);
+  padding: 1rem 1.25rem;
+}
+
+/* --- Prose --------------------------------------------------------------- */
+
+/*
+ * The document.
+ *
+ * One measure, and everything that is prose obeys it: 68 characters, which is
+ * inside the 65–75 a line of text stays trackable at. What does *not* obey it
+ * is anything that is not prose — a listing, a diagram, a nine-column table of
+ * measurements — because those are read by scanning rather than by line, and
+ * squeezing a table into a paragraph's width is how a table becomes a scroller
+ * nobody scrolls.
+ */
+.doc-prose {
+  font-family: var(--font-sans);
+  font-size: 0.9375rem; /* 15px */
+  font-weight: 400;
+  line-height: 1.72;
+  color: var(--color-slate-300);
+}
+
+.doc-prose > * {
+  max-width: 68ch;
+}
+
+.doc-prose > figure,
+.doc-prose > .doc-table,
+.doc-prose > .api-rows,
+.doc-prose > .api-signature,
+.doc-prose > section {
+  max-width: none;
+}
+
+.doc-prose > :first-child {
+  margin-top: 0;
+}
+
+.doc-prose p {
+  margin: 0 0 1.1em;
+  text-wrap: pretty;
+}
+
+/*
+ * Headings: the condensed grotesque, title case, and more space above than
+ * below — which is the rule that makes a long document navigable by scrolling
+ * past it rather than by reading it. A heading closer to the paragraph it
+ * introduces than to the one it ends belongs to the right thing.
+ */
+.doc-prose h2,
+.doc-prose h3,
+.doc-prose h4,
+.doc-prose h5,
+.doc-prose h6 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  color: var(--color-slate-100);
+  text-wrap: balance;
+  /* Under the sticky bar rather than beneath it, for both a fragment link and
+     the browser's own anchor scrolling. */
+  scroll-margin-top: 4.5rem;
+}
+
+.doc-prose h2 {
+  font-size: 1.5rem; /* 24px */
+  font-stretch: 82%;
+  line-height: 1.25;
+  letter-spacing: 0.002em;
+  margin: 2.9rem 0 0.85rem;
+}
+
+.doc-prose h3 {
+  font-size: 1.1875rem; /* 19px */
+  font-stretch: 84%;
+  line-height: 1.3;
+  margin: 2.1rem 0 0.6rem;
+}
+
+.doc-prose h4 {
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--color-slate-200);
+  margin: 1.6rem 0 0.4rem;
+}
+
+/* A heading is a link to itself. The whole line is the target rather than a
+   glyph beside it: the words are what a reader aims at, and a marker that
+   appears on hover is invisible to a touch screen. */
+.doc-prose .doc-anchor {
+  color: inherit;
+  text-decoration: none;
+  transition: color 150ms;
+}
+
+.doc-prose .doc-anchor:hover {
+  color: var(--color-sky-200);
+}
+
+/*
+ * Links.
+ *
+ * Instrument Blue 300 — `DESIGN.md` calls it the system's speaking voice, and
+ * in a document the thing that answers you is the cross-reference. The
+ * underline is the accent at low alpha so it reads as a rule rather than as a
+ * second stroke of ink through the descenders.
+ *
+ * **A dashed underline means the link leaves the site.** That is the same
+ * device the interface already uses for provenance — a dash pattern carrying
+ * information no colour is allowed to carry alone — and it is why there is no
+ * arrow glyph after these. An icon here would be a Unicode character standing
+ * in for the icon set, in the middle of a paragraph, eight hundred times.
+ */
+.doc-prose a,
+.api-source,
+.doc-prose .doc-link {
+  color: var(--color-sky-300);
+  text-decoration: underline;
+  text-decoration-color: rgb(14 165 233 / 0.35);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+  transition:
+    color 150ms,
+    text-decoration-color 150ms;
+}
+
+.doc-prose a:hover,
+.api-source:hover {
+  color: var(--color-sky-200);
+  text-decoration-color: rgb(56 189 248 / 0.8);
+}
+
+.doc-prose .doc-external {
+  text-decoration-style: dashed;
+}
+
+.doc-prose strong {
+  font-weight: 600;
+  color: var(--color-slate-100);
+}
+
+.doc-prose em {
+  font-style: italic;
+}
+
+/* --- Lists --------------------------------------------------------------- */
+
+.doc-prose ul,
+.doc-prose ol {
+  margin: 0 0 1.1em;
+  padding-left: 1.4em;
+}
+
+.doc-prose ul {
+  list-style: disc;
+}
+
+.doc-prose ol {
+  list-style: decimal;
+}
+
+.doc-prose li {
+  margin-bottom: 0.4em;
+}
+
+.doc-prose li::marker {
+  color: var(--color-slate-400);
+}
+
+.doc-prose li > ul,
+.doc-prose li > ol {
+  margin: 0.4em 0 0;
+}
+
+.doc-prose li > p {
+  margin-bottom: 0.5em;
+}
+
+/* --- Quotes, rules ------------------------------------------------------- */
+
+/*
+ * A callout in this corpus is a blockquote — every concept page opens with
+ * "The question / The answer" in one — so it is typeset as the summary it is
+ * rather than as a quotation. One hairline in the accent, because a heavier bar
+ * is a colour field down the side of a paragraph and this system draws
+ * structure with lines.
+ */
+.doc-prose blockquote {
+  margin: 1.5rem 0;
+  border-left: 1px solid rgb(14 165 233 / 0.45);
+  border-radius: 0 0.25rem 0.25rem 0;
+  background: rgb(15 23 42 / 0.55);
+  padding: 0.85rem 1.1rem;
+  color: var(--color-slate-300);
+}
+
+.doc-prose blockquote > :last-child {
+  margin-bottom: 0;
+}
+
+.doc-prose hr {
+  margin: 2.5rem 0;
+  border: 0;
+  border-top: 1px solid var(--color-slate-800);
+}
+
+/* --- Tables -------------------------------------------------------------- */
+
+.doc-table {
+  margin: 1.6rem 0;
+  overflow-x: auto;
+  border: 1px solid rgb(30 41 59 / 0.8);
+  border-radius: 0.25rem;
+}
+
+.doc-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  line-height: 1.55;
+}
+
+.doc-table th {
+  font-family: var(--font-display);
+  font-size: 0.6875rem;
+  font-stretch: 78%;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-align: left;
+  color: var(--color-slate-400);
+  white-space: nowrap;
+  padding: 0.55rem 0.85rem;
+  border-bottom: 1px solid var(--color-slate-800);
+}
+
+.doc-table td {
+  padding: 0.5rem 0.85rem;
+  border-top: 1px solid rgb(30 41 59 / 0.6);
+  vertical-align: baseline;
+}
+
+/* A table of measurements is the reason this corpus has tables at all, and a
+   figure that changes column to column has to stay in its column. */
+.doc-table td,
+.doc-table th {
+  font-variant-numeric: tabular-nums;
+}
+
+.doc-table tbody tr:hover td {
+  background: rgb(15 23 42 / 0.5);
+}
+
+/* --- Code ---------------------------------------------------------------- */
+
+/*
+ * Inline code is the Instrument register at prose scale: Martian Mono, run at
+ * the same 87.5% width it is everywhere else, on a recessed wash with a
+ * hairline. It is `slate-200` rather than the accent, because a paragraph here
+ * can carry six identifiers and the accent is already spoken for by the link
+ * in the same sentence.
+ *
+ * `0.86em` rather than a fixed size, so a `<code>` inside an `<h3>` is sized
+ * against the heading. Martian Mono runs large for its em.
+ */
+.doc-prose code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  font-stretch: 87.5%;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-slate-200);
+  background: rgb(30 41 59 / 0.6);
+  border: 1px solid rgb(30 41 59 / 0.9);
+  border-radius: 0.25rem;
+  padding: 0.08em 0.34em;
+  overflow-wrap: anywhere;
+}
+
+/*
+ * A listing.
+ *
+ * Recessed rather than raised — a darker ground inside the plate — because
+ * `DESIGN.md` has two elevations and neither of them means "a block of code".
+ * What separates it is the hairline, which is what separates everything here.
+ */
+.doc-code {
+  position: relative;
+  margin: 1.5rem 0;
+  border: 1px solid rgb(30 41 59 / 0.9);
+  border-radius: 0.25rem;
+  background: rgb(15 23 42 / 0.55);
+}
+
+.doc-code pre {
+  margin: 0;
+  padding: 0.85rem 1rem;
+  overflow-x: auto;
+  background: none !important;
+  font-family: var(--font-mono);
+  font-size: 0.75rem; /* 12px */
+  font-stretch: 87.5%;
+  line-height: 1.65;
+  tab-size: 2;
+}
+
+.doc-code pre:focus-visible {
+  outline: 1px solid var(--color-sky-400);
+  outline-offset: -1px;
+}
+
+/* Inside a listing the code has its own ground, its own border and its own
+   size; the inline rules above would draw a chip around every token. */
+.doc-code code {
+  font-size: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: inherit;
+}
+
+/*
+ * The language, and the copy control, in the same corner.
+ *
+ * They swap rather than sit side by side: the label is what the block says
+ * about itself at rest, and the button is what you want the instant you reach
+ * for it. One target, one label, no row of chrome above every listing.
+ */
+.doc-code::after {
+  content: attr(data-lang);
+  position: absolute;
+  top: 0.45rem;
+  right: 0.6rem;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  font-stretch: 87.5%;
+  letter-spacing: -0.01em;
+  color: var(--color-slate-400);
+  pointer-events: none;
+  transition: opacity 150ms;
+}
+
+.doc-copy {
+  position: absolute;
+  top: 0.3rem;
+  right: 0.3rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 0.25rem;
+  color: var(--color-slate-400);
+  opacity: 0;
+  transition:
+    opacity 150ms,
+    color 150ms,
+    background-color 150ms;
+}
+
+.doc-copy svg {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+.doc-code:hover::after,
+.doc-code:focus-within::after {
+  opacity: 0;
+}
+
+.doc-code:hover .doc-copy,
+.doc-copy:focus-visible {
+  opacity: 1;
+}
+
+.doc-copy:hover {
+  background: rgb(30 41 59 / 0.8);
+  color: var(--color-sky-200);
+}
+
+.doc-copy:focus-visible {
+  outline: 1px solid var(--color-sky-400);
+}
+
+/* Nominal Green, for a beat. The one status colour that means "it is there",
+   on the control that was pressed, instead of a notice somewhere else. */
+.doc-copy[data-copied] {
+  opacity: 1;
+  color: var(--color-emerald-400);
+}
+
+/* Nothing hovers on a touch screen, so the control that appears on hover is a
+   control that does not exist there. The label is what gives way instead. */
+@media (hover: none) {
+  .doc-copy {
+    opacity: 1;
+  }
+
+  .doc-code::after {
+    opacity: 0;
+  }
+}
+
+/* --- Diagrams ------------------------------------------------------------ */
+
+.doc-diagram {
+  margin: 1.75rem 0;
+  overflow-x: auto;
+  text-align: center;
+}
+
+/* The source, which is what is on screen until Mermaid has drawn it and
+   forever if it cannot. Typeset as a listing, because that is what it is. */
+.doc-mermaid {
+  margin: 0;
+  border: 1px solid rgb(30 41 59 / 0.9);
+  border-radius: 0.25rem;
+  background: rgb(15 23 42 / 0.55);
+  padding: 0.85rem 1rem;
+  overflow-x: auto;
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-stretch: 87.5%;
+  line-height: 1.6;
+  color: var(--color-slate-400);
+}
+
+.doc-mermaid-failed {
+  border-color: rgb(251 113 133 / 0.4);
+}
+
+/* Natural size on a phone, where shrinking a diagram to the column makes its
+   labels unreadable and the figure scrolls instead; capped to the column above
+   640 px, where one fits. `docs/mermaid.ts` sets `useMaxWidth: false` so the
+   SVG arrives with a size of its own for this to cap. */
+.doc-diagram-svg svg {
+  max-width: none;
+  height: auto;
+}
+
+@media (min-width: 640px) {
+  .doc-diagram-svg svg {
+    max-width: 100%;
+  }
+}
+
+/* Mermaid writes its label text into the SVG with its own font stack and its
+   own size; both are the interface's here, so a diagram's labels and the
+   paragraph above them are the same typeface at a related size. */
+.doc-diagram-svg .nodeLabel,
+.doc-diagram-svg .edgeLabel,
+.doc-diagram-svg .cluster-label {
+  font-family: var(--font-sans) !important;
+}
+
+/* --- The reference ------------------------------------------------------- */
+
+/*
+ * `scripts/docs/api.mjs` renders TypeDoc's reflection tree into the same
+ * `.doc-prose` container a document goes into, so every comment on every export
+ * is typeset by the rules above and only the parts that have no equivalent in
+ * prose are named here: a signature, a parameter list, a row in an index.
+ *
+ * The type printer's spans are the two hues the listing theme uses, for the
+ * same reasons — the accent for what the language owns, Nominal Green for a
+ * literal value, the graphite ramp for what you wrote.
+ */
+
+.api-signature {
+  margin: 0 0 1rem;
+  border: 1px solid rgb(30 41 59 / 0.9);
+  border-radius: 0.25rem;
+  background: rgb(15 23 42 / 0.55);
+  padding: 0.7rem 0.9rem;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 0.78125rem; /* 12.5px */
+  font-stretch: 87.5%;
+  line-height: 1.7;
+  letter-spacing: -0.015em;
+  white-space: pre-wrap;
+  color: var(--color-slate-300);
+}
+
+.t-kw {
+  color: var(--color-sky-300);
+}
+
+.t-name {
+  color: var(--color-slate-100);
+  font-weight: 500;
+}
+
+.t-param {
+  color: var(--color-slate-300);
+}
+
+.t-punct {
+  color: var(--color-slate-400);
+}
+
+.t-ref {
+  color: var(--color-sky-200);
+}
+
+.t-lit {
+  color: var(--color-emerald-300);
+}
+
+/* A type you can follow. The underline is absent until the pointer is on it:
+   a signature with nine linked types in it, all underlined, is a signature
+   nobody can read the shape of. */
+a.t-link {
+  text-decoration: none;
+  transition: text-decoration-color 150ms;
+}
+
+a.t-link:hover {
+  text-decoration: underline;
+  text-decoration-color: rgb(56 189 248 / 0.7);
+  text-underline-offset: 0.2em;
+}
+
+/*
+ * A list of exports, or of packages.
+ *
+ * Rows on hairlines rather than a grid of cards. Two hundred and twenty-eight
+ * cards is a wall; two hundred and twenty-eight rows is a list, and a list is
+ * what somebody scanning for a name needs. The name column is fixed so the
+ * names form a column you can run an eye down, which is the only thing anybody
+ * does on this page.
+ */
+.api-rows {
+  margin: 0.5rem 0 1.5rem;
+  border-top: 1px solid rgb(30 41 59 / 0.8);
+}
+
+.api-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.1rem 1rem;
+  border-bottom: 1px solid rgb(30 41 59 / 0.8);
+  padding: 0.55rem 0.5rem;
+  text-decoration: none;
+  transition: background-color 150ms;
+}
+
+@media (min-width: 640px) {
+  .api-row {
+    grid-template-columns: 13rem minmax(0, 1fr) auto;
+    align-items: baseline;
+  }
+
+  /* A package page's rows are two columns, because the group heading above them
+     already says what kind they are. `auto` on an absent third column collapses
+     to nothing, but naming it here keeps the name column at the same measure on
+     both pages, so the two lists line up. */
+  .api-row:not(:has(.api-row-kind)):not(:has(.api-row-count)) {
+    grid-template-columns: 13rem minmax(0, 1fr);
+  }
+}
+
+/* The whole row is the link, so the name inside it must not also be underlined
+   — `.doc-prose a` sets one, and a list of two hundred and twenty-eight
+   underlined names is a page with a line through it. */
+.doc-prose a.api-row {
+  text-decoration: none;
+}
+
+.api-row:hover {
+  background: rgb(15 23 42 / 0.6);
+}
+
+.api-row-name {
+  font-family: var(--font-mono);
+  font-size: 0.78125rem;
+  font-stretch: 87.5%;
+  letter-spacing: -0.015em;
+  color: var(--color-sky-300);
+  overflow-wrap: anywhere;
+}
+
+.api-row:hover .api-row-name {
+  color: var(--color-sky-200);
+}
+
+.api-row-body {
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--color-slate-400);
+}
+
+.api-row-body p {
+  margin: 0;
+}
+
+.api-row-kind,
+.api-row-count {
+  font-family: var(--font-display);
+  font-size: 0.6875rem;
+  font-stretch: 78%;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-align: right;
+  color: var(--color-slate-400);
+  white-space: nowrap;
+}
+
+/* --- One member ---------------------------------------------------------- */
+
+.api-member {
+  margin-top: 1.75rem;
+  border-top: 1px solid rgb(30 41 59 / 0.8);
+  padding-top: 1.25rem;
+  scroll-margin-top: 4.5rem;
+}
+
+.api-member > h3 {
+  font-family: var(--font-mono) !important;
+  font-size: 0.9375rem !important;
+  font-stretch: 87.5%;
+  letter-spacing: -0.015em;
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-top: 0 !important;
+}
+
+.api-flag {
+  font-family: var(--font-display);
+  font-size: 0.6875rem;
+  font-stretch: 78%;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-slate-400);
+  border: 1px solid var(--color-slate-700);
+  border-radius: 0.25rem;
+  /* Short by exactly the track the label carries: letter-spacing is added after
+     the last glyph, so symmetric padding reads as badly kerned. */
+  padding: 0.05rem calc(0.375rem - 0.1em) 0.05rem 0.375rem;
+}
+
+.api-source {
+  display: inline-block;
+  margin-bottom: 1.25rem;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  font-stretch: 87.5%;
+  color: var(--color-slate-400) !important;
+  text-decoration-color: rgb(51 65 85 / 0.8) !important;
+}
+
+.api-overload + .api-overload {
+  margin-top: 1.5rem;
+}
+
+/* --- Parameters, and the tagged blocks ----------------------------------- */
+
+.api-params {
+  margin: 0.25rem 0 1.25rem;
+  border-left: 1px solid var(--color-slate-800);
+  padding-left: 0.9rem;
+}
+
+.api-param {
+  margin-bottom: 0.55rem;
+}
+
+.api-param dt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-stretch: 87.5%;
+}
+
+.api-param dd {
+  margin: 0.15rem 0 0;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--color-slate-400);
+}
+
+.api-param dd p:last-child {
+  margin-bottom: 0;
+}
+
+.api-type {
+  color: var(--color-slate-400);
+}
+
+.api-undocumented {
+  font-style: italic;
+  color: var(--color-slate-400);
+  opacity: 0.75;
+}
+
+.api-returns {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.6rem;
+  margin-bottom: 1.25rem;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-stretch: 87.5%;
+}
+
+/*
+ * `@remarks`, `@defaultValue`, `@throws`, `@see` — a labelled aside rather than
+ * a heading, because these belong to the member above them and a heading would
+ * put them in the table of contents as though they were sections.
+ */
+.api-note,
+.api-example {
+  margin: 0.75rem 0 1rem;
+  border-left: 1px solid var(--color-slate-800);
+  padding-left: 0.9rem;
+}
+
+.api-term {
+  display: block;
+  margin-bottom: 0.25rem;
+  font-family: var(--font-display);
+  font-size: 0.6875rem;
+  font-stretch: 78%;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-sky-400);
+  opacity: 0.85;
+}
+
+.api-note > :last-child,
+.api-example > :last-child {
+  margin-bottom: 0;
+}

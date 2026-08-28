@@ -1,6 +1,7 @@
 import {
   ABOUT,
   CINEMA,
+  DOCS,
   HOME,
   PLANETARIUM,
   PLAY_MULTIPLAYER,
@@ -108,6 +109,13 @@ export const PAGES: readonly PageMeta[] = [
     title: 'Cinema',
     description:
       'Scripted scenes staged over the live simulation and played frame by frame. Every shot is the real world, seen from a camera on a script.',
+    index: true,
+  },
+  {
+    path: DOCS,
+    title: 'Documentation',
+    description:
+      'How InertialRef works and why: ten mechanisms, fifteen decision records, the design bible, and a generated reference for every export of the engine.',
     index: true,
   },
   {

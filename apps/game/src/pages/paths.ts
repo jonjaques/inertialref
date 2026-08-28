@@ -43,6 +43,20 @@ export const CINEMA = '/cinema'
 export const cinemaScene = (id: string): string =>
   `${CINEMA}/${encodeURIComponent(id)}`
 
+/**
+ * The documentation: the concepts, the design bible, and the generated
+ * reference for every export of the engine.
+ *
+ * A mode rather than a dialog, because it is a place you go and stay rather
+ * than a panel you open over what you were doing — and because the masthead at
+ * the top of every page is the live simulation, which a dialog over another
+ * mode could not have without two of them fighting over the camera.
+ */
+export const DOCS = '/docs'
+
+/** One page. The route mirrors the file's path in the repository. */
+export const docsPage = (slug: string): string => `${DOCS}/${slug}`
+
 /** Settings, over whatever is running. */
 export const SETTINGS = '/settings'
 export const settingsSection = (section: string): string =>
@@ -79,12 +93,19 @@ export const AUTH_CALLBACK = '/auth/callback'
  * | `flight`      | chase, from the ship | yes     | the cockpit strip         |
  * | `planetarium` | the observatory   | no         | dockable panels           |
  * | `cinema`      | the cutscene director | script | transport                 |
+ * | `docs`        | the wing's framing | no        | the reading room          |
  *
  * A mode is derived from the path rather than held in state, so a reload, a
  * back button and a pasted link all land in the same place. The derivation is
  * a pure function precisely so that claim is testable without a browser.
  */
-export const MODES = ['menu', 'flight', 'planetarium', 'cinema'] as const
+export const MODES = [
+  'menu',
+  'flight',
+  'planetarium',
+  'cinema',
+  'docs',
+] as const
 export type AppMode = (typeof MODES)[number]
 
 /**
@@ -98,6 +119,7 @@ export type AppMode = (typeof MODES)[number]
  * session behind it yet.
  */
 export function modeForPath(pathname: string): AppMode {
+  if (pathname === DOCS || pathname.startsWith(`${DOCS}/`)) return 'docs'
   if (pathname === PLANETARIUM || pathname.startsWith(`${PLANETARIUM}/`))
     return 'planetarium'
   if (pathname === CINEMA || pathname.startsWith(`${CINEMA}/`)) return 'cinema'
