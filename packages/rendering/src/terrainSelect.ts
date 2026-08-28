@@ -1,6 +1,13 @@
 import type { Meters, Radians } from '@inertialref/shared'
 import { Vec, type Vec3 } from '@inertialref/spatial'
 import {
+  BASELINE_VIEWPORT,
+  type Lens,
+  LENS_PRESETS,
+  pixelsPerRadian,
+  type Viewport,
+} from './lens.ts'
+import {
   type BodyFixedDirection,
   HEIGHTFIELD_RESOLUTION,
   type RegionAddress,
@@ -55,43 +62,40 @@ import {
  * attached to a precomputed point rather than to a cone.
  */
 
-/** How much of the screen a radian of view occupies, in pixels. */
-export interface TerrainViewport {
-  /** Vertical field of view, radians. */
-  readonly fovY: Radians
-  /** Drawable height in pixels — physical, so a 2× display asks for more. */
-  readonly height: number
-}
-
 /**
- * What the selection assumes when nobody says.
+ * The optics the predicate is a statement about.
  *
- * A 60° vertical field over 1080 physical pixels. The streamer passes the real
- * camera; this is what the headless probe and the tests measure against, and
+ * It was a 60° field over 1080 pixels that arrived from nowhere: neither the
+ * flight lens nor the cinematic one nor anything the field-of-view slider passes
+ * through except in transit. A node refines while `distance < spacing · scale`
+ * and `scale` goes as `pixelsPerRadian`, so doubling it is one more level of
+ * refinement everywhere on the visible disk and the square of that in patches —
+ * 16× of scale and 263× the patches between the two ends of controls a player
+ * reaches with two sliders. The lens is what the picture is actually taken
+ * with, so it is what the predicate reads.
+ *
+ * `LENS_PRESETS.flight` over `BASELINE_VIEWPORT` — 65° over 1080 display
+ * pixels, 848 px/rad against the old assumption's 935. The streamer passes the
+ * live lens; this is what the headless probe and the tests measure against, and
  * naming it here is what keeps those numbers comparable between runs.
  */
-export const DEFAULT_VIEWPORT: TerrainViewport = {
-  fovY: Math.PI / 3,
-  height: 1080,
-}
-
-/** Pixels subtended by one radian at the center of the view. */
-export const pixelsPerRadian = (viewport: TerrainViewport): number =>
-  viewport.height / (2 * Math.tan(viewport.fovY / 2))
+export const DEFAULT_LENS: Lens = LENS_PRESETS.flight
+export const DEFAULT_VIEWPORT: Viewport = BASELINE_VIEWPORT
 
 /**
  * How many pixels one grid cell of a patch may cover before it is refined.
  *
  * Less of a dial than it looks, once the tree is restricted. A balanced
  * quadtree grading from the level underfoot out to the level at the horizon has
- * a floor of its own — measured over the zoo, 410 to 450 patches whatever the
- * tolerance — and below about sixteen pixels the error predicate starts adding
- * on top of it: 6 px is 549 patches on Miranda against 435 at 16, and 32 px
- * saves four. So this sits where the two curves meet.
+ * a floor of its own — standing on Miranda at the flight lens, 408 patches at
+ * 32 px and 414 at 24 — and below about sixteen pixels the error predicate
+ * starts adding on top of it: 438 at 16, 597 at 8, 720 at 6. So this sits where
+ * the two curves meet.
  *
- * Measured at 16 px, at a 60° field over 1080 px: 236 patches on Earth, 435 on
- * Miranda, 474 on the zoo's 11,536 km world — 45 to 96 MB of vertex buffers and
- * 1.9 to 4.0 M triangles selected, of which the renderer's own frustum culling
+ * Measured at 16 px, at the flight lens over 1080 display pixels, standing at
+ * two meters: 294 patches on Earth, 330 to 438 across the zoo — 1.24 to 1.85 M
+ * vertices, which at four vec3 attributes is 60 to 89 MB of vertex buffers, and
+ * 2.4 to 3.6 M triangles selected, of which the renderer's own frustum culling
  * draws roughly a third. Packing the four vertex attributes below float32 is
  * worth about half the memory and frustum-culling the *selection* about half
  * again; both are measured-before-optimized rather than done here.
@@ -116,11 +120,20 @@ export const DEFAULT_MAX_LEVEL = 12
 /**
  * How many patches may be selected at once.
  *
- * A safety net rather than a working limit. A restricted whole-disk selection
- * settles between 236 and 474 across the zoo at two meters, and the worst
- * single step of a descent onto the zoo's 11,536 km world reaches **623** — so
- * the cap is above that with room, and a body with implausible relief degrades
- * by one level everywhere rather than by trying to draw the planet.
+ * A safety net rather than a working limit, and the lens is what says how much
+ * of a net it is. At the flight lens a restricted whole-disk selection settles
+ * between 294 and 438 across the zoo at two meters and peaks at 449 over a
+ * whole descent; at the wide end of the slider it is lower still. So for every
+ * lens a player flies with, this never binds.
+ *
+ * **It binds at the telephoto end, and by how much is measured rather than
+ * adjectival.** At 20° the same descents want 808 to 1,418 patches and get 768,
+ * which degrades the disk by one level on 60–84% of their steps and is reported
+ * as `saturated`. Raising the cap to cover it is the wrong trade: 1,418 patches
+ * is 6.0 M vertices and 288 MB of buffers, on a lens the player has narrowed
+ * deliberately and where one level coarser is a 4-pixel error rather than a
+ * 2-pixel one. The number is here so that the next person to want it raised
+ * knows what they are buying.
  */
 export const DEFAULT_MAX_PATCHES = 768
 
@@ -238,7 +251,18 @@ export interface TerrainEye {
 export interface TerrainSelectOptions {
   readonly maxLevel?: number
   readonly cellPixels?: number
-  readonly viewport?: TerrainViewport
+  /** The lens the picture is taken with. Defaults to the flight lens. */
+  readonly lens?: Lens
+  /**
+   * The picture's size in *display* pixels.
+   *
+   * Not the drawing buffer's. Supersampling raises the sample count, not the
+   * detail a viewer can resolve, so feeding a 4× AA buffer height in here asks
+   * for 6.5× the patches to draw geometry the resolve filter averages away. The
+   * caller divides its own factor out; the place to spend on sharper terrain is
+   * `cellPixels`, where it is a decision with a number on it.
+   */
+  readonly viewport?: Viewport
   readonly resolution?: number
   readonly maxPatches?: number
   /**
@@ -385,11 +409,12 @@ export function selectTerrain(
 ): TerrainSelection {
   const maxLevel = options.maxLevel ?? DEFAULT_MAX_LEVEL
   const cellPixels = options.cellPixels ?? DEFAULT_CELL_PIXELS
+  const lens = options.lens ?? DEFAULT_LENS
   const viewport = options.viewport ?? DEFAULT_VIEWPORT
   const resolution = options.resolution ?? HEIGHTFIELD_RESOLUTION
   const maxPatches = options.maxPatches ?? DEFAULT_MAX_PATCHES
   const ready = options.ready
-  const scale = pixelsPerRadian(viewport) / cellPixels
+  const scale = pixelsPerRadian(lens, viewport) / cellPixels
   const reach = horizonReach(eye)
 
   let visited = 0

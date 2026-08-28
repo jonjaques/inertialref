@@ -6,7 +6,7 @@ import {
   Vec,
   type Vec3,
 } from '@inertialref/spatial'
-import { type LodTier, selectLod } from './lod.ts'
+import { type LodThresholds, type LodTier, selectLod } from './lod.ts'
 
 /*
  * Turning a canonical position into something the GPU can draw (ADR-0003).
@@ -126,11 +126,19 @@ export function placeAt(
   position: UniverseVector,
   radius: Meters,
   eye: Vec3,
+  /**
+   * Where the representation changes, for the lens this frame is taken with.
+   *
+   * Only the point-to-billboard step moves with it, and only because that step
+   * is a claim about pixels. A caller with no lens gets the flight one, which
+   * is what every caller had before there was a lens to have.
+   */
+  thresholds?: LodThresholds,
 ): RenderPlacement {
   const fromOrigin = toRenderSpace(origin, position)
   const offset = Vec.sub(fromOrigin, eye)
   const distance = Vec.length(offset)
-  const tier = selectLod(radius, distance)
+  const tier = selectLod(radius, distance, thresholds)
   const angle =
     radius <= 0 || distance <= 0
       ? 0

@@ -20,7 +20,7 @@ import type {
 } from '@inertialref/simulation'
 import type { BodyAppearance, EntityId } from '@inertialref/universe'
 import { atmosphereShellRatio, ringScales, sunkSphereRadius } from './datum.ts'
-import { type LodTier, starColor } from './lod.ts'
+import { type LodThresholds, type LodTier, starColor } from './lod.ts'
 import { placeAt, type RenderPlacement } from './placement.ts'
 
 /*
@@ -154,6 +154,15 @@ export function buildScene(
    * nobody is looking from.
    */
   eye?: { readonly position: UniverseVector; readonly orientation: Quat },
+  /**
+   * The lens the frame is composed through, as thresholds.
+   *
+   * Passed rather than read, because `packages/rendering` holds no state and
+   * the lens has exactly one producer — `GameEngine`, under the pose's own
+   * precedence. Omitted is the flight lens, which is what a host without a
+   * camera panel is looking through anyway.
+   */
+  thresholds?: LodThresholds,
 ): RenderScene {
   const entity = snapshot.entities.find((e) => e.id === cameraEntity)
   invariant(
@@ -186,7 +195,13 @@ export function buildScene(
     // function rather than a subtraction here because the boot preloader has
     // to predict this exact number to prebake against it.
     const sphereRadius = sunkSphereRadius(body.radius, body.relief)
-    const placement = placeAt(origin, body.position, sphereRadius, eyeRender)
+    const placement = placeAt(
+      origin,
+      body.position,
+      sphereRadius,
+      eyeRender,
+      thresholds,
+    )
     if (placement.angularRadius < CULL_ANGLE) continue
     // Ring radii are authored in meters from the body's center and leave as
     // multiples of the drawn sphere, which is not the body's radius.
@@ -242,7 +257,13 @@ export function buildScene(
 
   let brightest = 0
   const rawStars = snapshot.stars.map((star) => {
-    const placement = placeAt(origin, star.position, star.radius, eyeRender)
+    const placement = placeAt(
+      origin,
+      star.position,
+      star.radius,
+      eyeRender,
+      thresholds,
+    )
     // Inverse-square apparent brightness; normalized below so the scene always
     // has something at full intensity whatever the player is looking at.
     const apparent =

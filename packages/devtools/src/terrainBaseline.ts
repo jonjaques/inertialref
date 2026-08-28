@@ -10,6 +10,14 @@ import {
   surveySites,
 } from '@inertialref/universe'
 import {
+  DEFAULT_LENS,
+  DEFAULT_VIEWPORT,
+  type Lens,
+  pixelsPerRadian,
+  verticalFovDegrees,
+  type Viewport,
+} from '@inertialref/rendering'
+import {
   type DescentReport,
   descentRegions,
   type GenerationCost,
@@ -86,6 +94,9 @@ export interface BaselineEntry {
 export interface TerrainBaseline {
   readonly seed: string
   readonly resolution: number
+  /** The optics every patch count in here is a function of. */
+  readonly lens: Lens
+  readonly viewport: Viewport
   readonly entries: readonly BaselineEntry[]
   /** Empty is the only passing answer. See `missingArchetypes`. */
   readonly missing: readonly SurfaceArchetype[]
@@ -117,6 +128,15 @@ const WARMUP_PATCHES = 12
 export interface BaselineOptions extends ZooOptions {
   readonly steps?: number
   readonly resolution?: number
+  /**
+   * The lens every descent below is flown behind. Default: the flight lens.
+   *
+   * The one parameter that moves every number in this report at once, which is
+   * why re-running it is cheaper than scaling the old figures by arithmetic —
+   * and why the header states it.
+   */
+  readonly lens?: Lens
+  readonly viewport?: Viewport
   readonly timedPatches?: number
 }
 
@@ -143,6 +163,8 @@ export function terrainBaseline(
 ): TerrainBaseline {
   const resolution = options.resolution ?? HEIGHTFIELD_RESOLUTION
   const limit = options.timedPatches ?? TIMED_PATCHES
+  const lens = options.lens ?? DEFAULT_LENS
+  const viewport = options.viewport ?? DEFAULT_VIEWPORT
   const zoo = terrainZoo(world, options)
 
   const entries: BaselineEntry[] = []
@@ -152,7 +174,12 @@ export function terrainBaseline(
     const profile = {
       ...(options.steps === undefined ? {} : { steps: options.steps }),
     }
-    const descent = simulateDescent(body, { ...profile, site: 'basin' })
+    const descent = simulateDescent(body, {
+      ...profile,
+      site: 'basin',
+      lens,
+      viewport,
+    })
     const regions = descentRegions(descent)
     /*
      * No clock, no generation.
@@ -204,6 +231,8 @@ export function terrainBaseline(
           ...profile,
           site: site.id,
           trackDegrees: 0,
+          lens,
+          viewport,
         })
         return {
           id: site.id,
@@ -221,6 +250,8 @@ export function terrainBaseline(
   return {
     seed: world.seedText,
     resolution,
+    lens,
+    viewport,
     entries,
     // From what was measured, not from what was found. An entry whose address
     // will not resolve a second time is skipped above, and reporting `missing`
@@ -235,6 +266,10 @@ export function terrainBaseline(
 export function summarizeBaseline(baseline: TerrainBaseline): string {
   const lines: string[] = [
     `terrain baseline — seed "${baseline.seed}", ${baseline.resolution}×${baseline.resolution} patches`,
+    `  lens ${baseline.lens.focalLength.toFixed(2)} mm ` +
+      `(${verticalFovDegrees(baseline.lens).toFixed(1)}°) over ` +
+      `${baseline.viewport.width}×${baseline.viewport.height} — ` +
+      `${pixelsPerRadian(baseline.lens, baseline.viewport).toFixed(0)} px/rad`,
   ]
   if (baseline.missing.length > 0) {
     lines.push(

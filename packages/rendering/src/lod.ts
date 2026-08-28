@@ -1,4 +1,11 @@
-import type { Meters } from '@inertialref/shared'
+import type { Meters, Radians } from '@inertialref/shared'
+import {
+  BASELINE_VIEWPORT,
+  type Lens,
+  LENS_PRESETS,
+  pixelAngle,
+  type Viewport,
+} from './lens.ts'
 
 /*
  * Level of detail (spec §13).
@@ -24,21 +31,59 @@ export type LodTier =
   /** Fills a good part of the view: sphere plus streamed terrain patches. */
   | 'surface'
 
-/*
- * Angular radius, in radians, at which a body changes representation.
+/** Angular radius, in radians, at which a body changes representation. */
+export interface LodThresholds {
+  readonly billboard: Radians
+  readonly sphere: Radians
+  readonly surface: Radians
+}
+
+/**
+ * How much of a pixel a body's *diameter* covers where it stops being a point.
  *
- * Constants rather than an injectable `LodThresholds`. There was one, threaded
- * through six signatures and nested three deep inside a `SceneConfig`, and in
- * the whole repository — app, headless runner, devtools and tests — nothing
- * ever constructed one other than the default. One adapter is a hypothetical
- * seam, and this one was charging every caller a parameter for it.
+ * A third of one, which is deliberately sub-pixel: a star is always smaller
+ * than a pixel and must still draw, so the threshold's job is to decide when a
+ * point cloud stops being an honest description rather than when something
+ * becomes resolvable. That is what the shipped constant was doing — 2e-4 of
+ * angular *radius* — and the sentence beside it, "~0.2 mrad is roughly a pixel
+ * at a 60 degree FOV on a 1080p display", was not arithmetic: a pixel there is
+ * `atan(1/935)`, which is 1.07 mrad, five times larger.
+ *
+ * Stated as a fraction of the real pixel angle, the same constant comes out at
+ * 1.97e-4 at the flight lens over the baseline — within 2% of the number it
+ * replaces, and now a function of the lens the body is being looked at through,
+ * which is what it always claimed to be.
  */
-export const LOD_THRESHOLDS = {
-  // ~0.2 mrad is roughly a pixel at a 60 degree FOV on a 1080p display.
-  billboard: 2e-4,
+export const BILLBOARD_PIXEL_FRACTION = 1 / 3
+
+/**
+ * The three thresholds, resolved against a lens.
+ *
+ * `billboard` follows the optics; `sphere` and `surface` do not, and that is
+ * not an oversight. They are claims about *representation* — "a disk with a
+ * terminator on it" and "close enough that the ground is the picture" — and a
+ * player who narrows the lens to a telephoto has not moved closer to the
+ * planet. Only the point-to-billboard step is a statement about pixels.
+ *
+ * This is an injectable that earns it. There was one before, threaded through
+ * six signatures inside a `SceneConfig`, and nothing in the repository ever
+ * constructed one other than the default; the lens is the first caller with a
+ * reason, and the default is still what every caller without one gets.
+ */
+export const lodThresholds = (
+  lens: Lens,
+  viewport: Viewport,
+): LodThresholds => ({
+  billboard: (pixelAngle(lens, viewport) * BILLBOARD_PIXEL_FRACTION) / 2,
   sphere: 2e-3,
   surface: 0.12,
-} as const
+})
+
+/** The flight lens over the baseline viewport — what a caller without one gets. */
+export const LOD_THRESHOLDS: LodThresholds = lodThresholds(
+  LENS_PRESETS.flight,
+  BASELINE_VIEWPORT,
+)
 
 /** Angular radius of a sphere of `radius` seen from `distance`, in radians. */
 export function angularRadius(radius: Meters, distance: Meters): number {
@@ -46,11 +91,15 @@ export function angularRadius(radius: Meters, distance: Meters): number {
   return Math.asin(Math.min(1, radius / distance))
 }
 
-export function selectLod(radius: Meters, distance: Meters): LodTier {
+export function selectLod(
+  radius: Meters,
+  distance: Meters,
+  thresholds: LodThresholds = LOD_THRESHOLDS,
+): LodTier {
   const angle = angularRadius(radius, distance)
-  if (angle >= LOD_THRESHOLDS.surface) return 'surface'
-  if (angle >= LOD_THRESHOLDS.sphere) return 'sphere'
-  if (angle >= LOD_THRESHOLDS.billboard) return 'billboard'
+  if (angle >= thresholds.surface) return 'surface'
+  if (angle >= thresholds.sphere) return 'sphere'
+  if (angle >= thresholds.billboard) return 'billboard'
   return 'point'
 }
 
