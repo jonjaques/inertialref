@@ -1,5 +1,9 @@
 import { Slider } from '@/components/ui/slider'
-import { LENS_CHANNELS, type CameraState, type LensChannelId } from './controls.ts'
+import {
+  LENS_CHANNELS,
+  type CameraState,
+  type LensChannelId,
+} from './controls.ts'
 import { releaseFocus } from './focus.ts'
 
 /**
@@ -39,7 +43,8 @@ export function LensSlider({
       value={[Math.round(spec.scrub(camera.lens) * STEPS)]}
       aria-label={spec.description}
       onValueChange={([next]) => {
-        if (next !== undefined) camera.onLens(spec.at(camera.lens, next / STEPS))
+        if (next !== undefined)
+          camera.onLens(spec.at(camera.lens, next / STEPS))
       }}
       // A pointer that grabbed the thumb has the keyboard; hand it back, the
       // same as every other control in the overlay. Not on `onValueChange`,
