@@ -28,13 +28,16 @@ Each invariant below is mirrored as a path-scoped one-liner in
 A drifted mirror is worse than none: it fires with authority and states the
 previous rule.
 
-That directory also holds two rules that are not mirrors of anything below.
-`branching.md` and `writing.md` carry no `paths:` and load every session, because
-the first commit and the commit message both happen before any glob would fire.
-They govern process and prose rather than the code, so they mirror
-[`docs/agents/working.md`](docs/agents/working.md) and
+That directory also holds three rules that are not mirrors of anything below.
+`branching.md`, `writing.md` and `browser.md` carry no `paths:` and load every
+session, because the first commit, the commit message and the choice of a browser
+tool all happen before any glob would fire. They govern process, prose and tooling
+rather than the code, so they mirror
+[`docs/agents/working.md`](docs/agents/working.md),
 [`docs/STYLE.md`](docs/STYLE.md) — the writing rules for every comment, document
-and commit message here — and are deliberately absent from the invariant map.
+and commit message here — and the
+[`drive` skill](.claude/skills/drive/SKILL.md), and are deliberately absent from
+the invariant map.
 
 ---
 
@@ -263,6 +266,9 @@ source. It is a safety net. The full `pnpm check` gates the push and
 `IR_SKIP_GATE=1` disables the hook.
 
 Commit each coherent piece as it goes green rather than one lump at the end,
-and cut the branch at the first commit, off `origin/main`. Pushing and the
-pull request are `ship`, which opens the PR as a draft and marks it ready only
-once CI is green. [Working](docs/agents/working.md) § "Starting work".
+and cut the branch at the first commit, off `origin/main`. `main` enforces
+linear history and takes squash merges only, so rebase onto `origin/main`
+before pushing — never merge into the branch. Pushing and the pull request are
+`ship`, which rebases, gates, audits, verifies in a browser, and then opens the
+PR ready for review; `/code-review` is a separate command the user runs on it.
+[Working](docs/agents/working.md) § "Starting work".

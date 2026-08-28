@@ -4676,6 +4676,96 @@ the correct increasing-longitude one. Flipping the old one rotates every
 restored landed save a half turn, so it wants its own change with a
 migration story, not a line in a fix pass.
 
+## The browser gets a driver, and shipping stops at the pull request (27 Aug 2026)
+
+Three changes to how work is done here, none to what the code does.
+
+### The browser is `scripts/drive.mjs`, and nothing else
+
+Agent browser sessions ran through the Claude-in-Chrome extension, which drives
+the _human's_ Chrome. Its screenshot takes focus, and focus is the resource the
+page needs: `requestAnimationFrame` is suspended while a window is occluded, so
+the tab it just took focus from stops rendering and the one it gave focus to is
+whichever of the two `localhost:5173` tabs it guessed at. Recovering that needed
+AppleScript to raise a window, which then fought whoever was using the machine.
+
+The driver launches its own Chrome on its own profile and debugging port and
+needs no focus at all, because `Emulation.setFocusEmulationEnabled` plus
+`Page.bringToFront` makes the page render while occluded. Three other things it
+has to do, each of which cost a round trip when they were discovered:
+`Page.captureScreenshot` rather than a canvas readback, because the renderer is
+WebGPU and the swap-chain texture is invalidated at the end of the task that drew
+it — `toDataURL` returns transparent black on a frame showing two-thirds of a
+planet; readiness on `window.engine.gl` rather than `window.ir`, which appears
+seconds earlier; and a real window rather than `--headless`, because headless
+macOS Chrome falls back to a software WebGPU adapter.
+
+**Boot is the cost, so Chrome is left running.** A cold start is the dev server
+plus about ten seconds of shader warm; a second invocation attaches to the booted
+page and returns in **86 ms**. That is what makes a step list worth having —
+`--js`, `--wait`, `--shot`, `--sample`, `--reload` and `--logs` run in the order
+written, in one process, so a whole verification is one command. `parseArgs`
+returns a map and loses that order; `tokens: true` gives it back.
+
+Two smaller decisions. A `--shot` is downscaled to 1568 px on its long edge,
+because that is where the reader downsamples anyway and beyond it a larger file
+is bytes spent on pixels nobody sees; `--max-px 0` keeps the native capture for a
+plate. And a `--url` the attached page is not already showing forces a re-boot
+rather than attaching: the mode is a function of the path _and the query_, so a
+booted page on `/` is not a booted page on `/planetarium`, and one on
+`?at=…/b:5` is not one on `?at=…/b:2`. Attaching regardless screenshots the
+wrong subject under the right caption, which is the failure a capture rig must
+not have. The comparison is over the keys the URL **asks for**, never the whole
+search string: `CinemaPlayer` rewrites `t` on every frame and `PlanetariumMode`
+rewrites `at` on every target, so an exact match would miss on a page already
+showing exactly what was asked for and turn every warm attach into a re-boot.
+
+**A CDP command timer holds the event loop open.** Every request armed a
+two-minute timeout and none of them were cleared on the reply, so an invocation
+that printed its answer in one second still took two minutes to exit — which
+reads as a hung driver and is a forgotten timer. `clearTimeout` on the reply, and
+`unref` besides.
+
+### The pull request opens ready, and review is a separate command
+
+`ship` opened a draft and marked it ready once CI was green, which put the
+invariant audit, the documentation audit and the screenshots in the window
+_after_ the PR existed, to overlap them with CI. They are now all before it: a PR
+that opens ready is one whose evidence is already attached, and the overlap it
+gave up was never real — `check.yml` runs `on: pull_request`, so no CI exists to
+overlap with until the PR does. The gate and the two read-only audits still run
+concurrently with each other, which is where the minutes actually are.
+
+**The checks are scoped to the diff.** Running all of them on every change is
+not thoroughness; it is a slower way to reach the same PR, and it teaches the
+reader that the verification section means nothing. A prose-only diff is verified
+by `pnpm format:check` and by having been read while it was written — the browser
+cannot say anything about a paragraph and `pnpm build` cannot say anything about
+a heading. Config and tooling get the full gate and no browser, because there the
+thing that broke is the thing that runs the gate. Source gets everything, and
+anything visible gets a picture. The two calls the table cannot make: prose that
+states a fact about the code is verified by running that one thing, and a diff
+that looks like documentation but carries a `.ts` file is a source change with
+documentation in it.
+
+Reviewing is deliberately not part of shipping. `/code-review --fix` is invoked
+on the finished PR, by hand, which is also what makes the cloud `ultra` variant
+reachable.
+
+### Rebase, never merge
+
+`main` carries a ruleset with `required_linear_history` and the repository allows
+squash merges only, so a merge commit cannot land — a branch behind `origin/main`
+is rebased or it is not mergeable. `ship` rebases **first**, before the gate:
+`pnpm check`, an audit and a screenshot are evidence about one specific tree, and
+taken against a stale base they describe a tree that will never exist.
+
+The deny matcher on `Bash(git push --force:*)` also matched `--force-with-lease`
+by prefix, which is the ordinary end of a rebase, so the flow it was protecting
+would have stalled on its own guardrail. It is narrowed to `git push -f`;
+everything else falls to the existing prompt, and `main` stays protected by the
+`git push … main` matcher and by the ruleset's own `non_fast_forward` rule.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

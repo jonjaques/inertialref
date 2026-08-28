@@ -23,12 +23,13 @@ operates with none of them.
 file has them too, pointed at the two sides of the contract it describes. It loads when
 you open a rule or `AGENTS.md`, and costs nothing the rest of the time.
 
-Two rules are deliberately unscoped, because no glob would fire in time for them.
+Three rules are deliberately unscoped, because no glob would fire in time for them.
 `branching.md` governs the first commit, which happens before any rule about a directory
-is relevant, and `writing.md` governs prose written into files a glob cannot predict —
-including the commit message, which is not a file in the tree at all. Both are kept under
-thirty lines for the same reason: they are in context for every session, including the
-ones that only answer a question.
+is relevant. `writing.md` governs prose written into files a glob cannot predict —
+including the commit message, which is not a file in the tree at all. `browser.md`
+governs a tool choice made in answer to "check the app", where nothing has been opened
+yet at all. All three are kept under thirty lines for the same reason: they are in
+context for every session, including the ones that only answer a question.
 
 ## The maintenance contract
 
@@ -44,11 +45,12 @@ half. When you change a rule, change it in `AGENTS.md` and grep here for the one
 When you add one, ask whether an agent could violate it without ever opening `AGENTS.md`;
 if so it belongs here too.
 
-`AGENTS.md` is canonical for the code invariants. The two unscoped rules mirror a
-different pair of pages, because what they carry is not a property of the code:
+`AGENTS.md` is canonical for the code invariants. The unscoped rules mirror other
+pages instead, because what they carry is not a property of the code:
 `branching.md` mirrors [`docs/agents/working.md`](../../docs/agents/working.md)
-§ "Starting work", and `writing.md` mirrors [`docs/STYLE.md`](../../docs/STYLE.md). The
-contract is identical — reasoning there, imperative here.
+§ "Starting work", `writing.md` mirrors [`docs/STYLE.md`](../../docs/STYLE.md), and
+`browser.md` mirrors the [`drive` skill](../skills/drive/SKILL.md). The contract is
+identical — reasoning there, imperative here.
 
 Cursor's path-scoped files in `.cursor/rules/*.mdc` contain only its `globs:` metadata
 and an `@` reference back to these canonical bodies. Keep those globs in step with the
@@ -61,6 +63,7 @@ every touch of its directory, and the thing it is competing with for attention i
 | ---------------- | ------------------------------------------------------------- |
 | `branching.md`   | every session — no `paths:`                                   |
 | `writing.md`     | every session — no `paths:`                                   |
+| `browser.md`     | every session — no `paths:`                                   |
 | `packages.md`    | anything in `packages/*`                                      |
 | `determinism.md` | the simulation, procedural, universe, spatial or physics core |
 | `react-shell.md` | any `.tsx` in the client                                      |

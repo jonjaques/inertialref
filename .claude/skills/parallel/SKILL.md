@@ -76,13 +76,21 @@ order — lower layers first, because a `packages/*` change can invalidate a
 `pnpm check` **after** merging, not only inside each worktree: each one proved itself
 against its own tree, and nothing proved them against each other.
 
+**Rebase each branch onto the one before it lands, never merge.** `main` enforces
+`required_linear_history` and takes squash merges only, so `git rebase` is the only way
+to collect them — `git fetch origin && git rebase origin/main` per branch, in the order
+you decided, and `--force-with-lease` for any that is already pushed. Fan-out is exactly
+where this bites: five branches all cut from the same `HEAD` are all stale the moment the
+first one merges.
+
 A worktree with no changes is removed automatically; one with work stays on disk until you
 remove it. `git worktree list` shows them.
 
 ## The other parallel tools
 
-- **`/code-review ultra`** — a deep multi-agent review in the cloud, on the current branch
-  or a PR number. User-triggered and billed; suggest it, never launch it.
+- **`/code-review`** — the review pass, at any effort level, with `--fix` to apply what it
+  finds and `ultra` for a deep multi-agent review in the cloud. User-triggered and billed,
+  and deliberately not part of `/ship`: name it in the handoff, never launch it.
 - **`claude --cloud "<task>"`** — a full cloud session per task, running independently of
   this machine. It clones the GitHub remote at your current branch, so **push first**.
   Requires the Node 26 setup script; see `scripts/cloud-setup.sh`.

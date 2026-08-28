@@ -1,0 +1,7 @@
+---
+alwaysApply: true
+---
+
+Apply the canonical browser rule — drive the app over CDP, never the Chrome extension:
+
+@.claude/rules/browser.md

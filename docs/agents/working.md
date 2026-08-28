@@ -44,6 +44,30 @@ Nothing is committed to `main`.
 
 ---
 
+## Staying rebased
+
+`main` carries a ruleset with `required_linear_history`, and the repository allows
+**squash merges only**. A merge commit cannot land, so a branch that has fallen behind
+`origin/main` is either rebased or it is not mergeable:
+
+```bash
+git fetch origin
+git rebase origin/main
+```
+
+Rebase **before** running the checks rather than after. `pnpm check`, an invariant
+audit and a screenshot are evidence about one specific tree; taken against a stale base
+they describe a tree that will never exist, and the work has to be redone once the
+rebase moves the ground under them.
+
+A rebase of a branch that is already pushed needs `git push --force-with-lease`. That is
+the ordinary end of a rebase, and the lease is what makes it safe: it refuses if the
+remote moved since you last saw it. A bare `--force` is not, and `main` is protected
+twice over — by a deny matcher on `git push … main`, and by the ruleset's
+`non_fast_forward` rule, which refuses it at the server.
+
+---
+
 ## Before you change anything
 
 1. Read the [ADR](../adr/README.md) for the area you are touching. They are
@@ -139,11 +163,19 @@ A commit message is the one place a backward glance is correct, because a commit
 exists to describe a change. That license does not extend to the source comment
 next to it.
 
-Pushing and opening a pull request are [`/ship`](../../.claude/skills/ship/SKILL.md),
-which runs the full `pnpm check`, opens the PR as a **draft**, watches CI in the
-background, and marks it ready only once the checks are green and the
-verification CI cannot do — a screenshot, a before/after pair, a headless probe
-— is attached.
+Pushing and opening a pull request are [`/ship`](../../.claude/skills/ship/SKILL.md).
+It rebases onto `origin/main` first, then runs the checks the diff actually warrants —
+the full `pnpm check` alongside the invariant and documentation audits for a source
+change, a picture for anything visible, `pnpm format:check` and nothing else for a
+prose-only one. Then it opens the PR, **ready rather than draft**: everything a draft
+exists to defer has already happened by that point.
+
+Scoping the checks is not corner-cutting. A browser cannot say anything about a
+paragraph, and a green build on a documentation PR proves nothing about the words —
+what it costs is twenty minutes and a verification section the reader learns to skip.
+
+Reviewing is deliberately not part of it. `/code-review --fix` is a separate command the
+user runs on the finished PR.
 
 ---
 

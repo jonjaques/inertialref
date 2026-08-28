@@ -27,6 +27,8 @@ pnpm check            # graph, brand, format, lint, typecheck, test, build
 pnpm sim --self-test           # headless run plus the twelve capability checks
 pnpm vitest run <substring>    # a single test file
 
+pnpm drive --help              # drive Chrome over CDP: --js, --shot, --sample, --down
+
 # Vendored data. Everything under data/ is committed; these rebuild it.
 pnpm catalog:fetch             # download the star catalog sources into .data/raw
 pnpm catalog:report            # build the catalog and print, without writing

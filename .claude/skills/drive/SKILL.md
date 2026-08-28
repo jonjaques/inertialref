@@ -1,15 +1,15 @@
 ---
 name: drive
-description: Launch, drive and screenshot InertialRef — the dev server, the window.ir harness, the headless runner, and the browser gotchas (hard reload, ~18s renderer boot, double screenshot after a seek) that otherwise cost an hour. Use whenever asked to run the game, verify a change in the real app, capture a still, or step a cutscene. This is the project skill the built-in /run defers to.
+description: Launch, drive and screenshot InertialRef — the headless runner, the CDP driver in scripts/drive.mjs, the window.ir harness, and the browser gotchas (renderer boot, occluded rAF, double capture after a seek) that otherwise cost an hour. Use whenever asked to run the game, verify a change in the real app, capture a still, or step a cutscene. This is the project skill the built-in /run defers to.
 argument-hint: '[what to verify]'
-allowed-tools: Bash(pnpm dev) Bash(pnpm dev:*) Bash(pnpm preview) Bash(pnpm preview:*) Bash(pnpm sim:*) Bash(pnpm vitest:*)
+allowed-tools: Bash(pnpm dev) Bash(pnpm dev:*) Bash(pnpm preview) Bash(pnpm preview:*) Bash(pnpm sim:*) Bash(pnpm vitest:*) Bash(pnpm drive:*) Bash(node scripts/drive.mjs:*)
 ---
 
 # Driving InertialRef
 
-Named for [`docs/agents/driving.md`](../../../docs/agents/driving.md), and named `drive` rather than `run` because a
-project skill called `run` collides with the bundled `/run` — which looks for a project
-skill covering app launch and defers to this one.
+Named for [`docs/agents/driving.md`](../../../docs/agents/driving.md), and named `drive`
+rather than `run` because a project skill called `run` collides with the bundled `/run` —
+which looks for a project skill covering app launch and defers to this one.
 
 Two ways in. Prefer the cheap one.
 
@@ -26,21 +26,73 @@ pnpm sim --help               # every flag
 pnpm vitest run <substring>   # one test file
 ```
 
+A throwaway script against `openSession` is the next rung and still not the browser:
+`packages/devtools` runs the director, the observatory and the terrain selector in Node.
+Those go in `.scratch/`, which is git-ignored and prettier-ignored for exactly this.
+
 **If a headless run can answer the question, stop here.** Reach for the browser only for
 what only a GPU can prove: shading, LOD, framing, the cutscene, presentation.
 
-## The browser
+---
+
+## The browser is `scripts/drive.mjs`, over CDP
+
+**Never the `mcp__claude-in-chrome__*` tools.** They drive the human's own Chrome: the
+screenshot takes focus, which stops whatever page it took focus from rendering and
+interrupts whoever was using the machine, and two tabs on `localhost:5173` are
+indistinguishable to it, so it can drive the wrong one. `scripts/drive.mjs` launches its
+own Chrome on its own profile and port and needs no focus at all.
 
 ```bash
-pnpm dev          # BOTH: vite on http://localhost:5173, wrangler on 8787
-pnpm dev:client   # vite alone — the client then correctly reports "no server",
-                  # which is the offline path and not a client bug to fix
-pnpm preview      # build, then serve through the real Worker on 8787. Reach for
-                  # this when the question is about how something is *served* —
-                  # asset headers, the SPA fallback, the service worker
+node scripts/drive.mjs --help
 ```
 
-Drive it from the console on `window.ir`. `ir.help()` prints the whole API.
+It starts `pnpm dev` if nothing is serving, boots the renderer, and then **leaves Chrome
+running**. Boot is the expensive part — about ten seconds of shader warm and body build
+on top of the dev server's own start — and every call after the first attaches to the
+booted page in well under a second. That is what makes a batch worth writing:
+
+```bash
+node scripts/drive.mjs --js "ir.summary()"                     # ~0.1 s, page still hot
+node scripts/drive.mjs --url http://localhost:5173/planetarium \
+    --js "ir.look('g:milky-way/s:SOL/b:5')" --wait 3000 --shot saturn.jpg
+node scripts/drive.mjs --js "ir.play('tng-intro')" --js "ir.pause()" \
+    --js "ir.seekCutscene(1150)" --wait 2500 --shot beat-1150.jpg
+node scripts/drive.mjs --sample 240 --sample-js "ir.terrain()"  # per-frame, min..max
+node scripts/drive.mjs --down                                   # when finished
+```
+
+Steps run in the order written, in one process and one session. Prefer one command with
+five steps to five commands.
+
+| Step            | For                                                                |
+| --------------- | ------------------------------------------------------------------ |
+| `--js <expr>`   | a bare expression is returned, so `--js "ir.terrain()"` prints     |
+| `--file <path>` | a local `.mjs` evaluated in the page, when quoting gets ugly       |
+| `--wait <ms>`   | textures stream in asynchronously after a look or a seek           |
+| `--shot <path>` | a bare filename lands in `.data/drive/`; `.jpg` is the one to read |
+| `--sample <n>`  | `n` consecutive rAF frames, with a min..max per field              |
+| `--logs`        | console output and page errors buffered so far                     |
+| `--reload`      | hard reload, then wait for the renderer                            |
+
+Session flags worth knowing: `--url` (the mode is a function of the path and the query,
+and the driver re-boots unless the attached page is already showing everything the URL
+asks for — `?at=`, `?t=`, `?seed=`), `--port` (**keys the Chrome
+profile too, so parallel agents must differ**), `--width`/`--height`/`--dpr`, `--fresh`,
+`--json`, `--down`, `--status`.
+
+A `--shot` is downscaled to 1568 px on its long edge, because that is where the reader
+downsamples anyway — beyond it a bigger file is bytes spent on pixels nobody sees. Pass
+`--max-px 0` for a plate that will be published. Page exceptions print to stderr whether
+or not `--logs` was asked for, so a broken page never looks like a blank capture.
+
+For anything about how the app is _served_ — asset headers, the SPA fallback, the service
+worker — point the driver at `pnpm preview` on 8787 instead: `pnpm preview` in one shell,
+then `--url http://localhost:8787/`.
+
+## The harness
+
+`ir.help()` prints the whole API. `--js "ir.help()"` works too.
 
 ```js
 ir.targets() // START HERE — every other verb takes an address and none of them will tell you one
@@ -65,30 +117,35 @@ ir.seekCutscene(1150) // frame-exact stills
 
 For a clean product shot: `engine.showShip = false`, then `ir.shot(...)`.
 
-`ir.visit` sets the height outright rather than easing it, which is what makes a
-descent plate loop work — `for (const h of [40000, 2000, 120, 2])`, one capture
-per rung, with nothing settling in between. Terrain fades out well above the
-ground, so a plate at 40 km is a smooth limb by design and not a broken streamer;
-`ir.terrain()` reads the opacity if you need to be sure.
+`ir.visit` sets the height outright rather than easing it, which is what makes a descent
+plate loop work — `for (const h of [40000, 2000, 120, 2])`, one capture per rung, with
+nothing settling in between. Terrain fades out well above the ground, so a plate at 40 km
+is a smooth limb by design and not a broken streamer; `ir.terrain()` reads the opacity if
+you need to be sure.
 
-## The four browser traps, in the order they will bite you
+## The traps, in the order they will bite you
 
-Each of these has already cost real time. None of them is a bug.
+Each of these has already cost real time. None of them is a bug, and the driver already
+handles the first three — they are here because they explain what it is doing.
 
-1. **After any source edit, hard-reload before verifying — then wait ~18 s.** "renderer
-   ready" logs about 18 seconds after load and `engine.gl` is `false` until then. A
-   spinner on black is boot, not a failure. HMR does not reliably re-establish the
-   renderer; do not trust a screenshot taken through it.
-2. **rAF is fully suspended while the automation window is occluded**, so a JS-only call
-   after a seek reads stale state — `engine.cinematic` null, blackout stuck at its last
-   value. The pattern that works is **seek → screenshot (this activates and renders) →
-   screenshot again (that one is real)**. Wait 2–4 s after a seek for async textures.
-3. **A wedged tab sometimes needs a new tab.** Reloading it is not always enough.
-4. **`resize_window` often refuses to grow `innerHeight`.** Shrink the width instead —
-   1509×992 yields a 16:9 viewport of 1509×849.
+1. **rAF is fully suspended while the window is occluded.** `Emulation.setFocusEmulationEnabled`
+   plus `Page.bringToFront` is what makes the page render anyway; without them boot never
+   leaves "first light…" and every capture is the boot cover.
+2. **A screenshot is taken twice, with a pause.** The first capture is what activates the
+   page and draws the frame, so on its own it shows whatever was on screen before the step
+   that preceded it. The second is the evidence. After a cutscene seek, `--wait 2500` on
+   top of that, for the textures.
+3. **HMR does not reliably rebuild the renderer.** After a source edit, `--reload` (or
+   `--fresh`), not a hot update — a tab that has taken a dozen of them draws its HUD with
+   `engine.gl` null, which reads as a rendering bug and is not one.
+4. **A wedged Chrome needs `--down` and a fresh start.** Reloading is not always enough
+   to recover its GPU state.
 
-Chrome also throttles `requestAnimationFrame` in backgrounded tabs, so a freshly reloaded
-page that is not focused sits at tick 0 until it is focused. That is the browser.
+Readiness is `window.engine.gl`, not `window.ir` — the harness appears seconds earlier,
+so a probe on it screenshots an unlit canvas. And a canvas readback is always transparent
+black: the renderer is WebGPU and the swap-chain texture is invalidated at the end of the
+task that drew it, which is why the driver uses `Page.captureScreenshot`. That composited
+image is also the only one carrying the DOM HUD.
 
 ## The dev dock
 
