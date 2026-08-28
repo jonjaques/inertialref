@@ -4297,7 +4297,7 @@ projection pass, not by `GameEngine.#step`.
 
 ## The terrain rig, and the three defects it found on its first run (26 Aug 2026)
 
-Phase 0 of [`TERRAIN-PLAN.md`](TERRAIN-PLAN.md) § 9: the instrument every later
+Phase 0 of [`TERRAIN-PLAN.md`](TERRAIN-PLAN.md) § 10: the instrument every later
 phase is judged through, built before any of them so the phase that triples the
 per-sample cost has something to be a regression against. No generator changes.
 
@@ -4456,7 +4456,7 @@ headless runner. Attach Browser is Chrome on 9222.
 
 ## The quadtree covers the disk, and three things it had to learn first (27 Aug 2026)
 
-Phase 1 of [`TERRAIN-PLAN.md`](TERRAIN-PLAN.md) § 9. A 3×3 window at one level
+Phase 1 of [`TERRAIN-PLAN.md`](TERRAIN-PLAN.md) § 10. A 3×3 window at one level
 becomes a restricted, morphing quadtree walked from the six cube faces.
 [ADR-0015](docs/adr/0015-terrain-level-of-detail.md) is the decision record.
 
