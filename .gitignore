@@ -67,6 +67,14 @@ coverage
 # and must not be committed.
 .scratch/
 
+# The documentation site's staged content: seventy markdown files and the whole
+# of `packages/*` rendered to JSON that the client fetches at runtime.
+# `pnpm docs:build` writes it and `pnpm build` runs that first, so a deploy always
+# carries it; it is derived from files in this repository and committing it
+# would be committing a second copy of the documentation that drifts from the
+# first. `scripts/docs/build.mjs` explains where it goes and why.
+apps/game/public/doc-content/
+
 # Media the build pulls out of the site's own R2 bucket rather than carrying —
 # today, the reference edit's audio track. A local copy of copyrighted music
 # whose use here is a fair-use claim this project is willing to make in a
