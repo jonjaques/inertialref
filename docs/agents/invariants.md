@@ -43,6 +43,7 @@ table is one of those three, not drift.
 | An unmeasured field is a row, in the universe's voice     | [ADR-0014](../adr/0014-the-record-with-holes-in-it.md) · [Planetarium](../design/planetarium.md)           |
 | Chrome is not sized or positioned against the viewport    | [Client](../guides/client.md) · [`DESIGN.md`](../../DESIGN.md)                                             |
 | One producer of the camera                                | [Client](../guides/client.md) · [ADR-0011](../adr/0011-application-shell-and-modes.md)                     |
+| One producer of the lens; the field of view is derived    | [ADR-0017](../adr/0017-the-lens.md) · [Art](../design/art.md#photo-mode)                                   |
 | The planetarium does not write canonical state            | [Planetarium](../design/planetarium.md)                                                                    |
 | Presentation asks at `renderTime`, not `clock.time`       | [ADR-0006](../adr/0006-simulation-clock.md) · [Planetarium](../design/planetarium.md)                      |
 | Mode chrome needs `pointer-events-auto`                   | [Client](../guides/client.md)                                                                              |

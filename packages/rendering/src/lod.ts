@@ -1,4 +1,11 @@
-import type { Meters } from '@inertialref/shared'
+import type { Meters, Radians } from '@inertialref/shared'
+import {
+  BASELINE_VIEWPORT,
+  type Lens,
+  LENS_PRESETS,
+  pixelAngle,
+  type Viewport,
+} from './lens.ts'
 
 /*
  * Level of detail (spec §13).
@@ -24,21 +31,79 @@ export type LodTier =
   /** Fills a good part of the view: sphere plus streamed terrain patches. */
   | 'surface'
 
-/*
- * Angular radius, in radians, at which a body changes representation.
+/** Angular radius, in radians, at which a body changes representation. */
+export interface LodThresholds {
+  readonly billboard: Radians
+  readonly sphere: Radians
+  readonly surface: Radians
+}
+
+/**
+ * How much of a pixel a body's *diameter* covers where it stops being a point.
  *
- * Constants rather than an injectable `LodThresholds`. There was one, threaded
- * through six signatures and nested three deep inside a `SceneConfig`, and in
- * the whole repository — app, headless runner, devtools and tests — nothing
- * ever constructed one other than the default. One adapter is a hypothetical
- * seam, and this one was charging every caller a parameter for it.
+ * A third of one, which is deliberately sub-pixel: a star is always smaller
+ * than a pixel and must still draw, so the threshold's job is to decide when a
+ * point cloud stops being an honest description rather than when something
+ * becomes resolvable.
+ *
+ * Stated as a fraction of the pixel angle rather than as a constant, because a
+ * constant can only be right at one lens: at the flight lens over the baseline
+ * this is 1.97e-4 of angular radius, at 20° it is 5.44e-5 — a third of it — and
+ * with the zoom channel racked out it is 6.8e-6. The arithmetic is easy to get
+ * wrong by an order of magnitude — a pixel at 60° over 1080 px is `atan(1/935)`,
+ * 1.07 mrad, not the 0.2 mrad it is tempting to call one.
  */
-export const LOD_THRESHOLDS = {
-  // ~0.2 mrad is roughly a pixel at a 60 degree FOV on a 1080p display.
-  billboard: 2e-4,
-  sphere: 2e-3,
+export const BILLBOARD_PIXEL_FRACTION = 1 / 3
+
+/**
+ * Where a body stops being an impostor and becomes a drawn disk.
+ *
+ * Named because the clamp below has to hold it too, and two spellings of the
+ * same number is how a ceiling comes to sit above the thing it is clamping to.
+ */
+const SPHERE_THRESHOLD: Radians = 2e-3
+
+/**
+ * The three thresholds, resolved against a lens.
+ *
+ * `billboard` follows the optics; `sphere` and `surface` do not, and that is
+ * not an oversight. They are claims about *representation* — "a disk with a
+ * terminator on it" and "close enough that the ground is the picture" — and a
+ * player who narrows the lens to a telephoto has not moved closer to the
+ * planet. Only the point-to-billboard step is a statement about pixels.
+ *
+ * This is an injectable that earns it: the lens is the one caller with a reason
+ * to construct a set of its own, and every caller without one gets
+ * `LOD_THRESHOLDS` below. An injectable nobody but the default constructs is a
+ * parameter charged to every signature it threads through, which is what the
+ * shape of `selectLod`, `placeAt` and `buildScene` is guarding against.
+ */
+export const lodThresholds = (
+  lens: Lens,
+  viewport: Viewport,
+): LodThresholds => ({
+  /*
+   * Never above `sphere`, because `selectLod` tests the three in order and a
+   * billboard threshold that overtook the sphere one would delete the tier
+   * rather than widen it — every body under 0.12 rad would answer `point`, and
+   * `Bodies.tsx` gates clouds, rings and the atmosphere shell on not being one.
+   * A pixel is 1.07 mrad at the flight lens over 1080 px and the crossing is at
+   * a viewport 106 px tall, which a window can be dragged to and a canvas
+   * measures while it is laying out.
+   */
+  billboard: Math.min(
+    SPHERE_THRESHOLD,
+    (pixelAngle(lens, viewport) * BILLBOARD_PIXEL_FRACTION) / 2,
+  ),
+  sphere: SPHERE_THRESHOLD,
   surface: 0.12,
-} as const
+})
+
+/** The flight lens over the baseline viewport — what a caller without one gets. */
+export const LOD_THRESHOLDS: LodThresholds = lodThresholds(
+  LENS_PRESETS.flight,
+  BASELINE_VIEWPORT,
+)
 
 /** Angular radius of a sphere of `radius` seen from `distance`, in radians. */
 export function angularRadius(radius: Meters, distance: Meters): number {
@@ -46,11 +111,15 @@ export function angularRadius(radius: Meters, distance: Meters): number {
   return Math.asin(Math.min(1, radius / distance))
 }
 
-export function selectLod(radius: Meters, distance: Meters): LodTier {
+export function selectLod(
+  radius: Meters,
+  distance: Meters,
+  thresholds: LodThresholds = LOD_THRESHOLDS,
+): LodTier {
   const angle = angularRadius(radius, distance)
-  if (angle >= LOD_THRESHOLDS.surface) return 'surface'
-  if (angle >= LOD_THRESHOLDS.sphere) return 'sphere'
-  if (angle >= LOD_THRESHOLDS.billboard) return 'billboard'
+  if (angle >= thresholds.surface) return 'surface'
+  if (angle >= thresholds.sphere) return 'sphere'
+  if (angle >= thresholds.billboard) return 'billboard'
   return 'point'
 }
 

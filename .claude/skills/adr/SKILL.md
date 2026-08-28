@@ -28,6 +28,10 @@ telling you to read the one for the area you are touching **before** changing an
 | `0011` | the application shell and modes |
 | `0012` | dockable panels                 |
 | `0013` | measured figures                |
+| `0014` | unmeasured fields               |
+| `0015` | terrain level of detail         |
+| `0016` | documentation as a mode         |
+| `0017` | the lens                        |
 
 If one covers the ground, **you are not relitigating it** — you are either applying it, or
 writing a new ADR that supersedes it and says so explicitly.

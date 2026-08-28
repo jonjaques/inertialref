@@ -100,11 +100,15 @@ export function TerrainPatches({ engine }: { engine: GameEngine }) {
     /*
      * The selection is measured in pixels, so it needs the drawing buffer
      * rather than the CSS size — a two-times display genuinely wants twice the
-     * patches for the same picture. Written every frame because a resize is not
-     * an event this component subscribes to; the setter compares and returns
-     * before doing anything when nothing changed.
+     * patches for the same picture. The engine divides the supersampling factor
+     * back out, because a two-times *sample count* does not. Written every
+     * frame because a resize is not an event this component subscribes to; the
+     * setter compares and returns before doing anything when nothing changed.
      */
-    engine.viewportHeight = gl.domElement.height
+    engine.viewportPixels = {
+      width: gl.domElement.width,
+      height: gl.domElement.height,
+    }
     const state = engine.terrainState()
     // The ground is the picture of the planet now that the quadtree draws the
     // whole disk, so it wears the body's own published color rather than one

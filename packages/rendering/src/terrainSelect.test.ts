@@ -9,15 +9,16 @@ import {
   regionNeighbor,
   regionParent,
 } from '@inertialref/universe'
+import { pixelsPerRadian } from './lens.ts'
 import {
   DEFAULT_CELL_PIXELS,
+  DEFAULT_LENS,
   DEFAULT_MAX_LEVEL,
   DEFAULT_VIEWPORT,
   MORPH_END,
   MORPH_START,
   NO_MORPH_DISTANCE,
   nodeDistance,
-  pixelsPerRadian,
   regionCone,
   regionSpacing,
   type TerrainEye,
@@ -263,7 +264,8 @@ describe('the terrain quadtree', () => {
      * neighbor is, and its neighbor is somewhere else on a cube face whose scale
      * differs from its own.
      */
-    const scale = pixelsPerRadian(DEFAULT_VIEWPORT) / DEFAULT_CELL_PIXELS
+    const scale =
+      pixelsPerRadian(DEFAULT_LENS, DEFAULT_VIEWPORT) / DEFAULT_CELL_PIXELS
     fc.assert(
       fc.property(
         fc.double({ min: 1e5, max: 2e7, noNaN: true }),

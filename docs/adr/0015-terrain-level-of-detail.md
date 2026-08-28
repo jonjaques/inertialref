@@ -160,4 +160,5 @@ bake goes when it arrives.
 - [Rendering](../concepts/rendering.md#terrain-meshing) — the morph, and why the shader's share is one `mix`
 - [ADR-0003](0003-render-coordinates.md) — the compression terrain now rides
 - [ADR-0005](0005-procedural-seeds.md) — the versioning the detail floor answers to
+- [ADR-0017](0017-the-lens.md) — the lens the predicate reads, and every patch count above re-measured through it
 - [TERRAIN-PLAN](../../TERRAIN-PLAN.md) — the milestone this is Phase 1 of

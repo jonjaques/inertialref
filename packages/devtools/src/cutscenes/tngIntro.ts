@@ -26,6 +26,7 @@ import {
   fadeEnvelope,
   frameTarget,
   frameTwoTargets,
+  lensForFov,
   lerp,
   lookAlong,
   rangeForWidth,
@@ -101,6 +102,17 @@ const DURATION = 2742
  * they describe, which is the test that fixes the field.
  */
 const FOV = 45
+/**
+ * The same 45°, as an instrument.
+ *
+ * Built through `lensForFov` rather than authored as a focal length, and the
+ * angle is what is preserved: the beats below are fitted frame by frame against
+ * the reference edit and their criteria are tests, so a tidy 29 mm instead of
+ * 28.970562748477143 mm is a week of re-fitting. The screen-space helpers below
+ * still take `FOV` — they are solving for a frame, and a frame is an angle and
+ * an aspect ratio.
+ */
+const LENS = lensForFov(FOV)
 /** Compositions are solved for the reference frame's shape. */
 const ASPECT = 16 / 9
 
@@ -1979,7 +1991,7 @@ function sample(stage: Stage, frame: number): CinematicSample {
   return {
     frame,
     camera,
-    fov: FOV,
+    lens: LENS,
     ship: shipAt(shot, camera, frame),
     texts: textsAt(frame),
     effects: effectsAt(frame),

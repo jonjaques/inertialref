@@ -19,9 +19,9 @@ const PREFIX = 'ir.hud.'
  * so the values that survive a rename are the dangerous ones: a `dock.tab` of
  * `"nav"` from before the tabs were renamed parses perfectly and renders no
  * panel at all and no active tab, and the only way back is devtools. A stored
- * `camera.fov` of `NaN` or `5000` reaches `engine.fov` and the projection
- * matrix behind it. Every caller therefore says what it will accept, and an
- * unrecognised value is treated exactly like an absent one.
+ * `camera.lens` whose focal length is `NaN` or zero reaches the projection
+ * matrix. Every caller therefore says what it will accept, and an unrecognised
+ * value is treated exactly like an absent one.
  */
 export type Accept<T> = (value: unknown) => value is T
 
@@ -37,9 +37,9 @@ export function oneOf<T extends string>(values: readonly T[]): Accept<T> {
 /**
  * A finite number inside a range.
  *
- * Rejects rather than clamps, deliberately: a stored 5000° field of view is not
- * a 110° field of view somebody nearly asked for, it is a value from a build
- * that meant something else, and the default is the honest answer to it.
+ * Rejects rather than clamps, deliberately: a stored 5000 is not a value
+ * somebody nearly asked for, it is a value from a build that meant something
+ * else, and the default is the honest answer to it.
  */
 export function numberWithin(min: number, max: number): Accept<number> {
   return (value): value is number =>
@@ -48,6 +48,14 @@ export function numberWithin(min: number, max: number): Accept<number> {
     value >= min &&
     value <= max
 }
+
+/**
+ * The sentinel `read` returns when there is nothing stored.
+ *
+ * A distinct object rather than `undefined`, because `undefined` is a value a
+ * caller may legitimately store and `null` is one `JSON.parse` returns.
+ */
+const MISSING: unique symbol = Symbol('missing')
 
 function read<T>(key: string, fallback: T, accept?: Accept<T>): T {
   try {
@@ -62,6 +70,21 @@ function read<T>(key: string, fallback: T, accept?: Accept<T>): T {
     // section was open is fine; one that refuses to render is not.
     return fallback
   }
+}
+
+/**
+ * One stored preference, read once, without a hook.
+ *
+ * For a key that is being *migrated away from*: the value is wanted at the
+ * moment a new key is found absent and never again, and a `usePersistentState`
+ * for it would keep an obsolete key alive in the component's state and write it
+ * back. `null` means absent or unbelievable, which the caller treats the same.
+ */
+export function readPreference<T>(key: string, accept: Accept<T>): T | null {
+  const held = read<T | null>(key, null, (value): value is T | null =>
+    value === null ? true : accept(value),
+  )
+  return held
 }
 
 /**
@@ -89,8 +112,43 @@ export function usePersistentState<T>(
   key: string,
   initial: T,
   accept?: Accept<T>,
+  /**
+   * What to do when the key is absent but an older shape of it is not.
+   *
+   * A preference that changes shape has three possible behaviors and only one
+   * of them is honest: silently reset (the player's choice is gone), read the
+   * old key forever (the new one never becomes canonical), or read the old key
+   * *once*, which is this. It runs inside the lazy initializer, so it happens
+   * exactly at the moment the fallback would have been used, and the new key is
+   * written the first time the value actually changes — which keeps "never
+   * chose" meaning the default, as above.
+   *
+   * Returning `null` means there was nothing to migrate.
+   */
+  migrate?: () => T | null,
+  /**
+   * What a believed stored value has to be put back through before it is used.
+   *
+   * JSON has no infinity: `JSON.stringify({focus: Infinity})` is
+   * `{"focus":null}`, and a preference whose round trip is not the identity
+   * silently changes on reload. The camera's focus is `Infinity` when the lens
+   * is racked to the stop, which is where it spends its whole life — so the
+   * default lens came back as `{...DEFAULT_LENS, focus: null}`, compared
+   * unequal to the default, and left the panel's Reset control enabled forever
+   * on a lens that *was* the default.
+   *
+   * Rejecting the value in `accept` is the wrong fix: it throws away the other
+   * six fields for one that can be restored exactly. This runs after `accept`,
+   * so it only ever sees a shape the caller has already believed.
+   */
+  revive?: (value: T) => T,
 ): [T, (value: T | ((previous: T) => T)) => void] {
-  const [value, setValue] = useState<T>(() => read(key, initial, accept))
+  const [value, setValue] = useState<T>(() => {
+    const stored = read(key, MISSING as T, accept)
+    if (stored !== (MISSING as T))
+      return revive === undefined ? stored : revive(stored)
+    return migrate?.() ?? initial
+  })
   /*
    * What is already on disk, so an unchanged value is not rewritten.
    *

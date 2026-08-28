@@ -2,7 +2,7 @@ import { getLogger } from '@inertialref/shared'
 import { type FrameState, UV, type Vec3 } from '@inertialref/spatial'
 import type { World } from '@inertialref/simulation'
 import type { EntityId } from '@inertialref/universe'
-import type { CinematicSample } from '@inertialref/rendering'
+import { type CinematicSample, isUsableLens } from '@inertialref/rendering'
 import type { HarnessHost } from './harness.ts'
 
 /*
@@ -248,7 +248,7 @@ export class CutsceneDirector {
     if (active === null) throw new Error('No cutscene is playing')
     /*
      * Non-finite input is declined rather than clamped, the way
-     * `Observatory.setFov` declines a field of view it cannot use.
+     * `surfaceStance.ts` declines a height it cannot stand at.
      * `Math.max(0, Math.min(NaN, n))` is `NaN`, which lands in `epoch` — and
      * `epoch` is never recomputed, so every subsequent frame is `NaN`, the
      * `frame >= durationFrames` end test is false forever, and the scene
@@ -346,7 +346,7 @@ export class CutsceneDirector {
   }
 }
 
-/** Guard against a script emitting a non-finite pose; used by tests. */
+/** Guard against a script emitting a non-finite pose or lens; used by tests. */
 export function sampleIsFinite(sample: CinematicSample): boolean {
   const finiteQuat = (q: { x: number; y: number; z: number; w: number }) =>
     Number.isFinite(q.x) &&
@@ -357,6 +357,13 @@ export function sampleIsFinite(sample: CinematicSample): boolean {
     UV.isValid(sample.camera.position) &&
     finiteQuat(sample.camera.orientation) &&
     UV.isValid(sample.ship.position) &&
-    finiteQuat(sample.ship.orientation)
+    finiteQuat(sample.ship.orientation) &&
+    // The lens too, and it is the field with the shortest path to a black
+    // frame: `CameraRig` writes `verticalFovDegrees(engine.lens)` straight into
+    // `camera.fov`, so one non-finite focal length in a script is a NaN
+    // projection matrix and nothing drawn anywhere. `lensForFov` clamps the
+    // slider's route in; a `CutsceneScript.sample()` builds its lens by hand
+    // and has no clamp between it and the camera.
+    isUsableLens(sample.lens)
   )
 }

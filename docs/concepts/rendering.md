@@ -180,12 +180,26 @@ flowchart LR
     T1 -->|yes| SURFACE["<b>surface</b><br/>sphere + streamed terrain"]
     T1 -->|no| T2{"≥ 2e-3"}
     T2 -->|yes| SPHERE["<b>sphere</b><br/>resolvable disc"]
-    T2 -->|no| T3{"≥ 2e-4"}
+    T2 -->|no| T3{"≥ ⅓ px of diameter<br/><i>1.97e-4 at the flight lens</i>"}
     T3 -->|yes| BILLBOARD["<b>billboard</b><br/>a few pixels"]
     T3 -->|no| POINT["<b>point</b><br/>sub-pixel"]
 
     style SURFACE fill:#065f46,stroke:#064e3b,color:#fff
 ```
+
+**Only the first step is a claim about pixels, and it follows the lens.**
+`lodThresholds(lens, viewport)` puts the point-to-billboard boundary at a third
+of a pixel of diameter — sub-pixel on purpose, because a star is always smaller
+than a pixel and must still draw, so what the threshold decides is when a point
+cloud stops being an honest description, not when something becomes resolvable.
+A constant can only be right at one lens: the boundary at the telephoto end of
+the slider is an eighth of the boundary at the wide end
+([ADR-0017](../adr/0017-the-lens.md)), which is why Atlas at 104,146 km draws as
+a point at 110° and as a billboard at 20°. `sphere` and `surface` stay
+constants, because they are claims about _representation_ — a disk with a
+terminator on it, and ground close enough to be the picture — and a player who
+fits a telephoto has not moved closer to the planet. A caller with no lens gets
+the flight one over 1920×1080.
 
 The architectural point: **representation is separate from identity**. A planet is the same planet — same address, same entity, same
 canonical position — whether it is one pixel or ground you are standing on. Only

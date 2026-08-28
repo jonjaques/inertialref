@@ -1,5 +1,9 @@
 import { Vector3, type PerspectiveCamera } from 'three/webgpu'
-import type { RenderScene } from '@inertialref/rendering'
+import {
+  type Lens,
+  pixelsPerRadian,
+  type RenderScene,
+} from '@inertialref/rendering'
 import type { PickCandidate } from './pick.ts'
 
 /*
@@ -35,9 +39,25 @@ export function projectScene(
   scene: RenderScene,
   camera: PerspectiveCamera,
   size: { readonly width: number; readonly height: number },
+  /**
+   * The lens the frame is composed through — `engine.lens`, never the camera's
+   * own `fov`.
+   *
+   * A label drawn at one radius and a click resolved against another is the bug
+   * this module's header is about, and reading the optics from a different
+   * producer than the one that set the projection is how it happens. A default
+   * would be worst exactly where it fires — on a camera that is not a
+   * `PerspectiveCamera`, which is when the picture is least like the one any
+   * fixed angle describes.
+   */
+  lens: Lens,
 ): PickCandidate[] {
-  const halfHeight = size.height / 2
-  const tanHalfFov = Math.tan(((camera.fov ?? 65) * Math.PI) / 360)
+  // The one identity every screen-space radius here is: an angle times the
+  // pixels a radian covers. Spelled `halfHeight / tan(fov/2)` it is the same
+  // number by a different route, and `SkyLabels` draws its marks from this call
+  // while the pick test resolves clicks against it — two spellings is two
+  // chances for a guard added to one to be missing from the other.
+  const perRadian = pixelsPerRadian(lens, size)
   const candidates: PickCandidate[] = []
 
   const add = (
@@ -61,7 +81,7 @@ export function projectScene(
       kind,
       x: (scratch.x * 0.5 + 0.5) * size.width,
       y: (1 - (scratch.y * 0.5 + 0.5)) * size.height,
-      radius: range > 0 ? (worldRadius / range / tanHalfFov) * halfHeight : 0,
+      radius: range > 0 ? (worldRadius / range) * perRadian : 0,
       offscreen,
     })
   }

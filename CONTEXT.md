@@ -4845,6 +4845,99 @@ every page's vocabulary — so a query keeping one of them requires a term nothi
 can satisfy and returns nothing at all. "The harness" found it. `search.json`
 now ships its own list and `tokenize` filters against it.
 
+## The camera gets a lens, and every terrain number is re-measured through it (28 Aug 2026)
+
+The engine stated its field of view in nine places and three values, and the
+predicate that spends the number hardest read none of them. `selectTerrain`
+refines while one grid cell subtends more than 16 px, and the pixels came from
+`DEFAULT_VIEWPORT` — 60° over 1080 — which is neither the flight lens (65°), nor
+the cinematic one (45°), nor anything the field-of-view slider's 20–110° passes
+through except in transit. [ADR-0017](docs/adr/0017-the-lens.md) carries the
+decision and the five alternatives it beat; this is what the building measured.
+
+**The lens is 848 px/rad against the guess's 935, and it costs 2–10% fewer
+patches.** Standing at two meters, 1920×1080, 16 px a cell, on the terrain zoo:
+
+| Lens            | px/rad | Earth | Zoo, standing | Zoo, descent peak | Saturated steps |
+| --------------- | ------ | ----- | ------------- | ----------------- | --------------- |
+| 60°, the guess  | 935    | 300   | 336–444       | 415–460           | 0 of 128        |
+| **65°, flight** | 848    | 294   | 330–438       | 385–449           | 0 of 128        |
+| 110°, wide end  | 378    | 264   | 300–408       | 334–415           | 0 of 128        |
+| 20°, telephoto  | 3062   | 665   | 529–642       | 687–742           | **77–108**      |
+
+**The plan's own arithmetic overstated the telephoto end by an order of
+magnitude, and why is the useful part.** It predicted 21× the patches at 20°,
+from `scale²` — the honest reading of the predicate in isolation. Measured, the
+uncapped demand is 808 to 1,418 patches, 1.9× to 3.2×. Refinement runs out of
+_levels_ before it runs out of budget: `surfaceDetailFloor` puts the zoo's floor
+at level 9 or 10, and a balanced whole-disk tree has a floor of its own. A
+predicate bounded above by the field's own detail cannot spend the square.
+
+**The 768-patch cap binds at the telephoto end and nowhere else**, on 60–84% of
+a descent's steps, reported as `saturated`. It is left where it is: 1,418
+patches is 6.0 M vertices and 288 MB of vertex buffers, on a lens the player has
+deliberately narrowed and where one level coarser is a four-pixel error rather
+than a two-pixel one. The number is written down so the next person to want it
+raised knows what they are buying.
+
+**The angle survives the conversion, and the bound is stated rather than
+claimed.** `lensForFov` on a 24 mm gauge puts the flight lens at
+18.836226925409882 mm and the cinematic one at 28.970562748477143 mm. The round
+trip through `atan(tan(θ/2))` is bit-exact for 70% of the slider's range and
+never worse than 2.9e-14° across it; the cinematic 45° round-trips exactly and
+the flight 65° is one ulp out. Carried into `framingDistance`, which goes as
+`1/tan(fov/2)`, that is 7.5 nanometers at Earth's radius. Rounding to a tidy
+19 mm would have moved it 0.85%, which is every `SHOTS` bookmark and every
+`tng-intro` beat, so `compositions.test.ts` holds the bound.
+
+**A body's tier now follows the lens it is looked at through.**
+`LOD_THRESHOLDS.billboard` was 2e-4 of angular radius under a comment reading
+"~0.2 mrad is roughly a pixel at a 60 degree FOV on a 1080p display" — a pixel
+there is `atan(1/935)`, 1.07 mrad, five times larger. It is now a third of a
+pixel of _diameter_, 1.97e-4 at the flight lens over the baseline, and in the
+browser Atlas at 104,146 km draws as a `point` at 110° and a `billboard` at 20°.
+The 1.7% shift in the shipped constant moves where a distant star becomes a
+billboard, which is a plate review rather than a unit test; it was done at both
+ends of the slider.
+
+**Three fallbacks fired exactly when they were most wrong.** `flare.ts`,
+`warpEffects.ts` and `planetarium/project.ts` read `camera.fov ?? 65` or `?? 45`
+— and the `??` branch is taken precisely when the camera is not a
+`PerspectiveCamera`, which is when the picture is least like the one the number
+assumes. Two of them disagreed with each other by 20°. All three now take
+`engine.lens`, which resolves the camera's own precedence.
+
+**The planetarium's lens copy described a coupling nobody had wired.** The panel
+said narrowing the lens "pulls the camera back rather than magnifying" and that
+"the subject stays the same size"; `setFov` recorded an angle and nothing
+re-solved the standoff until the next `focus`. Zoom, dolly and framing are three
+acts with three controls now, and the browser confirmed each does its own: a
+zoom moved the field and left `desired.distance` bit-identical, `Out` took
+Saturn from 196.3 Mm to 273.8 Mm — exactly 1.18², the wheel's own notch — and
+Hold Framing re-solved to 196.7 Mm, easing back toward the 0.55 fill it solves
+for.
+
+**The dolly buttons were wired backwards and the browser is what found it.**
+`applyZoom` takes a multiplier on distance and `ZOOM_PER_NOTCH` is 1.18, so a
+positive notch _retreats_. `In` was `+2`. Nothing in Node could have caught it —
+the arithmetic is correct in both directions and only the label is wrong.
+
+**The terrain viewport is display pixels now.** `App.tsx` multiplies the device
+ratio by `aaDprFactor`, so at 4× AA the drawing buffer is twice the display in
+each axis; supersampling raises the sample count, not the detail a viewer can
+resolve, and feeding the raw buffer height into the predicate asks for 6.5× the
+patches to draw geometry the resolve filter averages away. The engine divides
+its own factor back out, and a `gameEngine.test.ts` property pins it: the same
+window at 1× and 4× resolves to the same viewport.
+
+**Two derived numbers settle scope on sight.** The hyperfocal distance is 5.37 m
+at the flight lens on a 1520 px buffer, so everything at planetary range is at
+infinity and sharp — depth of field can never affect terrain, which is why the
+defocus _pass_ can be deferred while the _parameters_ cannot. And the circle of
+confusion is a display pixel rather than a film convention: 23.7 µm on a 24 mm
+gauge over 1520 px, against the 29 µm full-frame print rule, close enough to be
+a sanity check and moving with the display the way the blur it predicts does.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

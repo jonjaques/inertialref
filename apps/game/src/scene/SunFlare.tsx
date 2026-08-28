@@ -60,6 +60,10 @@ export function SunFlare({ engine }: { engine: GameEngine }) {
       // which is what keeps a crescent preset in the planetarium from turning
       // into an eclipse nobody asked for.
       engine.cinematic?.effects.corona ?? 0,
+      // The lens the flare is a response to, from the one producer of it. A
+      // script's lens outranks the flight one and `engine.lens` has already
+      // resolved that; reading `camera.fov` here would be a second opinion.
+      engine.lens,
     )
   })
 

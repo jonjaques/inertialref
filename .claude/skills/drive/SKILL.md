@@ -108,6 +108,7 @@ ir.sites(address) // the named places on a body: summit basin shore rough corner
 ir.visit(address, { site: 'summit', height: 2 }) // stand there; moves only a CAMERA
 ir.ascend() // back to the framing the visit left
 ir.terrain() // what the live streamer holds this frame
+ir.lens() // the optics the plate is composed through: mm, f-stop, depth of field, EV
 await ir.selfTest() // the twelve capabilities, in the real renderer
 await ir.scenario('surface') // orbit | approach | surface | interstellar | descent
 ir.play('tng-intro')

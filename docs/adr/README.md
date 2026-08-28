@@ -1,6 +1,6 @@
 # Architectural decision records
 
-Sixteen decisions that are expensive to reverse. Each records the **context**, the
+Seventeen decisions that are expensive to reverse. Each records the **context**, the
 **decision**, the **alternatives that were rejected**, and the **consequences**
 — including the ones that turned out to be costs.
 
@@ -26,6 +26,7 @@ Sixteen decisions that are expensive to reverse. Each records the **context**, t
 | [0014](0014-the-record-with-holes-in-it.md) | The record with holes in it | accepted     | A field nothing has measured is a row saying so, with the reason — written in the universe's voice, never the engine's.                                                 |
 | [0015](0015-terrain-level-of-detail.md)     | Terrain level of detail     | accepted     | A restricted, morphing quadtree over a detail floor measured from the field — and the morph closes one level, which is why the tree is restricted at all.               |
 | [0016](0016-documentation-as-a-mode.md)     | Documentation as a mode     | accepted     | The docs are a mode of the application, rendered at build and fetched at runtime — TypeDoc's model drawn by our components, so the reference is one site with the rest. |
+| [0017](0017-the-lens.md)                    | The lens                    | accepted     | The camera carries focal length, gauge, aperture, focus and gain; the field of view is derived. One producer, under the pose's own precedence.                          |
 
 ---
 
@@ -49,6 +50,7 @@ flowchart TB
     A14["<b>0014</b><br/>the record with holes"]
     A15["<b>0015</b><br/>terrain level of detail"]
     A16["<b>0016</b><br/>documentation as a mode"]
+    A17["<b>0017</b><br/>the lens"]
 
     A1 -->|"precision already solved,<br/>so frames are free to be<br/>about motion"| A2
     A1 -->|"canonical → GPU"| A3
@@ -74,6 +76,9 @@ flowchart TB
     A3 -->|"a patch rides the body's<br/>own compression"| A15
     A4 -->|"a patch is addressed<br/>before it exists"| A15
     A11 -->|"a fifth mode, over<br/>the same canvas"| A16
+    A11 -->|"the optics follow<br/>the pose's precedence"| A17
+    A15 -->|"the refinement predicate<br/>was reading a guess"| A17
+    A10 -->|"a shot carries<br/>its own lens"| A17
 
     style A1 fill:#0369a1,stroke:#0c4a6e,color:#fff
     style A8 fill:#334155,stroke:#1e293b,color:#94a3b8,stroke-dasharray: 5 5
@@ -82,6 +87,7 @@ flowchart TB
     style A13 fill:#0e7490,stroke:#155e75,color:#fff
     style A14 fill:#0e7490,stroke:#155e75,color:#fff
     style A15 fill:#0e7490,stroke:#155e75,color:#fff
+    style A17 fill:#0e7490,stroke:#155e75,color:#fff
 ```
 
 Four dependencies are worth noticing because they are not obvious:

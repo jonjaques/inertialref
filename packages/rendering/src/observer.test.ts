@@ -109,6 +109,33 @@ describe('zoom', () => {
     )
   })
 
+  it('retreats on a positive notch, in every consumer', () => {
+    /*
+     * The *direction*, which symmetry below cannot see: `applyZoom` takes a
+     * multiplier on distance and `ZOOM_PER_NOTCH` is above 1, so a positive
+     * notch moves the camera away. Flip the sign anywhere and in-then-out still
+     * returns to where it started, so every other test here passes while the
+     * wheel and every button wired to `zoomNotches` scroll the wrong way.
+     *
+     * The planetarium's dolly buttons shipped backwards for exactly this
+     * reason: the arithmetic is correct in both directions and only the label
+     * is wrong, so nothing but a picture — or this — can catch it.
+     */
+    expect(zoomFactorForNotches(1)).toBeGreaterThan(1)
+    expect(zoomFactorForNotches(-1)).toBeLessThan(1)
+    const start: ObserverState = {
+      azimuth: 0,
+      elevation: 0,
+      distance: 1e9,
+    }
+    expect(
+      applyZoom(start, zoomFactorForNotches(2), EARTH_RADIUS).distance,
+    ).toBeGreaterThan(start.distance)
+    expect(
+      applyZoom(start, zoomFactorForNotches(-2), EARTH_RADIUS).distance,
+    ).toBeLessThan(start.distance)
+  })
+
   it('is symmetric: in then out returns to where it started', () => {
     // A multiplicative zoom has this for free and a linear one does not, which
     // is the whole reason the wheel is a ratio.

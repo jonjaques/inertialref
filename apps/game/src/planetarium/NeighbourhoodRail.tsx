@@ -73,7 +73,7 @@ export function NeighbourhoodRail({
               }}
               /*
                * 20 px of hit area around a 6 px dot, and the two are different
-               * boxes on purpose — the same split `FovSlider` makes for the
+               * boxes on purpose — the same split `LensSlider` makes for the
                * thumb and its track. Dots overlap where two stars are at
                * similar distances, so the *drawn* mark has to stay small while
                * the target stays reachable; the last one painted wins the

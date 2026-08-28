@@ -77,12 +77,27 @@ free-fly space browser has: being lost, at an unknown scale, pointed at nothing.
 | Gesture               | Does                           |
 | --------------------- | ------------------------------ |
 | Drag                  | Orbit                          |
-| Wheel / pinch         | Zoom, logarithmically          |
+| Wheel / pinch         | Dolly, logarithmically         |
 | Click / tap an object | Focus it, and the camera flies |
 | `↑ ↓ ← →`             | Orbit — shift for coarse       |
-| `+` / `−`             | Zoom                           |
+| `+` / `−`             | Dolly                          |
 | `F`                   | Frame the target               |
 | `Home`                | Back to Earth                  |
+
+**Zoom, dolly and framing are three acts, and the View panel has three
+controls.** Zoom multiplies the focal length: it magnifies and changes no
+parallax, so the limb does not turn and the moons do not shift against the disk.
+A dolly moves the camera and changes all of that. Framing is a solve — the
+standoff that makes the subject fill a stated fraction of the frame at whatever
+lens is fitted, which is what `F` and **Frame** run. It solves rather than
+restores: nothing stores the fill a viewer dollied to, so the control is
+labelled for the act it performs.
+
+One control cannot describe all three without saying something false about two
+of them — "the subject stays the same size" is a claim about the solve alone,
+and a panel that prints it under a lens slider is describing a coupling nobody
+can wire, because a lens change does not move a camera.
+[ADR-0017](../adr/0017-the-lens.md) is the object that keeps the three apart.
 
 **Distance is logarithmic everywhere.** The range this camera covers is from a
 kilometer above a moon to a hundred light years — nineteen decades. Interpolated

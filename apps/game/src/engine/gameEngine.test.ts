@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { createInlineWorker, createTaskRegistry } from '@inertialref/workers'
 import { MemorySaveStore } from '@inertialref/persistence'
-import { DEFAULT_MAX_PATCHES } from '@inertialref/rendering'
-import { DEFAULT_CACHE } from '@inertialref/devtools'
+import {
+  DEFAULT_MAX_PATCHES,
+  framingDistance,
+  lensForFov,
+  verticalFovDegrees,
+} from '@inertialref/rendering'
+import { DEFAULT_CACHE, DEFAULT_FILL } from '@inertialref/devtools'
 import {
   FIELD_CACHE,
   GEOMETRY_CACHE,
@@ -66,6 +71,117 @@ describe('the game engine, headless', () => {
 
     expect(await game.load('slot-a')).toBe(true)
     expect(game.world.stateHash()).toBe(before)
+    game.dispose()
+  })
+
+  it('resolves one lens under the pose\u2019s own precedence', () => {
+    const game = engine()
+    game.frame(1 / 60)
+
+    // Nothing is scripted, so the flight lens is the answer, and it is the
+    // object the shell wrote rather than a copy of it.
+    expect(game.lens).toBe(game.flightLens)
+    game.flightLens = lensForFov(30)
+    expect(verticalFovDegrees(game.lens)).toBeCloseTo(30, 9)
+
+    /*
+     * A script outranks it, the same way its camera does — one order, resolved
+     * once, so a consumer cannot compose through the flight lens while the
+     * director is framing through its own.
+     */
+    game.harness.play('tng-intro')
+    game.frame(1 / 60)
+    expect(game.cinematic).not.toBeNull()
+    expect(verticalFovDegrees(game.lens)).toBe(45)
+
+    game.harness.stopCutscene()
+    game.frame(1 / 60)
+    expect(verticalFovDegrees(game.lens)).toBeCloseTo(30, 9)
+    game.dispose()
+  })
+
+  it('frames the observatory against the flight lens, cutscene or not', () => {
+    /*
+     * The observatory is the fallback arm: it produces a camera only when the
+     * cutscene arm is null, so solving its standoff against a script's lens is
+     * the arm depending on the one it is the fallback for. And the error is not
+     * transient — `focus` *stores* the distance it solves, so nothing recomputes
+     * it when the scene stops.
+     *
+     * Measured with the composed lens: focusing Earth during `tng-intro` parked
+     * the camera 29.76 Mm out against the 20.78 Mm the flight lens asks for, 43%
+     * too far, permanently. `framingLens()` is the host method that exists to
+     * stop it.
+     */
+    const game = engine()
+    // The viewport, because `lensView()` is null without one and a null lens
+    // falls back to the flight preset — which would hide the very thing this
+    // asserts. A headless engine has no `TerrainPatches` to report a buffer.
+    game.viewportPixels = { width: 1920, height: 1080 }
+    /*
+     * Off the default, and that is what gives this test teeth.
+     *
+     * `Observatory.#lens` falls back to `LENS_PRESETS.flight` when the host
+     * offers no `framingLens`, and `flightLens` starts life as exactly that
+     * object — so left at the default, every assertion below holds whether the
+     * port is wired or not, and deleting the wire is green. At 30° the fallback
+     * is a different lens and a missing wire is a different standoff.
+     */
+    game.flightLens = lensForFov(30)
+    game.frame(1 / 60)
+    const observatory = game.harness.observatory
+
+    observatory.focus('s:SOL/b:2')
+    // The standoff the *flight* lens asks for, stated rather than assumed: a
+    // test that only compares two readings passes when both are wrong. The
+    // radius comes off the target, because the body is the world's Earth
+    // rather than the constant.
+    const framed = observatory.status()
+    expect(framed.target).not.toBeNull()
+    expect(framed.desired.distance).toBeCloseTo(
+      framingDistance(framed.target!.radius, 30, DEFAULT_FILL),
+      -3,
+    )
+    // `desired`, not `state`: `focus` solves the standoff into the first and
+    // eases the second toward it, so a reading taken before the ease runs
+    // reports where the camera *was*.
+    const alone = observatory.status().desired.distance
+
+    game.harness.play('tng-intro')
+    game.frame(1 / 60)
+    expect(game.cinematic).not.toBeNull()
+    observatory.focus('s:SOL/b:2')
+    expect(observatory.status().desired.distance).toBeCloseTo(alone, 6)
+
+    game.harness.stopCutscene()
+    game.dispose()
+  })
+
+  it('measures the picture in display pixels, not in the drawing buffer', () => {
+    /*
+     * `App` multiplies the device ratio by `aaDprFactor`, so a 4x AA buffer is
+     * twice the display in each axis. Supersampling raises the sample count,
+     * not the detail a viewer can resolve — and the terrain predicate goes as
+     * the square of the pixels-per-radian, so feeding the raw buffer in asks
+     * for 6.5x the patches to draw geometry the resolve filter averages away.
+     *
+     * The property is that the *display* is what the lens sees: the same window
+     * at 1x and at 4x AA must produce the same viewport, and therefore the same
+     * selection.
+     */
+    const game = engine()
+    game.supersample = 1
+    game.viewportPixels = { width: 3040, height: 1520 }
+    const plain = game.lensView()
+
+    game.supersample = 2
+    game.viewportPixels = { width: 6080, height: 3040 }
+    expect(game.lensView()?.viewport).toEqual(plain?.viewport)
+
+    // And a genuinely bigger display is not divided away with it.
+    game.supersample = 1
+    game.viewportPixels = { width: 6080, height: 3040 }
+    expect(game.lensView()?.viewport.height).toBe(3040)
     game.dispose()
   })
 

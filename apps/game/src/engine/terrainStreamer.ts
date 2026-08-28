@@ -29,8 +29,10 @@ import {
 } from '@inertialref/universe'
 import {
   buildPatch,
+  DEFAULT_LENS,
   DEFAULT_MAX_PATCHES,
   DEFAULT_VIEWPORT,
+  type LensView,
   type PatchPlacement,
   patchPlacement,
   type RenderBody,
@@ -39,7 +41,6 @@ import {
   type SelectedPatch,
   selectTerrain,
   type TerrainEye,
-  type TerrainViewport,
   terrainPatchKey,
 } from '@inertialref/rendering'
 import { generateHeightfieldTask, type WorkerPool } from '@inertialref/workers'
@@ -78,6 +79,19 @@ import { generateHeightfieldTask, type WorkerPool } from '@inertialref/workers'
  */
 
 const log = getLogger('game.terrain')
+
+/**
+ * What the selection is measured against before a display has reported itself.
+ *
+ * The flight lens over the baseline, which is the same pair `LOD_THRESHOLDS`
+ * resolves to — so in the frames before `TerrainPatches` has a drawing buffer,
+ * the tier a body draws at and the ground selected under it are statements
+ * about one camera rather than two.
+ */
+const DEFAULT_LENS_VIEW: LensView = {
+  lens: DEFAULT_LENS,
+  viewport: DEFAULT_VIEWPORT,
+}
 
 /**
  * How far ahead of the camera the request set is taken, in seconds.
@@ -302,15 +316,35 @@ export class TerrainStreamer {
    * keep list, never evicted.
    */
   #epoch = 0
+  /**
+   * What the last selection was actually made against, for `ir.terrain()`.
+   *
+   * The resolved pair rather than the two nullable fields above: a readout
+   * saying "no lens" while the streamer was quietly using the flight default
+   * would be a different claim from the one the numbers beside it describe.
+   */
+  #lensView: LensView | null = null
 
   /**
-   * The drawable height the selection is measured against, in physical pixels.
+   * The optics the selection is measured against.
    *
-   * A presentation input like `fov`, set by the scene from the drawing buffer,
-   * and it belongs to the streamer rather than to the selection because a
-   * two-times display genuinely wants twice the patches for the same picture.
+   * A presentation input, written by the engine each frame under the pose's own
+   * precedence — a cutscene's lens outranks the flight one, and the terrain a
+   * scripted shot selects is the terrain that shot's lens asks for. The
+   * viewport is in *display* pixels with any supersampling already divided out;
+   * a two-times display genuinely wants twice the patches for the same picture
+   * and a two-times supersample does not.
+   *
+   * **One field rather than two, because the pair is what a selection is made
+   * against and half of it is not an answer.** Nullable independently, a live
+   * cinematic lens could be measured over the 1920×1080 baseline on a display
+   * that is neither — a `LensView` that never existed, reported by
+   * `ir.terrain()` as the one the numbers beside it came from. `null` here
+   * resolves to the same flight-lens default `selectLod` falls back to, so the
+   * bodies and the ground under them agree about the optics in every frame,
+   * including the ones before a drawing buffer has been reported.
    */
-  viewport: TerrainViewport | null = null
+  lensView: LensView | null = null
 
   constructor(pool: WorkerPool | null) {
     this.#pool = pool
@@ -337,6 +371,7 @@ export class TerrainStreamer {
     readonly culled: number
     readonly starved: number
     readonly saturated: boolean
+    readonly lens: LensView | null
   } {
     let placed = 0
     let vertices = 0
@@ -365,6 +400,7 @@ export class TerrainStreamer {
       culled: this.#culled,
       starved: this.#starved,
       saturated: this.#saturated,
+      lens: this.#lensView,
     }
   }
 
@@ -471,11 +507,12 @@ export class TerrainStreamer {
     }
     this.#colour = surface.appearance.colour
 
-    const viewport = this.viewport ?? DEFAULT_VIEWPORT
+    const { lens, viewport } = this.lensView ?? DEFAULT_LENS_VIEW
+    this.#lensView = this.lensView ?? DEFAULT_LENS_VIEW
     const eye = this.#eye(surface, spinPose, bodyPose.position, camera)
     const height = Math.max(1, eye.distance - eye.radius)
     if (
-      (eye.relief * pixelsPerRadian(viewport)) / height <
+      (eye.relief * pixelsPerRadian(lens, viewport)) / height <
       TERRAIN_RELIEF_PIXELS
     ) {
       this.#forget()
@@ -484,6 +521,7 @@ export class TerrainStreamer {
 
     const options = {
       maxLevel: surfaceDetailFloor(surface.radius, surface.surface),
+      lens,
       viewport,
     }
 
@@ -800,6 +838,9 @@ export class TerrainStreamer {
     this.#starved = 0
     this.#saturated = false
     this.#pose = null
+    // The lens is a selection mirror like the rest: reporting one beside
+    // `patches: 0` claims a selection was made against it, and none was.
+    this.#lensView = null
   }
 
   /** Drop everything. The world was replaced; none of this describes it. */

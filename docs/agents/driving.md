@@ -63,6 +63,15 @@ ir.terrain() // what the live streamer holds this frame — null headlessly
 ir.ascend() // back to the framing the camera left
 ```
 
+**A patch count is only comparable against the lens it was taken through.** The
+headless probes measure at the flight lens over 1920×1080 and state both in
+their reports; the live streamer uses whatever the camera panel is set to and
+the display's own pixels, so an `ir.terrain()` taken at another lens is a
+different question rather than a disagreement — the telephoto end of the slider
+measures 1.9× to 3.2× the flight lens's demand. `ir.lens()` is what the picture
+is being taken with, and `ir.descend` takes a `lens` and a `viewport` to ask at
+another one.
+
 `ir.visit` stands a camera on the ground; `ir.land` teleports the ship onto it.
 The same distinction as `look` and `goTo`, one clamp lower. Sites are `summit`,
 `basin`, `shore`, `rough`, `corner` and `pole`, derived from the body's own field

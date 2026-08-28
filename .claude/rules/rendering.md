@@ -2,6 +2,8 @@
 paths:
   - 'apps/game/src/render/**'
   - 'apps/game/src/scene/**'
+  - 'apps/game/src/engine/**'
+  - 'apps/game/src/hud/controls.ts'
   - 'packages/rendering/**'
   - 'packages/devtools/src/observatory.ts'
 ---
@@ -47,6 +49,14 @@ Reasoning: `AGENTS.md` § "The rules that actually matter",
   the swallowed rejection; producers `register` so the boot progress total is the sum of
   what registered rather than one step's own count. Registration is idempotent by label
   because StrictMode does everything twice.
+- **The lens has one producer, and the field of view is derived from it.**
+  `engine.lens` resolves the camera's own precedence — a script's lens, then the flight
+  one — and every consumer reads it. Focal length, gauge and zoom are canonical; the angle
+  is one line of arithmetic from them, and an angle cannot carry the aperture, focus and
+  exposure `docs/design/art.md` commits to. `CameraRig` writes `camera.fov` and nothing
+  else does — never `filmGauge`/`setFocalLength`, whose angle moves on a resize. The
+  terrain predicate takes the lens in **display** pixels, with supersampling divided out.
+  ADR-0017.
 - **Render compression is radial about the eye, never about the origin.** `placeAt` takes
   the eye in render space; `buildScene` computes it once and every caller outside it —
   `scene/OrbitTraces.tsx` is the only one — has to be given the same one. The origin is

@@ -78,6 +78,15 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", ADR-0011.
   about a different viewpoint from the one on screen. **No arm may depend on a later one
   resolving** — only the ship needs a player, and a cutscene sample placed below the
   missing-player return latched `engine.cinematic` for the rest of the session.
+- **One producer of the lens, and the field of view is derived from it.** `engine.lens`
+  resolves the same order — a script's lens, then the flight one — and every consumer
+  reads it. Focal length, gauge and zoom are canonical; the angle is arithmetic from
+  them. A panel writes `engine.flightLens`, never a `fov`, and never `camera.fov`:
+  `CameraRig` is the one writer of that, `<Canvas camera>` is a constructor argument, and
+  a consumer that cannot see the lens is a bug rather than a case to have a default for.
+  The observatory's framing solver reads `framingLens()` — the flight lens alone —
+  because it is the arm that only produces a camera when the cutscene arm is null.
+  ADR-0017.
 - **One component per file.** `react/no-multi-comp` is an oxlint error. A `.tsx` that
   exports anything besides components is a file Fast Refresh gives up on, and a full
   reload here rebuilds the `WebGPURenderer` and loses the camera. Constants and types go

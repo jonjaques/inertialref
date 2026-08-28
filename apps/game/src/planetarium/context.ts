@@ -1,5 +1,6 @@
 import type { GameEngine } from '../engine/GameEngine.ts'
 import type { OrbitScope } from '../engine/presentation.ts'
+import type { CameraState } from '../hud/controls.ts'
 import type { LabelDensity } from './layers.ts'
 
 /*
@@ -36,6 +37,30 @@ export interface PlanetariumContext {
   /** How much of the lens's artifact stack is showing, 0..1. */
   readonly flare: number
   readonly onFlare: (amount: number) => void
-  readonly fov: number
-  readonly onFov: (fov: number) => void
+  /** The lens, and the only writer of it — see `hud/controls.ts`. */
+  readonly camera: CameraState
+  /**
+   * Move the camera in or out by `notches` of the wheel's own step.
+   *
+   * The *dolly*, which is not the zoom and not the framing. One control cannot
+   * be all three: a zoom magnifies and moves nothing, a dolly changes every
+   * parallax in the frame, and holding a subject's size is a solve for the
+   * distance that does it at whatever lens is fitted. Narrowing the lens
+   * re-solves no standoff on its own — `focus` and `frameTarget` store the
+   * distance they solve — so "the subject stays the same size" is true of the
+   * solve and false of the other two. Each act has its own control, and the
+   * sentence under it is about that act.
+   */
+  readonly dolly: (notches: number) => void
+  /**
+   * Solve the standoff that fills the frame with the subject at this lens.
+   *
+   * The *framing* act, and it solves rather than restores: `DEFAULT_FILL` of
+   * the frame height at whatever lens is fitted, which is what `F` and the
+   * shot presets run. Nothing stores the fill a viewer dollied to, so this
+   * cannot put one back — and a control labelled for an intent the code does
+   * not keep would be the panel describing a coupling nobody wired all over
+   * again.
+   */
+  readonly frameSubject: () => void
 }

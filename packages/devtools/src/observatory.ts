@@ -37,6 +37,7 @@ import {
 } from '@inertialref/universe'
 import {
   anglesForPhase,
+  angularRadius,
   applyDrag,
   applyZoom,
   approachState,
@@ -52,11 +53,15 @@ import {
   MIN_STANCE_HEIGHT,
   type ObserverState,
   observerPose,
+  type Lens,
+  LENS_PRESETS,
   scrubForHeight,
   shortestAngle,
   type SurfaceStance,
   surfaceHeightBounds,
   surfaceStancePose,
+  verticalFov,
+  verticalFovDegrees,
   zoomFactorForNotches,
 } from '@inertialref/rendering'
 import { currentSystemOf, resolveDestination } from './travel.ts'
@@ -188,8 +193,6 @@ export class Observatory {
   #target: ObserverTarget | null = null
   #state: ObserverState = { azimuth: 0.6, elevation: 0.25, distance: 1e9 }
   #desired: ObserverState = this.#state
-  /** The lens the framing math assumes. Set by the host from its camera. */
-  #fovDeg = 65
   /**
    * The surface arm's whole state: non-null exactly while standing.
    *
@@ -241,11 +244,28 @@ export class Observatory {
     return centre === null ? null : observerPose(centre, this.#state).position
   }
 
-  /** The host's current vertical field of view; framing depends on it. */
-  setFov(fovDeg: number): void {
-    if (Number.isFinite(fovDeg) && fovDeg > 1 && fovDeg < 179) {
-      this.#fovDeg = fovDeg
-    }
+  /**
+   * The lens the framing math is solved against: the *flight* lens, always.
+   *
+   * Read from the host, never held here. A private copy pushed in once a frame
+   * is a second idea of the optics kept in step only by nobody forgetting the
+   * call, and the lens has one producer — `GameEngine`, under the pose's own
+   * precedence.
+   *
+   * **Deliberately not the composed lens.** That one resolves cutscene-first,
+   * and this arm produces a camera only when the cutscene arm is null, so
+   * framing against a script's lens is the observatory depending on the arm it
+   * is the fallback for. It is not a transient error either: `focus` and
+   * `frameTarget` *store* the standoff they solve, so a `ir.goTo` typed while
+   * `tng-intro` plays leaves the planetarium parked 29.8 Mm from Earth against
+   * the 20.8 Mm the flight lens asks for — 43% too far, and nothing recomputes
+   * it.
+   *
+   * The fallback is the flight preset because a headless host has no camera
+   * panel, not because the value is uncertain.
+   */
+  get #lens(): Lens {
+    return this.#host.framingLens?.() ?? LENS_PRESETS.flight
   }
 
   /**
@@ -273,7 +293,7 @@ export class Observatory {
     const distance = clampDistance(
       framingDistance(
         target.radius,
-        this.#fovDeg,
+        verticalFovDegrees(this.#lens),
         options.fill ?? DEFAULT_FILL,
       ),
       target.radius,
@@ -393,7 +413,13 @@ export class Observatory {
   /** Re-frame the current target so it fills `fill` of the frame height. */
   frameTarget(fill = DEFAULT_FILL): void {
     if (this.#target === null) return
-    this.setDistance(framingDistance(this.#target.radius, this.#fovDeg, fill))
+    this.setDistance(
+      framingDistance(
+        this.#target.radius,
+        verticalFovDegrees(this.#lens),
+        fill,
+      ),
+    )
   }
 
   /**
@@ -655,13 +681,16 @@ export class Observatory {
      * not being taken at made the Object panel's readout describe where the
      * viewer had been before the descent.
      */
+    // A ratio of two angles, so it is taken in radians and `angularRadius`
+    // owns the half of it that `lod.ts` also asks for. Written out in degrees
+    // it carries two 180/π factors that cancel, which is one edit away from
+    // the panel and the LOD tier disagreeing about a body's angular size.
     const fill =
       surface !== null
         ? 1
         : radius > 0 && this.#state.distance > radius
-          ? (2 * Math.asin(Math.min(1, radius / this.#state.distance)) * 180) /
-            Math.PI /
-            this.#fovDeg
+          ? (2 * angularRadius(radius, this.#state.distance)) /
+            verticalFov(this.#lens)
           : 0
     return {
       target: this.#target,

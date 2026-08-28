@@ -1,3 +1,4 @@
+import type { Lens } from './lens.ts'
 import {
   Quaternion as Q,
   type Quat,
@@ -135,8 +136,18 @@ export const NO_EFFECTS: CinematicEffects = Object.freeze({
 export interface CinematicSample {
   readonly frame: number
   readonly camera: CinematicPose
-  /** Vertical field of view, degrees — a cinematic lens, not the flight one. */
-  readonly fov: number
+  /**
+   * The lens the shot is taken with — a cinematic one, not the flight lens.
+   *
+   * A whole `Lens` rather than a bare angle, because the lens has one producer
+   * under the pose's own precedence and this is the first arm of it:
+   * `GameEngine` resolves `cutscene, then observatory, then the ship`
+   * for the *camera*, and the optics have to follow the same order through the
+   * same code or the picture is composed through one lens and measured through
+   * another. It is also what lets a shot carry an aperture and a focus, which
+   * `docs/design/art.md`'s photo mode is going to want and an angle cannot hold.
+   */
+  readonly lens: Lens
   readonly ship: CinematicPose & { readonly visible: boolean }
   readonly texts: readonly CinematicTextState[]
   readonly effects: CinematicEffects

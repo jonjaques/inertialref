@@ -13,13 +13,19 @@ import {
   surveySites,
 } from '@inertialref/universe'
 import {
+  DEFAULT_LENS,
   DEFAULT_MAX_PATCHES,
+  DEFAULT_VIEWPORT,
   clampLatitude,
+  type Lens,
+  type LensView,
   MIN_STANCE_HEIGHT,
   selectTerrain,
   surfaceHeightBounds,
   type TerrainSelectOptions,
   terrainPatchKey,
+  verticalFovDegrees,
+  type Viewport,
 } from '@inertialref/rendering'
 
 /*
@@ -80,6 +86,27 @@ export interface DescentOptions {
   readonly maxLevel?: number
   /** Pixels a grid cell may subtend before refining. Default 16. */
   readonly cellPixels?: number
+  /**
+   * The lens the descent is flown behind. Default: the flight lens.
+   *
+   * Every figure a descent reports is a function of it — measured over the zoo,
+   * two to three times the patches between the two ends of the field-of-view
+   * slider — so a baseline that did not say which lens it was taken through is
+   * a number nobody can reproduce. The report carries it back out for exactly
+   * that reason.
+   */
+  readonly lens?: Lens
+  /** Display pixels, supersampling already divided out. Default: 1920×1080. */
+  readonly viewport?: Viewport
+  /**
+   * The patch cap, for asking what a selection *wants* rather than what it gets.
+   *
+   * The streamer's own default is a safety net that degrades the whole disk by
+   * a level when it bites, and the only way to find out how hard it is biting
+   * is to raise it and re-fly. That is how the telephoto end of the slider got
+   * a number instead of an adjective.
+   */
+  readonly maxPatches?: number
 }
 
 export interface DescentStep {
@@ -110,6 +137,9 @@ export interface DescentStep {
 export interface DescentReport {
   readonly body: string
   readonly site: string
+  /** The optics every number below is a function of. */
+  readonly lens: Lens
+  readonly viewport: Viewport
   readonly steps: readonly DescentStep[]
   /** Every level the descent's *deepest* patch passed through, deduplicated. */
   readonly levels: readonly number[]
@@ -146,6 +176,18 @@ export interface DescentReport {
  */
 export interface TerrainReport {
   readonly body: string | null
+  /**
+   * The optics the selection was made against.
+   *
+   * Every count below is a function of it — measured, the telephoto end of the
+   * field-of-view slider asks for 1.9× to 3.2× what the flight lens does, and
+   * `terrainSelect.ts` says why that is not the square the arithmetic suggests.
+   * So a terrain readout without the optics beside it is a number nobody can
+   * compare with the one they took yesterday. Null when nothing is being
+   * selected: before the host has drawn a frame, and after the streamer lets a
+   * body go.
+   */
+  readonly lens: LensView | null
   /** Deepest and shallowest levels drawn together this frame. */
   readonly level: number
   readonly shallowestLevel: number
@@ -297,9 +339,16 @@ export function simulateDescent(
    * fixed at 12, because past it a patch is a bilinear upsample of its parent.
    * Passed explicitly so a descent report says which floor produced it.
    */
+  const lens = options.lens ?? DEFAULT_LENS
+  const viewport = options.viewport ?? DEFAULT_VIEWPORT
   const select: TerrainSelectOptions = {
     maxLevel: options.maxLevel ?? surfaceDetailFloor(body.radius, body.surface),
     cellPixels: options.cellPixels,
+    lens,
+    viewport,
+    ...(options.maxPatches === undefined
+      ? {}
+      : { maxPatches: options.maxPatches }),
   }
 
   const out: DescentStep[] = []
@@ -395,6 +444,8 @@ export function simulateDescent(
   return {
     body: address,
     site: target.name,
+    lens,
+    viewport,
     steps: out,
     levels,
     levelChanges,
@@ -486,6 +537,12 @@ export function summarizeDescent(report: DescentReport): string {
   return [
     `${report.body} → ${report.site}: ${report.steps.length} steps, ` +
       `deepest level ${report.levels.join('→')}, ${report.levelChanges} changes`,
+    // The lens, on the line above the counts it produced. Every one of them is
+    // a function of it, so a patch figure without it is a number nobody can
+    // reproduce.
+    `  through ${report.lens.focalLength.toFixed(2)} mm ` +
+      `(${verticalFovDegrees(report.lens).toFixed(1)}°) over ` +
+      `${report.viewport.width}×${report.viewport.height}`,
     `  ${report.totalRequests} requests / ${report.uniqueRegions} unique / ` +
       `${report.cacheHits} cache hits, peak burst ${report.peakBurst}`,
     `  peak ${report.peakDrawn} patches drawn, ${report.peakVisited} nodes ` +

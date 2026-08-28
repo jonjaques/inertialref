@@ -81,7 +81,7 @@ export const MIN_STANCE_HEIGHT: Meters = 2
  * the frame goes black with nothing in the console. `setStanceScrub`,
  * `setStanceHeight`, `setHeading` and `setPitch` are all public verbs, and a
  * capture script computing a height from `Number(input)` produces NaN without
- * trying. `observer.ts`'s `setFov` guards the same way for the same reason.
+ * trying. `cutscene.ts`'s `seek` guards the same way for the same reason.
  */
 export const clampPitch = (pitch: number): number =>
   !Number.isFinite(pitch)

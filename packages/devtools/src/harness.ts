@@ -45,7 +45,14 @@ import {
   restoreSave,
   serializeSave,
 } from '@inertialref/persistence'
-import { MIN_STANCE_HEIGHT, type RenderScene } from '@inertialref/rendering'
+import {
+  type Lens,
+  type LensReadout,
+  lensReadout,
+  type LensView,
+  MIN_STANCE_HEIGHT,
+  type RenderScene,
+} from '@inertialref/rendering'
 import type { PoolStats, WorkerPool } from '@inertialref/workers'
 import type { AuthorityPort, AuthorityStatus } from '@inertialref/net'
 import { describeDrift, type VersionDrift } from '@inertialref/protocol'
@@ -170,6 +177,31 @@ export interface PresentationHost {
   scene(): RenderScene | null
   frameStats(): FrameStats | null
   /**
+   * The lens the picture is being taken with, and the pixels it lands on.
+   *
+   * A getter rather than a setter for the same reason `world` is: the engine
+   * resolves the lens every frame under the pose's own precedence — a script's
+   * lens, then the flight one — and a host that pushed a copy in here would
+   * hold a second producer of it, which is the rule this phase exists to keep.
+   * `ir.lens()` reads it to print the instrument; the terrain predicate reads it
+   * to measure one. The observatory does not — it takes `framingLens()` below,
+   * and the block there says why. Absent headlessly, where there is no camera
+   * and no display.
+   */
+  lensView(): LensView | null
+  /**
+   * The lens the framing solver uses: the flight one, never the composed one.
+   *
+   * Separate from `lensView` because the observatory is the one consumer that
+   * must not see the cutscene arm. It produces a camera only when that arm is
+   * null, so framing a target against a script's lens is the observatory
+   * depending on the arm it is defined as the fallback for — and the standoff it
+   * solves is *stored*, so the error outlives the cutscene that caused it.
+   * Measured: `focus('s:SOL/b:2')` during `tng-intro` parks the camera 29.8 Mm
+   * out against the 20.8 Mm the flight lens asks for, 43% too far, permanently.
+   */
+  framingLens(): Lens
+  /**
    * What the terrain streamer is doing this frame.
    *
    * The one number in the terrain rig that cannot be derived: `simulateDescent`
@@ -190,6 +222,16 @@ export interface HarnessStatus {
   readonly workers: PoolStats | null
   readonly frame: FrameStats | null
   readonly authority: AuthorityStatus | null
+  /**
+   * The lens the frame was composed through, fully derived.
+   *
+   * On `status` rather than only on `ir.lens()` because it is what makes a
+   * captured still reproducible: a plate is a body, a pose *and* an optical
+   * setup, and the third has never been written down. `ir.shot` returns this
+   * object, so a bookmark carries the lens it was taken with — which is the
+   * record the photo-mode metadata seam eventually stamps.
+   */
+  readonly lens: LensReadout | null
 }
 
 export interface ScenarioResult {
@@ -246,7 +288,21 @@ export class GameHarness {
       workers: this.#host.pool()?.stats() ?? null,
       frame: this.#host.frameStats?.() ?? null,
       authority: this.#host.authority?.().status() ?? null,
+      lens: this.lens(),
     }
+  }
+
+  /**
+   * The camera's optics, as an instrument: focal length, aperture, the derived
+   * depth of field, the diffraction limit and the exposure.
+   *
+   * Null headlessly, where there is no display to resolve a circle of confusion
+   * against — the honest answer rather than a plausible one taken at a nominal
+   * resolution nobody is looking at.
+   */
+  lens(): LensReadout | null {
+    const view = this.#host.lensView?.() ?? null
+    return view === null ? null : lensReadout(view.lens, view.viewport)
   }
 
   /** Compact one-line summary, for a quick look from a console. */
@@ -1215,8 +1271,29 @@ export class GameHarness {
     if (!hasSolidSurface(body)) {
       throw new Error(`${body.name} has no surface to descend to`)
     }
+    /*
+     * The lens the host is actually looking through, unless the caller names
+     * one.
+     *
+     * `simulateDescent` otherwise answers for the flight lens over 1920×1080
+     * while `ir.terrain()` beside it reports a live selection made at whatever
+     * the camera panel is set to — up to three levels and 1.9× to 3.2× the
+     * patches apart, with nothing in either report saying they are answers to
+     * different questions. The pair is what the seam exists for: one says what
+     * *would* be asked for, the other what is held, and the two disagreeing is
+     * the interesting case only when they are asked at the same lens.
+     */
+    const live = this.#host.lensView?.() ?? null
+    const optics =
+      live === null
+        ? {}
+        : {
+            lens: rest.lens ?? live.lens,
+            viewport: rest.viewport ?? live.viewport,
+          }
     const report = simulateDescent(body, {
       ...rest,
+      ...optics,
       ...(latitude === undefined
         ? {}
         : { latitude: (latitude * Math.PI) / 180 }),
@@ -1327,6 +1404,7 @@ export class GameHarness {
       '  ir.descend(address?, {site, steps})',
       '                                fly a descent on paper: level churn, burst, cache',
       '  ir.terrain()                  what the live streamer holds this frame',
+      '  ir.lens()                     the camera as an instrument: mm, f-stop, depth of field',
       '  ir.zoo()                      one body per surface archetype',
       '  ir.terrainBaseline()          the zoo, its descents, and measured patch cost',
       '  ir.logs(n)',
