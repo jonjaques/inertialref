@@ -304,6 +304,17 @@ export class GameEngine implements PresentationHost {
    * answer before the first frame: a circle of confusion is a claim about a
    * display, and there is no display yet.
    */
+  /**
+   * The flight lens alone — what the observatory's framing solver reads.
+   *
+   * Separate from `lensView` because that one resolves cutscene-first, and the
+   * observatory produces a camera only when the cutscene arm is null. See
+   * `Observatory.#lens` for the 43% standoff error the composed lens caused.
+   */
+  framingLens(): Lens {
+    return this.flightLens
+  }
+
   lensView(): LensView | null {
     const viewport = this.#viewport
     return viewport === null ? null : { lens: this.lens, viewport }
@@ -482,6 +493,7 @@ export class GameEngine implements PresentationHost {
         frameStats: () => this.frameStats(),
         terrain: () => this.terrain(),
         lensView: () => this.lensView(),
+        framingLens: () => this.flightLens,
         onWorldReplaced: () => this.#invalidateDerived(),
       },
     })

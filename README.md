@@ -371,7 +371,7 @@ The markdown in this repository is the source; the site has no copy of its own.
 | [Vision and scope](docs/vision.md)                | What this is for, and the principles behind it                           |
 | [Architecture](docs/architecture.md)              | The system in one sitting                                                |
 | [Concepts](docs/README.md#concepts)               | How each mechanism works, and why                                        |
-| [ADRs](docs/adr/README.md)                        | Sixteen decisions that are expensive to reverse                          |
+| [ADRs](docs/adr/README.md)                        | Seventeen decisions that are expensive to reverse                        |
 | [Development](docs/guides/development.md)         | Commands, toolchain, conventions                                         |
 | [The harness](docs/guides/harness.md)             | The scriptable API, in full                                              |
 | [Testing](docs/guides/testing.md)                 | Property tests, golden vectors, state hashes                             |
@@ -400,9 +400,9 @@ Stated plainly, because discovering these by surprise is worse than reading them
   rather than the datum — but what it refines is three noise bands and one flat
   color per body, so every world is the same rolling fBm at a different
   amplitude. Generating a bordered 65×65 patch costs 14.5 ms against a
-  documented ≤ 8 ms budget, and a whole-disk selection holds 45–126 MB of
-  float32 vertex buffers. `pnpm sim --terrain-baseline` prints all of it; the
-  [roadmap](docs/roadmap.md#terrain) has the seams.
+  documented ≤ 8 ms budget, and a whole-disk selection holds 60–91 MB of
+  float32 vertex buffers at the flight lens. `pnpm sim --terrain-baseline`
+  prints all of it; the [roadmap](docs/roadmap.md#terrain) has the seams.
 - **Almost nothing is measured on the target machine.** The dev dock's perf tab
   (`P`) plots frame time, engine time, draw calls, worker queue and heap, and can
   time GPU frames properly — but every number recorded so far is from an Apple M5

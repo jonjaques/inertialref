@@ -332,3 +332,57 @@ than chaining, so it cannot double-unwrap either.
 Read the node_modules source before filing a raw-pathname finding inside a mode.
 The rule still binds anything rendered _outside_ `ModeRoutes` — the shell bar, the
 dock, `App`.
+
+## A "one producer" getter resolves precedence for the _wrong_ consumer
+
+`feat/the-lens` shipped `GameEngine.lens = this.cinematic?.lens ?? this.flightLens`
+and handed the same resolved value to every consumer through `lensView()`. The
+observatory is the one consumer that must **not** see the cutscene arm: it only ever
+produces a camera when the cutscene arm is null, so a lens resolved cutscene-first is
+a dependency on an arm the observatory is defined as the fallback for. `focus()`,
+`frameTarget()` and `view().fill` are command-driven and therefore reachable while a
+cutscene plays. Measured on the branch: `observatory.focus('s:SOL/b:2')` during
+`tng-intro` returns 29,761,384 m against 20,779,658 m clean — 43% further, `fill`
+0.38 against `DEFAULT_FILL` 0.55 — and it survives `stopCutscene()` because the
+distance is stored in `#state`, not recomputed.
+
+**The check, and it generalizes past the lens:** when a single getter collapses a
+precedence order, list the consumers and ask which arm each one is _itself_ part of.
+An arm reading the resolved value inherits every arm above it. The tell is a docstring
+that names the answer it expects — here three of them (`GameEngine.lens`,
+`CameraRig.tsx`, ADR-0017 § "One producer, one lens") all say "the observatory solves
+against the flight lens" while `AGENTS.md` says it reads `engine.lensView()`. Two
+statements of the same order that disagree means one of them is the code.
+
+Reproduction shape that settled it in 30 s: a throwaway `apps/game/src/engine/*.test.ts`
+using the `engine()` helper from `gameEngine.test.ts` (inline worker + `MemorySaveStore`),
+`viewportPixels` set, `frame()`, then the command with and without `harness.play(...)`.
+`ObserverStatus` has no `.distance` — it is `status.state.distance`.
+
+## `JSON.stringify(Infinity)` is `null`, and a persisted preference is JSON
+
+`Lens.focus: Meters` holds `Infinity` by default. `usePersistentState` round-trips
+through `JSON.stringify`, so a restored `camera.lens` has `focus: null` — and
+`controls.ts`'s `isLens` (`value is Lens`) explicitly admits it. Everything downstream
+happens to guard with `Number.isFinite`, so the _values_ are right; the equality
+check is not: `CameraPanel.tsx`'s Reset `disabled` compares `camera.lens.focus ===
+DEFAULT_LENS.focus`, so clicking Reset and reloading leaves Reset enabled forever.
+
+**The check:** any preference or capture record with an `Infinity`/`NaN`/`-0`/`undefined`
+field is not JSON-round-trippable. Grep the persisted shape for those, then grep for
+`===` against a constant carrying one. `LensReadout.depthOfField.far` has the same
+shape and goes out over CDP.
+
+## The branch's own re-measurement falsifies its own source comments
+
+`TERRAIN-PLAN.md` § 8 predicted `scale²` — "21× the patches at 20°", "263× between
+the two ends". The same branch measured 1.9–3.2× (refinement runs out of _levels_ at
+`surfaceDetailFloor`, so the square is never spent) and wrote the walkback into
+`TERRAIN-PLAN:717`, `ADR-0017:169` and `CONTEXT.md`. The prediction survives verbatim
+in `packages/rendering/src/lens.ts:11` and `terrainSelect.ts:70` — and
+`terrainSelect.ts` carries the _corrected_ figure 40 lines lower in
+`DEFAULT_MAX_PATCHES`, so one file states both.
+
+**The check:** when a plan document gains a "did not survive contact" paragraph, grep
+the falsified number across `packages/` and `apps/`. A phase that ships a measurement
+updates the plan and the ADR and forgets the module headers that motivated the work.

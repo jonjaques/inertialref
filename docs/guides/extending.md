@@ -251,15 +251,15 @@ seed, load a system, choose a landable body, put a ship above it, stand up a
 worker pool, pick a save store, wire the harness — and returns `{ world, player,
 harness, pool, store, system, target, dispose }`.
 
-| Option            | For                                                             |
-| ----------------- | --------------------------------------------------------------- |
-| `seed`, `system`  | what to generate                                                |
-| `catalog`         | the star catalog; defaults to Sol alone                         |
-| `workers`         | a `WorkerFactory`, or `null` for no pool at all                 |
-| `poolSize`, `now` | pool sizing and an injected clock                               |
-| `store`           | a `SaveStore`; defaults to in-memory                            |
-| `authority`       | an `AuthorityPort`; defaults to a `LocalAuthority` (ADR-0008)   |
-| `host`            | the render side: `scene()`, `frameStats()`, `onWorldReplaced()` |
+| Option            | For                                                                                                         |
+| ----------------- | ----------------------------------------------------------------------------------------------------------- |
+| `seed`, `system`  | what to generate                                                                                            |
+| `catalog`         | the star catalog; defaults to Sol alone                                                                     |
+| `workers`         | a `WorkerFactory`, or `null` for no pool at all                                                             |
+| `poolSize`, `now` | pool sizing and an injected clock                                                                           |
+| `store`           | a `SaveStore`; defaults to in-memory                                                                        |
+| `authority`       | an `AuthorityPort`; defaults to a `LocalAuthority` (ADR-0008)                                               |
+| `host`            | the render side: `scene()`, `frameStats()`, `terrain()`, `lensView()`, `framingLens()`, `onWorldReplaced()` |
 
 `host` is one parameter rather than three because they are one thing, and a
 _named_ one rather than a spread: the render answers used to be spread into the

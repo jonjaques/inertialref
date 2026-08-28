@@ -104,12 +104,21 @@ terrain is `cellPixels`, where it is a decision with a number on it.
 already forbids a second producer of the camera pose, with the precedence
 **cutscene, then observatory, then the ship**. The lens follows the same order
 through the same code: a `CinematicSample` carries a `Lens` rather than a bare
-`fov`, the observatory reads `engine.lensView()` instead of being pushed a
-scalar every step, and the flight lens is the fallback. The three `?? 65` /
+`fov`, the observatory reads the host's lens instead of being pushed a scalar
+every step, and the flight lens is the fallback. The three `?? 65` /
 `?? 45` fallbacks are deleted rather than reconciled — a consumer that cannot see
-the lens is a bug, not a case to have a default for. The order has two arms
-rather than three, because the observatory has no lens of its own: it solves a
-standoff against whatever the camera panel is set to.
+the lens is a bug, not a case to have a default for.
+
+The order has two arms rather than three, because the observatory has no lens of
+its own: it solves a standoff against whatever the camera panel is set to. That
+makes it the one consumer that must **not** read the composed lens, and the host
+port says so — `framingLens()` returns the flight lens alone, beside the
+`lensView()` that everything else reads. It produces a camera only when the
+cutscene arm is null, so framing against a script's lens is the arm depending on
+the one it is the fallback for; and because `focus` and `frameTarget` _store_ the
+distance they solve, the error outlives the scene. Measured before the split:
+focusing Earth during `tng-intro` parks the camera 29,761,384 m out against the
+20,779,658 m the flight lens asks for — 43% too far, and nothing recomputes it.
 
 **`LOD_THRESHOLDS.billboard` is derived from the pixel angle.** The comment
 beside it read "~0.2 mrad is roughly a pixel at a 60 degree FOV on a 1080p

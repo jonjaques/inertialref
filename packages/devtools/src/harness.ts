@@ -46,6 +46,7 @@ import {
   serializeSave,
 } from '@inertialref/persistence'
 import {
+  type Lens,
   type LensReadout,
   lensReadout,
   type LensView,
@@ -186,6 +187,18 @@ export interface PresentationHost {
    * one. Absent headlessly, where there is no camera and no display.
    */
   lensView(): LensView | null
+  /**
+   * The lens the framing solver uses: the flight one, never the composed one.
+   *
+   * Separate from `lensView` because the observatory is the one consumer that
+   * must not see the cutscene arm. It produces a camera only when that arm is
+   * null, so framing a target against a script's lens is the observatory
+   * depending on the arm it is defined as the fallback for — and the standoff it
+   * solves is *stored*, so the error outlives the cutscene that caused it.
+   * Measured: `focus('s:SOL/b:2')` during `tng-intro` parks the camera 29.8 Mm
+   * out against the 20.8 Mm the flight lens asks for, 43% too far, permanently.
+   */
+  framingLens(): Lens
   /**
    * What the terrain streamer is doing this frame.
    *

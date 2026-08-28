@@ -139,6 +139,24 @@ In `GameEngine.#step` the order is **cutscene, then observatory, then the
 ship**. Each arm hands a presentation eye to `buildScene`. No arm may depend
 on a later one resolving, and only the last needs a player.
 
+**The lens follows the same order through the same code.** `engine.lens` is a
+getter over `cinematic?.lens ?? flightLens`, and everything that composes a
+frame — `CameraRig`, the flare, the warp streaks, the sky labels, the terrain
+predicate — reads it rather than holding a copy. A picture composed through one
+lens and measured through another is the bug class this closes, which is why a
+consumer _reads_ the lens instead of being pushed an angle once a frame: a
+private copy is a second producer kept in step only by nobody forgetting the
+call ([ADR-0017](../adr/0017-the-lens.md)).
+
+**With one exception, and it is the precedence rule again.** The observatory's
+framing solver reads `framingLens()` — the flight lens alone — rather than the
+composed one. It is the arm that produces a camera only when the cutscene arm is
+null, so solving a standoff against a script's lens is the arm depending on the
+one it is the fallback for; and `focus` and `frameTarget` _store_ the distance
+they solve, so the error outlives the scene that caused it. Measured: focusing
+Earth from the console while `tng-intro` plays parks the camera 29.8 Mm out
+against the 20.8 Mm the flight lens asks for, permanently.
+
 The planetarium does not write canonical state. The observatory resolves an
 address, asks the world where that is this tick, and returns a pose. No
 teleport, no clock, no entity write, no save.

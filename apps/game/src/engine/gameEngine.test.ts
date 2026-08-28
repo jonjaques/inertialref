@@ -99,6 +99,43 @@ describe('the game engine, headless', () => {
     game.dispose()
   })
 
+  it('frames the observatory against the flight lens, cutscene or not', () => {
+    /*
+     * The observatory is the fallback arm: it produces a camera only when the
+     * cutscene arm is null, so solving its standoff against a script's lens is
+     * the arm depending on the one it is the fallback for. And the error is not
+     * transient — `focus` *stores* the distance it solves, so nothing recomputes
+     * it when the scene stops.
+     *
+     * Measured with the composed lens: focusing Earth during `tng-intro` parked
+     * the camera 29.76 Mm out against the 20.78 Mm the flight lens asks for, 43%
+     * too far, permanently. `framingLens()` is the host method that exists to
+     * stop it.
+     */
+    const game = engine()
+    // The viewport, because `lensView()` is null without one and a null lens
+    // falls back to the flight preset — which would hide the very thing this
+    // asserts. A headless engine has no `TerrainPatches` to report a buffer.
+    game.viewportPixels = { width: 1920, height: 1080 }
+    game.frame(1 / 60)
+    const observatory = game.harness.observatory
+
+    observatory.focus('s:SOL/b:2')
+    // `desired`, not `state`: `focus` solves the standoff into the first and
+    // eases the second toward it, so a reading taken before the ease runs
+    // reports where the camera *was*.
+    const alone = observatory.status().desired.distance
+
+    game.harness.play('tng-intro')
+    game.frame(1 / 60)
+    expect(game.cinematic).not.toBeNull()
+    observatory.focus('s:SOL/b:2')
+    expect(observatory.status().desired.distance).toBeCloseTo(alone, 6)
+
+    game.harness.stopCutscene()
+    game.dispose()
+  })
+
   it('measures the picture in display pixels, not in the drawing buffer', () => {
     /*
      * `App` multiplies the device ratio by `aaDprFactor`, so a 4x AA buffer is

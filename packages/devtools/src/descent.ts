@@ -89,10 +89,11 @@ export interface DescentOptions {
   /**
    * The lens the descent is flown behind. Default: the flight lens.
    *
-   * Every figure a descent reports is a function of it — the patch counts go as
-   * the square of the pixels-per-radian, so a baseline that did not say which
-   * lens it was taken through was a number nobody could reproduce. The report
-   * carries it back out for exactly that reason.
+   * Every figure a descent reports is a function of it — measured over the zoo,
+   * two to three times the patches between the two ends of the field-of-view
+   * slider — so a baseline that did not say which lens it was taken through is
+   * a number nobody can reproduce. The report carries it back out for exactly
+   * that reason.
    */
   readonly lens?: Lens
   /** Display pixels, supersampling already divided out. Default: 1920×1080. */
@@ -533,9 +534,9 @@ export function summarizeDescent(report: DescentReport): string {
   return [
     `${report.body} → ${report.site}: ${report.steps.length} steps, ` +
       `deepest level ${report.levels.join('→')}, ${report.levelChanges} changes`,
-    // The lens, on the line above the counts it produced. Every one of them
-    // goes as the square of the pixels-per-radian, so a patch figure without it
-    // is a number nobody can reproduce.
+    // The lens, on the line above the counts it produced. Every one of them is
+    // a function of it, so a patch figure without it is a number nobody can
+    // reproduce.
     `  through ${report.lens.focalLength.toFixed(2)} mm ` +
       `(${verticalFovDegrees(report.lens).toFixed(1)}°) over ` +
       `${report.viewport.width}×${report.viewport.height}`,

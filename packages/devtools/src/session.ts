@@ -108,8 +108,10 @@ export interface SessionHost {
   readonly frameStats?: PresentationHost['frameStats']
   /** What the terrain streamer holds this frame, for `ir.terrain()`. */
   readonly terrain?: PresentationHost['terrain']
-  /** The lens the frame is composed through, for `ir.lens()` and the observatory. */
+  /** The lens the frame is composed through, for `ir.lens()` and the panel. */
   readonly lensView?: PresentationHost['lensView']
+  /** The flight lens alone, for the observatory's framing solver. */
+  readonly framingLens?: PresentationHost['framingLens']
   /**
    * Called after the world is replaced, so a host can drop derived state.
    *
@@ -231,6 +233,9 @@ export function openSession(options: SessionOptions = {}): Session {
     ...(options.host?.lensView === undefined
       ? {}
       : { lensView: options.host.lensView }),
+    ...(options.host?.framingLens === undefined
+      ? {}
+      : { framingLens: options.host.framingLens }),
   }
 
   const harness = new GameHarness(host)

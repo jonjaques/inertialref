@@ -166,9 +166,11 @@ Violating one of these is a rewrite later, not a refactor.
   long side divided by the aspect ratio and a lens whose angle moved on a resize
   would move the terrain selection, the observatory's standoff and every
   composed shot with it. A consumer that cannot see the lens is a bug, not a
-  case to have a default for: three sites read `camera.fov ?? 65` or `?? 45`,
-  the fallbacks fired exactly when the camera was not a `PerspectiveCamera`, and
-  two of them disagreed with each other by 20°.
+  case to have a default for: a `camera.fov ?? 65` fallback fires exactly when
+  the camera is not a `PerspectiveCamera`, which is when the picture is least
+  like the one any fixed angle describes. `<Canvas camera>` sets the initial
+  angle from `DEFAULT_LENS` and is the one exception, because it is a
+  constructor argument rather than a writer.
   [ADR-0017](docs/adr/0017-the-lens.md).
 - **Never let the planetarium write canonical state.** The observatory
   resolves an address, asks the world where that is at `renderTime`, and

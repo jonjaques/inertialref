@@ -198,6 +198,19 @@ export const isLens = (value: unknown): value is Lens => {
   )
 }
 
+/**
+ * A restored lens, with the one field JSON cannot hold put back.
+ *
+ * `JSON.stringify(Infinity)` is `null`, and a lens racked to the stop is the
+ * lens the camera spends its whole life at — so without this the default lens
+ * does not survive its own round trip. Everything downstream guards with
+ * `Number.isFinite`, which takes the same branch for `null` as for `Infinity`,
+ * so the symptom is quiet: an equality against `DEFAULT_LENS` that can never
+ * hold, and a Reset control enabled on a lens that is already the default.
+ */
+export const reviveLens = (lens: Lens): Lens =>
+  Number.isFinite(lens.focus) ? lens : { ...lens, focus: Infinity }
+
 export interface CameraState {
   readonly lens: Lens
   readonly onLens: (lens: Lens) => void

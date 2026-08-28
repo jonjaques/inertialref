@@ -43,6 +43,7 @@ pixels.
 | `ir.inspect(id?)`      | one entity in full — frames, canonical + local coords, velocities |
 | `ir.dossier(address)`  | one star or one body as a page of astronomy                       |
 | `ir.snapshot(alpha?)`  | the raw presentation snapshot                                     |
+| `ir.lens()`            | the camera as an instrument — mm, f-stop, depth of field, EV      |
 | `ir.bodies(system?)`   | flat listing of a system's bodies with addresses                  |
 | `ir.systemsNearby(ly)` | nearest star systems, catalog and procedural                      |
 | `ir.logs(n)`           | recent structured log records                                     |
@@ -62,6 +63,16 @@ a `pending` reason, and `pendingCount` is how many
 ([ADR-0014](../adr/0014-the-record-with-holes-in-it.md)). It is lenient about its
 input in the same way `ir.look` is, through the same resolver, and returns `null`
 for an address that names nothing.
+
+**`ir.lens()` is the optics, and `ir.status().lens` is the same object.** Focal
+length, gauge and zoom are what the camera is set to; the field of view, the
+sharp band, the blur circle against the pixel it has to hide inside, the Airy
+disk and the exposure are derived from them against the viewport the picture
+actually lands on ([ADR-0017](../adr/0017-the-lens.md)). It is on `status`
+because a still is a body, a pose _and_ an optical setup — a capture that
+records the first two is not reproducible. Both are `null` headlessly, which is
+the honest answer rather than a plausible one taken at a nominal resolution: a
+circle of confusion is a claim about a display, and there is no display.
 
 ---
 
@@ -229,6 +240,17 @@ browser console, in `pnpm sim --terrain-baseline` and in a Node test. It takes
 `null` headlessly rather than a zero. Its `patches` counts ground built and
 placed this frame, not the selection's length — a cold arrival reports zero
 patches over zero vertices rather than six regions still in a worker.
+
+**Every count here is a function of the lens, so every report states one.** The
+demand climbs steeply with the pixels-per-radian — measured, the telephoto end
+of the slider wants 1.9× to 3.2× what the flight lens does — so a figure taken
+without the optics beside it is one nobody can reproduce or compare with
+yesterday's. `ir.descend` and `ir.terrainBaseline` print the lens and the
+viewport in their headers and carry both in the returned object; `ir.terrain`
+carries the live one. Both probes take a `lens` and a `viewport` to ask the
+question at another setting, and `ir.descend` takes a `maxPatches` — the
+streamer's own 768 is a safety net that degrades the whole disk by a level when
+it bites, so raising it is the only way to see what a selection _wanted_.
 
 ---
 

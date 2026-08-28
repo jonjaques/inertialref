@@ -59,20 +59,20 @@ matching `paths:` list; never copy the body into a second rule.
 Do not paste reasoning into these files. A rule that grows past ~30 lines is being read on
 every touch of its directory, and the thing it is competing with for attention is the code.
 
-| Rule             | Loads when you touch                                          |
-| ---------------- | ------------------------------------------------------------- |
-| `branching.md`   | every session — no `paths:`                                   |
-| `writing.md`     | every session — no `paths:`                                   |
-| `browser.md`     | every session — no `paths:`                                   |
-| `packages.md`    | anything in `packages/*`                                      |
-| `determinism.md` | the simulation, procedural, universe, spatial or physics core |
-| `react-shell.md` | any `.tsx` in the client                                      |
-| `rendering.md`   | `render/`, `scene/`, `packages/rendering`, or the observatory |
-| `cutscenes.md`   | the cinematic director, its scripts, or `cinema/`             |
-| `dock.md`        | `apps/game/src/dock`                                          |
-| `catalogue.md`   | the star catalog or the ingest app                            |
-| `record.md`      | the object dossier or any planetarium panel                   |
-| `server.md`      | the Worker, net, protocol or persistence                      |
-| `testing.md`     | any `*.test.ts`                                               |
-| `site.md`        | the document head, `public/`, the brand pipeline, analytics   |
-| `documents.md`   | any markdown under `docs/`, or the documentation build        |
+| Rule             | Loads when you touch                                                  |
+| ---------------- | --------------------------------------------------------------------- |
+| `branching.md`   | every session — no `paths:`                                           |
+| `writing.md`     | every session — no `paths:`                                           |
+| `browser.md`     | every session — no `paths:`                                           |
+| `packages.md`    | anything in `packages/*`                                              |
+| `determinism.md` | the simulation, procedural, universe, spatial or physics core         |
+| `react-shell.md` | any `.tsx` in the client                                              |
+| `rendering.md`   | `render/`, `scene/`, `engine/`, `packages/rendering`, the observatory |
+| `cutscenes.md`   | the cinematic director, its scripts, or `cinema/`                     |
+| `dock.md`        | `apps/game/src/dock`                                                  |
+| `catalogue.md`   | the star catalog or the ingest app                                    |
+| `record.md`      | the object dossier or any planetarium panel                           |
+| `server.md`      | the Worker, net, protocol or persistence                              |
+| `testing.md`     | any `*.test.ts`                                                       |
+| `site.md`        | the document head, `public/`, the brand pipeline, analytics           |
+| `documents.md`   | any markdown under `docs/`, or the documentation build                |

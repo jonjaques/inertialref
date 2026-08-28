@@ -8,9 +8,13 @@ import type { Meters, Radians, Seconds } from '@inertialref/shared'
  * screen-space-error predicate is what makes that expensive rather than untidy:
  * it refines while a patch's grid cell subtends more than `cellPixels`, so the
  * pixels-per-radian decides how much terrain exists — and across the shipped
- * controls that number spans 16×, four levels of refinement and 263× the
- * patches. A predicate reading anything but the lens the picture is actually
- * taken with is a guess with the whole disk riding on it.
+ * controls that number spans 16×, which is four levels of refinement everywhere
+ * on the visible disk. The patch demand does not go as the square of it, which
+ * is the tempting reading: refinement runs out of *levels* at
+ * `surfaceDetailFloor` before it runs out of budget, so the telephoto end
+ * measures 1.9× to 3.2× the patches rather than 263×. Four levels is still the
+ * whole disk, and a predicate reading anything but the lens the picture is
+ * actually taken with is a guess with all of it riding on it.
  *
  * **A lens is a lens, not an angle.** The canonical fields are focal length,
  * sensor gauge, zoom, f-number, focus distance, shutter and gain; the field of

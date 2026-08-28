@@ -243,17 +243,27 @@ export class Observatory {
   }
 
   /**
-   * The lens the framing math is solved against.
+   * The lens the framing math is solved against: the *flight* lens, always.
    *
    * Read from the host, never held here. A private copy pushed in once a frame
    * is a second idea of the optics kept in step only by nobody forgetting the
    * call, and the lens has one producer — `GameEngine`, under the pose's own
-   * precedence. A consumer that cannot see it is a bug rather than a case to
-   * have a default for; the fallback is the flight lens because a headless host
-   * has no camera panel, not because the value is uncertain.
+   * precedence.
+   *
+   * **Deliberately not the composed lens.** That one resolves cutscene-first,
+   * and this arm produces a camera only when the cutscene arm is null, so
+   * framing against a script's lens is the observatory depending on the arm it
+   * is the fallback for. It is not a transient error either: `focus` and
+   * `frameTarget` *store* the standoff they solve, so a `ir.goTo` typed while
+   * `tng-intro` plays leaves the planetarium parked 29.8 Mm from Earth against
+   * the 20.8 Mm the flight lens asks for — 43% too far, and nothing recomputes
+   * it.
+   *
+   * The fallback is the flight preset because a headless host has no camera
+   * panel, not because the value is uncertain.
    */
   get #lens(): Lens {
-    return this.#host.lensView?.()?.lens ?? LENS_PRESETS.flight
+    return this.#host.framingLens?.() ?? LENS_PRESETS.flight
   }
 
   /**

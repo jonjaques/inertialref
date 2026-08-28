@@ -67,12 +67,15 @@ import {
  *
  * A node refines while `distance < spacing · scale` and `scale` goes as
  * `pixelsPerRadian`, so doubling it is one more level of refinement everywhere
- * on the visible disk and the square of that in patches — 16× of scale and 263×
- * the patches between the two ends of controls a player reaches with two
- * sliders. That is why the predicate takes the lens the picture is actually
- * composed through rather than a nominal angle: a fixed one is right for
- * exactly one setting of the field-of-view slider and wrong by four levels at
- * its ends.
+ * on the visible disk — 16× of scale between the two ends of controls a player
+ * reaches with two sliders, which is four levels. The patches do not follow the
+ * square of it: refinement runs out of *levels* at `surfaceDetailFloor` before
+ * it runs out of budget, so the telephoto end measures 1.9× to 3.2× the demand
+ * rather than the 263× the arithmetic suggests — `DEFAULT_MAX_PATCHES` below
+ * carries the counts. That is why the predicate takes the lens the picture is
+ * actually composed through rather than a nominal angle: a fixed one is right
+ * for exactly one setting of the field-of-view slider and wrong by four levels
+ * at its ends.
  *
  * `LENS_PRESETS.flight` over `BASELINE_VIEWPORT` — 65° over 1080 display
  * pixels, which is 848 px/rad. The streamer passes the live lens; this is what

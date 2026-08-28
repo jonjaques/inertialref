@@ -152,7 +152,7 @@ through the optics the game is played with.
 | A mapped body's terrain is not its map     | Procedural ground under a photographic albedo, near the surface only                    | The DEM ingest ends the carve-out; Phase 3's material is what makes the patches wear the published map meanwhile                  |
 | The sphere-tier shell needs an albedo bake | Terrain is switched off past 8 px of relief, so an approach shows the sphere            | A per-face normal + albedo tile, baked in workers like any patch                                                                  |
 | The selection is not frustum-culled        | A whole disk is generated, of which the renderer draws about a third                    | The streamer has the camera; a generous cone would keep a turn from bursting                                                      |
-| Vertex attributes are float32              | 203 KB a patch, so a whole-disk selection is 45–126 MB                                  | Int8 normals and Int16 morph deltas are worth about half                                                                          |
+| Vertex attributes are float32              | 203 KB a patch, so a whole-disk selection is 60–91 MB at the flight lens                | Int8 normals and Int16 morph deltas are worth about half                                                                          |
 | The mesh is built on the main thread       | 0.25 ms a patch, four a frame                                                           | The worker already has the field; the mesh arithmetic has to move to `packages/universe` first, for the layer rule                |
 | Patch generation is over its budget        | 14.5 ms per bordered 65×65 patch against a documented ≤ 8 ms, before any geology        | `pnpm sim --terrain-baseline` is the measurement; amplitude floors and a GPU producer are the levers                              |
 | A coarse patch costs more than a fine one  | 20.7 ms at level 1 against 14.3 at level 12, for the same 4,761 samples                 | Consecutive samples of a coarse patch land in different noise lattice cells; a whole-disk selection pays it on the shell          |
@@ -319,7 +319,7 @@ has the token mapping.
 | `hud/widgets.tsx` → `Section`           | `Collapsible`, still controlled by `usePersistentState`   |
 | `hud/widgets.tsx` → `Row`               | `hud/Row.tsx`, unchanged — it is a readout, not a control |
 | `HudDock`'s hand-rolled tablist         | `Tabs` / `TabsList` / `TabsTrigger` / `TabsContent`       |
-| `CameraPanel`'s `<input type="range">`  | `Slider`, via the shared `hud/FovSlider.tsx`              |
+| `CameraPanel`'s `<input type="range">`  | `Slider`, via the shared `hud/LensSlider.tsx`             |
 | Both transports' `<input type="range">` | `Slider`, via the shared `hud/FrameScrubber.tsx`          |
 | `GraphicsPanel`'s and `ViewPanel`'s two | one `hud/SwitchRow.tsx` over `Switch`                     |
 | different `Toggle`s                     |                                                           |

@@ -95,13 +95,29 @@ describe('the angle survives the conversion', () => {
 
 describe('the gauge is vertical, so a resize crops rather than zooms', () => {
   it('holds the vertical field across every aspect ratio', () => {
+    /*
+     * The property the whole `filmGauge` / `setFocalLength` ban rests on: a
+     * lens whose angle moved on a resize would move the terrain selection, the
+     * observatory's standoff and every composed shot with it.
+     *
+     * Asserted against the *arithmetic*, and across two viewports, because
+     * `verticalFov` takes no viewport — comparing its result with its own
+     * result is `x === x` and passes whatever the body does. The way this
+     * actually breaks is the vertical field acquiring an aspect term, and that
+     * only shows up when the two windows differ. The horizontal field is
+     * asserted to follow them in the same breath, so a lens that ignored the
+     * viewport entirely cannot pass either.
+     */
     fc.assert(
       fc.property(lenses, viewports, viewports, (lens, a, b) => {
-        expect(verticalFov(lens)).toBe(verticalFov(lens))
-        // Nothing in the vertical field can see a viewport at all — which is
-        // the property, stated as a signature rather than as a test.
-        expect(horizontalFov(lens, a) > 0).toBe(true)
-        expect(horizontalFov(lens, b) > 0).toBe(true)
+        const bare =
+          2 * Math.atan(lens.gauge / (2 * effectiveFocalLength(lens)))
+        expect(verticalFov(lens)).toBe(bare)
+        const wide = aspectRatio(a) >= aspectRatio(b) ? a : b
+        const narrow = wide === a ? b : a
+        expect(horizontalFov(lens, wide)).toBeGreaterThanOrEqual(
+          horizontalFov(lens, narrow),
+        )
       }),
     )
   })
@@ -129,7 +145,10 @@ describe('the gauge is vertical, so a resize crops rather than zooms', () => {
       height: 1080,
     })
     expect(wide).toBeGreaterThan(square)
-    expect(verticalFov(LENS_PRESETS.flight)).toBeGreaterThan(square - 1e-9)
+    // A 1:1 window is the one case where the two fields coincide, which is what
+    // says the horizontal one is derived from the vertical rather than stated
+    // beside it.
+    expect(square).toBeCloseTo(verticalFov(LENS_PRESETS.flight), 12)
   })
 })
 

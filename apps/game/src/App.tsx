@@ -16,7 +16,7 @@ import type {
   HudCommands,
   HudRenderState,
 } from './hud/controls.ts'
-import { FOV_MAX, FOV_MIN, isLens } from './hud/controls.ts'
+import { FOV_MAX, FOV_MIN, isLens, reviveLens } from './hud/controls.ts'
 import { BootOverlay } from './hud/BootOverlay.tsx'
 import { CutsceneOverlay } from './hud/CutsceneOverlay.tsx'
 import { ErrorBoundary } from './hud/ErrorBoundary.tsx'
@@ -230,6 +230,9 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
       const held = readPreference('camera.fov', numberWithin(FOV_MIN, FOV_MAX))
       return held === null ? null : lensForFov(held)
     },
+    // JSON has no infinity, and a lens focused at infinity is the ordinary
+    // case. See `reviveLens`.
+    reviveLens,
   )
   const [dynamicRangeHigh, setDynamicRangeHigh] = useState(
     () => window.matchMedia(EXTENDED_RANGE_QUERY).matches,

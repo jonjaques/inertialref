@@ -700,9 +700,9 @@ quadtree and the geology rather than beside them. After Phase 1 the predicate
 that decides how much terrain exists is live and reads a guess; before Phase 2
 the geology is measured, plated and signed off against whatever that predicate
 selected. A band stack tuned against a 60° assumption and then looked at
-through a 20° lens is 21× the patches at four levels finer, and the taste
-judgment in Phase 2 — "reads as a Moon, not as noise" — is made from plates
-that would have been composed through the wrong optics. The cheap moment to
+through a 20° lens is four levels finer and two to three times the patches, and
+the taste judgment in Phase 2 — "reads as a Moon, not as noise" — is made from
+plates that would have been composed through the wrong optics. The cheap moment to
 fix that is after the machinery exists and before anything is judged with it.
 
 _Done means:_ § 8's "done means", plus the terrain baseline re-run and its

@@ -172,6 +172,13 @@ are ordinary operations. → [streaming](concepts/streaming.md)
 
 ## Presentation
 
+**Lens** — the camera's optics as an instrument: focal length, a 24 mm sensor
+gauge, zoom, f-number, focus distance, shutter and ISO. The field of view is
+_derived_ from the first three and never stored beside them, because an angle
+cannot carry an aperture, a depth of field or an exposure. The gauge is the
+sensor's _vertical_ extent, so a resize changes what is at the sides of the
+frame and nothing else. → [ADR-0017](adr/0017-the-lens.md)
+
 **LOD tier** — the _representation_ of a body: `point`, `billboard`, `sphere` or
 `surface`. Chosen by angular size, not distance. Separate from identity — the
 same planet at every tier. → [rendering](concepts/rendering.md)

@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { type Lens, LENS_PRESETS } from '@inertialref/rendering'
+import { isLens, reviveLens } from './controls.ts'
 import { isBoolean, numberWithin, oneOf } from './panelState.ts'
 
 /*
@@ -41,6 +43,28 @@ describe('remembered preferences', () => {
     expect(accept(Number.NaN)).toBe(false)
     expect(accept(Number.POSITIVE_INFINITY)).toBe(false)
     expect(accept('65')).toBe(false)
+  })
+
+  it('survives its own round trip through JSON', () => {
+    /*
+     * The stored lens, through the exact path `usePersistentState` takes: the
+     * effect writes `JSON.stringify(value)` and the next mount reads it back
+     * through `accept` and `revive`.
+     *
+     * `JSON.stringify(Infinity)` is `null`, and a lens racked to the stop is
+     * the lens the camera spends its whole life at — so the default did not
+     * survive being stored. Every consumer guards with `Number.isFinite`,
+     * which takes the same branch for `null`, so the only visible symptom was
+     * an equality against `DEFAULT_LENS` that could never hold and a Reset
+     * control enabled forever on a lens that was already the default.
+     */
+    const stored: unknown = JSON.parse(JSON.stringify(LENS_PRESETS.flight))
+    expect((stored as { focus: unknown }).focus).toBeNull()
+    expect(isLens(stored)).toBe(true)
+    expect(reviveLens(stored as Lens)).toEqual(LENS_PRESETS.flight)
+    // And a focus somebody actually set comes back untouched.
+    const near = { ...LENS_PRESETS.flight, focus: 4 }
+    expect(reviveLens(JSON.parse(JSON.stringify(near)) as Lens)).toEqual(near)
   })
 
   it('does not take a truthy string for a remembered toggle', () => {

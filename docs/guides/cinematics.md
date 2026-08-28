@@ -8,9 +8,9 @@ How scripted scenes are authored, sampled, and applied. The design intent is
 
 ## A scene is a shot list, not a camera move
 
-Each shot owns its camera, placed against its own subject. Cuts hide in
-darkness, behind a flash, or under a body filling the frame. Authored as one
-continuous spline, a scene becomes a camera crossing astronomical units
+Each shot owns its camera and its lens, placed against its own subject. Cuts
+hide in darkness, behind a flash, or under a body filling the frame. Authored as
+one continuous spline, a scene becomes a camera crossing astronomical units
 between beats and aiming at whatever sits between them.
 
 Time derives from `renderTime`, never a wall clock. A script's
@@ -72,6 +72,12 @@ limb; a cinema-authored halo is not.
 - Camera-relative choreography is **offset beats**, never absolute beats off
   a moving camera.
 - Do not per-frame look-at a hull near the lens.
+- **A shot carries a lens, not an angle.** `sample()` returns a `Lens`; build it
+  once with `lensForFov(deg)` and keep the exact focal length that comes out.
+  Rounding it to a tidy millimeter moves the field, `framingDistance` goes as
+  `1/tan(fov/2)`, and every beat fitted against the reference edit is a test that
+  then fails. The screen-space helpers still take the angle — a frame is an angle
+  and an aspect ratio ([ADR-0017](../adr/0017-the-lens.md)).
 - Light is staging. A key's screen position is a product of two dot products
   that must both carry the right sign.
 - Whiteouts are honest scene changes.
@@ -94,7 +100,8 @@ Two rungs, and the cheap one answers most questions.
 **Sample the director in Node.** `openSession()` builds the world,
 `harness.play('tng-intro')` prepares the script, and
 `harness.cutsceneSample(epoch + frame / fps)` returns the frame — camera pose,
-hull pose, texts, effects — with no browser and no dev server. A throwaway
+lens, hull pose, texts, effects — with no browser and no dev server. A
+throwaway
 script in a git-ignored `.scratch/` that prints a body's standoff in radii, its
 angular radius, where its center and limb land on screen, where the star lands,
 and the elongation, converges a camera knot in a second where a capture costs a

@@ -118,12 +118,16 @@ the error is a patch's _sample spacing_, the way Cesium's shipping tiles carry
 it: the size of the smallest thing a patch can express.
 
 "What the screen can tell" is a statement about optics, and it reads the lens
-the picture is actually taken with — [ADR-0017](../adr/0017-the-lens.md). It
-used to assume 60° over 1080 px, which is neither the flight lens nor the
-cinematic one nor anything the field-of-view slider passes through except in
-transit; the patch demand goes as the square of the pixels-per-radian, so that
-assumption set how much terrain existed. The viewport is in **display** pixels
-with any supersampling divided back out: 4× AA raises the sample count, not the
+the picture is actually taken with — [ADR-0017](../adr/0017-the-lens.md). A
+fixed angle would be right for exactly one setting of the field-of-view slider
+and four levels wrong at its ends; the patch demand climbs steeply with the
+pixels-per-radian, so the assumption would decide how much terrain exists rather
+than the picture deciding it. Not as its square, which is what the
+arithmetic suggests: refinement runs out of _levels_ at `surfaceDetailFloor`
+before it runs out of budget, and the telephoto end of the slider measures 1.9×
+to 3.2× the flight lens's demand rather than thirteen times it. The viewport is
+in **display** pixels with any supersampling divided back out: 4× AA raises the
+sample count, not the
 detail a viewer can resolve, and feeding the raw buffer in asks for 6.5× the
 patches to draw geometry the resolve filter averages away.
 
@@ -243,7 +247,7 @@ gone.
 | ------------------------------------------------ | --------------------------------------------------------------------------- | -------------------------------------------- |
 | Interest is a radius scan over generation cells  | Fine at 6 ly; a spatial index is needed for large radii                     | [roadmap](../roadmap.md#streaming-and-scale) |
 | The selection is not frustum-culled              | A whole disk is generated, of which the renderer draws about a third        | [roadmap](../roadmap.md#terrain)             |
-| Vertex attributes are float32                    | 203 KB a patch, so a whole-disk selection is 45–126 MB                      | [roadmap](../roadmap.md#terrain)             |
+| Vertex attributes are float32                    | 203 KB a patch, so a whole-disk selection is 60–91 MB at the flight lens    | [roadmap](../roadmap.md#terrain)             |
 | The mesh is built on the main thread             | 0.25 ms a patch, budgeted at four a frame; the worker already has the field | [roadmap](../roadmap.md#terrain)             |
 | Three noise bands and one flat color per body    | The ground reads as geometry rather than as a place                         | [roadmap](../roadmap.md#terrain)             |
 | A mapped body's terrain is not its published map | Procedural ground under a photographic albedo, near the surface only        | [roadmap](../roadmap.md#terrain)             |

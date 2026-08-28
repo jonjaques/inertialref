@@ -126,10 +126,27 @@ export function usePersistentState<T>(
    * Returning `null` means there was nothing to migrate.
    */
   migrate?: () => T | null,
+  /**
+   * What a believed stored value has to be put back through before it is used.
+   *
+   * JSON has no infinity: `JSON.stringify({focus: Infinity})` is
+   * `{"focus":null}`, and a preference whose round trip is not the identity
+   * silently changes on reload. The camera's focus is `Infinity` when the lens
+   * is racked to the stop, which is where it spends its whole life — so the
+   * default lens came back as `{...DEFAULT_LENS, focus: null}`, compared
+   * unequal to the default, and left the panel's Reset control enabled forever
+   * on a lens that *was* the default.
+   *
+   * Rejecting the value in `accept` is the wrong fix: it throws away the other
+   * six fields for one that can be restored exactly. This runs after `accept`,
+   * so it only ever sees a shape the caller has already believed.
+   */
+  revive?: (value: T) => T,
 ): [T, (value: T | ((previous: T) => T)) => void] {
   const [value, setValue] = useState<T>(() => {
     const stored = read(key, MISSING as T, accept)
-    if (stored !== (MISSING as T)) return stored
+    if (stored !== (MISSING as T))
+      return revive === undefined ? stored : revive(stored)
     return migrate?.() ?? initial
   })
   /*

@@ -2,6 +2,8 @@
 paths:
   - 'apps/game/src/render/**'
   - 'apps/game/src/scene/**'
+  - 'apps/game/src/engine/**'
+  - 'apps/game/src/hud/controls.ts'
   - 'packages/rendering/**'
   - 'packages/devtools/src/observatory.ts'
 ---
