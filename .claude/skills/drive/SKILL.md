@@ -75,8 +75,9 @@ five steps to five commands.
 | `--logs`        | console output and page errors buffered so far                     |
 | `--reload`      | hard reload, then wait for the renderer                            |
 
-Session flags worth knowing: `--url` (the mode is a function of the path, and the driver
-re-boots when the path differs from the attached page), `--port` (**keys the Chrome
+Session flags worth knowing: `--url` (the mode is a function of the path and the query,
+and the driver re-boots unless the attached page is already showing everything the URL
+asks for — `?at=`, `?t=`, `?seed=`), `--port` (**keys the Chrome
 profile too, so parallel agents must differ**), `--width`/`--height`/`--dpr`, `--fresh`,
 `--json`, `--down`, `--status`.
 

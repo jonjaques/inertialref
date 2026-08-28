@@ -4710,10 +4710,15 @@ returns a map and loses that order; `tokens: true` gives it back.
 Two smaller decisions. A `--shot` is downscaled to 1568 px on its long edge,
 because that is where the reader downsamples anyway and beyond it a larger file
 is bytes spent on pixels nobody sees; `--max-px 0` keeps the native capture for a
-plate. And a different `--url` path forces a re-boot rather than attaching: the
-mode is a function of the path, so a booted page on `/` is not a booted page on
-`/planetarium`, and attaching regardless produced a screenshot of the home poster
-captioned as the planetarium.
+plate. And a `--url` the attached page is not already showing forces a re-boot
+rather than attaching: the mode is a function of the path _and the query_, so a
+booted page on `/` is not a booted page on `/planetarium`, and one on
+`?at=…/b:5` is not one on `?at=…/b:2`. Attaching regardless screenshots the
+wrong subject under the right caption, which is the failure a capture rig must
+not have. The comparison is over the keys the URL **asks for**, never the whole
+search string: `CinemaPlayer` rewrites `t` on every frame and `PlanetariumMode`
+rewrites `at` on every target, so an exact match would miss on a page already
+showing exactly what was asked for and turn every warm attach into a re-boot.
 
 **A CDP command timer holds the event loop open.** Every request armed a
 two-minute timeout and none of them were cleared on the reply, so an invocation

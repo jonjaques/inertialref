@@ -183,10 +183,39 @@ const note = (line) => {
  * `parseArgs` returns values as a map, which loses the interleaving — and the
  * interleaving is the whole point of a step list. `tokens: true` gives them
  * back in source order.
+ *
+ * The `--no-` filter is not defensive tidying. `allowNegative` is on for
+ * `--no-serve`, but it applies to every boolean in `OPTIONS`, and two of the
+ * steps are booleans: `--no-reload` parses to a token named `reload` and would
+ * otherwise re-boot the page — the negation running the very step it denies.
  */
 const script = tokens
-  .filter((t) => t.kind === 'option' && STEPS.has(t.name))
+  .filter(
+    (t) =>
+      t.kind === 'option' &&
+      STEPS.has(t.name) &&
+      !String(t.rawName).startsWith('--no-'),
+  )
   .map((t) => ({ step: t.name, arg: t.value }))
+
+/** A step argument that has to be a number. `Number('soon')` is `NaN`, and a
+ *  `NaN` reaches `setTimeout` as 0 — a `--wait` that silently does not wait. */
+const count = (arg, flag, least) => {
+  const n = Number(arg)
+  if (!Number.isFinite(n) || n < least)
+    throw new Error(`--${flag} wants a number ≥ ${least}, not ${String(arg)}`)
+  return n
+}
+
+/** Every numeric step argument, checked before the dev server, Chrome and an
+ *  eleven-second boot: a typo'd `--wait` should cost a line of output, not the
+ *  whole start-up it sits behind. */
+function checkScript() {
+  for (const { step, arg } of script) {
+    if (step === 'wait') count(arg, 'wait', 0)
+    if (step === 'sample') count(arg, 'sample', 1)
+  }
+}
 
 /* ------------------------------------------------------------------ rig ---- */
 
@@ -196,9 +225,13 @@ async function readState() {
     .catch(() => null)
 }
 
+/** A patch, merged over what is already recorded rather than replacing it, so
+ *  a pid written the moment its process was spawned survives the fuller write
+ *  at the end of start-up. */
 async function writeState(patch) {
   await mkdir(RIG, { recursive: true })
-  await writeFile(STATE, `${JSON.stringify({ ...patch }, null, 2)}\n`)
+  const prior = (await readState()) ?? {}
+  await writeFile(STATE, `${JSON.stringify({ ...prior, ...patch }, null, 2)}\n`)
 }
 
 const alive = (pid) => {
@@ -232,6 +265,10 @@ async function serve(state) {
     detached: true,
   })
   child.unref()
+  // Recorded now, not on the way out. A dev server that never starts serving
+  // still has a process group holding 5173 and 8787, and a pid that only lands
+  // in the state file on success is a pid `--down` can never kill.
+  await writeState({ serverPid: child.pid ?? null, startedServer: true })
   for (let i = 0; i < 120; i += 1) {
     await sleep(500)
     if (await answers(URL_)) return child.pid ?? null
@@ -264,6 +301,9 @@ async function launchChrome(state) {
     { stdio: 'ignore', detached: true },
   )
   child.unref()
+  // Same reason as the dev server above: a Chrome that never opens its
+  // debugging port is still a Chrome, and `--down` can only kill what it knows.
+  await writeState({ chromePid: child.pid ?? null })
   for (let i = 0; i < 80; i += 1) {
     await sleep(500)
     const r = await fetch(`http://127.0.0.1:${PORT}/json/version`).catch(
@@ -321,6 +361,20 @@ function connect(ws) {
       pending.set(id, { resolve, reject, timer })
       ws.send(JSON.stringify({ id, method, params }))
     })
+  // A socket that goes away takes every command in flight with it, and those
+  // timers are `unref`d — so without this the process drains its event loop
+  // and exits 0 having answered nothing, which reads as a passing run against
+  // a Chrome that crashed. `pending` is empty by the time `main` closes the
+  // socket itself, so the ordinary shutdown lands here as a no-op.
+  const abandon = (why) => {
+    for (const [id, entry] of pending) {
+      pending.delete(id)
+      clearTimeout(entry.timer)
+      entry.reject(new Error(why))
+    }
+  }
+  ws.addEventListener('close', () => abandon('the CDP socket closed'))
+  ws.addEventListener('error', () => abandon('the CDP socket errored'))
   return { send, events }
 }
 
@@ -355,10 +409,27 @@ async function boot(send, { force }) {
   const ready = await evaluate(send, READY).catch(() => false)
   // The mode is a function of the path, so a booted page on `/` is not a
   // booted page on `/planetarium` — attaching to it regardless produced a
-  // screenshot of the home poster captioned as the planetarium.
-  const here = await evaluate(send, 'return location.pathname').catch(() => '')
-  const wanted = new URL(URL_).pathname
-  if (ready && !force && here === wanted) {
+  // screenshot of the home poster captioned as the planetarium. The query is
+  // half of that contract and carries the same weight: `?at=` is the body the
+  // planetarium opens on, `?t=` the cutscene frame, `?seed=` the universe.
+  //
+  // Asked-for keys only, never the whole search string. The app writes those
+  // same keys back as it plays — `CinemaPlayer` replaces `t` on every frame,
+  // `PlanetariumMode` replaces `at` on every target — so an exact comparison
+  // would miss on a page that is already showing exactly what was asked for,
+  // and turn every warm attach into an eleven-second re-boot.
+  const wanted = new URL(URL_)
+  const here = await evaluate(
+    send,
+    'return location.pathname + location.search',
+  ).catch(() => '')
+  const at = new URL(here, wanted.origin)
+  const showing =
+    at.pathname === wanted.pathname &&
+    [...wanted.searchParams].every(
+      ([key, value]) => at.searchParams.get(key) === value,
+    )
+  if (ready && !force && showing) {
     note('attached to a booted page')
     return
   }
@@ -405,9 +476,18 @@ async function capture(send, target) {
     // that a larger file is bytes and tokens spent on pixels the reader never
     // sees. `--max-px 0` keeps the native capture for a plate that gets published.
     const sharp = await import('sharp').then((m) => m.default).catch(() => null)
+    // Both edges and `fit: 'inside'`, because the bound is on the *long* edge
+    // and the long edge is not always the width: a portrait viewport capped by
+    // width alone comes back untouched — `withoutEnlargement` sees 900 px of
+    // width under the cap and leaves the 1600 px of height it was called about.
     if (sharp !== null)
       bytes = await sharp(bytes)
-        .resize({ width: MAX_PX, withoutEnlargement: true })
+        .resize({
+          width: MAX_PX,
+          height: MAX_PX,
+          fit: 'inside',
+          withoutEnlargement: true,
+        })
         .toBuffer()
   }
   await mkdir(path.dirname(out), { recursive: true })
@@ -453,9 +533,7 @@ function drainLogs(events) {
       const text = event.params.args
         .map((a) => a.value ?? a.description ?? a.type)
         .join(' ')
-      if (event.params.type === 'error' || event.params.type === 'warning')
-        lines.push(`${event.params.type}: ${text}`)
-      else lines.push(`${event.params.type}: ${text}`)
+      lines.push(`${event.params.type}: ${text}`)
     } else if (event.method === 'Runtime.exceptionThrown') {
       lines.push(
         `exception: ${
@@ -515,6 +593,7 @@ async function status() {
 async function main() {
   if (values.down === true) return await down()
   if (values.status === true) return await status()
+  checkScript()
 
   const prior = (await readState()) ?? {}
   const wasServing = await answers(URL_)
@@ -559,8 +638,9 @@ async function main() {
         break
       }
       case 'wait': {
-        await sleep(Number(arg))
-        results.push({ step, ms: Number(arg) })
+        const ms = count(arg, 'wait', 0)
+        await sleep(ms)
+        results.push({ step, ms })
         break
       }
       case 'reload': {
@@ -577,7 +657,7 @@ async function main() {
       case 'sample': {
         const out = await sampleFrames(
           send,
-          Number(arg),
+          count(arg, 'sample', 1),
           String(values['sample-js']),
         )
         results.push({ step, ...out })
