@@ -206,7 +206,7 @@ export function ViewPanel({
             }}
             onClick={releaseFocus}
             // The same 24px-of-hit-area-around-a-6px-track geometry
-            // `FovSlider` documents. Written out rather than shared, because
+            // `LensSlider` documents. Written out rather than shared, because
             // the two are the same *shape* and not the same control.
             className="min-w-0 flex-1 py-2.5 [&_[data-slot=slider-thumb]]:size-3.5 [&_[data-slot=slider-track]]:h-1.5"
           />

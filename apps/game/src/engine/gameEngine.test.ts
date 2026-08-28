@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { createInlineWorker, createTaskRegistry } from '@inertialref/workers'
 import { MemorySaveStore } from '@inertialref/persistence'
-import { DEFAULT_MAX_PATCHES } from '@inertialref/rendering'
+import {
+  DEFAULT_MAX_PATCHES,
+  lensForFov,
+  verticalFovDegrees,
+} from '@inertialref/rendering'
 import { DEFAULT_CACHE } from '@inertialref/devtools'
 import {
   FIELD_CACHE,
@@ -66,6 +70,61 @@ describe('the game engine, headless', () => {
 
     expect(await game.load('slot-a')).toBe(true)
     expect(game.world.stateHash()).toBe(before)
+    game.dispose()
+  })
+
+  it('resolves one lens under the pose\u2019s own precedence', () => {
+    const game = engine()
+    game.frame(1 / 60)
+
+    // Nothing is scripted, so the flight lens is the answer, and it is the
+    // object the shell wrote rather than a copy of it.
+    expect(game.lens).toBe(game.flightLens)
+    game.flightLens = lensForFov(30)
+    expect(verticalFovDegrees(game.lens)).toBeCloseTo(30, 9)
+
+    /*
+     * A script outranks it, the same way its camera does. This is the arm that
+     * used to be missing: the engine held one scalar `fov`, `CameraRig` picked
+     * between it and the sample's, and every other consumer read `camera.fov`
+     * with a hard-coded fallback for the frames where it could not.
+     */
+    game.harness.play('tng-intro')
+    game.frame(1 / 60)
+    expect(game.cinematic).not.toBeNull()
+    expect(verticalFovDegrees(game.lens)).toBe(45)
+
+    game.harness.stopCutscene()
+    game.frame(1 / 60)
+    expect(verticalFovDegrees(game.lens)).toBeCloseTo(30, 9)
+    game.dispose()
+  })
+
+  it('measures the picture in display pixels, not in the drawing buffer', () => {
+    /*
+     * `App` multiplies the device ratio by `aaDprFactor`, so a 4x AA buffer is
+     * twice the display in each axis. Supersampling raises the sample count,
+     * not the detail a viewer can resolve — and the terrain predicate goes as
+     * the square of the pixels-per-radian, so feeding the raw buffer in asks
+     * for 6.5x the patches to draw geometry the resolve filter averages away.
+     *
+     * The property is that the *display* is what the lens sees: the same window
+     * at 1x and at 4x AA must produce the same viewport, and therefore the same
+     * selection.
+     */
+    const game = engine()
+    game.supersample = 1
+    game.viewportPixels = { width: 3040, height: 1520 }
+    const plain = game.lensView()
+
+    game.supersample = 2
+    game.viewportPixels = { width: 6080, height: 3040 }
+    expect(game.lensView()?.viewport).toEqual(plain?.viewport)
+
+    // And a genuinely bigger display is not divided away with it.
+    game.supersample = 1
+    game.viewportPixels = { width: 6080, height: 3040 }
+    expect(game.lensView()?.viewport.height).toBe(3040)
     game.dispose()
   })
 
