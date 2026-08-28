@@ -335,9 +335,9 @@ export function createWarpEffects(hullLength: () => number): WarpEffects {
       group.position.copy(camera.position)
       group.quaternion.copy(camera.quaternion)
 
-      // The script's own lens, off the sample that is already in hand. It was
-      // `camera.fov ?? 45` — a second statement of the cinematic angle, in a
-      // file that had no way to know a script had changed it.
+      // The script's own lens, off the sample that is already in hand. Reading
+      // the camera instead would be a second statement of the cinematic angle,
+      // in a file with no way to know a script had changed it.
       const tanHalf = Math.tan(verticalFov(view.lens) / 2)
       const aspect = camera.aspect ?? 16 / 9
       const frameHeight = 2 * tanHalf * PLANE

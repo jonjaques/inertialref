@@ -84,10 +84,9 @@ describe('the game engine, headless', () => {
     expect(verticalFovDegrees(game.lens)).toBeCloseTo(30, 9)
 
     /*
-     * A script outranks it, the same way its camera does. This is the arm that
-     * used to be missing: the engine held one scalar `fov`, `CameraRig` picked
-     * between it and the sample's, and every other consumer read `camera.fov`
-     * with a hard-coded fallback for the frames where it could not.
+     * A script outranks it, the same way its camera does — one order, resolved
+     * once, so a consumer cannot compose through the flight lens while the
+     * director is framing through its own.
      */
     game.harness.play('tng-intro')
     game.frame(1 / 60)

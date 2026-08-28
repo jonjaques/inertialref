@@ -136,13 +136,13 @@ export function ViewPanel({
         {/*
          * Three acts, three controls, and the split is the whole section.
          *
-         * They shared one slider, and the copy under it told the reader that
-         * narrowing the lens "pulls the camera back rather than magnifying" and
-         * that "the subject stays the same size". It did not: the angle was
-         * recorded and nothing re-solved the standoff until the next focus. A
-         * lens change *is* a magnification; a dolly is the one that changes
-         * parallax; holding the framing is a solve. Each sentence below is now
-         * true of the control it sits under.
+         * A lens change is a magnification and changes no parallax; a dolly
+         * moves the camera and changes all of it; holding the framing is a
+         * solve for the distance that fills the frame at whatever lens is
+         * fitted. One control cannot be all three, and a panel that tries
+         * writes a sentence that is false of two of them — "the subject stays
+         * the same size" is true only of the solve. Each sentence below sits
+         * under the act it describes.
          */}
         <div className="flex flex-col gap-1">
           <span className="type-ui flex items-center gap-1.5 text-slate-400">

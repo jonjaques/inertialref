@@ -683,8 +683,8 @@ export class GameEngine implements PresentationHost {
      * `delta` rather than simulation time: the fly-to easing is a presentation
      * filter, and a planetarium in which pausing the clock also froze a
      * transition mid-flight would be a bug in every screenshot taken while
-     * paused. It reads the lens off this engine when it needs one, so there is
-     * no longer a scalar to push in here first.
+     * paused. It reads the lens off this engine when it needs one, so nothing
+     * has to be pushed into it first.
      */
     const observed =
       cinematic === null ? this.harness.observerSample(delta) : null

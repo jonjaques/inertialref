@@ -19,9 +19,9 @@ const PREFIX = 'ir.hud.'
  * so the values that survive a rename are the dangerous ones: a `dock.tab` of
  * `"nav"` from before the tabs were renamed parses perfectly and renders no
  * panel at all and no active tab, and the only way back is devtools. A stored
- * `camera.fov` of `NaN` or `5000` reaches `engine.fov` and the projection
- * matrix behind it. Every caller therefore says what it will accept, and an
- * unrecognised value is treated exactly like an absent one.
+ * `camera.lens` whose focal length is `NaN` or zero reaches the projection
+ * matrix. Every caller therefore says what it will accept, and an unrecognised
+ * value is treated exactly like an absent one.
  */
 export type Accept<T> = (value: unknown) => value is T
 
@@ -37,9 +37,9 @@ export function oneOf<T extends string>(values: readonly T[]): Accept<T> {
 /**
  * A finite number inside a range.
  *
- * Rejects rather than clamps, deliberately: a stored 5000° field of view is not
- * a 110° field of view somebody nearly asked for, it is a value from a build
- * that meant something else, and the default is the honest answer to it.
+ * Rejects rather than clamps, deliberately: a stored 5000 is not a value
+ * somebody nearly asked for, it is a value from a build that meant something
+ * else, and the default is the honest answer to it.
  */
 export function numberWithin(min: number, max: number): Accept<number> {
   return (value): value is number =>

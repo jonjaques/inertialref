@@ -44,15 +44,14 @@ export interface LodThresholds {
  * A third of one, which is deliberately sub-pixel: a star is always smaller
  * than a pixel and must still draw, so the threshold's job is to decide when a
  * point cloud stops being an honest description rather than when something
- * becomes resolvable. That is what the shipped constant was doing — 2e-4 of
- * angular *radius* — and the sentence beside it, "~0.2 mrad is roughly a pixel
- * at a 60 degree FOV on a 1080p display", was not arithmetic: a pixel there is
- * `atan(1/935)`, which is 1.07 mrad, five times larger.
+ * becomes resolvable.
  *
- * Stated as a fraction of the real pixel angle, the same constant comes out at
- * 1.97e-4 at the flight lens over the baseline — within 2% of the number it
- * replaces, and now a function of the lens the body is being looked at through,
- * which is what it always claimed to be.
+ * Stated as a fraction of the pixel angle rather than as a constant, because a
+ * constant can only be right at one lens: at the flight lens over the baseline
+ * this is 1.97e-4 of angular radius, and at the telephoto end of the slider it
+ * is a quarter of that. The arithmetic is easy to get wrong by an order of
+ * magnitude — a pixel at 60° over 1080 px is `atan(1/935)`, 1.07 mrad, not the
+ * 0.2 mrad it is tempting to call one.
  */
 export const BILLBOARD_PIXEL_FRACTION = 1 / 3
 

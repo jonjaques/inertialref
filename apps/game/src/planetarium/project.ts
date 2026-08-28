@@ -43,12 +43,12 @@ export function projectScene(
    * The lens the frame is composed through — `engine.lens`, never the camera's
    * own `fov`.
    *
-   * It was `camera.fov ?? 65`, and the fallback fired exactly when the camera
-   * was not a `PerspectiveCamera`, which is when the picture is least like the
-   * one 65° describes. A label drawn at one radius and a click resolved against
-   * another is the bug this module's header is about; reading the lens from a
-   * different producer than the one that set the projection is how that
-   * happens.
+   * A label drawn at one radius and a click resolved against another is the bug
+   * this module's header is about, and reading the optics from a different
+   * producer than the one that set the projection is how it happens. A default
+   * would be worst exactly where it fires — on a camera that is not a
+   * `PerspectiveCamera`, which is when the picture is least like the one any
+   * fixed angle describes.
    */
   lens: Lens,
 ): PickCandidate[] {

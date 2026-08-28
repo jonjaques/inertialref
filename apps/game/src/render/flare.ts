@@ -307,13 +307,13 @@ export interface LensFlare {
     /**
      * The lens the frame is composed through — `engine.lens`.
      *
-     * It was `camera.fov ?? 65`, and the fallback fired exactly when the camera
-     * was not a `PerspectiveCamera`: the frames least like the picture 65°
-     * describes were the frames that assumed it. The flare's quads are placed
-     * at a fixed camera-space depth and sized by `tan(fov/2)`, so a lens the
-     * host has changed and this has not puts the ghost chain somewhere other
-     * than on the line through frame center, which is the one thing the whole
-     * artifact stack is.
+     * Not `camera.fov`, which is a second opinion: the quads are placed at a
+     * fixed camera-space depth and sized by `tan(fov/2)`, so a lens the host
+     * has changed and this has not puts the ghost chain somewhere other than on
+     * the line through frame center — which is the one thing the whole artifact
+     * stack is. A default here would be worst exactly where it fires, on a
+     * camera that is not a `PerspectiveCamera` and therefore least like the
+     * picture any fixed angle describes.
      */
     lens: Lens,
   ): void

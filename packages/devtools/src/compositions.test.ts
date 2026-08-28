@@ -12,7 +12,7 @@ import { placeShot, SHOTS } from './shots.ts'
 import { TNG_INTRO, TNG_LENS } from './cutscenes/tngIntro.ts'
 
 /*
- * Every shipped composition, before and after the lens exists.
+ * Every shipped composition, held to the angle the lens gives back.
  *
  * This is the test that protects work nobody can redo cheaply. `tng-intro`'s
  * beats are fitted frame by frame against a reference edit and their criteria

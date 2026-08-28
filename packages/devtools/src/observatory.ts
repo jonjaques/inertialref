@@ -245,14 +245,12 @@ export class Observatory {
   /**
    * The lens the framing math is solved against.
    *
-   * Read from the host rather than pushed into here every step, which is what
-   * `setFov` was: a scalar copied out of the engine once a frame into a private
-   * field, so the observatory held its own idea of the optics and the only
-   * thing keeping the two in step was that nobody had forgotten the call. The
-   * lens has one producer — `GameEngine`, under the pose's own precedence — and
-   * a consumer that cannot see it is a bug rather than a case to have a default
-   * for. The fallback here is the flight lens because a headless host has no
-   * camera panel, not because the value is uncertain.
+   * Read from the host, never held here. A private copy pushed in once a frame
+   * is a second idea of the optics kept in step only by nobody forgetting the
+   * call, and the lens has one producer — `GameEngine`, under the pose's own
+   * precedence. A consumer that cannot see it is a bug rather than a case to
+   * have a default for; the fallback is the flight lens because a headless host
+   * has no camera panel, not because the value is uncertain.
    */
   get #lens(): Lens {
     return this.#host.lensView?.()?.lens ?? LENS_PRESETS.flight

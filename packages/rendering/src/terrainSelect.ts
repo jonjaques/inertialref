@@ -65,19 +65,19 @@ import {
 /**
  * The optics the predicate is a statement about.
  *
- * It was a 60° field over 1080 pixels that arrived from nowhere: neither the
- * flight lens nor the cinematic one nor anything the field-of-view slider passes
- * through except in transit. A node refines while `distance < spacing · scale`
- * and `scale` goes as `pixelsPerRadian`, so doubling it is one more level of
- * refinement everywhere on the visible disk and the square of that in patches —
- * 16× of scale and 263× the patches between the two ends of controls a player
- * reaches with two sliders. The lens is what the picture is actually taken
- * with, so it is what the predicate reads.
+ * A node refines while `distance < spacing · scale` and `scale` goes as
+ * `pixelsPerRadian`, so doubling it is one more level of refinement everywhere
+ * on the visible disk and the square of that in patches — 16× of scale and 263×
+ * the patches between the two ends of controls a player reaches with two
+ * sliders. That is why the predicate takes the lens the picture is actually
+ * composed through rather than a nominal angle: a fixed one is right for
+ * exactly one setting of the field-of-view slider and wrong by four levels at
+ * its ends.
  *
  * `LENS_PRESETS.flight` over `BASELINE_VIEWPORT` — 65° over 1080 display
- * pixels, 848 px/rad against the old assumption's 935. The streamer passes the
- * live lens; this is what the headless probe and the tests measure against, and
- * naming it here is what keeps those numbers comparable between runs.
+ * pixels, which is 848 px/rad. The streamer passes the live lens; this is what
+ * the headless probe and the tests measure against, and naming it here is what
+ * keeps those numbers comparable between runs.
  */
 export const DEFAULT_LENS: Lens = LENS_PRESETS.flight
 export const DEFAULT_VIEWPORT: Viewport = BASELINE_VIEWPORT

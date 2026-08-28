@@ -3,13 +3,14 @@ import type { Meters, Radians, Seconds } from '@inertialref/shared'
 /*
  * The lens.
  *
- * The engine stated its field of view in nine places and three values, and the
- * one predicate that spends the number hardest — the terrain screen-space-error
- * test — read none of them: it assumed 60° over 1080 px, which is neither the
- * flight lens nor the cinematic one nor anything the field-of-view slider
- * passes through except in transit. Across the shipped controls that guess
- * spans 16× of scale, four levels of refinement and 263× the patches. This is
- * the object that goes in the seam.
+ * One object for the camera's optics, because more than one is a picture
+ * composed through one lens and measured through another. The terrain
+ * screen-space-error predicate is what makes that expensive rather than untidy:
+ * it refines while a patch's grid cell subtends more than `cellPixels`, so the
+ * pixels-per-radian decides how much terrain exists — and across the shipped
+ * controls that number spans 16×, four levels of refinement and 263× the
+ * patches. A predicate reading anything but the lens the picture is actually
+ * taken with is a guess with the whole disk riding on it.
  *
  * **A lens is a lens, not an angle.** The canonical fields are focal length,
  * sensor gauge, zoom, f-number, focus distance, shutter and gain; the field of
@@ -96,9 +97,9 @@ export interface Lens {
    * Multiplier on the focal length. 1 is the lens's own.
    *
    * Zoom is not the dolly and it is not framing — it magnifies without moving
-   * the camera, so it changes no parallax and no occlusion. The planetarium's
-   * three controls are exactly those three acts, which before this shared one
-   * slider and one number.
+   * the camera, so it changes no parallax and no occlusion. The planetarium
+   * gives each of the three acts its own control, because one control cannot
+   * describe all three without saying something false about two of them.
    */
   readonly zoom: number
   /** f-number: focal length over aperture diameter. */

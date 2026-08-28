@@ -248,7 +248,7 @@ export class CutsceneDirector {
     if (active === null) throw new Error('No cutscene is playing')
     /*
      * Non-finite input is declined rather than clamped, the way
-     * `Observatory.setFov` declines a field of view it cannot use.
+     * `surfaceStance.ts` declines a height it cannot stand at.
      * `Math.max(0, Math.min(NaN, n))` is `NaN`, which lands in `epoch` — and
      * `epoch` is never recomputed, so every subsequent frame is `NaN`, the
      * `frame >= durationFrames` end test is false forever, and the scene
