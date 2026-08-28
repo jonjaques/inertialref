@@ -132,17 +132,23 @@ interface OutputEntry {
  * Deliberately narrow, in three ways that each close a hole. One first-party
  * module in the chunk and it is ours again. A chunk whose module list is
  * unavailable counts as ours too, because the failure this guards against is
- * silent and the check is worth more than the false positive. And the virtual
- * prefix is `\0vite/` rather than `\0`: any plugin may emit a virtual module,
- * and the first one here that does would otherwise be first-party source in a
- * chunk this check had stopped looking at.
+ * silent and the check is worth more than the false positive. And a virtual
+ * module is somebody else's **unless it is named as ours** — every plugin in
+ * this file is `inertialref:`-prefixed by convention, so the first one that
+ * emits a module of its own is checked rather than skipped.
+ *
+ * That last one took two attempts. A bare `startsWith('\0')` exempts a
+ * first-party virtual module along with everyone else's; enumerating the
+ * prefixes that exist today — `\0vite/preload-helper.js` and
+ * `\0rolldown/runtime.js` — fails the build on the next one the bundler
+ * invents, which is how the second attempt was found.
  */
 function hasNoSourceOfOurs(chunk: OutputEntry | undefined): boolean {
   const ids = chunk?.moduleIds ?? Object.keys(chunk?.modules ?? {})
-  return (
-    ids.length > 0 &&
-    ids.every((id) => id.includes('node_modules') || id.startsWith('\0vite/'))
-  )
+  const theirs = (id: string): boolean =>
+    id.includes('node_modules') ||
+    (id.startsWith('\0') && !id.includes('inertialref'))
+  return ids.length > 0 && ids.every(theirs)
 }
 
 function requireSourceMaps() {
@@ -166,6 +172,16 @@ function requireSourceMaps() {
       for (const name of scripts) {
         const text = readFileSync(`${dir}/${name}`, 'utf8')
         if (!text.includes('sourceMappingURL')) {
+          console.log(
+            'NOMAP',
+            name,
+            JSON.stringify(
+              (
+                bundle[`assets/${name}`]?.moduleIds ??
+                Object.keys(bundle[`assets/${name}`]?.modules ?? {})
+              ).slice(0, 4),
+            ),
+          )
           if (hasNoSourceOfOurs(bundle[`assets/${name}`])) continue
           throw new Error(
             `dist/assets/${name} has no sourceMappingURL — the debugger ` +

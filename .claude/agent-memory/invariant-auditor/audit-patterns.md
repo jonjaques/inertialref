@@ -279,16 +279,16 @@ a comment that quotes a millisecond figure.
 
 `feat/the-docs-join-the-site` added a hand-maintained allow-list
 (`scripts/docs/wings.mjs`) and a gate that fails the build on any `docs/**.md` no
-wing claims. The *next* commit on the same branch added
+wing claims. The _next_ commit on the same branch added
 `docs/adr/0016-documentation-as-a-mode.md` — the ADR for the feature — and did not
 list it. `pnpm docs:build` throws (`build.mjs:236 assertNothingUnlisted`), and
 `pnpm build` runs `docs:build` first, so `pnpm check` is red.
 
-**The check, and it is thirty seconds:** run the tests for the *new* gate, not the
+**The check, and it is thirty seconds:** run the tests for the _new_ gate, not the
 whole suite. `pnpm vitest run <the new test file>`. A feature that ships an
 exhaustiveness gate over a directory will be violated by the documentation commit
 that follows it, because the author is thinking about prose by then. Do this
-*last*, after the tree has stopped moving.
+_last_, after the tree has stopped moving.
 
 ## Count words in doc headers drift on every row added
 
@@ -302,7 +302,7 @@ five-row table it had just gained, in the same hunk.
 it for a number word. `rg -n 'One|Two|Three|Four|Five|Six|Seven|Eight|Nine|Ten|Eleven|Twelve|Thirteen|Fourteen|Fifteen|Sixteen'`
 over the touched markdown is enough.
 
-## A comment's *reason* can be false while its code is right
+## A comment's _reason_ can be false while its code is right
 
 `useDocsFraming.ts` destructures `framing` into four values "because the manifest
 hands back a fresh `framing` on every render … eight times a second". Neither half
@@ -324,11 +324,11 @@ Nearly filed "DocsMode reads `resolvedLocation(...).pathname` but the raw
 resets the scroll". It cannot happen: react-router's `useRoutesImpl` wraps the
 rendered matches in a `LocationContext.Provider` carrying `locationArg`
 (`react-router@8/dist/development/lib/hooks.js:612`), and `ModeRoutes` renders
-`<Routes location={resolvedLocation(useLocation())}>`. So *every* `useLocation()`
+`<Routes location={resolvedLocation(useLocation())}>`. So _every_ `useLocation()`
 inside a mode already returns the background. `resolvedLocation` at a mode's root
-is a defensive no-op, and `useOverlay.keep` re-wraps the *mode's* location rather
+is a defensive no-op, and `useOverlay.keep` re-wraps the _mode's_ location rather
 than chaining, so it cannot double-unwrap either.
 
 Read the node_modules source before filing a raw-pathname finding inside a mode.
-The rule still binds anything rendered *outside* `ModeRoutes` — the shell bar, the
+The rule still binds anything rendered _outside_ `ModeRoutes` — the shell bar, the
 dock, `App`.
