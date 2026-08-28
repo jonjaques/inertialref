@@ -1,9 +1,7 @@
-import { readdir } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
-import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { assetName, DOCS, linkFor, routeFor } from './routes.mjs'
-import { listedPages, WINGS } from './wings.mjs'
+import { documentsUnderDocs, listedPages, WINGS } from './wings.mjs'
 
 /*
  * The two halves of the documentation build that can be wrong silently.
@@ -109,9 +107,9 @@ describe('where a link in a document points', () => {
 /*
  * The reference exports `Vec3` and `vec3`, `Session` and `session`, and
  * twenty-two more pairs that differ only in case. On APFS and NTFS those are
- * one filename, so 904 pages produced 878 files and the twenty-six that
+ * one filename, so 905 pages produced 881 files and the twenty-four that
  * vanished were whichever of each pair was written second — on Linux, where CI
- * and the deploy build run, all 904 survived. A generator whose output depends
+ * and the deploy build run, all 905 survived. A generator whose output depends
  * on the developer's filesystem is a generator whose output cannot be checked.
  */
 describe('the file a page is written to', () => {
@@ -137,17 +135,7 @@ describe('the file a page is written to', () => {
 describe('the wing table', () => {
   it('claims every markdown file under docs/', async () => {
     const claimed = new Set(listedPages().map((entry) => entry.path))
-    const found = []
-    const walk = async (relative) => {
-      for (const item of await readdir(join(ROOT, relative), {
-        withFileTypes: true,
-      })) {
-        const path = `${relative}/${item.name}`
-        if (item.isDirectory()) await walk(path)
-        else if (item.name.endsWith('.md')) found.push(path)
-      }
-    }
-    await walk('docs')
+    const found = await documentsUnderDocs(ROOT)
     expect(found.filter((path) => !claimed.has(path))).toEqual([])
   })
 

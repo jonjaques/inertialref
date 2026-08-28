@@ -46,6 +46,9 @@
  * go. `b:4` is Jupiter. `s:SOL` is the star itself, over the reference.
  */
 
+import { readdir } from 'node:fs/promises'
+import { join } from 'node:path'
+
 import { DOCS } from './routes.mjs'
 
 /** @typedef {{ address: string, phase: number, tilt: number, fill: number }} Framing */
@@ -253,6 +256,30 @@ export const allWings = (referenceGroups) => [
   ...WINGS,
   { ...REFERENCE, groups: referenceGroups },
 ]
+
+/**
+ * Every markdown file under `docs/`, as repository paths.
+ *
+ * Here rather than beside either caller, because there are two and they have to
+ * agree about what a document is: `build.mjs` refuses to publish one this finds
+ * and the table does not claim, and `routes.test.mjs` asserts the same thing
+ * without running a build. Two walks is one of them quietly growing a rule the
+ * other does not have.
+ */
+export async function documentsUnderDocs(root) {
+  const found = []
+  const walk = async (relative) => {
+    for (const item of await readdir(join(root, relative), {
+      withFileTypes: true,
+    })) {
+      const path = `${relative}/${item.name}`
+      if (item.isDirectory()) await walk(path)
+      else if (item.name.endsWith('.md')) found.push(path)
+    }
+  }
+  await walk('docs')
+  return found
+}
 
 /** The repository paths this table publishes, in reading order. */
 export function listedPages() {

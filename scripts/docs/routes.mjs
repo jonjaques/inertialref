@@ -156,10 +156,10 @@ export const sourceUrl = (repoPath) =>
  *
  * The reference exports `Vec3` and `vec3`, `Session` and `session`, and
  * twenty-two more pairs that differ only in case. On APFS and NTFS those are
- * one filename, so the second page written silently replaced the first — 902
- * pages produced 878 files, and the twenty-four that vanished were whichever
+ * one filename, so the second page written silently replaced the first — 905
+ * pages produced 881 files, and the twenty-four that vanished were whichever
  * of each pair happened to be written second. On Linux, where CI and the
- * deploy build run, all 902 survive. A generator whose output depends on the
+ * deploy build run, all 905 survive. A generator whose output depends on the
  * developer's filesystem is a generator whose output cannot be checked.
  *
  * The digest also means nothing has to agree about the escaping rules: the

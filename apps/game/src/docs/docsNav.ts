@@ -45,14 +45,14 @@ export function groupFor(
 /**
  * Whether a wing's groups are all open at once.
  *
- * The four prose wings are twenty-six pages at their largest, which is a rail
- * you can read; the reference is eight hundred and eighteen, which is not. So
+ * The four prose wings are twenty-seven pages at their largest, which is a rail
+ * you can read; the reference is eight hundred and twenty, which is not. So
  * the rule is a count rather than a flag on the wing: everything is open until
  * the wing is too long to be, and then only the group being read is.
  *
  * Forty is where a rail stops being scannable at this type size and starts
- * being a list to scroll — measured against `concepts`, which is twenty-six and
- * comfortable, and against `api`, which is not close.
+ * being a list to scroll — measured against `concepts`, which is twenty-seven
+ * and comfortable, and against `api`, which is not close.
  */
 const OPEN_ALL_BELOW = 40
 

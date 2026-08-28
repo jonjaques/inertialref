@@ -12,7 +12,7 @@ import { buildReference } from './api.mjs'
 import { loadHighlighter } from './highlight.mjs'
 import { renderMarkdown } from './markdown.mjs'
 import { assetName, routeFor, sourceUrl } from './routes.mjs'
-import { allWings, listedPages } from './wings.mjs'
+import { allWings, documentsUnderDocs, listedPages } from './wings.mjs'
 
 /*
  * The documentation build.
@@ -29,10 +29,10 @@ import { allWings, listedPages } from './wings.mjs'
  *
  * The obvious alternative is to import the pages into the bundle, so that Vite
  * content-hashes them and the service worker's cache-first branch covers them
- * for free. It is the wrong trade at this size: there are eight hundred and
- * forty pages, and a module graph with eight hundred and forty dynamic imports
- * in it is a chunk manifest larger than most of the pages. Under `public/` they
- * are ordinary same-origin GETs, which `public/sw.js` serves
+ * for free. It is the wrong trade at this size: there are nine hundred and five
+ * pages, and a module graph with nine hundred and five dynamic imports in it is
+ * a chunk manifest larger than most of the pages. Under `public/` they are
+ * ordinary same-origin GETs, which `public/sw.js` serves
  * stale-while-revalidate: instant from the cache, corrected in the background,
  * and available with the network off, which is this project's base case rather
  * than its degraded one.
@@ -137,7 +137,7 @@ async function main() {
      * is paid for on the way in. The lead, the word count and the diagram count
      * were here and are not: each is read on exactly one screen, and that screen
      * has already fetched the page that carries them. Dropping the three took
-     * the manifest from 240 KB to 110 KB.
+     * the manifest from 286 KB to 181 KB.
      */
     pages: Object.fromEntries(
       pages.map((page) => [
@@ -202,6 +202,20 @@ async function renderProse() {
 
     const source = await readFile(join(ROOT, entry.path), 'utf8')
     const rendered = renderMarkdown(source, entry.path)
+    /*
+     * A document with no `# heading` has no title, and `null` propagates
+     * further than it looks: the manifest carries it, the masthead and the
+     * breadcrumb both `??` it into "Not Found" on a page that loaded, and
+     * `searchDocs` lowercases every row's title on every keystroke — so one
+     * untitled page is search returning nothing for every query, with a
+     * `TypeError` in the console as the only sign. The wing table gates a file
+     * nobody filed; this gates a file nobody named.
+     */
+    if ((entry.title ?? rendered.title) === null)
+      throw new Error(
+        `${entry.path} has no level-one heading, so it has no title. ` +
+          'Give it a `# Title` line, or name it in scripts/docs/wings.mjs.',
+      )
     pages.push({
       ...rendered,
       route,
@@ -235,17 +249,7 @@ async function renderProse() {
  */
 async function assertNothingUnlisted(listed) {
   const claimed = new Set(listed.map((entry) => entry.path))
-  const found = []
-  const walk = async (relative) => {
-    for (const item of await readdir(join(ROOT, relative), {
-      withFileTypes: true,
-    })) {
-      const path = `${relative}/${item.name}`
-      if (item.isDirectory()) await walk(path)
-      else if (item.name.endsWith('.md')) found.push(path)
-    }
-  }
-  await walk('docs')
+  const found = await documentsUnderDocs(ROOT)
 
   const missing = found.filter((path) => !claimed.has(path)).sort()
   if (missing.length > 0)
@@ -268,6 +272,14 @@ async function assertNothingUnlisted(listed) {
  * because `TypeDocReader` is what reads it. Nothing is lost; what is gained is
  * that a conversion failure arrives as a thrown exception with a stack rather
  * than as an exit code and a missing file.
+ *
+ * **`validate` is a second call and not a setting.** `typedoc.json` asks for
+ * `validation.invalidLink`, which is what makes `{@link Observatory}` pointing
+ * at a renamed symbol a build failure rather than words that link nowhere — but
+ * `convert()` does not run it. Only `app.validate(project)` does, and it
+ * reports through the logger rather than by throwing, so the count has to be
+ * read afterwards. Left out, the option is configured and inert: a broken
+ * cross-reference converts cleanly, emits no warning, and ships.
  */
 async function convert() {
   const app = await Application.bootstrapWithPlugins({}, [
@@ -279,6 +291,13 @@ async function convert() {
   if (project === undefined)
     throw new Error(
       'TypeDoc could not convert packages/*. Run `pnpm exec typedoc` for the diagnostics.',
+    )
+  app.validate(project)
+  if (app.logger.hasErrors() || app.logger.hasWarnings())
+    throw new Error(
+      'TypeDoc reported the problems above. A `{@link}` naming a symbol that ' +
+        'no longer exists is the common one — fix what points at it, or rename ' +
+        'the target back.',
     )
   return app.serializer.projectToObject(project, ROOT)
 }
@@ -317,7 +336,7 @@ async function packageDescriptions() {
  * server and without a second dependency.
  *
  * The body field holds a page's *vocabulary* rather than its prose:
- * deduplicated, lowercased, sorted. The corpus is a hundred and fifty-eight
+ * deduplicated, lowercased, sorted. The corpus is a hundred and twenty-two
  * thousand words and its distinct words are a fraction of that, because a
  * document that is about reference frames says "frame" forty times and an index
  * needs to know it once. That is the difference between a full-text index of

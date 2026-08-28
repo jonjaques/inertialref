@@ -60,6 +60,11 @@
      whose internal links quietly stop working is worse than one that never had
      them.
 
+     Half of it is here and half is in `scripts/docs/build.mjs`: `convert()`
+     does not run these, only `app.validate(project)` does, and it reports
+     through the logger rather than by throwing. Set here alone the whole block
+     is configured and inert.
+
      `notDocumented` stays off. It is the only one of these that is a judgement
      rather than a fact: this codebase comments what is not obvious and
      deliberately declines to restate what is, and turning that into a build

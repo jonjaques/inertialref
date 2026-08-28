@@ -46,10 +46,21 @@ const request = (
   headers: { has: (name) => name === 'range' && overrides.range === true },
 })
 
-/** A response the worker considers worth storing. */
-const okResponse = () => ({
+/**
+ * A response the worker considers worth storing.
+ *
+ * The content type is a parameter because it is load-bearing: the deployment
+ * answers a staged file it does not have with the application shell and a
+ * **200**, so "is this a real answer" is not a question the status code can
+ * settle.
+ */
+const okResponse = (contentType = 'application/javascript') => ({
   ok: true,
   type: 'basic',
+  headers: {
+    get: (name: string) =>
+      name.toLowerCase() === 'content-type' ? contentType : null,
+  },
   clone: () => ({ body: 'copy' }),
 })
 
@@ -63,7 +74,9 @@ interface Harness {
   readonly stores: Map<string, Map<string, unknown>>
 }
 
-function loadServiceWorker(): Harness {
+function loadServiceWorker(
+  answer: () => unknown = () => okResponse(),
+): Harness {
   const listeners = new Map<string, (event: unknown) => void>()
   const harness: Harness = {
     listeners,
@@ -124,7 +137,7 @@ function loadServiceWorker(): Harness {
   // The file is a script, not a module, so this is how it gets evaluated with
   // its globals replaced. Everything it reaches for is a parameter here.
   new Function('self', 'caches', 'fetch', SOURCE)(self, caches, () =>
-    Promise.resolve(okResponse()),
+    Promise.resolve(answer()),
   )
   return harness
 }
@@ -142,6 +155,25 @@ function handled(harness: Harness, req: FakeRequest): boolean {
     waitUntil: () => {},
   })
   return responded
+}
+
+/** The same, run to completion, for the tests that ask what got stored. */
+async function settle(harness: Harness, req: FakeRequest): Promise<void> {
+  const listener = harness.listeners.get('fetch')
+  if (listener === undefined) throw new Error('no fetch listener registered')
+  const waits: Promise<unknown>[] = []
+  let answered: Promise<unknown> = Promise.resolve()
+  listener({
+    request: req,
+    respondWith: (promise: Promise<unknown>) => {
+      answered = promise
+    },
+    waitUntil: (promise: Promise<unknown>) => {
+      waits.push(promise)
+    },
+  })
+  await answered
+  await Promise.all(waits)
 }
 
 describe('the service worker', () => {
@@ -183,6 +215,30 @@ describe('the service worker', () => {
     expect(
       handled(sw, request('/assets/x.js', { cache: 'only-if-cached' })),
     ).toBe(false)
+  })
+
+  /*
+   * The 200 that is not an answer.
+   *
+   * The origin is served with `not_found_handling: single-page-application`, so
+   * a request for a staged file the asset store does not have yet comes back as
+   * `index.html` with a 200 — which is how a page of `/doc-content/` looks in
+   * the window after a deploy, before its file has landed. Stored, that shell
+   * is served out of Cache Storage in place of the file for the life of the
+   * cache: `docs/content.ts` asks for JSON, gets markup, and the reader is told
+   * a page that exists does not, on every visit, until the next build rotates
+   * the cache name.
+   */
+  it('does not store the application shell under a data file’s name', async () => {
+    const sw = loadServiceWorker(() => okResponse('text/html; charset=utf-8'))
+    await settle(sw, request('/doc-content/page/vision-1a2b3.json'))
+    expect(sw.put).toEqual([])
+  })
+
+  it('does store the file when the file is what came back', async () => {
+    const sw = loadServiceWorker(() => okResponse('application/json'))
+    await settle(sw, request('/doc-content/page/vision-1a2b3.json'))
+    expect(sw.put).toEqual([`${ORIGIN}/doc-content/page/vision-1a2b3.json`])
   })
 
   it('names its cache after the build that installed it', async () => {

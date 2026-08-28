@@ -54,9 +54,6 @@ export const cinemaScene = (id: string): string =>
  */
 export const DOCS = '/docs'
 
-/** One page. The route mirrors the file's path in the repository. */
-export const docsPage = (slug: string): string => `${DOCS}/${slug}`
-
 /** Settings, over whatever is running. */
 export const SETTINGS = '/settings'
 export const settingsSection = (section: string): string =>

@@ -187,8 +187,13 @@ function indexPage(packages, context) {
           ? ''
           : `<p>${escapeHtml(entry.description)}</p>`)
       const count = (entry.module.children ?? []).length
+      /* The `id` is what the `headings` below point at. This page has no
+         `<h2>`s to hang them on — it is twelve rows — so the row is the
+         anchor, and without one every entry in "On this page" is a link to a
+         fragment that is not in the document: `DocsMode` finds no target and
+         scrolls to the top instead. */
       return (
-        `<a class="api-row" href="${entry.route}" data-internal>` +
+        `<a class="api-row" id="${escapeAttribute(entry.short)}" href="${entry.route}" data-internal>` +
         `<span class="api-row-name">${escapeHtml(entry.short)}</span>` +
         `<span class="api-row-body">${summary}</span>` +
         `<span class="api-row-count">${count}</span></a>`

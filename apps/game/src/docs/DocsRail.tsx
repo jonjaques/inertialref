@@ -14,14 +14,14 @@ const MARGIN = 64
  *
  * **Only one wing is ever expanded**, and that is the decision the whole rail
  * rests on. There are nine hundred pages here and a tree that showed all of
- * them would be a file browser; five names and twenty-six pages is a table of
+ * them would be a file browser; five names and twenty-seven pages is a table of
  * contents. Moving between wings is a click on a name that is always visible,
  * which is the same trade a book makes between its contents page and its
  * chapter openers.
  *
  * The groups inside a wing follow `opensEveryGroup`: open everywhere the wing
  * is short enough to read at once, and only around the current page in the
- * reference, which is eight hundred and eighteen exports across twelve
+ * reference, which is eight hundred and twenty exports across twelve
  * packages.
  */
 export function DocsRail({

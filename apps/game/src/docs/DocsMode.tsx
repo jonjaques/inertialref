@@ -69,9 +69,16 @@ export function DocsMode({
    * reading room the two differ, and this component is drawn at the background
    * — reading `location.pathname` here would refetch the page for `/settings`
    * and find nothing. `pages/paths.ts` carries the argument at length.
+   *
+   * The **hash** comes from the same place, and that is not symmetry for its
+   * own sake: a dialog's location carries no fragment, so reading it raw turns
+   * opening Settings from `/docs/concepts/frames#the-chain` into a `hash` that
+   * changed to `''`, which re-runs the scroll below and throws the reading room
+   * back to the top behind the scrim.
    */
-  const route = normalize(resolvedLocation(useLocation()).pathname)
-  const hash = useLocation().hash
+  const here = resolvedLocation(useLocation())
+  const route = normalize(here.pathname)
+  const hash = here.hash
 
   const manifest = useManifest()
   const wing =

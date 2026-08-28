@@ -1482,6 +1482,10 @@ a.t-link:hover {
   padding: 0.55rem 0.5rem;
   text-decoration: none;
   transition: background-color 150ms;
+  /* The reference index has no headings of its own, so a row carries the id
+     "On this page" points at — and a fragment landing on one has to clear the
+     sticky bar for the same reason a heading does. */
+  scroll-margin-top: 4.5rem;
 }
 
 @media (min-width: 640px) {

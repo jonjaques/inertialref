@@ -96,16 +96,36 @@ export function renderMarkdown(source, repoPath) {
  * than a place to jump to.
  */
 export function renderFragment(source, repoPath) {
-  const counted = { diagrams: 0 }
-  return markedFor(repoPath, counted, {
-    heading({ tokens, depth }) {
-      const level = Math.min(depth + 2, 6)
-      return `<h${level} class="doc-h">${this.parser.parseInline(tokens)}</h${level}>\n`
-    },
-  })
-    .parse(source, { async: false })
-    .trim()
+  let marked = fragmentRenderers.get(repoPath)
+  if (marked === undefined) {
+    marked = markedFor(
+      repoPath,
+      { diagrams: 0 },
+      {
+        heading({ tokens, depth }) {
+          const level = Math.min(depth + 2, 6)
+          return `<h${level} class="doc-h">${this.parser.parseInline(tokens)}</h${level}>\n`
+        },
+      },
+    )
+    fragmentRenderers.set(repoPath, marked)
+  }
+  return marked.parse(source, { async: false }).trim()
 }
+
+/*
+ * One renderer per source path, kept rather than rebuilt.
+ *
+ * `api.mjs` calls the above for every summary, every block tag and every
+ * documented parameter in the reference — several thousand fragments across
+ * nine hundred pages — and a fresh `new Marked().use({ renderer })` each time
+ * is the largest avoidable cost in that half of the build. An instance is a
+ * pure function of `repoPath` and holds nothing between parses, which is what
+ * makes it cacheable at all; the diagram tally it carries is written and never
+ * read, because a `mermaid` fence in a doc comment belongs to the page whose
+ * comment it is.
+ */
+const fragmentRenderers = new Map()
 
 /**
  * The renderer both of the above share.

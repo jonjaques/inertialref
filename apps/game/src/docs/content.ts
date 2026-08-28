@@ -218,6 +218,13 @@ const pages = new Map<string, Promise<DocPage>>()
  * page the cache has never seen and the origin has only just gained. Asking
  * again past the cache turns that into a slower first load instead of an error
  * on a page that exists.
+ *
+ * **Past a different cache than the one it looks like.** `cache: 'reload'`
+ * bypasses the HTTP cache, and the service worker is not one: it answers from
+ * Cache Storage, and `Cache.match` keys on the URL alone — it has never heard
+ * of a request's cache mode. So the retry asks for a *different* URL, which is
+ * the only thing a `caches.match` can miss on. The query is ignored by the
+ * asset store and the file that comes back is the same one.
  */
 export function loadPage(entry: DocEntry): Promise<DocPage> {
   const url = `${CONTENT}/page/${entry.asset}`
@@ -227,7 +234,7 @@ export function loadPage(entry: DocEntry): Promise<DocPage> {
   const promise = fetchJson<DocPage>(url)
     .catch((cause: unknown) => {
       if (!(cause instanceof NotFound)) throw cause
-      return fetchJson<DocPage>(url, { cache: 'reload' })
+      return fetchJson<DocPage>(`${url}?retry=1`, { cache: 'reload' })
     })
     .catch((cause: unknown) => {
       pages.delete(entry.asset)

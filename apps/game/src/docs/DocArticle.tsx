@@ -70,17 +70,38 @@ export function DocArticle({
     if (copy !== null) {
       const listing = copy.parentElement?.querySelector('pre')
       if (listing === null || listing === undefined) return
-      void navigator.clipboard.writeText(listing.textContent ?? '').then(() => {
-        // The icon turns Nominal Green for a beat. No text swap and no toast:
-        // the confirmation belongs on the control that was pressed, and this is
-        // the one status colour in the system that means "it is there".
-        copy.setAttribute('data-copied', 'true')
-        copy.setAttribute('aria-label', 'Copied')
-        window.setTimeout(() => {
-          copy.removeAttribute('data-copied')
-          copy.setAttribute('aria-label', 'Copy this block')
-        }, 1400)
-      })
+      /*
+       * `navigator.clipboard` is not always there, and the write can be
+       * refused. It is a secure-context API, so it is `undefined` on any
+       * `http://` origin that is not `localhost` — which is the dev server
+       * bound to a LAN address so a phone can reach it — and reading through
+       * it there throws out of the click handler into React. Where it exists
+       * the promise still rejects on a denied permission or an unfocused
+       * document, and an unhandled rejection is a control that neither
+       * confirms nor says why.
+       *
+       * The `?.` and the guard under it both read as dead to TypeScript, whose
+       * DOM types declare `clipboard` non-optional. The browser disagrees, and
+       * the browser is the one running this.
+       */
+      const write = navigator.clipboard?.writeText(listing.textContent ?? '')
+      if (write === undefined) return
+      void write.then(
+        () => {
+          // The icon turns Nominal Green for a beat. No text swap and no toast:
+          // the confirmation belongs on the control that was pressed, and this
+          // is the one status colour in the system that means "it is there".
+          copy.setAttribute('data-copied', 'true')
+          copy.setAttribute('aria-label', 'Copied')
+          window.setTimeout(() => {
+            copy.removeAttribute('data-copied')
+            copy.setAttribute('aria-label', 'Copy this block')
+          }, 1400)
+        },
+        () => {
+          copy.setAttribute('aria-label', 'Copying is not available here')
+        },
+      )
       return
     }
 

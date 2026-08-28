@@ -172,16 +172,6 @@ function requireSourceMaps() {
       for (const name of scripts) {
         const text = readFileSync(`${dir}/${name}`, 'utf8')
         if (!text.includes('sourceMappingURL')) {
-          console.log(
-            'NOMAP',
-            name,
-            JSON.stringify(
-              (
-                bundle[`assets/${name}`]?.moduleIds ??
-                Object.keys(bundle[`assets/${name}`]?.modules ?? {})
-              ).slice(0, 4),
-            ),
-          )
           if (hasNoSourceOfOurs(bundle[`assets/${name}`])) continue
           throw new Error(
             `dist/assets/${name} has no sourceMappingURL — the debugger ` +
