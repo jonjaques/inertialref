@@ -164,15 +164,20 @@ export function ViewPanel({
             <Move3d aria-hidden className="size-3.5 shrink-0" />
             Dolly
             <span className="ml-auto flex gap-1">
+              {/* Negative notches close the distance: `applyZoom` takes a
+                  multiplier on distance and `ZOOM_PER_NOTCH` is 1.18, so a
+                  positive notch retreats. The wheel is signed the same way and
+                  these two buttons are the same act with a pointer that has
+                  no wheel. */}
               <Action
                 label="In"
                 title="Move the camera toward the subject"
-                onClick={() => dolly(2)}
+                onClick={() => dolly(-2)}
               />
               <Action
                 label="Out"
                 title="Move the camera away from the subject"
-                onClick={() => dolly(-2)}
+                onClick={() => dolly(2)}
               />
               <Action
                 label="Hold Framing"

@@ -1,6 +1,5 @@
 import {
   DEFAULT_GAUGE,
-  effectiveFocalLength,
   type Lens,
   lensForFov,
   verticalFovDegrees,
@@ -133,8 +132,10 @@ export const LENS_CHANNELS = {
       ...lens,
       fStop: valueOf(scrub, F_STOP_MIN, F_STOP_MAX),
     }),
-    format: (lens) =>
-      `f/${lens.fStop.toFixed(1)} · ⌀ ${(effectiveFocalLength(lens) / lens.fStop).toFixed(1)} mm`,
+    // The f-number alone. The aperture *diameter* it implies is a derived
+    // reading and belongs with the other derived readings, not wrapped onto a
+    // second line of a control's own value.
+    format: (lens) => `f/${lens.fStop.toFixed(1)}`,
   },
   focus: {
     label: 'Focus',

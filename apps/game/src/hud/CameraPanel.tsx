@@ -148,20 +148,28 @@ export function CameraPanel({ camera }: { camera: CameraState }) {
             value={formatDistance(view.depthOfField.hyperfocal)}
           />
           <Row
-            label="Circle of confusion"
-            value={`${(view.circleOfConfusion * 1000).toFixed(1)} µm on a ${(view.pixelPitch * 1000).toFixed(1)} µm pixel`}
+            label="Aperture"
+            value={`⌀ ${view.apertureDiameter.toFixed(1)} mm`}
+          />
+          {/* A blur circle against the pixel it has to hide inside, and an Airy
+              disk against the f-number where it stops fitting. Both are
+              two-number comparisons and both were one row of prose that the
+              panel truncated at the ellipsis. */}
+          <Row
+            label="Blur circle"
+            value={`${(view.circleOfConfusion * 1000).toFixed(1)} µm / ${(view.pixelPitch * 1000).toFixed(1)} µm px`}
           />
           <Row
             label="Airy disk"
-            value={`${(view.airyDiameter * 1000).toFixed(1)} µm — diffraction-limited past f/${view.diffractionLimit.toFixed(1)}`}
+            value={`${(view.airyDiameter * 1000).toFixed(1)} µm · past f/${view.diffractionLimit.toFixed(0)}`}
           />
           <Row
             label="Resolution"
-            value={`${view.pixelAngleMrad.toFixed(2)} mrad/px · ${view.angularResolutionMrad.toFixed(2)} mrad optical`}
+            value={`${view.pixelAngleMrad.toFixed(2)} · ${view.angularResolutionMrad.toFixed(2)} mrad`}
           />
           <Row
             label="Exposure"
-            value={`EV ${view.exposureValue.toFixed(1)} at 1/${Math.round(1 / camera.lens.shutter)} s, ISO ${camera.lens.iso}`}
+            value={`EV ${view.exposureValue.toFixed(1)} · 1/${Math.round(1 / camera.lens.shutter)} s · ISO ${camera.lens.iso}`}
           />
         </Section>
       )}
