@@ -136,6 +136,15 @@ from the datum are gone — every one of the zoo's twenty-four survey sites now
 bottoms out at its own detail floor, where two of Miranda's could not be drawn
 at any altitude at all.
 
+Phase 1.5 landed 28 Aug 2026: the camera has a lens, and the refinement
+predicate reads it instead of assuming 60° over 1080 px.
+[ADR-0017](adr/0017-the-lens.md) is the decision record. It matters here because
+every patch count in the plan is a function of that one number — the flight lens
+is 848 px/rad against the guess's 935, and the telephoto end of the
+field-of-view slider saturates the patch cap on most of a descent's steps.
+Phase 2's acceptance criterion is a plate review, and the plates are now composed
+through the optics the game is played with.
+
 | Gap                                        | Consequence today                                                                       | Seam                                                                                                                              |
 | ------------------------------------------ | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | Three noise bands                          | No craters, no tectonics — every world is the same rolling fBm at a different amplitude | The band stack and the per-body sketch, [TERRAIN-PLAN § 6](../TERRAIN-PLAN.md); `surfaceDetailFloor` deepens with them on its own |

@@ -157,6 +157,19 @@ Violating one of these is a rewrite later, not a refactor.
 - **Never add a second producer of the camera.** In `GameEngine.#step` the
   order is **cutscene, then observatory, then the ship.** No arm of that
   order may depend on a later one resolving. Only the last needs a player.
+- **Never add a second producer of the lens.** It follows the camera's own
+  precedence through the same code — a `CinematicSample` carries a `Lens`, the
+  observatory reads `engine.lensView()`, and the flight lens is the fallback.
+  The field of view is _derived_ from focal length, gauge and zoom and is never
+  stored beside them; `CameraRig` writes `camera.fov` and nothing else does,
+  never `filmGauge` or `setFocalLength`, because Three's gauge is the sensor's
+  long side divided by the aspect ratio and a lens whose angle moved on a resize
+  would move the terrain selection, the observatory's standoff and every
+  composed shot with it. A consumer that cannot see the lens is a bug, not a
+  case to have a default for: three sites read `camera.fov ?? 65` or `?? 45`,
+  the fallbacks fired exactly when the camera was not a `PerspectiveCamera`, and
+  two of them disagreed with each other by 20°.
+  [ADR-0017](docs/adr/0017-the-lens.md).
 - **Never let the planetarium write canonical state.** The observatory
   resolves an address, asks the world where that is at `renderTime`, and
   returns a pose. No teleport, no clock, no entity write, no save.

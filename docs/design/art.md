@@ -296,6 +296,21 @@ camera the player can actually operate is the natural expression of the
 | Time                             | Pause and step; the simulation is deterministic, so a stepped frame is exact                          |
 | Export                           | Full HDR and tonemapped SDR, with the location's address stamped in the metadata                      |
 
+**The instrument exists.** [ADR-0017](../adr/0017-the-lens.md) makes the camera a
+lens rather than an angle — focal length on a 24 mm gauge, zoom, f-number, focus
+distance, shutter and gain — and the camera panel already drives all of it and
+prints what it implies: the sharp band, the blur circle against the pixel it has
+to hide inside, the Airy disk against the f-number where it stops fitting, and
+the exposure in stops. What photo mode adds is the tether, the filters, the
+export, and the _blur_ the depth of field already predicts.
+
+The numbers are why that split is safe rather than a deferral. At the flight
+lens the hyperfocal distance is 5.37 m, so everything at planetary range is at
+infinity and sharp: defocus is a near-field effect — the hull, the cockpit, a
+rock two meters away — and no amount of it can touch a planet. Diffraction and
+exposure are not like that. They act at every scale, which is why the parameters
+ship now and the blur pass ships with the rest of the art milestone.
+
 **The address in the metadata is the good part.** A screenshot carries the
 address of where it was taken, and because the universe is a deterministic pure
 function, anyone can paste that address and go there. The image _is_ a

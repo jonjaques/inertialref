@@ -117,6 +117,16 @@ in a thousand of a cube face, and a patch's 64 quads cut it by another 64. So
 the error is a patch's _sample spacing_, the way Cesium's shipping tiles carry
 it: the size of the smallest thing a patch can express.
 
+"What the screen can tell" is a statement about optics, and it reads the lens
+the picture is actually taken with — [ADR-0017](../adr/0017-the-lens.md). It
+used to assume 60° over 1080 px, which is neither the flight lens nor the
+cinematic one nor anything the field-of-view slider passes through except in
+transit; the patch demand goes as the square of the pixels-per-radian, so that
+assumption set how much terrain existed. The viewport is in **display** pixels
+with any supersampling divided back out: 4× AA raises the sample count, not the
+detail a viewer can resolve, and feeding the raw buffer in asks for 6.5× the
+patches to draw geometry the resolve filter averages away.
+
 **Stop where the field stops.** Past some level a patch is a bilinear upsample
 of its parent — on Mercury a level-9 patch differs from one by 12 cm, and levels
 10 through 12 by nothing a float can hold. `surfaceDetailFloor` measures that

@@ -119,6 +119,7 @@ export const WINGS = [
           ],
           ['docs/adr/0015-terrain-level-of-detail.md', 'Terrain Detail'],
           ['docs/adr/0016-documentation-as-a-mode.md', 'Documentation'],
+          ['docs/adr/0017-the-lens.md', 'The Lens'],
         ],
       },
     ],
