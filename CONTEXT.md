@@ -5050,6 +5050,123 @@ the test is that the same CSS window drags at one rate at 1×, 1.5× and 2×.
 - **An inline `--js` IIFE returns `null` through the driver.** The multi-step
   capture is a `--file`, which is what `scripts/drive.mjs --help` already says.
 
+## The ground stops being noise and becomes a geology (28 Aug 2026)
+
+Phase 2 of [`TERRAIN-PLAN.md`](TERRAIN-PLAN.md), in full.
+[ADR-0019](docs/adr/0019-the-geology.md) is the record.
+
+Three bands of noise is the smallest number that reads as a planet and the
+largest that can read as anything *in particular*. Mercury and Titan came out of
+it as the same rolling fBm at different amplitudes, because `SurfaceParameters`
+carried a seed, a peak, a frequency and a sea level and nothing downstream could
+know more. It now carries a `SurfaceGrammar` derived from the body's own facts,
+a per-body sketch of plate nuclei, hotspots and a crater ladder sits under it,
+and six bands evaluate against that.
+
+**What comes out, checked against the published numbers.** Mercury: saturated
+(crater density 0.97), one lid, largest basin 1,098 km against Caloris's 1,550,
+floors flattening past 7.8 km. Luna: 0.86, largest 782 km against Imbrium's
+1,145. Mars: 0.47 and 1,525 km against Hellas's 2,300. Earth: 0.19, 22 plates.
+Venus: 0.00 craters and **one** plate — the same size and age as Earth, and the
+only input that separates them is standing water, which is the leading
+explanation for why one of them subducts. Callisto: 37% relaxed at 134 K; Pluto
+0% at 40 K, which is why its water-ice mountains stand.
+
+**`maxElevation` is a strength limit rather than a dial.** `σ/(ρg)` with σ =
+3.2 × 10⁸ Pa calibrated on Olympus Mons, capped at nine percent of the body's own
+mean radius and at 22 km. Each of the three binds on a different class of body:
+strength on the planets (Earth 5.9 km, which understates Everest because a static
+limit describes what a crust holds rather than what a collision is still doing),
+size on a 50 km moon where strength alone would allow 5,000 km, and the ceiling
+on Luna where it would allow 59. Twenty-two kilometers is the largest relief
+measured on any body in the Solar System, and Vesta and Mars carry the same
+number four orders of magnitude of gravity apart.
+
+**The crater lattice is cubes in ℝ³, and the cube-sphere grid is the trap.** A
+crater straddling a face edge has to hash the same from both faces, and at the
+eight points where three faces meet a cell has *seven* neighbors — `regionNeighbor`
+says so in its own docstring — so a ring walk counts one twice and that crater
+comes out at double depth, on every world, at eight places. A cubic lattice has
+no seams and no corners: a cell is `floor(d · s)` whoever is asking. It costs a
+3×3×3 neighborhood, and the exact box-sphere test rejects a third more of those
+twenty-seven than a bounding-sphere test would.
+
+**Two optimizations that were not.** Splitting each hash lane into halves answers
+all eight of a cell's questions from one `pcg4d` instead of two and saves half a
+millisecond in twenty-one; the lanes stay whole. Writing the crater's jittered
+center out unnormalized and taking `2 − 2 cos θ` straight from the dot product
+*did* pay — one divide where there were three, on the band's inner loop — and so
+did flattening the gradient table.
+
+**The gradient table was an array of arrays, and `noise3` was four times slower
+for it.** 209 ns a call became 47, with identical output; the golden vectors are
+the assertion. That is a fifth of a heightfield patch, and it is why the band
+stack is under three times the documented Phase 0 figure instead of five.
+
+### The numbers
+
+| Measured                             | Was            | Now                              |
+| ------------------------------------ | -------------- | -------------------------------- |
+| A bordered 65×65 patch                | 12.8 ms        | 20 ms airless, 37 atmosphered    |
+| The same three bands, re-measured     | 12.8 ms        | 3.6–3.8 ms                       |
+| `noise3`                              | 209 ns         | 47 ns                            |
+| `surfaceDetailFloor` across the zoo   | 7–10           | 13–16                            |
+| Whole-disk selection, flight lens     | 410–480        | 420–1,008                        |
+| `DEFAULT_MAX_PATCHES`                 | 768            | 1,024 (208 MB in the corner case) |
+| `REQUESTS_PER_FRAME`                  | 8              | 24                               |
+
+An atmosphered world is half again as expensive as an airless one, and the reason
+is one branch: its erosion damping is the only consumer of the analytic gradient,
+and `gradientNoise3` is four times `noise3` — the value is one trilinear
+interpolation and the gradient is three more. Every band that does not read a
+slope calls the v1 primitives.
+
+**The detail floor is what moved everything else.** Crater rims are sharp — a rim
+is about a seventh of its crater wide — so resolving one to half a meter takes
+samples seven times finer again, and `surfaceDetailFloor` reports it without a
+constant to raise, exactly as ADR-0015 said it would. Every extra level underfoot
+is another ring of about ninety patches, which is why the cap moved and why the
+streamer's per-frame request budget tripled: the ladder is strictly serial, and a
+landing that used to sharpen in eighty frames wanted two hundred and fifty.
+
+**The crater ladder's depth is the dial that connects the two.** Capped at eleven
+halvings, so a body's finest crater is a two-thousandth of its largest — a
+kilometer on Mercury, a hundred meters on Callisto. Fourteen halvings gives 134 m
+craters on Mercury and pushes its floor from 14 to 16, which doubles the patches
+a landing generates: 1,250 against 600. Three decades of crater diameter is what
+a body reads at from orbit to a landing, and below that is the micro-relief tail
+Phase 4 synthesizes per pixel rather than meshes.
+
+### Bugs that must not come back
+
+- **A quiet level is not a floor when the field has discrete feature scales.**
+  `surfaceDetailFloor` took the first level whose residual fell under tolerance.
+  With a crater ladder a stencil that straddles nothing at one level lands on a
+  rim at the next, and the level it returned had a residual of 1.01 m against a
+  0.5 m tolerance. It takes three consecutive quiet levels now, which is the
+  claim it was making all along.
+- **A sea datum scaled by a constant floods or drains the whole world.** The
+  clamp was `(2s − 1) · maxElevation · 0.55`, a number that matched the old
+  continents band's amplitude. With the budget divided into shares, a world whose
+  grammar spends most of its relief on craters has its ocean floor at a fifth of
+  that, and the datum lands below every seabed on it — a dry basin with a sea
+  level in it. It is scaled by the hypsometry band's own share.
+- **A `WeakMap` on `SurfaceParameters` is not a cache for a worker.** The
+  heightfield task rebuilds a fresh surface from its payload on every call, so
+  object identity is never shared and every patch derives its own sketch — a
+  millisecond apiece against a twenty-millisecond patch. Keyed by what the
+  derivation reads.
+- **The bimodality of an elevation histogram is not the share of samples in the
+  middle third.** Two deep basins stretch Mercury's range and pile everything
+  else into the top third, so that statistic reads the one-plate world as *more*
+  bimodal than Earth. Sarle's coefficient — `(skew² + 1) / kurtosis`, above 5/9
+  for two modes — puts Earth at 0.76 and the four stagnant lids at 0.36–0.40.
+- **A ridge-fold derivative property tested nothing under `fc.double`.** Doubles
+  bias toward whole numbers, Perlin noise is identically zero at every lattice
+  point, and that is exactly where `1 − |n|` has its kink — so the skip that
+  keeps the property honest fired on 196 of 200 samples. Integers over a prime
+  divisor, and the surviving count is asserted.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

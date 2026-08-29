@@ -20,20 +20,25 @@ import {
 import { apoapsis, normalizeAngle, periapsis } from '@inertialref/physics'
 import type { World } from '@inertialref/simulation'
 import {
+  archetypeName,
   type Body,
   type BodyKind,
   type BodyProvenance,
   type CatalogStar,
+  CRUST_STRENGTH,
   findBody as findBodyAt,
   formatAddress,
   frostLine,
   habitableZone,
+  hasSolidSurface,
   insolation,
   isDebris,
   isHabitable,
   isPlanetKind,
+  MAX_RELIEF,
   orbitalOrder,
   parseSpectralType,
+  RELIEF_RADIUS_FRACTION,
   type Star,
   type StarSystem,
   type SystemId,
@@ -500,6 +505,8 @@ function bodyDossier(world: World, system: StarSystem, body: Body): Dossier {
     atmosphereGroup(body),
     insolationGroup(star, body, primary),
   ]
+  const geology = geologyGroup(body)
+  if (geology !== null) groups.splice(1, 0, geology)
   const rings = ringGroup(body)
   if (rings !== null) groups.push(rings)
   groups.push(discoveryGroup(body))
@@ -801,6 +808,114 @@ function rotationGroup(body: Body, year: Seconds): FactGroup {
       : {}),
     facts,
   }
+}
+
+/**
+ * What the ground is made of and what has happened to it.
+ *
+ * The `SurfaceGrammar` restated as a record. Every row is a claim about the
+ * *place* — how hard a mountain can stand on it, how saturated with craters it
+ * is, whether its lithosphere moves in pieces — and none of them is a claim
+ * about how the terrain is drawn, which is the line ADR-0014 draws through this
+ * whole panel.
+ *
+ * Null for a body with nowhere to stand. A gas giant's grammar exists (the
+ * record is built for every body) and means nothing, so the honest thing is to
+ * have no card rather than a card full of numbers about a surface that is not
+ * there.
+ */
+function geologyGroup(body: Body): FactGroup | null {
+  if (!hasSolidSurface(body)) return null
+  const g = body.surface.grammar
+  const facts: Fact[] = [
+    {
+      label: 'Terrain',
+      value: archetypeName(g.archetype),
+      note: `${significant(g.gravity)} m/s² at the datum`,
+    },
+    {
+      label: 'Relief',
+      value:
+        body.surface.maxElevation > 0
+          ? kilometres(body.surface.maxElevation)
+          : 'None resolved',
+      /*
+       * Which of the three limits bit, named rather than implied. A reader who
+       * wonders why a small moon carries as much relief as a planet is asking a
+       * real question, and the answer is that a planet is limited by what its
+       * crust can hold up and a moon by how big it is.
+       */
+      note:
+        body.surface.maxElevation <= 0
+          ? 'the shape model carries what relief there is'
+          : g.reliefLimit >= MAX_RELIEF * 0.999
+            ? 'at the ceiling nothing measured anywhere exceeds'
+            : g.meanRadius * RELIEF_RADIUS_FRACTION <=
+                CRUST_STRENGTH / (g.density * Math.max(g.gravity, 1e-9))
+              ? 'limited by the size of the body'
+              : 'limited by what the crust can hold up',
+    },
+  ]
+
+  if (g.craterDensity > 0.02 && g.largestCrater > 0) {
+    facts.push({
+      label: 'Cratering',
+      value:
+        g.craterDensity > 0.75
+          ? 'Saturated'
+          : g.craterDensity > 0.35
+            ? 'Heavy'
+            : 'Sparse',
+      note: `largest basin ${kilometres(g.largestCrater)} across; floors flatten past ${kilometres(g.complexDiameter)}`,
+    })
+  } else {
+    facts.push({
+      label: 'Cratering',
+      value: 'Effectively none',
+      note:
+        g.air > 0.5
+          ? 'the air erases them faster than they arrive'
+          : 'the surface is younger than the impacts that would mark it',
+    })
+  }
+
+  facts.push({
+    label: 'Lithosphere',
+    value: g.plateCount > 1 ? `${g.plateCount} plates` : 'One lid',
+    note:
+      g.plateCount > 1
+        ? 'margins that converge, open and slide'
+        : 'a single shell that cracks rather than subducts',
+  })
+
+  if (g.relaxation > 0.1) {
+    facts.push({
+      label: 'Ice',
+      value: `${round(g.relaxation * 100, 0)}% relaxed`,
+      note: `at ${round(g.temperature, 0)} K a large old crater sags toward a palimpsest`,
+    })
+  }
+  if (g.chaos > 0.1 || g.stripes > 0.1) {
+    facts.push({
+      label: 'Tidal working',
+      value: g.stripes > 0.1 ? 'Fractured shell' : 'Broken crust',
+      note: 'the primary flexes it faster than it can anneal',
+    })
+  }
+
+  facts.push(
+    noData(
+      'Surface age',
+      'crater counts date a surface against a cratering rate, and nobody has flown the survey this one would need',
+    ),
+  )
+  facts.push(
+    noData(
+      'Composition',
+      'the rocks have a density and a strength. Which minerals add up to them wants a sample, and no lander has taken one',
+    ),
+  )
+  return { id: 'body.geology', title: 'Geology', facts }
 }
 
 function atmosphereGroup(body: Body): FactGroup {

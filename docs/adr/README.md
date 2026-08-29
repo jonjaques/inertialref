@@ -28,6 +28,7 @@ Eighteen decisions that are expensive to reverse. Each records the **context**, 
 | [0016](0016-documentation-as-a-mode.md)     | Documentation as a mode     | accepted     | The docs are a mode of the application, rendered at build and fetched at runtime — TypeDoc's model drawn by our components, so the reference is one site with the rest.                                 |
 | [0017](0017-the-lens.md)                    | The lens                    | accepted     | The camera carries focal length, gauge, aperture, focus and gain; the field of view is derived. One producer, under the pose's own precedence.                                                          |
 | [0018](0018-the-instrument.md)              | The instrument              | accepted     | The aim is an offset on the pose; compositions are one list with two placers; the keymap has one dispatcher and contexts that may share a chord; preferences are a registry with one storage call site. |
+| [0019](0019-the-geology.md)                 | The geology                 | accepted     | Terrain is a grammar derived from body facts, a per-body sketch, and a band stack of shares that sum to one; `maxElevation` is a strength limit rather than a dial; craters are placed on a cubic lattice in ℝ³; one field at every level, because the morph is exact only if two patches evaluate the same function. |
 
 ---
 
@@ -53,6 +54,7 @@ flowchart TB
     A16["<b>0016</b><br/>documentation as a mode"]
     A17["<b>0017</b><br/>the lens"]
     A18["<b>0018</b><br/>the instrument"]
+    A19["<b>0019</b><br/>the geology"]
 
     A1 -->|"precision already solved,<br/>so frames are free to be<br/>about motion"| A2
     A1 -->|"canonical → GPU"| A3
@@ -84,6 +86,9 @@ flowchart TB
     A12 -->|"the panels the eye<br/>is operated from"| A18
     A7 -->|"a preference is not<br/>part of the universe"| A18
     A10 -->|"a shot carries<br/>its own lens"| A17
+    A15 -->|"the quadtree wanted<br/>something to draw"| A19
+    A5 -->|"a grammar is a pure<br/>function of the seed"| A19
+    A14 -->|"the geology is a claim<br/>about the place"| A19
 
     style A1 fill:#0369a1,stroke:#0c4a6e,color:#fff
     style A8 fill:#334155,stroke:#1e293b,color:#94a3b8,stroke-dasharray: 5 5

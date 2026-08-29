@@ -1082,11 +1082,30 @@ lens below 20° is deferred with the terrain predicate's saturation that motivat
 it; the geometry is right and the parent is smaller in the frame than in the
 photograph.
 
-**Phase 2 — the geology.** New procedural primitives, grammar, sketch, band
-stack, archetypes; terrain algorithm v2 in one bump; golden vectors extended;
-zoo plates reviewed body by body against § 6's anchors. This is the phase
-with taste in it: the acceptance criterion for "reads as a Moon, not as
-noise" is the plate review, and it says so honestly.
+**Phase 2 — the geology. Landed 28 Aug 2026.** New procedural primitives
+(`pcg3d`/`pcg4d`, analytic-derivative noise, profile shapes), the grammar, the
+sketch, the band stack, the crater field; terrain algorithm v2 in one bump;
+golden vectors extended. [ADR-0019](docs/adr/0019-the-geology.md) is the record
+and [`CONTEXT.md`](CONTEXT.md#the-ground-stops-being-noise-and-becomes-a-geology-28-aug-2026)
+has the numbers: a patch is 20 ms airless and 37 atmosphered against the
+documented 12.8, `surfaceDetailFloor` moved from 7–10 to 13–16 because crater
+rims are sharp, and the patch cap and the streamer's request budget moved with
+it.
+
+Three things did not land as written, stated rather than quietly dropped.
+**The plate review is not done** — the acceptance criterion for "reads as a
+Moon, not as noise" is a set of before/after plates of the zoo through the
+browser, and what exists is the arithmetic: the published anchors are asserted
+as tests (crater density ordered Mercury > Luna > Mars > Earth > Venus, the
+transition diameter's `D·g = 29,000`, Earth's hypsometry bimodal at 0.76 against
+0.36–0.40 for four stagnant lids). **The crater ladder is capped at eleven
+halvings rather than running to the canonical floor**, so a body's finest crater
+is a two-thousandth of its largest — fourteen halvings doubles the patches a
+landing generates, and the finer craters are Phase 4's micro relief. And **the
+early-out is per body rather than per patch**: stopping a patch's ladder at its
+own sample spacing breaks the CDLOD handover, because a fully morphed child is
+the child's own field at the parent's spacing and that equals the parent's mesh
+only if both evaluate the same function.
 
 **Phase 3 — the face.** Biome lookup, splat material with hex-tiling and
 triplanar, crater rays and ejecta in albedo, analytic normals end to end,
@@ -1103,9 +1122,9 @@ written down.
 **Phase 5 — the GPU producer.** TSL compute tile production (heightfield +
 normal tiles into a texture-array cache, Proland's shape in WebGPU terms),
 CPU workers retained as canon and as the WebGL2 path, tolerance test in the
-browser checks. Adopt only if Phase 0's measurements say the worker path is
-the binding constraint at Phase 4 patch volumes — the recipe is proven, the
-need is not yet.
+browser checks. The condition is met: Phase 2 put a patch at 20–37 ms and a
+landing at six hundred of them, so the worker path is the binding constraint
+before Phase 4 adds a level.
 
 **Phase 6 — named seams, not scheduled work.** Hydrology graphs (Génevaux)
 for valley networks; the density-overlay cave/overhang layer with Transvoxel
