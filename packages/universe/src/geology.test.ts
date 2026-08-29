@@ -427,10 +427,20 @@ describe('the band stack', () => {
   })
 
   it('is a pure function of the direction, at any magnitude', () => {
-    // `elevationAt` normalizes, so a caller that hands it an unnormalized
-    // direction gets the ground under that direction rather than a scaled
-    // version of it — which is what `regionDirection` relies on when it steps
-    // past a face edge.
+    /*
+     * `elevationAt` normalizes, so a caller that hands it an unnormalized
+     * direction gets the ground under that direction rather than a scaled
+     * version of it — which is what `regionDirection` relies on when it steps
+     * past a face edge.
+     *
+     * Three decimal places, on a field whose values are kilometers: half a
+     * millimeter. `normalize` of `6·d` and of `d` differ in the last bits of a
+     * double, and the crater band reads that difference through
+     * `2 − 2 cos θ` at the ladder's finest level, where the cancellation costs
+     * seven significant figures. What is being asserted is that the two answers
+     * are the same *place*, not that two different float paths agree to the
+     * last bit.
+     */
     const body = find('Mars')
     fc.assert(
       fc.property(
@@ -440,7 +450,7 @@ describe('the band stack', () => {
           const direction = [...sphere(1_000)][index] as ReturnType<typeof vec3>
           expect(
             elevationAt(body.surface, Vec.scale(direction, scale)),
-          ).toBeCloseTo(elevationAt(body.surface, direction), 6)
+          ).toBeCloseTo(elevationAt(body.surface, direction), 3)
         },
       ),
       { numRuns: 60 },

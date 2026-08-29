@@ -289,12 +289,17 @@ describe('a simulated descent', () => {
        * The measured ceiling, and the number `DEFAULT_MAX_PATCHES` has to stay
        * clear of. It is set by the *balance* rather than by the error
        * tolerance: a restricted quadtree grading from the level underfoot out
-       * to the level at the horizon costs 410 to 480 patches on a body with
-       * seven or eight levels between the two, and changing the tolerance moves
-       * it by a few percent. The assertion is here so that a change to either
-       * is a change to a number rather than a surprise in a frame.
+       * to the level at the horizon costs about ninety patches per level
+       * between the two, and changing the tolerance moves it by a few percent.
+       *
+       * 420 to 1,008 across the zoo's twenty-four site descents, where the
+       * three bands this replaced cost 410 to 480 — the band stack put crater
+       * rims in the field, `surfaceDetailFloor` went from 7–10 to 13–16 to
+       * resolve them, and every extra level underfoot is another ring. The
+       * assertion is here so that a change to either is a change to a number
+       * rather than a surprise in a frame.
        */
-      expect(`${entry.name}: ${report.peakDrawn < 700}`).toBe(
+      expect(`${entry.name}: ${report.peakDrawn < 1_024}`).toBe(
         `${entry.name}: true`,
       )
       const wanted = report.steps.reduce((sum, step) => sum + step.wanted, 0)

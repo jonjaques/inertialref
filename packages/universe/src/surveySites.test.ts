@@ -241,12 +241,21 @@ describe('survey sites', () => {
       const body = find(name)
       for (const site of surveySites(body)) {
         const direction = geodeticDirection(site.latitude, site.longitude)
-        // `groundElevation`, not `elevationAt`: the sea clamp has one owner and
-        // a site that quoted the seabed under an ocean would be a site the
-        // camera cannot stand at.
+        /*
+         * `groundElevation`, not `elevationAt`: the sea clamp has one owner and
+         * a site that quoted the seabed under an ocean would be a site the
+         * camera cannot stand at.
+         *
+         * Five decimal places rather than six, and the ten microns between them
+         * are the ground's own steepness. The site's elevation is sampled at
+         * `regionDirection`'s answer and this resamples at `geodeticDirection`'s;
+         * the two agree to the last bits of a double, and the band stack now has
+         * crater rims in it, so a direction that differs in its last bit lands
+         * on ground that differs by half a micron rather than by nothing.
+         */
         expect(site.elevation).toBeCloseTo(
           groundElevation(body.surface, direction),
-          6,
+          5,
         )
       }
     }

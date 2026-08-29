@@ -96,16 +96,31 @@ const DEFAULT_LENS_VIEW: LensView = {
 /**
  * How far ahead of the camera the request set is taken, in seconds.
  *
- * Long enough for a worker to answer — a patch is 12.8 ms of generation and the
- * pool is a handful of them — and short enough that a turn does not spend the
- * budget on ground nobody looks at. The extrapolation is linear in the eye's
+ * Long enough for a worker to answer — a patch is 24 to 44 ms of generation and
+ * the pool is a handful of them — and short enough that a turn does not spend
+ * the budget on ground nobody looks at. The extrapolation is linear in the eye's
  * own motion and ignores the body's rotation over the interval, which at two
  * seconds is meters on anything you could be landing on.
  */
 const PREFETCH_SECONDS: Seconds = 2
 
-/** Heightfields to queue in one frame. Beyond this they are queueing, not working. */
-const REQUESTS_PER_FRAME = 8
+/**
+ * Heightfields to queue in one frame.
+ *
+ * It was eight, against a quadtree that bottomed out around level 10. The band
+ * stack put crater rims into the field and `surfaceDetailFloor` moved to 13–16
+ * to resolve them, which is three times as much tree to fetch: a landing that
+ * used to sharpen in eighty frames wanted two hundred and fifty, and the
+ * ladder is strictly serial — a level cannot refine until all four children of
+ * every node on it have arrived, so a frame that under-asks is a frame the next
+ * level waits for.
+ *
+ * Twenty-four rather than more because these go to a **pool**, not to this
+ * thread: a request beyond what the workers can chew is a request that queues,
+ * and a queue is what a camera turn has to throw away. Three times the depth,
+ * three times the rate, same amount of ground in flight.
+ */
+const REQUESTS_PER_FRAME = 24
 
 /**
  * Every level of the selection, coarsest first.
@@ -766,6 +781,7 @@ export class TerrainStreamer {
           maxElevation: body.surface.maxElevation,
           roughness: body.surface.roughness,
           seaLevel: body.surface.seaLevel,
+          grammar: body.surface.grammar,
           region,
           resolution: HEIGHTFIELD_RESOLUTION,
           border: HEIGHTFIELD_BORDER,
@@ -799,7 +815,7 @@ export class TerrainStreamer {
    * pyramid — rather than the two selections' leaves. `#request` re-asks for
    * every rung of the pyramid every frame, so a keep set without them turns
    * the cap into a treadmill: evict a rung, re-request it next frame,
-   * regenerate it at 12.8 ms, evict it again.
+   * regenerate it at 20 to 37 ms, evict it again.
    */
   #evict(requested: readonly RegionAddress[]): void {
     if (

@@ -462,10 +462,16 @@ describe('where the field stops having anything to add', () => {
 
   it('answers the same whatever order it is asked in', () => {
     /*
-     * The memo key folded `resolution` and `tolerance` into a sum, so (65, 0.5)
-     * and (64, 1.5) collided and whichever call ran first won for both — a pure
-     * function of the seed whose answer depended on the order of the questions,
-     * which is the one thing generation may never do.
+     * The memo key folded `resolution` and `tolerance` into a sum, so any two
+     * questions whose two numbers added to the same thing collided, and
+     * whichever ran first won for both — a pure function of the seed whose
+     * answer depended on the order of the questions, which is the one thing
+     * generation may never do.
+     *
+     * `(65, 0.5)` and `(33, 32.5)` both sum to 65.5, so a summed key cannot
+     * tell them apart, and they answer 14 and 11 — the shipped pair, `(65, 0.5)`
+     * against `(64, 1.5)`, sums the same way and now answers 14 to both, so it
+     * could no longer fail.
      */
     const system = generateSystem(ROOT, MILKY_WAY, SOL)
     const planet = [...walkBodies(system)].find(
@@ -475,9 +481,9 @@ describe('where the field stops having anything to add', () => {
     const fresh = { ...planet.surface }
 
     const a = surfaceDetailFloor(planet.radius, planet.surface, 65, 0.5)
-    const b = surfaceDetailFloor(planet.radius, planet.surface, 64, 1.5)
+    const b = surfaceDetailFloor(planet.radius, planet.surface, 33, 32.5)
     // The same two questions, asked of an equal surface in the other order.
-    const b2 = surfaceDetailFloor(planet.radius, fresh, 64, 1.5)
+    const b2 = surfaceDetailFloor(planet.radius, fresh, 33, 32.5)
     const a2 = surfaceDetailFloor(planet.radius, fresh, 65, 0.5)
     expect([a2, b2]).toEqual([a, b])
     // And they are genuinely different answers, so the pair can fail.

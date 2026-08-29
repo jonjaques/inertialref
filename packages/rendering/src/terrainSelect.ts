@@ -115,10 +115,12 @@ export const DEFAULT_CELL_PIXELS = 16
  * The deepest level to ask for when the caller does not say.
  *
  * Callers with a body should pass `surfaceDetailFloor` instead, which measures
- * where *that* field stops having anything to add — level 7 to 10 across the
- * zoo, against the 12 the old rule saturated at. This is the fallback for a
- * caller holding numbers rather than a body, and it is deliberately the old
- * ceiling so that nothing gets quietly shallower by forgetting to pass one.
+ * where *that* field stops having anything to add — level 13 to 16 across the
+ * zoo now that the field carries crater rims, against 7 to 10 for the three
+ * bands it replaced. This is the fallback for a caller holding numbers rather
+ * than a body, and it is deliberately shallower than any of them so that
+ * forgetting to pass one is visible as coarse ground rather than as a budget
+ * that will not close.
  */
 export const DEFAULT_MAX_LEVEL = 12
 
@@ -126,30 +128,42 @@ export const DEFAULT_MAX_LEVEL = 12
  * How many patches may be selected at once.
  *
  * A safety net rather than a working limit, and the lens is what says how much
- * of a net it is. At the flight lens a restricted whole-disk selection settles
- * between 294 and 438 across the zoo at two meters and peaks at 449 over a
- * whole descent; at the wide end of the slider it is lower still. So for every
- * lens a player flies with, this never binds.
+ * of a net it is. At the flight lens an uncapped whole-disk selection wants
+ * between 420 and 1,008 patches across the zoo's twenty-four site descents, so
+ * this never binds on a lens a player flies with; at the wide end of the
+ * slider it is lower still.
+ *
+ * **It was 768, and the geology is what moved it.** A whole-disk selection
+ * costs about ninety patches per level between the horizon and the ground, and
+ * the band stack pushed `surfaceDetailFloor` from 7–10 to 13–16 — crater rims
+ * are sharp, and resolving one to half a meter takes samples about seven times
+ * finer than the rim is wide. Every extra level underfoot is another ring of
+ * patches. Holding the old cap would have spent the phase's whole point: the
+ * disk would degrade by a level on three of the four zoo bodies, on the ground,
+ * which is exactly where the new detail is.
+ *
+ * **What that buys costs 208 MB in the corner case.** A patch carries
+ * positions, normals and both morph targets — 65² vertices, twelve floats
+ * apiece, 203 KB — so 1,024 of them is 4.3 M vertices and 208 MB of buffers,
+ * against 156 MB at the old cap. The number is here so that the next person to
+ * want it raised knows what they are buying.
  *
  * **It binds at the telephoto end, and by how much is measured rather than
- * adjectival.** At 20° the same descents want 808 to 1,418 patches and get 768,
- * which degrades the disk by one level on 60–84% of their steps and is reported
- * as `saturated`. Raising the cap to cover it is the wrong trade: 1,418 patches
- * is 6.0 M vertices and 288 MB of buffers, on a lens the player has narrowed
- * deliberately and where one level coarser is a 4-pixel error rather than a
- * 2-pixel one. The number is here so that the next person to want it raised
- * knows what they are buying.
+ * adjectival.** At 20° the same descents want two to three times the flight
+ * lens's count, which degrades the disk by a level on most of their steps and
+ * is reported as `saturated`. That is the right trade: one level coarser is a
+ * 4-pixel error rather than a 2-pixel one, on a lens the player has narrowed
+ * deliberately.
  *
  * **The zoom channel goes three levels past that, and no cap covers it.** At 20°
  * with the zoom racked to 8× the picture is a 2.5° field at 24,500 px/rad, and
- * Miranda's basin descent wants **20,174** patches — 26× the cap, `saturated` on
- * every step of the descent rather than on two thirds of them. That is a
+ * Miranda's basin descent wanted **20,174** patches at the old detail floor —
+ * an order of magnitude past any cap, `saturated` on every step. That is a
  * telephoto held on a subject rather than a lens anything is flown behind, and
- * the honest answer is the one the cap already gives: the disk goes coarse, by a
- * stated amount, rather than the frame going away. It is recorded here because
- * the counts above stop at zoom 1 and the controls do not.
+ * the honest answer is the one the cap already gives: the disk goes coarse, by
+ * a stated amount, rather than the frame going away.
  */
-export const DEFAULT_MAX_PATCHES = 768
+export const DEFAULT_MAX_PATCHES = 1_024
 
 /**
  * Where a patch starts and finishes sliding onto its parent's grid, as
