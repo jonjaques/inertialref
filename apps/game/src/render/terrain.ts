@@ -224,7 +224,8 @@ export function createTerrainMaterial(): TerrainMaterial {
    * rectangles across a flat sea.
    */
   const anchorAltitude = uniform(0).onObjectUpdate(
-    ({ object }) => (object?.userData.anchorAltitude as number | undefined) ?? 0,
+    ({ object }) =>
+      (object?.userData.anchorAltitude as number | undefined) ?? 0,
   )
 
   /*
@@ -467,7 +468,10 @@ export function createTerrainMaterial(): TerrainMaterial {
      * flanks of Tharsis.
      */
     const blown = saturate(
-      aeolian.mul(level).mul(dry).mul(oneMinus(smoothstep(0.25, 0.7, relief))),
+      aeolian
+        .mul(level)
+        .mul(dry)
+        .mul(oneMinus(smoothstep(0.25, 0.7, relief))),
     )
     const dried = saturate(evaporitic.mul(level).mul(dry).mul(lowGround))
     // Volatiles last, because they condense on top of everything else.
@@ -494,7 +498,11 @@ export function createTerrainMaterial(): TerrainMaterial {
     // The invented channels, switched off where the archive has a photograph.
     const invented = oneMinus(mapped)
     // The compositional ramp, as a tint on whatever deposit won.
-    const mineral = mix(mineralLow, mineralHigh, mix(float(0.5), cover.z, invented))
+    const mineral = mix(
+      mineralLow,
+      mineralHigh,
+      mix(float(0.5), cover.z, invented),
+    )
     /*
      * Mottling: the detail field spent on reflectance rather than on shape, and
      * nothing at all on water.
@@ -560,7 +568,12 @@ export function createTerrainMaterial(): TerrainMaterial {
     }
     const published = mix(
       vec3(1),
-      sampled(albedoMap, mapUv, uvGradient(dFdx(local)), uvGradient(dFdy(local))),
+      sampled(
+        albedoMap,
+        mapUv,
+        uvGradient(dFdx(local)),
+        uvGradient(dFdy(local)),
+      ),
       mapped,
     )
 

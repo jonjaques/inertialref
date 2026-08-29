@@ -359,7 +359,9 @@ export function terrainPalette(body: Body): TerrainPalette {
      */
     terminator: Math.max(
       air > 0 ? 0.09 : 0.025,
-      Math.sqrt((2 * body.surface.maxElevation) / Math.max(grammar.meanRadius, 1)),
+      Math.sqrt(
+        (2 * body.surface.maxElevation) / Math.max(grammar.meanRadius, 1),
+      ),
     ),
 
     // Wind needs air to blow and something loose to move. `dunes` is the

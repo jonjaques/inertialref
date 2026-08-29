@@ -1158,9 +1158,30 @@ own sample spacing breaks the CDLOD handover, because a fully morphed child is
 the child's own field at the parent's spacing and that equals the parent's mesh
 only if both evaluate the same function.
 
-**Phase 3 — the face.** Biome lookup, splat material with hex-tiling and
-triplanar, crater rays and ejecta in albedo, analytic normals end to end,
-orbital normal+albedo bake, ocean surface treatment for `seaLevel` worlds.
+**Phase 3 — the face. Landed 29 Aug 2026.** The cover field and its rays, the
+palette, one material with the deposits layered over the archive's own map, and
+the ocean. [ADR-0020](docs/adr/0020-the-face.md) is the record and
+[`CONTEXT.md`](CONTEXT.md#the-ground-stops-being-a-colour-and-becomes-a-face-29-aug-2026)
+has the numbers: Luna at 0.136 reflectance with its mare at 0.073 against a
+measured 0.07, the cover at 0.55 to 1.0 ms a patch, and the two halves of a
+descent 4.6% apart on Mars and 0.02% on Earth either side of the eight-pixel
+gate — which is the "done means" below, measured rather than looked at.
+
+Four things did not land as written, stated rather than quietly dropped.
+**There is no orbital albedo bake**, so a _generated_ body's sphere is still a
+flat tint while its ground has maria, rays and caps; a mapped body has no such
+gap, because its ground wears the same photograph its sphere does. **There is no
+hex-tiling and no triplanar** — both answer questions an authored material set
+asks, a period to break and a projection to choose, and the detail is gradient
+noise on the body-fixed position, which has neither. **Normals are still central
+differences over the bordered field** rather than analytic end to end: the border
+rows already make them exact and equal across patches, and analytic crater
+derivatives would be a second implementation of every profile that has to agree
+with the first or the mesh cracks. And **deposits chosen from the mesh step at a
+level boundary** by about 4% of the drawn value, because two patches at
+different levels report different slopes for the same ground; the fix is more
+channels on the cover so they read the canonical field instead.
+
 _Done means:_ the approach view and the landed view are recognizably the
 same world in a single uncut descent capture.
 

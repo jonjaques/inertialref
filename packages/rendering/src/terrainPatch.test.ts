@@ -159,7 +159,7 @@ describe('a terrain patch', () => {
     }
   })
 
-  it('wears exactly its parent\'s cover once fully morphed', () => {
+  it("wears exactly its parent's cover once fully morphed", () => {
     /*
      * The same claim, for the material. Geometry that hands over exactly while
      * the albedo does not is worse than a pop: the ray edges and the mare

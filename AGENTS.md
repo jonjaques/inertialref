@@ -282,6 +282,21 @@ Violating one of these is a rewrite later, not a refactor.
   [Cinematics](docs/guides/cinematics.md).
 - **Never write a label in the case you want to see it in.** Source strings
   are title case; `text-transform` on the type step decides what is shouted.
+- **Never subtract two planetary radii from each other in a shader, and never take a
+  screen-space derivative of a planetary position.** At Earth's radius one float32
+  step is half a metre, so `length(anchor + local) − radius` arrives quantized to
+  half a metre — and the morph walks it across those steps every frame, which is a
+  coastline visibly warping several times a second from two kilometres up. Use
+  `(2(a·l) + l·l)/(|p| + |a|)`, which never lets the large numbers meet. The
+  derivative is worse than the value: a tenth of noise and biased per patch, which
+  moved the albedo map's mip level at every patch boundary. And `local` is linear
+  across a triangle, so `dFdx(local)` is constant over the whole triangle — a detail
+  fade measured that way steps per polygon, where distance times the lens's pixel
+  angle does not. A varying may not take an attribute's name either: both become
+  identifiers in the generated WGSL, and the redeclaration surfaces as
+  `[Invalid ShaderModule "vertex"]` with the real message on a channel the page
+  console does not carry.
+  [ADR-0020](docs/adr/0020-the-face.md).
 - **Never import from `three` in `apps/game`.** Import `three/webgpu` and
   `three/tsl`. `packages/*` may not import Three.js at all.
 - **Never hand-write a compile-ahead.** `render/warmup.ts` owns the recipe —

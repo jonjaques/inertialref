@@ -56,7 +56,7 @@ describe('the terrain palette', () => {
    * twice, and it multiplied — an evaporite at 1.9 over ground the map had
    * already drawn pale turned every lowland on Earth to snow.
    */
-  it('halves a deposit\'s own brightness where a map carries it', () => {
+  it("halves a deposit's own brightness where a map carries it", () => {
     for (const name of ['Luna', 'Mercury', 'Mars']) {
       const palette = terrainPalette(find(name))
       const ratio = grey(palette.basalt) / grey(palette.regolith)

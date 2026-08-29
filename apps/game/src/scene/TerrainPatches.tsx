@@ -176,11 +176,7 @@ export function TerrainPatches({ engine }: { engine: GameEngine }) {
           )
           terrain.sunDirection.value.set(local.x, local.y, local.z)
         }
-        terrain.sunColour.value.setRGB(
-          key.color.r,
-          key.color.g,
-          key.color.b,
-        )
+        terrain.sunColour.value.setRGB(key.color.r, key.color.g, key.color.b)
       }
     }
     const seen = new Set<string>()

@@ -710,8 +710,7 @@ export function rayCraters(
  * not a rare enough case to leave to chance.
  */
 function tangentFrame(axis: Vec3): readonly [Vec3, Vec3] {
-  const helper =
-    Math.abs(axis.y) < 0.9 ? vec3(0, 1, 0) : vec3(1, 0, 0)
+  const helper = Math.abs(axis.y) < 0.9 ? vec3(0, 1, 0) : vec3(1, 0, 0)
   const tangent = Vec.normalize(Vec.cross(helper, axis))
   return [tangent, Vec.cross(axis, tangent)]
 }

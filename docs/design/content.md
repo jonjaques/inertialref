@@ -154,6 +154,17 @@ problem entirely until after launch.
 albedo, roughness, normal, and a detail layer — and those are the few dozen
 authored assets the whole game rests on. See [art](art.md).
 
+Until they exist, [ADR-0020](../adr/0020-the-face.md) draws the six from a
+parameterized palette: a reflectance ratio, a roughness, a grain and a bump per
+deposit, expressed against the body's own published colour so that Mars stays
+ochre and Callisto stays grey while both get the same internal contrast. The
+lookup is split by who can answer — latitude, altitude and slope per pixel from
+the mesh, and a four-byte _cover_ per vertex for what only the generator knows:
+where the flood basalt is, where a young crater has thrown fresh material, which
+way the crust's composition varies, where the volatiles have condensed. A body
+with a published map wears it, and the invented channels switch off, because the
+maria are in the photograph already.
+
 ### Scatter
 
 Rocks before plants. A region-seeded scatter of boulders, outcrops and debris,

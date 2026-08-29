@@ -640,7 +640,7 @@ describe('terrain mesh', () => {
           resolution,
           border: field.border,
           elevations: field.elevations,
-        cover: field.cover,
+          cover: field.cover,
           bodyRadius: planet.radius,
         })
 

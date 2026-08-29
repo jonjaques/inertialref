@@ -73,6 +73,26 @@ Reasoning: `AGENTS.md` § "The rules that actually matter",
   and the boot prebake both call it; when they each typed the formula, they agreed only
   through a three-hop identity nothing asserted, and a rounding step apart is a silent
   full cache miss at boot.
+- **Never subtract two planetary radii in a shader, and never take a screen-space
+  derivative of a planetary position.** One float32 step at Earth's radius is half a
+  metre, so `length(anchor + local) − radius` is quantized to that and the morph walks
+  it across the steps every frame — a coastline warping several times a second from two
+  kilometres up. Use `(2(a·l) + l·l)/(|p| + |a|)`. A derivative of the same sum is a
+  tenth noise and biased per patch; take it analytically from the patch-local step. And
+  `local` is linear across a triangle, so `dFdx(local)` is constant over the whole
+  triangle: a fade measured that way steps per polygon, where distance times the lens's
+  pixel angle does not. ADR-0020.
+
+- **Never give a varying an attribute's name.** Both become identifiers in the generated
+  WGSL; the redeclaration surfaces as `[Invalid ShaderModule "vertex"]` with the real
+  message on a channel the page console does not carry, and a planet that draws nothing.
+
+- **The ground and the sphere behind it are one body, so they shade alike.**
+  `render/terrain.ts` and `render/planet.ts` share the lunar-Lambert split, the
+  terminator and the archive's photograph. A descent crosses the eight-pixel gate
+  between them — 4.6% apart on Mars, 0.02% on Earth — so anything added to one side is
+  a step at the switch. Skylight comes _out of_ the direct beam, not beside it.
+
 - **Look at the perf tab before optimizing anything**, and before believing a performance
   claim in a design document. The first thing it found was that time warp had never worked
   above 5×.
