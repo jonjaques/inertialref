@@ -75,7 +75,12 @@ const GRADIENT_Z = new Float64Array([0, 0, 0, 0, 1, 1, -1, -1, 1, 1, -1, -1])
  * the trade `craters.ts` records for its imports, in the one other place the
  * measurement justifies it.
  */
-const gradientAt = (seed: number, ix: number, iy: number, iz: number): number => {
+const gradientAt = (
+  seed: number,
+  ix: number,
+  iy: number,
+  iz: number,
+): number => {
   // `hash3` composed with `mix32`, written out. Calling it costs 14 ms a patch
   // on an eroded world — eight call sites two levels deep exhaust V8's inlining
   // budget, which is the same trade `craters.ts` records for its imports.

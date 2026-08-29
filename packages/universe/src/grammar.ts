@@ -517,8 +517,7 @@ export function surfaceGrammar(
      * above, seen from the other end.
      */
     chaos: icy * smoothstep(0.45, 0.85, young),
-    sulci:
-      icy * (smoothstep(0.12, 0.45, young) - smoothstep(0.6, 0.95, young)),
+    sulci: icy * (smoothstep(0.12, 0.45, young) - smoothstep(0.6, 0.95, young)),
     stripes: young * young * icy,
     bands,
   }

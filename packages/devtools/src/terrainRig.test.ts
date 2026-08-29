@@ -264,9 +264,7 @@ describe('a simulated descent', () => {
       toHeight: 2,
       trackDegrees: 10,
     })
-    expect(report.levels).toEqual([
-      surfaceDetailFloor(body.surface),
-    ])
+    expect(report.levels).toEqual([surfaceDetailFloor(body.surface)])
     expect(report.levelChanges).toBe(0)
   })
 
