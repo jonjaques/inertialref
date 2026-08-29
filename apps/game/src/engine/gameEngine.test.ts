@@ -555,7 +555,17 @@ describe('the game engine, headless', () => {
        * them.
        */
       expect(FIELD_CACHE).toBeGreaterThan(DEFAULT_MAX_PATCHES * 2)
-      expect(GEOMETRY_CACHE).toBeGreaterThanOrEqual(DEFAULT_MAX_PATCHES)
+      /*
+       * Geometry is held for the *request* set, not the drawn one, and the
+       * request set is a whole pyramid: a quadtree's ancestors are a third
+       * again as many as its leaves. A cap at `DEFAULT_MAX_PATCHES + 128` sat
+       * under that floor, so `#build` added four patches a frame and `#evict`
+       * dropped four it had just wanted — `starved` never reached zero and the
+       * disk collapsed from 760 patches at level 7 to four at level 1 every
+       * twenty-six frames. Only above a 1600×900 buffer, because that is where
+       * the keep set outgrows the cap, which is why it read as a display bug.
+       */
+      expect(GEOMETRY_CACHE).toBeGreaterThan((DEFAULT_MAX_PATCHES * 4) / 3)
       // The baseline restates the streamer's multiplier because devtools cannot
       // import apps/game; this is the assertion that keeps the twin honest — a
       // retune of FIELD_CACHE alone silently un-calibrates every ir.descend

@@ -244,15 +244,36 @@ export const FIELD_CACHE = DEFAULT_MAX_PATCHES * 3
 /**
  * Patch geometries held.
  *
- * Only drawn patches get geometry, so the ceiling is the selection itself plus
- * enough slack that a camera turning back finds the ground where it left it.
+ * **Sized against the request set, not the drawn one.** Only drawn patches are
+ * *placed*, but three sets get geometry built and a fourth decides what may be
+ * dropped: `#build` takes the drawn set *and* the rung below it, and `#evict`
+ * keeps whatever the frame requested — which is the drawn set, the starved
+ * children, and the whole pyramid under the ideal selection. A quadtree's
+ * ancestors are about a third again as many as its leaves, so that keep set
+ * floors at ~1.33× `DEFAULT_MAX_PATCHES` before the starved rung is counted.
+ * Measured standing at Earthrise over a 3840×2400 drawing buffer: **1,323
+ * regions named by one frame's request list, 1,597 resident once the ladder
+ * converges** — both above the 1,152 this was.
+ *
+ * A cache under its working set does not degrade, it oscillates, and this one
+ * did it where nothing was watching. `#build` added four patches a frame,
+ * `#evict` dropped four it had wanted a moment earlier, `starved` sat at ~70
+ * forever instead of falling to zero, and every twenty-six frames the rotation
+ * took a patch the traversal was refining through: `ready` failed, the walk
+ * stopped ten nodes in, and the whole disk snapped from 760 patches at level 7
+ * to four at level 1 for a frame. On screen that is the ground jumping two to
+ * three times a second, and only once the finest level is in play — below the
+ * buffer size where the keep set fits, it never happens at all, which is why it
+ * follows the display rather than the body. `FIELD_CACHE` above carries the
+ * same argument for heightfields; geometry never got it.
+ *
  * A patch is 203 KB of vertex buffers, which is the expensive half of terrain's
- * memory and the half attribute packing would halve. **The slack is part of the
- * bill.** At a cap of 1,024 this holds 1,152 patches and 234 MB, against the
- * 208 MB `DEFAULT_MAX_PATCHES` quotes for the selection alone — the cache is
- * what is resident, and it is the larger of the two.
+ * memory and the half attribute packing would halve. This is a *ceiling*, not
+ * an allocation — what is resident is the working set, ~700 patches and 142 MB
+ * at 1600×900 — so raising it costs nothing at the sizes that already fit and
+ * buys 324 MB rather than a strobe at the sizes that do not.
  */
-export const GEOMETRY_CACHE = DEFAULT_MAX_PATCHES + 128
+export const GEOMETRY_CACHE = DEFAULT_MAX_PATCHES * 2
 
 interface CachedField {
   readonly elevations: Float32Array
@@ -406,6 +427,7 @@ export class TerrainStreamer {
     readonly shallowestLevel: number
     readonly pending: number
     readonly cached: number
+    readonly geometry: number
     readonly patches: number
     readonly vertices: number
     readonly triangles: number
@@ -431,6 +453,7 @@ export class TerrainStreamer {
       shallowestLevel: this.#shallowest,
       pending: this.#inFlight.size,
       cached: this.#fields.size,
+      geometry: this.#patches.size,
       // Placed, not selected: the report's contract is "built and placed this
       // frame", and the selection can hold regions whose geometry is still in
       // a worker. Counting those reported ground before any was drawn —

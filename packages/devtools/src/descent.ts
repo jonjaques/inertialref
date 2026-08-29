@@ -197,6 +197,16 @@ export interface TerrainReport {
   readonly pending: number
   /** Heightfields held, across level changes and origin rebases. */
   readonly cached: number
+  /**
+   * Patch geometries held — the set `ready` answers from.
+   *
+   * Beside `cached` because the two caches fail differently and only one of
+   * them was observable. Refinement is gated on geometry, not on the field, so
+   * a geometry cache that loses what the draw set is standing on collapses the
+   * selection to the roots while `cached` sits at its steady value and reports
+   * nothing wrong.
+   */
+  readonly geometry: number
   /** Vertices in the drawn set — what the frame's terrain actually costs. */
   readonly vertices: number
   /** Triangles in the same set. One draw call per patch, today. */
