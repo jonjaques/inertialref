@@ -65,15 +65,35 @@ doctrine says the data is not negotiable.
 **`terrainSketch` is the coarse structure a per-sample function cannot
 express.** Plate nuclei with drift directions, a hotspot list, the crater
 field's lattice ladder. Kilobytes, derived from the seed and the grammar in a
-fraction of a millisecond, memoized by a string key rather than by object
-identity — a heightfield worker rebuilds a fresh `SurfaceParameters` from its
-payload on every task, so a `WeakMap` would derive a new sketch per patch. It is
-regenerable content and therefore a cache, never a save (ADR-0005).
+fraction of a millisecond, and memoized twice over because the two layers answer
+different questions: a string key of what the derivation reads, because a
+heightfield worker rebuilds a fresh `SurfaceParameters` from its payload on
+every task and a `WeakMap` alone would derive a new sketch per patch; and a
+`WeakMap` in front of it, because `elevationAt` resolves the sketch per
+_sample_ and building that string 4,761 times a patch is 1.7 to 2.5 ms of
+formatting a key that cannot have changed. It is regenerable content and
+therefore a cache, never a save (ADR-0005).
 
-Plate identity is a spherical Voronoi diagram over the nuclei, and the second
-distance is what makes it useful: `F2 − F1` is zero on a boundary and grows
-inward, so the distance-to-boundary field the belts need falls out of the same
-search that names the plate.
+**Plate identity is a spherical Voronoi diagram over the nuclei, and it is read
+as a partition of unity rather than as a ranking.** `F2 − F1` is zero on a
+boundary and grows inward, so the distance-to-boundary field the belts need
+falls out of the same search that names the plate — that much is a _value_ and
+is continuous everywhere. What is not is the _identity_ of the plate holding
+`F2`: it changes discontinuously along the locus where the second and third
+nearest are equidistant, which is a network of curves through every plate's
+interior, nowhere near an edge. Anything reading a property off "the neighbour"
+inherits that jump: 1,532 m of step on Proxima Centauri II and 3,081 m on Earth,
+out of relief budgets of 20 and 10 km.
+
+So a sample carries _every_ plate within a quarter-radian of the nearest, and a
+band reads a property as a weighted average over all of them, normalised, with a
+weight that reaches zero at its own margin. No rank identity enters, so
+continuity is by construction rather than by a blend that has to be got right —
+the same argument the crater lattice makes about the cube corner. `convergence`
+is weighted over _pairs_ for the same reason. The weight is `(1 − s)/(1 + s)`,
+which is exactly what the two-plate blend it replaces was already spending, so
+where only two plates are in range the field is unchanged; the plain complement
+smears Earth's elevation histogram until it stops reading as bimodal.
 
 **The band stack replaces the three bands.** Hypsometry from plate identity,
 tectonic belts from the boundary type, volcanic edifices from the hotspot list,
@@ -97,8 +117,18 @@ three faces meet a cell has _seven_ neighbors rather than eight, so a ring walk
 counts one of them twice and that crater comes out at double depth, on every
 world, at eight places. A lattice of cubes in ℝ³ intersected with the unit
 sphere has no seams and no corners: a cell is `floor(d · s)` whoever is asking.
-The cost is a 3×3×3 neighborhood instead of 3×3, and most of those twenty-seven
-cells do not touch the sphere at all.
+
+The cost is a three-dimensional neighborhood instead of a flat one, and **how
+wide it has to be is derived rather than written down**, because the ±1 walk it
+started as could not contain the field it was placing. Two displacements
+separate a crater's cell from the sample's and they are perpendicular: the
+ejecta reach, which is 1.3 cells because a level's largest crater has an angular
+radius of half a cell; and the radial slop, because the lattice is cubes and the
+field is a shell cutting through them, so a crater's center sits off the sphere
+by up to the cell's own width along the radius and is indexed there. A crater
+the walk cannot see is not a missing crater, it is a step — it appears at full
+apron height the moment the sample crosses into a cell that can see it. About
+five cells an axis, against three, and it is most of what a patch costs.
 
 **One field, at every level.** Nothing in the stack knows what patch is asking
 or how closely it is sampling. That is not a missed optimization. The CDLOD
@@ -178,16 +208,23 @@ lid, because it has no ocean and water is the leading explanation for why one of
 them subducts; Enceladus with four parallel fractures across a shell nothing has
 had time to hit.
 
-**A patch costs 20 to 37 ms where it cost 12.8.** Under three times the
-documented Phase 0 figure, against the plan's forecast of three to five. Part of
-that is paid for by an unrelated win: flattening the gradient table in `noise3`
-from an array of triples to three `Float64Array` lanes took it from 209 ns a
-call to 47, so the three bands this replaces would now cost 3.6–3.8 ms and the
-band stack is five to ten times _them_. The crater field is two thirds of what
-remains, and an atmosphered world is half again as expensive as an airless one
-because its erosion damping is what reads the analytic gradient. This is the
-condition `TERRAIN-PLAN.md` § 12 names for moving Phase 5's GPU producer from
-"adopt if the measurements say so" to a scheduled piece of work.
+**A patch costs 9 to 60 ms where it cost 12.8**, measured across the zoo:
+9.4 ms on Miranda, which has no craters at all, 32.3 on a rocky airless world,
+34.3 on Iapetus and 59.7 on a rocky atmosphered one, where the erosion damping
+reads the analytic gradient. Part of that is paid for by an unrelated win:
+flattening the gradient table in `noise3` from an array of triples to three
+`Float64Array` lanes took it from 209 ns a call to 47, so the three bands this
+replaces would now cost 3.6–3.8 ms.
+
+**The crater neighborhood is most of the rest, and containment is what it buys.**
+Sizing the walk to the ejecta reach and the radial slop took an airless patch
+from 17.5 ms to 28.3 while removing a step of up to 158 m from about 30% of
+directions. Two levers remain and both are deliberate not-yet: the radial bound
+is the cube's full width where the worst case measured over six bodies is 1.36
+of 1.73, and `EJECTA_REACH` is 2.6 where the published continuous ejecta deposit
+is often mapped to 2. This is well past the condition `TERRAIN-PLAN.md` § 12
+names for moving Phase 5's GPU producer from "adopt if the measurements say so"
+to a scheduled piece of work.
 
 **`surfaceDetailFloor` moved from 7–10 to 12–16, and everything downstream moved
 with it.** Crater rims are sharp — a rim is about a seventh of its crater wide —

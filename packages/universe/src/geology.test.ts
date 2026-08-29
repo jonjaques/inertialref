@@ -26,12 +26,7 @@ import {
   reliefLimit,
   surfaceGrammar,
 } from './grammar.ts'
-import {
-  craterLadder,
-  PLATE_MARGIN,
-  plateAt,
-  terrainSketch,
-} from './sketch.ts'
+import { craterLadder, PLATE_MARGIN, plateAt, terrainSketch } from './sketch.ts'
 import { type Body, generateSystem, walkBodies } from './system.ts'
 import { elevationAt, regionDirection } from './terrain.ts'
 
@@ -452,7 +447,9 @@ describe('the crater field', () => {
         const ring = Math.sqrt(Math.max(0, 1 - z * z))
         const gap = walk(
           body,
-          Vec.normalize(vec3(Math.cos(around) * ring, z, Math.sin(around) * ring)),
+          Vec.normalize(
+            vec3(Math.cos(around) * ring, z, Math.sin(around) * ring),
+          ),
           Vec.normalize(
             vec3(-Math.sin(around) * ring, -z, Math.cos(around) * ring),
           ),

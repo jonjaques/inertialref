@@ -5267,6 +5267,98 @@ migration that never happened. One golden vector moves with it — the damped
 `pcg` lanes are bit-identical, which is what says the change is in the divisor
 rather than in the noise underneath it.
 
+## The cost of a sample, and the two seams that were not boundaries (29 Aug 2026)
+
+Five findings that all touch `elevationAt`'s inner loop, taken as one branch
+because every one of them changes terrain or its cost and each change means
+re-measuring the same numbers. The budget first, so that the correctness work
+had something to spend.
+
+**Three ways the loop paid for an answer it already had.** The sketch was
+resolved through a string key of nine floats — built 4,761 times a patch to find
+a value that could not have changed, 1.7 ms on an airless world and 2.5 on
+Earth; a `WeakMap` in front of the string cache answers the repeats while the
+string map goes on sharing an entry between two equal surfaces built separately,
+which is the case the worker's per-task rebuild needs. Three bands each did
+their own plate lookup and `convergence` was paid twice, for an answer that
+depends on nothing but the direction. And the belt band generated seven octaves
+of ridged fBm — in the analytic-derivative form on anything that erodes — and
+then multiplied it by an `edge` of zero everywhere outside a tenth of a radian
+of a boundary. Together: Luna 20.0 → 17.5 ms a patch, Miranda 12.3 → 9.0,
+Proxima Centauri II 33.8 → 24.8.
+
+A fourth was in the selection rather than the field. `terrainSelect`'s numeric
+region key was gated at level 12 on the reasoning that `surfaceDetailFloor`
+returned nothing deeper — and the band stack moved the floor to between thirteen
+and seventeen the day it landed, so every whole-disk selection took the string
+fallback the key exists to avoid, 1.8 ms a pass. The span goes to 2²², which is
+the deepest level whose `i` and `j` still fit inside a double's exact integers.
+
+**A crater the walk cannot see arrives as a cliff rather than not at all.** The
+3×3×3 neighborhood's docstring claimed it contained every crater whose support
+reaches the sample. It did not, for two independent reasons. The ejecta reach is
+1.3 cells, because `craterLadder` sizes a cell to the level's largest crater
+diameter and that crater's radius is half a cell. And the lattice is cubes in ℝ³
+while the field is a shell cutting through them, so a crater's center sits off
+the sphere by up to the cell's own width along the radius, is indexed _there_,
+and has its profile measured from its projection — a crater directly underfoot
+can be indexed a cell away for no other reason. Walking the reach alone still
+lost 34 m on Luna. The walk derives its own bounds per axis from both, which is
+about five cells an axis against three, and `craterFieldWithin` exists so the
+test can walk two cells wider and assert the two are _equal_.
+
+**Which plate is second is a rank, and a rank has a seam where it changes.**
+`plateAt` returned the nearest plate and the second-nearest, and the phase before
+this one made the blend between them continuous across the line separating them.
+It was. The field still had a kilometre of cliff in it, because the pair also
+changes along the locus where the second and third nearest are equidistant — a
+network of curves through every plate's interior, nowhere near an edge. Measured
+either side of one on Proxima Centauri II: the same nearest plate, base 0.432,
+with the second jumping from base 0.224 to −0.894 at a `boundary` of 5.72e-2.
+
+A sample now carries every plate within a quarter-radian of the nearest and a
+band reads a property as a normalised weighted average over all of them, so no
+rank identity enters and continuity is by construction — the same argument the
+crater lattice makes about the cube corner. `convergence` is weighted over
+_pairs_, because a convergence taken from the nearest plate and whichever is
+second inherits exactly the same seam, and near a triple junction it runs through
+the ground the belt band is loudest on. Largest gap surviving sixty bisections,
+over twenty-four great circles: **Earth 3,081 m → 1.3e-4, Proxima Centauri II
+6,070 m → 4.8e-5.** It costs about a percent of a patch.
+
+The weight is `(1 − s)/(1 + s)` and not the plain complement, which is the one
+place this changes a world rather than a defect. It is what the two-plate blend
+was already spending, so where only two plates are in range the field is
+unchanged; with the complement, Earth's elevation histogram smears until Sarle's
+coefficient falls to 0.553, under the 5/9 at which a distribution stops having
+two modes. It reads 0.583 as shipped, against 0.76 before the partition — the
+triple junctions are genuinely more blended now, and that is the honest picture
+of ground where three plates meet.
+
+**The bug that must not come back is the test that missed it.** `has no step in
+it` walked one great circle per body and bisected onto its single largest jump.
+On Earth that jump was a crater rim — genuinely steep, genuinely continuous —
+while 3,081 m of plate seam sat elsewhere on the same arc, and the test passed.
+A one-plate world cannot exercise the tectonic bands at all, which is how the
+first round of these survived; a one-arc walk on a world that can is the second
+half of the same blind spot. It now bisects the four largest jumps per arc and
+sweeps sixteen arcs on the worlds with plates, and truncating the plate
+neighbourhood back to two fails it on Earth.
+
+**What it costs, measured across the zoo.** A patch goes 26.6 → 32.3 ms on a
+rocky airless world, 49.9 → 59.7 on a rocky atmosphered one, 25.2 → 34.3 on
+Iapetus, and 12.4 → **9.4** on Miranda, which has no craters and therefore keeps
+the budget savings whole. The detail floors (12, 13, 15, 16), the peak patch
+counts and the descent ladders are bit-identical before and after, which is what
+says the cost moved and the streaming did not. Two levers on the crater walk
+remain deliberately unspent: its radial bound is the cube's full width where the
+worst case measured over six bodies is 1.36 of 1.73, and `EJECTA_REACH` is 2.6
+where the published continuous ejecta deposit is often mapped to 2.
+
+`TERRAIN_ALGORITHM` does not move, for the reason the entry above it gives:
+`origin/main` is on v1, this branch already carries the one bump to v2, and v2
+has never described a shipped world. That window closes when it merges.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

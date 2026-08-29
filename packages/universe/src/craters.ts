@@ -81,7 +81,6 @@ const EJECTA_REACH = 2.6
 const RIM_INNER = 0.7
 const RIM_OUTER = 1.5
 
-
 /**
  * The crater field's contribution at a direction, meters.
  *

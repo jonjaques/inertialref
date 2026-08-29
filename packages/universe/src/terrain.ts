@@ -404,9 +404,16 @@ const detailFloorCache = new WeakMap<SurfaceParameters, Map<string, number>>()
  * would add. Twenty-four probe directions spread by the golden angle, five
  * samples each, and the search stops at the first level under tolerance whose
  * stencils touched dry ground — a sea-flattened stencil is the clamp talking,
- * not the field, and the walk carries past it. About 1,500 samples and five
- * milliseconds for a body, memoized, which is a quarter of what deriving its
- * survey sites costs.
+ * not the field, and the walk carries past it.
+ *
+ * About 1,500 samples, and **4 to 23 ms for a body on the main thread** —
+ * Miranda 3.8, Iapetus 11.8, Luna 14.8, Proxima Centauri II 21.2, Mars 23.2.
+ * That is the same order as deriving the body's survey sites rather than the
+ * quarter of it this once was, because the band stack and the crater
+ * neighborhood both grew under it. It is memoized, and it is paid by
+ * `TerrainStreamer.#update` on the frame a body becomes the terrain target,
+ * which is one to two dropped frames exactly when the player arrives — a real
+ * cost, named here because the number is what would justify moving it.
  *
  * This lives beside `elevationAt` because it is a property of those bands and
  * has to move when they do — the band stack put crater rims and scarps into the
@@ -655,9 +662,12 @@ export function heightfieldSample(
  * Generate one terrain patch.
  *
  * This is the meaningful CPU work that runs in a worker: a bordered 65×65 patch
- * is 4,761 samples and each is six bands and a crater ladder — 20 ms on an
- * airless world and 37 on an atmosphered one, where the erosion damping reads
- * the analytic gradient. The result is a Float32Array precisely so it can be
+ * is 4,761 samples and each is six bands and a crater ladder — 32 ms on an
+ * airless world and 60 on an atmosphered one, where the erosion damping reads
+ * the analytic gradient. A world with no craters at all is 9. The crater
+ * neighborhood is most of the difference and most of the total: it walks about
+ * five cells an axis, which is what containing the ejecta reach costs
+ * (`craters.ts`). The result is a Float32Array precisely so it can be
  * transferred rather than copied back to the main thread.
  *
  * The border samples run `s` and `t` outside [0,1], which `regionDirection`
