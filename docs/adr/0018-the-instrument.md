@@ -94,8 +94,8 @@ outside itself. `L` and a switch make the primary drag and the arrow keys look
 instead, which is the only way in on a phone and with a keyboard alone.
 
 **A drag moves the picture by the pixels dragged, at any lens.**
-`DRAG_RADIANS_PER_PIXEL` is a constant, so at 8× zoom a 100 px drag swung the
-frame through forty field-widths. The sensitivity is `pixelAngle(lens,
+`DRAG_RADIANS_PER_PIXEL` is a constant, so at 8× zoom a 100 px drag swung the frame through three of its own
+field-widths. The sensitivity is `pixelAngle(lens,
 viewport)`, so the ground under the pointer follows the pointer. The lens exists,
 and this is one of the things it is for.
 
@@ -136,7 +136,7 @@ under its feet.
 **The lens is solved with it.** Earth is 1.90° across from Luna and Mars is
 42.39° from Phobos — twenty-two to one — and one focal length is not the picture
 for both. `riseFov` clamps to the slider's range, which is doing real work at the
-long end: Earthrise wants 12.6° and stops at 20°, where the terrain predicate
+long end: Earthrise wants 11.4° and stops at 20°, where the terrain predicate
 saturates. That is a stated limit, and the lens below 20° is its own phase.
 
 ### Presets are two tiers, and the top one is a picture that already exists
@@ -258,7 +258,7 @@ store — a preset whose address the viewer wrote is a bookmark and `pictures.ts
 is the record, so the store is what is missing. The flight canopy's
 hold-to-free-look — the aim offset is the mechanism. Photo-mode export — the
 plate capture is the same act. And a lens below 20°, which Earthrise at the
-photograph's 12.6° asks for and the terrain predicate's saturation answers.
+photograph's 11.4° asks for and the terrain predicate's saturation answers.
 
 ## Related
 

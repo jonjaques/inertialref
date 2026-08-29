@@ -1,6 +1,6 @@
 # Architectural decision records
 
-Seventeen decisions that are expensive to reverse. Each records the **context**, the
+Eighteen decisions that are expensive to reverse. Each records the **context**, the
 **decision**, the **alternatives that were rejected**, and the **consequences**
 — including the ones that turned out to be costs.
 

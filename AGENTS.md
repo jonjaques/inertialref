@@ -58,8 +58,8 @@ Violating one of these is a rewrite later, not a refactor.
   `apps/game/src/state/engineStore.ts`. Subscribe to the narrowest slice you
   need, and do not add a timer of your own — one sampler owns the rate.
 - **Never write a presentation switch directly.** `showShip`, `showOrbits`,
-  `orbitScope`, `flareArtifacts` and the observatory's target go through
-  `engine.presentation`: a mode pushes a stance on mount and releases it on
+  `orbitScope`, `labels`, `flareArtifacts`, `chrome` and the observatory's
+  target go through `engine.presentation`: a mode pushes a stance on mount and releases it on
   unmount, a panel's override is another push, and `release()` restores what
   was underneath rather than a literal. The rule has no carve-out for the
   fields that look like preferences — `orbitScope` is read by the frame loop,
@@ -199,7 +199,7 @@ Violating one of these is a rewrite later, not a refactor.
   built.
 - **Never turn the head at a constant radians-per-pixel.** Drag sensitivity is
   `pixelAngle(lens, viewport)`, so the ground under the pointer follows the
-  pointer; a bare constant swung the frame through forty field-widths on a 100 px
+  pointer; a bare constant swung the frame through three of its own field-widths on a 100 px
   drag at 8× zoom. The aim is a `LookOffset` on the pose, and it is cleared by
   whatever **replaces** the pose — a focus, a frame, a stand, a composed set of
   angles — and by nothing else, so a viewer who turned to look at Io beside

@@ -9,7 +9,13 @@ import {
   Vec,
 } from '@inertialref/spatial'
 import { createInlineWorker, createTaskRegistry } from '@inertialref/workers'
-import { MAX_OBSERVER_DISTANCE } from '@inertialref/rendering'
+import {
+  type Lens,
+  LENS_PRESETS,
+  MAX_OBSERVER_DISTANCE,
+  verticalFov,
+  verticalFovDegrees,
+} from '@inertialref/rendering'
 import { openSession, type Session } from './session.ts'
 import type { GameHarness } from './harness.ts'
 import type { ObserverPose } from './observatory.ts'
@@ -23,14 +29,39 @@ import type { ObserverPose } from './observatory.ts'
  * the same act as going there. The last one is the whole architectural claim
  * the planetarium rests on and it is one line to check.
  */
-function harness(): { harness: GameHarness; session: Session } {
+function harness(): {
+  harness: GameHarness
+  session: Session
+  lens: () => Lens
+} {
   const registry = createTaskRegistry()
+  /*
+   * The session gets a lens the way a browser does, and it has to.
+   *
+   * With no host, `framingLens` and `setFlightLens` are both absent:
+   * `Observatory.#lens` falls back to `LENS_PRESETS.flight` and `#fitLens` is a
+   * silent no-op — so every picture composes at 65° whatever it names, and the
+   * `fovDeg` a test asserts against is the literal echoed back out of
+   * `PICTURES`. `preset`'s central claim, that a `fill` standoff is solved
+   * *against* the lens and so the lens is fitted first, was exercised by
+   * nothing: swapping the two lines left the suite green while `the-rings`
+   * moved from 2.249 radii to 2.735.
+   *
+   * Two lines of host is the whole fix, and it makes the ordering assertable.
+   */
+  let held: Lens = LENS_PRESETS.flight
   const session = openSession({
     seed: 'inertialref',
     workers: () => createInlineWorker(registry),
     catalog: TEST_CATALOG,
+    host: {
+      framingLens: () => held,
+      setFlightLens: (next) => {
+        held = next
+      },
+    },
   })
-  return { harness: session.harness, session }
+  return { harness: session.harness, session, lens: () => held }
 }
 
 /** A sample that must exist. Keeps the assertions about geometry, not nulls. */
@@ -478,6 +509,103 @@ describe('the pictures', () => {
     const marble = ir.preset('blue-marble')
     expect(marble.status.surface).toBeNull()
     expect(marble.status.target?.name).toBe('Earth')
+    session.dispose()
+  })
+})
+
+describe('a picture fits the lens it names', () => {
+  it('leaves the lens where a rise solved it', () => {
+    // A rise solves its own field from the parent's angular size, so the fit
+    // has to happen *after* the stance rather than before it.
+    const { harness: ir, session, lens } = harness()
+    const taken = ir.preset('earthrise')
+    expect(verticalFovDegrees(lens())).toBeCloseTo(taken.fovDeg, 6)
+    expect(taken.fovDeg).toBe(20)
+    session.dispose()
+  })
+
+  it('composes at the fitted lens, not at the one before it', () => {
+    /*
+     * The claim stated without reaching into private state: take a picture at
+     * 80°, then take one at 65°, and the standoff for the *same* fill has to
+     * differ — a wider field frames the same fraction from nearer.
+     */
+    const { harness: ir, session } = harness()
+    const wide = ir.preset('the-rings')
+    // `desired`, not `state`: the orbit arm eases, and the ease only runs
+    // inside `sample()`, which is the render loop's to call. Headlessly nothing
+    // draws, so `state` is wherever the camera was when the verb was issued —
+    // reading it here compared two focus distances and passed for the wrong
+    // reason on the first run.
+    const wideDistance = wide.status.desired.distance
+
+    ir.preset('blue-marble')
+    ir.look('s:SOL/b:5')
+    const narrow = ir.compose('high-angle')
+
+    expect(narrow.desired.distance).toBeGreaterThan(wideDistance)
+    // 65° against 80° on one fill: the standoff is `r / sin(fill · fov/2)`, so
+    // 2.734 radii against 2.249 — 22%, not a rounding difference.
+    expect(narrow.desired.distance / wideDistance).toBeCloseTo(1.216, 2)
+    session.dispose()
+  })
+})
+
+describe('the drag sensitivity', () => {
+  it('is per CSS pixel, not per display pixel', () => {
+    /*
+     * The claim is "the ground under the pointer follows the pointer", and a
+     * pointer delta arrives in CSS pixels. `pixelAngle` answers in *display*
+     * pixels — the viewport keeps the device ratio deliberately, because the
+     * terrain predicate and the circle of confusion are claims about physical
+     * pixels — so the two have to be reconciled somewhere.
+     *
+     * The check that catches the conflation: the same window at 1× and at 2×
+     * must drag at the same rate. Without the ratio the 2× answer is half, so
+     * the picture moves at half the speed of the hand on every Retina display
+     * and at two thirds on a phone, which is the case free look exists for.
+     */
+    const rate = (ratio: number): number => {
+      const registry = createTaskRegistry()
+      const session = openSession({
+        seed: 'inertialref',
+        workers: () => createInlineWorker(registry),
+        catalog: TEST_CATALOG,
+        host: {
+          lensView: () => ({
+            lens: LENS_PRESETS.flight,
+            // A 1000×750 CSS window, at whatever ratio the display has.
+            viewport: { width: 1000 * ratio, height: 750 * ratio },
+          }),
+          pixelRatio: () => ratio,
+        },
+      })
+      const sensitivity = session.harness.observatory.dragSensitivity()
+      session.dispose()
+      return sensitivity
+    }
+    expect(rate(2)).toBeCloseTo(rate(1), 12)
+    expect(rate(1.5)).toBeCloseTo(rate(1), 12)
+
+    /*
+     * And the absolute value is the lens's own, through `pixelAngle` — which is
+     * the *tangent* form, `2·tan(fov/2)/height`, rather than `fov/height`.
+     * That is the angle a pixel actually subtends at the center of a
+     * projection, and it is the identity the terrain predicate and the LOD
+     * thresholds already stand on: at 65° over 750 pixels it is 1.699 mrad
+     * against the naive 1.513, an 11% difference that would put this arm and
+     * the refinement predicate on two different ideas of a pixel.
+     */
+    const tangent = (2 * Math.tan(verticalFov(LENS_PRESETS.flight) / 2)) / 750
+    expect(rate(1) * 0.005).toBeCloseTo(tangent, 9)
+    expect(tangent * 1000).toBeCloseTo(1.699, 3)
+  })
+
+  it('falls back to the reference rate with no display', () => {
+    // Headlessly the gesture is a number in a script rather than a hand on a
+    // surface, and there is no viewport for an angle to be measured over.
+    const { harness: ir, session } = harness()
+    expect(ir.observatory.dragSensitivity()).toBe(1)
     session.dispose()
   })
 })

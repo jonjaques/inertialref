@@ -325,7 +325,7 @@ has the token mapping.
 | different `Toggle`s                     |                                                           |
 | `GraphicsPanel`'s `Cycle`               | `ToggleGroup` — see "one correction" below                |
 | `ShellBar`'s `<button role="switch">`   | `Toggle`                                                  |
-| `NavPanel`'s address field              | `Input`, via `hud/AddressForm.tsx`                        |
+| The catalog's address field             | `Input`, via `hud/AddressForm.tsx`                        |
 | The `w-px bg-slate-800` dividers        | `Separator`                                               |
 | The status chips                        | `Badge`                                                   |
 | Icon-only controls' `title` attribute   | `Tooltip` — the rest keep `title`; see below              |

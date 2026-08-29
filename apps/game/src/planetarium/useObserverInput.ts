@@ -237,7 +237,7 @@ export function useObserverInput(
       if (step.orbit.x !== 0 || step.orbit.y !== 0) {
         // The sensitivity is the lens's own pixel angle, so the ground under
         // the pointer follows the pointer at any focal length. A constant
-        // radians-per-pixel swings the frame through forty field-widths at 8×.
+        // radians-per-pixel swings the frame through three of its own field-widths at 8×.
         if (looking) observatory.turn(step.orbit.x, step.orbit.y)
         else
           observatory.drag(

@@ -4986,7 +4986,7 @@ radii, three to two thousand parent-radii out, at any parent direction.
 Earth is 1.90° across from Luna and Mars is 42.39° from Phobos, so the lens is
 part of the picture rather than a setting beside it. `riseFov` clamps to the
 slider's 20–110°, which is doing real work at the long end: Earthrise wants
-12.6° and gets 20°, because that is where the terrain predicate saturates
+11.4° and gets 20°, because that is where the terrain predicate saturates
 (§ 8). The captured plate is right otherwise — Earth over the lunar limb from
 110 km, horizon on the lower-third line.
 
@@ -5004,9 +5004,32 @@ what keeps it true under a later change to `multiply`, and the compositions are
 fitted against that pose.
 
 **A drag now moves the picture by the pixels dragged.**
-`DRAG_RADIANS_PER_PIXEL` is a constant, so at 8× zoom a 100 px drag swung the
-frame through forty field-widths. The sensitivity is `pixelAngle(lens,
+`DRAG_RADIANS_PER_PIXEL` is a constant, so at 8× zoom a 100 px drag swung the frame through three of its own
+field-widths. The sensitivity is `pixelAngle(lens,
 viewport)`.
+
+**Two the audit found before it shipped**, and both are the same shape — a
+number that was right in one unit and read in another.
+
+`ir.preset` fitted its lens by writing `engine.flightLens`, and the shell owns
+that field: `camera.lens` is a persisted preference and an effect re-asserts it
+on every render-preference change. So a picture held its lens until the next
+unrelated toggle — press The Rings, change the anti-aliasing, and Saturn goes
+from 0.660 of the frame height to 0.812 with the A ring's outer edge off both
+sides, which is exactly what that picture's 80° exists to prevent.
+`requestLens` writes **both**: the field, because `framingLens()` is read on the
+very next line and a `fill` standoff is solved against it, and the shell's
+setter, because that is what survives. Routing through React alone was tried and
+is wrong for the first reason — the state update is asynchronous, so `the-rings`
+composed at 2.735 radii wearing an 80° label instead of 2.249.
+
+And the drag sensitivity was radians per **display** pixel while a pointer delta
+is in **CSS** pixels. `lensView().viewport` keeps the device ratio deliberately —
+the terrain predicate and the circle of confusion are claims about physical
+pixels — so on a 2× display the picture moved at half the rate of the hand, and
+on a phone at two thirds, which is the case free look exists for.
+`GameEngine.displayRatio` is the missing factor and `dragSensitivity` spends it;
+the test is that the same CSS window drags at one rate at 1×, 1.5× and 2×.
 
 ### Bugs this pass found, worth not reintroducing
 

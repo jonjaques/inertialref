@@ -668,8 +668,8 @@ refusal. Pitch clamps short of the pole for the reason `ELEVATION_LIMIT`
 exists.
 
 **A drag moves the picture by the pixels dragged, at any lens.**
-`DRAG_RADIANS_PER_PIXEL` is a constant, so at 8× zoom a 100 px drag swings the
-frame through forty field-widths. The sensitivity for the orbit and for the
+`DRAG_RADIANS_PER_PIXEL` is a constant, so at 8× zoom a 100 px drag swings the frame through three of its own
+field-widths. The sensitivity for the orbit and for the
 look is `pixelAngle(lens, viewport)`, so the ground under the pointer follows
 the pointer — the lens exists, and this is one of the things it is for.
 
@@ -870,7 +870,7 @@ address the viewer wrote is a bookmark, and `pictures.ts` is the record — the
 store is what is missing); the flight canopy's hold-to-free-look (the aim
 offset is the mechanism; the chase camera is the flight arm's to compose);
 photo-mode export (the plate capture is the same act); a lens below 20°, which
-Earthrise at the photograph's 12.6° asks for and the terrain predicate's
+Earthrise at the photograph's framing asks for and the terrain predicate's
 saturation at 20° (§ 8) answers.
 
 **Done means:** one `addEventListener('keydown'` in `apps/game/src` outside
@@ -1077,7 +1077,7 @@ Two things it did not deliver as written, stated rather than quietly dropped.
 particular places and the zoo is a set of _sites_, so the fixture the terrain
 phases compare against is still `ir.visit` plus the drive rig — the preset tier
 is the mechanism it will use, and the seven pictures are the proof it works. And
-**Earthrise is framed at 20° rather than the photograph's 12.6°**, because the
+**Earthrise is framed at 20° rather than the photograph's framing**, because the
 lens below 20° is deferred with the terrain predicate's saturation that motivates
 it; the geometry is right and the parent is smaller in the frame than in the
 photograph.

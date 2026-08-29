@@ -226,6 +226,20 @@ export interface PresentationHost {
    * to be reachable from here too. Optional for the same reason: headlessly
    * there is no interface to clear.
    */
+  /**
+   * How many display pixels one CSS pixel is, on this host.
+   *
+   * The drag sensitivity needs both and they are not the same number.
+   * `lensView().viewport` is *display* pixels with supersampling divided out
+   * and the device ratio deliberately kept — the terrain predicate and the
+   * circle of confusion are claims about physical pixels. A pointer delta is in
+   * CSS pixels. On a 2× display the two differ by two, and a sensitivity that
+   * conflated them moved the picture at half the rate of the hand.
+   *
+   * 1 headlessly, and 1 is also the honest answer for a display that has no
+   * ratio to report.
+   */
+  pixelRatio?(): number
   setChrome?(visible: boolean): void
   /**
    * Put the sky's own layers — names and traces — in or out of the frame.
@@ -1232,10 +1246,15 @@ export class GameHarness {
    * fixture is what a before/after plate is — the geology phase is judged from
    * these, so they exist before the geology does.
    *
-   * The lens comes back rather than being applied, exactly as `rise` does and
-   * for the same reason: the observatory has no lens of its own by design, so
-   * fitting one is the shell's. A console caller gets told the angle and the
-   * camera panel stays where they left it.
+   * The lens **is** fitted, through the host's own owner of it — a picture that
+   * named a lens and did not wear it would be a fixture that produced a
+   * different frame on a machine with a different slider position. It comes
+   * back as well, because a caller composing a plate has to be able to say what
+   * the picture was taken at.
+   *
+   * Headlessly the port is absent and the fit is a silent no-op: the arithmetic
+   * is worth running there and there is no display for a field of view to be
+   * about.
    */
   preset(id: string): {
     status: ObserverStatus

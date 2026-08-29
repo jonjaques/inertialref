@@ -106,7 +106,7 @@ only way in on a phone and with a keyboard alone.
 
 **A drag moves the picture by the pixels dragged, at any lens.** The sensitivity
 is the lens's own pixel angle, so the ground under the pointer follows the
-pointer. A constant radians-per-pixel swings the frame through forty
+pointer. A constant radians-per-pixel swings the frame through three of its own
 field-widths at 8× zoom, which is a gesture nobody can aim.
 
 **Zoom, dolly and framing are three acts, and the Camera panel has three

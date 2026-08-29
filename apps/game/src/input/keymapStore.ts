@@ -87,7 +87,15 @@ export class KeymapStore {
     return this.#layout
   }
 
-  /** The contexts live right now, innermost last. */
+  /**
+   * The contexts live right now, in no particular order.
+   *
+   * Deliberately not "innermost last": React runs child effects before parent
+   * ones, so a nested claim is inserted *first*, and a reader who believed the
+   * order would write a resolver that took the last match. `actionFor` decides
+   * by `SPECIFICITY` and membership, both order-independent, which is what
+   * makes the arbitration a stated rule rather than an accident of mount order.
+   */
   get live(): readonly KeyContext[] {
     return ['global', ...[...this.#claims].map((claim) => claim.context)]
   }

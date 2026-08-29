@@ -415,8 +415,19 @@ export class Observatory {
    * ascent on a framing nobody chose and leaves `travelling` true forever,
    * because `sample` never runs the ease that would clear it.
    */
-  /** Orbit by a pointer drag, in pixels. */
-  drag(dxPixels: number, dyPixels: number, sensitivity = 1): void {
+  /**
+   * Orbit by a pointer drag, in pixels.
+   *
+   * The sensitivity defaults to the solved one rather than to 1, so a caller
+   * that omits it gets the lens's own pixel angle instead of a 4.8× drag at the
+   * flight lens. `turn` solves it internally for the same reason; the argument
+   * survives for a script that wants a stated rate.
+   */
+  drag(
+    dxPixels: number,
+    dyPixels: number,
+    sensitivity = this.dragSensitivity(),
+  ): void {
     if (this.#stance !== null) return
     // Both are written, not just the desired: a drag is direct manipulation and
     // must not lag a damping filter. Easing is for travel, not for the hand.
@@ -554,15 +565,28 @@ export class Observatory {
    * Radians of camera motion per pixel of pointer, over the reference rate.
    *
    * A drag moves the picture by the pixels dragged at any lens, which
-   * `DRAG_RADIANS_PER_PIXEL` alone cannot do: it is a constant, so at 8× zoom a
-   * 100 px drag swings the frame through forty field-widths. 1 when there is no
-   * display to measure — headlessly the gesture is a number in a script rather
-   * than a hand on a surface.
+   * `DRAG_RADIANS_PER_PIXEL` alone cannot do: it is a constant, so at 8× zoom
+   * on the flight lens a 100 px drag swings the frame through three of its own
+   * field-widths, and eleven at the telephoto end.
+   *
+   * **Two pixel counts, and they are not the same one.** `pixelAngle` is
+   * radians per *display* pixel — the viewport keeps the device ratio, because
+   * the terrain predicate and the circle of confusion are claims about physical
+   * pixels — and a pointer delta arrives in CSS pixels. On a 2× display the
+   * uncorrected answer moves the picture at half the rate of the hand, and on a
+   * phone at two thirds, which is the case free look exists for.
+   *
+   * 1 when there is no display to measure: headlessly the gesture is a number
+   * in a script rather than a hand on a surface.
    */
   dragSensitivity(): number {
     const view = this.#host.lensView?.()
     if (view === null || view === undefined) return 1
-    return pixelAngle(view.lens, view.viewport) / DRAG_RADIANS_PER_PIXEL
+    const ratio = this.#host.pixelRatio?.() ?? 1
+    return (
+      (pixelAngle(view.lens, view.viewport) * Math.max(1, ratio)) /
+      DRAG_RADIANS_PER_PIXEL
+    )
   }
 
   /**

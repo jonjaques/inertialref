@@ -272,6 +272,23 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
   // without, and reading it once at startup gets that permanently wrong.
   useEffect(() => watchDynamicRange(setDynamicRangeHigh), [])
 
+  /*
+   * The shell owns the lens, so the engine is told where to send one.
+   *
+   * `ir.preset` and `ir.rise` solve a lens as part of the picture, and the
+   * effect below re-asserts `lens` onto `engine.flightLens` on every render
+   * preference change — so a verb that wrote the field would hold its picture
+   * only until the next unrelated toggle. Routing it into the preference is
+   * what makes a preset's lens survive, and what keeps the panel's sliders
+   * agreeing with the picture on screen.
+   */
+  useEffect(() => {
+    engine.onLensRequest = setLens
+    return () => {
+      engine.onLensRequest = null
+    }
+  }, [engine, setLens])
+
   useEffect(() => {
     engine.lensFlare = lensFlare
     engine.flightLens = lens
@@ -312,6 +329,17 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    * the buffer rather than rebuilding the renderer around it.
    */
   const coarse = useCoarsePointer()
+  /*
+   * The other half of `supersample`, and the one the *pointer* needs.
+   *
+   * The same ratio `<Canvas dpr>` is built from below. A drag delta arrives in
+   * CSS pixels and `pixelAngle` answers in display pixels, so without this the
+   * picture moves at half the rate of the hand on a 2× display — and at two
+   * thirds on a phone, which is the case free look exists for.
+   */
+  useEffect(() => {
+    engine.displayRatio = Math.min(window.devicePixelRatio, dprCeiling(coarse))
+  }, [engine, coarse])
 
   /*
    * Verify that boot actually put pixels on screen.

@@ -114,6 +114,8 @@ export interface SessionHost {
   readonly framingLens?: PresentationHost['framingLens']
   /** Fit a lens — `ir.preset` and `ir.rise` each solve one. */
   readonly setFlightLens?: PresentationHost['setFlightLens']
+  /** Display pixels per CSS pixel, for the drag sensitivity. */
+  readonly pixelRatio?: PresentationHost['pixelRatio']
   /** Put the interface in or out of the frame, for a plate capture. */
   readonly setChrome?: PresentationHost['setChrome']
   /** Names and traces in or out of the frame, for the same. */
@@ -245,6 +247,9 @@ export function openSession(options: SessionOptions = {}): Session {
     ...(options.host?.setFlightLens === undefined
       ? {}
       : { setFlightLens: options.host.setFlightLens }),
+    ...(options.host?.pixelRatio === undefined
+      ? {}
+      : { pixelRatio: options.host.pixelRatio }),
     ...(options.host?.setChrome === undefined
       ? {}
       : { setChrome: options.host.setChrome }),

@@ -316,6 +316,46 @@ export class GameEngine implements PresentationHost {
   }
 
   /**
+   * Where a lens the engine did not choose goes.
+   *
+   * Installed by the shell, because the shell *owns* the lens: `camera.lens` is
+   * a persisted preference and an effect mirrors it onto `flightLens` whenever
+   * any render preference changes. A verb that wrote the field directly would
+   * therefore hold the picture only until the next unrelated toggle — press
+   * The Rings, change the anti-aliasing, and Saturn goes from 0.660 of the
+   * frame height to 0.812 with the A ring's outer edge off both sides, which is
+   * exactly what that picture's 80° exists to prevent.
+   *
+   * Null headlessly, where there is no preference and no panel, and the field
+   * is the whole of the truth.
+   */
+  onLensRequest: ((lens: Lens) => void) | null = null
+
+  /**
+   * Fit a lens, through whoever owns it — and **both** writes are required.
+   *
+   * The field first, because it is what `framingLens()` answers *this instant*
+   * and `ir.preset` composes on the very next line: a `fill` standoff is solved
+   * against the lens, so a fit that only queued a React state update would
+   * compose against the lens from a moment ago. Measured: `the-rings` landed at
+   * 2.735 radii instead of 2.249, which is the 65° answer wearing an 80° label.
+   *
+   * Then the shell's setter, because the field alone does not survive. The
+   * preference is the owner and an effect re-asserts it onto this field on
+   * every render-preference change, so a lens written here and nowhere else
+   * holds its picture until the next unrelated toggle — press The Rings, change
+   * the anti-aliasing, and Saturn goes from 0.660 of the frame height to 0.812
+   * with the A ring's outer edge off both sides.
+   *
+   * Not a second producer: `engine.lens` still resolves cutscene-then-flight,
+   * and this writes the one flight lens a panel's slider also writes.
+   */
+  requestLens(lens: Lens): void {
+    this.flightLens = lens
+    this.onLensRequest?.(lens)
+  }
+
+  /**
    * The flight lens alone — what the observatory's framing solver reads.
    *
    * Separate from `lensView` because that one resolves cutscene-first, and the
@@ -348,6 +388,25 @@ export class GameEngine implements PresentationHost {
    * The place to spend on sharper terrain is `cellPixels`.
    */
   supersample = 1
+
+  /**
+   * How many *display* pixels one CSS pixel is, written by the shell.
+   *
+   * Named for what it holds rather than for the port that reads it, because
+   * `GameEngine` implements `PresentationHost` and a field cannot share a name
+   * with the method the interface asks for.
+   *
+   * The companion to `supersample` and a different number: that one is the
+   * factor the buffer is inflated by for anti-aliasing and is divided back out,
+   * this one is the device ratio and is deliberately kept — the terrain
+   * predicate and the circle of confusion are claims about physical pixels.
+   *
+   * What needs it is the pointer. A drag delta arrives in CSS pixels, and a
+   * sensitivity solved from `pixelAngle` alone is per display pixel: on a 2×
+   * display it moves the picture at half the rate of the hand, and on a phone,
+   * which is the case free look exists for, at two thirds.
+   */
+  displayRatio = 1
 
   #viewport: Viewport | null = null
 
@@ -545,9 +604,8 @@ export class GameEngine implements PresentationHost {
         terrain: () => this.terrain(),
         lensView: () => this.lensView(),
         framingLens: () => this.framingLens(),
-        setFlightLens: (lens) => {
-          this.flightLens = lens
-        },
+        pixelRatio: () => this.displayRatio,
+        setFlightLens: (lens) => this.requestLens(lens),
         setChrome: (visible) => this.setChrome(visible),
         setLayers: (visible) => this.setLayers(visible),
         onWorldReplaced: () => this.#invalidateDerived(),

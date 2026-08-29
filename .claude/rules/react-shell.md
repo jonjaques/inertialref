@@ -18,8 +18,8 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", ADR-0011.
   `useShallow`. **Do not add a timer.** The two that remain are not field reads — a star
   sweep (`hud/useTravelTargets.ts`) and a scene projection (`planetarium/SkyLabels.tsx`).
 - **Never write a presentation switch directly.** `showShip`, `showOrbits`,
-  `orbitScope`, `flareArtifacts` and the observatory's target go through
-  `engine.presentation` — a mode pushes a stance on mount and releases on unmount, a
+  `orbitScope`, `labels`, `flareArtifacts`, `chrome` and the observatory's target
+  go through `engine.presentation` — a mode pushes a stance on mount and releases on unmount, a
   panel's override is another push, and `release()` restores what was underneath.
   Assigning the field instead is the "restored by whoever lowered it" convention that had
   three implementations and no owner: leaving the planetarium after arriving from the menu
@@ -107,7 +107,7 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", ADR-0011.
   A focus, a frame, a stand and a composed set of angles clear it; a drag, a
   dolly and leaving the mode do not. Drag sensitivity is
   `pixelAngle(lens, viewport)`, never the bare constant — at 8× zoom a 100 px
-  drag swung the frame through forty field-widths.
+  drag swung the frame through three of its own field-widths.
 - **One component per file.** `react/no-multi-comp` is an oxlint error. A `.tsx` that
   exports anything besides components is a file Fast Refresh gives up on, and a full
   reload here rebuilds the `WebGPURenderer` and loses the camera. Constants and types go

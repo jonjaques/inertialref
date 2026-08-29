@@ -1,9 +1,10 @@
 /*
  * What is drawn, and who is allowed to say so.
  *
- * Five presentation fields — `showShip`, `showOrbits`, `orbitScope`,
- * `flareArtifacts`, and the observatory's target. Four of them were written on
- * mode entry under three different disciplines, none of them owned:
+ * Seven presentation fields — `showShip`, `showOrbits`, `orbitScope`, `labels`,
+ * `flareArtifacts`, `chrome`, and the observatory's target. Four of the
+ * original five were written on mode entry under three different disciplines,
+ * none of them owned:
  *
  *   - the menu captured the previous values and restored them
  *   - the planetarium restored to hard-coded literals, so leaving it after
@@ -25,8 +26,8 @@
  * mode's stance applying, which fits ADR-0011's "the mode is never held in
  * state" more tightly than anything here does.
  *
- * The deciding constraint is `NavPanel`'s in-planetarium ship toggle: a user
- * override on top of the mode's stance. The table needs a second channel for
+ * The deciding constraint is the in-planetarium ship toggle — `ViewPanel`'s
+ * now — which is a user override on top of the mode's stance. The table needs a second channel for
  * it — and then a rule for what happens to that channel when the mode changes,
  * which is a restore rule wearing a different hat. **A stack gets it free**:
  * the toggle is just another push, and `release()` means "whatever was under
@@ -161,7 +162,7 @@ export interface PresentationStack {
  * Resolve a stack of stances, bottom to top.
  *
  * Last writer wins per field, which is what makes an override a push rather
- * than a special case: `NavPanel` pushes `{ showShip: false }` over the
+ * than a special case: `ViewPanel` pushes `{ showShip: false }` over the
  * planetarium's stance and neither of them has to know about the other.
  */
 export function resolveStances(layers: readonly Stance[]): Presentation {

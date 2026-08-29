@@ -75,7 +75,7 @@ export const HORIZON_THIRD = 1 / 3
  * one of them would put the other off the edges or in a corner as a speck.
  *
  * Clamped to the slider's own range, and the clamp is doing real work at the
- * long end: Earthrise at the photograph's framing wants 12.6°, and the range
+ * long end: Earthrise at the photograph's framing wants 11.4°, and the range
  * stops at 20° because the terrain predicate saturates there (`TERRAIN-PLAN.md`
  * § 8). The picture below 20° is a phase of its own; until then Earth is
  * smaller in this frame than in the photograph, which is a stated limit rather
