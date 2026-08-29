@@ -174,6 +174,29 @@ Violating one of these is a rewrite later, not a refactor.
   angle from `DEFAULT_LENS` and is the one exception, because it is a
   constructor argument rather than a writer.
   [ADR-0017](docs/adr/0017-the-lens.md).
+- **Never add a second window-level key listener.** `input/keymapStore.ts` owns
+  the one `keydown` in `apps/game/src`, and there were six: two read `event.key`
+  and four read `event.code`, which is why `+` carried a comment about `Shift`. A
+  mode registers a handler for an **action id** (`useAction`) and declares which
+  **context** it is (`useKeyContext`); it never sees a key. Conflicts are checked
+  against `LIVE_SETS` — every set of contexts that can be live at one moment —
+  because `global` is live alongside everything, and "conflicts within a context"
+  misses exactly the pair that shipped as a bug: `Space` was the pause key and
+  the cinema transport, both handlers ran, and `clock.paused` flipped twice.
+  [ADR-0018](docs/adr/0018-the-instrument.md).
+- **Never call `localStorage` outside `state/preferences.ts`.** Every key is
+  declared there once — default, guard, revive, migrate, group — and a call site
+  takes the _definition_ rather than a key string, so an unregistered preference
+  is a name that does not resolve. The rule is not tidiness: the export, the
+  import and the live subscription each have to know the whole set, and none of
+  them is possible with the calls spread out. An import reaches mounted hooks
+  through that subscription, because a reload here rebuilds the renderer.
+- **Never write a key name in a label.** Not in a title, not in an `aria-label`,
+  not in a help table. `useActionTitle(id, text)` and `KeySheet` read the live
+  chord, which is the only kind of help a rebindable build can have — and the
+  two hand-maintained tables of prose that named keys as string literals are
+  exactly what `/settings/controls` was printing while it said rebinding was not
+  built.
 - **Never let the planetarium write canonical state.** The observatory
   resolves an address, asks the world where that is at `renderTime`, and
   returns a pose. No teleport, no clock, no entity write, no save.

@@ -102,8 +102,13 @@ ir.look(address) // moves only a CAMERA; the planetarium's whole verb
 ir.dossier(address) // what the thing IS — the object panel's whole source, as JSON
 ir.orbit('g:milky-way/s:SOL/b:2', 400)
 ir.land('g:milky-way/s:SOL/b:0', 0.35, -1.1)
-ir.shot('crescent', address) // camera bookmarks: full-face gibbous half crescent glint sunset oblique
-ir.shots() // what they are
+ir.shot('crescent', address) // teleports the SHIP into a composition
+ir.compose('crescent') // the same picture, moving only a CAMERA
+ir.shots() // the sixteen, with what each one is
+ir.preset('earthrise') // a PICTURE: address + framing + lens, the same frame every time
+ir.presets() // the seven, with what each one is
+ir.rise() // stand with the parent over the horizon; returns the fov it solved
+ir.aim(yawDeg, pitchDeg) // turn the head without moving the camera. (0,0) recentres
 ir.sites(address) // the named places on a body: summit basin shore rough corner pole
 ir.visit(address, { site: 'summit', height: 2 }) // stand there; moves only a CAMERA
 ir.ascend() // back to the framing the visit left
@@ -116,7 +121,17 @@ ir.pause()
 ir.seekCutscene(1150) // frame-exact stills
 ```
 
-For a clean product shot: `engine.showShip = false`, then `ir.shot(...)`.
+For a clean plate: `ir.chrome(false)` puts the interface out of the frame — the state
+`Shift+H` reaches, and the state a plate is _defined_ to be taken in — and `ir.layers(false)`
+takes the names and traces with it, which is a different claim: chrome is the interface and
+the layers are content, so `Shift+H` leaves them. Then `ir.preset(id)`, which fits its own
+lens. `engine.showShip = false` is the older half of the same idea and still works.
+
+**A picture has to be taken in the planetarium.** `ir.preset` moves the observatory, and
+the observatory only produces a camera while a layer is holding it — a stance the
+planetarium pushes on mount. From the menu every verb succeeds and every capture is a
+picture of the menu: the right size, and wrong. `pnpm presets:plates` is the rig that gets
+this right, and it is the thing to copy.
 
 `ir.visit` sets the height outright rather than easing it, which is what makes a descent
 plate loop work — `for (const h of [40000, 2000, 120, 2])`, one capture per rung, with

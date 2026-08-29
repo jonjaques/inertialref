@@ -87,6 +87,26 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", ADR-0011.
   The observatory's framing solver reads `framingLens()` — the flight lens alone —
   because it is the arm that only produces a camera when the cutscene arm is null.
   ADR-0017.
+- **One window-level `keydown`, and it is `input/keymapStore.ts`'s.** A mode
+  registers a handler for an action id (`useAction`) and declares its context
+  (`useKeyContext`); it never sees a key. Conflicts are checked against
+  `LIVE_SETS` rather than per context, because `global` is live beside
+  everything — `Space` was the pause key _and_ the cinema transport, both
+  handlers ran, and `clock.paused` flipped twice with nothing in the console.
+  A chord is `event.code`: `+` is `Shift+Equal` everywhere this ships, so
+  `event.key` carries a modifier that means nothing. ADR-0018.
+- **No `localStorage` outside `state/preferences.ts`.** Keys are declared there
+  once and a call site takes the definition, never a string. The export, the
+  import and the live subscription each need the whole set, which is why the
+  calls cannot be spread out — and an import reaches mounted hooks through that
+  subscription, because a reload rebuilds the `WebGPURenderer`.
+- **No key name in a label** — not a title, not an `aria-label`, not a help
+  table. `useActionTitle(id, text)` and `KeySheet` read the live chord.
+- **The aim is an offset on the pose, cleared only by what replaces the pose.**
+  A focus, a frame, a stand and a composed set of angles clear it; a drag, a
+  dolly and leaving the mode do not. Drag sensitivity is
+  `pixelAngle(lens, viewport)`, never the bare constant — at 8× zoom a 100 px
+  drag swung the frame through forty field-widths.
 - **One component per file.** `react/no-multi-comp` is an oxlint error. A `.tsx` that
   exports anything besides components is a file Fast Refresh gives up on, and a full
   reload here rebuilds the `WebGPURenderer` and loses the camera. Constants and types go

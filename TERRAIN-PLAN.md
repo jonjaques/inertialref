@@ -1047,7 +1047,7 @@ and a balanced whole-disk tree has a floor of its own. A predicate bounded above
 by the field's own detail cannot spend the square. The direction of every
 conclusion in § 8 holds; the magnitude at the narrow end does not.
 
-**Phase 1.6 — the instrument.** § 9, in full: View split from a Camera panel
+**Phase 1.6 — the instrument. Landed 28 Aug 2026.** § 9, in full: View split from a Camera panel
 that carries the whole eye; free look as an aim offset that persists until the
 pose is replaced; one list of compositions, with the aim solve that makes
 Earthrise a rise; Presets in two tiers with captured plates; Navigate deleted
@@ -1066,7 +1066,21 @@ after a week of composing.
 
 _Done means:_ § 9's "done means", plus the zoo plates (§ 10) re-captured
 through `ir.preset` and `Shift+H`, so that every later phase's before/after is
-one command.
+one command. [ADR-0018](docs/adr/0018-the-instrument.md) is the record and
+[`CONTEXT.md`](CONTEXT.md#the-instrument-the-lens-is-operated-from-28-aug-2026)
+has the numbers: one `keydown` listener where there were nine, one `localStorage`
+call site where there were five, and the 0.28° that decides whether a rise reads
+the parent as a direction or as a displacement.
+
+Two things it did not deliver as written, stated rather than quietly dropped.
+**The zoo plates are not re-captured**: `ir.preset` names seven pictures of
+particular places and the zoo is a set of _sites_, so the fixture the terrain
+phases compare against is still `ir.visit` plus the drive rig — the preset tier
+is the mechanism it will use, and the seven pictures are the proof it works. And
+**Earthrise is framed at 20° rather than the photograph's 12.6°**, because the
+lens below 20° is deferred with the terrain predicate's saturation that motivates
+it; the geometry is right and the parent is smaller in the frame than in the
+photograph.
 
 **Phase 2 — the geology.** New procedural primitives, grammar, sketch, band
 stack, archetypes; terrain algorithm v2 in one bump; golden vectors extended;

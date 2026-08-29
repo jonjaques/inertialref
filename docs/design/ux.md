@@ -36,7 +36,8 @@ clicking.
 | `/planetarium?at=…`                                  | [The planetarium](planetarium.md)                                    | `planetarium` |
 | `/cinema`, `/cinema/:id`                             | [The cinema player](cinema.md)                                       | `cinema`      |
 | `/docs`, `/docs/*`                                   | The documentation, over a masthead framed on a real body             | `docs`        |
-| `/settings/:section?`                                | Display, camera, controls                                            | _a dialog_    |
+| `/settings/:section?`                                | Display, camera, controls, data                                      | _a dialog_    |
+| `/keys`                                              | Every binding this build has                                         | _a dialog_    |
 | `/about`                                             | What this is                                                         | _a dialog_    |
 | `/sign-in`, `/sign-up`, `/profile`, `/auth/callback` | Accounts ⬜                                                          | _a dialog_    |
 
@@ -336,8 +337,30 @@ not punish having one.
 | **Gamepad**          | Full parity        | Dual sticks for rotation and translation; pips on the d-pad                                                                                              |
 | **HOTAS / HOSAS**    | Full 6-DoF binding | Direct axis binding, no emulation layer, per-device profiles. **Chromium only** — see below                                                              |
 
-Everything is rebindable, including modifier layers. Bindings are part of the
-save and sync across modes.
+**Everything is rebindable, including modifier layers**, and the editor is
+`/settings/controls`: a row per act, press it to capture the next chord, a
+conflict named in place, reset per row and for all. Every label in the interface
+that names a key reads the live chord for the act rather than a string, so a
+rebind reaches the keys sheet, the panel tooltips and the screen reader in the
+same commit that stores it. `?` opens the sheet from any mode.
+
+A binding is a **physical key**, not a character: `+` is `Shift+Equal` on every
+layout this ships to, so a chord tied to what the key types would not survive a
+change of keyboard. The label goes the other way — `navigator.keyboard` where it
+exists, a US table where it does not.
+
+`Tab`, `Escape`, `F11`, `F12` and anything with `Ctrl` or `Cmd` cannot be bound.
+Those belong to the browser, and a mode that claims `Tab` owns focus navigation
+whether it means to or not.
+
+**Where they are stored.** `controls.keymap` in this browser, as overrides only
+— a stored copy of the whole table stops tracking the defaults, so an act whose
+default later moves is frozen at the old one for everybody who ever opened the
+editor. Preferences are not part of the universe, so they are not in a save;
+`/settings/data` exports them as a file, which is how they reach a second
+machine. Bindings in the save, and syncing them to an account, come with the
+account — the `controls` group is what would go.
+[ADR-0018](../adr/0018-the-instrument.md).
 
 ### What a browser can actually do with a HOTAS
 

@@ -172,15 +172,50 @@ ir.observatory.frameTarget()
 ir.observatory.clear()
 ```
 
-Camera bookmarks stage known views:
+`ir.aim(yawDeg, pitchDeg)` turns the head without moving the camera. It is an
+**offset** on whatever the pose aims at, so `ir.aim(0, 0)` is the way back to
+the subject; it survives a drag, a dolly and a wheel notch, and is cleared by
+whatever replaces the pose — a focus, a frame, a stance, a composition. Standing,
+it drives the stance's own heading and pitch.
+
+### Compositions
+
+Sixteen named framings, relative to whatever is under the camera, with two
+placers:
 
 ```js
-ir.shots() // names and descriptions
-ir.shot('crescent', address)
+ir.shots() // ids and descriptions
+ir.shot('crescent', address) // teleports the ship into the picture
+ir.compose('crescent') // moves the camera into it
 ```
 
-The built-in names include `full-face`, `gibbous`, `half`, `crescent`,
-`glint`, `sunset`, and `oblique`.
+The ids are `portrait`, `blue-marble`, `close`, `wide`, `half-lit`, `raking`,
+`high-angle`, `far-crescent`, `backlit`, `full-face`, `gibbous`, `half`,
+`crescent`, `glint`, `sunset` and `oblique`. The last three aim at a limb or a
+specular point rather than at the body's center, which is why they were
+ship-only until the aim became an offset; `sunset` and `oblique` stand off below
+the orbit floor, so `ir.compose` lands them on the surface arm.
+
+### Pictures
+
+A composition plus the two things a composition leaves out — an address and a
+lens — so it produces the same frame every time:
+
+```js
+ir.presets() // ids, labels and what each one is
+ir.preset('earthrise') // takes it, and fits the lens it solved
+```
+
+`ir.rise()` is the framing behind Earthrise on its own: it stands on the body
+being looked at with its parent a stated clearance over the horizon, and returns
+the field of view it solved — Earth is 1.90° across from Luna and Mars is 42.39°
+from Phobos, so the lens is part of the picture rather than a setting beside it.
+
+```js
+ir.rise({ clearance: 3, height: 110000 }) // degrees and meters
+ir.chrome(false) // the interface out of the frame — the plate state
+ir.layers(false) // names and traces off, which is a different claim
+```
 
 ---
 

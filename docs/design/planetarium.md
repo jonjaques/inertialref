@@ -74,17 +74,42 @@ model in which "look at Jupiter" has an unambiguous answer, it is what makes the
 mode usable with one finger on a phone, and it removes the failure every
 free-fly space browser has: being lost, at an unknown scale, pointed at nothing.
 
-| Gesture               | Does                           |
-| --------------------- | ------------------------------ |
-| Drag                  | Orbit                          |
-| Wheel / pinch         | Dolly, logarithmically         |
-| Click / tap an object | Focus it, and the camera flies |
-| `↑ ↓ ← →`             | Orbit — shift for coarse       |
-| `+` / `−`             | Dolly                          |
-| `F`                   | Frame the target               |
-| `Home`                | Back to Earth                  |
+| Gesture               | Does                                     |
+| --------------------- | ---------------------------------------- |
+| Drag                  | Orbit                                    |
+| Secondary drag        | Look — turn the head where the pose aims |
+| Wheel / pinch         | Dolly, logarithmically                   |
+| Click / tap an object | Focus it, and the camera flies           |
+| `↑ ↓ ← →`             | Orbit — shift for coarse                 |
+| `=` / `−`             | Dolly                                    |
+| `F`                   | Frame the target                         |
+| `L`                   | Make the drag and the arrows look        |
+| `Home`                | Back to Earth                            |
 
-**Zoom, dolly and framing are three acts, and the View panel has three
+The keys are the defaults, and every one of them is rebindable —
+[ux § controls](ux.md#controls). The Camera panel prints the live chord beside
+each control rather than a key written into a label.
+
+**Looking is an offset on the aim, and it persists until the pose is
+replaced.** The orbit arm aims at the target's center by construction, so
+without an offset there is no way to look at a limb, at a moon beside a disk, or
+at the sky at all. A focus, a frame, `Home`, a composition and a picture each
+replace the pose and recentre the head; a drag, a dolly and leaving the mode do
+not — so a viewer who turned to look at Io beside Jupiter is still looking at Io
+after the wheel. On the ground the offset _is_ the heading and the pitch, which
+the stance already holds.
+
+Two ways in, because there are two kinds of hand. The secondary button always
+drags the look and suppresses the context menu on the sky and nowhere else. `L`
+and a switch make the primary drag and the arrow keys look instead, which is the
+only way in on a phone and with a keyboard alone.
+
+**A drag moves the picture by the pixels dragged, at any lens.** The sensitivity
+is the lens's own pixel angle, so the ground under the pointer follows the
+pointer. A constant radians-per-pixel swings the frame through forty
+field-widths at 8× zoom, which is a gesture nobody can aim.
+
+**Zoom, dolly and framing are three acts, and the Camera panel has three
 controls.** Zoom multiplies the focal length: it magnifies and changes no
 parallax, so the limb does not turn and the moons do not shift against the disk.
 A dolly moves the camera and changes all of that. Framing is a solve — the
@@ -97,7 +122,9 @@ One control cannot describe all three without saying something false about two
 of them — "the subject stays the same size" is a claim about the solve alone,
 and a panel that prints it under a lens slider is describing a coupling nobody
 can wire, because a lens change does not move a camera.
-[ADR-0017](../adr/0017-the-lens.md) is the object that keeps the three apart.
+[ADR-0017](../adr/0017-the-lens.md) is the object that keeps the three apart,
+and [ADR-0018](../adr/0018-the-instrument.md) is the panel they are operated
+from.
 
 **Distance is logarithmic everywhere.** The range this camera covers is from a
 kilometer above a moon to a hundred light years — nineteen decades. Interpolated
@@ -176,18 +203,25 @@ Everything is a **panel**, and every panel is dockable — see
 | ----------- | ---------------------------------------------------------------------------- |
 | **Catalog** | Where can I go? Search the whole index, fold the systems, filter the classes |
 | **Object**  | What is this? The record — physical, orbit, rotation, air, light             |
-| **View**    | Names, orbit traces, the ship, the lens, the glare                           |
-| **Shots**   | Nine composed pictures, the light on its own, and the way out                |
+| **Camera**  | The eye: where it looks, how far off, and through what                       |
+| **View**    | What is drawn over the sky — names, orbit traces, the ship                   |
+| **Presets** | Seven pictures, sixteen compositions, the light on its own, and the way out  |
 | **Surface** | What is it like down there? The named sites, the height scrub, and a compass |
 | **Time**    | Pause, warp, and what the clock is actually delivering                       |
 
+The split between **Camera** and **View** is by what a control _changes_. A
+layer changes pixels the scene does not own — names, traces, the ship — and the
+camera changes the picture itself. The lens sat on View for a while, under a
+title that is a claim about what is drawn _over_ the sky, which is the opposite
+of what a lens does.
+
 The camera's own readings — range, altitude, how much of the frame the subject
-fills, the two orbit angles, the frame id — are **not** in the object panel.
-They are facts about where you are standing rather than about the thing being
-looked at, and on a page about Mars they read as a debugger. They live in the
-author's Camera instrument, beside the lens they describe. The Surface panel is
-that rule applied once more: descending is a camera act, so it is a camera panel
-and not a section of the record.
+fills, the two orbit angles — are **not** in the object panel. They are facts
+about where you are standing rather than about the thing being looked at, and on
+a page about Mars they read as a debugger. They are on the Camera panel, beside
+the lens they describe. The Surface panel is that rule applied once more:
+descending is a camera act, so it is a camera panel and not a section of the
+record — its question is _where can I stand_, and that is a list.
 
 ### The catalog
 
@@ -221,25 +255,48 @@ this game may not invent — and clicking one flies the camera there. The scale 
 √r: a survey's volume grows as r³, so linearly the whole neighborhood piles into
 the left tenth, and logarithmically the observer's own zero has nowhere to go.
 
-### Shots
+### Presets
 
-`Framing` and `Compositions` were two banks of word-buttons and they were never
-two kinds of thing — a framing is a composition that happens not to move the
-light. Nine identical rectangles of type, and the two things that separate any
-two shots are _how much of the frame the body fills_ and _where the terminator
-falls_, both of which are pictures.
+Two tiers, and the difference between them is whether the picture is of a
+_particular place_.
 
-So they are drawn, to the geometry the solver uses: the disk's radius is
-`fill × half the frame height`, which is what `frameTarget` solves a distance
+**Pictures** are absolute: an address, a framing and a lens. They produce the
+same frame every time they are pressed, which is what makes them fixtures —
+_the same picture, every time_ is what a before/after plate is, and the geology
+milestone is judged from those. Their thumbnails are **plates**: captured
+through the renderer and vendored, because a drawn diagram of a picture that
+exists is a worse thumbnail than the picture. A plate is taken with the chrome
+cleared and the layers off, because a thumbnail of a picture is a thumbnail of
+what the _camera_ does, and a trace slashing across one promises a layer the
+press does not set.
+
+Earthrise is the one that names two bodies: a stance on Luna with Earth a stated
+clearance over the horizon, the horizon on the lower-third line, and the lens
+solved from the parent's angular size — 1.90° from Luna, 42.39° from Phobos, and
+one focal length is not the picture for both.
+
+**Compositions** are the tier under them, relative to whatever is under the
+camera. Sixteen of them, and there is one list where there were two: `gibbous`
+in this panel and `ir.shot('gibbous')` came out of one solver and meant one
+picture, but one moved a camera and the other teleported a hull. Three —
+`glint`, `sunset`, `oblique` — existed only for the hull, because they aim
+somewhere other than the body's center and the orbit arm's pose aims at the
+center by construction. With the aim solved as a look offset they are camera
+shots too, and the two that stand off below the orbit floor land on the surface
+arm: `sunset` at 1.04 radii _is_ a stance four hundredths of a radius up.
+
+They are drawn, to the geometry the solver uses: the disk's radius is
+`fill × half the frame height`, which is what the standoff solves a distance
 for, and the terminator is a half-ellipse of projected width `r·cos φ`, which is
 why it collapses to a straight line at 90°. The thumbnail is a prediction rather
-than an illustration.
+than an illustration — which is exactly why a _picture_ gets a plate instead.
 
 The light stays as its own row of five phase glyphs, because changing it
 _without_ losing your framing is the commonest thing anyone does here and a
-whole shot cannot express it. The two scale jumps are absolute distances rather
-than framings — one AU from Jupiter is a planet in a frame and one AU from Sol
-is most of the inner system — so they are labelled "Step Back" and kept apart.
+whole composition cannot express it. The two scale jumps are absolute distances
+rather than framings — one AU from Jupiter is a planet in a frame and one AU
+from Sol is most of the inner system — so they are labelled "Step Back" and kept
+apart.
 
 ### Names
 
