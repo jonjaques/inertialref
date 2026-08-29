@@ -17,6 +17,7 @@ import {
   beltBand,
   hypsometryBand,
   iceBand,
+  plateContext,
   reliefBand,
   volcanicBand,
 } from './bands.ts'
@@ -287,13 +288,16 @@ export function elevationAt(
   const budget = surface.maxElevation
   if (budget <= 0) return 0
   const bands = grammar.bands
+  // Three of the bands below read the plate this sample sits on. One lookup,
+  // handed to all three — see `plateContext`.
+  const plates = plateContext(sketch, d)
 
   let height =
     bands.hypsometry *
-      hypsometryBand(sketch, grammar, d, bands.hypsometry * budget) +
-    bands.belts * beltBand(sketch, grammar, d, bands.belts * budget) +
+      hypsometryBand(sketch, grammar, plates, d, bands.hypsometry * budget) +
+    bands.belts * beltBand(sketch, grammar, plates, d, bands.belts * budget) +
     bands.volcanism *
-      volcanicBand(sketch, grammar, d, bands.volcanism * budget) +
+      volcanicBand(sketch, grammar, plates, d, bands.volcanism * budget) +
     bands.relief *
       reliefBand(sketch, grammar, surface.roughness, d, bands.relief * budget)
   if (bands.ice > 0) {
@@ -372,7 +376,7 @@ export const TERRAIN_DETAIL_TOLERANCE: Meters = CANONICAL_AMPLITUDE_FLOOR
 const DETAIL_PROBES = 24
 
 /**
- * How many consecutive quiet levels settle the floor.
+ * How many consecutive quiet levels on dry ground settle the floor.
  *
  * Three. Two is enough for the crater ladder alone — its levels are a factor of
  * two apart, so one quiet level followed by another has already stepped past a
@@ -400,9 +404,23 @@ const detailFloorCache = new WeakMap<SurfaceParameters, Map<string, number>>()
  * would add. Twenty-four probe directions spread by the golden angle, five
  * samples each, and the search stops at the first level under tolerance whose
  * stencils touched dry ground — a sea-flattened stencil is the clamp talking,
- * not the field, and the walk carries past it. About 1,500 samples and five
- * milliseconds for a body, memoized, which is a quarter of what deriving its
- * survey sites costs.
+ * not the field, and the walk carries past it.
+ *
+ * About 1,500 samples, and **16 to 32 ms for a body on the main thread** —
+ * Miranda 15.5, Earth 20.4, Iapetus 21.6, Callisto 30.2, Luna 32.2. That is the
+ * same order as deriving the body's survey sites rather than the quarter of it
+ * this once was, because the band stack and the crater neighborhood both grew
+ * under it.
+ *
+ * **Cold, and the warm figure is half of it.** This is the first thing to touch
+ * the band stack for a body, so nothing is JIT-warm when it runs — the same
+ * search costs 4 to 16 ms once the field has been sampled, and quoting that
+ * figure would be quoting a number the application never pays. It is memoized,
+ * and it is paid by `TerrainStreamer.#update` on the frame a body becomes the
+ * terrain target: two dropped frames exactly when the player arrives. Nothing
+ * about it needs the main thread — `HeightfieldRequestPayload` already carries
+ * everything it reads — so the number is here because it is what would justify
+ * making it a second task on the pool.
  *
  * This lives beside `elevationAt` because it is a property of those bands and
  * has to move when they do — the band stack put crater rims and scarps into the
@@ -424,7 +442,6 @@ const detailFloorCache = new WeakMap<SurfaceParameters, Map<string, number>>()
  * is ground that is right to a meter instead of to half of one.
  */
 export function surfaceDetailFloor(
-  radius: Meters,
   surface: SurfaceParameters,
   resolution: number = HEIGHTFIELD_RESOLUTION,
   tolerance: Meters = TERRAIN_DETAIL_TOLERANCE,
@@ -432,12 +449,18 @@ export function surfaceDetailFloor(
   const held = detailFloorCache.get(surface)
   /*
    * A string, because the arithmetic version collided. `radius * 1e6 +
-   * resolution + tolerance` folds three numbers additively, so (65, 0.5) and
+   * resolution + tolerance` folds the numbers additively, so (65, 0.5) and
    * (64, 1.5) hash the same and whichever call ran first won for both — a pure
    * function whose answer depended on the order it was asked in, which is the
    * one thing generation may never do.
+   *
+   * `radius` is not in it because it is not read: the field's angular scales
+   * convert through `grammar.meanRadius`, which is on the surface this is
+   * already keyed by. It was a parameter and a key term, so a caller passing the
+   * equatorial radius and one passing the volumetric one bought two entries and
+   * two five-hundred-sample searches for one answer.
    */
-  const key = `${radius}|${resolution}|${tolerance}`
+  const key = `${resolution}|${tolerance}`
   const cached = held?.get(key)
   if (cached !== undefined) return cached
 
@@ -486,19 +509,23 @@ export function surfaceDetailFloor(
      * it settles the floor only on a world with no dry ground at all, where
      * the shallowest one is the honest answer.
      */
-    if (peak <= tolerance) {
+    if (peak <= tolerance && ashore) {
       if (run === 0) runStart = level
       run += 1
-      if (ashore) {
-        if (run >= QUIET_RUN) {
-          floor = runStart
-          break
-        }
-      } else if (flooded === null) {
-        flooded = level
+      if (run >= QUIET_RUN) {
+        floor = runStart
+        break
       }
     } else {
+      /*
+       * A flooded level breaks the run rather than extending it, and that is
+       * the whole force of the paragraph above. `runStart` is the level the
+       * search answers with, so a run that may begin on a flooded level answers
+       * with one — the field would never have been asked about the ground
+       * there, and the streamer would take a clamp's silence for the field's.
+       */
       run = 0
+      if (peak <= tolerance && flooded === null) flooded = level
     }
     if (ashore) everAshore = true
   }
@@ -651,9 +678,12 @@ export function heightfieldSample(
  * Generate one terrain patch.
  *
  * This is the meaningful CPU work that runs in a worker: a bordered 65×65 patch
- * is 4,761 samples and each is six bands and a crater ladder — 20 ms on an
- * airless world and 37 on an atmosphered one, where the erosion damping reads
- * the analytic gradient. The result is a Float32Array precisely so it can be
+ * is 4,761 samples and each is six bands and a crater ladder — 32 ms on a rocky
+ * airless world, 34 on an icy dead one, 38 on an atmosphered one where the
+ * erosion damping reads the analytic gradient. A world with no craters at all
+ * is 9.5. The crater neighborhood is nearly all of that spread and most of the
+ * total: it walks about five cells an axis, which is what containing the ejecta
+ * reach costs (`craters.ts`). The result is a Float32Array precisely so it can be
  * transferred rather than copied back to the main thread.
  *
  * The border samples run `s` and `t` outside [0,1], which `regionDirection`

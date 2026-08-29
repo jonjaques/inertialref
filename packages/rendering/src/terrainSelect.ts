@@ -118,9 +118,9 @@ export const DEFAULT_CELL_PIXELS = 16
  * where *that* field stops having anything to add — level 12 to 16 across the
  * zoo now that the field carries crater rims, against 7 to 10 for the three
  * bands it replaced. This is the fallback for a caller holding numbers rather
- * than a body, and it is deliberately shallower than any of them so that
- * forgetting to pass one is visible as coarse ground rather than as a budget
- * that will not close.
+ * than a body, and it is deliberately no deeper than any of them — it *is* the
+ * shallowest the zoo measures — so forgetting to pass one is visible as coarse
+ * ground rather than as a budget that will not close.
  */
 export const DEFAULT_MAX_LEVEL = 12
 
@@ -296,8 +296,10 @@ export interface TerrainSelectOptions {
   /**
    * Refine only into regions this says are drawable.
    *
-   * The streamer's answer is "its heightfield is in the cache". Refining into a
-   * region whose field has not arrived is what produces a hole; stopping at the
+   * The streamer's answer is "its geometry is built" — the mesh rather than the
+   * heightfield, because a region whose field has arrived but whose vertices
+   * have not is one `state()` cannot place. Refining into a region that is not
+   * drawable is what produces a hole; stopping at the
    * parent produces a coarser picture of the same ground, which is what a
    * descent should look like while it loads. Omitted means everything is ready,
    * which is the question the *request* set asks.
@@ -569,10 +571,19 @@ const RING: readonly (readonly [number, number])[] = [
 /**
  * A region as one number, for the maps the balance pass lives in.
  *
- * Levels to twelve keep `i` and `j` under 4,096, which packs a whole address
- * into 2.9e9 — exact in a double, and free to compare. Deeper than that it
- * falls back to a string, which is slower and correct; nothing asks for deeper
- * than twelve today because `surfaceDetailFloor` does not return it.
+ * Levels to twenty-two keep `i` and `j` under 2²², which packs a whole address
+ * into 3.2e15 — inside a double's 2⁵³ of exact integers, and free to compare.
+ * Deeper than that it falls back to a string, which is slower and correct.
+ *
+ * **The bound has to sit above what the streamer actually asks for**, which is
+ * the mistake this carried: it was written at twelve on the reasoning that
+ * `surfaceDetailFloor` never returned deeper, and the band stack moved the floor
+ * to between twelve and sixteen across the zoo — seventeen on the worst
+ * generated body. Every selection deeper than twelve took the string branch, the
+ * fallback paying 1.8 ms a pass in the code whose whole purpose is to avoid
+ * paying it. Twenty-two is the deepest level whose `i` and `j` still fit, so the
+ * fallback is now unreachable rather than merely unlikely; `MAX_REGION_LEVEL` is
+ * 24 and the two levels past it keep the branch honest.
  *
  * The reason this is not `terrainPatchKey`: the balance pass builds a key for
  * every node's eight neighbors and for every ancestor of every node, which on
@@ -583,14 +594,17 @@ const RING: readonly (readonly [number, number])[] = [
 const regionKey = (region: RegionAddress): number | string =>
   packed(region.face, region.level, region.i, region.j)
 
+/** The span `packed` reserves for `i` and `j`, and the deepest level it fits. */
+const PACKED_SPAN = 2 ** 22
+
 const packed = (
   face: number,
   level: number,
   i: number,
   j: number,
 ): number | string =>
-  level <= 12
-    ? ((face * 32 + level) * 4096 + i) * 4096 + j
+  level <= 22
+    ? ((face * 32 + level) * PACKED_SPAN + i) * PACKED_SPAN + j
     : `${face}.${level}.${i}.${j}`
 
 /**

@@ -399,12 +399,7 @@ describe('where the field stops having anything to add', () => {
     if (planet === undefined) throw new Error('expected a solid body')
 
     const tolerance = 0.5
-    const floor = surfaceDetailFloor(
-      planet.radius,
-      planet.surface,
-      65,
-      tolerance,
-    )
+    const floor = surfaceDetailFloor(planet.surface, 65, tolerance)
     expect(floor).toBeGreaterThan(0)
     expect(floor).toBeLessThan(MAX_REGION_LEVEL)
 
@@ -457,7 +452,7 @@ describe('where the field stops having anything to add', () => {
       (b) => b.surface.seaLevel !== null && b.surface.maxElevation > 0,
     )
     if (wet === undefined) throw new Error('expected an ocean world')
-    expect(surfaceDetailFloor(wet.radius, wet.surface)).toBeGreaterThan(1)
+    expect(surfaceDetailFloor(wet.surface)).toBeGreaterThan(1)
   })
 
   it('answers the same whatever order it is asked in', () => {
@@ -480,11 +475,11 @@ describe('where the field stops having anything to add', () => {
     if (planet === undefined) throw new Error('expected a solid body')
     const fresh = { ...planet.surface }
 
-    const a = surfaceDetailFloor(planet.radius, planet.surface, 65, 0.5)
-    const b = surfaceDetailFloor(planet.radius, planet.surface, 33, 32.5)
+    const a = surfaceDetailFloor(planet.surface, 65, 0.5)
+    const b = surfaceDetailFloor(planet.surface, 33, 32.5)
     // The same two questions, asked of an equal surface in the other order.
-    const b2 = surfaceDetailFloor(planet.radius, fresh, 33, 32.5)
-    const a2 = surfaceDetailFloor(planet.radius, fresh, 65, 0.5)
+    const b2 = surfaceDetailFloor(fresh, 33, 32.5)
+    const a2 = surfaceDetailFloor(fresh, 65, 0.5)
     expect([a2, b2]).toEqual([a, b])
     // And they are genuinely different answers, so the pair can fail.
     expect(a).not.toBe(b)

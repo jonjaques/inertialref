@@ -142,9 +142,30 @@ are named in [the roadmap](../roadmap.md#terrain).
 
 **A cache smaller than the working set oscillates rather than degrading.** The
 streamer holds two selections — the drawn one and the request one, taken from
-where the eye is going — so its caps derive from the selection's own ceiling. At
-a flat 512 against a working set of six hundred, terrain strobed at every
-altitude.
+where the eye is going. At a flat 512 against a working set of six hundred,
+terrain strobed at every altitude.
+
+**The selection's ceiling is not what sizes those caches, and reading it that way
+is how the second one was set too small.** What must be resident is the set the
+evictor promises to keep, which is the whole pyramid under the request
+selection — and a quadtree's ancestors are a third again as many as its leaves,
+so that floors at ~1.33× the selection cap before the starved rung is counted.
+Geometry sized at the selection plus a slack of 128 sat under that floor: the
+streamer built four patches a frame and dropped four it had wanted a moment
+earlier, and every twenty-sixth frame the eviction took a patch the traversal
+was refining through and the disk snapped from 760 patches at level 7 to four at
+level 1.
+
+**No multiple of the selection cap bounds that keep set, and the cap in force is
+a measurement rather than a proof.** The request set is _two_ independently
+capped selections — the drawn one and the one taken at the look-ahead eye — so
+its ceiling is around 2.3× the selection cap in the limit, which is more than
+the geometry cache holds. The two coincide at a hover and separate as the
+camera's ground track lengthens, so what moves the keep set is the camera's
+speed as much as the drawing buffer: measured over Luna, Ganymede and Triton it
+runs from 957 at a hover over 1600×900 to 1,824 at a 20 km lead over 5120×2880.
+Twice the cap clears everything measured, by about 11%. Anyone retuning either
+number wants that sweep again rather than the arithmetic.
 
 **Phase 3 owes the sphere-tier shell a material.** The plan's unconditional
 level-0–2 shell wants a per-face normal and albedo bake underneath it; without

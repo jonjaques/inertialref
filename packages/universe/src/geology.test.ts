@@ -3,8 +3,19 @@ import { describe, expect, it } from 'vitest'
 import { rootSeed, type Seed } from '@inertialref/procedural'
 import { Vec, vec3 } from '@inertialref/spatial'
 import { regionAddress } from './address.ts'
-import { hypsometryBand } from './bands.ts'
-import { craterCountAbove, craterField, softLimit } from './craters.ts'
+import {
+  ARC_MARGIN,
+  BELT_MARGIN,
+  HYPSOMETRY_MARGIN,
+  hypsometryBand,
+  plateContext,
+} from './bands.ts'
+import {
+  craterCountAbove,
+  craterField,
+  craterFieldWithin,
+  softLimit,
+} from './craters.ts'
 import { TEST_CATALOG } from './catalog/fixture.ts'
 import { catalogStub, MILKY_WAY } from './galaxy.ts'
 import {
@@ -15,7 +26,7 @@ import {
   reliefLimit,
   surfaceGrammar,
 } from './grammar.ts'
-import { craterLadder, plateAt, terrainSketch } from './sketch.ts'
+import { craterLadder, PLATE_MARGIN, plateAt, terrainSketch } from './sketch.ts'
 import { type Body, generateSystem, walkBodies } from './system.ts'
 import { elevationAt, regionDirection } from './terrain.ts'
 
@@ -231,6 +242,48 @@ describe('the crater field', () => {
     expect(highest).toBeLessThan(-deepest)
   })
 
+  it('walks far enough out to find every crater that reaches it', () => {
+    /*
+     * The containment claim, held by running the walk the claim is about
+     * against a wider one and finding nothing in the difference.
+     *
+     * A crater the walk does not visit is not a small error, it is a *step*:
+     * the crater appears the moment the sample crosses into a cell the walk can
+     * see, at whatever height its apron has there. The ±1 neighborhood this
+     * replaced could not contain the ejecta reach — 1.3 cells, because a
+     * level's largest crater has an angular radius of half a cell — and lost up
+     * to 158 m of ejecta on about 30% of directions.
+     *
+     * Reach is only half of how wide the walk has to be. The other half is that
+     * the lattice is cubes in ℝ³ while the field is a shell cutting through
+     * them, so a crater's center sits off the sphere by up to the cell's own
+     * width along the radius, and is indexed there while its profile is
+     * measured from its projection. Walking `reach` alone still lost 34 m on
+     * Luna, which is what makes this a test rather than an argument.
+     *
+     * Two cells wider is the reference because the bound it is checking against
+     * peaks at 2.2, so a walk two cells past it cannot be short. Twelve
+     * thousand directions on two bodies is enough to find it: dropping the
+     * radial half of the bound fails this by 506 m on Luna.
+     */
+    for (const name of ['Luna', 'Iapetus']) {
+      const body = find(name)
+      const sketch = terrainSketch(body.surface)
+      const grammar = body.surface.grammar
+      let worst = 0
+      for (const direction of sphere(12_000)) {
+        const gap = Math.abs(
+          craterField(sketch, grammar, direction) -
+            craterFieldWithin(sketch, grammar, direction, 2),
+        )
+        if (gap > worst) worst = gap
+      }
+      // Not "small": equal. Both walks evaluate the same craters in the same
+      // order, so anything but zero is a crater one of them did not see.
+      expect(`${name}: ${worst}`).toBe(`${name}: 0`)
+    }
+  })
+
   it('crosses a cube-face corner without a step in it', () => {
     /*
      * The bug the 3D lattice exists to make impossible, stated as continuity.
@@ -298,50 +351,113 @@ describe('the crater field', () => {
      *
      * **The measurement is continuity itself, not a proxy for it.** A large
      * adjacent-sample jump is not a defect — a crater rim is genuinely steep,
-     * and a scan fine enough to resolve one will report metres between
-     * neighbours. What separates steep from discontinuous is what happens when
+     * and a scan fine enough to resolve one will report meters between
+     * neighbors. What separates steep from discontinuous is what happens when
      * the two samples are brought together: on a continuous field the gap
      * closes with the separation, and across a step it does not. So this finds
      * the worst jump on a great circle, bisects it sixty times — down to a
-     * separation of ~1e-16 of the arc, sub-nanometre on every body here — and
+     * separation of ~1e-16 of the arc, sub-nanometer on every body here — and
      * asserts the gap has gone with it.
      *
-     * A metre is four hundred times the largest survivor measured (2.4 mm, on
+     * A meter is four hundred times the largest survivor measured (2.4 mm, on
      * Miranda) and six hundred times smaller than the defect, so the bound is
      * nowhere near either edge. Reintroducing the step fails it by three orders
      * of magnitude on four of the five bodies.
      */
-    const step = (body: Body): number => {
-      const from = Vec.normalize(vec3(0.3, 0.7, 0.64))
-      const to = Vec.normalize(vec3(0.9, -0.2, 0.31))
+    const walk = (
+      body: Body,
+      from: ReturnType<typeof vec3>,
+      to: ReturnType<typeof vec3>,
+      samples: number,
+    ): number => {
       const at = (t: number): ReturnType<typeof vec3> =>
         Vec.normalize(Vec.lerp(from, to, t))
-      const samples = 20_000
-      let worstAt = 0
-      let worst = 0
+      /*
+       * The four largest jumps on the arc, not the largest.
+       *
+       * A step is not usually the biggest thing on a walk — a crater rim is
+       * genuinely steeper than a kilometer of plate seam spread over a
+       * five-thousandth of an arc — so bisecting onto the single largest jump
+       * examines a rim, finds it continuous, and reports that the arc is clean.
+       * Four candidates is what it takes to see past the rims, and each costs
+       * sixty samples against the four thousand the scan already spent.
+       */
+      const candidates: { at: number; jump: number }[] = []
       let previous = elevationAt(body.surface, at(0))
       for (let i = 1; i <= samples; i += 1) {
         const here = elevationAt(body.surface, at(i / samples))
-        if (Math.abs(here - previous) > worst) {
-          worst = Math.abs(here - previous)
-          worstAt = i / samples
-        }
+        const jump = Math.abs(here - previous)
         previous = here
+        if (candidates.length === 4 && jump <= (candidates[3]?.jump ?? 0))
+          continue
+        candidates.push({ at: i / samples, jump })
+        candidates.sort((a, b) => b.jump - a.jump)
+        candidates.length = Math.min(4, candidates.length)
       }
-      // Bisect onto the jump, keeping `lo` on the side the walk started from.
-      let lo = worstAt - 1 / samples
-      let hi = worstAt
-      const atLo = elevationAt(body.surface, at(lo))
-      for (let i = 0; i < 60; i += 1) {
-        const mid = (lo + hi) / 2
-        if (mid === lo || mid === hi) break
-        if (Math.abs(elevationAt(body.surface, at(mid)) - atLo) < worst / 2)
-          lo = mid
-        else hi = mid
+
+      let survivor = 0
+      for (const candidate of candidates) {
+        // Bisect onto the jump, keeping `lo` on the side the walk started from.
+        let lo = candidate.at - 1 / samples
+        let hi = candidate.at
+        const atLo = elevationAt(body.surface, at(lo))
+        for (let i = 0; i < 60; i += 1) {
+          const mid = (lo + hi) / 2
+          if (mid === lo || mid === hi) break
+          if (
+            Math.abs(elevationAt(body.surface, at(mid)) - atLo) <
+            candidate.jump / 2
+          )
+            lo = mid
+          else hi = mid
+        }
+        const gap = Math.abs(
+          elevationAt(body.surface, at(hi)) - elevationAt(body.surface, at(lo)),
+        )
+        if (gap > survivor) survivor = gap
       }
-      return Math.abs(
-        elevationAt(body.surface, at(hi)) - elevationAt(body.surface, at(lo)),
+      return survivor
+    }
+
+    const step = (body: Body): number =>
+      walk(
+        body,
+        Vec.normalize(vec3(0.3, 0.7, 0.64)),
+        Vec.normalize(vec3(0.9, -0.2, 0.31)),
+        20_000,
       )
+
+    /*
+     * The same walk over a spread of great circles, for the worlds with plates.
+     *
+     * One arc is enough to find a crater seam, because craters are everywhere.
+     * It is not enough to find a plate seam: the interior seams run along the
+     * curves where the second and third nearest plates are equidistant, and
+     * there are only a few dozen of them on a world. Earth's single arc above
+     * reported 5.0e-5 m while a sweep of twenty-four circles found **3,081 m**
+     * on the same body and the same day — the arc simply missed. So a plated
+     * world is swept, and that is what makes this test able to fail for the
+     * defect it was written for.
+     */
+    const sweep = (body: Body, arcs: number): number => {
+      let worst = 0
+      for (let a = 0; a < arcs; a += 1) {
+        const z = 1 - (2 * a + 1) / arcs
+        const around = a * Math.PI * (3 - Math.sqrt(5))
+        const ring = Math.sqrt(Math.max(0, 1 - z * z))
+        const gap = walk(
+          body,
+          Vec.normalize(
+            vec3(Math.cos(around) * ring, z, Math.sin(around) * ring),
+          ),
+          Vec.normalize(
+            vec3(-Math.sin(around) * ring, -z, Math.cos(around) * ring),
+          ),
+          4_000,
+        )
+        if (gap > worst) worst = gap
+      }
+      return worst
     }
 
     /*
@@ -385,30 +501,28 @@ describe('the crater field', () => {
     }
 
     /*
-     * Proxima Centauri II is **pinned, not asserted continuous** — the field
-     * still has a seam there and this records its size rather than pretending
-     * it is gone.
+     * Proxima Centauri II is held to the same meter as everything else, and it
+     * is the body that had to earn it.
      *
-     * It is not a plate boundary. `plateAt` returns the second-nearest plate,
-     * and which plate that *is* changes discontinuously along the locus where
-     * the second and third nearest are equidistant — a network of curves
-     * through every plate's interior, nowhere near an edge. Measured either
-     * side of one: same `plate` (base 0.432), `neighbor` jumping from base
-     * 0.224 to −0.894, at `boundary` 5.72e-2. Anything reading `neighbor` — and
-     * `acrossBoundary` reads it by construction — inherits that jump, which is
-     * why fixing the boundary left the interior alone. It is the same shape as
-     * the cube-corner problem `craters.ts` avoids: a rank-based lookup has a
-     * seam wherever the ranking changes, and the fix is a partition of unity
-     * over every plate rather than a function of the top two.
+     * The seam here was never a plate boundary. `plateAt` used to return the
+     * second-nearest plate, and which plate that *is* changes discontinuously
+     * along the locus where the second and third nearest are equidistant — a
+     * network of curves through every plate's interior, nowhere near an edge.
+     * Measured either side of one: the same nearest plate, base 0.432, with the
+     * second jumping from base 0.224 to −0.894 at a `boundary` of 5.72e-2, for
+     * 1,532.3 m of step out of a 20,434 m budget. Anything reading that second
+     * plate inherited the jump, which is why fixing the boundary blend left the
+     * interior alone.
      *
-     * 1,532.3 m measured, of a 20,434 m budget. The window is wide enough that
-     * a last-bit change in the noise cannot flap it and narrow enough that
-     * either direction is a failure: fix the seam and this goes red asking to
-     * become `< 1` like the rest, and make it worse and it goes red saying so.
+     * `plateProperty` weights every plate within `PLATE_MARGIN` instead, so no
+     * rank identity enters and there is nothing left to change discontinuously.
+     * It reads 7.5e-6 m now, and Earth — whose own seam this walk's single arc
+     * happened to miss, while a sweep of twenty-four great circles found
+     * 3,081 m of it — reads 1.2e-4.
      */
-    const known = step(proxima as Body)
-    expect(known).toBeGreaterThan(1_000)
-    expect(known).toBeLessThan(2_000)
+    for (const body of [find('Earth'), proxima as Body]) {
+      expect(`${body.name}: ${sweep(body, 16) < 1}`).toBe(`${body.name}: true`)
+    }
   })
 
   it('folds an overlapping stack through a soft ceiling', () => {
@@ -487,7 +601,14 @@ describe('the band stack', () => {
      *
      * Sarle's bimodality coefficient, `(skew² + 1) / kurtosis`, which sits above
      * 5/9 for a distribution with two modes and below it for a normal one.
-     * Earth reads 0.76 against 0.36–0.40 for the four stagnant lids.
+     * Earth reads 0.583 against 0.36–0.40 for the four stagnant lids.
+     *
+     * Earth's figure is the one that moves when the blend does, and the margin
+     * over 5/9 is thin on purpose rather than by luck: reading a plate property
+     * as a partition of unity means a sample near a triple junction averages
+     * three plates rather than two, which fills in the middle of the histogram.
+     * `plateWeight` is shaped so that the two-plate case is unchanged — with
+     * the plain complement instead, this reads 0.553 and fails.
      *
      * The obvious cheaper statistic — the share of samples in the middle third
      * of the range — reads *Mercury* as the more bimodal of the two, because
@@ -501,7 +622,13 @@ describe('the band stack', () => {
       const peak =
         body.surface.grammar.bands.hypsometry * body.surface.maxElevation
       const values = [...sphere(6_000)].map((d) =>
-        hypsometryBand(sketch, body.surface.grammar, d, peak),
+        hypsometryBand(
+          sketch,
+          body.surface.grammar,
+          plateContext(sketch, d),
+          d,
+          peak,
+        ),
       )
       const n = values.length
       const mean = values.reduce((sum, v) => sum + v, 0) / n
@@ -517,34 +644,70 @@ describe('the band stack', () => {
     }
   })
 
-  it('finds a plate and a distance to its boundary', () => {
+  it('finds a plate, a distance to its boundary, and everyone nearby', () => {
     const sketch = terrainSketch(find('Earth').surface)
     expect(sketch.plates.length).toBeGreaterThan(8)
     let onBoundary = 0
+    let crowded = 0
     for (const direction of sphere(2_000)) {
       const sample = plateAt(sketch, direction)
       if (sample === null) throw new Error('a plate world has plates')
-      expect(sample.plate).not.toBe(sample.neighbor)
       // `F2 − F1` is a distance and cannot be negative; it is zero exactly on a
       // boundary, which is what makes it the field a belt is drawn along.
       expect(sample.boundary).toBeGreaterThanOrEqual(0)
       if (sample.boundary < 0.02) onBoundary += 1
+      /*
+       * The neighborhood, and the two things every reader of it assumes: the
+       * nearest plate is in it at zero excess — which is what makes the weights
+       * sum to something positive everywhere — and nothing in it is farther out
+       * than the search looked, which is what makes a plate's weight zero
+       * before it can leave.
+       */
+      expect(sample.nearby).toContain(sample.plate)
+      expect(sample.excess).toHaveLength(sample.nearby.length)
+      expect(Math.min(...sample.excess)).toBe(0)
+      expect(Math.max(...sample.excess)).toBeLessThanOrEqual(PLATE_MARGIN)
+      if (sample.nearby.length > 2) crowded += 1
     }
     // Some samples land near a boundary, or the belt band never fires.
     expect(onBoundary).toBeGreaterThan(0)
+    // And some land where three plates have a say, which is the ground the
+    // rank-based version had a seam through.
+    expect(crowded).toBeGreaterThan(0)
+  })
+
+  it('keeps every band margin inside the one the search looked over', () => {
+    /*
+     * A band blending over a wider margin than `plateAt` collected would divide
+     * by a sum it had already truncated, and a plate would fall out of the set
+     * while it still had weight — which is the seam, put back by arithmetic.
+     */
+    for (const margin of [HYPSOMETRY_MARGIN, BELT_MARGIN, ARC_MARGIN]) {
+      expect(margin).toBeLessThanOrEqual(PLATE_MARGIN)
+    }
   })
 
   it('derives the same sketch whatever order it is asked in', () => {
     /*
-     * The rule that generation may never depend on order, at the one place this
-     * phase adds state: the sketch cache. Two bodies, interleaved, and the
-     * answers have to be the ones each would get alone.
+     * The rule that generation may never depend on order, at the two places
+     * this phase adds state: the sketch cache and the `WeakMap` in front of it.
+     * Two bodies, interleaved, and the answers have to be the ones each would
+     * get alone.
+     *
+     * **The copy is the half that reaches the string cache.** `terrainSketch`
+     * answers a repeat of the same object from the `WeakMap` and returns before
+     * the key is built, so asserting only on `luna.surface` tests an identity
+     * lookup and nothing else — an eviction policy that dropped a live entry
+     * would pass it. A structural copy has a different identity and the same
+     * key, so it is the assertion the FIFO cap and the key itself are visible
+     * through.
      */
     const luna = find('Luna')
     const earth = find('Earth')
     const first = terrainSketch(luna.surface)
     terrainSketch(earth.surface)
     expect(terrainSketch(luna.surface)).toBe(first)
+    expect(terrainSketch({ ...luna.surface })).toBe(first)
     const direction = vec3(0.3, 0.5, 0.8)
     const a = elevationAt(luna.surface, direction)
     elevationAt(earth.surface, direction)

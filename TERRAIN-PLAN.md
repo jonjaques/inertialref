@@ -50,18 +50,18 @@ version bump ([ADR-0005](docs/adr/0005-procedural-seeds.md) § versioning).
 
 The foundations are real and none of them move.
 
-| Foundation                                                | Where                                                                   | Keep because                                                                                                                 |
-| --------------------------------------------------------- | ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| Cube-sphere quadtree addressing, levels 0–24              | `packages/universe/src/terrain.ts` (`RegionAddress`, `regionDirection`) | A stable integer address for every patch of ground at every LOD — streaming, seeds and scatter all hang off it               |
-| Elevation as a pure function of (seed, direction)         | `terrain.ts:165` `elevationAt`                                          | The whole determinism regime; also the only thing that makes planetary scale storable at all (§ 4)                           |
-| `BodyFixedDirection` brand                                | `terrain.ts:49`                                                         | Sampling in inertial axes has shipped twice as a bug                                                                         |
-| One owner of the sea clamp                                | `terrain.ts:206` `groundElevation`                                      | Physics and mesh agree on where the ocean is                                                                                 |
-| Worker-generated heightfields, transferred not copied     | `packages/workers/src/tasks.ts:199`                                     | Capability check 10 proves worker ≡ main thread. The cost is **12.8 ms/patch**, not the ≤ 8 ms the budget claimed — see § 12 |
-| Reconciling streamer, heightfield cache across rebases    | `apps/game/src/engine/terrainStreamer.ts`                               | Loading is an ordinary operation, not a mode                                                                                 |
-| Body-fixed, anchor-relative patch vertices                | `packages/rendering/src/terrainMesh.ts:62`                              | Baking pose into vertices was ~865 m/frame of ground slide                                                                   |
-| Eye-relative log compression, angular size exact          | `packages/rendering/src/placement.ts:115`                               | Measured from anywhere else, small bodies vibrate                                                                            |
-| LOD tiers by angular size                                 | `packages/rendering/src/lod.ts:36`                                      | A gas giant at 1e9 m and a boulder at 10 m deserve the same treatment                                                        |
-| `renderTime`, never `clock.time`, for anything in a frame | [ADR-0006](docs/adr/0006-simulation-clock.md)                           | The streamer already learned this the hard way                                                                               |
+| Foundation                                                | Where                                                                   | Keep because                                                                                                                                   |
+| --------------------------------------------------------- | ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Cube-sphere quadtree addressing, levels 0–24              | `packages/universe/src/terrain.ts` (`RegionAddress`, `regionDirection`) | A stable integer address for every patch of ground at every LOD — streaming, seeds and scatter all hang off it                                 |
+| Elevation as a pure function of (seed, direction)         | `terrain.ts:165` `elevationAt`                                          | The whole determinism regime; also the only thing that makes planetary scale storable at all (§ 4)                                             |
+| `BodyFixedDirection` brand                                | `terrain.ts:49`                                                         | Sampling in inertial axes has shipped twice as a bug                                                                                           |
+| One owner of the sea clamp                                | `terrain.ts:206` `groundElevation`                                      | Physics and mesh agree on where the ocean is                                                                                                   |
+| Worker-generated heightfields, transferred not copied     | `packages/workers/src/tasks.ts:199`                                     | Capability check 10 proves worker ≡ main thread. The cost is **9 to 37 ms/patch** across the zoo, not the ≤ 8 ms the budget claimed — see § 12 |
+| Reconciling streamer, heightfield cache across rebases    | `apps/game/src/engine/terrainStreamer.ts`                               | Loading is an ordinary operation, not a mode                                                                                                   |
+| Body-fixed, anchor-relative patch vertices                | `packages/rendering/src/terrainMesh.ts:62`                              | Baking pose into vertices was ~865 m/frame of ground slide                                                                                     |
+| Eye-relative log compression, angular size exact          | `packages/rendering/src/placement.ts:115`                               | Measured from anywhere else, small bodies vibrate                                                                                              |
+| LOD tiers by angular size                                 | `packages/rendering/src/lod.ts:36`                                      | A gas giant at 1e9 m and a boulder at 10 m deserve the same treatment                                                                          |
+| `renderTime`, never `clock.time`, for anything in a frame | [ADR-0006](docs/adr/0006-simulation-clock.md)                           | The streamer already learned this the hard way                                                                                                 |
 
 And the layering: quadtree arithmetic and patch building stay in
 `packages/rendering` as plain data with Node tests; Three.js objects and TSL
@@ -404,8 +404,8 @@ Sixteen times, four levels of refinement, and 263× the patches between the two
 ends of controls a player reaches with two sliders — against a `maxPatches` of
 384 whose whole job is to be a safety net rather than a working limit. The
 field-of-view slider reaches it on its own, and what the cap does when it is
-reached is degrade the entire disk by a level, silently. § 12's 12.8 ms is the
-cost of one patch; how many there are is the number nothing currently states.
+reached is degrade the entire disk by a level, silently. A patch costs 9 to
+37 ms; how many there are is the number nothing currently states.
 
 None of this is an argument for clamping the slider. It is the argument for the
 predicate reading the lens the picture is actually taken with, and for the
@@ -925,7 +925,7 @@ and `ir.shot` already exist):
 | `ir.sites(address)`                               | The derived survey sites, with region addresses                                                                                                                                       |
 | `ir.visit(address, site \| lat/lon, alt)`         | Observatory surface pose — no ship, no physics                                                                                                                                        |
 | `ir.descend(address, { site \| lat/lon, steps })` | Scripted descent orbit→2 m on paper — the selection rule and a cache model, deterministic; the unit of perf measurement and plates. Degrees at this boundary, like every harness verb |
-| `ir.terrain()`                                    | Live streamer state: patches built and placed this frame, vertices, triangles, levels, pending, cached, and the traversal's own counters                                              |
+| `ir.terrain()`                                    | Live streamer state: patches built and placed this frame, vertices, triangles, levels, pending, both caches — heightfields and geometries — and the traversal's own counters          |
 
 **The terrain zoo** is a fixture, not a save: one named seed whose generated
 system demonstrably contains all four archetypes (asserted by a test over the
@@ -1087,10 +1087,21 @@ photograph.
 sketch, the band stack, the crater field; terrain algorithm v2 in one bump;
 golden vectors extended. [ADR-0019](docs/adr/0019-the-geology.md) is the record
 and [`CONTEXT.md`](CONTEXT.md#the-ground-stops-being-noise-and-becomes-a-geology-28-aug-2026)
-has the numbers: a patch is 20 ms airless and 37 atmosphered against the
-documented 12.8, `surfaceDetailFloor` moved from 7–10 to 13–16 because crater
-rims are sharp, and the patch cap and the streamer's request budget moved with
-it.
+has the numbers: a patch is 9 to 37 ms across the zoo against the documented
+12.8 — 9 on a world with no craters, 38 on a rocky atmosphered one —
+`surfaceDetailFloor` moved from 7–10 to 10–16 because crater rims are sharp,
+and the patch cap and the streamer's request budget moved with it.
+
+The spread is the crater neighborhood, and it is wider than § 6 specifies. A
+sample does not sum a 3×3 window per level: two displacements separate a
+crater's cell from the sample's and neither fits in one cell. The ejecta reach
+is 1.3 cells, because a level's largest crater has an angular radius of half a
+cell; and the lattice is cubes in ℝ³ while the field is a shell cutting through
+them, so a crater's center sits off the sphere by up to the cell's own width
+along the radius and is indexed there. A crater the walk cannot see is not a
+missing crater but a step — full apron height the moment the sample crosses
+into a cell that can see it. The walk derives its bounds per axis from both,
+which is about five cells an axis, and that is most of what a patch costs.
 
 Three things did not land as written, stated rather than quietly dropped.
 **The plate review is not done** — the acceptance criterion for "reads as a
@@ -1122,9 +1133,9 @@ written down.
 **Phase 5 — the GPU producer.** TSL compute tile production (heightfield +
 normal tiles into a texture-array cache, Proland's shape in WebGPU terms),
 CPU workers retained as canon and as the WebGL2 path, tolerance test in the
-browser checks. The condition is met: Phase 2 put a patch at 20–37 ms and a
-landing at six hundred of them, so the worker path is the binding constraint
-before Phase 4 adds a level.
+browser checks. The condition is met and then some: Phase 2 put a patch at
+9–37 ms and a landing at six hundred of them, so the worker path is the binding
+constraint before Phase 4 adds a level.
 
 **Phase 6 — named seams, not scheduled work.** Hydrology graphs (Génevaux)
 for valley networks; the density-overlay cave/overhang layer with Transvoxel

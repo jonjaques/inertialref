@@ -65,8 +65,9 @@ import { generateHeightfieldTask, type WorkerPool } from '@inertialref/workers'
  * Three rules the quadtree adds, all of them about *when* rather than *what*:
  *
  *   - **Refinement only enters ground that is already there.** The draw set is
- *     selected with a `ready` test against the heightfield cache, so a patch
- *     whose field has not arrived is not a hole — its parent is drawn instead,
+ *     selected with a `ready` test against the *geometry* cache — the mesh, not
+ *     the field, for the reason `#build`'s gate gives — so a patch that is not
+ *     built yet is not a hole; its parent is drawn instead,
  *     covering the same ground more coarsely. A descent therefore sharpens
  *     rather than filling in.
  *   - **The request set leads the camera.** It is selected again at where the
@@ -96,9 +97,9 @@ const DEFAULT_LENS_VIEW: LensView = {
 /**
  * How far ahead of the camera the request set is taken, in seconds.
  *
- * Long enough for a worker to answer — a patch is 20 to 37 ms of generation and
- * the pool is a handful of them — and short enough that a turn does not spend
- * the budget on ground nobody looks at. The extrapolation is linear in the eye's
+ * Long enough for a worker to answer — a patch is 9 to 37 ms of generation
+ * across the zoo and the pool is a handful of them — and short enough that a
+ * turn does not spend the budget on ground nobody looks at. The extrapolation is linear in the eye's
  * own motion and ignores the body's rotation over the interval, which at two
  * seconds is meters on anything you could be landing on.
  */
@@ -108,7 +109,7 @@ const PREFETCH_SECONDS: Seconds = 2
  * Heightfields to queue in one frame.
  *
  * It was eight, against a quadtree that bottomed out around level 10. The band
- * stack put crater rims into the field and `surfaceDetailFloor` moved to 12–16
+ * stack put crater rims into the field and `surfaceDetailFloor` moved to 10–16
  * to resolve them, which is three times as much tree to fetch: a landing that
  * used to sharpen in eighty frames wanted two hundred and fifty, and the
  * ladder is strictly serial — a level cannot refine until all four children of
@@ -121,6 +122,28 @@ const PREFETCH_SECONDS: Seconds = 2
  * three times the rate, same amount of ground in flight.
  */
 const REQUESTS_PER_FRAME = 24
+
+/**
+ * How many heightfields may be outstanding at once.
+ *
+ * `REQUESTS_PER_FRAME` is a *rate* and this is the *depth*, and without the
+ * second the first is unbounded: `#request` filtered on "not cached and not
+ * already asked for" and nothing consulted how much was already in flight, so at
+ * 24 a frame it committed the whole 400-to-1,024-patch wanted set inside forty
+ * frames. `WorkerPool`'s queue is uncapped and the pool is two to four workers
+ * at 9 to 37 ms a patch, which drains 50 to 400 a second against a submit rate
+ * of 1,440 — so after a camera turn the pool spent seconds generating ground
+ * nobody was looking at before it reached the new selection, and
+ * `PREFETCH_SECONDS` was describing a queue rather than a lookahead.
+ *
+ * A hundred and twenty-eight is a little over one rung of a whole-disk
+ * selection, which is about ninety patches. That is the unit that matters,
+ * because the ladder is strictly serial — a level cannot refine until all four
+ * children of every node on it have arrived — so a cap below a rung would stall
+ * the descent for exactly the reason the rate was tripled. Above it, the extra
+ * is only queue.
+ */
+const IN_FLIGHT_CAP = 128
 
 /**
  * Every level of the selection, coarsest first.
@@ -213,19 +236,63 @@ const TERRAIN_RELIEF_PIXELS = 8
  * by design because the second is taken from where the eye is *going*, so three
  * times the cap is the working set with room to spare.
  *
- * A bordered 65×65 field is 19 KB, so this is about 44 MB.
+ * A bordered 65×65 field is 19 KB, so at a cap of 1,024 this is 3,072 fields
+ * and 58 MB. Both numbers move with `DEFAULT_MAX_PATCHES` rather than with
+ * anything here, which is why they are stated as arithmetic.
  */
 export const FIELD_CACHE = DEFAULT_MAX_PATCHES * 3
 
 /**
  * Patch geometries held.
  *
- * Only drawn patches get geometry, so the ceiling is the selection itself plus
- * enough slack that a camera turning back finds the ground where it left it.
+ * **Sized against the request set, not the drawn one.** Only drawn patches are
+ * *placed*, but three sets get geometry built and a fourth decides what may be
+ * dropped: `#build` takes the drawn set *and* the rung below it, and `#evict`
+ * keeps whatever the frame requested — the drawn set, the starved children, and
+ * the whole pyramid under the ideal selection.
+ *
+ * **That keep set is two selections, not one, so it is not bounded by
+ * `DEFAULT_MAX_PATCHES`.** `wanted` is a second `selectTerrain` at the
+ * look-ahead eye and is capped independently of the drawn one, so the union's
+ * ceiling is `|drawn| + 4·|starved| + |pyramid(wanted)|` — around 2.3× the
+ * selection cap in the limit, which this number does *not* clear. What makes 2×
+ * safe is measurement rather than arithmetic, and the thing that moves it is the
+ * camera's speed over the ground as much as the buffer: the two selections
+ * coincide at a hover and separate as the lead grows. Worst measured, across
+ * Luna, Ganymede and Triton at 500 m and 2 km with leads to 20 km:
+ *
+ * | buffer     | hover | 5 km lead | 20 km lead |
+ * | ---------- | ----- | --------- | ---------- |
+ * | 1600×900   | 957   | 1,267     | 1,450      |
+ * | 3840×2400  | 1,085 | 1,506     | 1,668      |
+ * | 5120×2880  | 1,193 | 1,711     | **1,824**  |
+ *
+ * So the margin here is about 11%, not the 2× the multiple suggests. Standing
+ * at Earthrise — a hover, where the two selections coincide — one frame's
+ * request list names 1,323 regions and 1,597 are resident once the ladder
+ * converges; both are above the 1,152 this was.
+ *
+ * A cache under its working set does not degrade, it oscillates, and this one
+ * did it where nothing was watching. `#build` added four patches a frame,
+ * `#evict` dropped four it had wanted a moment earlier, `starved` sat at ~70
+ * forever instead of falling to zero, and every twenty-six frames the rotation
+ * took a patch the traversal was refining through: `ready` failed, the walk
+ * stopped ten nodes in, and the whole disk snapped from 760 patches at level 7
+ * to four at level 1 for a frame. On screen that is the ground jumping two to
+ * three times a second, and only once the finest level is in play. What decides
+ * whether it happens is the *ratio* of keep set to cap, which is why a hover at
+ * 1600×900 never showed it and a moving camera at the old cap would have:
+ * 1,450 against 1,152. `FIELD_CACHE` above carries the same argument for
+ * heightfields; geometry never got it.
+ *
  * A patch is 203 KB of vertex buffers, which is the expensive half of terrain's
- * memory and the half attribute packing would halve.
+ * memory and the half attribute packing would halve. This is a *ceiling*, not
+ * an allocation — what is resident is the working set, ~700 patches and 142 MB
+ * at 1600×900, 1,597 and 324 MB at 3840×2400 — so raising it costs nothing at
+ * the sizes that already fit. Full, it is **416 MB**, which is the number to
+ * weigh against a strobe and against the 208 MB the selection alone quotes.
  */
-export const GEOMETRY_CACHE = DEFAULT_MAX_PATCHES + 128
+export const GEOMETRY_CACHE = DEFAULT_MAX_PATCHES * 2
 
 interface CachedField {
   readonly elevations: Float32Array
@@ -379,6 +446,7 @@ export class TerrainStreamer {
     readonly shallowestLevel: number
     readonly pending: number
     readonly cached: number
+    readonly geometry: number
     readonly patches: number
     readonly vertices: number
     readonly triangles: number
@@ -404,6 +472,7 @@ export class TerrainStreamer {
       shallowestLevel: this.#shallowest,
       pending: this.#inFlight.size,
       cached: this.#fields.size,
+      geometry: this.#patches.size,
       // Placed, not selected: the report's contract is "built and placed this
       // frame", and the selection can hold regions whose geometry is still in
       // a worker. Counting those reported ground before any was drawn —
@@ -535,7 +604,7 @@ export class TerrainStreamer {
     }
 
     const options = {
-      maxLevel: surfaceDetailFloor(surface.radius, surface.surface),
+      maxLevel: surfaceDetailFloor(surface.surface),
       lens,
       viewport,
     }
@@ -766,7 +835,16 @@ export class TerrainStreamer {
         seen.add(key)
         return !this.#fields.has(key) && !this.#inFlight.has(key)
       })
-      .slice(0, REQUESTS_PER_FRAME)
+      // `Math.max(0, …)` because a negative end index slices from the *back* of
+      // the array — an over-full queue would have asked for the tail of the
+      // wanted list rather than for nothing.
+      .slice(
+        0,
+        Math.max(
+          0,
+          Math.min(REQUESTS_PER_FRAME, IN_FLIGHT_CAP - this.#inFlight.size),
+        ),
+      )
 
     for (const region of missing) {
       const key = this.#key(region)
@@ -815,7 +893,7 @@ export class TerrainStreamer {
    * pyramid — rather than the two selections' leaves. `#request` re-asks for
    * every rung of the pyramid every frame, so a keep set without them turns
    * the cap into a treadmill: evict a rung, re-request it next frame,
-   * regenerate it at 20 to 37 ms, evict it again.
+   * regenerate it at 9 to 37 ms, evict it again.
    */
   #evict(requested: readonly RegionAddress[]): void {
     if (

@@ -400,8 +400,9 @@ Stated plainly, because discovering these by surprise is worse than reading them
   The quadtree covers the whole disk — morphed, seamless, measured to the ground
   rather than the datum — and what it refines is now craters, plates, volcanism
   and ice from each body's own facts. What it wears is still one flat color per
-  body: no biomes, no materials. Generating a bordered 65×65 patch costs 20 ms
-  on an airless world and 37 on an atmosphered one, against a documented ≤ 8 ms
+  body: no biomes, no materials. Generating a bordered 65×65 patch costs 9 to
+  37 ms across the zoo — 9 on a world with no craters at all, 32 on a rocky
+  airless one, 37 on a rocky atmosphered one — against a documented ≤ 8 ms
   budget, and a whole-disk selection holds up to 208 MB of float32 vertex
   buffers at the flight lens. `pnpm sim --terrain-baseline` prints all of it;
   the [roadmap](docs/roadmap.md#terrain) has the seams.

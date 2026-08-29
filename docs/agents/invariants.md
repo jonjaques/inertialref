@@ -24,6 +24,7 @@ table is one of those three, not drift.
 | One `Worker` constructor                                  | [Workers](../concepts/workers.md) · [Development](../guides/development.md)                                |
 | One session constructor                                   | [Client](../guides/client.md)                                                                              |
 | Terrain is sampled in body-fixed axes                     | [Frames](../concepts/frames.md)                                                                            |
+| No field value read off a rank                            | [ADR-0019](../adr/0019-the-geology.md) · [Determinism](../concepts/determinism.md)                         |
 | Entity writes go through `World`                          | [Extending](../guides/extending.md)                                                                        |
 | Landedness is a consequence, never asserted               | [Extending](../guides/extending.md)                                                                        |
 | Saves store references, not regenerable content           | [Persistence](../concepts/persistence.md) · [ADR-0007](../adr/0007-persistence.md)                         |

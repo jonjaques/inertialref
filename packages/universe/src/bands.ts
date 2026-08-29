@@ -20,9 +20,10 @@ import {
   convergence,
   type Hotspot,
   plateAt,
+  PLATE_MARGIN,
+  plateProperty,
   type PlateSample,
   type StripeAxis,
-  type TectonicPlate,
   type TerrainSketch,
 } from './sketch.ts'
 
@@ -51,6 +52,13 @@ import {
  * twelve octaves an Earth-sized world needs, because it runs out of world
  * first, and a band with a tenth of the relief budget stops three octaves
  * earlier than one with all of it.
+ *
+ * **The plate lookup is done once and handed round.** Three of the six bands
+ * read the plates a sample sits among, and each of them used to call `plateAt`
+ * itself — a pass over every nucleus, three times over, for an answer that
+ * depends on nothing but the direction. `convergence` was paid twice the same
+ * way. `plateContext` is that work, done once per sample by `elevationAt` and
+ * passed down; it is 4.4 ms a patch on a world with plates.
  *
  * **Only the bands that read a gradient pay for one.** `gradientNoise3` is four
  * times the cost of `noise3` — the value is one trilinear interpolation and the
@@ -95,6 +103,92 @@ export function octavesFor(
 }
 
 /**
+ * How wide a margin each band reads a plate property over.
+ *
+ * They are the support radii of `plateProperty`'s weights: a plate this much
+ * farther from the sample than the nearest one has no say in that band. They
+ * genuinely differ, which is why there are three rather than one — hypsometry
+ * changes crust type over a shelf and slope, a mountain belt is an orogen wide,
+ * and an arc's volcanoes sit closer to the trench than either.
+ *
+ * `HYPSOMETRY_MARGIN` is a quarter of a radian, ~1,600 km on Earth: a
+ * continental shelf and slope together, and the scale over which the crust
+ * actually changes type. `BELT_MARGIN` is a tenth, ~640 km, which is the width
+ * of an orogen — the Andes are 700 km across including the foreland.
+ * `ARC_MARGIN` is 0.06, which is where the volcanoes are rather than where the
+ * orogen is.
+ *
+ * **None of them may exceed `PLATE_MARGIN`**, which is how far `plateAt`
+ * bothers to look: a band blending over a wider margin than the search would be
+ * dividing by a sum it had already truncated, and the answer would jump as a
+ * plate fell out of a set it still had weight in. `geology.test.ts` holds the
+ * three against it.
+ */
+export const HYPSOMETRY_MARGIN = PLATE_MARGIN
+export const BELT_MARGIN = 0.1
+export const ARC_MARGIN = 0.06
+
+/**
+ * The plate work every band shares, done once per sample.
+ *
+ * `elevationAt` builds one of these and hands it to the three bands that read
+ * plates, because all three want the same answer and none of them can cache it:
+ * the bands are pure functions of a direction and the direction changes every
+ * sample. What it saves is stated in the module header.
+ *
+ * `across` is folded in for the same reason and computed only where it is read:
+ * it is the *belts'* convergence, weighted at `BELT_MARGIN`, and `beltBand` is
+ * the only band that reads it.
+ *
+ * **The arc computes its own, and sharing this one was wrong.** `ARC_MARGIN` is
+ * inside `BELT_MARGIN`, which reads as the arc asking for strictly less — but
+ * `convergence` returns `total/weight`, a normalised mean, and re-weighting a
+ * mean moves it in either direction rather than shrinking it. Measured on Earth
+ * over the 11,833 of 40,000 directions the arc actually reads: the two disagree
+ * in 3,510 of them, worst case a belt reading of 0.0005 — pure transform, no arc
+ * at all — against an arc reading of 1.0000, fully convergent with cones at full
+ * height, at a `boundary` of 0.0583 with three plates in range. Through
+ * `edge · continental · across · cones³ · 1.6` that is 436 m of a 802 m
+ * volcanism budget. A second `convergence` pass costs a loop over two to four
+ * plates on the thin band where `boundary < ARC_MARGIN`, which is what the arc's
+ * own gate was already paying for.
+ *
+ * **`across` is defined only where `edge > 0`, and it is zero rather than
+ * continuous outside that.** It steps at `boundary === BELT_MARGIN`, where the
+ * pair weights go to zero but their normalized ratio does not. Nothing sees it:
+ * `beltBand` multiplies by an `edge` that is exactly zero there and returns
+ * before that anyway, and the arc gates at 0.06. A third consumer, or an
+ * `ARC_MARGIN` raised past `BELT_MARGIN`, would see it — which is the kind of
+ * precondition this whole branch exists because nobody wrote down.
+ */
+export interface PlateContext {
+  readonly sample: PlateSample | null
+  /**
+   * Relative motion across the nearby boundary: positive convergent, negative
+   * divergent, near zero transform. Zero away from every boundary, where no
+   * band reads it.
+   */
+  readonly across: number
+}
+
+const NO_PLATES: PlateContext = { sample: null, across: 0 }
+
+export function plateContext(
+  sketch: TerrainSketch,
+  direction: Vec3,
+): PlateContext {
+  const sample = plateAt(sketch, direction)
+  if (sample === null) return NO_PLATES
+  return {
+    sample,
+    across:
+      sample.boundary < BELT_MARGIN
+        ? convergence(sample, direction, BELT_MARGIN)
+        : 0,
+  }
+}
+
+/**
  * Hypsometry: continents against ocean floor.
  *
  * A plate is continental or oceanic, and that one bit is what gives Earth its
@@ -109,6 +203,7 @@ export function octavesFor(
 export function hypsometryBand(
   sketch: TerrainSketch,
   grammar: SurfaceGrammar,
+  plates: PlateContext,
   direction: Vec3,
   peak: Meters,
 ): number {
@@ -121,49 +216,11 @@ export function hypsometryBand(
     { octaves: octavesFor(grammar.meanRadius, swellCycles, 5, peak * 0.35) },
   )
 
-  const sample = plateAt(sketch, direction)
+  const sample = plates.sample
   if (sample === null) return clamp(swell, -1, 1)
 
-  // A quarter of a radian of margin, which is ~1,600 km on Earth: the width of
-  // a continental shelf and slope together, and the scale over which the crust
-  // actually changes type.
-  const base = acrossBoundary(sample, (plate) => plate.base, 0.25)
+  const base = plateProperty(sample, (plate) => plate.base, HYPSOMETRY_MARGIN)
   return clamp(base + swell * 0.35, -1, 1)
-}
-
-/**
- * A plate's own property, read so that it is continuous across the boundary.
- *
- * Which plate is `plate` and which is `neighbor` swaps as you step over the
- * line between them, so **any expression that reads one of them and not the
- * other is discontinuous there by construction**. The average is the one
- * combination that is not: it is symmetric under the swap, so it agrees with
- * itself from both sides. Weighting from the average at the line to the plate's
- * own value in its interior is what makes the whole band continuous while still
- * letting a plate be itself away from its edges.
- *
- * The weight has to reach *zero* at the boundary and not a half. Starting at a
- * half leaves half the difference between the two plates standing as a cliff —
- * measured before this: 9,433.9 m on Proxima Centauri II, which is 46% of that
- * world's entire relief budget, and 891.2 m on Earth, across 10⁻⁹ m of ground.
- * `elevationAt` is the one function the mesh and the contact test share, so a
- * step in it is a wall a ship lands on as readily as a wall you can see.
- *
- * `width` is each band's own margin rather than one shared number, because the
- * bands genuinely differ: hypsometry changes crust type over a shelf and slope,
- * a mountain belt is an orogen wide, and an arc's volcanoes sit closer to the
- * trench than either. A boolean becomes a fraction on the way through — the
- * caller asks for `plate.continental ? 1 : 0` and gets continentalness, which is
- * what a passive margin actually is.
- */
-function acrossBoundary(
-  sample: PlateSample,
-  of: (plate: TectonicPlate) => number,
-  width: number,
-): number {
-  const mine = of(sample.plate)
-  const theirs = of(sample.neighbor)
-  return mix((mine + theirs) / 2, mine, smoothstep(0, width, sample.boundary))
 }
 
 /**
@@ -183,9 +240,25 @@ function acrossBoundary(
 export function beltBand(
   sketch: TerrainSketch,
   grammar: SurfaceGrammar,
+  plates: PlateContext,
   direction: Vec3,
   peak: Meters,
 ): number {
+  /*
+   * The gate, before the noise it gates.
+   *
+   * A belt exists within `BELT_MARGIN` of a boundary and nowhere else, which on
+   * a world with twenty-odd plates is most of the sphere — and the ridged fBm
+   * this band is drawn from was generated for every one of those samples and
+   * then multiplied by an `edge` of zero. Seven octaves of it, with the
+   * analytic-derivative form on any world that erodes: 4.4 ms a patch, thrown
+   * away.
+   */
+  const sample = plates.sample
+  const edge =
+    sample === null ? 0 : 1 - smoothstep(0, BELT_MARGIN, sample.boundary)
+  if (sample !== null && edge <= 0) return 0
+
   const cycles = 9
   const options = {
     octaves: octavesFor(grammar.meanRadius, cycles, 7, peak),
@@ -212,7 +285,6 @@ export function beltBand(
         )
   const ranges = raw * 0.5 + 0.5
 
-  const sample = plateAt(sketch, direction)
   if (sample === null) {
     /*
      * Lobate scarps: long, low, one-sided. The `1 -` turns the ridge crest into
@@ -230,35 +302,28 @@ export function beltBand(
     return clamp((1 - ranges) ** 3 * 2 - 0.1, -1, 1)
   }
 
-  // A tenth of a radian is ~640 km on Earth, which is the width of an orogen —
-  // the Andes are 700 km across including the foreland.
-  const edge = 1 - smoothstep(0, 0.1, sample.boundary)
-  if (edge <= 0) return 0
-  const across = convergence(sample, direction)
+  const across = plates.across
   const converging = Math.max(0, across)
   const diverging = Math.max(0, -across)
   const sliding = 1 - Math.abs(across)
   /*
-   * Continentalness and the transform's sense, both read across the boundary.
+   * Continentalness and the transform's sense, both read as a partition.
    *
    * `edge` is *one* at the line and falls to zero away from it, so this band is
-   * at full strength exactly where `plate` and `neighbor` swap — which makes it
-   * the worst place in the field to read a property of one plate and not the
-   * other. Taking `sample.plate.continental` directly flipped `uplift` between
-   * `ranges` and `-0.9·ranges` at a continental-oceanic margin: a 1,347.6 m
-   * step on Earth, and the one the hypsometry band's own half-blend was partly
-   * masking, so correcting that alone made Earth worse rather than better.
-   *
-   * `convergence` needs no such treatment and gets none: it negates both
-   * `toward` and `relative` under the swap, so their dot product is already
-   * symmetric.
+   * at full strength exactly where the plates around a sample change places —
+   * which makes it the worst place in the field to read a property off one of
+   * them by name. Taking `sample.plate.continental` directly flipped `uplift`
+   * between `ranges` and `-0.9·ranges` at a continental-oceanic margin: a
+   * 1,347.6 m step on Earth, and the one the hypsometry band's own half-blend
+   * was partly masking, so correcting that alone made Earth worse rather than
+   * better.
    */
-  const continental = acrossBoundary(
+  const continental = plateProperty(
     sample,
     (plate) => (plate.continental ? 1 : 0),
-    0.1,
+    BELT_MARGIN,
   )
-  const step = acrossBoundary(sample, (plate) => plate.step, 0.1)
+  const step = plateProperty(sample, (plate) => plate.step, BELT_MARGIN)
 
   const uplift = converging * mix(-0.9 * ranges, ranges, continental)
   const opening = diverging * mix(0.55 * ranges, -0.7 * ranges, continental)
@@ -282,6 +347,7 @@ export function beltBand(
 export function volcanicBand(
   sketch: TerrainSketch,
   grammar: SurfaceGrammar,
+  plates: PlateContext,
   direction: Vec3,
   peak: Meters,
 ): number {
@@ -290,9 +356,13 @@ export function volcanicBand(
     height += shieldProfile(hotspot, direction)
   }
 
-  const sample = plateAt(sketch, direction)
-  if (sample !== null) {
-    const edge = 1 - smoothstep(0, 0.06, sample.boundary)
+  const sample = plates.sample
+  // The gate before the work it gates, as in `beltBand`: an arc exists within
+  // `ARC_MARGIN` of a boundary, which on a plate world is a few percent of the
+  // sphere, and everywhere else this whole block multiplies out to zero.
+  const edge =
+    sample === null ? 0 : 1 - smoothstep(0, ARC_MARGIN, sample.boundary)
+  if (sample !== null && edge > 0) {
     /*
      * Continentalness scales the arc rather than gating it.
      *
@@ -304,13 +374,14 @@ export function volcanicBand(
      * is also the honest picture: an arc sits behind the trench and thins
      * toward it rather than stopping at a line.
      */
-    const continental = acrossBoundary(
+    const continental = plateProperty(
       sample,
       (plate) => (plate.continental ? 1 : 0),
-      0.06,
+      ARC_MARGIN,
     )
-    if (edge > 0 && continental > 0) {
-      const across = Math.max(0, convergence(sample, direction))
+    if (continental > 0) {
+      // The arc's own margin, not the belts'. See `plateContext`.
+      const across = Math.max(0, convergence(sample, direction, ARC_MARGIN))
       const cycles = 60
       const cones =
         ridged3(
@@ -418,8 +489,21 @@ function stripeProfile(stripe: StripeAxis, direction: Vec3): number {
  * Voronoi block rafts: plateau interiors, sharp walls, each block at its own
  * height.
  *
- * The same 3×3×3 lattice the crater field walks, for the same reason — a cube
- * lattice in ℝ³ intersected with the sphere has no face seams and no corners.
+ * A cube lattice in ℝ³ intersected with the sphere, for the reason the crater
+ * field picks one — no face seams and no corners. The walk stays at the ±1
+ * Worley window where `craters.ts` derives a wider one, and the reason is the
+ * gate rather than the geometry: a truncated window can only be wrong about
+ * `F1` and `F2` near a *wall*, which is exactly where `smoothstep(0, 0.35,
+ * wall)` has already taken the amplitude to zero. A crater has no such gate —
+ * its apron reaches `EJECTA_REACH` radii past its own cell at full height, and
+ * it is indexed off the sphere besides.
+ *
+ * Measured rather than argued, because the argument is about a candidate set
+ * and those have been wrong here before: the bisection walk over twelve great
+ * circles finds nothing above **9.3e-10 m** on any of the eleven bodies with
+ * chaos, Mimas, Dione and Miranda among them at full chaos and up to 3.4 km of
+ * ice band.
+ *
  * `F2 − F1` is the distance to the nearest wall, and running it through a
  * smoothstep is what makes the interior flat instead of conical.
  */
@@ -465,7 +549,8 @@ function blockField(seed: Seed, direction: Vec3, cells: number): number {
  * it reading as noise — a warped field bends its own ridges around, which is
  * what a landscape that has been drained and re-drained looks like — and the
  * damping is the erosion stand-in: on an airless world it is zero and rims stay
- * razor-edged, under a thick atmosphere it is 24 and everything reads as worn.
+ * razor-edged, under a thick atmosphere it is 1.2 and the band is worn to two
+ * fifths of its roughness and half its amplitude.
  */
 export function reliefBand(
   sketch: TerrainSketch,

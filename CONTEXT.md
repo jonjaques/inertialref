@@ -5107,11 +5107,11 @@ stack is under three times the documented Phase 0 figure instead of five.
 
 | Measured                            | Was     | Now                               |
 | ----------------------------------- | ------- | --------------------------------- |
-| A bordered 65×65 patch              | 12.8 ms | 20 ms airless, 37 atmosphered     |
+| A bordered 65×65 patch              | 12.8 ms | 9–37 ms across the zoo            |
 | The same three bands, re-measured   | 12.8 ms | 3.6–3.8 ms                        |
 | `noise3`                            | 209 ns  | 47 ns                             |
-| `surfaceDetailFloor` across the zoo | 7–10    | 12–16                             |
-| Whole-disk selection, flight lens   | 410–480 | 416–864                           |
+| `surfaceDetailFloor` across the zoo | 7–10    | 10–16                             |
+| Whole-disk selection, flight lens   | 410–480 | 380–862                           |
 | `DEFAULT_MAX_PATCHES`               | 768     | 1,024 (208 MB in the corner case) |
 | `REQUESTS_PER_FRAME`                | 8       | 24                                |
 
@@ -5218,10 +5218,10 @@ samples. `norm += amplitude * damp` in both fields; the `clamp` every other exit
 from `beltBand` already had, on the one that did not.
 
 **The floor came down four levels and the cap got its headroom back.** With the
-step gone, `surfaceDetailFloor` reports 12–16 across the zoo where it reported
-13–17, Iapetus falling 16 → 12, and a whole-disk selection costs 416–864 patches
+step gone, `surfaceDetailFloor` reports 10–16 across the zoo where it reported
+13–17, Iapetus falling 16 → 12, and a whole-disk selection costs 380–862 patches
 where it cost 420–1,008. `DEFAULT_MAX_PATCHES` stays 1,024 and that is now a
-measurement rather than a hope: 864 is 84% of it, against 1,008 and 98% before —
+measurement rather than a hope: 862 is 84% of it, against 1,008 and 98% before —
 768 would still bite, so the raise in the phase before this one was right for a
 reason that survived the fix. `REQUESTS_PER_FRAME` and `MAX_CRATER_LEVELS` did
 not move; the baseline reports "budget bit on 0 steps" on every body.
@@ -5266,6 +5266,205 @@ migration that never happened. One golden vector moves with it — the damped
 `fbmField` — and the undamped fields, `gradientNoise3`, `latticeSeed` and both
 `pcg` lanes are bit-identical, which is what says the change is in the divisor
 rather than in the noise underneath it.
+
+## The cost of a sample, and the two seams that were not boundaries (29 Aug 2026)
+
+Five findings that all touch `elevationAt`'s inner loop, taken as one branch
+because every one of them changes terrain or its cost and each change means
+re-measuring the same numbers. The budget first, so that the correctness work
+had something to spend.
+
+**Three ways the loop paid for an answer it already had.** The sketch was
+resolved through a string key of nine floats — built 4,761 times a patch to find
+a value that could not have changed, 1.7 ms on an airless world and 2.5 on
+Earth; a `WeakMap` in front of the string cache answers the repeats while the
+string map goes on sharing an entry between two equal surfaces built separately,
+which is the case the worker's per-task rebuild needs. Three bands each did
+their own plate lookup and `convergence` was paid twice, for an answer that
+depends on nothing but the direction. And the belt band generated seven octaves
+of ridged fBm — in the analytic-derivative form on anything that erodes — and
+then multiplied it by an `edge` of zero everywhere outside a tenth of a radian
+of a boundary. Together: Luna 20.0 → 17.5 ms a patch, Miranda 12.3 → 9.0,
+Proxima Centauri II 33.8 → 24.8.
+
+A fourth was in the selection rather than the field. `terrainSelect`'s numeric
+region key was gated at level 12 on the reasoning that `surfaceDetailFloor`
+returned nothing deeper — and the band stack moved the floor to between twelve
+and sixteen across the zoo, seventeen on the worst generated body, so every
+whole-disk selection deeper than twelve took the string fallback the key exists
+to avoid, 1.8 ms a pass. The span goes to 2²², which is
+the deepest level whose `i` and `j` still fit inside a double's exact integers.
+
+**A crater the walk cannot see arrives as a cliff rather than not at all.** The
+3×3×3 neighborhood's docstring claimed it contained every crater whose support
+reaches the sample. It did not, for two independent reasons. The ejecta reach is
+1.3 cells, because `craterLadder` sizes a cell to the level's largest crater
+diameter and that crater's radius is half a cell. And the lattice is cubes in ℝ³
+while the field is a shell cutting through them, so a crater's center sits off
+the sphere by up to the cell's own width along the radius, is indexed _there_,
+and has its profile measured from its projection — a crater directly underfoot
+can be indexed a cell away for no other reason. Walking the reach alone still
+lost 34 m on Luna. The walk derives its own bounds per axis from both, which is
+about five cells an axis against three, and `craterFieldWithin` exists so the
+test can walk two cells wider and assert the two are _equal_.
+
+**Which plate is second is a rank, and a rank has a seam where it changes.**
+`plateAt` returned the nearest plate and the second-nearest, and the phase before
+this one made the blend between them continuous across the line separating them.
+It was. The field still had a kilometre of cliff in it, because the pair also
+changes along the locus where the second and third nearest are equidistant — a
+network of curves through every plate's interior, nowhere near an edge. Measured
+either side of one on Proxima Centauri II: the same nearest plate, base 0.432,
+with the second jumping from base 0.224 to −0.894 at a `boundary` of 5.72e-2.
+
+A sample now carries every plate within a quarter-radian of the nearest and a
+band reads a property as a normalised weighted average over all of them, so no
+rank identity enters and continuity is by construction — the same argument the
+crater lattice makes about the cube corner. `convergence` is weighted over
+_pairs_, because a convergence taken from the nearest plate and whichever is
+second inherits exactly the same seam, and near a triple junction it runs through
+the ground the belt band is loudest on. Largest gap surviving sixty bisections,
+over twenty-four great circles: **Earth 3,081 m → 1.3e-4, Proxima Centauri II
+6,070 m → 4.8e-5.** It costs about a percent of a patch.
+
+The weight is `(1 − s)/(1 + s)` and not the plain complement, which is the one
+place this changes a world rather than a defect. It is what the two-plate blend
+was already spending, so where only two plates are in range the field is
+unchanged; with the complement, Earth's elevation histogram smears until Sarle's
+coefficient falls to 0.553, under the 5/9 at which a distribution stops having
+two modes. It reads 0.583 as shipped, against 0.76 before the partition — the
+triple junctions are genuinely more blended now, and that is the honest picture
+of ground where three plates meet.
+
+**The bug that must not come back is the test that missed it.** `has no step in
+it` walked one great circle per body and bisected onto its single largest jump.
+On Earth that jump was a crater rim — genuinely steep, genuinely continuous —
+while 3,081 m of plate seam sat elsewhere on the same arc, and the test passed.
+A one-plate world cannot exercise the tectonic bands at all, which is how the
+first round of these survived; a one-arc walk on a world that can is the second
+half of the same blind spot. It now bisects the four largest jumps per arc and
+sweeps sixteen arcs on the worlds with plates, and truncating the plate
+neighborhood back to two fails it on Earth.
+
+**What it costs, measured across the zoo.** A patch goes 26.6 → 32.3 ms on a
+rocky airless world, 25.2 → 35.9 on Iapetus, 12.4 → **8.8** on Miranda, which has
+no craters and therefore keeps the budget savings whole — and 49.9 → **37.3** on
+a rocky atmosphered world, which is _cheaper_ than before the crater walk
+widened. Two levers on the crater walk remain deliberately unspent: its radial
+bound is the cube's full width where the worst case measured over six bodies is
+1.36 of 1.73, and `EJECTA_REACH` is 2.6 where the published continuous ejecta
+deposit is often mapped to 2.
+
+**The gradient lattice was hashing with the wrong function, and it cost twice.**
+`gradientAt` called `pcg3d`, which returns three lanes, and read one — eight
+calls per `gradientNoise3` and seven to twelve octaves a sample, so V8 exhausts
+its inlining budget across the eight sites and never scalar-replaces the object.
+That was the cheap half. The expensive half is that `noise3` hashes with `hash3`,
+so the two gradient lattices were _different fields_: `bands.ts` picks between
+`ridged3` and `ridgedField` on whether a world erodes and says the two give the
+same number, and they were separated by up to 1.25 on a band whose contract is
+[-1, 1] — two worlds a pascal apart got unrelated mountain ranges rather than the
+same ones slightly more worn. Sharing `hash3` makes the claim true (they agree to
+twelve decimals now, and `field.test.ts` holds them there) and takes the whole
+analytic-gradient path from 59.7 ms a patch to 37.3. `hash3` is _written out_
+rather than called, because composing it with `mix32` is two levels deep at eight
+sites and calling it costs 14 ms a patch — 51.8 against 37.3 — where the same
+call in `noise.ts` costs nothing measurable.
+
+**The erosion damping was a dead dial.** `fbmField` accumulated each octave's
+gradient scaled by frequency but not by amplitude, so the sum grew as
+`lacunarity^i` instead of `(lacunarity·gain)^i` and saturated after three
+octaves whatever `erosion` was: measured octave weights of 0.813/0.156/0.027 at
+`damping` 1 against 0.850/0.128/0.019 at 24, a 48× range moving the fundamental
+by three points. Every atmosphered world was three octaves of fBm paying for
+twelve. With the amplitude in, `norm` had to stop accumulating the _damped_
+amplitude too — dividing by it renormalizes each sample back to full range, so
+the damping got **rougher** as it rose (total variation 29.3 undamped, 30.6 at
+1.2, 41.7 at 24) instead of smoother. Against the raw amplitude it falls the way
+the name says: 29.3, 11.9, 2.5. `ridgedField` remaps `2r² − 1` per octave rather
+than `·2 − 1` on the sum, which is identical undamped — `2·Σa·r²/Σa − 1 =
+Σa·(2r² − 1)/Σa` — and attenuates toward the band's midpoint rather than toward
+−1 when damped, which is the bias the damped divisor was there to fix. `erosion`
+is `1.2·air^1.5` where it was `24·air^1.5`, because the old scale was calibrated
+against a dial that had already stopped turning.
+
+**And three latent defects the same review found, none of which had a live
+trigger.** `surfaceDetailFloor`'s three-level quiet run counted sea-flattened
+levels toward the run and gated only its last, so `floor = runStart` could answer
+with a level whose quiet was the clamp — the exact failure the paragraph above it
+says it prevents. `surveySites`' memo key never learned about the grammar, though
+its derivation samples `elevationAt`, which reads twenty of its fields; the
+grammar goes in whole now, which is complete by construction rather than a list
+somebody maintains. And the geology card in `dossier.ts` re-derived which of the
+three relief limits bound a body, when on any body with a `publishedRelief` none
+of them ran — Earth's card read "limited by what the crust can hold up" over a
+crust limit of 5,910 m against its 9.9 km. `reliefLimit` reports its own source
+now, because ADR-0014 makes every row on that panel a claim about the place, and
+a mechanism that did not run is the one kind of claim it may not make.
+
+`TERRAIN_ALGORITHM` does not move, for the reason the entry above it gives:
+`origin/main` is on v1, this branch already carries the one bump to v2, and v2
+has never described a shipped world. That window closes when it merges.
+
+## The disk strobed twice a second, and the cache had promised more than it held (29 Aug 2026)
+
+Reported as terrain jitter on Luna under the Earthrise preset, two to three
+times a second, arriving with the finest level. It reproduced on a 3840x2400
+drawing buffer and not at all on 1600x900, which is what made it read as a
+rendering defect: the same body, the same stance, the same seed, and a strobe
+that followed the display.
+
+It was `GEOMETRY_CACHE`, sized from the wrong set. The constant was
+`DEFAULT_MAX_PATCHES + 128` and its docstring said "only drawn patches get
+geometry, so the ceiling is the selection itself plus enough slack" — but the
+streamer does not hold the drawn set. `#build` takes the drawn set _and_ the
+rung below it, and `#evict` keeps whatever the frame requested: the drawn set,
+the starved children, and the whole pyramid under the ideal selection. A
+quadtree's ancestors are a third again as many as its leaves, so that keep set
+floors at ~1.33x the selection cap before the starved rung is counted. Measured
+at Earthrise: **one frame's request list named 1,323 distinct regions against a
+cap of 1,152**, with 98 held meshes outside the keep set and therefore always
+available as victims.
+
+So the streamer ran a treadmill. Four patches built a frame, four dropped that
+it had wanted a moment earlier, `starved` sitting at ~70 instead of falling to
+zero, and `buildPatch` on every frame forever — 267 samples at a 16.9 ms median
+gap over a 4.3 s profile, which is the tell: a converged streamer builds
+nothing. Every twenty-sixth frame the rotation took a patch the traversal was
+refining through, `ready` returned false, the walk stopped ten nodes in instead
+of 1,138, and the disk drew **four patches at level 1 where the frame before had
+760 at level 7**. A Chrome trace of the deployed preview carries it frame by
+frame: the frame either side of the collapse differs by **zero pixels** — the
+scene is perfectly static — and the collapse frame differs from both by 30,050,
+of which 17,391 are ground, at **2.29 Hz**. On screen every crater flattens to a
+blank shell for one frame, twice a second.
+
+The fix is `DEFAULT_MAX_PATCHES * 2`, and the first thing written about it here
+was wrong: that the keep set is bounded by the selection cap and not by the
+viewport, "measured 1,232 to 1,327 at both 3840x2400 and 5120x2880". Both
+measurements were taken at Earthrise, **which is a hover** — and at a hover
+`#lookAhead` collapses to the present, so the drawn selection and the requested
+one are the same set and the keep set really is just one pyramid. Let the camera
+move and they are two independently capped selections whose union grows with
+both the buffer and the ground-track speed: 957 regions at a hover over
+1600x900, 1,824 at a 20 km lead over 5120x2880, on Ganymede and Triton at 500 m.
+So twice the cap is a number that clears everything measured with about 11% to
+spare, not a bound anything proves — and the old cap of 1,152 was under the keep
+set at 1600x900 too, on any camera that was moving. It is a ceiling rather than
+an allocation, so the sizes that already fit pay nothing; full it is 416 MB. At 3840x2400 the streamer
+now converges to 1,597 resident and **901 patches drawn against the 760 it
+managed while thrashing**: correcting the cache made the picture both stable and
+deeper, because a treadmill spends its build budget re-making ground it already
+had.
+
+`FIELD_CACHE` above it has carried this argument since the 3x3 window — "a cache
+smaller than the working set does not degrade, it oscillates" — and the geometry
+cache never got it. What hid the second case is that nothing reported it:
+refinement gates on geometry, not on the heightfield, so `cached` sat at its
+steady 1,421 and said nothing was wrong while the cache under it strobed.
+`ir.terrain()` reports `geometry` beside `cached` now, and it was the counter
+that ended the search — pinned at exactly 1,152, which is the signature
+`FIELD_CACHE`'s own comment describes.
 
 ## Known gaps
 

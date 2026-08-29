@@ -275,7 +275,11 @@ browser console, in `pnpm sim --terrain-baseline` and in a Node test. It takes
 `ir.terrain` is the counterpart: what the streamer actually has, which is
 `null` headlessly rather than a zero. Its `patches` counts ground built and
 placed this frame, not the selection's length — a cold arrival reports zero
-patches over zero vertices rather than six regions still in a worker.
+patches over zero vertices rather than six regions still in a worker. It states
+both caches, `cached` for heightfields and `geometry` for meshes, because they
+fail differently: refinement gates on the mesh, so a geometry cache losing what
+the draw set is standing on collapses the selection to the roots while `cached`
+sits at its steady value and reports nothing wrong.
 
 **Every count here is a function of the lens, so every report states one.** The
 demand climbs steeply with the pixels-per-radian — measured, the telephoto end
