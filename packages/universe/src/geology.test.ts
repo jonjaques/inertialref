@@ -286,6 +286,71 @@ describe('the crater field', () => {
     expect(acrossCorner).toBeLessThan(inFace * 3)
   })
 
+  it('has no step in it, anywhere a crater rim falls', () => {
+    /*
+     * `elevationAt` is C0, and this is the assertion that says so.
+     *
+     * The ejecta blanket entered at its full `r⁻³` value on the first sample
+     * past one crater radius, which is a vertical wall of 7–17% of every
+     * crater's depth at exactly the radius the rim crest sits on: 590 m on
+     * Iapetus, 432 m on a rocky airless world, across 1.7e-10 m of ground.
+     * `craters.ts` fades it in over the rim now.
+     *
+     * **The measurement is continuity itself, not a proxy for it.** A large
+     * adjacent-sample jump is not a defect — a crater rim is genuinely steep,
+     * and a scan fine enough to resolve one will report metres between
+     * neighbours. What separates steep from discontinuous is what happens when
+     * the two samples are brought together: on a continuous field the gap
+     * closes with the separation, and across a step it does not. So this finds
+     * the worst jump on a great circle, bisects it sixty times — down to a
+     * separation of ~1e-16 of the arc, sub-nanometre on every body here — and
+     * asserts the gap has gone with it.
+     *
+     * A metre is four hundred times the largest survivor measured (2.4 mm, on
+     * Miranda) and six hundred times smaller than the defect, so the bound is
+     * nowhere near either edge. Reintroducing the step fails it by three orders
+     * of magnitude on four of the five bodies.
+     */
+    const step = (body: Body): number => {
+      const from = Vec.normalize(vec3(0.3, 0.7, 0.64))
+      const to = Vec.normalize(vec3(0.9, -0.2, 0.31))
+      const at = (t: number): ReturnType<typeof vec3> =>
+        Vec.normalize(Vec.lerp(from, to, t))
+      const samples = 20_000
+      let worstAt = 0
+      let worst = 0
+      let previous = elevationAt(body.surface, at(0))
+      for (let i = 1; i <= samples; i += 1) {
+        const here = elevationAt(body.surface, at(i / samples))
+        if (Math.abs(here - previous) > worst) {
+          worst = Math.abs(here - previous)
+          worstAt = i / samples
+        }
+        previous = here
+      }
+      // Bisect onto the jump, keeping `lo` on the side the walk started from.
+      let lo = worstAt - 1 / samples
+      let hi = worstAt
+      const atLo = elevationAt(body.surface, at(lo))
+      for (let i = 0; i < 60; i += 1) {
+        const mid = (lo + hi) / 2
+        if (mid === lo || mid === hi) break
+        if (Math.abs(elevationAt(body.surface, at(mid)) - atLo) < worst / 2)
+          lo = mid
+        else hi = mid
+      }
+      return Math.abs(
+        elevationAt(body.surface, at(hi)) - elevationAt(body.surface, at(lo)),
+      )
+    }
+
+    for (const name of ['Luna', 'Mercury', 'Mars', 'Callisto', 'Miranda']) {
+      const body = find(name)
+      if (body.surface.maxElevation <= 0) continue
+      expect(`${name}: ${step(body) < 1}`).toBe(`${name}: true`)
+    }
+  })
+
   it('folds an overlapping stack through a soft ceiling', () => {
     fc.assert(
       fc.property(

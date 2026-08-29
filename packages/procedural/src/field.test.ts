@@ -33,9 +33,21 @@ describe('the lattice hash', () => {
     expect(fbmField(ROOT, 0.3, 0.7, -0.1).value.toFixed(12)).toBe(
       '-0.299323700480',
     )
+    /*
+     * The damped vector, and the only one on this list that moves when the
+     * damping normalization is corrected — the undamped `fbmField` and
+     * `ridgedField` above it, `gradientNoise3`, `latticeSeed` and both `pcg`
+     * lanes are all bit-identical, which is what says the change is confined to
+     * the divisor rather than to the noise underneath it.
+     *
+     * `TERRAIN_ALGORITHM` does not move for it. `origin/main` is on v1 and this
+     * branch already carries the one bump to v2, so v2 has never described a
+     * shipped world: changing what it means before it merges costs nothing,
+     * where a second bump would claim a migration that never happened.
+     */
     expect(
       fbmField(ROOT, 0.3, 0.7, -0.1, { damping: 4 }).value.toFixed(12),
-    ).toBe('-0.051141145526')
+    ).toBe('-0.414131443355')
     expect(ridgedField(ROOT, 0.3, 0.7, -0.1).value.toFixed(12)).toBe(
       '-0.107030897777',
     )

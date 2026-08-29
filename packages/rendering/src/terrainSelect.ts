@@ -115,7 +115,7 @@ export const DEFAULT_CELL_PIXELS = 16
  * The deepest level to ask for when the caller does not say.
  *
  * Callers with a body should pass `surfaceDetailFloor` instead, which measures
- * where *that* field stops having anything to add — level 13 to 17 across the
+ * where *that* field stops having anything to add — level 12 to 16 across the
  * zoo now that the field carries crater rims, against 7 to 10 for the three
  * bands it replaced. This is the fallback for a caller holding numbers rather
  * than a body, and it is deliberately shallower than any of them so that
@@ -135,7 +135,7 @@ export const DEFAULT_MAX_LEVEL = 12
  *
  * **It was 768, and the geology is what moved it.** A whole-disk selection
  * costs about ninety patches per level between the horizon and the ground, and
- * the band stack pushed `surfaceDetailFloor` from 7–10 to 13–17 — crater rims
+ * the band stack pushed `surfaceDetailFloor` from 7–10 to 12–16 — crater rims
  * are sharp, and resolving one to half a meter takes samples about seven times
  * finer than the rim is wide. Every extra level underfoot is another ring of
  * patches. Holding the old cap would have spent the phase's whole point: the

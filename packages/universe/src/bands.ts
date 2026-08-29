@@ -182,9 +182,20 @@ export function beltBand(
 
   const sample = plateAt(sketch, direction)
   if (sample === null) {
-    // Lobate scarps: long, low, one-sided. The `1 -` turns the ridge crest into
-    // a scarp face, and the cube keeps it to a few percent of the surface.
-    return (1 - ranges) ** 3 * 2 - 0.1
+    /*
+     * Lobate scarps: long, low, one-sided. The `1 -` turns the ridge crest into
+     * a scarp face, and the cube keeps it to a few percent of the surface.
+     *
+     * Clamped like every other exit from this function, and for the reason the
+     * band contract states: a band returns roughly [-1, 1] and is scaled by its
+     * share of the relief budget, so the shares summing to one is what bounds
+     * the stack ([ADR-0019](../../../docs/adr/0019-the-geology.md) § Decision).
+     * `(1 - ranges)³·2 - 0.1` reaches 1.9 as `ranges` goes to zero, and this is
+     * the branch every stagnant lid takes — which is most rocky worlds with air.
+     * Unclamped it was a 1.9 that turned a few percent of the surface into a
+     * uniform pedestal over the whole of it.
+     */
+    return clamp((1 - ranges) ** 3 * 2 - 0.1, -1, 1)
   }
 
   // A tenth of a radian is ~640 km on Earth, which is the width of an orogen —

@@ -284,16 +284,39 @@ function craterProfile(
   /*
    * The ejecta blanket, falling off as ~r⁻³ from the rim.
    *
-   * Faded to zero at the outer reach rather than truncated: an apron that stops
-   * with a step draws a circle at its own edge, and the circle survives into
-   * the normals. The `typeDraw` is the one place a crater's *kind* shows in the
-   * height field — a low-angle impact throws a lopsided blanket, and here that
-   * is a scale on the apron rather than a direction, because a direction would
-   * need a second axis this profile does not carry.
+   * Faded to zero at **both** ends rather than truncated at either: an apron
+   * that stops with a step draws a circle at its own edge, and the circle
+   * survives into the normals.
+   *
+   * The outer fade is the obvious one and the inner fade is the one that
+   * matters more, because `r⁻³` is at its largest exactly where the blanket
+   * begins. Entering at full value on the first sample past `t = 1` is a
+   * vertical wall of `0.12·depth·rimLife·(0.6 + 0.8·typeDraw)` — seven to
+   * seventeen percent of every crater's depth, on every crater on every body,
+   * at precisely the radius the rim crest sits on. Measured before the
+   * `smoothstep(1, RIM_OUTER, t)` below: a 590 m step across 1.7e-10 m of
+   * ground on Iapetus, 432 m on a rocky airless world, and a largest-sample-jump
+   * to p99.9 ratio of 14.4 where a C1 field gives ~1.
+   *
+   * That is not only a visible cliff. `elevationAt` is the one function the mesh
+   * and the contact test share, and the CDLOD morph is exact only because a
+   * parent and its child evaluate the same function — which two patches
+   * straddling a step at different levels do not
+   * ([ADR-0019](../../../docs/adr/0019-the-geology.md) § "One field, at every
+   * level"). `RIM_OUTER` is where the rim ring has already returned to zero, so
+   * the blanket is at full strength by the time it is the only term left.
+   *
+   * The `typeDraw` is the one place a crater's *kind* shows in the height field
+   * — a low-angle impact throws a lopsided blanket, and here that is a scale on
+   * the apron rather than a direction, because a direction would need a second
+   * axis this profile does not carry.
    */
   if (t > 1) {
     const r = t
-    const apron = (1 / (r * r * r)) * (1 - smoothstep(1.8, EJECTA_REACH, t))
+    const apron =
+      (1 / (r * r * r)) *
+      smoothstep(1, RIM_OUTER, t) *
+      (1 - smoothstep(1.8, EJECTA_REACH, t))
     height += 0.12 * depth * rimLife * (0.6 + 0.8 * typeDraw) * apron
   }
 

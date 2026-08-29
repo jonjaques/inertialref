@@ -5110,8 +5110,8 @@ stack is under three times the documented Phase 0 figure instead of five.
 | A bordered 65×65 patch              | 12.8 ms | 20 ms airless, 37 atmosphered     |
 | The same three bands, re-measured   | 12.8 ms | 3.6–3.8 ms                        |
 | `noise3`                            | 209 ns  | 47 ns                             |
-| `surfaceDetailFloor` across the zoo | 7–10    | 13–17                             |
-| Whole-disk selection, flight lens   | 410–480 | 420–1,008                         |
+| `surfaceDetailFloor` across the zoo | 7–10    | 12–16                             |
+| Whole-disk selection, flight lens   | 410–480 | 416–864                           |
 | `DEFAULT_MAX_PATCHES`               | 768     | 1,024 (208 MB in the corner case) |
 | `REQUESTS_PER_FRAME`                | 8       | 24                                |
 
@@ -5177,6 +5177,70 @@ Phase 4 synthesizes per pixel rather than meshes.
   point, and that is exactly where `1 − |n|` has its kink — so the skip that
   keeps the property honest fired on 196 of 200 samples. Integers over a prime
   divisor, and the surviving count is asserted.
+
+## The rim was a cliff and the damping was a bias (29 Aug 2026)
+
+Two defects in the geology's own field, both found by `invariant-auditor` against
+the phase that introduced them, both bounded by a stated invariant the code did
+not keep.
+
+**The ejecta blanket entered at full value one crater radius out, so every
+crater on every body had a vertical wall at its rim.** `r⁻³` is largest exactly
+where the blanket begins: the apron's outer end was faded to zero and its inner
+end was not, which is a step of 7–17% of the crater's depth at precisely the
+radius the rim crest sits on. Measured by bisecting to adjacent doubles along a
+great circle: **590 m across 1.7e-10 m of ground on Iapetus**, 432 m on a rocky
+airless world, 313 m on a rocky atmosphered one. The tell is the ratio of the
+largest adjacent-sample jump to the p99.9 jump — 14.4 on Iapetus where a C1
+field gives ~1 — because a crater rim is _genuinely_ steep and a large jump on
+its own proves nothing.
+
+That is not a cosmetic seam. `elevationAt` is the one function the mesh and the
+contact test share, and ADR-0019's "one field, at every level" is exact only
+because a parent and its child evaluate the same function — which two patches
+straddling a step at different levels do not. `craters.ts` fades the apron in
+over `smoothstep(1, RIM_OUTER, t)`, where the rim ring has already returned to
+zero.
+
+**`fbmField` and `ridgedField` divided a damped sum by an undamped norm**, which
+does not attenuate detail — it subtracts a bias. The amplitude the damping
+removed never reached the numerator and never left the divisor, so the mean
+walked toward zero and `ridgedField`'s `·2 − 1` remap walked it toward −1:
+measured means of **−0.644 at `damping: 1` and −0.890 at 6**, against +0.255
+undamped, on a function whose docstring promises "roughly [−1, 1] … so the two
+are interchangeable as band inputs".
+
+`bands.ts` then amplified it. The stagnant-lid branch returns
+`(1 − ranges)³·2 − 0.1`, which reaches 1.9 as `ranges` goes to zero — so the
+band meant to draw lobate scarps was a near-constant pedestal of **3,064 m on
+Mars and 2,625 m on Venus**, exceeding its stated [−1, 1] on 97.5% and 99.6% of
+samples. `norm += amplitude * damp` in both fields; the `clamp` every other exit
+from `beltBand` already had, on the one that did not.
+
+**The floor came down four levels and the cap got its headroom back.** With the
+step gone, `surfaceDetailFloor` reports 12–16 across the zoo where it reported
+13–17, Iapetus falling 16 → 12, and a whole-disk selection costs 416–864 patches
+where it cost 420–1,008. `DEFAULT_MAX_PATCHES` stays 1,024 and that is now a
+measurement rather than a hope: 864 is 84% of it, against 1,008 and 98% before —
+768 would still bite, so the raise in the phase before this one was right for a
+reason that survived the fix. `REQUESTS_PER_FRAME` and `MAX_CRATER_LEVELS` did
+not move; the baseline reports "budget bit on 0 steps" on every body.
+
+**The regression test measures continuity rather than steepness.** A large
+adjacent jump is not a defect; what separates steep from discontinuous is
+whether the gap closes as the two samples are brought together. `geology.test.ts`
+finds the worst jump on a great circle, bisects sixty times to a sub-nanometre
+separation, and asserts the gap went with it — 1 m bound against a 2.4 mm worst
+survivor and a 590 m defect. Reintroducing the step fails it on Luna by three
+orders of magnitude.
+
+`TERRAIN_ALGORITHM` does not move. `origin/main` is on v1 and the branch already
+carries the one bump to v2, so v2 has never described a shipped world: changing
+what it means before it merges costs nothing, where a second bump would claim a
+migration that never happened. One golden vector moves with it — the damped
+`fbmField` — and the undamped fields, `gradientNoise3`, `latticeSeed` and both
+`pcg` lanes are bit-identical, which is what says the change is in the divisor
+rather than in the noise underneath it.
 
 ## Known gaps
 

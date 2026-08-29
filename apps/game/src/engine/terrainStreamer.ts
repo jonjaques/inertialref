@@ -108,7 +108,7 @@ const PREFETCH_SECONDS: Seconds = 2
  * Heightfields to queue in one frame.
  *
  * It was eight, against a quadtree that bottomed out around level 10. The band
- * stack put crater rims into the field and `surfaceDetailFloor` moved to 13–17
+ * stack put crater rims into the field and `surfaceDetailFloor` moved to 12–16
  * to resolve them, which is three times as much tree to fetch: a landing that
  * used to sharpen in eighty frames wanted two hundred and fifty, and the
  * ladder is strictly serial — a level cannot refine until all four children of

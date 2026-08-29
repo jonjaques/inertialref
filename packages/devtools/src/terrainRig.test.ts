@@ -292,16 +292,24 @@ describe('a simulated descent', () => {
        * to the level at the horizon costs about ninety patches per level
        * between the two, and changing the tolerance moves it by a few percent.
        *
-       * 420 to 1,008 across the zoo's twenty-four site descents, where the
+       * 416 to 864 across the zoo's twenty-four site descents, where the
        * three bands this replaced cost 410 to 480 — the band stack put crater
-       * rims in the field, `surfaceDetailFloor` went from 7–10 to 13–17 to
+       * rims in the field, `surfaceDetailFloor` went from 7–10 to 12–16 to
        * resolve them, and every extra level underfoot is another ring. The
        * assertion is here so that a change to either is a change to a number
        * rather than a surprise in a frame.
+       *
+       * **Nine tenths of the cap, taken from the constant rather than typed as
+       * a literal.** A bare `< 1_024` is the cap itself, which can only say
+       * "the selection did not saturate" — it passes at 1,023 with the cap
+       * doing the work it is supposed to be a safety net for, and raising
+       * `DEFAULT_MAX_PATCHES` silently raises the assertion with it. 864 is the
+       * measured worst and 921 is the bound, so what this says is that there is
+       * still headroom, which is the property the constant was raised to have.
        */
-      expect(`${entry.name}: ${report.peakDrawn < 1_024}`).toBe(
-        `${entry.name}: true`,
-      )
+      expect(
+        `${entry.name}: ${report.peakDrawn < DEFAULT_MAX_PATCHES * 0.9}`,
+      ).toBe(`${entry.name}: true`)
       const wanted = report.steps.reduce((sum, step) => sum + step.wanted, 0)
       expect(report.totalRequests + report.cacheHits).toBe(wanted)
       expect(report.uniqueRegions).toBeLessThanOrEqual(report.totalRequests)

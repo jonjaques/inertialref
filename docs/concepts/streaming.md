@@ -137,8 +137,8 @@ patches to draw geometry the resolve filter averages away.
 
 **Stop where the field stops.** Past some level a patch is a bilinear upsample of
 its parent. `surfaceDetailFloor` measures that per body from the field itself
-rather than assuming it, and it lands at level 13 to 17 across the zoo — 13 on
-Miranda, 17 on the atmosphered rocky world, as `pnpm sim --terrain-baseline`
+rather than assuming it, and it lands at level 12 to 16 across the zoo — 12 on
+Iapetus, 16 on the atmosphered rocky world, as `pnpm sim --terrain-baseline`
 prints it against each body's descent. The
 [band stack](rendering.md#terrain-meshing) puts crater rims in the field, a rim
 is about a seventh of its crater wide, and resolving one to half a meter takes
