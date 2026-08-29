@@ -10,11 +10,13 @@ import {
   Vector2,
   Vector3,
 } from 'three/webgpu'
+import { Quaternion as Q, Vec } from '@inertialref/spatial'
 import { HEIGHTFIELD_RESOLUTION } from '@inertialref/universe'
 import { patchIndices } from '@inertialref/rendering'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { GEOMETRY_CACHE } from '../engine/terrainStreamer.ts'
-import { createTerrainMaterial } from '../render/materials.ts'
+import { texturesFor } from '../render/planetTextures.ts'
+import { createTerrainMaterial } from '../render/terrain.ts'
 import { warmAtMount, warmCompile, warmRenderer } from '../render/warmup.ts'
 
 /**
@@ -39,7 +41,8 @@ import { warmAtMount, warmCompile, warmRenderer } from '../render/warmup.ts'
 export function TerrainPatches({ engine }: { engine: GameEngine }) {
   const group = useRef<Group>(null)
   const meshes = useMemo(() => new Map<string, Mesh>(), [])
-  const material = useMemo(() => createTerrainMaterial(), [])
+  const terrain = useMemo(() => createTerrainMaterial(), [])
+  const material = terrain.material
   /*
    * One index attribute for the session. It is a function of the resolution
    * alone, and the renderer keys its GPU buffers on the attribute instance — so
@@ -50,6 +53,9 @@ export function TerrainPatches({ engine }: { engine: GameEngine }) {
     [],
   )
   const gl = useThree((state) => state.gl)
+  const anisotropy = useThree(
+    (state) => state.gl.capabilities?.getMaxAnisotropy?.() ?? 8,
+  )
   const camera = useThree((state) => state.camera)
   const scene = useThree((state) => state.scene)
 
@@ -93,6 +99,7 @@ export function TerrainPatches({ engine }: { engine: GameEngine }) {
         const dummy = new Mesh(geometry, material)
         dummy.userData.eyeLocal = new Vector3()
         dummy.userData.morphBand = new Vector2(1, 2)
+        dummy.userData.anchor = new Vector3(0, 0, 1)
         await warmCompile(warmRenderer(gl), {
           object: dummy,
           camera,
@@ -119,10 +126,47 @@ export function TerrainPatches({ engine }: { engine: GameEngine }) {
       height: gl.domElement.height,
     }
     const state = engine.terrainState()
-    // The ground is the picture of the planet now that the quadtree draws the
-    // whole disk, so it wears the body's own published color rather than one
-    // sandstone for every world. Phase 3 replaces this with the biome splat.
-    material.color.setRGB(state.colour.r, state.colour.g, state.colour.b)
+    /*
+     * The body's own appearance, and the star that lights it.
+     *
+     * The sun arrives in **body-fixed** axes because everything in the material
+     * is: the shading normal is body-fixed because the geometry is, and the eye
+     * already had to be for the morph. Rotating one vector on the CPU here is
+     * cheaper and has one fewer frame in it than transforming the normal to
+     * world space per fragment to meet a world-space sun.
+     */
+    if (state.palette !== null && state.orientation !== null) {
+      terrain.setPalette(state.palette, state.meanRadius)
+      /*
+       * The same texture set `Bodies.tsx` draws the sphere from, looked up by
+       * the same key. Not passed down from there, because the two components
+       * see different frames of the same body and the loader is a cache: asking
+       * it again is a map lookup, and sharing a reference would make the
+       * terrain's material depend on whether the body happened to be in the
+       * drawn set this frame.
+       */
+      terrain.setAlbedoMap(
+        texturesFor(state.palette.textureKey, anisotropy).albedo,
+      )
+      const key = engine.scene()?.stars[0]
+      if (key !== undefined && state.centre !== null) {
+        const toStar = Vec.sub(key.placement.position, state.centre)
+        // A body sitting exactly on its star leaves this zero-length, and a
+        // normalized zero is a NaN across the whole surface.
+        if (Vec.length(toStar) > 0) {
+          const local = Q.rotate(
+            Q.conjugate(state.orientation),
+            Vec.normalize(toStar),
+          )
+          terrain.sunDirection.value.set(local.x, local.y, local.z)
+        }
+        terrain.sunColour.value.setRGB(
+          key.color.r,
+          key.color.g,
+          key.color.b,
+        )
+      }
+    }
     const seen = new Set<string>()
 
     for (const placed of state.patches) {
@@ -192,6 +236,13 @@ export function TerrainPatches({ engine }: { engine: GameEngine }) {
         mesh = new Mesh(geometry, material)
         mesh.userData.eyeLocal = new Vector3()
         mesh.userData.morphBand = new Vector2()
+        // Body-fixed and constant for the life of the patch, which is what
+        // turns an anchor-relative vertex back into a place on the planet.
+        mesh.userData.anchor = new Vector3(
+          patch.anchor.x,
+          patch.anchor.y,
+          patch.anchor.z,
+        )
         mesh.userData.patch = patch
         meshes.set(key, mesh)
       }

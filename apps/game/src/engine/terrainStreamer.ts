@@ -41,6 +41,8 @@ import {
   type SelectedPatch,
   selectTerrain,
   type TerrainEye,
+  type TerrainPalette,
+  terrainPalette,
   terrainPatchKey,
 } from '@inertialref/rendering'
 import { generateHeightfieldTask, type WorkerPool } from '@inertialref/workers'
@@ -339,17 +341,26 @@ export interface TerrainState {
   readonly cached: number
   readonly level: number
   /**
-   * The body's own published color, linear.
+   * What the ground on this body is made of, or null when nothing is streaming.
    *
-   * Terrain has no material of its own yet — Phase 3 is the biome splat, the
-   * crater rays and the mapped bodies' albedo — and one flat sandstone color
-   * for every world was survivable while the streamed set was nine patches near
-   * the ground. It is not survivable now that the quadtree draws the whole
-   * disk: the ground *is* the picture of the planet, and Callisto and Mars are
-   * not the same color. This is the same number the datum sphere is tinted
-   * with, so the two agree until there is something better to say.
+   * Derived from the body every frame rather than kept: it is twenty multiplies
+   * and a cache keyed by body address is a thing to invalidate on a retarget,
+   * a reseed and a catalog bump.
    */
-  readonly colour: { r: number; g: number; b: number }
+  readonly palette: TerrainPalette | null
+  /**
+   * Body-fixed axes to render space — the rotation every patch is drawn with.
+   *
+   * On the state rather than read off `patches[0]` because the renderer needs
+   * it in the frame where the drawn set is *empty*: that is exactly the frame a
+   * body is acquired, and the material's uniforms are written before there is
+   * anything to draw with them.
+   */
+  readonly orientation: Q.Quat | null
+  /** The body's centre in render space, for the direction of its star. */
+  readonly centre: Vec3 | null
+  /** `(a·b·c)^(1/3)` of the body, meters. */
+  readonly meanRadius: Meters
 }
 
 export class TerrainStreamer {
@@ -379,7 +390,8 @@ export class TerrainStreamer {
     /** The camera in body-fixed axes, from the body's center. */
     eye: Vec3
   } | null = null
-  #colour = { r: 0.61, g: 0.51, b: 0.4 }
+  #palette: TerrainPalette | null = null
+  #meanRadius = 1
   /**
    * Last eye in body-fixed axes, for the velocity the request set is
    * extrapolated along.
@@ -519,7 +531,10 @@ export class TerrainStreamer {
       pending: this.#inFlight.size,
       cached: this.#fields.size,
       level: this.#deepest,
-      colour: this.#colour,
+      palette: this.#palette,
+      orientation: pose?.orientation ?? null,
+      centre: pose?.position ?? null,
+      meanRadius: this.#meanRadius,
     }
   }
 
@@ -591,7 +606,8 @@ export class TerrainStreamer {
       scale: body.placement.compression,
       eye: eyeLocal,
     }
-    this.#colour = surface.appearance.colour
+    this.#palette = terrainPalette(surface)
+    this.#meanRadius = surface.surface.grammar.meanRadius
 
     const { lens, viewport } = this.lensView ?? DEFAULT_LENS_VIEW
     this.#lensView = this.lensView ?? DEFAULT_LENS_VIEW
@@ -936,6 +952,10 @@ export class TerrainStreamer {
     this.#starved = 0
     this.#saturated = false
     this.#pose = null
+    // Same argument as the lens below: a palette beside `patches: 0` describes
+    // a body this streamer is no longer drawing, and the material would keep
+    // wearing the last world's ground.
+    this.#palette = null
     // The lens is a selection mirror like the rest: reporting one beside
     // `patches: 0` claims a selection was made against it, and none was.
     this.#lensView = null
