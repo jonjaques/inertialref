@@ -17,6 +17,7 @@ import {
   beltBand,
   hypsometryBand,
   iceBand,
+  plateContext,
   reliefBand,
   volcanicBand,
 } from './bands.ts'
@@ -287,13 +288,16 @@ export function elevationAt(
   const budget = surface.maxElevation
   if (budget <= 0) return 0
   const bands = grammar.bands
+  // Three of the bands below read the plate this sample sits on. One lookup,
+  // handed to all three — see `plateContext`.
+  const plates = plateContext(sketch, d)
 
   let height =
     bands.hypsometry *
-      hypsometryBand(sketch, grammar, d, bands.hypsometry * budget) +
-    bands.belts * beltBand(sketch, grammar, d, bands.belts * budget) +
+      hypsometryBand(sketch, grammar, plates, d, bands.hypsometry * budget) +
+    bands.belts * beltBand(sketch, grammar, plates, d, bands.belts * budget) +
     bands.volcanism *
-      volcanicBand(sketch, grammar, d, bands.volcanism * budget) +
+      volcanicBand(sketch, grammar, plates, d, bands.volcanism * budget) +
     bands.relief *
       reliefBand(sketch, grammar, surface.roughness, d, bands.relief * budget)
   if (bands.ice > 0) {

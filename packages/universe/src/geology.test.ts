@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { rootSeed, type Seed } from '@inertialref/procedural'
 import { Vec, vec3 } from '@inertialref/spatial'
 import { regionAddress } from './address.ts'
-import { hypsometryBand } from './bands.ts'
+import { hypsometryBand, plateContext } from './bands.ts'
 import { craterCountAbove, craterField, softLimit } from './craters.ts'
 import { TEST_CATALOG } from './catalog/fixture.ts'
 import { catalogStub, MILKY_WAY } from './galaxy.ts'
@@ -501,7 +501,13 @@ describe('the band stack', () => {
       const peak =
         body.surface.grammar.bands.hypsometry * body.surface.maxElevation
       const values = [...sphere(6_000)].map((d) =>
-        hypsometryBand(sketch, body.surface.grammar, d, peak),
+        hypsometryBand(
+          sketch,
+          body.surface.grammar,
+          plateContext(sketch, d),
+          d,
+          peak,
+        ),
       )
       const n = values.length
       const mean = values.reduce((sum, v) => sum + v, 0) / n
