@@ -442,7 +442,6 @@ const detailFloorCache = new WeakMap<SurfaceParameters, Map<string, number>>()
  * is ground that is right to a meter instead of to half of one.
  */
 export function surfaceDetailFloor(
-  radius: Meters,
   surface: SurfaceParameters,
   resolution: number = HEIGHTFIELD_RESOLUTION,
   tolerance: Meters = TERRAIN_DETAIL_TOLERANCE,
@@ -450,12 +449,18 @@ export function surfaceDetailFloor(
   const held = detailFloorCache.get(surface)
   /*
    * A string, because the arithmetic version collided. `radius * 1e6 +
-   * resolution + tolerance` folds three numbers additively, so (65, 0.5) and
+   * resolution + tolerance` folds the numbers additively, so (65, 0.5) and
    * (64, 1.5) hash the same and whichever call ran first won for both — a pure
    * function whose answer depended on the order it was asked in, which is the
    * one thing generation may never do.
+   *
+   * `radius` is not in it because it is not read: the field's angular scales
+   * convert through `grammar.meanRadius`, which is on the surface this is
+   * already keyed by. It was a parameter and a key term, so a caller passing the
+   * equatorial radius and one passing the volumetric one bought two entries and
+   * two five-hundred-sample searches for one answer.
    */
-  const key = `${radius}|${resolution}|${tolerance}`
+  const key = `${resolution}|${tolerance}`
   const cached = held?.get(key)
   if (cached !== undefined) return cached
 

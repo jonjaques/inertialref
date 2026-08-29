@@ -41,6 +41,7 @@ import {
   type StarSystem,
   type SystemId,
   type UniverseAddress,
+  volumetricMeanRadius,
   walkBodies,
 } from '@inertialref/universe'
 import { currentSystemOf, resolveDestination } from './travel.ts'
@@ -847,7 +848,19 @@ function geologyGroup(body: Body): FactGroup | null {
     {
       label: 'Terrain',
       value: archetypeName(g.archetype),
-      note: `${significant(g.gravity)} m/s² at the datum`,
+      /*
+       * `gravity(...)` over the body's volumetric mean radius, not
+       * `grammar.gravity`, so this row and the Physical card's agree.
+       *
+       * The grammar's copy is a *generation input*: `makeSurface` derives it
+       * before the body has a figure and therefore from `radius`, the largest
+       * half-extent, which its own docstring says overstates the mean by a few
+       * percent on an irregular moon and by the flattening on an oblate planet.
+       * That is fine for choosing a crater ladder and wrong for a panel — two
+       * rows of one dossier quoting different surface gravities for one world is
+       * the kind of thing ADR-0014 exists to prevent.
+       */
+      note: `${significant(gravity(body.mass, volumetricMeanRadius(body)))} m/s² at the datum`,
     },
     {
       label: 'Relief',

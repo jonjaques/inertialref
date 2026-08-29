@@ -118,9 +118,9 @@ export const DEFAULT_CELL_PIXELS = 16
  * where *that* field stops having anything to add — level 12 to 16 across the
  * zoo now that the field carries crater rims, against 7 to 10 for the three
  * bands it replaced. This is the fallback for a caller holding numbers rather
- * than a body, and it is deliberately shallower than any of them so that
- * forgetting to pass one is visible as coarse ground rather than as a budget
- * that will not close.
+ * than a body, and it is deliberately no deeper than any of them — it *is* the
+ * shallowest the zoo measures — so forgetting to pass one is visible as coarse
+ * ground rather than as a budget that will not close.
  */
 export const DEFAULT_MAX_LEVEL = 12
 

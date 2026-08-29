@@ -159,7 +159,7 @@ describe('a simulated descent', () => {
     const session = live()
     for (const entry of terrainZoo(session.world)) {
       const body = bodyAt(session, entry.address)
-      const floor = surfaceDetailFloor(body.radius, body.surface)
+      const floor = surfaceDetailFloor(body.surface)
       const report = simulateDescent(body, { site: 'basin', trackDegrees: 0 })
       const levels = report.levels
       expect(`${entry.name}: ${levels.length > 4}`).toBe(`${entry.name}: true`)
@@ -198,7 +198,7 @@ describe('a simulated descent', () => {
       const report = simulateDescent(body, { site, trackDegrees: 0 })
       return report.levels[report.levels.length - 1] ?? -1
     }
-    const floor = surfaceDetailFloor(body.radius, body.surface)
+    const floor = surfaceDetailFloor(body.surface)
     expect(last('basin')).toBe(floor)
     expect(last('summit')).toBe(floor)
   })
@@ -223,7 +223,7 @@ describe('a simulated descent', () => {
       (entry) => entry.archetype === 'icy-active',
     )
     const body = bodyAt(session, active?.address ?? '')
-    const floor = surfaceDetailFloor(body.radius, body.surface)
+    const floor = surfaceDetailFloor(body.surface)
     for (const site of ['summit', 'rough', 'basin']) {
       const report = simulateDescent(body, { site, trackDegrees: 0 })
       expect(`${site}: ${report.levels[report.levels.length - 1]}`).toBe(
@@ -265,7 +265,7 @@ describe('a simulated descent', () => {
       trackDegrees: 10,
     })
     expect(report.levels).toEqual([
-      surfaceDetailFloor(body.radius, body.surface),
+      surfaceDetailFloor(body.surface),
     ])
     expect(report.levelChanges).toBe(0)
   })
@@ -292,7 +292,7 @@ describe('a simulated descent', () => {
        * to the level at the horizon costs about ninety patches per level
        * between the two, and changing the tolerance moves it by a few percent.
        *
-       * 416 to 864 across the zoo's twenty-four site descents, where the
+       * 380 to 862 across the zoo's twenty-four site descents, where the
        * three bands this replaced cost 410 to 480 — the band stack put crater
        * rims in the field, `surfaceDetailFloor` went from 7–10 to 12–16 to
        * resolve them, and every extra level underfoot is another ring. The
@@ -303,7 +303,7 @@ describe('a simulated descent', () => {
        * a literal.** A bare `< 1_024` is the cap itself, which can only say
        * "the selection did not saturate" — it passes at 1,023 with the cap
        * doing the work it is supposed to be a safety net for, and raising
-       * `DEFAULT_MAX_PATCHES` silently raises the assertion with it. 864 is the
+       * `DEFAULT_MAX_PATCHES` silently raises the assertion with it. 862 is the
        * measured worst and 921 is the bound, so what this says is that there is
        * still headroom, which is the property the constant was raised to have.
        */

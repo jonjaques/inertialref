@@ -136,14 +136,22 @@ export const ARC_MARGIN = 0.06
  * the bands are pure functions of a direction and the direction changes every
  * sample. What it saves is stated in the module header.
  *
- * `across` is folded in for the same reason and computed only where it is read.
- * Both bands that consume it gate on `boundary` first — the belts at
- * `BELT_MARGIN` and the arc cones at the narrower `ARC_MARGIN` — so the wider
- * of the two gates decides whether anybody wants the number, and it is weighted
- * at that wider margin for both of them. The arc could ask for its own and
- * would be asking for strictly less: `ARC_MARGIN` is inside `BELT_MARGIN`, so
- * the narrower weighting is the same pairs with a sharper falloff and a second
- * pass to compute it.
+ * `across` is folded in for the same reason and computed only where it is read:
+ * it is the *belts'* convergence, weighted at `BELT_MARGIN`, and `beltBand` is
+ * the only band that reads it.
+ *
+ * **The arc computes its own, and sharing this one was wrong.** `ARC_MARGIN` is
+ * inside `BELT_MARGIN`, which reads as the arc asking for strictly less — but
+ * `convergence` returns `total/weight`, a normalised mean, and re-weighting a
+ * mean moves it in either direction rather than shrinking it. Measured on Earth
+ * over the 11,833 of 40,000 directions the arc actually reads: the two disagree
+ * in 3,510 of them, worst case a belt reading of 0.0005 — pure transform, no arc
+ * at all — against an arc reading of 1.0000, fully convergent with cones at full
+ * height, at a `boundary` of 0.0583 with three plates in range. Through
+ * `edge · continental · across · cones³ · 1.6` that is 436 m of a 802 m
+ * volcanism budget. A second `convergence` pass costs a loop over two to four
+ * plates on the thin band where `boundary < ARC_MARGIN`, which is what the arc's
+ * own gate was already paying for.
  *
  * **`across` is defined only where `edge > 0`, and it is zero rather than
  * continuous outside that.** It steps at `boundary === BELT_MARGIN`, where the
@@ -349,8 +357,12 @@ export function volcanicBand(
   }
 
   const sample = plates.sample
-  if (sample !== null) {
-    const edge = 1 - smoothstep(0, ARC_MARGIN, sample.boundary)
+  // The gate before the work it gates, as in `beltBand`: an arc exists within
+  // `ARC_MARGIN` of a boundary, which on a plate world is a few percent of the
+  // sphere, and everywhere else this whole block multiplies out to zero.
+  const edge =
+    sample === null ? 0 : 1 - smoothstep(0, ARC_MARGIN, sample.boundary)
+  if (sample !== null && edge > 0) {
     /*
      * Continentalness scales the arc rather than gating it.
      *
@@ -367,8 +379,9 @@ export function volcanicBand(
       (plate) => (plate.continental ? 1 : 0),
       ARC_MARGIN,
     )
-    if (edge > 0 && continental > 0) {
-      const across = Math.max(0, plates.across)
+    if (continental > 0) {
+      // The arc's own margin, not the belts'. See `plateContext`.
+      const across = Math.max(0, convergence(sample, direction, ARC_MARGIN))
       const cycles = 60
       const cones =
         ridged3(
@@ -536,7 +549,8 @@ function blockField(seed: Seed, direction: Vec3, cells: number): number {
  * it reading as noise — a warped field bends its own ridges around, which is
  * what a landscape that has been drained and re-drained looks like — and the
  * damping is the erosion stand-in: on an airless world it is zero and rims stay
- * razor-edged, under a thick atmosphere it is 24 and everything reads as worn.
+ * razor-edged, under a thick atmosphere it is 1.2 and the band is worn to two
+ * fifths of its roughness and half its amplitude.
  */
 export function reliefBand(
   sketch: TerrainSketch,

@@ -172,7 +172,15 @@ export interface SurfaceParameters {
   readonly seed: Seed
   /** Peak-to-datum elevation, meters. `grammar.reliefLimit`, restated. */
   readonly maxElevation: Meters
-  /** Base spatial frequency of the terrain, cycles per body radius. */
+  /**
+   * Base spatial frequency of the *relief* band, cycles per body radius.
+   *
+   * One band of six rather than the whole field: it sets `reliefBand`'s cycle
+   * count and nothing else reads it. Every other band's scale comes from the
+   * grammar — a crater ladder from the largest crater, an orogen from
+   * `BELT_MARGIN`, a hotspot from the plate count — because those are properties
+   * of the geology rather than a dial on the noise.
+   */
   readonly roughness: number
   /** Ocean datum as a fraction of maxElevation, or null for a dry world. */
   readonly seaLevel: number | null

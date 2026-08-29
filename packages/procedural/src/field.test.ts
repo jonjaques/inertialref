@@ -1,6 +1,7 @@
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
 import { fbmField, gradientNoise3, ridgedField } from './field.ts'
+import { fbm3, noise3, ridged3 } from './noise.ts'
 import { latticeSeed, pcg3d, pcg4d, toUnit } from './lattice.ts'
 import { falloff, ring, smoothstep } from './profile.ts'
 import { rootSeed } from './seed.ts'
@@ -27,30 +28,31 @@ describe('the lattice hash', () => {
       w: 1_261_381_209,
     })
     expect(latticeSeed(ROOT)).toBe(2_978_377_386)
-    expect(gradientNoise3(ROOT, 1.5, -2.25, 3.125).value.toFixed(12)).toBe(
-      '-0.242112450302',
-    )
-    expect(fbmField(ROOT, 0.3, 0.7, -0.1).value.toFixed(12)).toBe(
-      '-0.299323700480',
-    )
     /*
-     * The damped vector, and the only one on this list that moves when the
-     * damping normalization is corrected — the undamped `fbmField` and
-     * `ridgedField` above it, `gradientNoise3`, `latticeSeed` and both `pcg`
-     * lanes are all bit-identical, which is what says the change is confined to
-     * the divisor rather than to the noise underneath it.
+     * The gradient lattice moved when `gradientAt` stopped hashing with `pcg3d`
+     * and started sharing `noise3`'s `hash3`, which is what makes the three
+     * vectors below equal to their `noise.ts` counterparts to the last printed
+     * digit rather than merely close. `carries the same field as noise3` holds
+     * that; these pin the arithmetic underneath it.
      *
      * `TERRAIN_ALGORITHM` does not move for it. `origin/main` is on v1 and this
      * branch already carries the one bump to v2, so v2 has never described a
      * shipped world: changing what it means before it merges costs nothing,
      * where a second bump would claim a migration that never happened.
      */
+    expect(gradientNoise3(ROOT, 1.5, -2.25, 3.125).value.toFixed(12)).toBe(
+      '-0.279786154628',
+    )
+    expect(fbmField(ROOT, 0.3, 0.7, -0.1).value.toFixed(12)).toBe(
+      '0.017432449097',
+    )
+    expect(ridgedField(ROOT, 0.3, 0.7, -0.1).value.toFixed(12)).toBe(
+      '0.580459350306',
+    )
+    // The damped vector, which has no undamped counterpart to agree with.
     expect(
       fbmField(ROOT, 0.3, 0.7, -0.1, { damping: 4 }).value.toFixed(12),
-    ).toBe('-0.414131443355')
-    expect(ridgedField(ROOT, 0.3, 0.7, -0.1).value.toFixed(12)).toBe(
-      '-0.107030897777',
-    )
+    ).toBe('0.005871701863')
   })
 
   it('gives every lane the full 32 bits and decorrelates neighbors', () => {
@@ -96,40 +98,44 @@ describe('the lattice hash', () => {
     expect(latticeSeed(a)).not.toBe(latticeSeed({ ...a, d: 5 }))
   })
 
-  it('picks the same gradient the lattice hash would', () => {
+  it('carries the same field as `noise3`, undamped', () => {
     /*
-     * `gradientNoise3` writes `pcg3d`'s first lane out by hand, because calling
-     * it allocates a three-lane object per corner and that is 39% of an eroded
-     * patch (`field.ts`). Two spellings of one hash is how the gradient lattice
-     * comes to disagree with the crater lattice, so this holds them together.
+     * The claim `bands.ts` makes when it picks between `ridged3` and
+     * `ridgedField` on whether the world erodes: the two give "the same number",
+     * so an amplitude tuned against one reads the same against the other.
      *
-     * At an integer lattice point the fade curve and its slope are both zero, so
-     * the returned gradient *is* the corner's own edge vector — which makes the
-     * table lookup readable from the outside without exporting anything.
+     * It was false. `gradientAt` hashed with `pcg3d` where `noise3` hashes with
+     * `hash3`, which is a different lattice and therefore a different landscape
+     * — measured at 0.86 of separation on `fbm` and 1.25 on `ridged`, on bands
+     * whose contract is [-1, 1]. Two worlds a pascal apart got unrelated
+     * mountain ranges rather than the same ones slightly more worn. Sharing the
+     * hash is what makes the sentence true, and this is what keeps it true.
+     *
+     * Float association is the only slack: the analytic form factors the
+     * trilinear blend so one set of coefficients serves the value and the fade
+     * half of the derivative, where `noise3` nests `lerp`s. Same arithmetic,
+     * different order, ~1e-15 apart.
      */
-    const EDGES: readonly (readonly [number, number, number])[] = [
-      [1, 1, 0],
-      [-1, 1, 0],
-      [1, -1, 0],
-      [-1, -1, 0],
-      [1, 0, 1],
-      [-1, 0, 1],
-      [1, 0, -1],
-      [-1, 0, -1],
-      [0, 1, 1],
-      [0, -1, 1],
-      [0, 1, -1],
-      [0, -1, -1],
-    ]
-    for (let ix = -9; ix <= 9; ix += 1) {
-      for (let iy = -7; iy <= 7; iy += 1) {
-        for (let iz = -5; iz <= 5; iz += 1) {
-          const n = gradientNoise3(ROOT, ix, iy, iz)
-          const edge = EDGES[pcg3d(ix ^ (ROOT.a | 0), iy, iz).x % 12]
-          expect([n.dx, n.dy, n.dz]).toEqual(edge)
-        }
-      }
+    let worst = 0
+    for (let i = 0; i < 4_000; i += 1) {
+      const x = Math.cos(i * 1.7) * 40 + i * 0.013
+      const y = Math.sin(i * 2.3) * 40 - i * 0.007
+      const z = Math.cos(i * 0.91) * 40 + i * 0.019
+      const o = { octaves: 7 }
+      worst = Math.max(
+        worst,
+        Math.abs(noise3(ROOT, x, y, z) - gradientNoise3(ROOT, x, y, z).value),
+        Math.abs(
+          fbm3(ROOT, x, y, z, o) -
+            fbmField(ROOT, x, y, z, { ...o, damping: 0 }).value,
+        ),
+        Math.abs(
+          ridged3(ROOT, x, y, z, o) -
+            ridgedField(ROOT, x, y, z, { ...o, damping: 0 }).value,
+        ),
+      )
     }
+    expect(worst).toBeLessThan(1e-12)
   })
 
   it('converts to floats in range', () => {

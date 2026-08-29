@@ -342,7 +342,7 @@ export function simulateDescent(
   const lens = options.lens ?? DEFAULT_LENS
   const viewport = options.viewport ?? DEFAULT_VIEWPORT
   const select: TerrainSelectOptions = {
-    maxLevel: options.maxLevel ?? surfaceDetailFloor(body.radius, body.surface),
+    maxLevel: options.maxLevel ?? surfaceDetailFloor(body.surface),
     cellPixels: options.cellPixels,
     lens,
     viewport,

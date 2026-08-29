@@ -96,7 +96,7 @@ const DEFAULT_LENS_VIEW: LensView = {
 /**
  * How far ahead of the camera the request set is taken, in seconds.
  *
- * Long enough for a worker to answer — a patch is 9 to 38 ms of generation
+ * Long enough for a worker to answer — a patch is 9 to 37 ms of generation
  * across the zoo and the pool is a handful of them — and short enough that a
  * turn does not spend the budget on ground nobody looks at. The extrapolation is linear in the eye's
  * own motion and ignores the body's rotation over the interval, which at two
@@ -108,7 +108,7 @@ const PREFETCH_SECONDS: Seconds = 2
  * Heightfields to queue in one frame.
  *
  * It was eight, against a quadtree that bottomed out around level 10. The band
- * stack put crater rims into the field and `surfaceDetailFloor` moved to 12–16
+ * stack put crater rims into the field and `surfaceDetailFloor` moved to 10–16
  * to resolve them, which is three times as much tree to fetch: a landing that
  * used to sharpen in eighty frames wanted two hundred and fifty, and the
  * ladder is strictly serial — a level cannot refine until all four children of
@@ -121,6 +121,28 @@ const PREFETCH_SECONDS: Seconds = 2
  * three times the rate, same amount of ground in flight.
  */
 const REQUESTS_PER_FRAME = 24
+
+/**
+ * How many heightfields may be outstanding at once.
+ *
+ * `REQUESTS_PER_FRAME` is a *rate* and this is the *depth*, and without the
+ * second the first is unbounded: `#request` filtered on "not cached and not
+ * already asked for" and nothing consulted how much was already in flight, so at
+ * 24 a frame it committed the whole 400-to-1,024-patch wanted set inside forty
+ * frames. `WorkerPool`'s queue is uncapped and the pool is two to four workers
+ * at 9 to 37 ms a patch, which drains 50 to 400 a second against a submit rate
+ * of 1,440 — so after a camera turn the pool spent seconds generating ground
+ * nobody was looking at before it reached the new selection, and
+ * `PREFETCH_SECONDS` was describing a queue rather than a lookahead.
+ *
+ * A hundred and twenty-eight is a little over one rung of a whole-disk
+ * selection, which is about ninety patches. That is the unit that matters,
+ * because the ladder is strictly serial — a level cannot refine until all four
+ * children of every node on it have arrived — so a cap below a rung would stall
+ * the descent for exactly the reason the rate was tripled. Above it, the extra
+ * is only queue.
+ */
+const IN_FLIGHT_CAP = 128
 
 /**
  * Every level of the selection, coarsest first.
@@ -540,7 +562,7 @@ export class TerrainStreamer {
     }
 
     const options = {
-      maxLevel: surfaceDetailFloor(surface.radius, surface.surface),
+      maxLevel: surfaceDetailFloor(surface.surface),
       lens,
       viewport,
     }
@@ -771,7 +793,16 @@ export class TerrainStreamer {
         seen.add(key)
         return !this.#fields.has(key) && !this.#inFlight.has(key)
       })
-      .slice(0, REQUESTS_PER_FRAME)
+      // `Math.max(0, …)` because a negative end index slices from the *back* of
+      // the array — an over-full queue would have asked for the tail of the
+      // wanted list rather than for nothing.
+      .slice(
+        0,
+        Math.max(
+          0,
+          Math.min(REQUESTS_PER_FRAME, IN_FLIGHT_CAP - this.#inFlight.size),
+        ),
+      )
 
     for (const region of missing) {
       const key = this.#key(region)
@@ -820,7 +851,7 @@ export class TerrainStreamer {
    * pyramid — rather than the two selections' leaves. `#request` re-asks for
    * every rung of the pyramid every frame, so a keep set without them turns
    * the cap into a treadmill: evict a rung, re-request it next frame,
-   * regenerate it at 9 to 38 ms, evict it again.
+   * regenerate it at 9 to 37 ms, evict it again.
    */
   #evict(requested: readonly RegionAddress[]): void {
     if (

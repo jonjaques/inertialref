@@ -146,8 +146,28 @@ function surfaceOf(
     temperature,
     tidalProxy: tidal,
     hasOcean: seaLevel !== null,
-    // Unused wherever `publishedRelief` is non-null, which is every body in
-    // this table that has any relief at all.
+    /*
+     * Unused, because `publishedRelief` is never null here — and that is a seam
+     * rather than a tidy default.
+     *
+     * `relief` is zero for the eleven *round* bodies in `smallBodies.ts` that
+     * nobody has mapped — Pluto, Charon, Eris, Ceres, Makemake and the rest —
+     * and `??` does not fall back on zero, so they take the published branch
+     * with a published value of nothing: `maxElevation` 0, `elevationAt`
+     * returning at its `budget <= 0` guard, a perfectly smooth sphere streamed
+     * for each. Unlike Phobos they have `figure: null`, so there is no shape
+     * model underneath carrying the relief instead, and Pluto's
+     * three-kilometer water-ice mountains are cited in `grammar.ts` as the
+     * reason `relaxation` reads temperature.
+     *
+     * Deriving one instead is a content decision rather than a repair, which is
+     * why it is written down rather than done. `reliefLimit` would hand
+     * Makemake the 22 km `MAX_RELIEF` ceiling — a number measured on Vesta's
+     * central peak, not a typical value — and `terrainZoo` picks its
+     * representative per archetype by *most relief*, so an invented figure on an
+     * unmapped dwarf planet displaces Mercury and Iapetus from the zoo the whole
+     * tuning is checked against.
+     */
     reliefSpent: 1,
     publishedRelief: body.relief / 2,
   })
@@ -289,17 +309,31 @@ function buildBody(
       equilibriumTemperature(
         starLuminosity / (4 * Math.PI * starDistance * starDistance),
       ),
-      tidalProxyOf(
-        body.mass,
-        meanRadiusOf(
-          body.radius,
-          body.figure?.intermediateRadius ?? null,
-          body.polarRadius,
-        ),
-        body.semiMajorAxis,
-        body.eccentricity,
-        parentMass,
-      ),
+      /*
+       * Zero for a planet, whose parent here is the star.
+       *
+       * `parentMass` is `star.mass` at the top of the recursion, and feeding
+       * that to the proxy is the mistake `GrammarFacts.tidalProxy` names in as
+       * many words — "the star is not the primary". It put Mercury at 9.27e-8
+       * and every other planet between 2e-10 and 1e-9, which moved `young`,
+       * `mobility`, `relaxation` and the band shares on the four bodies the
+       * whole grammar is calibrated against. The generated path passes a literal
+       * zero for the same reason; `path.length === 1` is what "orbits the star"
+       * means here.
+       */
+      path.length > 1
+        ? tidalProxyOf(
+            body.mass,
+            meanRadiusOf(
+              body.radius,
+              body.figure?.intermediateRadius ?? null,
+              body.polarRadius,
+            ),
+            body.semiMajorAxis,
+            body.eccentricity,
+            parentMass,
+          )
+        : 0,
     ),
     sphereOfInfluence: soi,
     moons,

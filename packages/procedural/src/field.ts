@@ -50,47 +50,46 @@ const GRADIENT_Y = new Float64Array([1, 1, -1, -1, 0, 0, 0, 0, 1, -1, 1, -1])
 const GRADIENT_Z = new Float64Array([0, 0, 0, 0, 1, 1, -1, -1, 1, 1, -1, -1])
 
 /*
- * `pcg3d`'s first lane, written out here rather than called.
+ * The same hash `noise3` uses, written out rather than called.
  *
- * This is eight calls per `gradientNoise3` and seven to twelve octaves per
- * sample, which makes it the innermost loop in the band stack — and `pcg3d`
- * returns a `{x, y, z}` of which two lanes are discarded. V8 exhausts its
- * cumulative inlining budget across the eight call sites, so that object is
- * never scalar-replaced: it is a real allocation per corner. Measured on a
- * bordered 65×65 patch, this line was 39% of an eroded patch's self time, and
- * writing it out takes Mars from 40.5 ms to 24.4, Barnard's Star III from 42.9
- * to 26.4, Sirius II from 43.0 to 28.0 and Earth from 34.4 to 23.2.
+ * `pcg3d` was the obvious choice here and it was wrong twice over.
+ * `lattice.ts` exists to give *feature placement* several decorrelated values
+ * from one cell — does a crater exist, where in the cell, how wide — while a
+ * gradient lattice wants one number per corner, which is what `hash3` is. So it
+ * paid for three lanes to read one, eight times a sample and up to twelve
+ * octaves deep.
  *
- * Exporting a scalar `pcg3dX` from `lattice.ts` is the version that does not
- * duplicate anything, and it buys 5% of the 40%: V8 will not inline two levels
- * deep across the package boundary. The same trade `craters.ts` records for its
- * namespace destructure, and it is worth it in exactly these two places.
+ * The correctness half matters more. A different hash is a different field, and
+ * `bands.ts` picks between `ridged3` and `ridgedField` on whether the world
+ * erodes, on the stated grounds that the two give "the same number" — they
+ * differed by up to 1.25 on a band whose contract is [-1, 1], so two worlds a
+ * pascal apart got unrelated mountain ranges rather than the same ones slightly
+ * more worn. `field.test.ts` now holds `gradientNoise3` against `noise3` and
+ * both fBm forms against theirs, which pins this table and the fade curve to
+ * `noise.ts`'s at the same time and is why they are allowed to be spelled twice.
  *
- * The arithmetic is `lattice.ts`'s, lane for lane, including the signed `^` in
- * the middle. `field.test.ts` holds the two against each other over the lattice,
- * so a change to one has to move the other rather than silently forking the
- * field from every crater placed by the same hash.
+ * Written out because *calling* `hash3` costs 14 ms a patch on an eroded world —
+ * 51.8 against 37.1 — where the same call in `noise.ts` costs nothing
+ * measurable. `hash3` composes with `mix32`, so it is two levels deep at eight
+ * call sites, and V8's cumulative inlining budget runs out across them; this is
+ * the trade `craters.ts` records for its imports, in the one other place the
+ * measurement justifies it.
  */
-const PCG_MULTIPLIER = 1_664_525
-const PCG_INCREMENT = 1_013_904_223
-
-const gradientAt = (
-  seed: number,
-  ix: number,
-  iy: number,
-  iz: number,
-): number => {
-  let vx = (Math.imul((ix ^ seed) | 0, PCG_MULTIPLIER) + PCG_INCREMENT) >>> 0
-  let vy = (Math.imul(iy | 0, PCG_MULTIPLIER) + PCG_INCREMENT) >>> 0
-  let vz = (Math.imul(iz | 0, PCG_MULTIPLIER) + PCG_INCREMENT) >>> 0
-  vx = (vx + Math.imul(vy, vz)) >>> 0
-  vy = (vy + Math.imul(vz, vx)) >>> 0
-  vz = (vz + Math.imul(vx, vy)) >>> 0
-  vx ^= vx >>> 16
-  vy ^= vy >>> 16
-  vz ^= vz >>> 16
-  // The second round's `vy` and `vz` feed only lanes nobody reads.
-  return ((vx + Math.imul(vy, vz)) >>> 0) % GRADIENT_COUNT
+const gradientAt = (seed: number, ix: number, iy: number, iz: number): number => {
+  // `hash3` composed with `mix32`, written out. Calling it costs 14 ms a patch
+  // on an eroded world — eight call sites two levels deep exhaust V8's inlining
+  // budget, which is the same trade `craters.ts` records for its imports.
+  let h =
+    (Math.imul((ix ^ seed) | 0, 0x9e37_79b1) ^
+      Math.imul(iy | 0, 0x85eb_ca6b) ^
+      Math.imul(iz | 0, 0xc2b2_ae35)) |
+    0
+  h ^= h >>> 16
+  h = Math.imul(h, 0x85eb_ca6b)
+  h ^= h >>> 13
+  h = Math.imul(h, 0xc2b2_ae35)
+  h ^= h >>> 16
+  return (h >>> 0) % GRADIENT_COUNT
 }
 
 /** Quintic fade and its derivative, `30 t²(t-1)²`. */
@@ -273,15 +272,20 @@ export const DEFAULT_FIELD: FieldOptions = {
  * where the damping has already flattened the detail that slope would come
  * from. Undamped, the gradient is exact.
  *
- * **`norm` accumulates the damped amplitude, not the raw one**, and that is
- * what keeps "roughly [-1, 1]" true rather than aspirational. Dividing a damped
- * sum by an undamped norm does not attenuate detail, it subtracts a bias: the
- * amplitude the damping removed never reaches the numerator and never leaves
- * the divisor, so the mean walks toward zero — and `ridgedField`'s `·2 - 1`
- * remap then walks it toward -1. Measured over 20,000 directions at seven
- * octaves, `ridgedField` reported a mean of -0.644 at `damping: 1` and -0.890
- * at 6, against +0.255 undamped. Damping is meant to move weight between
- * octaves, not to move the whole band off its own zero.
+ * **`norm` accumulates the raw amplitude, not the damped one**, because that is
+ * the difference between attenuating detail and merely re-mixing it. Dividing by
+ * the damped sum renormalizes every sample back to full range — the amplitude
+ * the damping removed leaves the numerator *and* the divisor, so the octave
+ * *ratios* barely move and the position-varying divisor injects structure of its
+ * own. Measured as total variation along a 4,000-sample line at eight octaves,
+ * that version got **rougher** as the damping rose: 29.3 undamped, 30.6 at
+ * `damping: 1.2`, 41.7 at 24. Against the undamped norm it falls the way the
+ * name says — 29.3, 11.9, 2.5 — and "roughly [-1, 1]" becomes an upper bound
+ * rather than a target, which is what a worn landscape is.
+ *
+ * The bias that argued for the damped divisor is real and belongs to the ridge
+ * fold rather than to the norm; `ridgedField` remaps per octave and the comment
+ * there carries the arithmetic.
  */
 export function fbmField(
   seed: Seed,
@@ -301,17 +305,30 @@ export function fbmField(
   let amplitude = 1
   let norm = 0
   let f = frequency
-  // The slope the *field* has so far, in units of the input coordinate, which
-  // is what the damping reads. Kept separate from the returned gradient because
-  // the returned one is scaled by the damping and this one must not be.
+  /*
+   * The slope the *field* has so far, in units of the input coordinate, which
+   * is what the damping reads. Kept separate from the returned gradient because
+   * the returned one is scaled by the damping and this one must not be.
+   *
+   * **The octave's amplitude belongs in here and the damping does not.** An
+   * octave contributes `a·n(p·f)` to the field, so it contributes `a·f·∇n` to
+   * the slope; dropping the `a` leaves a sum that grows as `lacunarity^i`
+   * instead of `(lacunarity·gain)^i` — 1.015 per octave becomes 2.03, so by the
+   * fifth octave the accumulator is seventy times the slope it is meant to be
+   * and `damp` is a geometric decay on the octave index rather than a reading of
+   * the ground. Measured before the fix: octave weights of 0.813/0.156/0.027 at
+   * `damping` 1 against 0.850/0.128/0.019 at 24, so a dial with a 48× range
+   * moved the fundamental's share by three points and every atmosphered world
+   * was three octaves of fBm wearing the cost of twelve.
+   */
   let sx = 0
   let sy = 0
   let sz = 0
   for (let i = 0; i < octaves; i += 1) {
     const n = gradientNoise3(seed, x * f, y * f, z * f)
-    sx += n.dx * f
-    sy += n.dy * f
-    sz += n.dz * f
+    sx += amplitude * n.dx * f
+    sy += amplitude * n.dy * f
+    sz += amplitude * n.dz * f
     const damp =
       damping === 0 ? 1 : 1 / (1 + damping * (sx * sx + sy * sy + sz * sz))
     const a = amplitude * damp
@@ -319,7 +336,7 @@ export function fbmField(
     dx += a * n.dx * f
     dy += a * n.dy * f
     dz += a * n.dz * f
-    norm += amplitude * damp
+    norm += amplitude
     amplitude *= gain
     f *= lacunarity
   }
@@ -361,27 +378,46 @@ export function ridgedField(
     const sign = n.value < 0 ? -1 : 1
     const r = 1 - sign * n.value
     const outer = -2 * r * sign
-    sx += n.dx * f
-    sy += n.dy * f
-    sz += n.dz * f
+    /*
+     * The *noise's* slope, not the fold's, and that is not an oversight.
+     *
+     * `(1 - |n|)²` has a kink exactly where the noise crosses zero — that kink
+     * is the ridge line — so its derivative flips sign there. Feeding that to
+     * the accumulator makes `sx` jump discontinuously at every crest of every
+     * octave, and `damp` reads `sx² + sy² + sz²`, so the *value* jumps with it:
+     * 14.9 m of step on a landing target, and `geology.test.ts`'s bisecting
+     * continuity walk fails on Mars by three orders of magnitude. The damping
+     * wants a measure of how contorted the field is around here, and the
+     * underlying noise's slope is that measure without the fold's sign in it.
+     */
+    sx += amplitude * n.dx * f
+    sy += amplitude * n.dy * f
+    sz += amplitude * n.dz * f
     const damp =
       damping === 0 ? 1 : 1 / (1 + damping * (sx * sx + sy * sy + sz * sz))
     const a = amplitude * damp
-    value += a * r * r
-    dx += a * outer * n.dx * f
-    dy += a * outer * n.dy * f
-    dz += a * outer * n.dz * f
-    norm += amplitude * damp
+    /*
+     * `2r² − 1` per octave rather than `·2 − 1` on the sum at the end, and the
+     * two are the same number undamped: `2·Σa·r²/Σa − 1 = Σa·(2r² − 1)/Σa`,
+     * because `Σa/Σa` is one. `ridged3` agrees with this to twelve decimals and
+     * `field.test.ts` holds it there.
+     *
+     * They stop being the same the moment `damp` is not one, and that is the
+     * point. Remapping at the end, a damped sum shrinks toward zero and `·2 − 1`
+     * carries it toward **−1**: the whole band slides off its own datum, which
+     * is the bias measured at −0.644 for `damping: 1` and −0.890 at 6. Remapping
+     * per octave, a damped octave contributes less of a quantity already
+     * centred on zero, so attenuation lands on the band's midpoint where it
+     * belongs.
+     */
+    value += a * (2 * r * r - 1)
+    dx += a * 2 * outer * n.dx * f
+    dy += a * 2 * outer * n.dy * f
+    dz += a * 2 * outer * n.dz * f
+    norm += amplitude
     amplitude *= gain
     f *= lacunarity
   }
   if (norm === 0) return ZERO_FIELD
-  // Remapped to [-1, 1] like `ridged3`, so the two are interchangeable as band
-  // inputs and an amplitude tuned against one reads the same against the other.
-  return {
-    value: (value / norm) * 2 - 1,
-    dx: (dx / norm) * 2,
-    dy: (dy / norm) * 2,
-    dz: (dz / norm) * 2,
-  }
+  return { value: value / norm, dx: dx / norm, dy: dy / norm, dz: dz / norm }
 }

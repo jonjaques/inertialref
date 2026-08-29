@@ -346,6 +346,22 @@ export function surfaceGrammar(
    * moon from a live one, which is where Europa sits. Below it, Ganymede and
    * Callisto land near 0.08 — the order of magnitude between the two groups is
    * what makes a single scale usable at all.
+   *
+   * **It saturates for every moon closer in than Europa, and `craterDensity`
+   * multiplies by `1 - young`, so those come out with no craters at all.**
+   * Measured: Mimas 3.6e-4, Miranda 1.1e-5, Dione 3.8e-6, all clamped to 1
+   * against Europa's 4.5e-6, so three of the most heavily cratered surfaces in
+   * the Solar System generate a tiger-stripe shell and an empty crater band.
+   *
+   * The scale is not what is wrong with that and a logarithmic ramp makes it
+   * worse — it drags Luna from 0.14 to 0.21 and Europa down to 0.55, so the one
+   * pair the linear ramp *does* separate stops being separated. The proxy is
+   * what is wrong: it measures the tide a body has raised on it, not the heat it
+   * retained, and Dione at 3.8e-6 sits below Europa at 4.5e-6 while one is
+   * ancient and cratered and the other is the youngest surface in the system.
+   * No monotone function of this number tells them apart. Separating them wants
+   * a dissipation term — Q, or a resonance the body is actually in — which is a
+   * fact this grammar does not carry and is the shape of the next change here.
    */
   const young = clamp01(tidalProxy / (3 * ACTIVE_TIDAL_PROXY))
   /*
@@ -460,14 +476,49 @@ export function surfaceGrammar(
      * K is a hard rock and ice at 150 K is not.
      */
     relaxation: icy * (1 - young) * smoothstep(60, 160, temperature),
-    // Damping for the relief band's fBm. Zero on an airless world, which is
-    // what keeps a lunar rim razor-edged.
-    erosion: 24 * air ** 1.5,
+    /*
+     * Damping for the relief band's fBm. Zero on an airless world, which is
+     * what keeps a lunar rim razor-edged.
+     *
+     * **The scale is 1.2, not 24, and the accumulator is why.** The damping
+     * reads the slope the field has built so far, and that sum was missing each
+     * octave's amplitude — it grew as `lacunarity^i` rather than
+     * `(lacunarity·gain)^i`, so it saturated after three octaves whatever this
+     * number was, and 24 was calibrated against a dial that had already stopped
+     * turning. With the sum right the response is monotone and most of it is
+     * spent by 2: measured as total variation along a 4,000-sample line at eight
+     * octaves, the field goes 29.3 undamped, 19.9 at 0.2, 11.9 at 1.2 and 9.7 at
+     * 2, so Venus at 1.2 is worn to two fifths of the roughness and half the
+     * amplitude of an airless world, Earth at 0.66 to a half and two thirds, and
+     * Mars at 0.29 to three quarters and four fifths. Above 2 the extra buys a
+     * flattening rather than an erosion.
+     */
+    erosion: 1.2 * air ** 1.5,
     // Wind needs air, and a dune sea needs enough of it to move sand. Below a
     // tenth of a bar there is nothing to blow with.
     dunes: smoothstep(0.15, 0.6, air) * (1 - icy * young),
-    chaos: young * icy,
-    sulci: young * icy,
+    /*
+     * Chaos and sulci are different histories, and they were the same
+     * expression — `young * icy` twice, so no body could have one without the
+     * other and both docstrings named an exemplar that got neither.
+     *
+     * Chaos is a brittle shell over liquid being actively broken up, which is
+     * the top of the range. Sulci are grooved bands: extension a shell recorded
+     * and then kept, so they want a shell that is worked but not pulled apart,
+     * and they fade where chaos takes over: sulci on Titan 0.58 and Rhea 0.35,
+     * chaos on Mimas, Enceladus, Dione and Miranda, which are the icy bodies
+     * `young` saturates for.
+     *
+     * Ganymede is the body sulci are named for and it comes out at zero, which
+     * is the proxy and not the window: it reads 2.5e-7 against Callisto's
+     * 2.7e-7, and Callisto is the Galilean moon that never resurfaced at all.
+     * What separates them is that Ganymede differentiated and Callisto did not,
+     * which is not a fact this grammar carries — the same limit `young` records
+     * above, seen from the other end.
+     */
+    chaos: icy * smoothstep(0.45, 0.85, young),
+    sulci:
+      icy * (smoothstep(0.12, 0.45, young) - smoothstep(0.6, 0.95, young)),
     stripes: young * young * icy,
     bands,
   }
