@@ -296,6 +296,8 @@ export const GEOMETRY_CACHE = DEFAULT_MAX_PATCHES * 2
 
 interface CachedField {
   readonly elevations: Float32Array
+  /** Four bytes of surface cover per vertex, unbordered. See `cover.ts`. */
+  readonly cover: Uint8Array
   readonly region: RegionAddress
   readonly border: number
 }
@@ -810,6 +812,7 @@ export class TerrainStreamer {
           resolution: HEIGHTFIELD_RESOLUTION,
           border: field.border,
           elevations: field.elevations,
+          cover: field.cover,
           bodyRadius: body.radius,
         }),
       )
@@ -868,6 +871,7 @@ export class TerrainStreamer {
           if (epoch !== this.#epoch) return
           this.#fields.set(key, {
             elevations: result.elevations,
+            cover: result.cover,
             region,
             border: result.border,
           })

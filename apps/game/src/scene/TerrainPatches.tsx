@@ -80,6 +80,15 @@ export function TerrainPatches({ engine }: { engine: GameEngine }) {
         geometry.setAttribute('normal', new BufferAttribute(up, 3))
         geometry.setAttribute('terrainMorph', new BufferAttribute(triangle, 3))
         geometry.setAttribute('terrainMorphNormal', new BufferAttribute(up, 3))
+        const cover = new Uint8Array(12)
+        geometry.setAttribute(
+          'terrainCover',
+          new BufferAttribute(cover, 4, true),
+        )
+        geometry.setAttribute(
+          'terrainMorphCover',
+          new BufferAttribute(cover, 4, true),
+        )
         geometry.setIndex([0, 1, 2])
         const dummy = new Mesh(geometry, material)
         dummy.userData.eyeLocal = new Vector3()
@@ -147,6 +156,23 @@ export function TerrainPatches({ engine }: { engine: GameEngine }) {
         geometry.setAttribute(
           'terrainMorphNormal',
           new BufferAttribute(patch.morphNormals, 3),
+        )
+        /*
+         * The cover, as normalized bytes rather than floats.
+         *
+         * Four channels of a fraction, read through a splat weight — eight bits
+         * resolves each to a four-hundredth, which is finer than anything
+         * downstream of a mip chain can tell from a float, and it is a quarter
+         * of the bandwidth. A whole-disk selection is several hundred patches
+         * and vertex memory is already the streamer's largest number.
+         */
+        geometry.setAttribute(
+          'terrainCover',
+          new BufferAttribute(patch.cover, 4, true),
+        )
+        geometry.setAttribute(
+          'terrainMorphCover',
+          new BufferAttribute(patch.morphCover, 4, true),
         )
         geometry.setIndex(indices)
         /*

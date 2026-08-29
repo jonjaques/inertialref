@@ -45,6 +45,7 @@ function patchOf(body: Body, region: RegionAddress): RenderPatch {
     resolution: RESOLUTION,
     border: field.border,
     elevations: field.elevations,
+    cover: field.cover,
     bodyRadius: body.radius,
   })
 }
@@ -158,6 +159,48 @@ describe('a terrain patch', () => {
     }
   })
 
+  it('wears exactly its parent\'s cover once fully morphed', () => {
+    /*
+     * The same claim, for the material. Geometry that hands over exactly while
+     * the albedo does not is worse than a pop: the ray edges and the mare
+     * margins slide by one child cell across the whole morph band and keep
+     * sliding as the camera moves, which reads as a shimmering ring around the
+     * viewer rather than as a single switch.
+     *
+     * **Bit-exact, not close.** The cover is bytes, both patches evaluate the
+     * same pure function of the same direction, and the child's snapped vertex
+     * *is* a parent vertex — so there is no rounding for a tolerance to
+     * absorb, and any disagreement at all is the two grids having been indexed
+     * differently.
+     */
+    const body = solidBody()
+    const parentRegion = regionAddress(2, 8, 130, 97)
+    const parent = patchOf(body, parentRegion)
+
+    for (const [quadrant, childRegion] of regionChildren(
+      parentRegion,
+    ).entries()) {
+      const child = patchOf(body, childRegion)
+      const qi = quadrant % 2
+      const qj = quadrant < 2 ? 0 : 1
+      const half = (RESOLUTION - 1) / 2
+
+      for (let row = 0; row < RESOLUTION; row += 1) {
+        for (let col = 0; col < RESOLUTION; col += 1) {
+          const index = row * RESOLUTION + col
+          const parentIndex =
+            (half * qj + (row & ~1) / 2) * RESOLUTION +
+            (half * qi + (col & ~1) / 2)
+          for (let channel = 0; channel < 4; channel += 1) {
+            expect(child.morphCover[index * 4 + channel]).toBe(
+              parent.cover[parentIndex * 4 + channel],
+            )
+          }
+        }
+      }
+    }
+  })
+
   it('shares its edge vertices and its edge normals with its neighbor', () => {
     /*
      * Two patches at the same level meeting inside a cube face. The vertices
@@ -267,6 +310,7 @@ describe('a terrain patch', () => {
         resolution: RESOLUTION,
         border: 0,
         elevations: field.elevations,
+        cover: field.cover,
         bodyRadius: body.radius,
       }),
     ).toThrow(/two rings/)
