@@ -16,6 +16,7 @@ import {
   type Heightfield,
   type RegionAddress,
   regionAddress,
+  type SurfaceGrammar,
   type SystemId,
   type SystemStub,
   walkBodies,
@@ -184,6 +185,16 @@ export interface HeightfieldRequestPayload {
   readonly maxElevation: number
   readonly roughness: number
   readonly seaLevel: number | null
+  /**
+   * Which bands this body's terrain has and how loud each is.
+   *
+   * Plain data by construction — numbers, one string and one nested record of
+   * numbers — so it crosses a structured clone unchanged. It is on the payload
+   * rather than looked up because a worker has no system, no star and no parent
+   * planet to derive it from, and shipping the *sketch* instead would be
+   * kilobytes per patch of something each worker can rebuild once and keep.
+   */
+  readonly grammar: SurfaceGrammar
   readonly region: RegionAddress
   readonly resolution: number
   /** Rings of samples outside the patch. Omitted means `HEIGHTFIELD_BORDER`. */
@@ -210,8 +221,14 @@ export const generateHeightfieldTask = defineTask<
    * mesh builder indexes as though the first row were the patch's own edge,
    * which is a patch shifted by one sample rather than a failure — so the
    * version is what makes the mismatch loud.
+   *
+   * 3: the request carries the body's surface grammar. Without it a worker
+   * cannot evaluate the band stack at all, and a version 2 worker handed a
+   * version 3 payload would read `undefined` for every band amplitude and
+   * return a field of `NaN` — which reaches the mesh as a patch that vanishes
+   * rather than as an error.
    */
-  version: 2,
+  version: 3,
   run(payload) {
     const seed: Seed = parseSeed(payload.surfaceSeed)
     const field: Heightfield = generateHeightfield(
@@ -220,6 +237,7 @@ export const generateHeightfieldTask = defineTask<
         maxElevation: payload.maxElevation,
         roughness: payload.roughness,
         seaLevel: payload.seaLevel,
+        grammar: payload.grammar,
       },
       {
         region: regionAddress(

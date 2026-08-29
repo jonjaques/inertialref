@@ -411,6 +411,7 @@ async function checkWorkerTask(
     maxElevation: planet.surface.maxElevation,
     roughness: planet.surface.roughness,
     seaLevel: planet.surface.seaLevel,
+    grammar: planet.surface.grammar,
     region: { face: 1, level: 6, i: 20, j: 33 },
     resolution: HEIGHTFIELD_RESOLUTION,
   }

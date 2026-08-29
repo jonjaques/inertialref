@@ -9,6 +9,7 @@ import {
   galaxySeedOf,
   HEIGHTFIELD_BORDER,
   MILKY_WAY,
+  surfaceGrammar,
   TEST_CATALOG,
 } from '@inertialref/universe'
 import { createInlineWorker } from './inline.ts'
@@ -199,11 +200,28 @@ describe('worker pool', () => {
 describe('terrain task', () => {
   it('returns a transferable heightfield that matches local generation', async () => {
     const p = pool(2)
+    /*
+     * A grammar built here rather than taken off a body, because the point of
+     * the task is that a worker needs nothing but its payload — no system, no
+     * star, no parent planet. A Luna-sized airless rock is the case with the
+     * most bands turned on.
+     */
+    const grammar = surfaceGrammar(SEED, {
+      mass: 7.35e22,
+      meanRadius: 1.737e6,
+      atmosphere: null,
+      temperature: 270,
+      tidalProxy: 0,
+      hasOcean: false,
+      reliefSpent: 1,
+      publishedRelief: 8_000,
+    })
     const payload = {
       surfaceSeed: formatSeed(SEED),
       maxElevation: 8_000,
       roughness: 3,
       seaLevel: null,
+      grammar,
       region: { face: 2, level: 5, i: 11, j: 4 },
       resolution: 33,
     }

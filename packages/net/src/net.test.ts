@@ -116,8 +116,19 @@ describe('the local authority', () => {
     }
     const result = await authority.join(SOL_PARTITION, stale)
     expect(result.ok).toBe(false)
-    // Read as server≠client: this authority is on terrain 1, the hello on 99.
-    expect(!result.ok && result.error).toMatch(/terrain 1≠99/)
+    /*
+     * Read as server≠client: the authority is on whatever terrain version this
+     * build generates, the hello on 99.
+     *
+     * From the manifest rather than spelled out, because the version moves
+     * whenever the geology does and a literal here fails the day it does — with
+     * a message about a mismatch, which is exactly what the test is about and
+     * therefore exactly the wrong thing to have to read twice.
+     */
+    const server = GENERATION_VERSIONS.terrain
+    expect(!result.ok && result.error).toMatch(
+      new RegExp(`terrain ${server}≠99`),
+    )
     expect(authority.status().state).toBe('refused')
     // Refusal is an answer, so the reason survives on the status for the
     // overlay to show rather than being thrown away with the promise.

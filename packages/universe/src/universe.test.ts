@@ -62,6 +62,7 @@ import {
   regionNeighbor,
   regionParent,
   regionSize,
+  seaDatumElevation,
   surfaceDetailFloor,
   surfaceRadius,
 } from './terrain.ts'
@@ -955,8 +956,11 @@ describe('the ground has one owner', () => {
 
   it('clamps the ocean up to its datum rather than down to the seabed', () => {
     const body = oceanWorld()
-    const sea = body.surface.seaLevel as number
-    const floor = (sea * 2 - 1) * body.surface.maxElevation * 0.55
+    expect(body.surface.seaLevel).not.toBeNull()
+    // Through `seaDatumElevation`, not a copy of its arithmetic: the datum is
+    // scaled by the hypsometry band's share of the budget, and a test that
+    // spelled that out again would be asserting its own copy of the formula.
+    const floor = seaDatumElevation(body.surface) as number
     // Somewhere on this world the bare landform is below the water line; the
     // ground there is the water, not the rock.
     const grid = []

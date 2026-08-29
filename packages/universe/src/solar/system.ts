@@ -1,5 +1,6 @@
 import {
   GRAVITATIONAL_CONSTANT,
+  type Kelvin,
   type Meters,
   type Mu,
   SOLAR_LUMINOSITY,
@@ -17,7 +18,9 @@ import {
   systemAddress,
   systemId,
 } from '../address.ts'
+import { tidalProxyOf } from '../archetype.ts'
 import { blackbodyColour } from '../catalog/photometry.ts'
+import { equilibriumTemperature, surfaceGrammar } from '../grammar.ts'
 import type { SystemStub } from '../galaxy.ts'
 import { systemSeedOf } from '../galaxy.ts'
 import {
@@ -110,18 +113,50 @@ const atmosphereOf = (body: SolarBody): Atmosphere | null =>
  * Terrain parameters for a body that has a real elevation map.
  *
  * `relief` is measured — Olympus Mons really is 29 km above Hellas — so
- * `maxElevation` is a fact here rather than a draw. The *shape* at scales below
- * the map's resolution is still generated, because a global map is a few
- * kilometers per pixel and a ship on final approach is looking at meters.
+ * `maxElevation` is a fact here rather than a draw, and it goes into the
+ * grammar as `publishedRelief` so that the strength limit cannot override it.
+ * The art doctrine is explicit that the data is not negotiable. The *shape* at
+ * scales below the map's resolution is still generated, because a global map is
+ * a few kilometers per pixel and a ship on final approach is looking at meters.
+ *
+ * The grammar itself is derived here exactly as it is for a projected world:
+ * Sol's bodies get the same band stack from the same facts, which is what makes
+ * Mercury the reference the tuning is checked against rather than a special
+ * case beside it.
  */
-function surfaceOf(body: SolarBody, seed: Seed, rng: Rng): SurfaceParameters {
+function surfaceOf(
+  body: SolarBody,
+  seed: Seed,
+  rng: Rng,
+  temperature: Kelvin,
+  tidal: number,
+): SurfaceParameters {
+  const roughness = rng.range(2, 5)
+  // Earth is the only body here with a sea, and its datum is what "sea level"
+  // means in the first place.
+  const seaLevel = body.name === 'Earth' ? 0.55 : null
+  const grammar = surfaceGrammar(seed, {
+    mass: body.mass,
+    meanRadius: Math.cbrt(
+      body.radius *
+        (body.figure?.intermediateRadius ?? body.radius) *
+        body.polarRadius,
+    ),
+    atmosphere: atmosphereOf(body),
+    temperature,
+    tidalProxy: tidal,
+    hasOcean: seaLevel !== null,
+    // Unused wherever `publishedRelief` is non-null, which is every body in
+    // this table that has any relief at all.
+    reliefSpent: 1,
+    publishedRelief: body.relief / 2,
+  })
   return {
     seed,
-    maxElevation: body.relief / 2,
-    roughness: rng.range(2, 5),
-    // Earth is the only body here with a sea, and its datum is what "sea level"
-    // means in the first place.
-    seaLevel: body.name === 'Earth' ? 0.55 : null,
+    maxElevation: grammar.reliefLimit,
+    roughness,
+    seaLevel,
+    grammar,
   }
 }
 
@@ -133,6 +168,15 @@ function buildBody(
   system: SystemId,
   path: readonly number[],
   body: SolarBody,
+  starLuminosity: number,
+  /**
+   * How far this body's *primary* is from the star, meters.
+   *
+   * A moon's own semi-major axis is around its planet, so using it would put
+   * Europa 671,000 km from the Sun. What lights a moon is the planet's orbit,
+   * which is why this is passed down rather than read off the body.
+   */
+  starDistance: Meters,
 ): Body {
   /*
    * The address *is* the seed path (ADR-0005), and this has to derive it the
@@ -196,6 +240,8 @@ function buildBody(
         system,
         [...path, m],
         satellite,
+        starLuminosity,
+        starDistance,
       ),
     )
   }
@@ -236,7 +282,25 @@ function buildBody(
     rotationPeriod: body.rotationPeriod,
     axialTilt: body.axialTilt,
     atmosphere: atmosphereOf(body),
-    surface: surfaceOf(body, deriveSeed(seed, 'surface'), rng),
+    surface: surfaceOf(
+      body,
+      deriveSeed(seed, 'surface'),
+      rng,
+      equilibriumTemperature(
+        starLuminosity / (4 * Math.PI * starDistance * starDistance),
+      ),
+      tidalProxyOf(
+        body.mass,
+        Math.cbrt(
+          body.radius *
+            (body.figure?.intermediateRadius ?? body.radius) *
+            body.polarRadius,
+        ),
+        body.semiMajorAxis,
+        body.eccentricity,
+        parentMass,
+      ),
+    ),
     sphereOfInfluence: soi,
     moons,
   }
@@ -270,7 +334,17 @@ export function solarSystem(
    */
   const planets = [...SOLAR_PLANETS, ...SOLAR_SMALL_BODIES].map(
     (planet, index) =>
-      buildBody(seed, star.mu, star.mass, galaxy, stub.id, [index], planet),
+      buildBody(
+        seed,
+        star.mu,
+        star.mass,
+        galaxy,
+        stub.id,
+        [index],
+        planet,
+        star.luminosity,
+        planet.semiMajorAxis,
+      ),
   )
   return {
     id: stub.id,
