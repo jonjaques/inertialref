@@ -65,5 +65,17 @@ export default defineConfig({
      */
     testTimeout: 20_000,
     reporters: ['dot'],
+    /*
+     * 5 seconds, not vitest's default 300 ms.
+     *
+     * The dot reporter says nothing about a test until the run ends, so the only
+     * live sign of a slow one is the running panel — and the panel is only worth
+     * reading if what it lists is remarkable. At 300 ms it names a dozen honest
+     * tests, at 5 s it names the descent in `gameEngine.test.ts` and nothing
+     * else. That is how a test grown into a minute gets noticed while it is
+     * still under its own timeout, rather than on the day the timeout starts
+     * measuring how busy the machine is.
+     */
+    slowTestThreshold: 5_000,
   },
 })

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createInlineWorker, createTaskRegistry } from '@inertialref/workers'
 import { MemorySaveStore } from '@inertialref/persistence'
 import {
@@ -7,7 +7,11 @@ import {
   lensForFov,
   verticalFovDegrees,
 } from '@inertialref/rendering'
-import { DEFAULT_CACHE, DEFAULT_FILL } from '@inertialref/devtools'
+import {
+  DEFAULT_CACHE,
+  DEFAULT_FILL,
+  type TerrainReport,
+} from '@inertialref/devtools'
 import {
   FIELD_CACHE,
   GEOMETRY_CACHE,
@@ -28,20 +32,28 @@ import { GameEngine } from './GameEngine.ts'
  */
 
 /**
- * How long the four terrain-streaming tests below are given, milliseconds.
+ * How long the descent in `beforeAll` below is given, milliseconds.
  *
- * Two minutes against the suite's twenty seconds, and they run in forty-five to
- * seventy. Each generates a landing's worth of terrain — about six hundred
- * bordered 65×65 patches at 20 ms apiece — through an **inline** worker, which
- * is to say serially on this thread. In a browser that is a pool of six and a
- * four-second sharpen.
+ * Five minutes against the suite's twenty seconds, and it runs in about fifty.
+ * It generates a landing's worth of terrain — some nine hundred bordered 65×65
+ * heightfields, the coarse ones 20 ms apiece — through an **inline** worker,
+ * which is to say serially on this thread. In a browser that is a pool of six
+ * and a four-second sharpen.
  *
- * It is a timeout rather than a target: what it guards against is a hang. The
- * thing that would bring it back down is the GPU tile producer
+ * It is a timeout rather than a target: what it guards against is a hang, so
+ * the headroom is the point. Two minutes is only twice the idle cost, and twice
+ * is inside the range a busy machine moves this by — the runner puts sixty-four
+ * files across every core, and under that contention this descent has taken
+ * more than 120 s and been killed for it. A timeout that a green run can reach
+ * has stopped measuring the code and started measuring the machine, which is
+ * the same mistake `testTimeout`'s own note in `vitest.config.ts` describes one
+ * order of magnitude down.
+ *
+ * The thing that would bring it back down is the GPU tile producer
  * ([roadmap § terrain](../../../../docs/roadmap.md#terrain)), or a test pool
  * with real worker threads in it.
  */
-const STREAMING_TIMEOUT = 120_000
+const STREAMING_TIMEOUT = 300_000
 
 function engine(): GameEngine {
   const registry = createTaskRegistry()
@@ -223,137 +235,104 @@ describe('the game engine, headless', () => {
     game.dispose()
   })
 
-  it(
-    'keeps the ground under a landed ship, frame after frame',
-    async () => {
-      /*
-       * The strobe. Landed, stationary, nothing should move relative to anything
-       * — and the ground slid ~865 m per frame away from the ship and snapped
-       * back on every render-origin rebase, ten times a second.
-       *
-       * Two independent causes, both of the same shape: geometry that had a
-       * moment baked into it. The vertices were emitted in render space against
-       * the body's pose at build time and only rebuilt on a rebase, and the
-       * streamer read `world.clock.time` while the snapshot presents the world one
-       * tick earlier. A planet orbiting at 52 km/s covers 812 m in a tick, so
-       * either one on its own is a visible judder.
-       *
-       * The measurement is the invariant, not the mechanism: a landed ship and a
-       * patch of ground beneath it are both fixed in body-fixed axes, so the
-       * distance between them in render space is a constant.
-       */
-      const game = engine()
+  /*
+   * The four terrain assertions, over one descent.
+   *
+   * Each of them needs a body's ground actually generated — a whole-disk
+   * selection on Mercury is about nine hundred heightfields and six hundred
+   * drawn patches — and in this file that goes through an **inline** worker,
+   * which is to say serially on the test's own thread. Giving each `it` its own
+   * engine pays for the same descent four times, and the bill is most of this
+   * suite's runtime: four landings is three and a half minutes where one is
+   * fifty seconds.
+   *
+   * So the descent happens once, in `beforeAll`, and it is the real one — a 300
+   * km orbit, a landing, and frames until the drawn set stops growing. Each
+   * `it` below asserts on a reading taken there and steps nothing itself. That
+   * is not only cheaper: an `it` that drives the shared engine is an `it` whose
+   * result depends on which `it` ran before it, and four of those in a row is a
+   * file that passes in source order and nowhere else.
+   *
+   * `BUILDS_PER_FRAME` is the floor on how short this can be. Geometry is built
+   * four patches to a frame on the main thread, so a six-hundred-patch disk
+   * cannot converge in under a hundred and fifty frames however fast the field
+   * gets — the way to make this cheaper is that budget or a real worker pool,
+   * not fewer frames.
+   */
+  describe('the ground, over one descent', () => {
+    const game = engine()
+
+    const settle = async (frames: number): Promise<void> => {
+      for (let i = 0; i < frames; i += 1) {
+        game.frame(1 / 60)
+        await new Promise((resolve) => setTimeout(resolve, 2))
+      }
+    }
+
+    /** From 300 km, and on the ground, for the refinement comparison. */
+    let orbit: TerrainReport
+    let landed: TerrainReport
+    /** Distance from the ship to the nearest terrain vertex, on the ground. */
+    let nearestVertex = Infinity
+    /** Over a window after convergence: origin rebases, and the worst drift
+     *  between the ship and one named patch. */
+    let rebases = 0
+    let worstDrift = 0
+    /** The drawn count, frame by frame, over a later window. */
+    const drawn: number[] = []
+
+    beforeAll(async () => {
       const target = game.harness
         .targets()
         .find((candidate) => candidate.landable)
       if (target === undefined) throw new Error('nowhere to land')
+
+      game.harness.orbit(target.address, 300)
+      await settle(40)
+      const fromOrbit = game.terrain()
+      if (fromOrbit === null) throw new Error('no terrain report from orbit')
+      orbit = fromOrbit
+
       game.harness.land(target.address, 0.35, -1.1)
 
-      // Enough frames for the quadtree to bottom out. It refines progressively,
-      // so a patch chosen before it settles is a patch that gets refined away.
-      for (let i = 0; i < 150; i += 1) {
-        game.frame(1 / 60)
-        await new Promise((resolve) => setTimeout(resolve, 2))
-      }
-      expect(game.terrainState().patches.length).toBeGreaterThan(0)
-
       /*
-       * One named patch, followed by its address.
+       * Settle until the drawn set stops growing, rather than for a fixed count
+       * of frames.
        *
-       * `patches[0]` was enough while the streamed set was a nine-patch window
-       * that arrived at once. A quadtree refines progressively and reorders as it
-       * does, so the first entry is a different piece of ground from frame to
-       * frame and the distance to it moves by kilometers for reasons that have
-       * nothing to do with what this test is about.
+       * A fixed count is a number that goes stale every time the field gets
+       * deeper: 150 frames places a whole disk while a disk is 450 patches, and
+       * with the band stack it is 600 and the meshes are built four to a frame
+       * — so the windows below would open while the count was still climbing,
+       * and "it must not shrink" would fail against its own warm-up. What the
+       * assertions need is *converged*, so that is what is waited for.
+       *
+       * Twenty still frames is convergence and six hundred is the cap. If the
+       * oscillation `holds the ground it has refined to` guards against came
+       * back the count would never settle, the cap would run out, and the
+       * window would then see the collapse — so the loop cannot hide the defect
+       * by failing to finish.
        */
-      const anchorRegion = [...game.terrainState().patches].sort(
-        (a: PlacedPatch, b: PlacedPatch) =>
-          b.patch.region.level - a.patch.region.level,
-      )[0]!.patch.region
-      const separation = (): number => {
-        const scene = game.scene()
-        const ship = scene?.entities.find((entity) => entity.isCamera)
-        const placed = game
-          .terrainState()
-          .patches.find(
-            ({ patch }) =>
-              patch.region.face === anchorRegion.face &&
-              patch.region.level === anchorRegion.level &&
-              patch.region.i === anchorRegion.i &&
-              patch.region.j === anchorRegion.j,
-          )
-        if (ship === undefined || placed === undefined)
-          throw new Error('nothing to measure')
-        return Math.hypot(
-          placed.placement.position.x - ship.position.x,
-          placed.placement.position.y - ship.position.y,
-          placed.placement.position.z - ship.position.z,
-        )
+      let previous = -1
+      let steady = 0
+      for (let i = 0; i < 600 && steady < 20; i += 1) {
+        await settle(1)
+        const placed = game.terrain()?.patches ?? 0
+        steady = placed <= previous ? steady + 1 : 0
+        previous = placed
+      }
+      const onGround = game.terrain()
+      if (onGround === null) throw new Error('no terrain report on the ground')
+      landed = onGround
+
+      const shipNow = (): { x: number; y: number; z: number } => {
+        const entity = game.scene()?.entities.find((e) => e.isCamera)
+        if (entity === undefined) throw new Error('no ship')
+        return entity.position
       }
 
-      const first = separation()
-      let rebases = 0
-      let worst = 0
-      const startGeneration = game.origin?.generation ?? 0
-      for (let i = 0; i < 20; i += 1) {
-        game.frame(1 / 60)
-        await new Promise((resolve) => setTimeout(resolve, 1))
-        worst = Math.max(worst, Math.abs(separation() - first))
-      }
-      rebases = (game.origin?.generation ?? 0) - startGeneration
-
-      // The window has to contain a rebase, or it proves nothing: the old bug was
-      // invisible within a single origin generation and snapped at the boundary.
-      expect(rebases).toBeGreaterThan(0)
-      /*
-       * A millimeter, against a measured residual of 83 µm — numerical noise in
-       * a chain of rotations over a 2,800 km radius, not the planet moving out
-       * from under the ship.
-       *
-       * Both causes were confirmed to fail this: freezing the pose between
-       * rebases, the way baked geometry did, gives 2,101 m; reading
-       * `world.clock.time` instead of the snapshot's render time gives 90 m.
-       */
-      expect(worst).toBeLessThan(0.001)
-      game.dispose()
-    },
-    STREAMING_TIMEOUT,
-  )
-
-  it(
-    'streams the ground under the ship, not beside it',
-    async () => {
-      /*
-       * What the strobe looked like from the cockpit, and the assertion that says
-       * it plainly: the patch set was displaced 1.5–4.5 km from the ship, so there
-       * was no ground under your feet at all. What read as "the ground" was the
-       * datum sphere 11 km below, the real terrain was a thin band near the
-       * horizon, and the dark gap between them showed stars through the planet.
-       *
-       * Measured on this seed: 1,542 m to the nearest vertex before the fix, 10 m
-       * after — and 10 m is simply the vertex spacing at this level.
-       */
-      const game = engine()
-      const target = game.harness
-        .targets()
-        .find((candidate) => candidate.landable)
-      if (target === undefined) throw new Error('nowhere to land')
-      game.harness.land(target.address, 0.35, -1.1)
-      // Enough for the pyramid to arrive: the whole ladder is queued at once, but
-      // it is still a couple of hundred patches at 13 ms of generation apiece.
-      for (let i = 0; i < 120; i += 1) {
-        game.frame(1 / 60)
-        await new Promise((resolve) => setTimeout(resolve, 2))
-      }
-
-      const scene = game.scene()
-      const ship = scene?.entities.find((entity) => entity.isCamera)
-      if (ship === undefined) throw new Error('no ship')
-      const patches = game.terrainState().patches
-      expect(patches.length).toBeGreaterThan(0)
-
-      let nearest = Infinity
-      for (const { patch, placement } of patches) {
+      // --- the nearest vertex, once the disk has converged -------------------
+      const ship = shipNow()
+      for (const { patch, placement } of game.terrainState().patches) {
         const q = placement.orientation
         for (let i = 0; i < patch.positions.length; i += 3) {
           const v = {
@@ -372,16 +351,110 @@ describe('the game engine, headless', () => {
             placement.position.y + v.y + q.w * ty + (q.z * tx - q.x * tz)
           const z =
             placement.position.z + v.z + q.w * tz + (q.x * ty - q.y * tx)
-          nearest = Math.min(
-            nearest,
-            Math.hypot(
-              x - ship.position.x,
-              y - ship.position.y,
-              z - ship.position.z,
-            ),
+          nearestVertex = Math.min(
+            nearestVertex,
+            Math.hypot(x - ship.x, y - ship.y, z - ship.z),
           )
         }
       }
+
+      /*
+       * One named patch, followed by its address.
+       *
+       * `patches[0]` is enough while the streamed set is a nine-patch window
+       * that arrives at once. A quadtree refines progressively and reorders as
+       * it does, so the first entry is a different piece of ground from frame to
+       * frame and the distance to it moves by kilometers for reasons that have
+       * nothing to do with what is being measured.
+       */
+      const anchor = [...game.terrainState().patches].sort(
+        (a: PlacedPatch, b: PlacedPatch) =>
+          b.patch.region.level - a.patch.region.level,
+      )[0]!.patch.region
+      const separation = (): number => {
+        const here = shipNow()
+        const placed = game
+          .terrainState()
+          .patches.find(
+            ({ patch }) =>
+              patch.region.face === anchor.face &&
+              patch.region.level === anchor.level &&
+              patch.region.i === anchor.i &&
+              patch.region.j === anchor.j,
+          )
+        if (placed === undefined) throw new Error('the anchor patch is gone')
+        return Math.hypot(
+          placed.placement.position.x - here.x,
+          placed.placement.position.y - here.y,
+          placed.placement.position.z - here.z,
+        )
+      }
+
+      // --- the drift window --------------------------------------------------
+      const first = separation()
+      const startGeneration = game.origin?.generation ?? 0
+      for (let i = 0; i < 20; i += 1) {
+        await settle(1)
+        worstDrift = Math.max(worstDrift, Math.abs(separation() - first))
+      }
+      rebases = (game.origin?.generation ?? 0) - startGeneration
+
+      // --- the steadiness window ---------------------------------------------
+      for (let i = 0; i < 60; i += 1) {
+        await settle(1)
+        drawn.push(game.terrain()?.patches ?? 0)
+      }
+    }, STREAMING_TIMEOUT)
+
+    afterAll(() => {
+      game.dispose()
+    })
+
+    it('keeps the ground under a landed ship, frame after frame', () => {
+      /*
+       * The strobe. Landed, stationary, nothing should move relative to anything
+       * — and the ground slid ~865 m per frame away from the ship and snapped
+       * back on every render-origin rebase, ten times a second.
+       *
+       * Two independent causes, both of the same shape: geometry that had a
+       * moment baked into it. The vertices were emitted in render space against
+       * the body's pose at build time and only rebuilt on a rebase, and the
+       * streamer read `world.clock.time` while the snapshot presents the world one
+       * tick earlier. A planet orbiting at 52 km/s covers 812 m in a tick, so
+       * either one on its own is a visible judder.
+       *
+       * The measurement is the invariant, not the mechanism: a landed ship and a
+       * patch of ground beneath it are both fixed in body-fixed axes, so the
+       * distance between them in render space is a constant.
+       */
+
+      // The window has to contain a rebase, or it proves nothing: the old bug was
+      // invisible within a single origin generation and snapped at the boundary.
+      expect(rebases).toBeGreaterThan(0)
+      /*
+       * A millimeter, against a measured residual of 83 µm — numerical noise in
+       * a chain of rotations over a 2,800 km radius, not the planet moving out
+       * from under the ship.
+       *
+       * Both causes were confirmed to fail this: freezing the pose between
+       * rebases, the way baked geometry did, gives 2,101 m; reading
+       * `world.clock.time` instead of the snapshot's render time gives 90 m.
+       */
+      expect(worstDrift).toBeLessThan(0.001)
+    })
+
+    it('streams the ground under the ship, not beside it', () => {
+      /*
+       * What the strobe looked like from the cockpit, and the assertion that says
+       * it plainly: the patch set was displaced 1.5–4.5 km from the ship, so there
+       * was no ground under your feet at all. What read as "the ground" was the
+       * datum sphere 11 km below, the real terrain was a thin band near the
+       * horizon, and the dark gap between them showed stars through the planet.
+       *
+       * Measured on this seed: 1,542 m to the nearest vertex before the fix, 10 m
+       * after — and 10 m is simply the vertex spacing at this level.
+       */
+      expect(landed.patches).toBeGreaterThan(0)
       /*
        * One vertex spacing at this body's own detail floor, plus room for the
        * chase camera's offset.
@@ -392,14 +465,10 @@ describe('the game engine, headless', () => {
        * cache. 300 m is two of those spacings and still an order of magnitude
        * inside the 1,542 m displacement this test exists to catch.
        */
-      expect(nearest).toBeLessThan(300)
-    },
-    STREAMING_TIMEOUT,
-  )
+      expect(nearestVertex).toBeLessThan(300)
+    })
 
-  it(
-    'streams coarse ground from orbit and refines it on the way down',
-    async () => {
+    it('streams coarse ground from orbit and refines it on the way down', () => {
       /*
        * From a 300 km orbit the 3×3 patch window was a lone raised tile on the
        * datum sphere — 11 km proud of it, since the sphere is sunk a full relief
@@ -413,41 +482,14 @@ describe('the game engine, headless', () => {
        * the ground is the field's own detail floor, and there is ground on screen
        * throughout.
        */
-      const game = engine()
-      const target = game.harness
-        .targets()
-        .find((candidate) => candidate.landable)
-      if (target === undefined) throw new Error('nowhere to land')
-
-      const settle = async (frames: number) => {
-        for (let i = 0; i < frames; i += 1) {
-          game.frame(1 / 60)
-          await new Promise((resolve) => setTimeout(resolve, 2))
-        }
-      }
-
-      game.harness.orbit(target.address, 300)
-      await settle(40)
-      const orbit = game.terrain()
-      if (orbit === null) throw new Error('no terrain report')
       expect(orbit.patches).toBeGreaterThan(0)
-
-      game.harness.land(target.address, 0.35, -1.1)
-      await settle(60)
-      const landed = game.terrain()
-      if (landed === null) throw new Error('no terrain report')
       expect(landed.patches).toBeGreaterThan(0)
       // Finer on the ground than from orbit, which is the whole of "one field at
       // every distance": the same quadtree answered at two ranges.
       expect(landed.level).toBeGreaterThan(orbit.level)
-      game.dispose()
-    },
-    STREAMING_TIMEOUT,
-  )
+    })
 
-  it(
-    'holds the ground it has refined to, frame after frame',
-    async () => {
+    it('holds the ground it has refined to, frame after frame', () => {
       /*
        * The strobe, as an assertion.
        *
@@ -466,51 +508,6 @@ describe('the game engine, headless', () => {
        * generous — a few patches of churn as the body turns under the stance is
        * ordinary — and the failure it was written for is a factor of eighteen.
        */
-      const game = engine()
-      const target = game.harness
-        .targets()
-        .find((candidate) => candidate.landable)
-      if (target === undefined) throw new Error('nowhere to land')
-      game.harness.land(target.address, 0.35, -1.1)
-
-      const settle = async (frames: number) => {
-        for (let i = 0; i < frames; i += 1) {
-          game.frame(1 / 60)
-          await new Promise((resolve) => setTimeout(resolve, 2))
-        }
-      }
-
-      /*
-       * Settle until the drawn set stops growing, rather than for a fixed count
-       * of frames.
-       *
-       * A fixed count is a number that goes stale every time the field gets
-       * deeper, and this one did: 150 frames placed a whole disk when a disk was
-       * 450 patches, and with the band stack it is 600 and the meshes are built
-       * a handful a frame — so the window below opened while the count was still
-       * climbing, and "it must not shrink" failed against its own warm-up. What
-       * the assertion needs is *converged*, so that is what is waited for.
-       *
-       * Twenty still frames is convergence and six hundred is the cap. If the
-       * oscillation this guards against came back the count would never settle,
-       * the cap would run out, and the window would then see the collapse — so
-       * the loop cannot hide the defect by failing to finish.
-       */
-      let previous = -1
-      let steady = 0
-      for (let i = 0; i < 600 && steady < 20; i += 1) {
-        await settle(1)
-        const placed = game.terrain()?.patches ?? 0
-        steady = placed <= previous ? steady + 1 : 0
-        previous = placed
-      }
-
-      const drawn: number[] = []
-      for (let i = 0; i < 60; i += 1) {
-        await settle(1)
-        drawn.push(game.terrain()?.patches ?? 0)
-      }
-
       const peak = Math.max(...drawn)
       expect(peak).toBeGreaterThan(100)
       // A tenth is ordinary churn as the body turns under the stance. The failure
@@ -535,10 +532,8 @@ describe('the game engine, headless', () => {
       // retune of FIELD_CACHE alone silently un-calibrates every ir.descend
       // cache figure.
       expect(FIELD_CACHE).toBe(DEFAULT_CACHE)
-      game.dispose()
-    },
-    STREAMING_TIMEOUT,
-  )
+    })
+  })
 
   it('keeps sampling the cutscene through a frame with no player', () => {
     /*
