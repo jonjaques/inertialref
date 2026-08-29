@@ -142,9 +142,21 @@ are named in [the roadmap](../roadmap.md#terrain).
 
 **A cache smaller than the working set oscillates rather than degrading.** The
 streamer holds two selections — the drawn one and the request one, taken from
-where the eye is going — so its caps derive from the selection's own ceiling. At
-a flat 512 against a working set of six hundred, terrain strobed at every
-altitude.
+where the eye is going. At a flat 512 against a working set of six hundred,
+terrain strobed at every altitude.
+
+**The selection's ceiling is not what sizes those caches, and reading it that way
+is how the second one was set too small.** What must be resident is the set the
+evictor promises to keep, which is the whole pyramid under the request
+selection — and a quadtree's ancestors are a third again as many as its leaves,
+so that floors at ~1.33× the selection cap before the starved rung is counted.
+Geometry sized at the selection plus a slack of 128 sat under that floor: the
+streamer built four patches a frame and dropped four it had wanted a moment
+earlier, and every twenty-sixth frame the eviction took a patch the traversal
+was refining through and the disk snapped from 760 patches at level 7 to four at
+level 1. The keep set is bounded by the selection cap rather than by the
+viewport — measured 1,232 to 1,327 at both 3840×2400 and 5120×2880 — so the
+multiple is a bound and not a display-dependent one.
 
 **Phase 3 owes the sphere-tier shell a material.** The plan's unconditional
 level-0–2 shell wants a per-face normal and albedo bake underneath it; without

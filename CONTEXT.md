@@ -5406,6 +5406,59 @@ a mechanism that did not run is the one kind of claim it may not make.
 `origin/main` is on v1, this branch already carries the one bump to v2, and v2
 has never described a shipped world. That window closes when it merges.
 
+## The disk strobed twice a second, and the cache had promised more than it held (29 Aug 2026)
+
+Reported as terrain jitter on Luna under the Earthrise preset, two to three
+times a second, arriving with the finest level. It reproduced on a 3840x2400
+drawing buffer and not at all on 1600x900, which is what made it read as a
+rendering defect: the same body, the same stance, the same seed, and a strobe
+that followed the display.
+
+It was `GEOMETRY_CACHE`, sized from the wrong set. The constant was
+`DEFAULT_MAX_PATCHES + 128` and its docstring said "only drawn patches get
+geometry, so the ceiling is the selection itself plus enough slack" — but the
+streamer does not hold the drawn set. `#build` takes the drawn set _and_ the
+rung below it, and `#evict` keeps whatever the frame requested: the drawn set,
+the starved children, and the whole pyramid under the ideal selection. A
+quadtree's ancestors are a third again as many as its leaves, so that keep set
+floors at ~1.33x the selection cap before the starved rung is counted. Measured
+at Earthrise: **one frame's request list named 1,323 distinct regions against a
+cap of 1,152**, with 98 held meshes outside the keep set and therefore always
+available as victims.
+
+So the streamer ran a treadmill. Four patches built a frame, four dropped that
+it had wanted a moment earlier, `starved` sitting at ~70 instead of falling to
+zero, and `buildPatch` on every frame forever — 267 samples at a 16.9 ms median
+gap over a 4.3 s profile, which is the tell: a converged streamer builds
+nothing. Every twenty-sixth frame the rotation took a patch the traversal was
+refining through, `ready` returned false, the walk stopped ten nodes in instead
+of 1,138, and the disk drew **four patches at level 1 where the frame before had
+760 at level 7**. A Chrome trace of the deployed preview carries it frame by
+frame: the frame either side of the collapse differs by **zero pixels** — the
+scene is perfectly static — and the collapse frame differs from both by 30,050,
+of which 17,391 are ground, at **2.29 Hz**. On screen every crater flattens to a
+blank shell for one frame, twice a second.
+
+The fix is `DEFAULT_MAX_PATCHES * 2`, and the thing that makes it a bound rather
+than a number that worked on one monitor is that **`selectTerrain` caps the
+selection**, so the keep set is bounded by `DEFAULT_MAX_PATCHES` and not by the
+viewport. Measured keep is 1,232 to 1,327 at both 3840x2400 and 5120x2880 — the
+buffer doubles and the keep set does not move. It is a ceiling rather than an
+allocation, so the sizes that already fit pay nothing. At 3840x2400 the streamer
+now converges to 1,597 resident and **901 patches drawn against the 760 it
+managed while thrashing**: correcting the cache made the picture both stable and
+deeper, because a treadmill spends its build budget re-making ground it already
+had.
+
+`FIELD_CACHE` above it has carried this argument since the 3x3 window — "a cache
+smaller than the working set does not degrade, it oscillates" — and the geometry
+cache never got it. What hid the second case is that nothing reported it:
+refinement gates on geometry, not on the heightfield, so `cached` sat at its
+steady 1,421 and said nothing was wrong while the cache under it strobed.
+`ir.terrain()` reports `geometry` beside `cached` now, and it was the counter
+that ended the search — pinned at exactly 1,152, which is the signature
+`FIELD_CACHE`'s own comment describes.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

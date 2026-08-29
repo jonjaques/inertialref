@@ -925,7 +925,7 @@ and `ir.shot` already exist):
 | `ir.sites(address)`                               | The derived survey sites, with region addresses                                                                                                                                       |
 | `ir.visit(address, site \| lat/lon, alt)`         | Observatory surface pose — no ship, no physics                                                                                                                                        |
 | `ir.descend(address, { site \| lat/lon, steps })` | Scripted descent orbit→2 m on paper — the selection rule and a cache model, deterministic; the unit of perf measurement and plates. Degrees at this boundary, like every harness verb |
-| `ir.terrain()`                                    | Live streamer state: patches built and placed this frame, vertices, triangles, levels, pending, cached, and the traversal's own counters                                              |
+| `ir.terrain()`                                    | Live streamer state: patches built and placed this frame, vertices, triangles, levels, pending, both caches — heightfields and geometries — and the traversal's own counters          |
 
 **The terrain zoo** is a fixture, not a save: one named seed whose generated
 system demonstrably contains all four archetypes (asserted by a test over the

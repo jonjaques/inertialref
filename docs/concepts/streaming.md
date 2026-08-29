@@ -183,6 +183,20 @@ because the pyramid is re-asked for every frame: a keep set of the two
 selections' leaves alone turns the cap into a treadmill that evicts a rung,
 re-requests it, and regenerates it at 9 to 37 ms a patch.
 
+**The cap has to clear that keep set, and the drawn selection does not measure
+it.** A quadtree's ancestors are about a third again as many as its leaves, so
+the keep set floors at ~1.33× the selection cap before the starved rung is
+counted — geometry is held at twice the cap, heightfields at three times. Under
+that floor the streamer builds four patches a frame and evicts four it wanted a
+moment earlier, `starved` never falls to zero, and every twenty-sixth frame the
+eviction takes a patch the traversal is refining through: the disk snaps from
+760 patches at level 7 to four at level 1 and back, two to three times a second.
+It follows the display rather than the body — below the drawing buffer where the
+keep set outgrows the cap it never happens at all, which is why 1600×900 is rock
+solid and a Retina window is not — and only the geometry count shows it, because
+refinement gates on the mesh while the heightfield cache sits at its steady
+value.
+
 Patch keys are `body|face.level.i.j` — `terrainPatchKey`, one definition and
 three readers — so the same patch is never requested twice concurrently, and the
 request set is stable while the player hovers.
