@@ -73,6 +73,20 @@ Violating one of these is a rewrite later, not a refactor.
 - **Never pass a bare `Vec3` to anything that samples terrain.** The argument
   is a `BodyFixedDirection`. The only producers are `bodyFixedDirection`,
   `geodeticDirection`, and `regionDirection`.
+- **Never read a field value off something chosen by rank.** Nearest,
+  second-nearest, the neighbor across an edge — the _value_ of a ranked distance
+  is continuous and its _identity_ is not, so a property read off the identity is
+  a cliff along the whole locus where the ranking changes. Those loci do not run
+  where the boundary you were guarding runs: which plate is second changes along
+  curves through every plate's **interior**, which was 3,081 m of wall on Earth
+  and 1,532 m on Proxima Centauri II with the boundary blend already correct, and
+  a cube-sphere ring walk counts one of seven neighbors twice at each of the
+  eight corners. Weight every candidate within a margin by a smooth function of
+  how much farther it is than the nearest, normalise, and sum — `plateProperty` —
+  or put the field on a lattice with no ranking in it, which is what `craters.ts`
+  does. The weight has to reach zero before a candidate can leave the set, and
+  the margin has to be no wider than the search that collected them.
+  [ADR-0019](docs/adr/0019-the-geology.md).
 - **Never write entity state through `world.entities.update`.** Use `teleport`
   for a discontinuous move and `setControl` / `setFlightAssist` /
   `killRotation` for input. Those reset interpolation history and the landed

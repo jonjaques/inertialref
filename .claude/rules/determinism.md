@@ -29,6 +29,12 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", ADR-0001..0009.
   `BodyFixedDirection`; the only producers are `bodyFixedDirection`, `geodeticDirection`
   and `regionDirection`. Sampling in inertial axes leaves the mountains behind as the
   planet rotates — it has shipped twice.
+- **Never read a field value off something chosen by rank.** A ranked distance is
+  continuous; the identity holding it is not, so a property read off "the nearest" or
+  "the second-nearest" is a cliff wherever the ranking changes — and that locus runs
+  through a plate's interior, not along its boundary. Weight every candidate inside a
+  margin, normalise, and sum (`plateProperty`), or use a lattice with no ranking in it
+  (`craters.ts`). The weight reaches zero before a candidate can leave the set.
 - **Never persist anything regenerable.** A save stores references and mutations. If you
   want to store generated content you want a cache, and it is not a save.
 - **Never make the star catalog ambient.** It is a generation input alongside the seed
