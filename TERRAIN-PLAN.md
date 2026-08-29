@@ -77,7 +77,7 @@ What stands between today and "rich terrain from orbit to on foot":
 | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | One LOD level, 3×3 patches, no cross-face wrap (`terrainWindow.ts`, `windowRadius` and `clipped`) | ~~The visible ground is a few patches wide; face edges are holes; the horizon is the datum sphere~~ — closed by Phase 1's whole-disk quadtree; the window is retired                                                                                                                                                                                                                                                                                  |
 | No stitching or morphing (`terrainMesh.ts:174` one-sided edge normals)                            | ~~Hairline seams now; cracks the moment two levels coexist~~ — closed by Phase 1: bordered patches, the CDLOD morph, and the 2:1 restriction                                                                                                                                                                                                                                                                                                          |
-| Three noise bands                                                                                 | No craters, no tectonics, no volcanism — every world is the same rolling fBm at a different amplitude                                                                                                                                                                                                                                                                                                                                                 |
+| Three noise bands                                                                                 | ~~No craters, no tectonics, no volcanism — every world is the same rolling fBm at a different amplitude~~ — closed by Phase 2: a `SurfaceGrammar` derived from the body's own facts, a per-body sketch, six bands over it and a crater field on a lattice in ℝ³; terrain algorithm v2. [ADR-0019](docs/adr/0019-the-geology.md)                                                                                                                       |
 | One flat color per body                                                                           | Terrain reads as geometry, never as a place; no biomes, no materials                                                                                                                                                                                                                                                                                                                                                                                  |
 | Procgen bodies are featureless at `sphere` tier                                                   | The world you approach is not the world you land on — relief appears only below the streaming threshold                                                                                                                                                                                                                                                                                                                                               |
 | No scatter                                                                                        | Nothing at human scale; the last octave of noise is the smallest thing that exists                                                                                                                                                                                                                                                                                                                                                                    |
@@ -1088,9 +1088,45 @@ sketch, the band stack, the crater field; terrain algorithm v2 in one bump;
 golden vectors extended. [ADR-0019](docs/adr/0019-the-geology.md) is the record
 and [`CONTEXT.md`](CONTEXT.md#the-ground-stops-being-noise-and-becomes-a-geology-28-aug-2026)
 has the numbers: a patch is 9 to 37 ms across the zoo against the documented
-12.8 — 9 on a world with no craters, 38 on a rocky atmosphered one —
+12.8 — 9 on a world with no craters, 37 on a rocky atmosphered one —
 `surfaceDetailFloor` moved from 7–10 to 10–16 because crater rims are sharp,
-and the patch cap and the streamer's request budget moved with it.
+and the patch cap and the streamer's request budget moved with it:
+`DEFAULT_MAX_PATCHES` is 1,024 and a whole-disk selection peaks at 380–862
+across the zoo's survey sites, so the cap is a measurement with headroom
+rather than a hope.
+
+The phase merges with four more entries in `CONTEXT.md` than it landed with,
+because an audit of the field found what the tests had not, and every one of
+them was a step in a function that is supposed to be C1 at every level.
+**The ejecta blanket entered at full value at the rim** — 590 m across
+1.7 × 10⁻¹⁰ m of ground on Iapetus — and **the damped fBm divided by an
+undamped norm**, which is a bias rather than an attenuation and made the belt
+band a 3 km pedestal on Mars and Venus. **Plate properties flipped across a
+boundary**: a blend weighted from 0.5 stood half the difference between two
+plates up as a 9.4 km wall on Proxima Centauri II, and `beltBand` read a bit
+that flips while the edge factor is one. **And which plate is second is a
+rank**, discontinuous along the curves where the second and third nearest are
+equidistant — a kilometre of cliff nowhere near an edge — so a sample now
+carries every plate within a quarter-radian and reads a partition of unity, the
+same argument the crater lattice makes about the cube corner. Largest gap
+surviving sixty bisections over twenty-four great circles: Earth 3,081 m →
+1.3 × 10⁻⁴, Proxima Centauri II 6,070 m → 4.8 × 10⁻⁵. The test that missed the
+seams bisected one arc's single largest jump, which on Earth was a genuine
+crater rim; it sweeps sixteen arcs and the four largest jumps on each now.
+Earth's hypsometry reads 0.583 for it, against 0.76 with two plates: the
+triple junctions are genuinely more blended, and still bimodal.
+
+Two more were in the streamer rather than the field. **`GEOMETRY_CACHE` was
+sized from the drawn set** when the keep set is the drawn set plus the rung
+below plus the whole pyramid under the ideal selection — 1,323 regions against
+a cap of 1,152 at Earthrise over a retina window — so the disk strobed to four
+patches at level 1 for one frame at 2.29 Hz, invisible at the 1600×900 rig and
+violent at 3840×2400. It is twice the patch cap now, and `ir.terrain()` reports
+`geometry` beside `cached` because refinement gates on geometry and the counter
+that would have said so did not exist. And **`terrainSelect`'s numeric region
+key was gated at level 12** on the floor the three bands had; the geology's
+floor is deeper, so every selection below twelve paid the string fallback the
+key exists to avoid. The span is 2²² now.
 
 The spread is the crater neighborhood, and it is wider than § 6 specifies. A
 sample does not sum a 3×3 window per level: two displacements separate a
@@ -1108,8 +1144,12 @@ Three things did not land as written, stated rather than quietly dropped.
 Moon, not as noise" is a set of before/after plates of the zoo through the
 browser, and what exists is the arithmetic: the published anchors are asserted
 as tests (crater density ordered Mercury > Luna > Mars > Earth > Venus, the
-transition diameter's `D·g = 29,000`, Earth's hypsometry bimodal at 0.76 against
-0.36–0.40 for four stagnant lids). **The crater ladder is capped at eleven
+transition diameter's `D·g = 29,000`, Earth's hypsometry bimodal at 0.583
+against 0.36–0.40 for four stagnant lids). What the browser has confirmed is
+narrower than a review: the Earthrise and Raking Mars presets compose to the
+same frame, lens and orbit state on this branch as on the deployed `main`, and a
+2 m stand on Luna's summit converges at level 13 with 537 patches and nothing
+starved where `main` bottoms out at level 9 with 295. **The crater ladder is capped at eleven
 halvings rather than running to the canonical floor**, so a body's finest crater
 is a two-thousandth of its largest — fourteen halvings doubles the patches a
 landing generates, and the finer craters are Phase 4's micro relief. And **the
@@ -1152,7 +1192,14 @@ mapped-body carve-out; CBT if draw submission ever dominates.
   stack is plausibly 3–5× that. Amplitude floors and early-outs are the lever;
   the baseline is what makes the regression visible. This moves Phase 5 from
   "adopt only if the measurements say so" to a condition the measurements have
-  already met once, and it is still not a reason to thin the geology.
+  already met once, and it is still not a reason to thin the geology. Phase 2
+  measured it: 9 to 37 ms a patch across the zoo, and the crater walk is most
+  of it — five cells an axis rather than three, because a crater the walk
+  cannot see arrives as a cliff rather than not at all. The two levers left
+  deliberately unspent are the walk's radial bound, the cube's full width where
+  the worst case measured is 1.36 of 1.73, and `EJECTA_REACH` at 2.6 where the
+  continuous deposit is often mapped to 2. The streamer's own budget does not
+  bite: the baseline reports "budget bit on 0 steps" on every body.
 - **Draw calls.** A whole-disk mixed-level selection is a few hundred patches
   where today draws nine. Measured before optimized; per-level merging and
   the GPU producer are the known outs.
