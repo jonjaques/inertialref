@@ -15,10 +15,12 @@ import {
   PLANETARIUM_LABELS,
   PLANETARIUM_ORBIT_SCOPE,
   PLANETARIUM_ORBITS,
+  PLANETARIUM_HINTED,
   PLANETARIUM_SHIP,
   usePersistentState,
 } from '../state/preferences.ts'
 import { useChromeHidden } from '../hud/chrome.ts'
+import { useKeyLabel } from '../input/useKeymap.ts'
 import { useEngine } from '../state/engineStore.ts'
 import { QUERY } from '../pages/paths.ts'
 import type { PlanetariumContext } from './context.ts'
@@ -96,6 +98,9 @@ export function PlanetariumMode({
    * mode whose primary gesture had silently changed.
    */
   const [freeLook, setFreeLook] = useState(false)
+  const [hinted, setHinted] = usePersistentState(PLANETARIUM_HINTED)
+  // The sheet's own chord, so the hint cannot name a key the editor has moved.
+  const keysLabel = useKeyLabel('chrome.keys')
   const chromeHidden = useChromeHidden()
   /*
    * Whether the camera is on the ground, sampled with the rest of the status.
@@ -262,6 +267,10 @@ export function PlanetariumMode({
     standing,
     freeLook,
     onFreeLook: setFreeLook,
+    // Idempotent: the hook fires this on every gesture and the preference is
+    // already true after the first, so the write happens once and the effect
+    // that persists it bails on the rest.
+    onGesture: () => setHinted(true),
   })
 
   return (
@@ -288,12 +297,32 @@ export function PlanetariumMode({
        * and a drag that starts in the 44 px a landscape iPhone keeps at each
        * side is still a drag.
        */}
+      {/* The cursor says which act a drag is: `grab` for the orbit, `move`
+          for the look. Standing, a drag always turns the head, so the two
+          conditions are the same question asked of two things. */}
       <div
         ref={surface}
         className="hud-bleed pointer-events-auto absolute touch-none select-none"
-        style={{ cursor: 'grab' }}
+        style={{ cursor: freeLook || standing ? 'move' : 'grab' }}
         aria-hidden
       />
+
+      {!hinted && !chromeHidden && (
+        /*
+         * The one thing a planetarium has to say before it says anything else.
+         *
+         * Every gesture here is discoverable by trying it and none of them is
+         * discoverable by looking, which is the specific failure a scene with
+         * no chrome in it has. It leaves on the first gesture and stays gone —
+         * a hint that came back on the next reload would be an advertisement
+         * rather than an introduction, which is why it is a preference and not
+         * session state.
+         */
+        <p className="type-ui pointer-events-none absolute bottom-20 left-1/2 -translate-x-1/2 text-balance text-slate-400">
+          drag to orbit · wheel to dolly · click to focus · {keysLabel ?? '?'}{' '}
+          for keys
+        </p>
+      )}
 
       <SkyLabels
         engine={engine}

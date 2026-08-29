@@ -2,7 +2,7 @@ import { Canvas } from '@react-three/fiber'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useStore } from 'zustand'
 import { AnimatePresence, motion } from 'motion/react'
-import { useLocation } from 'react-router'
+import { useLocation, useNavigate } from 'react-router'
 import type { StarCatalog } from '@inertialref/universe'
 import { DEFAULT_FOV_DEG, GameEngine } from './engine/GameEngine.ts'
 import type {
@@ -53,7 +53,13 @@ import {
 import { DocumentMeta } from './pages/DocumentMeta.tsx'
 import { ModeRoutes } from './pages/ModeRoutes.tsx'
 import { OverlayRoutes } from './pages/OverlayRoutes.tsx'
-import { modeForPath, resolvedLocation } from './pages/paths.ts'
+import {
+  KEYS,
+  modeForPath,
+  overlayState,
+  resolvedLocation,
+  SETTINGS,
+} from './pages/paths.ts'
 import { SceneView } from './scene/SceneView.tsx'
 import {
   engineStore,
@@ -153,6 +159,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    * what went wrong at length.
    */
   const location = useLocation()
+  const navigate = useNavigate()
   const mode = modeForPath(resolvedLocation(location).pathname)
 
   /*
@@ -511,6 +518,22 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
   useAction('time.normal', commands.realTime)
   useAction('chrome.instruments', () => setDebug(!debug))
   useAction('chrome.all', () => engine.setChrome(chromeHidden))
+  /*
+   * The two dialogs a key opens, as navigations rather than as state.
+   *
+   * `overlayState` carries the mode's own location along, which is what keeps
+   * the mode mounted behind the dialog — without it `ModeRoutes` re-resolves at
+   * `/keys`, matches nothing, falls through to the menu and tears down the
+   * session the reader was asking about.
+   */
+  useAction(
+    'chrome.keys',
+    () => void navigate(KEYS, { state: overlayState(location) }),
+  )
+  useAction(
+    'chrome.settings',
+    () => void navigate(SETTINGS, { state: overlayState(location) }),
+  )
 
   return (
     /*

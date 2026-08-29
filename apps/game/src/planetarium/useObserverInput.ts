@@ -74,6 +74,15 @@ export interface ObserverInputOptions {
   /** Whether the primary drag and the arrows look instead of orbiting. */
   readonly freeLook: boolean
   readonly onFreeLook: (on: boolean) => void
+  /**
+   * Somebody did something with the camera.
+   *
+   * The first-visit hint's exit. Fired on every gesture rather than only the
+   * first, because "was this the first" is the caller's question — the
+   * preference it writes is idempotent, and a hook that tried to answer it
+   * would be a second place that has to agree about what counts as a gesture.
+   */
+  readonly onGesture: () => void
 }
 
 export function useObserverInput(
@@ -110,6 +119,7 @@ export function useObserverInput(
     const dx = step.x * scale
     const dy = step.y * scale
     const observatory = engine.harness.observatory
+    latest.current.onGesture()
     if (latest.current.freeLook || observatory.standing) {
       observatory.turn(dx, dy)
       return
@@ -193,6 +203,7 @@ export function useObserverInput(
         return
       // Re-measured only when a gesture begins from nothing: a rotation or a
       // browser-chrome change between gestures does move the surface.
+      latest.current.onGesture()
       if (down.size === 0) rect = node.getBoundingClientRect()
       node.setPointerCapture(event.pointerId)
       down.set(event.pointerId, local(event))
@@ -277,7 +288,9 @@ export function useObserverInput(
       // is a console warning and nothing else.
       event.preventDefault()
       const notches = wheelNotches(event.deltaY, event.deltaMode)
-      if (notches !== 0) observatory.zoomNotches(notches)
+      if (notches === 0) return
+      latest.current.onGesture()
+      observatory.zoomNotches(notches)
     }
 
     /*

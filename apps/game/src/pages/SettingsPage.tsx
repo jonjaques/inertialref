@@ -1,5 +1,11 @@
 import { Link, useParams } from 'react-router'
-import { Camera, Keyboard, MonitorCog, type LucideIcon } from 'lucide-react'
+import {
+  Aperture,
+  Database,
+  Keyboard,
+  MonitorCog,
+  type LucideIcon,
+} from 'lucide-react'
 import { LensSection } from '../hud/LensSection.tsx'
 import { OpticsSection } from '../hud/OpticsSection.tsx'
 import type {
@@ -10,6 +16,7 @@ import type {
 import { GraphicsPanel } from '../hud/GraphicsPanel.tsx'
 import { FOCUS_RING } from '../hud/focus.ts'
 import { ControlsSection } from './ControlsSection.tsx'
+import { DataSection } from './DataSection.tsx'
 import { OverlayPage } from './OverlayPage.tsx'
 import { settingsSection } from './paths.ts'
 import { useOverlay } from './useOverlay.ts'
@@ -35,8 +42,11 @@ import { useOverlay } from './useOverlay.ts'
 
 const SECTIONS = [
   { id: 'display', title: 'Display', icon: MonitorCog },
-  { id: 'camera', title: 'Camera', icon: Camera },
+  // The aperture, matching the planetarium's Camera panel. One idea, one glyph
+  // — a lens control reached from two places must not look like two things.
+  { id: 'camera', title: 'Camera', icon: Aperture },
   { id: 'controls', title: 'Controls', icon: Keyboard },
+  { id: 'data', title: 'Data', icon: Database },
 ] as const satisfies readonly {
   id: string
   title: string
@@ -113,6 +123,7 @@ export function SettingsPage({
         </>
       )}
       {active === 'controls' && <ControlsSection />}
+      {active === 'data' && <DataSection />}
     </OverlayPage>
   )
 }

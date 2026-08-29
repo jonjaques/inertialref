@@ -62,6 +62,16 @@ export const settingsSection = (section: string): string =>
 /** What this is, and who made it. */
 export const ABOUT = '/about'
 
+/**
+ * The keys sheet.
+ *
+ * A dialog with an address, like the settings sections, and for the same
+ * reason: "what does `L` do" is a question somebody answers for somebody else,
+ * and a link is a much better answer than three sentences of navigation. It is
+ * also what makes `?` reachable from a mode that has no menu.
+ */
+export const KEYS = '/keys'
+
 /** The account routes. Stubs today — the seam, not the feature. */
 export const SIGN_IN = '/sign-in'
 export const SIGN_UP = '/sign-up'
@@ -130,6 +140,7 @@ export function isOverlayPath(pathname: string): boolean {
     pathname === SETTINGS ||
     pathname.startsWith(`${SETTINGS}/`) ||
     pathname === ABOUT ||
+    pathname === KEYS ||
     pathname === PROFILE ||
     pathname === SIGN_IN ||
     pathname === SIGN_UP ||
