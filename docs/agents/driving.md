@@ -20,7 +20,7 @@ pnpm sim --help
 ```
 
 The baseline is the slow one because it is the one that generates: sixty patches
-per zoo body, at 9 to 38 ms each. Its request pattern is the deterministic half
+per zoo body, at 9 to 37 ms each. Its request pattern is the deterministic half
 and costs nothing, which is what a caller that passes no clock gets.
 
 Use the browser only for what only a GPU can prove: shading, LOD, framing, a

@@ -5107,11 +5107,11 @@ stack is under three times the documented Phase 0 figure instead of five.
 
 | Measured                            | Was     | Now                               |
 | ----------------------------------- | ------- | --------------------------------- |
-| A bordered 65×65 patch              | 12.8 ms | 20 ms airless, 37 atmosphered     |
+| A bordered 65×65 patch              | 12.8 ms | 9–37 ms across the zoo            |
 | The same three bands, re-measured   | 12.8 ms | 3.6–3.8 ms                        |
 | `noise3`                            | 209 ns  | 47 ns                             |
-| `surfaceDetailFloor` across the zoo | 7–10    | 12–16                             |
-| Whole-disk selection, flight lens   | 410–480 | 416–864                           |
+| `surfaceDetailFloor` across the zoo | 7–10    | 10–16                             |
+| Whole-disk selection, flight lens   | 410–480 | 380–862                           |
 | `DEFAULT_MAX_PATCHES`               | 768     | 1,024 (208 MB in the corner case) |
 | `REQUESTS_PER_FRAME`                | 8       | 24                                |
 
@@ -5218,10 +5218,10 @@ samples. `norm += amplitude * damp` in both fields; the `clamp` every other exit
 from `beltBand` already had, on the one that did not.
 
 **The floor came down four levels and the cap got its headroom back.** With the
-step gone, `surfaceDetailFloor` reports 12–16 across the zoo where it reported
-13–17, Iapetus falling 16 → 12, and a whole-disk selection costs 416–864 patches
+step gone, `surfaceDetailFloor` reports 10–16 across the zoo where it reported
+13–17, Iapetus falling 16 → 12, and a whole-disk selection costs 380–862 patches
 where it cost 420–1,008. `DEFAULT_MAX_PATCHES` stays 1,024 and that is now a
-measurement rather than a hope: 864 is 84% of it, against 1,008 and 98% before —
+measurement rather than a hope: 862 is 84% of it, against 1,008 and 98% before —
 768 would still bite, so the raise in the phase before this one was right for a
 reason that survived the fix. `REQUESTS_PER_FRAME` and `MAX_CRATER_LEVELS` did
 not move; the baseline reports "budget bit on 0 steps" on every body.
@@ -5346,30 +5346,47 @@ half of the same blind spot. It now bisects the four largest jumps per arc and
 sweeps sixteen arcs on the worlds with plates, and truncating the plate
 neighborhood back to two fails it on Earth.
 
-**What it costs, measured across the zoo.** A patch goes 26.6 → 32.1 ms on a
-rocky airless world, 25.2 → 34.1 on Iapetus, 12.4 → **9.5** on Miranda, which has
-no craters and therefore keeps the budget savings whole — and 49.9 → **38.2** on
+**What it costs, measured across the zoo.** A patch goes 26.6 → 32.3 ms on a
+rocky airless world, 25.2 → 35.9 on Iapetus, 12.4 → **8.8** on Miranda, which has
+no craters and therefore keeps the budget savings whole — and 49.9 → **37.3** on
 a rocky atmosphered world, which is _cheaper_ than before the crater walk
-widened. The detail floors (12, 13, 15, 16), the peak patch counts and the
-descent ladders are bit-identical before and after, which is what says the cost
-moved and the streaming did not. Two levers on the crater walk remain
-deliberately unspent: its radial bound is the cube's full width where the worst
-case measured over six bodies is 1.36 of 1.73, and `EJECTA_REACH` is 2.6 where
-the published continuous ejecta deposit is often mapped to 2.
+widened. Two levers on the crater walk remain deliberately unspent: its radial
+bound is the cube's full width where the worst case measured over six bodies is
+1.36 of 1.73, and `EJECTA_REACH` is 2.6 where the published continuous ejecta
+deposit is often mapped to 2.
 
-**The atmosphered world got cheaper because of a hash lane nobody was reading.**
-`gradientAt` called `pcg3d`, which returns three lanes, and used one. It is eight
+**The gradient lattice was hashing with the wrong function, and it cost twice.**
+`gradientAt` called `pcg3d`, which returns three lanes, and read one — eight
 calls per `gradientNoise3` and seven to twelve octaves a sample, so V8 exhausts
-its inlining budget across the eight sites and never scalar-replaces the object:
-a real allocation at every lattice corner, 39% of an eroded patch's self time.
-Written out inline it is 2,611 → 455 ns per nine-octave call, bit-identical over
-800,000 of them, and it takes the whole analytic-gradient path — every world with
-an atmosphere — from 59.7 ms a patch to 38.2. Exporting a scalar `pcg3dX` from
-`lattice.ts` instead is the version that duplicates nothing and buys 5% of the
-40%, because V8 will not inline two levels deep across a package boundary; the
-duplication is held together by a test at the integer lattice points, where the
-fade and its slope are both zero so the returned gradient _is_ the corner's edge
-vector.
+its inlining budget across the eight sites and never scalar-replaces the object.
+That was the cheap half. The expensive half is that `noise3` hashes with `hash3`,
+so the two gradient lattices were _different fields_: `bands.ts` picks between
+`ridged3` and `ridgedField` on whether a world erodes and says the two give the
+same number, and they were separated by up to 1.25 on a band whose contract is
+[-1, 1] — two worlds a pascal apart got unrelated mountain ranges rather than the
+same ones slightly more worn. Sharing `hash3` makes the claim true (they agree to
+twelve decimals now, and `field.test.ts` holds them there) and takes the whole
+analytic-gradient path from 59.7 ms a patch to 37.3. `hash3` is _written out_
+rather than called, because composing it with `mix32` is two levels deep at eight
+sites and calling it costs 14 ms a patch — 51.8 against 37.3 — where the same
+call in `noise.ts` costs nothing measurable.
+
+**The erosion damping was a dead dial.** `fbmField` accumulated each octave's
+gradient scaled by frequency but not by amplitude, so the sum grew as
+`lacunarity^i` instead of `(lacunarity·gain)^i` and saturated after three
+octaves whatever `erosion` was: measured octave weights of 0.813/0.156/0.027 at
+`damping` 1 against 0.850/0.128/0.019 at 24, a 48× range moving the fundamental
+by three points. Every atmosphered world was three octaves of fBm paying for
+twelve. With the amplitude in, `norm` had to stop accumulating the _damped_
+amplitude too — dividing by it renormalizes each sample back to full range, so
+the damping got **rougher** as it rose (total variation 29.3 undamped, 30.6 at
+1.2, 41.7 at 24) instead of smoother. Against the raw amplitude it falls the way
+the name says: 29.3, 11.9, 2.5. `ridgedField` remaps `2r² − 1` per octave rather
+than `·2 − 1` on the sum, which is identical undamped — `2·Σa·r²/Σa − 1 =
+Σa·(2r² − 1)/Σa` — and attenuates toward the band's midpoint rather than toward
+−1 when damped, which is the bias the damped divisor was there to fix. `erosion`
+is `1.2·air^1.5` where it was `24·air^1.5`, because the old scale was calibrated
+against a dial that had already stopped turning.
 
 **And three latent defects the same review found, none of which had a live
 trigger.** `surfaceDetailFloor`'s three-level quiet run counted sea-flattened

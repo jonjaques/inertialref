@@ -137,7 +137,7 @@ patches to draw geometry the resolve filter averages away.
 
 **Stop where the field stops.** Past some level a patch is a bilinear upsample of
 its parent. `surfaceDetailFloor` measures that per body from the field itself
-rather than assuming it, and it lands at level 12 to 16 across the zoo — 12 on
+rather than assuming it, and it lands at level 10 to 16 across the zoo — 10 on
 Iapetus, 16 on the atmosphered rocky world, as `pnpm sim --terrain-baseline`
 prints it against each body's descent. The
 [band stack](rendering.md#terrain-meshing) puts crater rims in the field, a rim
@@ -181,7 +181,7 @@ from the selection's own ceiling now, and eviction keeps everything the frame's
 request list names — the drawn set, the starved children, the whole pyramid —
 because the pyramid is re-asked for every frame: a keep set of the two
 selections' leaves alone turns the cap into a treadmill that evicts a rung,
-re-requests it, and regenerates it at 9 to 38 ms a patch.
+re-requests it, and regenerates it at 9 to 37 ms a patch.
 
 Patch keys are `body|face.level.i.j` — `terrainPatchKey`, one definition and
 three readers — so the same patch is never requested twice concurrently, and the

@@ -208,16 +208,26 @@ lid, because it has no ocean and water is the leading explanation for why one of
 them subducts; Enceladus with four parallel fractures across a shell nothing has
 had time to hit.
 
-**A patch costs 9 to 38 ms where it cost 12.8**, measured across the zoo:
-9.5 ms on Miranda, which has no craters at all, 32.1 on a rocky airless world,
-34.1 on Iapetus and 38.2 on a rocky atmosphered one, where the erosion damping
+**A patch costs 9 to 37 ms where it cost 12.8**, measured across the zoo:
+8.8 ms on Miranda, which has no craters at all, 32.3 on a rocky airless world,
+35.9 on Iapetus and 37.3 on a rocky atmosphered one, where the erosion damping
 reads the analytic gradient. Two unrelated wins pay for part of it. Flattening
 the gradient table in `noise3` from an array of triples to three `Float64Array`
 lanes took it from 209 ns a call to 47, so the three bands this replaces would
-now cost 3.6–3.8 ms. And writing `pcg3d`'s first lane out inside `gradientAt`
-took the atmosphered world from 59.7 ms to 38.2 — that hash is eight calls per
-`gradientNoise3` and up to twelve octaves a sample, and V8 was allocating the
-two discarded lanes at every lattice corner.
+now cost 3.6–3.8 ms. And `gradientAt` — eight calls per `gradientNoise3`, up to
+twelve octaves a sample, the innermost thing in the stack — hashed with `pcg3d`
+and read one of the three lanes it returns, which V8 never scalar-replaced. It
+hashes with `noise3`'s own `hash3` now, written out rather than called because
+two levels of call at eight sites exhausts the inlining budget: 59.7 ms on the
+atmosphered world became 37.3.
+
+**That hash was also a correctness bug, and the more expensive one.** `bands.ts`
+picks between `ridged3` and `ridgedField` on whether a world erodes, on the
+stated grounds that the two give the same number; hashing the gradient lattice
+with `pcg3d` where `noise3` uses `hash3` made them different _fields_, separated
+by up to 1.25 on a band whose contract is [-1, 1]. Two worlds a pascal apart got
+unrelated mountain ranges rather than the same ones slightly more worn. They now
+agree to twelve decimals, and `field.test.ts` holds them there.
 
 **The crater neighborhood is the spread, and containment is what it buys.**
 Sizing the walk to the ejecta reach and the radial slop took an airless patch
@@ -229,12 +239,12 @@ is often mapped to 2. This is well past the condition `TERRAIN-PLAN.md` § 12
 names for moving Phase 5's GPU producer from "adopt if the measurements say so"
 to a scheduled piece of work.
 
-**`surfaceDetailFloor` moved from 7–10 to 12–16, and everything downstream moved
+**`surfaceDetailFloor` moved from 7–10 to 10–16, and everything downstream moved
 with it.** Crater rims are sharp — a rim is about a seventh of its crater wide —
 so resolving one to half a meter takes samples seven times finer again. A
 whole-disk selection costs about ninety patches per level between the horizon
 and the ground, so the extra levels underfoot took it from 410–480 patches to
-416–864; `DEFAULT_MAX_PATCHES` went from 768 to 1,024 so that the cap stays a
+380–862; `DEFAULT_MAX_PATCHES` went from 768 to 1,024 so that the cap stays a
 safety net rather than a working limit, at 208 MB of vertex buffers in the
 corner case. The streamer's per-frame request budget went from 8 to 24 for the
 same reason: the ladder is strictly serial — a level cannot refine until all
