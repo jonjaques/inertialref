@@ -33,7 +33,7 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", ADR-0001..0009.
   continuous; the identity holding it is not, so a property read off "the nearest" or
   "the second-nearest" is a cliff wherever the ranking changes — and that locus runs
   through a plate's interior, not along its boundary. Weight every candidate inside a
-  margin, normalise, and sum (`plateProperty`), or use a lattice with no ranking in it
+  margin, normalize, and sum (`plateProperty`), or use a lattice with no ranking in it
   (`craters.ts`). The weight reaches zero before a candidate can leave the set.
 - **Never persist anything regenerable.** A save stores references and mutations. If you
   want to store generated content you want a cache, and it is not a save.

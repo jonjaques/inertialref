@@ -18,7 +18,7 @@ import {
   systemAddress,
   systemId,
 } from '../address.ts'
-import { tidalProxyOf } from '../archetype.ts'
+import { meanRadiusOf, tidalProxyOf } from '../archetype.ts'
 import { blackbodyColour } from '../catalog/photometry.ts'
 import { equilibriumTemperature, surfaceGrammar } from '../grammar.ts'
 import type { SystemStub } from '../galaxy.ts'
@@ -137,10 +137,10 @@ function surfaceOf(
   const seaLevel = body.name === 'Earth' ? 0.55 : null
   const grammar = surfaceGrammar(seed, {
     mass: body.mass,
-    meanRadius: Math.cbrt(
-      body.radius *
-        (body.figure?.intermediateRadius ?? body.radius) *
-        body.polarRadius,
+    meanRadius: meanRadiusOf(
+      body.radius,
+      body.figure?.intermediateRadius ?? null,
+      body.polarRadius,
     ),
     atmosphere: atmosphereOf(body),
     temperature,
@@ -291,10 +291,10 @@ function buildBody(
       ),
       tidalProxyOf(
         body.mass,
-        Math.cbrt(
-          body.radius *
-            (body.figure?.intermediateRadius ?? body.radius) *
-            body.polarRadius,
+        meanRadiusOf(
+          body.radius,
+          body.figure?.intermediateRadius ?? null,
+          body.polarRadius,
         ),
         body.semiMajorAxis,
         body.eccentricity,

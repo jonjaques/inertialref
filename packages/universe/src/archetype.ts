@@ -61,8 +61,29 @@ export const ACTIVE_TIDAL_PROXY: number = 1e-6
  * small bodies would put half the belt on the wrong side of `ICE_ROCK_DENSITY`.
  */
 export function volumetricMeanRadius(body: Body): Meters {
-  const intermediate = body.figure?.intermediateRadius ?? body.radius
-  return Math.cbrt(body.radius * intermediate * body.polarRadius)
+  return meanRadiusOf(
+    body.radius,
+    body.figure?.intermediateRadius ?? null,
+    body.polarRadius,
+  )
+}
+
+/**
+ * The same radius from loose numbers, for a body that does not exist yet.
+ *
+ * `solar/system.ts` derives a grammar and a tidal proxy from a `SolarBody`,
+ * which is a table row rather than a `Body`, and `surfaceGrammar` runs inside
+ * the generator where the moon being described is half-built. Two spellings of
+ * the formula above is how the dossier's density row shipped Phobos at
+ * 1.08 g/cm³, so there is one — the same reason `tidalProxyOf` and
+ * `classifySurface` exist beside their `Body`-shaped callers.
+ */
+export function meanRadiusOf(
+  radius: Meters,
+  intermediateRadius: Meters | null,
+  polarRadius: Meters,
+): Meters {
+  return Math.cbrt(radius * (intermediateRadius ?? radius) * polarRadius)
 }
 
 /** Bulk density, kg/m³. See `volumetricMeanRadius` for the denominator. */

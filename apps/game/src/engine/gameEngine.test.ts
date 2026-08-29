@@ -322,6 +322,15 @@ describe('the game engine, headless', () => {
        * collapsed and have them measure it as steady. A frame is converged when
        * the count is not growing *and* has not dropped more than a twentieth,
        * which is the same ordinary churn the assertion downstream allows.
+       *
+       * `placed > 0` is the same clause at the one value the ratio cannot
+       * speak for. Zero satisfies both halves against a previous zero — `0 <= 0`
+       * and `0 >= 0 * 0.95` — so a disk that never arrives, or that goes away
+       * entirely, is the *most* converged thing this loop can see. It would then
+       * exit after twenty frames and hand `no terrain report` past a null check
+       * that a zero-patch report passes, and the anchor sort below would throw a
+       * `TypeError` out of `beforeAll` instead of any of the four assertions
+       * reporting which invariant broke.
        */
       let previous = -1
       let steady = 0
@@ -329,7 +338,9 @@ describe('the game engine, headless', () => {
         await settle(1)
         const placed = game.terrain()?.patches ?? 0
         steady =
-          placed <= previous && placed >= previous * 0.95 ? steady + 1 : 0
+          placed > 0 && placed <= previous && placed >= previous * 0.95
+            ? steady + 1
+            : 0
         previous = placed
       }
       const onGround = game.terrain()
@@ -379,10 +390,16 @@ describe('the game engine, headless', () => {
        * frame and the distance to it moves by kilometers for reasons that have
        * nothing to do with what is being measured.
        */
-      const anchor = [...game.terrainState().patches].sort(
+      const byDepth = [...game.terrainState().patches].sort(
         (a: PlacedPatch, b: PlacedPatch) =>
           b.patch.region.level - a.patch.region.level,
-      )[0]!.patch.region
+      )
+      // Named, because the four assertions below all read state this block
+      // gathers: an empty set here has to say so rather than reach a `[0]!`
+      // that fails the whole suite as a `TypeError` in setup.
+      const deepest = byDepth[0]
+      if (deepest === undefined) throw new Error('no patches on the ground')
+      const anchor = deepest.patch.region
       const separation = (): number => {
         const here = shipNow()
         const placed = game

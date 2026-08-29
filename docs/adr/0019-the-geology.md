@@ -81,12 +81,12 @@ falls out of the same search that names the plate — that much is a _value_ and
 is continuous everywhere. What is not is the _identity_ of the plate holding
 `F2`: it changes discontinuously along the locus where the second and third
 nearest are equidistant, which is a network of curves through every plate's
-interior, nowhere near an edge. Anything reading a property off "the neighbour"
+interior, nowhere near an edge. Anything reading a property off "the neighbor"
 inherits that jump: 1,532 m of step on Proxima Centauri II and 3,081 m on Earth,
 out of relief budgets of 20 and 10 km.
 
 So a sample carries _every_ plate within a quarter-radian of the nearest, and a
-band reads a property as a weighted average over all of them, normalised, with a
+band reads a property as a weighted average over all of them, normalized, with a
 weight that reaches zero at its own margin. No rank identity enters, so
 continuity is by construction rather than by a blend that has to be got right —
 the same argument the crater lattice makes about the cube corner. `convergence`
@@ -208,15 +208,18 @@ lid, because it has no ocean and water is the leading explanation for why one of
 them subducts; Enceladus with four parallel fractures across a shell nothing has
 had time to hit.
 
-**A patch costs 9 to 60 ms where it cost 12.8**, measured across the zoo:
-9.4 ms on Miranda, which has no craters at all, 32.3 on a rocky airless world,
-34.3 on Iapetus and 59.7 on a rocky atmosphered one, where the erosion damping
-reads the analytic gradient. Part of that is paid for by an unrelated win:
-flattening the gradient table in `noise3` from an array of triples to three
-`Float64Array` lanes took it from 209 ns a call to 47, so the three bands this
-replaces would now cost 3.6–3.8 ms.
+**A patch costs 9 to 38 ms where it cost 12.8**, measured across the zoo:
+9.5 ms on Miranda, which has no craters at all, 32.1 on a rocky airless world,
+34.1 on Iapetus and 38.2 on a rocky atmosphered one, where the erosion damping
+reads the analytic gradient. Two unrelated wins pay for part of it. Flattening
+the gradient table in `noise3` from an array of triples to three `Float64Array`
+lanes took it from 209 ns a call to 47, so the three bands this replaces would
+now cost 3.6–3.8 ms. And writing `pcg3d`'s first lane out inside `gradientAt`
+took the atmosphered world from 59.7 ms to 38.2 — that hash is eight calls per
+`gradientNoise3` and up to twelve octaves a sample, and V8 was allocating the
+two discarded lanes at every lattice corner.
 
-**The crater neighborhood is most of the rest, and containment is what it buys.**
+**The crater neighborhood is the spread, and containment is what it buys.**
 Sizing the walk to the ejecta reach and the radial slop took an airless patch
 from 17.5 ms to 28.3 while removing a step of up to 158 m from about 30% of
 directions. Two levers remain and both are deliberate not-yet: the radial bound

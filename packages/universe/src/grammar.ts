@@ -168,6 +168,15 @@ export interface SurfaceGrammar {
   readonly tidalProxy: number
   /** Relief the material and the body's own size permit, meters. */
   readonly reliefLimit: Meters
+  /**
+   * Which of the three limits bound it — or `'measured'`, where somebody has
+   * flown over the body and the archive overrides all three.
+   *
+   * Recorded rather than re-derived, because `reliefLimit` is not always what
+   * bound the body and the comparison cannot tell afterwards. See
+   * `reliefLimitSource`.
+   */
+  readonly reliefSource: ReliefSource
 
   /** 0 on an airless world, 1 under a thick one. The erasure driver. */
   readonly air: number
@@ -246,6 +255,35 @@ export function reliefLimit(
       ? CRUST_STRENGTH / (density * gravity)
       : Number.POSITIVE_INFINITY
   return Math.min(strength, meanRadius * RELIEF_RADIUS_FRACTION, MAX_RELIEF)
+}
+
+/** Which of the three limits `reliefLimit` returned, or the archive. */
+export type ReliefSource = 'measured' | 'strength' | 'size' | 'ceiling'
+
+/**
+ * Which term bound the relief, named where the `Math.min` above runs.
+ *
+ * The dossier's relief row says *why* a body carries the relief it does, and a
+ * panel that re-derives the comparison from the three constants is a second copy
+ * of the rule that answers a different question: `reliefLimit` is not always
+ * what bound the body. `surfaceOf` in `solar/system.ts` passes a published
+ * figure for every body in Sol, which overrides all three — so the re-derived
+ * version told Earth's card "limited by what the crust can hold up" over a
+ * 9,900 m relief the crust limit puts at 5,910. The answer has to come from the
+ * site that knows, and `'measured'` is the case a re-derivation cannot see.
+ */
+export function reliefLimitSource(
+  density: number,
+  gravity: number,
+  meanRadius: Meters,
+): Exclude<ReliefSource, 'measured'> {
+  const strength =
+    density > 0 && gravity > 0
+      ? CRUST_STRENGTH / (density * gravity)
+      : Number.POSITIVE_INFINITY
+  const size = meanRadius * RELIEF_RADIUS_FRACTION
+  if (strength <= size && strength <= MAX_RELIEF) return 'strength'
+  return size <= MAX_RELIEF ? 'size' : 'ceiling'
 }
 
 /**
@@ -347,6 +385,12 @@ export function surfaceGrammar(
   const limit =
     facts.publishedRelief ??
     reliefLimit(density, gravity, meanRadius) * facts.reliefSpent
+  // `??` above, so a published zero is still published — which is what every
+  // Sol body with no measured relief passes, and why this is not `> 0`.
+  const reliefSource: ReliefSource =
+    facts.publishedRelief !== null
+      ? 'measured'
+      : reliefLimitSource(density, gravity, meanRadius)
 
   const complexDiameter = mix(29_000, 3_500, icy) / Math.max(gravity, 1e-4)
   /*
@@ -394,6 +438,7 @@ export function surfaceGrammar(
     airMass,
     tidalProxy,
     reliefLimit: limit,
+    reliefSource,
     air,
     young,
     icy,

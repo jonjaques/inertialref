@@ -147,7 +147,7 @@ export const ARC_MARGIN = 0.06
  *
  * **`across` is defined only where `edge > 0`, and it is zero rather than
  * continuous outside that.** It steps at `boundary === BELT_MARGIN`, where the
- * pair weights go to zero but their normalised ratio does not. Nothing sees it:
+ * pair weights go to zero but their normalized ratio does not. Nothing sees it:
  * `beltBand` multiplies by an `edge` that is exactly zero there and returns
  * before that anyway, and the arc gates at 0.06. A third consumer, or an
  * `ARC_MARGIN` raised past `BELT_MARGIN`, would see it — which is the kind of

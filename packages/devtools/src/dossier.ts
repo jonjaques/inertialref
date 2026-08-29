@@ -25,7 +25,6 @@ import {
   type BodyKind,
   type BodyProvenance,
   type CatalogStar,
-  CRUST_STRENGTH,
   findBody as findBodyAt,
   formatAddress,
   frostLine,
@@ -35,10 +34,9 @@ import {
   isDebris,
   isHabitable,
   isPlanetKind,
-  MAX_RELIEF,
   orbitalOrder,
   parseSpectralType,
-  RELIEF_RADIUS_FRACTION,
+  type ReliefSource,
   type Star,
   type StarSystem,
   type SystemId,
@@ -824,6 +822,24 @@ function rotationGroup(body: Body, year: Seconds): FactGroup {
  * have no card rather than a card full of numbers about a surface that is not
  * there.
  */
+/**
+ * Why a body carries the relief it does, one phrase per source.
+ *
+ * `reliefSource` rather than the three constants re-compared here, because a
+ * measured world does not go through the comparison at all: `solar/system.ts`
+ * hands every body in Sol its published figure, so re-deriving the answer told
+ * Earth "limited by what the crust can hold up" over a 9,900 m relief the crust
+ * limit puts at 5,910. A row on this panel is a claim about the place
+ * (ADR-0014), and a claim about a mechanism that did not run is the one kind
+ * this panel may not make.
+ */
+const RELIEF_REASON: Readonly<Record<ReliefSource, string>> = {
+  measured: 'measured from orbit; the archive outranks the model',
+  ceiling: 'at the ceiling nothing measured anywhere exceeds',
+  size: 'limited by the size of the body',
+  strength: 'limited by what the crust can hold up',
+}
+
 function geologyGroup(body: Body): FactGroup | null {
   if (!hasSolidSurface(body)) return null
   const g = body.surface.grammar
@@ -848,12 +864,7 @@ function geologyGroup(body: Body): FactGroup | null {
       note:
         body.surface.maxElevation <= 0
           ? 'the shape model carries what relief there is'
-          : g.reliefLimit >= MAX_RELIEF * 0.999
-            ? 'at the ceiling nothing measured anywhere exceeds'
-            : g.meanRadius * RELIEF_RADIUS_FRACTION <=
-                CRUST_STRENGTH / (g.density * Math.max(g.gravity, 1e-9))
-              ? 'limited by the size of the body'
-              : 'limited by what the crust can hold up',
+          : RELIEF_REASON[g.reliefSource],
     },
   ]
 

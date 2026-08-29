@@ -5344,17 +5344,46 @@ A one-plate world cannot exercise the tectonic bands at all, which is how the
 first round of these survived; a one-arc walk on a world that can is the second
 half of the same blind spot. It now bisects the four largest jumps per arc and
 sweeps sixteen arcs on the worlds with plates, and truncating the plate
-neighbourhood back to two fails it on Earth.
+neighborhood back to two fails it on Earth.
 
-**What it costs, measured across the zoo.** A patch goes 26.6 → 32.3 ms on a
-rocky airless world, 49.9 → 59.7 on a rocky atmosphered one, 25.2 → 34.3 on
-Iapetus, and 12.4 → **9.4** on Miranda, which has no craters and therefore keeps
-the budget savings whole. The detail floors (12, 13, 15, 16), the peak patch
-counts and the descent ladders are bit-identical before and after, which is what
-says the cost moved and the streaming did not. Two levers on the crater walk
-remain deliberately unspent: its radial bound is the cube's full width where the
-worst case measured over six bodies is 1.36 of 1.73, and `EJECTA_REACH` is 2.6
-where the published continuous ejecta deposit is often mapped to 2.
+**What it costs, measured across the zoo.** A patch goes 26.6 → 32.1 ms on a
+rocky airless world, 25.2 → 34.1 on Iapetus, 12.4 → **9.5** on Miranda, which has
+no craters and therefore keeps the budget savings whole — and 49.9 → **38.2** on
+a rocky atmosphered world, which is _cheaper_ than before the crater walk
+widened. The detail floors (12, 13, 15, 16), the peak patch counts and the
+descent ladders are bit-identical before and after, which is what says the cost
+moved and the streaming did not. Two levers on the crater walk remain
+deliberately unspent: its radial bound is the cube's full width where the worst
+case measured over six bodies is 1.36 of 1.73, and `EJECTA_REACH` is 2.6 where
+the published continuous ejecta deposit is often mapped to 2.
+
+**The atmosphered world got cheaper because of a hash lane nobody was reading.**
+`gradientAt` called `pcg3d`, which returns three lanes, and used one. It is eight
+calls per `gradientNoise3` and seven to twelve octaves a sample, so V8 exhausts
+its inlining budget across the eight sites and never scalar-replaces the object:
+a real allocation at every lattice corner, 39% of an eroded patch's self time.
+Written out inline it is 2,611 → 455 ns per nine-octave call, bit-identical over
+800,000 of them, and it takes the whole analytic-gradient path — every world with
+an atmosphere — from 59.7 ms a patch to 38.2. Exporting a scalar `pcg3dX` from
+`lattice.ts` instead is the version that duplicates nothing and buys 5% of the
+40%, because V8 will not inline two levels deep across a package boundary; the
+duplication is held together by a test at the integer lattice points, where the
+fade and its slope are both zero so the returned gradient _is_ the corner's edge
+vector.
+
+**And three latent defects the same review found, none of which had a live
+trigger.** `surfaceDetailFloor`'s three-level quiet run counted sea-flattened
+levels toward the run and gated only its last, so `floor = runStart` could answer
+with a level whose quiet was the clamp — the exact failure the paragraph above it
+says it prevents. `surveySites`' memo key never learned about the grammar, though
+its derivation samples `elevationAt`, which reads twenty of its fields; the
+grammar goes in whole now, which is complete by construction rather than a list
+somebody maintains. And the geology card in `dossier.ts` re-derived which of the
+three relief limits bound a body, when on any body with a `publishedRelief` none
+of them ran — Earth's card read "limited by what the crust can hold up" over a
+crust limit of 5,910 m against its 9.9 km. `reliefLimit` reports its own source
+now, because ADR-0014 makes every row on that panel a claim about the place, and
+a mechanism that did not run is the one kind of claim it may not make.
 
 `TERRAIN_ALGORITHM` does not move, for the reason the entry above it gives:
 `origin/main` is on v1, this branch already carries the one bump to v2, and v2

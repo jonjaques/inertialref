@@ -376,7 +376,7 @@ export const TERRAIN_DETAIL_TOLERANCE: Meters = CANONICAL_AMPLITUDE_FLOOR
 const DETAIL_PROBES = 24
 
 /**
- * How many consecutive quiet levels settle the floor.
+ * How many consecutive quiet levels on dry ground settle the floor.
  *
  * Three. Two is enough for the crater ladder alone — its levels are a factor of
  * two apart, so one quiet level followed by another has already stepped past a
@@ -406,14 +406,21 @@ const detailFloorCache = new WeakMap<SurfaceParameters, Map<string, number>>()
  * stencils touched dry ground — a sea-flattened stencil is the clamp talking,
  * not the field, and the walk carries past it.
  *
- * About 1,500 samples, and **4 to 23 ms for a body on the main thread** —
- * Miranda 3.8, Iapetus 11.8, Luna 14.8, Proxima Centauri II 21.2, Mars 23.2.
- * That is the same order as deriving the body's survey sites rather than the
- * quarter of it this once was, because the band stack and the crater
- * neighborhood both grew under it. It is memoized, and it is paid by
- * `TerrainStreamer.#update` on the frame a body becomes the terrain target,
- * which is one to two dropped frames exactly when the player arrives — a real
- * cost, named here because the number is what would justify moving it.
+ * About 1,500 samples, and **16 to 32 ms for a body on the main thread** —
+ * Miranda 15.5, Earth 20.4, Iapetus 21.6, Callisto 30.2, Luna 32.2. That is the
+ * same order as deriving the body's survey sites rather than the quarter of it
+ * this once was, because the band stack and the crater neighborhood both grew
+ * under it.
+ *
+ * **Cold, and the warm figure is half of it.** This is the first thing to touch
+ * the band stack for a body, so nothing is JIT-warm when it runs — the same
+ * search costs 4 to 16 ms once the field has been sampled, and quoting that
+ * figure would be quoting a number the application never pays. It is memoized,
+ * and it is paid by `TerrainStreamer.#update` on the frame a body becomes the
+ * terrain target: two dropped frames exactly when the player arrives. Nothing
+ * about it needs the main thread — `HeightfieldRequestPayload` already carries
+ * everything it reads — so the number is here because it is what would justify
+ * making it a second task on the pool.
  *
  * This lives beside `elevationAt` because it is a property of those bands and
  * has to move when they do — the band stack put crater rims and scarps into the
@@ -497,19 +504,23 @@ export function surfaceDetailFloor(
      * it settles the floor only on a world with no dry ground at all, where
      * the shallowest one is the honest answer.
      */
-    if (peak <= tolerance) {
+    if (peak <= tolerance && ashore) {
       if (run === 0) runStart = level
       run += 1
-      if (ashore) {
-        if (run >= QUIET_RUN) {
-          floor = runStart
-          break
-        }
-      } else if (flooded === null) {
-        flooded = level
+      if (run >= QUIET_RUN) {
+        floor = runStart
+        break
       }
     } else {
+      /*
+       * A flooded level breaks the run rather than extending it, and that is
+       * the whole force of the paragraph above. `runStart` is the level the
+       * search answers with, so a run that may begin on a flooded level answers
+       * with one — the field would never have been asked about the ground
+       * there, and the streamer would take a clamp's silence for the field's.
+       */
       run = 0
+      if (peak <= tolerance && flooded === null) flooded = level
     }
     if (ashore) everAshore = true
   }
@@ -662,12 +673,12 @@ export function heightfieldSample(
  * Generate one terrain patch.
  *
  * This is the meaningful CPU work that runs in a worker: a bordered 65×65 patch
- * is 4,761 samples and each is six bands and a crater ladder — 32 ms on an
- * airless world and 60 on an atmosphered one, where the erosion damping reads
- * the analytic gradient. A world with no craters at all is 9. The crater
- * neighborhood is most of the difference and most of the total: it walks about
- * five cells an axis, which is what containing the ejecta reach costs
- * (`craters.ts`). The result is a Float32Array precisely so it can be
+ * is 4,761 samples and each is six bands and a crater ladder — 32 ms on a rocky
+ * airless world, 34 on an icy dead one, 38 on an atmosphered one where the
+ * erosion damping reads the analytic gradient. A world with no craters at all
+ * is 9.5. The crater neighborhood is nearly all of that spread and most of the
+ * total: it walks about five cells an axis, which is what containing the ejecta
+ * reach costs (`craters.ts`). The result is a Float32Array precisely so it can be
  * transferred rather than copied back to the main thread.
  *
  * The border samples run `s` and `t` outside [0,1], which `regionDirection`

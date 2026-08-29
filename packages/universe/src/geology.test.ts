@@ -351,15 +351,15 @@ describe('the crater field', () => {
      *
      * **The measurement is continuity itself, not a proxy for it.** A large
      * adjacent-sample jump is not a defect — a crater rim is genuinely steep,
-     * and a scan fine enough to resolve one will report metres between
-     * neighbours. What separates steep from discontinuous is what happens when
+     * and a scan fine enough to resolve one will report meters between
+     * neighbors. What separates steep from discontinuous is what happens when
      * the two samples are brought together: on a continuous field the gap
      * closes with the separation, and across a step it does not. So this finds
      * the worst jump on a great circle, bisects it sixty times — down to a
-     * separation of ~1e-16 of the arc, sub-nanometre on every body here — and
+     * separation of ~1e-16 of the arc, sub-nanometer on every body here — and
      * asserts the gap has gone with it.
      *
-     * A metre is four hundred times the largest survivor measured (2.4 mm, on
+     * A meter is four hundred times the largest survivor measured (2.4 mm, on
      * Miranda) and six hundred times smaller than the defect, so the bound is
      * nowhere near either edge. Reintroducing the step fails it by three orders
      * of magnitude on four of the five bodies.
@@ -376,7 +376,7 @@ describe('the crater field', () => {
        * The four largest jumps on the arc, not the largest.
        *
        * A step is not usually the biggest thing on a walk — a crater rim is
-       * genuinely steeper than a kilometre of plate seam spread over a
+       * genuinely steeper than a kilometer of plate seam spread over a
        * five-thousandth of an arc — so bisecting onto the single largest jump
        * examines a rim, finds it continuous, and reports that the arc is clean.
        * Four candidates is what it takes to see past the rims, and each costs
@@ -501,7 +501,7 @@ describe('the crater field', () => {
     }
 
     /*
-     * Proxima Centauri II is held to the same metre as everything else, and it
+     * Proxima Centauri II is held to the same meter as everything else, and it
      * is the body that had to earn it.
      *
      * The seam here was never a plate boundary. `plateAt` used to return the

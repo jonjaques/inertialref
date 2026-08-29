@@ -401,8 +401,8 @@ Stated plainly, because discovering these by surprise is worse than reading them
   rather than the datum — and what it refines is now craters, plates, volcanism
   and ice from each body's own facts. What it wears is still one flat color per
   body: no biomes, no materials. Generating a bordered 65×65 patch costs 9 to
-  60 ms across the zoo — 9 on a world with no craters at all, 32 on a rocky
-  airless one, 60 on a rocky atmosphered one — against a documented ≤ 8 ms
+  38 ms across the zoo — 9 on a world with no craters at all, 32 on a rocky
+  airless one, 38 on a rocky atmosphered one — against a documented ≤ 8 ms
   budget, and a whole-disk selection holds up to 208 MB of float32 vertex
   buffers at the flight lens. `pnpm sim --terrain-baseline` prints all of it;
   the [roadmap](docs/roadmap.md#terrain) has the seams.

@@ -132,7 +132,7 @@ export const PLATE_MARGIN = 0.25
  * The plates near a direction, and how much farther each is than the nearest.
  *
  * **This is a partition of unity, not a ranking, and the difference is a
- * kilometre of cliff.** The obvious version returns the nearest plate and the
+ * kilometer of cliff.** The obvious version returns the nearest plate and the
  * second-nearest — one pass, two minima, and `F2 − F1` falls out of it for
  * free. What that version cannot do is be *read*: which plate is second changes
  * discontinuously along the locus where the second and third nearest are
@@ -146,7 +146,7 @@ export const PLATE_MARGIN = 0.25
  *
  * So the sample carries *every* plate within `PLATE_MARGIN` of the nearest, and
  * `plateProperty` weights them by a smooth function of how much farther they
- * are and normalises. No rank identity enters, so a property read this way is
+ * are and normalizes. No rank identity enters, so a property read this way is
  * continuous by construction: a plate joins the set at the support radius with
  * weight zero, and two plates that swap places have equal weight at the instant
  * they do.
@@ -238,13 +238,13 @@ export function plateAt(
  *
  * **`(1 − s)/(1 + s)` rather than `1 − s`, and the difference is the shape of a
  * continental margin.** The plain complement blends too far into a plate's
- * interior: at half the margin it still gives its neighbour a third of the say,
+ * interior: at half the margin it still gives its neighbor a third of the say,
  * where the two-plate blend this replaces gave a fifth. On Earth that is the
  * difference between a bimodal elevation histogram and a smeared one — Sarle's
  * coefficient reads 0.583 with this and 0.553 with the complement, against the
  * 5/9 at which a distribution stops having two modes. This form *is* that
  * two-plate blend wherever only two plates are in range: the ratio it gives the
- * neighbour is `(1 − s)/(1 + s)`, which is what `mix(average, mine, s)` was
+ * neighbor is `(1 − s)/(1 + s)`, which is what `mix(average, mine, s)` was
  * spending all along. What the partition changes is the interior seams and the
  * triple junctions, and nothing else.
  */

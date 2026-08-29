@@ -96,6 +96,42 @@ describe('the lattice hash', () => {
     expect(latticeSeed(a)).not.toBe(latticeSeed({ ...a, d: 5 }))
   })
 
+  it('picks the same gradient the lattice hash would', () => {
+    /*
+     * `gradientNoise3` writes `pcg3d`'s first lane out by hand, because calling
+     * it allocates a three-lane object per corner and that is 39% of an eroded
+     * patch (`field.ts`). Two spellings of one hash is how the gradient lattice
+     * comes to disagree with the crater lattice, so this holds them together.
+     *
+     * At an integer lattice point the fade curve and its slope are both zero, so
+     * the returned gradient *is* the corner's own edge vector — which makes the
+     * table lookup readable from the outside without exporting anything.
+     */
+    const EDGES: readonly (readonly [number, number, number])[] = [
+      [1, 1, 0],
+      [-1, 1, 0],
+      [1, -1, 0],
+      [-1, -1, 0],
+      [1, 0, 1],
+      [-1, 0, 1],
+      [1, 0, -1],
+      [-1, 0, -1],
+      [0, 1, 1],
+      [0, -1, 1],
+      [0, 1, -1],
+      [0, -1, -1],
+    ]
+    for (let ix = -9; ix <= 9; ix += 1) {
+      for (let iy = -7; iy <= 7; iy += 1) {
+        for (let iz = -5; iz <= 5; iz += 1) {
+          const n = gradientNoise3(ROOT, ix, iy, iz)
+          const edge = EDGES[pcg3d(ix ^ (ROOT.a | 0), iy, iz).x % 12]
+          expect([n.dx, n.dy, n.dz]).toEqual(edge)
+        }
+      }
+    }
+  })
+
   it('converts to floats in range', () => {
     expect(toUnit(0)).toBe(0)
     expect(toUnit(0xffff_ffff)).toBeLessThan(1)

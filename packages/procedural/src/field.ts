@@ -1,4 +1,3 @@
-import { pcg3d } from './lattice.ts'
 import type { Seed } from './seed.ts'
 
 /*
@@ -50,8 +49,49 @@ const GRADIENT_X = new Float64Array([1, -1, 1, -1, 1, -1, 1, -1, 0, 0, 0, 0])
 const GRADIENT_Y = new Float64Array([1, 1, -1, -1, 0, 0, 0, 0, 1, -1, 1, -1])
 const GRADIENT_Z = new Float64Array([0, 0, 0, 0, 1, 1, -1, -1, 1, 1, -1, -1])
 
-const gradientAt = (seed: number, ix: number, iy: number, iz: number): number =>
-  pcg3d(ix ^ seed, iy, iz).x % GRADIENT_COUNT
+/*
+ * `pcg3d`'s first lane, written out here rather than called.
+ *
+ * This is eight calls per `gradientNoise3` and seven to twelve octaves per
+ * sample, which makes it the innermost loop in the band stack — and `pcg3d`
+ * returns a `{x, y, z}` of which two lanes are discarded. V8 exhausts its
+ * cumulative inlining budget across the eight call sites, so that object is
+ * never scalar-replaced: it is a real allocation per corner. Measured on a
+ * bordered 65×65 patch, this line was 39% of an eroded patch's self time, and
+ * writing it out takes Mars from 40.5 ms to 24.4, Barnard's Star III from 42.9
+ * to 26.4, Sirius II from 43.0 to 28.0 and Earth from 34.4 to 23.2.
+ *
+ * Exporting a scalar `pcg3dX` from `lattice.ts` is the version that does not
+ * duplicate anything, and it buys 5% of the 40%: V8 will not inline two levels
+ * deep across the package boundary. The same trade `craters.ts` records for its
+ * namespace destructure, and it is worth it in exactly these two places.
+ *
+ * The arithmetic is `lattice.ts`'s, lane for lane, including the signed `^` in
+ * the middle. `field.test.ts` holds the two against each other over the lattice,
+ * so a change to one has to move the other rather than silently forking the
+ * field from every crater placed by the same hash.
+ */
+const PCG_MULTIPLIER = 1_664_525
+const PCG_INCREMENT = 1_013_904_223
+
+const gradientAt = (
+  seed: number,
+  ix: number,
+  iy: number,
+  iz: number,
+): number => {
+  let vx = (Math.imul((ix ^ seed) | 0, PCG_MULTIPLIER) + PCG_INCREMENT) >>> 0
+  let vy = (Math.imul(iy | 0, PCG_MULTIPLIER) + PCG_INCREMENT) >>> 0
+  let vz = (Math.imul(iz | 0, PCG_MULTIPLIER) + PCG_INCREMENT) >>> 0
+  vx = (vx + Math.imul(vy, vz)) >>> 0
+  vy = (vy + Math.imul(vz, vx)) >>> 0
+  vz = (vz + Math.imul(vx, vy)) >>> 0
+  vx ^= vx >>> 16
+  vy ^= vy >>> 16
+  vz ^= vz >>> 16
+  // The second round's `vy` and `vz` feed only lanes nobody reads.
+  return ((vx + Math.imul(vy, vz)) >>> 0) % GRADIENT_COUNT
+}
 
 /** Quintic fade and its derivative, `30 t²(t-1)²`. */
 const fade = (t: number): number => t * t * t * (t * (t * 6 - 15) + 10)

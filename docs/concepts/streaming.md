@@ -181,7 +181,7 @@ from the selection's own ceiling now, and eviction keeps everything the frame's
 request list names — the drawn set, the starved children, the whole pyramid —
 because the pyramid is re-asked for every frame: a keep set of the two
 selections' leaves alone turns the cap into a treadmill that evicts a rung,
-re-requests it, and regenerates it at 9 to 60 ms a patch.
+re-requests it, and regenerates it at 9 to 38 ms a patch.
 
 Patch keys are `body|face.level.i.j` — `terrainPatchKey`, one definition and
 three readers — so the same patch is never requested twice concurrently, and the

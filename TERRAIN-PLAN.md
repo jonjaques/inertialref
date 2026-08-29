@@ -56,7 +56,7 @@ The foundations are real and none of them move.
 | Elevation as a pure function of (seed, direction)         | `terrain.ts:165` `elevationAt`                                          | The whole determinism regime; also the only thing that makes planetary scale storable at all (§ 4)                                             |
 | `BodyFixedDirection` brand                                | `terrain.ts:49`                                                         | Sampling in inertial axes has shipped twice as a bug                                                                                           |
 | One owner of the sea clamp                                | `terrain.ts:206` `groundElevation`                                      | Physics and mesh agree on where the ocean is                                                                                                   |
-| Worker-generated heightfields, transferred not copied     | `packages/workers/src/tasks.ts:199`                                     | Capability check 10 proves worker ≡ main thread. The cost is **9 to 60 ms/patch** across the zoo, not the ≤ 8 ms the budget claimed — see § 12 |
+| Worker-generated heightfields, transferred not copied     | `packages/workers/src/tasks.ts:199`                                     | Capability check 10 proves worker ≡ main thread. The cost is **9 to 38 ms/patch** across the zoo, not the ≤ 8 ms the budget claimed — see § 12 |
 | Reconciling streamer, heightfield cache across rebases    | `apps/game/src/engine/terrainStreamer.ts`                               | Loading is an ordinary operation, not a mode                                                                                                   |
 | Body-fixed, anchor-relative patch vertices                | `packages/rendering/src/terrainMesh.ts:62`                              | Baking pose into vertices was ~865 m/frame of ground slide                                                                                     |
 | Eye-relative log compression, angular size exact          | `packages/rendering/src/placement.ts:115`                               | Measured from anywhere else, small bodies vibrate                                                                                              |
@@ -405,7 +405,7 @@ ends of controls a player reaches with two sliders — against a `maxPatches` of
 384 whose whole job is to be a safety net rather than a working limit. The
 field-of-view slider reaches it on its own, and what the cap does when it is
 reached is degrade the entire disk by a level, silently. A patch costs 9 to
-60 ms; how many there are is the number nothing currently states.
+38 ms; how many there are is the number nothing currently states.
 
 None of this is an argument for clamping the slider. It is the argument for the
 predicate reading the lens the picture is actually taken with, and for the
@@ -1087,8 +1087,8 @@ photograph.
 sketch, the band stack, the crater field; terrain algorithm v2 in one bump;
 golden vectors extended. [ADR-0019](docs/adr/0019-the-geology.md) is the record
 and [`CONTEXT.md`](CONTEXT.md#the-ground-stops-being-noise-and-becomes-a-geology-28-aug-2026)
-has the numbers: a patch is 9 to 60 ms across the zoo against the documented
-12.8 — 9 on a world with no craters, 60 on a rocky atmosphered one —
+has the numbers: a patch is 9 to 38 ms across the zoo against the documented
+12.8 — 9 on a world with no craters, 38 on a rocky atmosphered one —
 `surfaceDetailFloor` moved from 7–10 to 12–16 because crater rims are sharp,
 and the patch cap and the streamer's request budget moved with it.
 
@@ -1134,7 +1134,7 @@ written down.
 normal tiles into a texture-array cache, Proland's shape in WebGPU terms),
 CPU workers retained as canon and as the WebGL2 path, tolerance test in the
 browser checks. The condition is met and then some: Phase 2 put a patch at
-9–60 ms and a landing at six hundred of them, so the worker path is the binding
+9–38 ms and a landing at six hundred of them, so the worker path is the binding
 constraint before Phase 4 adds a level.
 
 **Phase 6 — named seams, not scheduled work.** Hydrology graphs (Génevaux)

@@ -82,7 +82,7 @@ Violating one of these is a rewrite later, not a refactor.
   and 1,532 m on Proxima Centauri II with the boundary blend already correct, and
   a cube-sphere ring walk counts one of seven neighbors twice at each of the
   eight corners. Weight every candidate within a margin by a smooth function of
-  how much farther it is than the nearest, normalise, and sum — `plateProperty` —
+  how much farther it is than the nearest, normalize, and sum — `plateProperty` —
   or put the field on a lattice with no ranking in it, which is what `craters.ts`
   does. The weight has to reach zero before a candidate can leave the set, and
   the margin has to be no wider than the search that collected them.

@@ -96,7 +96,7 @@ const DEFAULT_LENS_VIEW: LensView = {
 /**
  * How far ahead of the camera the request set is taken, in seconds.
  *
- * Long enough for a worker to answer — a patch is 9 to 60 ms of generation
+ * Long enough for a worker to answer — a patch is 9 to 38 ms of generation
  * across the zoo and the pool is a handful of them — and short enough that a
  * turn does not spend the budget on ground nobody looks at. The extrapolation is linear in the eye's
  * own motion and ignores the body's rotation over the interval, which at two
@@ -213,7 +213,9 @@ const TERRAIN_RELIEF_PIXELS = 8
  * by design because the second is taken from where the eye is *going*, so three
  * times the cap is the working set with room to spare.
  *
- * A bordered 65×65 field is 19 KB, so this is about 44 MB.
+ * A bordered 65×65 field is 19 KB, so at a cap of 1,024 this is 3,072 fields
+ * and 58 MB. Both numbers move with `DEFAULT_MAX_PATCHES` rather than with
+ * anything here, which is why they are stated as arithmetic.
  */
 export const FIELD_CACHE = DEFAULT_MAX_PATCHES * 3
 
@@ -223,7 +225,10 @@ export const FIELD_CACHE = DEFAULT_MAX_PATCHES * 3
  * Only drawn patches get geometry, so the ceiling is the selection itself plus
  * enough slack that a camera turning back finds the ground where it left it.
  * A patch is 203 KB of vertex buffers, which is the expensive half of terrain's
- * memory and the half attribute packing would halve.
+ * memory and the half attribute packing would halve. **The slack is part of the
+ * bill.** At a cap of 1,024 this holds 1,152 patches and 234 MB, against the
+ * 208 MB `DEFAULT_MAX_PATCHES` quotes for the selection alone — the cache is
+ * what is resident, and it is the larger of the two.
  */
 export const GEOMETRY_CACHE = DEFAULT_MAX_PATCHES + 128
 
@@ -815,7 +820,7 @@ export class TerrainStreamer {
    * pyramid — rather than the two selections' leaves. `#request` re-asks for
    * every rung of the pyramid every frame, so a keep set without them turns
    * the cap into a treadmill: evict a rung, re-request it next frame,
-   * regenerate it at 9 to 60 ms, evict it again.
+   * regenerate it at 9 to 38 ms, evict it again.
    */
   #evict(requested: readonly RegionAddress[]): void {
     if (
