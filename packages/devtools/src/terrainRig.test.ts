@@ -294,7 +294,7 @@ describe('a simulated descent', () => {
        *
        * 420 to 1,008 across the zoo's twenty-four site descents, where the
        * three bands this replaced cost 410 to 480 — the band stack put crater
-       * rims in the field, `surfaceDetailFloor` went from 7–10 to 13–16 to
+       * rims in the field, `surfaceDetailFloor` went from 7–10 to 13–17 to
        * resolve them, and every extra level underfoot is another ring. The
        * assertion is here so that a change to either is a change to a number
        * rather than a surprise in a frame.

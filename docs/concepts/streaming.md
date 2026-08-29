@@ -89,7 +89,7 @@ flowchart TB
     REFINE -->|no| BALANCE["restrict to a 2:1 balance<br/><i>the morph closes one level, not two</i>"]
     BALANCE --> DRAW["the draw set"]
     WALK --> AHEAD["the same walk from where<br/>the eye will be in 2 s"]
-    AHEAD --> QUEUE["queue the pyramid under it,<br/>coarsest first, 8 a frame"]
+    AHEAD --> QUEUE["queue the pyramid under it,<br/>coarsest first, 24 a frame"]
     QUEUE --> JOB["worker: bordered heightfield"]
     JOB --> CACHE["cache the heightfield"]
     CACHE --> MESH["build geometry, 4 a frame"]
@@ -137,7 +137,9 @@ patches to draw geometry the resolve filter averages away.
 
 **Stop where the field stops.** Past some level a patch is a bilinear upsample of
 its parent. `surfaceDetailFloor` measures that per body from the field itself
-rather than assuming it, and it lands at level 13 to 16 across the zoo: the
+rather than assuming it, and it lands at level 13 to 17 across the zoo — 13 on
+Miranda, 17 on the atmosphered rocky world, as `pnpm sim --terrain-baseline`
+prints it against each body's descent. The
 [band stack](rendering.md#terrain-meshing) puts crater rims in the field, a rim
 is about a seventh of its crater wide, and resolving one to half a meter takes
 samples seven times finer again. It moved there from 7–10 the day the geology
@@ -198,6 +200,13 @@ behind that extrapolation is measured in body-fixed axes, because a hovering
 camera co-moves with the body at its orbital velocity — 47 km/s at Mercury —
 so a universe-frame drift pushed two seconds ahead aims the request set ~94 km
 along the orbit rather than along the camera's track over the ground.
+
+**Twenty-four requests go out a frame**, because that ladder is strictly serial:
+a level cannot refine until all four children of every node on it have arrived,
+so a frame that under-asks is a frame the next level waits for, and with the
+detail floor thirteen to seventeen levels down that is most of a landing. More
+would queue rather than work — the requests go to a pool, and a queue is what a
+camera turn has to throw away.
 
 ### Where terrain is not drawn
 

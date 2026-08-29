@@ -128,6 +128,17 @@ Related: prefer **relative** comparisons when magnitudes span orders of
 magnitude. `expect(Math.abs(a / b - 1)).toBeLessThan(1e-9)` means something at
 both 1e-3 and 1e16; an absolute epsilon does not.
 
+**A wall-clock bound has one honest job: catching a collapse.** The catalog's
+search bound allows half a second for six queries that cost 1.9 ms, and the
+margin is the whole usable range rather than generosity — the same queries cost
+an order of magnitude more under vitest than under bare Node, and anything close
+enough to the real figure to be interesting is measuring how busy the machine
+is. It catches `search` decoding the catalog per query or going quadratic. It
+does **not** catch the scan it was written against, and no bound can: a naive
+scan of 7,123 stars is 2.9 ms against the index's 1.9, so the index buys a
+factor of one and a half. Say what a clock assertion cannot see, in the
+assertion's own comment.
+
 ### Prove a regression test can fail
 
 Before keeping a regression test, temporarily reintroduce the defect and
@@ -158,7 +169,7 @@ it pass. Three ways a test has failed that check here, each different:
 reason is written there. Several tests legitimately take a second or more of
 pure CPU — a 129-body Solar System stepped for thousands of ticks, a fast-check
 property over a quarter of a million noise samples — and the runner puts
-sixty-odd files across every core at once. At 5 s the suite failed
+eighty-odd files across every core at once. At 5 s the suite failed
 intermittently, and **the tests it killed were mostly not the ones that had
 grown**: an Rng uniformity property, an atmosphere sweep, the catalog's own
 search bound, all pre-existing and green standalone.
@@ -168,6 +179,19 @@ entirely: when unrelated tests start failing together and pass on a re-run, the
 timeout has stopped measuring the code and started measuring how busy the
 machine is. A test that spawns processes is the usual culprit — one here began
 as ten parallel `node` invocations under `it.each` and starved everything.
+
+**A test that needs more says so at the call site, with the same reasoning one
+order of magnitude up.** `gameEngine.test.ts` streams a landing — about nine
+hundred heightfields through an _inline_ worker, which is to say serially on the
+test's own thread — and takes some fifty seconds for it. Its timeout is five
+minutes, not two: two is only twice the idle cost, and twice is inside the range
+full-suite contention moves this by, so the tighter budget goes red on a green
+run. The descent is paid once in a shared `beforeAll` and four assertions read a
+reading taken there, because four landings is three and a half minutes where one
+is fifty seconds — and because an `it` that drives a shared engine is an `it`
+whose result depends on which one ran before it. What brings the number down is
+the GPU tile producer or a pool with real worker threads in it, not a shorter
+landing.
 
 ### Check a distribution when the claim is about one
 

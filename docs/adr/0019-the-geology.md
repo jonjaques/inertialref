@@ -189,7 +189,7 @@ because its erosion damping is what reads the analytic gradient. This is the
 condition `TERRAIN-PLAN.md` § 12 names for moving Phase 5's GPU producer from
 "adopt if the measurements say so" to a scheduled piece of work.
 
-**`surfaceDetailFloor` moved from 7–10 to 13–16, and everything downstream moved
+**`surfaceDetailFloor` moved from 7–10 to 13–17, and everything downstream moved
 with it.** Crater rims are sharp — a rim is about a seventh of its crater wide —
 so resolving one to half a meter takes samples seven times finer again. A
 whole-disk selection costs about ninety patches per level between the horizon

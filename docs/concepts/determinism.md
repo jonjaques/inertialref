@@ -122,29 +122,35 @@ asserts the mean lands between 56 and 72.
 
 ## Stateless noise
 
-Terrain is a pure function of `(seed, lattice coordinate)` — no stream, no
-cursor, no accumulated state.
+Terrain is a pure function of `(surface parameters, direction on the sphere)` —
+no stream, no cursor, no accumulated state. The two derivations between the seed
+and the field, the grammar and the sketch, are memoized rather than stored: a
+cache, never a save ([ADR-0019](../adr/0019-the-geology.md)).
 
 ```mermaid
 flowchart LR
-    IN["surface seed<br/>+ direction on the sphere"] --> N1["continents<br/><i>fBm, low frequency</i>"]
-    IN --> N2["mountains<br/><i>ridged, sharp crests</i>"]
-    IN --> N3["detail<br/><i>fBm, high frequency</i>"]
-    N1 --> MIX(("×"))
-    N2 --> MIX
-    N3 --> SUM(("+"))
-    MIX --> SUM
-    N1 --> SUM
-    SUM --> OUT["groundElevation, meters"]
+    IN["body facts + surface seed<br/><i>mass, radius, air, tide</i>"] --> G["SurfaceGrammar<br/><i>which bands, how loud</i>"]
+    G --> SK["terrainSketch<br/><i>plate nuclei, hotspots,<br/>the crater ladder</i>"]
+    G --> B["six bands<br/><i>hypsometry, belts, volcanism,<br/>relief, ice, craters</i>"]
+    SK --> B
+    D["direction on the sphere"] --> B
+    B --> OUT["groundElevation, meters"]
 
-    MIX -.- NOTE["continents modulate the mountains,<br/>so ranges sit on landmasses instead of<br/>marching across the ocean floor"]
+    B -.- NOTE["each band is a share of one relief budget<br/>and the shares sum to one, so no band<br/>can grow past its allowance"]
     classDef note fill:none,stroke:none,color:#64748b,font-style:italic
     class NOTE note
 ```
 
+**Stateful erosion is what this rules out**, and it is the one thing that would
+buy the look for free. Hydraulic erosion is order- and resolution-dependent: two
+patches of the same ground at different levels, or the same patch generated
+after a different neighbor, come out different, and ground whose value depends
+on who asked first is not a function of an address. The look is bought
+analytically instead — each octave damped by how steep the sum already is.
+
 Because it is stateless, the same patch generated on the main thread and in a
 worker are byte-identical — which capability check 10 asserts by comparing all
-4,225 samples of a 65×65 patch.
+4,761 samples of a bordered 65×65 patch.
 
 ---
 
@@ -169,7 +175,7 @@ Generators carry an `AlgorithmVersion`. The version is part of what defines the
 universe, and a save records the versions it was written with:
 
 ```
-generation: { galaxy: 2, system: 3, terrain: 1, photometry: 1 }
+generation: { galaxy: 2, system: 3, terrain: 2, photometry: 1 }
 ```
 
 `system` went to 3 when generated systems gained a belt — six to eighteen small
@@ -178,6 +184,11 @@ moved, because [issue ordinals](../adr/0009-issue-ordinal-addressing.md) are
 exactly what stops that; but a system now _contains_ things it did not, and a
 manifest that did not say so would let two builds of the game disagree about the
 contents of one address space with nothing to notice.
+
+`terrain` went to 2 with the band stack, and `system` deliberately did not move
+with it: `makeSurface` draws the same three values in the same order from the
+same stream, so the ground under a landed ship is a different number while every
+other property of every body in the galaxy is exactly where it was.
 
 So "this save was made with terrain v2" is a statement the loader can act on,
 rather than a mystery about why the coastline moved. Deciding _what_ to do about

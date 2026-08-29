@@ -96,7 +96,7 @@ const DEFAULT_LENS_VIEW: LensView = {
 /**
  * How far ahead of the camera the request set is taken, in seconds.
  *
- * Long enough for a worker to answer — a patch is 24 to 44 ms of generation and
+ * Long enough for a worker to answer — a patch is 20 to 37 ms of generation and
  * the pool is a handful of them — and short enough that a turn does not spend
  * the budget on ground nobody looks at. The extrapolation is linear in the eye's
  * own motion and ignores the body's rotation over the interval, which at two
@@ -108,7 +108,7 @@ const PREFETCH_SECONDS: Seconds = 2
  * Heightfields to queue in one frame.
  *
  * It was eight, against a quadtree that bottomed out around level 10. The band
- * stack put crater rims into the field and `surfaceDetailFloor` moved to 13–16
+ * stack put crater rims into the field and `surfaceDetailFloor` moved to 13–17
  * to resolve them, which is three times as much tree to fetch: a landing that
  * used to sharpen in eighty frames wanted two hundred and fifty, and the
  * ladder is strictly serial — a level cannot refine until all four children of

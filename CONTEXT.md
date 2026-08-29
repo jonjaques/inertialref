@@ -5110,7 +5110,7 @@ stack is under three times the documented Phase 0 figure instead of five.
 | A bordered 65×65 patch              | 12.8 ms | 20 ms airless, 37 atmosphered     |
 | The same three bands, re-measured   | 12.8 ms | 3.6–3.8 ms                        |
 | `noise3`                            | 209 ns  | 47 ns                             |
-| `surfaceDetailFloor` across the zoo | 7–10    | 13–16                             |
+| `surfaceDetailFloor` across the zoo | 7–10    | 13–17                             |
 | Whole-disk selection, flight lens   | 410–480 | 420–1,008                         |
 | `DEFAULT_MAX_PATCHES`               | 768     | 1,024 (208 MB in the corner case) |
 | `REQUESTS_PER_FRAME`                | 8       | 24                                |

@@ -147,7 +147,7 @@ build:
 ```
 PASS  7. Precision near the surface — 1 inch resolved to 9.4 µm, 8.18 kpc from the galactic center
 PASS  9. Origin rebasing — 500 rebases, 2560 km of origin travel, zero drift
-PASS 10. Worker task — 4225 terrain samples generated in a worker, identical to local generation
+PASS 10. Worker task — 4761 terrain samples generated in a worker, identical to local generation
 ```
 
 They report **measurements, not "OK"**. That distinction is not cosmetic: check
