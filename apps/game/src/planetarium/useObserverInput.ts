@@ -191,9 +191,9 @@ export function useObserverInput(
        * The primary button orbits and the secondary looks; the middle one is
        * the browser's autoscroll and stays the browser's.
        *
-       * The secondary button used to be declined outright, on the argument that
-       * claiming it takes a platform gesture to do something a drag already
-       * does. That was true while there was only one thing a drag could do.
+       * The secondary button is claimed, and only because there are two things
+       * a drag can do. Claiming a platform gesture to do what the primary drag
+       * already does would not be worth the context menu it costs.
        */
       if (
         event.pointerType === 'mouse' &&

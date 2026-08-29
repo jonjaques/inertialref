@@ -13,14 +13,13 @@ import {
 /*
  * The ship's placer for a composition: where a hull goes to take the picture.
  *
- * The list itself moved to `packages/rendering/src/compositions.ts`, and the
- * move is the whole of this phase's argument about it. There were two lists
- * sharing a vocabulary and not a mechanism — `gibbous` here and `gibbous` in
- * the planetarium's presets came out of one solver and meant one picture, but
- * one teleported a hull and the other moved a camera — and three compositions
- * existed only here because they aim somewhere other than the body's center,
- * which the observatory's pose could not do. With the aim solved as a look
- * offset there is one list and two placers, and this file is one of them.
+ * The list itself lives in `packages/rendering/src/compositions.ts`, and that
+ * is the load-bearing part: two lists sharing a vocabulary and not a mechanism
+ * is how `gibbous` here and `gibbous` in the planetarium's presets come to mean
+ * two pictures. One list and two placers instead — one teleports a hull, the
+ * other moves a camera — and this file is one of them. The three that aim
+ * somewhere other than the body's center reach both arms because the aim is a
+ * look offset rather than something only a hull's orientation can express.
  *
  * What is left here is the placement: pure geometry in the body's frame, so it
  * is testable in Node and the same composition works on any body in any system.

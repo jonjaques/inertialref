@@ -219,8 +219,8 @@ describe('the author’s instruments', () => {
     for (const verb of ['Pause', 'Flight Assist', 'Stop Spin', 'Save', 'Load'])
       expect(markup).toContain(verb)
     // And the key beside each of them is the *live* binding, read from the
-    // keymap — the tooltips used to name keys as string literals, which is a
-    // binding the editor cannot move.
+    // keymap. A key named as a string literal in a tooltip is a binding the
+    // editor cannot move.
     expect(markup).toContain('title="Pause the simulated clock · Space"')
     session.dispose()
   })

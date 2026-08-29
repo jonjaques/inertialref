@@ -86,6 +86,9 @@ export function Workspace({
    * closed is worse than no shortcut at all.
    */
   useWorkspaceKeys(workspace, {
+    // Not while the chrome is cleared: this component returns `null` there, and
+    // a key that rearranged a dock nobody can see would persist the change.
+    enabled: !chromeHidden,
     // The number row addresses positions in *this* mode's menu, which is why
     // it is the visible list rather than a constant: "the third panel" means a
     // different panel in the planetarium than in flight.

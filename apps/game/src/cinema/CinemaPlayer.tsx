@@ -188,20 +188,29 @@ export function CinemaPlayer({
   /*
    * Space plays and pauses, the arrows step. What a player's keys always are.
    *
-   * `cinema` is a context rather than a listener, which is what removes the
-   * special case that used to live in `App`: the player's Space is the *same*
-   * key as the global pause, so both handlers ran and one press flipped
-   * `clock.paused` twice — the documented transport did nothing at all with
-   * nothing to see in the console. The context is more specific, so it wins,
-   * and the shell no longer has to be told that this mode exists.
+   * `cinema` is a context rather than a listener, and that is what keeps the
+   * shell from needing a special case for this mode. The player's Space is the
+   * *same* key as the global pause, and two listeners for it means two handlers
+   * running on one press: `clock.paused` flips twice and the documented
+   * transport does nothing at all, with nothing to see in the console. A
+   * context is more specific than `global`, so it wins by rule.
    *
-   * The two refusals every window listener here used to make are the
-   * dispatcher's now: `isTyping` for the address field one disclosure away, and
+   * The two refusals every window listener would otherwise repeat are the
+   * dispatcher's: `isTyping` for the address field one disclosure away, and
    * `yieldsToFocus` for Space on a focused button and the arrows on a focused
    * Radix control.
    */
   useKeyContext({ context: 'cinema' })
   useAction('cinema.play', toggle)
+  /*
+   * Escape goes back to the library, which is what the table says it means
+   * here and what the keys sheet prints.
+   *
+   * The link two screens down is the other route to it; without this the
+   * binding is advertised in three places and claimed by nobody, and the
+   * dispatcher declines a key the sheet says works.
+   */
+  useAction('cinema.library', () => void navigate(CINEMA))
   useActions(['cinema.back', 'cinema.forward'], (action, event) => {
     const status = engine.cutscene.sample()
     if (status === null) return

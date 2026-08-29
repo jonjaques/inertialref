@@ -25,6 +25,27 @@ import { FLIGHT_FOV, findComposition } from '@inertialref/rendering'
  * already produces.
  */
 
+/**
+ * The plate for a picture: its file name, and the size it is captured at.
+ *
+ * Here rather than in the capture script, because three places have to agree
+ * about it and only two of them can import a `.mjs`: `scripts/presets/plates.mjs`
+ * writes the file, `scripts/presets/check.mjs` gates that it exists, and
+ * `PictureCard` requests it over HTTP. Written out in the component instead,
+ * changing the format leaves the check green — it validates the files it named
+ * — while every card in the panel falls through to its "no plate" state, which
+ * is exactly the silent rot the gate exists to make loud.
+ *
+ * 3:2, because that is the grid the cards are drawn in and a plate cropped by
+ * CSS is a composition nobody chose. 480 wide is twice the widest a card is
+ * ever drawn at, which covers a 2× display and nothing more — these are
+ * committed files and seven of them at 1600 px would be a megabyte of
+ * repository for pixels no screen shows.
+ */
+export const PLATE_WIDTH = 480
+export const PLATE_HEIGHT = 320
+export const plateName = (id: string): string => `${id}.jpg`
+
 /** What a picture asks the camera to do. */
 export type PictureFraming =
   | { readonly kind: 'compose'; readonly composition: string }

@@ -41,7 +41,7 @@ describe('the default table', () => {
     ).toEqual([])
   })
 
-  it('shadows only the four outer acts it means to', () => {
+  it('shadows only the three outer acts it means to', () => {
     /*
      * A shadow is an inner context taking a chord an outer one also holds, and
      * every one of these is the design rather than an accident:
@@ -50,15 +50,20 @@ describe('the default table', () => {
      *             bug the six listeners had — both handlers ran, `clock.paused`
      *             flipped twice, and the documented control did nothing at all
      *             with nothing to see in the console. It is an ordering now.
-     *   `Escape`  the library in the cinema, and a dialog or a running scene
-     *             takes it back while one is up. That is the platform's
-     *             gesture, and the reason Escape is not rebindable.
+     *   `Escape`  a dialog and a running scene both take it, and the two can be
+     *             live together in the cinema. The dialog is the thing most
+     *             recently asked for, so it goes first and the scene is skipped
+     *             on the press after.
      *   `/`       the catalog's search, and the reading room's own where there
      *             is no catalog.
      *
+     * The cinema's own Escape is not among them, and that is `arbitrate`: a
+     * modal layer takes the keyboard from the mode under it, so `cinema.library`
+     * is not reachable while either layer is up and there is nothing to shadow.
+     *
      * Deduplicated because a shadow repeats in every live set that contains
      * both contexts, and the claim is about the pairs rather than about how
-     * many arrangements they appear in. Pinned exactly, so a fifth has to be
+     * many arrangements they appear in. Pinned exactly, so a fourth has to be
      * argued for here rather than discovered in a mode where a key quietly
      * stopped working.
      */
@@ -68,11 +73,64 @@ describe('the default table', () => {
         .map((one) => `${formatChord(one.chord)}: ${one.ids.join(' over ')}`),
     )
     expect([...shadows].sort()).toEqual([
-      'Escape: cutscene.skip over cinema.library',
-      'Escape: overlay.close over cinema.library',
+      'Escape: overlay.close over cutscene.skip',
       'Slash: docs.search over nav.goTo',
       'Space: cinema.play over time.pause',
     ])
+  })
+
+  it('lets a modal layer take the keyboard from the mode under it', () => {
+    /*
+     * The guard `DocsSearch` deleted, as a rule rather than as a
+     * `document.querySelector('[role="dialog"]')` in one listener.
+     *
+     * `/` focusing the reading room's search field from behind a Settings scrim
+     * is the case: the dialogs deliberately have no focus trap, so the
+     * keystroke lands in a field nobody can see. `global` survives, because the
+     * settings key and the panel numbers mean the same thing over a dialog as
+     * under one.
+     */
+    const bindings = resolveBindings()
+    const slash = chord('Slash')
+    expect(actionFor(bindings, ['global', 'docs'], slash)?.id).toBe(
+      'docs.search',
+    )
+    expect(actionFor(bindings, ['global', 'docs', 'dialog'], slash)?.id).toBe(
+      'nav.goTo',
+    )
+    expect(
+      actionFor(bindings, ['global', 'planetarium', 'dialog'], chord('KeyF')),
+    ).toBeNull()
+    expect(
+      actionFor(bindings, ['global', 'flight', 'dialog'], chord('Comma'))?.id,
+    ).toBe('chrome.settings')
+  })
+
+  it('refuses a bare modifier, so a chord can be captured at all', () => {
+    /*
+     * `Shift+H` arrives as two `keydown`s and the modifier's comes first, so an
+     * editor that binds the first event it sees binds `Shift+ShiftLeft` — a
+     * binding on the bare modifier, which then fires on every Shift press, and
+     * one the editor can never replace with the chord it was reaching for. The
+     * refusal is in `isBindable` rather than in `chordFromEvent`, because the
+     * dispatcher's key-*up* goes through that and a null there means "release
+     * everything held".
+     */
+    for (const code of ['ShiftLeft', 'AltRight', 'ControlLeft', 'CapsLock']) {
+      const pressed = chordFromEvent({
+        code,
+        shiftKey: code.startsWith('Shift'),
+        altKey: code.startsWith('Alt'),
+        ctrlKey: false,
+        metaKey: false,
+      })
+      expect(pressed, code).not.toBeNull()
+      expect(isBindable(pressed!), code).toBe(false)
+      // And a stored one from before the refusal is not believed either.
+      expect(parseChord(formatChord(pressed!)), code).toBeNull()
+    }
+    // The chord it is half of is still perfectly bindable.
+    expect(isBindable(chord('KeyH', { shift: true }))).toBe(true)
   })
 
   it('gives every action a unique id and a group', () => {
@@ -341,6 +399,67 @@ describe('the store', () => {
     expect(downs).toBe(1)
   })
 
+  it('drops the auto-repeat of a press action, and keeps it for a climb', () => {
+    /*
+     * A key leant on is one gesture, not thirty. A press action is a
+     * *decision*, so thirty of them land on whichever parity the release
+     * happened to fall on — held `Space` strobes `clock.paused` and finishes
+     * wherever the hand came off — which is why both listeners this dispatcher
+     * replaces opened with `if (event.repeat) return`.
+     *
+     * `stand.up` is the exception and says so with `repeats`: it moves a tenth
+     * of the travel per press, and leaning on the key is how somebody asks to
+     * keep climbing.
+     */
+    const store = new KeymapStore()
+    let pauses = 0
+    let climbs = 0
+    store.register('time.pause', () => (pauses += 1))
+    store.register('stand.up', () => (climbs += 1))
+    store.claim({ context: 'planetarium' })
+    store.claim({ context: 'standing' })
+    store.handleKeyDown(keyEvent('Space'))
+    store.handleKeyDown(keyEvent('Space', { repeat: true }))
+    store.handleKeyDown(keyEvent('Space', { repeat: true }))
+    store.handleKeyDown(keyEvent('PageUp'))
+    store.handleKeyDown(keyEvent('PageUp', { repeat: true }))
+    expect(pauses).toBe(1)
+    expect(climbs).toBe(2)
+  })
+
+  it('leaves a chord no handler claims to the browser', () => {
+    /*
+     * Nothing ties a definition to a handler, so an id can be bound, drawn on
+     * the keys sheet and offered in the editor while no `useAction` registers
+     * it. Swallowing the key on top of that is the worst of both — `/` stops
+     * being the browser's quick-find *and* focuses nothing.
+     */
+    const store = new KeymapStore()
+    const unclaimed = keyEvent('Slash')
+    store.handleKeyDown(unclaimed)
+    expect(unclaimed.defaultPrevented).toBe(false)
+    const release = store.register('nav.goTo', () => undefined)
+    const claimed = keyEvent('Slash')
+    store.handleKeyDown(claimed)
+    expect(claimed.defaultPrevented).toBe(true)
+    release()
+  })
+
+  it('releases every held action when the bindings move under it', () => {
+    /*
+     * A key-up matches on the *bound* code, so rebinding the main drive while
+     * it is burning leaves the release looking for a key that no longer names
+     * it — and the drive burns for the rest of the session.
+     */
+    const store = new KeymapStore()
+    const phases: string[] = []
+    store.register('flight.fore', (event) => phases.push(event.phase))
+    store.claim({ context: 'flight' })
+    store.handleKeyDown(keyEvent('KeyW'))
+    store.setBindings(resolveBindings({ 'flight.fore': 'KeyT' }))
+    expect(phases).toEqual(['down', 'up'])
+  })
+
   it('tells a shift-scaling action whether Shift was down', () => {
     const store = new KeymapStore()
     const shifts: boolean[] = []
@@ -374,7 +493,14 @@ function keyEvent(
     // there is no `HTMLElement` for one to be — which is exactly the "focus is
     // on the canvas" case, where nothing declines.
     target: null,
-    preventDefault: () => {},
+    // Recorded rather than ignored, because "was the key left to the browser"
+    // is a claim a test has to be able to make: a binding nobody registered
+    // that still swallows `/` is the difference between a dead control and a
+    // dead control that also broke quick-find.
+    defaultPrevented: false,
+    preventDefault(this: { defaultPrevented: boolean }) {
+      this.defaultPrevented = true
+    },
   } as unknown as KeyboardEvent
 }
 

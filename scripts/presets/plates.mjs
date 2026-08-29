@@ -31,7 +31,11 @@ import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
-import { PICTURES } from '../../packages/devtools/src/pictures.ts'
+import {
+  PICTURES,
+  PLATE_HEIGHT,
+  PLATE_WIDTH,
+} from '../../packages/devtools/src/pictures.ts'
 import { PLATES, plateName } from './check.mjs'
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url))
@@ -50,17 +54,13 @@ const PAGE = 'http://localhost:5173/planetarium'
 /** Where the per-picture step script goes. Removed on the way out. */
 const STEP = path.join(ROOT, '.data/drive/preset-step.mjs')
 
-/**
- * The plate's pixel size.
- *
- * A 3:2 frame, because that is what the panel's thumbnail grid draws and a
- * plate cropped by CSS is a composition nobody chose. 480 wide is twice the
- * widest a card is ever drawn at, which covers a 2× display and nothing more —
- * these are committed files and seven of them at 1600 px would be a megabyte of
- * repository for pixels no screen shows.
+/*
+ * The plate's pixel size comes from `pictures.ts`, beside the file name, so the
+ * capture and the `<img>` that reserves layout for it cannot disagree about the
+ * aspect.
  */
-const WIDTH = 480
-const HEIGHT = 320
+const WIDTH = PLATE_WIDTH
+const HEIGHT = PLATE_HEIGHT
 
 /**
  * How long the renderer is given to settle after a preset is taken.
@@ -99,6 +99,15 @@ const drive = (args) =>
   })
 
 await mkdir(PLATES, { recursive: true })
+/*
+ * The rig directory too, because `drive.mjs` is what usually creates it and it
+ * has not run yet.
+ *
+ * `.data/` is gitignored, so on a fresh clone the step file below is the first
+ * thing that wants the directory and `writeFile` fails with ENOENT before the
+ * driver — the only other thing that would have made it — is ever spawned.
+ */
+await mkdir(path.dirname(STEP), { recursive: true })
 
 for (const picture of pictures) {
   console.log(`${picture.id} — ${picture.why}`)

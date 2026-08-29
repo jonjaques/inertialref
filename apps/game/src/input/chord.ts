@@ -64,9 +64,40 @@ export const chord = (
  */
 export const REFUSED_CODES: readonly string[] = ['Tab', 'Escape', 'F11', 'F12']
 
+/**
+ * The keys that are only ever half of a chord.
+ *
+ * A modifier arrives as a `keydown` of its own, *before* the key it modifies —
+ * so a capture that takes the first event it sees takes `ShiftLeft` and never
+ * `KeyH`. Stored, that is a binding on the bare modifier: pressing Shift for
+ * anything at all then fires whatever the row was. The editor cannot express
+ * `Shift+KeyH` — one of its own defaults — until this is refused.
+ *
+ * Refused here rather than in `chordFromEvent`, which the dispatcher's key-*up*
+ * also goes through: a null there means "release everything held", and Shift
+ * going up mid-burn would stop the drive.
+ */
+const MODIFIER_CODES: readonly string[] = [
+  'ShiftLeft',
+  'ShiftRight',
+  'AltLeft',
+  'AltRight',
+  'ControlLeft',
+  'ControlRight',
+  'MetaLeft',
+  'MetaRight',
+  'CapsLock',
+]
+
+/** Whether this physical key is only ever a modifier. */
+export const isModifierCode = (code: string): boolean =>
+  MODIFIER_CODES.includes(code)
+
 /** Whether the editor may bind this chord. */
 export const isBindable = (candidate: Chord): boolean =>
-  !REFUSED_CODES.includes(candidate.code) && candidate.code !== ''
+  !REFUSED_CODES.includes(candidate.code) &&
+  !isModifierCode(candidate.code) &&
+  candidate.code !== ''
 
 export const chordEquals = (a: Chord, b: Chord): boolean =>
   a.code === b.code && a.shift === b.shift && a.alt === b.alt
@@ -145,13 +176,19 @@ const US_LABELS: Readonly<Record<string, string>> = {
   ArrowDown: '↓',
   ArrowLeft: '←',
   ArrowRight: '→',
-  Minus: '−',
+  // ASCII, deliberately, and not the typographic `−` and `’`. These are
+  // compared for equality against what `navigator.keyboard.getLayoutMap()`
+  // reports for the same key, which is always the plain character — a
+  // typographic glyph here can never match, so `chordLabel` would decide the
+  // attached keyboard disagrees with this table and print "Shift + −" where
+  // the key says `_`.
+  Minus: '-',
   Equal: '=',
   BracketLeft: '[',
   BracketRight: ']',
   Backslash: '\\',
   Semicolon: ';',
-  Quote: '’',
+  Quote: "'",
   Comma: ',',
   Period: '.',
   Slash: '/',
@@ -186,7 +223,11 @@ export function codeLabel(
 ): string {
   const mapped = layout?.get(code)
   if (mapped !== undefined && mapped !== '') return mapped.toUpperCase()
-  const known = US_LABELS[code]
+  // `hasOwn`, because a `code` reaches here from storage: `resolveBindings`
+  // validates the *id* and `parseChord` validates the shape, so a chord of
+  // `"toString"` survives an import and would otherwise index
+  // `Object.prototype` and render a native function in the keys sheet.
+  const known = Object.hasOwn(US_LABELS, code) ? US_LABELS[code] : undefined
   if (known !== undefined) return known
   if (code.startsWith('Key')) return code.slice(3)
   if (code.startsWith('Digit')) return code.slice(5)
@@ -220,10 +261,14 @@ export function chordLabel(
    * clumsy and is never wrong.
    */
   const unshifted = layout?.get(candidate.code)
-  const agrees =
-    unshifted === undefined || unshifted === US_LABELS[candidate.code]
+  const known = Object.hasOwn(US_LABELS, candidate.code)
+    ? US_LABELS[candidate.code]
+    : undefined
+  const agrees = unshifted === undefined || unshifted === known
   const shifted =
-    candidate.shift && agrees ? US_SHIFTED[candidate.code] : undefined
+    candidate.shift && agrees && Object.hasOwn(US_SHIFTED, candidate.code)
+      ? US_SHIFTED[candidate.code]
+      : undefined
   const parts: string[] = []
   if (candidate.alt) parts.push('Alt')
   if (shifted === undefined && candidate.shift) parts.push('Shift')

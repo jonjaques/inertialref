@@ -70,6 +70,7 @@ import {
   riseStance,
   scrubForHeight,
   shortestAngle,
+  stanceToward,
   type SurfaceStance,
   surfaceHeightBounds,
   surfaceStancePose,
@@ -516,9 +517,9 @@ export class Observatory {
    *
    * On the ground the offset *is* the heading and the pitch, which the stance
    * already holds — so this is the one verb that writes through both arms, and
-   * the orbit writers' refusal does not apply to it. A drag on Miranda's summit
-   * previously did nothing at all: the orbit writers refused while standing and
-   * nothing else listened.
+   * the orbit writers' refusal does not apply to it. That refusal is why this
+   * verb exists: with it and nothing else listening, a drag on Miranda's summit
+   * does nothing at all.
    *
    * `sensitivity` is `pixelAngle(lens, viewport) / DRAG_RADIANS_PER_PIXEL` when
    * a caller has a display, which makes the ground under the pointer follow the
@@ -582,10 +583,21 @@ export class Observatory {
   dragSensitivity(): number {
     const view = this.#host.lensView?.()
     if (view === null || view === undefined) return 1
+    /*
+     * Whatever the host reports, floored only against nonsense.
+     *
+     * An absent port is already 1 by the `??`, so a clamp at 1 could only ever
+     * fire on a ratio a host genuinely reported below one — which is exactly
+     * what `devicePixelRatio` is with the browser zoomed out (0.8 at 80%, 0.67
+     * at 67%). The buffer really is that many device pixels per CSS pixel
+     * there, so throwing the correction away moves the picture at 1.49× the
+     * rate of the hand: the same defect as the 2× case, in the other
+     * direction.
+     */
     const ratio = this.#host.pixelRatio?.() ?? 1
+    const usable = Number.isFinite(ratio) && ratio > 0 ? ratio : 1
     return (
-      (pixelAngle(view.lens, view.viewport) * Math.max(1, ratio)) /
-      DRAG_RADIANS_PER_PIXEL
+      (pixelAngle(view.lens, view.viewport) * usable) / DRAG_RADIANS_PER_PIXEL
     )
   }
 
@@ -664,14 +676,29 @@ export class Observatory {
      * which is a different place every time the same button is pressed.
      */
     const up = this.#toBodyFixed(placement.up)
-    if (up === null) throw new Error(`${body.name} is not turning`)
+    const forward = this.#toBodyFixed(placement.forward)
+    if (up === null || forward === null)
+      throw new Error(`${body.name} is not turning`)
+    /*
+     * *Both* directions come back through the spin pose, and then the heading
+     * is solved.
+     *
+     * A heading is measured against a triad built on the pole of the axes it
+     * was solved in, so it cannot be carried across a frame change. Solved
+     * against universe north and applied against the body's own — which is
+     * tilted by `axialTilt` — `sunset` aims 5.31° off the sunward limb on
+     * Earth and `oblique` 14.36°, which is the whole subject of both pictures.
+     * `pitch` would survive, being a dot product with `up`; it is solved here
+     * anyway so there is one place the pair comes from.
+     */
     const { latitude, longitude } = directionToGeodetic(up)
+    const aimed = stanceToward(up, forward)
     return this.stand(this.#target?.address, {
       latitude,
       longitude,
       height: placement.height,
-      heading: placement.heading,
-      pitch: placement.pitch,
+      heading: aimed.heading,
+      pitch: aimed.pitch,
     })
   }
 

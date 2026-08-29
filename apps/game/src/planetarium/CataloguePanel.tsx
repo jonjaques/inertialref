@@ -1,9 +1,11 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Search, SlidersHorizontal, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { useTravelTargets } from '../hud/useTravelTargets.ts'
 import { FOCUS_RING, releaseFocus } from '../hud/focus.ts'
+import { attempt } from '../hud/notice.ts'
+import { useAction } from '../input/useKeymap.ts'
 import {
   CATALOGUE_CLASSES,
   CATALOGUE_FILTERING,
@@ -50,8 +52,6 @@ import { ALL_CLASSES, OBJECT_CLASSES, RADII } from './kinds.ts'
  * tested there. This file is the controls and the layout.
  */
 
-/** How far the survey reaches. The radii a person actually asks for. */
-
 /**
  * How many systems the list will draw at once.
  *
@@ -94,8 +94,10 @@ export function CataloguePanel({
   readonly verbs?: 'look' | 'travel'
 }) {
   const [query, setQuery] = useState('')
-  /** The row a travelling reader has picked, and whose verbs are showing. */
+  /** The row a traveling reader has picked, and whose verbs are showing. */
   const [selected, setSelected] = useState<string | null>(null)
+  /** The search field, for the `nav.goTo` binding to put focus into. */
+  const field = useRef<HTMLInputElement>(null)
   const [radius, setRadius] = usePersistentState(CATALOGUE_RADIUS)
   const [classes, setClasses] = usePersistentState(CATALOGUE_CLASSES)
   const [filtering, setFiltering] = usePersistentState(CATALOGUE_FILTERING)
@@ -154,7 +156,7 @@ export function CataloguePanel({
    */
   /**
    * What pressing a row does, which is the mode's answer rather than this
-   * panel's. Looking moves a camera; travelling picks a destination and offers
+   * panel's. Looking moves a camera; traveling picks a destination and offers
    * the verbs that reach it.
    */
   const act = (address: string): void => {
@@ -239,12 +241,25 @@ export function CataloguePanel({
     0,
   )
 
+  /*
+   * `/` focuses the search, which is what the table has always claimed it does.
+   *
+   * Registered here because this is the panel that owns the field. The binding
+   * is global rather than per-mode: the catalog is in the flight workspace as
+   * well as the planetarium's, and "go to" means the same thing in both. It is
+   * live only while the panel is drawn, which is the honest scope — the
+   * dispatcher declines a chord no handler claims, so `/` stays the browser's
+   * in a mode with no catalog on screen.
+   */
+  useAction('nav.goTo', () => field.current?.focus())
+
   return (
     <div className="flex min-h-0 flex-col gap-2">
       <div className="flex items-center gap-1.5">
         <label className="flex min-w-0 flex-1 items-center gap-1.5 rounded border border-slate-700/60 bg-slate-900/60 px-2 transition-colors focus-within:border-sky-500/60">
           <Search aria-hidden className="size-3 shrink-0 text-slate-400" />
           <Input
+            ref={field}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Name or address"
@@ -497,16 +512,7 @@ export function CataloguePanel({
                 <TargetActions
                   engine={engine}
                   target={chosen}
-                  run={(label, action) => {
-                    try {
-                      action()
-                      onNotice(label)
-                    } catch (cause) {
-                      onNotice(
-                        cause instanceof Error ? cause.message : String(cause),
-                      )
-                    }
-                  }}
+                  run={(label, action) => attempt(onNotice, label, action)}
                 />
               </div>
             </>

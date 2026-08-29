@@ -28,14 +28,20 @@ import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import {
   PICTURES,
+  plateName,
   unresolvedCompositions,
 } from '../../packages/devtools/src/pictures.ts'
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url))
 export const PLATES = path.join(ROOT, 'apps/game/public/presets')
 
-/** What a plate is called. One extension, so the panel can build the path. */
-export const plateName = (id) => `${id}.jpg`
+/*
+ * `plateName` comes from `pictures.ts` rather than being written here, because
+ * the panel that requests the file over HTTP cannot import a `.mjs` and would
+ * otherwise carry a third copy of the convention — one this gate could not see
+ * go stale.
+ */
+export { plateName }
 
 /** The smallest a real capture can plausibly be. Below this it is a failure. */
 const MIN_BYTES = 4096
@@ -88,4 +94,14 @@ async function main() {
   )
 }
 
-await main()
+/*
+ * Run only when this file is the command.
+ *
+ * `plates.mjs` imports `PLATES` and `plateName` from here so the naming
+ * convention has one owner, and a bare `await main()` would make that import
+ * run the whole check: seven `stat` calls and a success line before Chrome is
+ * launched, and — on the one run that matters, a capture of a picture whose
+ * plate does not exist yet — `process.exitCode = 1` left behind for a capture
+ * that then succeeds.
+ */
+if (process.argv[1] === fileURLToPath(import.meta.url)) await main()

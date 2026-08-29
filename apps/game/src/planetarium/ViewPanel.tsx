@@ -47,10 +47,9 @@ export function ViewPanel({
   return (
     <div className="flex flex-col gap-1">
       {/*
-       * One section, and it carries the panel's own name — which is a heading
-       * this panel used to need and now does not. The lens moved to the Camera
-       * panel, where the eye is, so there is no second thing here to be told
-       * apart from.
+       * One section, carrying the panel's own name. There is nothing here to
+       * tell it apart from: the lens belongs to the Camera panel, where the eye
+       * is, so a second heading would be dividing one thing in half.
        */}
       <Section id="planetarium.view.sky" title="Layers">
         {/*

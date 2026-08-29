@@ -588,7 +588,7 @@ the hint _is_ the label.
 
 **Tabs are gone.** The dev dock's five-tab strip decided that exactly one
 readout could be on screen; they are four panels now — the camera moved to the
-planetarium, where looking is the whole subject, and travelling is the Catalog's.
+planetarium, where looking is the whole subject, and traveling is the Catalog's.
 
 ### Panel (signature)
 

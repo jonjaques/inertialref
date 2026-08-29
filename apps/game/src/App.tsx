@@ -16,7 +16,7 @@ import { ChromeContext } from './hud/chrome.ts'
 import { CutsceneOverlay } from './hud/CutsceneOverlay.tsx'
 import { ErrorBoundary } from './hud/ErrorBoundary.tsx'
 import { TrackOverlay } from './hud/TrackOverlay.tsx'
-import { useCoarsePointer } from './hud/viewport.ts'
+import { useCoarsePointer, useDevicePixelRatio } from './hud/viewport.ts'
 import {
   CAMERA_LENS,
   DEBUG_ON,
@@ -330,16 +330,19 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    */
   const coarse = useCoarsePointer()
   /*
-   * The other half of `supersample`, and the one the *pointer* needs.
+   * The ratio the drawing buffer is actually built at, once.
    *
-   * The same ratio `<Canvas dpr>` is built from below. A drag delta arrives in
-   * CSS pixels and `pixelAngle` answers in display pixels, so without this the
-   * picture moves at half the rate of the hand on a 2× display — and at two
-   * thirds on a phone, which is the case free look exists for.
+   * `<Canvas dpr>` below and `engine.displayRatio` have to be the same number —
+   * the pointer's half of it converts a drag delta in CSS pixels into an angle
+   * `pixelAngle` answers per *display* pixel, so a disagreement moves the
+   * picture at the wrong rate against a buffer that has already rescaled.
+   * Written twice they disagree the moment `devicePixelRatio` moves, which
+   * browser zoom and a drag between displays both do without changing `coarse`.
    */
+  const displayRatio = Math.min(useDevicePixelRatio(), dprCeiling(coarse))
   useEffect(() => {
-    engine.displayRatio = Math.min(window.devicePixelRatio, dprCeiling(coarse))
-  }, [engine, coarse])
+    engine.displayRatio = displayRatio
+  }, [engine, displayRatio])
 
   /*
    * Verify that boot actually put pixels on screen.
@@ -528,12 +531,12 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
   /*
    * The transport verbs, bound in every mode.
    *
-   * No `axes` and no `pause` flag any more. Which keys are live where is a
-   * question about contexts, and each mode answers it for itself: the flight
-   * axes are `flight`, the cinema's transport shadows the global pause because
-   * it is more specific, and the reading room mutes the pause outright. All
-   * three used to be booleans threaded through here that turned parts of a
-   * listener off.
+   * No flags. Which keys are live where is a question about contexts, and each
+   * mode answers it for itself: the flight axes are `flight`, the cinema's
+   * transport shadows the global pause because it is more specific, and the
+   * reading room mutes the pause outright. A boolean threaded through here to
+   * turn part of a listener off would be the shell answering a question it
+   * cannot see the answer to.
    */
   useShipControls(engine, {
     onToggleAssist: commands.toggleAssist,
@@ -545,7 +548,15 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
   })
   useAction('time.normal', commands.realTime)
   useAction('chrome.instruments', () => setDebug(!debug))
-  useAction('chrome.all', () => engine.setChrome(chromeHidden))
+  /*
+   * Asked of the engine, not of the snapshot.
+   *
+   * `chromeHidden` is republished by the sampler at 8 Hz, so two presses inside
+   * one interval both read the same stale answer: the second asks for the
+   * state the first already set, `#chromeStance ??=` makes it a no-op, and the
+   * interface stays gone after a press that asked for it back.
+   */
+  useAction('chrome.all', () => engine.setChrome(!engine.chrome))
   /*
    * The two dialogs a key opens, as navigations rather than as state.
    *
@@ -553,14 +564,23 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    * the mode mounted behind the dialog — without it `ModeRoutes` re-resolves at
    * `/keys`, matches nothing, falls through to the menu and tears down the
    * session the reader was asking about.
+   *
+   * `resolvedLocation` and not the raw one, because these two are reachable
+   * *from inside a dialog*: with `/keys` up, `location` is already `/keys`, and
+   * carrying that along would make the sheet its own background — which is the
+   * same teardown by a longer route, and needs two Escapes to get out of.
    */
   useAction(
     'chrome.keys',
-    () => void navigate(KEYS, { state: overlayState(location) }),
+    () =>
+      void navigate(KEYS, { state: overlayState(resolvedLocation(location)) }),
   )
   useAction(
     'chrome.settings',
-    () => void navigate(SETTINGS, { state: overlayState(location) }),
+    () =>
+      void navigate(SETTINGS, {
+        state: overlayState(resolvedLocation(location)),
+      }),
   )
 
   return (
@@ -603,10 +623,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
         // lower. `dprCeiling` is where the handheld figure and its argument
         // live; the short version is that this scene is fragment-bound close to
         // a planet and a phone is shading the whole display three times over.
-        dpr={
-          Math.min(window.devicePixelRatio, dprCeiling(coarse)) *
-          aaDprFactor(aa)
-        }
+        dpr={displayRatio * aaDprFactor(aa)}
         // R3F configures the renderer *after* the factory resolves and sets its
         // own tone mapping while doing so. This is where ours goes back.
         onCreated={(state) => {

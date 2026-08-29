@@ -44,31 +44,49 @@ export interface WorkspaceKeyOptions {
    * reason the numbers are bound to positions and the letters to names.
    */
   readonly panels: readonly string[]
+  /**
+   * Whether the workspace is on screen at all.
+   *
+   * `Workspace` renders nothing while the chrome is cleared, but rendering
+   * nothing is not unmounting — so without this, `H` and the number row still
+   * rearrange the dock and write the layout to storage behind a frame nobody
+   * can see, which a plate script does by sending a digit.
+   */
+  readonly enabled?: boolean
 }
 
 export function useWorkspaceKeys(
   workspace: Workspace,
   options: WorkspaceKeyOptions,
 ): void {
-  useActions(['chrome.panes'], () => {
-    /*
-     * One key, both panes, and the sense is decided by what is already true: if
-     * either pane is open, this clears the frame; if both are away, it brings
-     * them back. A per-pane toggle would mean pressing it twice left the
-     * workspace inverted rather than restored.
-     */
-    const anyOpen = PANE_ZONES.some((zone) => workspace.panes[zone])
-    for (const zone of PANE_ZONES) workspace.setPane(zone, !anyOpen)
-  })
+  const live = options.enabled !== false
+  useActions(
+    ['chrome.panes'],
+    () => {
+      /*
+       * One key, both panes, and the sense is decided by what is already true: if
+       * either pane is open, this clears the frame; if both are away, it brings
+       * them back. A per-pane toggle would mean pressing it twice left the
+       * workspace inverted rather than restored.
+       */
+      const anyOpen = PANE_ZONES.some((zone) => workspace.panes[zone])
+      for (const zone of PANE_ZONES) workspace.setPane(zone, !anyOpen)
+    },
+    live,
+  )
 
-  useActions(['panel.perf'], () => options.onToggle('perf'))
+  useActions(['panel.perf'], () => options.onToggle('perf'), live)
 
-  useActions(PANEL_KEYS, (id) => {
-    const index = PANEL_KEYS.indexOf(id)
-    const panel = options.panels[index]
-    // A number with no panel behind it does nothing rather than the nearest
-    // thing: a mode with four panels has to leave `5` alone, or the key means
-    // something different in every mode for no reason anybody could infer.
-    if (panel !== undefined) options.onToggle(panel)
-  })
+  useActions(
+    PANEL_KEYS,
+    (id) => {
+      const index = PANEL_KEYS.indexOf(id)
+      const panel = options.panels[index]
+      // A number with no panel behind it does nothing rather than the nearest
+      // thing: a mode with four panels has to leave `5` alone, or the key means
+      // something different in every mode for no reason anybody could infer.
+      if (panel !== undefined) options.onToggle(panel)
+    },
+    live,
+  )
 }

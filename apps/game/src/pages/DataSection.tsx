@@ -1,7 +1,6 @@
 import { useRef, useState } from 'react'
 import { AlertTriangle } from 'lucide-react'
 import { Action } from '../hud/Action.tsx'
-import { FOCUS_RING } from '../hud/focus.ts'
 import {
   exportPreferences,
   type ImportPlan,
@@ -60,9 +59,16 @@ export function DataSection() {
     link.href = url
     link.download = filename(stamp)
     link.click()
-    // Revoked immediately: the click has already started the download, and a
-    // blob URL left alive holds the whole file in memory for the session.
-    URL.revokeObjectURL(url)
+    /*
+     * Revoked on the next task, not this one.
+     *
+     * `click()` on a detached anchor only *queues* the download, and WebKit and
+     * Gecko resolve the blob URL asynchronously — revoking in the same task
+     * leaves a failed or empty file while this function goes on to report "N
+     * settings saved". A blob URL left alive forever would hold the whole file
+     * in memory for the session, which is what the timeout is for.
+     */
+    setTimeout(() => URL.revokeObjectURL(url), 0)
     setDone(`${Object.keys(file.preferences).length} settings saved`)
   }
 
@@ -102,9 +108,12 @@ export function DataSection() {
           title="Download every setting you have changed, as JSON"
           onClick={save}
         />
-        <label
-          className={`type-ui inline-flex h-7 cursor-pointer items-center rounded border border-slate-700 bg-slate-800/60 px-2 text-slate-300 transition-colors hover:border-sky-500/60 hover:text-sky-200 ${FOCUS_RING}`}
-        >
+        {/* The ring is drawn by `focus-within`, not `FOCUS_RING`.
+            A `<label>` never takes focus, so `focus-visible:` on it can never
+            match — the only focusable node here is the `sr-only` input, which
+            is a clipped pixel. Without this the Import control is the one thing
+            on the page a keyboard user cannot see themselves standing on. */}
+        <label className="type-ui inline-flex h-7 cursor-pointer items-center rounded border border-slate-700 bg-slate-800/60 px-2 text-slate-300 transition-colors hover:border-sky-500/60 hover:text-sky-200 focus-within:outline focus-within:outline-1 focus-within:outline-sky-400">
           Import
           <input
             type="file"

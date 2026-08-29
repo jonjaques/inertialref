@@ -178,9 +178,10 @@ resolve rather than a typo that silently reads `undefined`.
 The reason the calls cannot be spread out is that three things each need the
 whole set:
 
-- **The census.** An export is a list of what is stored, and there was none —
-  every key was guarded on the way in and nothing could enumerate them, so a
-  layout somebody arranged lived on one browser profile.
+- **The census.** An export is a list of what is stored, so something has to be
+  able to enumerate the keys. Guarding each one on the way in is not enough on
+  its own: without a list, a layout somebody arranged lives on one browser
+  profile and nowhere else.
 - **The import.** Every entry is validated by its own guard and the ones that
   fail are named, because a file from another build carries keys this one has
   never heard of and "2 dropped" with no list is a dialog nobody can act on.

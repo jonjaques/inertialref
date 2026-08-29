@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { PLATE_HEIGHT, PLATE_WIDTH, plateName } from '@inertialref/devtools'
 import { FOCUS_RING, releaseFocus } from '../hud/focus.ts'
 
 /**
@@ -49,12 +50,13 @@ export function PictureCard({
         </span>
       ) : (
         <img
-          // 3:2, the aspect the plate is captured at — a plate cropped by CSS
-          // would be a composition nobody chose.
-          src={`/presets/${picture.id}.jpg`}
+          // Name and size from `pictures.ts`, which is what `presets:check`
+          // gates and what `presets:plates` captures — a third copy here is a
+          // format change that leaves the gate green and every card empty.
+          src={`/presets/${plateName(picture.id)}`}
           alt=""
-          width={480}
-          height={320}
+          width={PLATE_WIDTH}
+          height={PLATE_HEIGHT}
           loading="lazy"
           onError={() => setMissing(true)}
           className="aspect-3/2 w-full rounded-sm object-cover"

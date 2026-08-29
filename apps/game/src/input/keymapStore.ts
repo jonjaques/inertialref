@@ -19,11 +19,11 @@ import { isOverlayControl, isTyping } from '../hud/focus.ts'
  * gesture in flight and, for the flight axes, leaves the drive burning with
  * nothing listening for the key-up that would stop it.
  *
- * `isTyping` and `isOverlayControl` are asked once here, where they used to be
- * asked in three listeners with a fourth that had forgotten to. The typing
- * refusal exists because the overlay has text fields: without it, typing `SOL`
- * into the address box fires the retro thruster twice and toggles nothing you
- * meant.
+ * `isTyping` and `isOverlayControl` are asked once, here, because the failure
+ * mode of asking per listener is silent: the one that forgets is the one
+ * nobody notices. The typing refusal exists because the overlay has text
+ * fields — without it, typing `SOL` into the address box fires the retro
+ * thruster twice and toggles nothing you meant.
  */
 
 /** What a handler is told when its action fires. */
@@ -101,6 +101,16 @@ export class KeymapStore {
   }
 
   setBindings(bindings: Bindings): void {
+    /*
+     * Everything held goes up first, because the key-up matches on the *bound*
+     * code and the table underneath it is about to move.
+     *
+     * Rebind the main drive while it is burning and its key-up finds a
+     * binding that no longer names the key that was released, so the axis is
+     * never cleared and the drive burns for the rest of the session with
+     * nothing still listening for the release.
+     */
+    this.#releaseHeld()
     this.#bindings = bindings
     this.#announce()
   }
@@ -182,9 +192,37 @@ export class KeymapStore {
     const action = this.resolve(pressed)
     if (action === null) return
     if (action.yieldsToFocus === true && isOverlayControl(event)) return
-    // A held key that is already down is auto-repeat, and the control vector it
-    // feeds does not change — so the repeat is dropped rather than re-applied
-    // at the operating system's repeat rate.
+    /*
+     * A binding nobody is listening for leaves the key to the browser.
+     *
+     * The table advertises an act and a component claims it, and nothing ties
+     * the two together — so an id can be bound, drawn on the keys sheet, and
+     * offered in the editor while no `useAction` ever registers it. Swallowing
+     * the key on top of that is the worst of both: `/` stops being the
+     * browser's quick-find in every mode *and* focuses nothing, with the sheet
+     * still saying it works. Declining is the honest failure, and it costs
+     * nothing when the handler is there.
+     */
+    if (!this.#handlers.has(action.id)) return
+    /*
+     * The operating system's auto-repeat, dropped unless the action asked for
+     * it.
+     *
+     * A key leant on is one gesture, not thirty — and a press action is a
+     * decision, so thirty of them land on whichever parity the release happened
+     * to fall on: held `Space` strobes `clock.paused`, held `]` walks the warp
+     * ladder to its top rung, held `F5` re-enters the save. Both listeners this
+     * dispatcher replaces opened with `if (event.repeat) return`; `repeats` is
+     * where an act that is a *quantity* rather than a decision says so.
+     *
+     * The `#held` check below is the same refusal for a platform that does not
+     * set `repeat` — and for a held axis it is the load-bearing one, because
+     * the control vector it feeds has not changed since the key went down.
+     */
+    if (event.repeat && action.repeats !== true) {
+      event.preventDefault()
+      return
+    }
     if (action.held === true && this.#held.has(action.id)) {
       event.preventDefault()
       return

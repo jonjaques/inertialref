@@ -194,6 +194,37 @@ export function localTriad(up: Vec3): LocalTriad {
  * it is also what lets the descent probe walk a stance down a heightfield it
  * generated itself without a world anywhere in the loop.
  */
+/**
+ * A forward direction, as the heading and pitch a stance holds.
+ *
+ * The inverse of the `along`/`forward` construction below, and it lives beside
+ * it because the two have to agree about what heading 0 means: north, swinging
+ * toward east, measured in the triad `localTriad` builds on the *pole of
+ * whatever axes `up` is expressed in*. That last clause is the whole reason
+ * this is a function rather than four lines at each call site — a heading
+ * solved in one frame and applied in another is a silent rotation about the
+ * local vertical, and on a tilted body it is the axial tilt's worth of it.
+ *
+ * `up` and `forward` must therefore be in the *same* axes, and the answer is
+ * about those axes.
+ */
+export function stanceToward(
+  up: Vec3,
+  forward: Vec3,
+): { readonly heading: Radians; readonly pitch: Radians } {
+  const triad = localTriad(up)
+  const along = Vec.normalize(forward)
+  return {
+    heading: Math.atan2(
+      Vec.dot(along, triad.east),
+      Vec.dot(along, triad.north),
+    ),
+    pitch: clampPitch(
+      Math.asin(Math.max(-1, Math.min(1, Vec.dot(along, triad.up)))),
+    ),
+  }
+}
+
 export function surfaceStancePose(
   up: Vec3,
   groundRadius: Meters,

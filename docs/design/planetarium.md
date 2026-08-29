@@ -143,7 +143,7 @@ neighboring stars appear" — the single most planetarium-shaped gesture there i
 Selecting a new target keeps the orbit angles and moves only the distance. The
 camera travels; it does not teleport. Two reasons: resetting the angles on every
 click reads as the interface reasserting itself over the player, and the
-_travelling_ is the thing worth seeing — a fly-to from Earth to Proxima that took
+_traveling_ is the thing worth seeing — a fly-to from Earth to Proxima that took
 no time would have taught nothing about four light years.
 
 ### On the ground

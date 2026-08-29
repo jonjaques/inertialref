@@ -2,7 +2,12 @@ import type { Meters, Radians } from '@inertialref/shared'
 import { Vec, type Vec3 } from '@inertialref/spatial'
 import { FOV_MAX, FOV_MIN } from './lens.ts'
 import { angularRadius } from './lod.ts'
-import { clampPitch, horizonPitch, localTriad } from './surfaceStance.ts'
+import {
+  clampPitch,
+  horizonPitch,
+  localTriad,
+  stanceToward,
+} from './surfaceStance.ts'
 
 /*
  * A rise: standing on a moon with its parent over the horizon.
@@ -196,20 +201,26 @@ export function riseStance(
       Vec.scale(triad.east, Math.sin(theta)),
     ),
   )
-  const stand = localTriad(up)
   const toward = Vec.normalize(Vec.sub(toParent, Vec.scale(up, eyeRadius)))
+  const half = (fovDeg * Math.PI) / 180 / 2
+  /*
+   * The horizon on the lower-third line, through the projection rather than
+   * across it.
+   *
+   * A frame fraction is a distance on the sensor, and the angle it subtends is
+   * `atan(tan(fov/2) · f)` — not `fov · f`. The two agree to 0.03° at the 20°
+   * floor Earthrise lands on, which is why the linear form reads as right; they
+   * do not agree at the wide end, and `riseFov` clamps to `FOV_MAX` for a close
+   * pair like Phobos over Mars. There the exact tilt is 25.45° and the linear
+   * one 18.33°, which puts the horizon at 0.384 of the frame height instead of
+   * a third — a composition named for a line it misses.
+   */
+  const aboveHorizon = Math.atan(Math.tan(half) * (1 - 2 * HORIZON_THIRD))
   return {
     up,
     height: Math.max(0, height),
-    heading: Math.atan2(
-      Vec.dot(toward, stand.east),
-      Vec.dot(toward, stand.north),
-    ),
-    // The horizon at the lower-third line: the frame's center sits a sixth of
-    // the field above it, which is the difference between a half and a third.
-    pitch: clampPitch(
-      -dip + ((fovDeg * Math.PI) / 180) * (1 / 2 - HORIZON_THIRD),
-    ),
+    ...stanceToward(up, toward),
+    pitch: clampPitch(-dip + aboveHorizon),
   }
 }
 

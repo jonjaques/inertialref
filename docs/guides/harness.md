@@ -184,7 +184,7 @@ Sixteen named framings, relative to whatever is under the camera, with two
 placers:
 
 ```js
-ir.shots() // ids and descriptions
+ir.shots() // names and descriptions
 ir.shot('crescent', address) // teleports the ship into the picture
 ir.compose('crescent') // moves the camera into it
 ```

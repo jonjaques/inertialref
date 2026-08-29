@@ -102,26 +102,32 @@ describe('a rise stance', () => {
 
   it('holds the horizon on the lower-third line', () => {
     /*
-     * The composition claim, stated at the frame it is composed in. The
-     * horizon sits at `-dip` from the local horizontal and the frame's center
-     * at `pitch`, so the horizon's distance below the center must be a sixth
-     * of the field — a half minus a third.
+     * The composition claim, stated as a *position in the frame* rather than as
+     * an angle, because that is what the name promises and the two are not the
+     * same number.
+     *
+     * The horizon sits `below` the frame's center; where it lands on the sensor
+     * is `tan(below) / tan(fov/2)` of the half-height, so its height up the
+     * frame is `(1 - that) / 2`. The linear reading — a sixth of the field
+     * below center — agrees to a hundredth of a degree at 20° and misses by
+     * 7.1° at the 110° wall `riseFov` clamps a close pair to, which is why the
+     * assertion is on the fraction and not on the angle.
      */
-    const height = 110_000
-    const fov = 20
-    const stance = riseStance(
-      LUNA.radius,
-      vec3(LUNA.distance, 0, 0),
-      height,
-      RISE_CLEARANCE,
-      fov,
-    )
-    const dip = -horizonPitch(LUNA.radius, height)
-    const below = stance.pitch - -dip
-    expect((below * 180) / Math.PI).toBeCloseTo(
-      fov * (1 / 2 - HORIZON_THIRD),
-      9,
-    )
+    for (const fov of [20, 65, FOV_MAX]) {
+      const height = 110_000
+      const stance = riseStance(
+        LUNA.radius,
+        vec3(LUNA.distance, 0, 0),
+        height,
+        RISE_CLEARANCE,
+        fov,
+      )
+      const dip = -horizonPitch(LUNA.radius, height)
+      const below = stance.pitch - -dip
+      const half = (fov * Math.PI) / 180 / 2
+      const upTheFrame = (1 - Math.tan(below) / Math.tan(half)) / 2
+      expect(upTheFrame, `${fov}°`).toBeCloseTo(HORIZON_THIRD, 9)
+    }
   })
 
   it('stands near the limb for Earthrise, and looks back along the ground', () => {

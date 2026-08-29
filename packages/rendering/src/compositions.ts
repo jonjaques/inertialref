@@ -9,7 +9,6 @@ import {
 import { lookAlong } from './cinematic.ts'
 import {
   anglesForPhase,
-  clampElevation,
   framingDistance,
   type LookOffset,
   lookToward,
@@ -17,7 +16,6 @@ import {
   NO_LOOK,
   observerOffset,
 } from './observer.ts'
-import { localTriad } from './surfaceStance.ts'
 
 /*
  * Named pictures of a body, as one list.
@@ -349,11 +347,10 @@ export function compositionAim(
  * Which arm a composition lands on, and the numbers that arm needs.
  *
  * One decision in one place, because the two arms meet exactly at
- * `MIN_DISTANCE_RADII` and a composition that named 1.04 radii previously had
- * nowhere to go: the orbit arm clamps at 1.5 and the surface arm was reached
- * only by a site picker. `sunset` *is* a stance 0.04 radii up, and saying so is
- * what makes it a planetarium picture rather than something only a hull can
- * take.
+ * `MIN_DISTANCE_RADII`, and a composition that names 1.04 radii has to land
+ * somewhere: the orbit arm clamps at 1.5, so without this decision there is no
+ * arm for it. `sunset` *is* a stance 0.04 radii up, and saying so is what makes
+ * it a planetarium picture rather than something only a hull can take.
  *
  * `toStar` is the unit vector from the body toward its star in the axes the
  * result is wanted in — the reference plane's, for the orbit arm; the body's
@@ -374,8 +371,22 @@ export type CompositionPlacement =
       /** The stance's up direction, in the axes `toStar` was given in. */
       readonly up: Vec3
       readonly height: Meters
-      readonly heading: number
-      readonly pitch: number
+      /**
+       * Where the camera looks, in the same axes as `up`.
+       *
+       * A direction rather than the heading and pitch it implies, and the
+       * distinction is load-bearing: a heading is measured against a triad
+       * built on the *pole of the axes it was solved in*, so a caller that has
+       * to change frames — which `Observatory.compose` does, because the sun
+       * line is in universe axes and a stance is in the body's own — can carry
+       * a direction across and cannot carry an angle. Carried as an angle it is
+       * a silent rotation about the local vertical worth the body's axial tilt:
+       * 5.31° off the sunward limb on Earth for `sunset`, 14.36° for `oblique`.
+       *
+       * `stanceToward(up, forward)` is the conversion, once both are in the
+       * frame the stance will be held in.
+       */
+      readonly forward: Vec3
     }
 
 export function placeComposition(
@@ -390,7 +401,24 @@ export function placeComposition(
     composition.phaseDeg,
     composition.tiltDeg,
   )
-  const ratio = standoffRadii(composition, fovDeg)
+  /*
+   * A stance is authored, never derived from the lens.
+   *
+   * `standoffRadii` answers in radii either way, but the two kinds mean
+   * different things below the orbit floor. A `radii` standoff below it is the
+   * author saying "stand here" — `sunset` at 1.04 radii is four hundredths of a
+   * radius up, and that is the picture. A `fill` standoff below it is the
+   * *lens* making a framing impossible: `close` wants 1.95 radii at 65° and
+   * 1.27 at 110°, and letting that become a stance turns a framing button into
+   * a centre-aimed one staring at the nadir, with a heading solved from
+   * `atan2(0, 0)`. Clamped to the floor, it stays the closest framing the orbit
+   * arm can give, which is what the press asked for.
+   */
+  const wanted = standoffRadii(composition, fovDeg)
+  const ratio =
+    composition.standoff.kind === 'radii'
+      ? wanted
+      : Math.max(wanted, MIN_DISTANCE_RADII)
   const distance = ratio * bodyRadius
   const position = observerOffset({ azimuth, elevation, distance })
   const aim = compositionAim(composition, position, bodyRadius, sun)
@@ -406,19 +434,11 @@ export function placeComposition(
      * explicitly through its `upHint`.
      */
     const up = Vec.normalize(position)
-    const triad = localTriad(up)
-    const forward = Vec.normalize(Vec.sub(aim, position))
     return {
       kind: 'surface',
       up,
       height: Math.max(0, distance - bodyRadius),
-      heading: Math.atan2(
-        Vec.dot(forward, triad.east),
-        Vec.dot(forward, triad.north),
-      ),
-      pitch: clampElevation(
-        Math.asin(Math.max(-1, Math.min(1, Vec.dot(forward, triad.up)))),
-      ),
+      forward: Vec.normalize(Vec.sub(aim, position)),
     }
   }
 

@@ -73,12 +73,25 @@ export function useAction(id: ActionId, handler: ActionHandler): void {
 export function useActions(
   ids: readonly ActionId[],
   handler: (id: ActionId, event: ActionEvent) => void,
+  /**
+   * Whether these are claimed right now.
+   *
+   * The same flag `useKeyContext` takes, and for the same reason: a hook cannot
+   * be called conditionally, and a component that returns `null` has not
+   * unmounted. `Workspace` is the caller — it draws nothing while the chrome is
+   * cleared, but its keys stayed registered above the early return, so a digit
+   * sent by a plate script rearranged and *persisted* a dock nobody could see.
+   * Unregistered, the dispatcher declines a chord no handler claims and the key
+   * goes back to the browser.
+   */
+  active = true,
 ): void {
   const store = useKeymap()
   const latest = useRef(handler)
   latest.current = handler
   const key = ids.join(',')
   useEffect(() => {
+    if (!active) return
     const releases = key
       .split(',')
       .map((id) =>
@@ -87,7 +100,7 @@ export function useActions(
     return () => {
       for (const release of releases) release()
     }
-  }, [store, key])
+  }, [store, key, active])
 }
 
 /**

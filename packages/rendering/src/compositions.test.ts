@@ -10,7 +10,7 @@ import {
   standoffRadii,
 } from './compositions.ts'
 import { lookAlong } from './cinematic.ts'
-import { FLIGHT_FOV } from './lens.ts'
+import { FLIGHT_FOV, FOV_MAX } from './lens.ts'
 import {
   anglesForPhase,
   clampElevation,
@@ -24,7 +24,7 @@ import {
   observerPose,
   turn,
 } from './observer.ts'
-import { localTriad, surfaceStancePose } from './surfaceStance.ts'
+import { localTriad, stanceToward, surfaceStancePose } from './surfaceStance.ts'
 import { UV } from '@inertialref/spatial'
 
 /*
@@ -230,8 +230,7 @@ describe('every composition', () => {
         latitude: 0,
         longitude: 0,
         height: placement.height,
-        heading: placement.heading,
-        pitch: placement.pitch,
+        ...stanceToward(placement.up, placement.forward),
       })
       const forward = Q.rotate(orientation, vec3(0, 0, -1))
       const eye = Vec.scale(placement.up, EARTH_RADIUS + placement.height)
@@ -246,6 +245,37 @@ describe('every composition', () => {
       )
       expect(Vec.dot(forward, wanted)).toBeCloseTo(1, 9)
     }
+  })
+
+  it('never lets a wide lens turn a framing into a stance', () => {
+    /*
+     * `close` wants 1.95 radii at 65° and 1.27 at 110°, which is below the
+     * orbit floor — and the floor is where the surface arm begins. Left to fall
+     * through, a centre-aimed framing becomes a stance whose aim point is the
+     * body's own centre: `forward` is `-up`, the heading is `atan2(0, 0)` and
+     * the camera stares straight down 0.265 radii above the ground, which is
+     * not "the disk overflowing the frame" by any reading.
+     *
+     * A `radii` standoff is the opposite case and stays a stance at any lens,
+     * because the author wrote the number rather than the lens producing it.
+     */
+    for (const id of ['close', 'raking', 'portrait']) {
+      const placement = placeComposition(
+        findComposition(id),
+        EARTH_RADIUS,
+        SUN,
+        FOV_MAX,
+      )
+      expect(placement.kind, id).toBe('orbit')
+      if (placement.kind !== 'orbit') return
+      expect(placement.distance / EARTH_RADIUS, id).toBeGreaterThanOrEqual(
+        MIN_DISTANCE_RADII,
+      )
+    }
+    expect(
+      placeComposition(findComposition('sunset'), EARTH_RADIUS, SUN, FOV_MAX)
+        .kind,
+    ).toBe('surface')
   })
 
   it('keeps a limb stance level with the local horizon', () => {
@@ -263,8 +293,7 @@ describe('every composition', () => {
       latitude: 0,
       longitude: 0,
       height: placement.height,
-      heading: placement.heading,
-      pitch: placement.pitch,
+      ...stanceToward(placement.up, placement.forward),
     })
     const right = Q.rotate(orientation, vec3(1, 0, 0))
     expect(Vec.dot(right, localTriad(placement.up).up)).toBeCloseTo(0, 12)

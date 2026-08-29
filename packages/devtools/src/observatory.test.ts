@@ -4,9 +4,12 @@ import { AU, type Meters } from '@inertialref/shared'
 import { TEST_CATALOG } from '@inertialref/universe'
 import {
   type FrameId,
+  Quaternion as Q,
   UV,
   type UniverseVector,
   Vec,
+  type Vec3,
+  vec3,
 } from '@inertialref/spatial'
 import { createInlineWorker, createTaskRegistry } from '@inertialref/workers'
 import {
@@ -419,6 +422,42 @@ describe('the compositions, through the camera rather than the hull', () => {
     expect(standing.surface?.stance.height).toBeLessThan(0.05 * 6.371e6)
 
     expect(ir.compose('portrait').aimed).toBe(false)
+    session.dispose()
+  })
+
+  it('aims a surface composition at the sun, on a body whose axis is tilted', () => {
+    /*
+     * The frame conversion, stated where it is visible.
+     *
+     * `placeComposition` solves the aim in the axes the sun line is given in —
+     * universe — and a stance is held in the body's own, which the spin pose
+     * tilts by `axialTilt`. A heading is measured against a triad built on the
+     * pole of *whichever* axes it was solved in, so carrying the angle across
+     * instead of the direction rotates the camera about the local vertical by
+     * that tilt: 5.31° off the sunward limb on Earth, 14.36° for `oblique`,
+     * and zero only on a body with no tilt at all.
+     *
+     * Measured as a horizontal bearing rather than as a heading, because the
+     * bearing is the composition's own claim — `sunset` looks along the ground
+     * toward the star — and it is the one quantity the mistake moves.
+     */
+    const { harness: ir, session } = harness()
+    ir.look('s:SOL/b:2', { ease: false })
+    for (const id of ['sunset', 'oblique']) {
+      ir.compose(id)
+      const pose = posed(ir.observerSample(0))
+      const centre = originOf(session, ir.observatory.target?.frame ?? '')
+      const star = originOf(session, 's:SOL')
+      const up = Vec.normalize(UV.difference(pose.position, centre))
+      const flat = (v: Vec3): Vec3 =>
+        Vec.normalize(Vec.sub(v, Vec.scale(up, Vec.dot(v, up))))
+      const forward = flat(Q.rotate(pose.orientation, vec3(0, 0, -1)))
+      const toStar = flat(Vec.normalize(UV.difference(star, pose.position)))
+      const bearing =
+        (Math.acos(Math.max(-1, Math.min(1, Vec.dot(forward, toStar)))) * 180) /
+        Math.PI
+      expect(bearing, id).toBeLessThan(1)
+    }
     session.dispose()
   })
 

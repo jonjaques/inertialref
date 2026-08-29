@@ -30,9 +30,8 @@ export function CutsceneTransport({
   onTogglePlay: () => void
   onStop: () => void
 }) {
-  // The live chord, not `(Esc)` written into an `aria-label`. A key name in a
-  // label is a binding the editor cannot move, and this one survived the pass
-  // that removed the rest because the file is not in its diff.
+  // The live chord rather than `(Esc)` written into an `aria-label`: a key name
+  // in a label is a binding the editor cannot move.
   const stop = useActionTitle('cutscene.skip', 'Stop and restore the ship')
   return (
     <div className="pointer-events-auto absolute bottom-5 left-1/2 flex w-[34rem] max-w-[80%] -translate-x-1/2 items-center gap-2 rounded-lg border border-slate-700/50 bg-slate-950/70 px-3 py-1.5 type-readout text-slate-300 backdrop-blur">

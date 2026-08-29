@@ -9,6 +9,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Action } from '../hud/Action.tsx'
 import { FOCUS_RING, releaseFocus } from '../hud/focus.ts'
+import { attempt, describeCause } from '../hud/notice.ts'
 import { Section } from '../hud/Section.tsx'
 import { useEngine, useShallow } from '../state/engineStore.ts'
 import type { PlanetariumContext } from './context.ts'
@@ -68,13 +69,23 @@ export function PresetsPanel({ engine, camera, onNotice }: PlanetariumContext) {
               key={picture.id}
               picture={picture}
               onTake={() => {
-                const taken = engine.harness.preset(picture.id)
-                // The notice the shell already flashes, saying what the press
-                // did — a preset that moved the camera and the lens with no
-                // word for it is two changes a viewer has to infer.
-                onNotice(
-                  `${taken.picture.label} — ${taken.status.target?.name ?? 'nowhere'}, ${Math.round(taken.fovDeg)}°`,
-                )
+                /*
+                 * Caught, because a picture can refuse: an address a build no
+                 * longer ships, or a rise from a moon that is not turning. A
+                 * throw out of an `onClick` reaches `window.onerror`, so the
+                 * press does nothing and says nothing.
+                 */
+                try {
+                  const taken = engine.harness.preset(picture.id)
+                  // The notice the shell already flashes, saying what the press
+                  // did — a preset that moved the camera and the lens with no
+                  // word for it is two changes a viewer has to infer.
+                  onNotice(
+                    `${taken.picture.label} — ${taken.status.target?.name ?? 'nowhere'}, ${Math.round(taken.fovDeg)}°`,
+                  )
+                } catch (cause) {
+                  onNotice(describeCause(cause))
+                }
               }}
             />
           ))}
@@ -102,7 +113,18 @@ export function PresetsPanel({ engine, camera, onNotice }: PlanetariumContext) {
               title={composition.why}
               onClick={(event) => {
                 releaseFocus(event)
-                observatory.compose(composition.id)
+                /*
+                 * A composition refuses more often than the enabled state can
+                 * say. A star has no terminator to swing round, and the two
+                 * standoffs below the orbit floor land on the surface arm,
+                 * which needs ground — so `sunset` on Jupiter is a real "no"
+                 * with a reason, and an uncaught throw out of an `onClick` is
+                 * that reason going to `window.onerror` instead of to the
+                 * person who pressed the button.
+                 */
+                attempt(onNotice, composition.label, () =>
+                  observatory.compose(composition.id),
+                )
               }}
               /*
                * `rounded` outside, `rounded-sm` on the thumbnail inside, with

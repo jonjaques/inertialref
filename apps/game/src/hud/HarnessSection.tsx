@@ -1,21 +1,21 @@
 import { useState } from 'react'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { Action } from './Action.tsx'
+import { attempt, describeCause } from './notice.ts'
 import { Section } from './Section.tsx'
 
 /**
  * The author's own verbs: scripted scenes, scenarios, and the self test.
  *
- * Where the deleted Navigate panel's author-only half landed. Navigate was two
- * things wearing one title — the product's navigation, filed under the
- * instruments, plus three sections nobody but the author ever presses — and it
- * was wrong about both. Going places is the Catalog, which every mode's
- * workspace now carries with a verb that depends on the mode. These three are
- * scaffolding and belong behind the disclosure that says so.
+ * Behind a disclosure, because these three are scaffolding and nobody but the
+ * author presses them. Going places is not filed here: that is the Catalog,
+ * which every mode's workspace carries with a verb that depends on the mode.
+ * Mixing the two under one title would file the product's navigation under the
+ * instruments and hide the author's tools in plain sight.
  *
- * Everything here is a harness call, which is the rule the panel it came from
- * was written under and the reason it survives the move unchanged: nothing a
- * button does may be unreachable from the console and from a headless test.
+ * Everything here is a harness call, and that is a rule rather than an
+ * observation: nothing a button does may be unreachable from the console and
+ * from a headless test.
  */
 export function HarnessSection({
   engine,
@@ -35,23 +35,15 @@ export function HarnessSection({
    */
   const [pending, setPending] = useState<string | null>(null)
 
-  const run = (label: string, action: () => void): void => {
-    try {
-      action()
-      onNotice(label)
-    } catch (cause) {
-      onNotice(cause instanceof Error ? cause.message : String(cause))
-    }
-  }
+  const run = (label: string, action: () => void): void =>
+    attempt(onNotice, label, action)
 
   const awaited = (label: string, action: () => Promise<string>): void => {
     if (pending !== null) return
     setPending(label)
     void action()
       .then(onNotice)
-      .catch((cause: unknown) =>
-        onNotice(cause instanceof Error ? cause.message : String(cause)),
-      )
+      .catch((cause: unknown) => onNotice(describeCause(cause)))
       .finally(() => setPending(null))
   }
 

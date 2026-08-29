@@ -48,12 +48,14 @@ import {
 import {
   FLIGHT_FOV,
   type Lens,
+  LENS_PRESETS,
   lensForFov,
   type LensReadout,
   lensReadout,
   type LensView,
   MIN_STANCE_HEIGHT,
   type RenderScene,
+  verticalFovDegrees,
 } from '@inertialref/rendering'
 import type { PoolStats, WorkerPool } from '@inertialref/workers'
 import type { AuthorityPort, AuthorityStatus } from '@inertialref/net'
@@ -219,14 +221,6 @@ export interface PresentationHost {
    */
   setFlightLens?(lens: Lens): void
   /**
-   * Put the interface in or out of the frame.
-   *
-   * A plate is defined as the frame taken with the chrome cleared, and a plate
-   * has to be reproducible from a script — so the state `Shift+H` reaches has
-   * to be reachable from here too. Optional for the same reason: headlessly
-   * there is no interface to clear.
-   */
-  /**
    * How many display pixels one CSS pixel is, on this host.
    *
    * The drag sensitivity needs both and they are not the same number.
@@ -240,6 +234,14 @@ export interface PresentationHost {
    * ratio to report.
    */
   pixelRatio?(): number
+  /**
+   * Put the interface in or out of the frame.
+   *
+   * A plate is defined as the frame taken with the chrome cleared, and a plate
+   * has to be reproducible from a script — so the state `Shift+H` reaches has
+   * to be reachable from here too. Optional for the same reason: headlessly
+   * there is no interface to clear.
+   */
   setChrome?(visible: boolean): void
   /**
    * Put the sky's own layers — names and traces — in or out of the frame.
@@ -738,6 +740,17 @@ export class GameHarness {
       body.radius,
       toStar,
       body.sphereOfInfluence * 0.85,
+      /*
+       * The lens the camera is actually wearing, not the flight default.
+       *
+       * Nine of the sixteen name their standoff as a *fill* of the frame, which
+       * is a claim about an angle — so solved against 65° while the slider sits
+       * at 20°, `close` parks the hull where the disk subtends 61° in a 20°
+       * field and the frame is all ground. `Observatory.compose` passes its own
+       * lens for exactly this reason; a bookmark that framed against a lens
+       * nobody is looking through is the defect `ir.preset` was fixed for.
+       */
+      verticalFovDegrees(this.#host.framingLens?.() ?? LENS_PRESETS.flight),
     )
     const distance = Vec.length(placement.position)
     this.world.teleport(player, {
@@ -1192,12 +1205,16 @@ export class GameHarness {
    *
    * The free-look offset as a harness verb, so every act a planetarium button
    * offers is reachable from a script — which is what makes a plate a command
-   * rather than a gesture. Zero is the composed aim itself: `ir.aim(0, 0)` is
-   * the way back to whatever the pose is looking at.
+   * rather than a gesture. In orbit the pair is an offset from the pose, so
+   * `ir.aim(0, 0)` is the way back to whatever the pose is looking at.
    *
-   * Standing, the offset *is* the heading and the pitch, so this drives those
-   * instead — a compass bearing and an angle above the horizon, which is what
-   * `ir.visit` already takes.
+   * Standing it is not an offset at all: the stance *is* the heading and the
+   * pitch, so these are absolute — a compass bearing and an angle above the
+   * horizon, which is what `ir.visit` already takes. `ir.aim(0, 0)` on the
+   * ground therefore faces due north and level, which is a place rather than a
+   * recentring. The way back to the composed aim on either arm is
+   * `observatory.centre()` — the panel's Recentre button — which levels to the
+   * horizon without touching the bearing.
    */
   aim(yaw = 0, pitch = 0): ObserverStatus {
     this.#observatory.setLook((yaw * Math.PI) / 180, (pitch * Math.PI) / 180)
@@ -1292,7 +1309,26 @@ export class GameHarness {
    * for the arithmetic, and there is no display for a field of view to be about.
    */
   #fitLens(fovDeg: number): void {
-    this.#host.setFlightLens?.(lensForFov(fovDeg))
+    /*
+     * The focal length alone, laid over the lens already on the camera.
+     *
+     * A `Picture` names a field of view and nothing else, but `lensForFov`
+     * returns a whole instrument — zoom 1, f/2.8, focus at infinity, 1/60 s,
+     * ISO 100 — and `requestLens` now routes that into the persisted
+     * `camera.lens`. Assigning it wholesale therefore discards an aperture and
+     * a focus distance somebody set for a depth-of-field shot, permanently and
+     * across a reload, as a side effect of pressing a framing button. `zoom` is
+     * the one channel that does have to go back to 1: the picture's angle is a
+     * claim about what the frame contains, and a zoom left on top of it would
+     * make the frame something else.
+     */
+    const current = this.#host.framingLens?.()
+    const fitted = lensForFov(fovDeg, current?.gauge)
+    this.#host.setFlightLens?.(
+      current === undefined
+        ? fitted
+        : { ...current, focalLength: fitted.focalLength, zoom: 1 },
+    )
   }
 
   /**

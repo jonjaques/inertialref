@@ -15,8 +15,8 @@ import { type Chord, chord, chordEquals, parseChord } from './chord.ts'
  * So: an action has an id, and a chord is a *binding* to it. A mode registers a
  * handler for an id (`useAction`) and never sees a key; the editor rebinds a
  * chord and never sees a handler; a label prints the live chord for an id and
- * never contains a key name. The three things that used to be one string
- * literal in three files are three views of this table.
+ * never contains a key name. The key, the label and the handler are three
+ * views of this table rather than three string literals in three files.
  *
  * **A chord is a physical key.** `event.code`, always — see `chord.ts` for why
  * the alternative cannot survive a keyboard change.
@@ -70,6 +70,16 @@ const MODAL_LAYERS: readonly (readonly KeyContext[])[] = [
   [],
   ['dialog'],
   ['cutscene'],
+  /*
+   * Both at once, which the cinema really does produce.
+   *
+   * `App` draws the dialog band whenever the mode is `cinema`, so a scene
+   * playing in the player with Settings opened over it claims `cutscene` and
+   * `dialog` together. Left out of this list the combination is a live set
+   * `collisions` never checks, and Escape — which both layers bind — would be
+   * arbitrated by nothing but the order of the table.
+   */
+  ['cutscene', 'dialog'],
 ]
 
 export const LIVE_SETS: readonly (readonly KeyContext[])[] = MODE_SETS.flatMap(
@@ -95,7 +105,46 @@ const SPECIFICITY: Readonly<Record<KeyContext, number>> = {
   planetarium: 1,
   standing: 2,
   cutscene: 3,
-  dialog: 3,
+  /*
+   * Above the cutscene, because the two can be live together and both bind
+   * Escape. A dialog is the thing most recently asked for and the thing with a
+   * scrim over everything else, so Escape dismisses it first and skips the
+   * scene on the press after. Equal ranks would leave that to table order,
+   * which is an accident rather than a rule.
+   */
+  dialog: 4,
+}
+
+/**
+ * The rank at which a context stops sharing the keyboard and takes it.
+ *
+ * `dialog` and `cutscene` are layers over a mode rather than modes, and the
+ * mode underneath stays mounted — which is the whole point of the background
+ * location, and also the reason its bindings are still live and still wrong.
+ * `/` focusing the reading room's search field from behind a Settings scrim is
+ * the worked example: the dialogs deliberately have no focus trap, so the
+ * keystroke lands in a field nobody can see.
+ */
+const MODAL_RANK = 3
+
+/**
+ * Which of the live contexts a chord may actually resolve against.
+ *
+ * A modal layer takes the keyboard from every *mode* under it and leaves
+ * `global` alone. Both halves are deliberate: a mode's keys are about a picture
+ * the reader has stopped looking at, while the global run is the shell's own —
+ * the settings key, the keys sheet, the panel numbers — and those are as
+ * meaningful over a dialog as under one.
+ *
+ * One rule, applied where the arbitration already happens, rather than a
+ * `document.querySelector('[role="dialog"]')` in each listener that wants it.
+ */
+export function arbitrate(live: readonly KeyContext[]): readonly KeyContext[] {
+  if (!live.some((context) => SPECIFICITY[context] >= MODAL_RANK)) return live
+  return live.filter(
+    (context) =>
+      SPECIFICITY[context] === 0 || SPECIFICITY[context] >= MODAL_RANK,
+  )
 }
 
 export interface ActionDefinition {
@@ -125,6 +174,23 @@ export interface ActionDefinition {
    * four, and the editor would offer both halves of one control.
    */
   readonly shiftScales?: boolean
+  /**
+   * Whether the operating system's auto-repeat should fire it again.
+   *
+   * Off by default, and the default is the interesting half: a press action is
+   * a *decision*, and a decision taken thirty times a second because a key was
+   * leant on is not the same decision thirty times — held `Space` flips
+   * `clock.paused` on every repeat and lands on whichever parity the release
+   * happened to fall on, and held `]` walks the whole warp ladder before a hand
+   * can come off it. The two listeners this table replaces both opened with
+   * `if (event.repeat) return` for exactly that reason.
+   *
+   * The exceptions are the acts that are a *quantity* rather than a decision,
+   * where leaning on the key is how somebody asks for more of it: the surface
+   * climb and descent move a tenth of the travel per press, and ten discrete
+   * presses to cross six decades of height is a control nobody would use twice.
+   */
+  readonly repeats?: boolean
   /**
    * Whether a focused control may take the key instead.
    *
@@ -345,12 +411,22 @@ export const ACTIONS: readonly ActionDefinition[] = [
   ),
 
   /* ------------------------------ standing ------------------------------ */
+  /*
+   * `repeats`, not `held`, and the distinction is the control's own.
+   *
+   * These move a tenth of the travel on the *down* edge and have nothing to do
+   * on the up one, so `held` buys no second edge and actively costs the
+   * repeats: the dispatcher drops a held action's auto-repeat because a control
+   * vector does not change while a key stays down, which turned leaning on
+   * PageUp into a single tenth of a climb. `held` is the flight axes, and
+   * nothing else.
+   */
   press('stand.up', 'Rise', 'Standing', 'standing', chord('PageUp'), {
-    held: true,
+    repeats: true,
     hint: 'climb, from two meters to the orbit floor',
   }),
   press('stand.down', 'Descend', 'Standing', 'standing', chord('PageDown'), {
-    held: true,
+    repeats: true,
   }),
   press(
     'stand.leave',
@@ -458,8 +534,9 @@ export function actionFor(
   muted: readonly ActionId[] = [],
 ): ActionDefinition | null {
   let best: ActionDefinition | null = null
+  const reachable = arbitrate(live)
   for (const action of ACTIONS) {
-    if (!live.includes(action.context)) continue
+    if (!reachable.includes(action.context)) continue
     if (muted.includes(action.id)) continue
     if (!matches(action, bindings.get(action.id) ?? null, pressed)) continue
     if (
@@ -506,9 +583,10 @@ export interface Collision {
 export function collisions(bindings: Bindings): readonly Collision[] {
   const found: Collision[] = []
   for (const live of LIVE_SETS) {
+    const reachable = arbitrate(live)
     const seen = new Map<string, ActionDefinition[]>()
     for (const action of ACTIONS) {
-      if (!live.includes(action.context)) continue
+      if (!reachable.includes(action.context)) continue
       const bound = bindings.get(action.id) ?? null
       if (bound === null) continue
       // Keyed by what the dispatcher compares: an action reading Shift as a

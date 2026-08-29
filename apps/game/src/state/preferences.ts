@@ -178,17 +178,37 @@ export interface PreferenceFamily<T> {
 
 const define = <T>(preference: Preference<T>): Preference<T> => preference
 
+/**
+ * The per-member defaults a family has been asked for, by full key.
+ *
+ * `of` is the only place a member's own default is stated, and `definitionFor`
+ * — which rebuilds a member from a *stored key* on the reset and import paths —
+ * has no `initial` to pass. Without this it hands back the family's default:
+ * the one section in the app that starts closed reopens on "reset to its
+ * default" and then closes again on the next reload, which is a reset
+ * contradicting both the default and itself.
+ *
+ * Filled as a side effect of asking, which is enough because the only keys the
+ * two paths can reach are ones something stored — and something stored it by
+ * mounting the hook that named the default.
+ */
+const familyDefaults = new Map<string, unknown>()
+
 const family = <T>(
   spec: Omit<PreferenceFamily<T>, 'of'>,
 ): PreferenceFamily<T> => ({
   ...spec,
-  of: (id, initial) => ({
-    key: `${spec.prefix}${id}`,
-    group: spec.group,
-    what: spec.what,
-    initial: initial ?? spec.initial,
-    accept: spec.accept,
-  }),
+  of: (id, initial) => {
+    const key = `${spec.prefix}${id}`
+    if (initial !== undefined) familyDefaults.set(key, initial)
+    return {
+      key,
+      group: spec.group,
+      what: spec.what,
+      initial: (initial ?? familyDefaults.get(key) ?? spec.initial) as T,
+      accept: spec.accept,
+    }
+  },
 })
 
 /* ------------------------------------------------------------------------ */
@@ -700,6 +720,22 @@ export function usePersistentState<T>(
     if (Object.is(persisted.current, value)) return
     persisted.current = value
     writeRaw(key, value)
+    /*
+     * And tell the other hooks on this key, which is not a nicety.
+     *
+     * A preference is a key, not a component, and two mounted hooks on one key
+     * are the ordinary case rather than the exotic one: `controls.keymap` is
+     * held by `KeymapProvider`, which is the only thing that feeds the
+     * dispatcher, *and* by the editor that rewrites it. Without this the editor
+     * updates its own copy and storage, the provider never hears, and a rebind
+     * is not live until a reload — which in this app rebuilds the renderer and
+     * loses the camera, the exact cost this subscription exists to avoid.
+     *
+     * Re-entrant on this hook's own listener and harmlessly so: it is handed
+     * the value that has just been committed, `persisted` already holds it, and
+     * `setValue` with the same reference is a bail-out rather than a render.
+     */
+    announce(key, value)
   }, [key, value])
 
   /*

@@ -11,9 +11,8 @@ import { useOverlay } from './useOverlay.ts'
  *
  * `?` opens it, and the whole sheet is derived from `ACTIONS` — so it says what
  * the keys *are* rather than what they shipped as, which is the only kind of
- * help a rebindable build can have. Two hand-maintained tables of prose used to
- * answer this question and named the keys as string literals; they went with
- * the six listeners.
+ * help a rebindable build can have. A table of prose could not: it would name
+ * the keys as string literals, and a literal is a key the editor cannot move.
  *
  * Every context at once rather than only the live one, and that is the choice
  * worth stating: the question somebody presses `?` to ask is usually "what can
