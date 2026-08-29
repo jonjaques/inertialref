@@ -20,7 +20,9 @@ import {
   convergence,
   type Hotspot,
   plateAt,
+  type PlateSample,
   type StripeAxis,
+  type TectonicPlate,
   type TerrainSketch,
 } from './sketch.ts'
 
@@ -125,13 +127,43 @@ export function hypsometryBand(
   // A quarter of a radian of margin, which is ~1,600 km on Earth: the width of
   // a continental shelf and slope together, and the scale over which the crust
   // actually changes type.
-  const blend = 0.5 + 0.5 * smoothstep(0, 0.25, sample.boundary)
-  const base = mix(
-    (sample.plate.base + sample.neighbor.base) / 2,
-    sample.plate.base,
-    blend,
-  )
+  const base = acrossBoundary(sample, (plate) => plate.base, 0.25)
   return clamp(base + swell * 0.35, -1, 1)
+}
+
+/**
+ * A plate's own property, read so that it is continuous across the boundary.
+ *
+ * Which plate is `plate` and which is `neighbor` swaps as you step over the
+ * line between them, so **any expression that reads one of them and not the
+ * other is discontinuous there by construction**. The average is the one
+ * combination that is not: it is symmetric under the swap, so it agrees with
+ * itself from both sides. Weighting from the average at the line to the plate's
+ * own value in its interior is what makes the whole band continuous while still
+ * letting a plate be itself away from its edges.
+ *
+ * The weight has to reach *zero* at the boundary and not a half. Starting at a
+ * half leaves half the difference between the two plates standing as a cliff —
+ * measured before this: 9,433.9 m on Proxima Centauri II, which is 46% of that
+ * world's entire relief budget, and 891.2 m on Earth, across 10⁻⁹ m of ground.
+ * `elevationAt` is the one function the mesh and the contact test share, so a
+ * step in it is a wall a ship lands on as readily as a wall you can see.
+ *
+ * `width` is each band's own margin rather than one shared number, because the
+ * bands genuinely differ: hypsometry changes crust type over a shelf and slope,
+ * a mountain belt is an orogen wide, and an arc's volcanoes sit closer to the
+ * trench than either. A boolean becomes a fraction on the way through — the
+ * caller asks for `plate.continental ? 1 : 0` and gets continentalness, which is
+ * what a passive margin actually is.
+ */
+function acrossBoundary(
+  sample: PlateSample,
+  of: (plate: TectonicPlate) => number,
+  width: number,
+): number {
+  const mine = of(sample.plate)
+  const theirs = of(sample.neighbor)
+  return mix((mine + theirs) / 2, mine, smoothstep(0, width, sample.boundary))
 }
 
 /**
@@ -206,11 +238,31 @@ export function beltBand(
   const converging = Math.max(0, across)
   const diverging = Math.max(0, -across)
   const sliding = 1 - Math.abs(across)
-  const continental = sample.plate.continental
+  /*
+   * Continentalness and the transform's sense, both read across the boundary.
+   *
+   * `edge` is *one* at the line and falls to zero away from it, so this band is
+   * at full strength exactly where `plate` and `neighbor` swap — which makes it
+   * the worst place in the field to read a property of one plate and not the
+   * other. Taking `sample.plate.continental` directly flipped `uplift` between
+   * `ranges` and `-0.9·ranges` at a continental-oceanic margin: a 1,347.6 m
+   * step on Earth, and the one the hypsometry band's own half-blend was partly
+   * masking, so correcting that alone made Earth worse rather than better.
+   *
+   * `convergence` needs no such treatment and gets none: it negates both
+   * `toward` and `relative` under the swap, so their dot product is already
+   * symmetric.
+   */
+  const continental = acrossBoundary(
+    sample,
+    (plate) => (plate.continental ? 1 : 0),
+    0.1,
+  )
+  const step = acrossBoundary(sample, (plate) => plate.step, 0.1)
 
-  const uplift = converging * (continental ? ranges : -0.9 * ranges)
-  const opening = diverging * (continental ? -0.7 * ranges : 0.55 * ranges)
-  const scarp = sliding * 0.35 * sample.plate.step * ranges
+  const uplift = converging * mix(-0.9 * ranges, ranges, continental)
+  const opening = diverging * mix(0.55 * ranges, -0.7 * ranges, continental)
+  const scarp = sliding * 0.35 * step * ranges
   return clamp(edge * (uplift + opening + scarp), -1, 1)
 }
 
@@ -239,9 +291,25 @@ export function volcanicBand(
   }
 
   const sample = plateAt(sketch, direction)
-  if (sample !== null && sample.plate.continental) {
+  if (sample !== null) {
     const edge = 1 - smoothstep(0, 0.06, sample.boundary)
-    if (edge > 0) {
+    /*
+     * Continentalness scales the arc rather than gating it.
+     *
+     * `if (sample.plate.continental)` is a hard gate on a property that flips
+     * as you cross the line, and `edge` is one *at* that line — so an arc that
+     * exists on the overriding side of a margin vanished at a step on the other
+     * side of it, at full amplitude. Reading it across the boundary makes the
+     * arc fade out over the same 0.06 radians the rest of the band uses, which
+     * is also the honest picture: an arc sits behind the trench and thins
+     * toward it rather than stopping at a line.
+     */
+    const continental = acrossBoundary(
+      sample,
+      (plate) => (plate.continental ? 1 : 0),
+      0.06,
+    )
+    if (edge > 0 && continental > 0) {
       const across = Math.max(0, convergence(sample, direction))
       const cycles = 60
       const cones =
@@ -254,7 +322,7 @@ export function volcanicBand(
         ) *
           0.5 +
         0.5
-      height += edge * across * cones ** 3 * 1.6
+      height += edge * continental * across * cones ** 3 * 1.6
     }
   }
   return clamp(height, -1, 1)

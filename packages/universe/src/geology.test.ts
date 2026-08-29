@@ -344,11 +344,71 @@ describe('the crater field', () => {
       )
     }
 
-    for (const name of ['Luna', 'Mercury', 'Mars', 'Callisto', 'Miranda']) {
-      const body = find(name)
+    /*
+     * Five stagnant lids and two worlds with plates, and the second group is
+     * the one that has to be here.
+     *
+     * A body with `plateCount === 1` never enters the branches that read
+     * `sample.plate.*`, so a list of Luna, Mercury, Mars, Callisto and Miranda
+     * exercises the crater ladder and nothing else — it cannot fail for
+     * anything the tectonic bands do, however large. Earth carries 22 plates
+     * and Proxima Centauri II 20, which is why they are named individually
+     * rather than left to whichever bodies a zoo sweep happens to pick.
+     *
+     * Proxima Centauri II is the worst case in `TEST_CATALOG` and it is worth a
+     * generated system for: a plate boundary stepped 9,433.9 m there, 46% of
+     * everything that world has, against 891.2 m on Earth. Both are closed; the
+     * seam that survives on it is pinned below rather than asserted away.
+     */
+    const plated = generateSystem(
+      ROOT,
+      MILKY_WAY,
+      catalogStub(
+        TEST_CATALOG.stars.find(
+          (star) => star.name === 'Proxima Centauri',
+        ) as (typeof TEST_CATALOG.stars)[number],
+      ),
+    )
+    const proxima = [...walkBodies(plated)].find(
+      (body) => body.name === 'Proxima Centauri II',
+    )
+    expect(proxima?.surface.grammar.plateCount).toBeGreaterThan(1)
+    expect(find('Earth').surface.grammar.plateCount).toBeGreaterThan(1)
+
+    const subjects: readonly Body[] = [
+      ...['Luna', 'Mercury', 'Mars', 'Callisto', 'Miranda'].map(find),
+      find('Earth'),
+    ]
+    for (const body of subjects) {
       if (body.surface.maxElevation <= 0) continue
-      expect(`${name}: ${step(body) < 1}`).toBe(`${name}: true`)
+      expect(`${body.name}: ${step(body) < 1}`).toBe(`${body.name}: true`)
     }
+
+    /*
+     * Proxima Centauri II is **pinned, not asserted continuous** — the field
+     * still has a seam there and this records its size rather than pretending
+     * it is gone.
+     *
+     * It is not a plate boundary. `plateAt` returns the second-nearest plate,
+     * and which plate that *is* changes discontinuously along the locus where
+     * the second and third nearest are equidistant — a network of curves
+     * through every plate's interior, nowhere near an edge. Measured either
+     * side of one: same `plate` (base 0.432), `neighbor` jumping from base
+     * 0.224 to −0.894, at `boundary` 5.72e-2. Anything reading `neighbor` — and
+     * `acrossBoundary` reads it by construction — inherits that jump, which is
+     * why fixing the boundary left the interior alone. It is the same shape as
+     * the cube-corner problem `craters.ts` avoids: a rank-based lookup has a
+     * seam wherever the ranking changes, and the fix is a partition of unity
+     * over every plate rather than a function of the top two.
+     *
+     * 1,532.3 m measured, of a 20,434 m budget. The window is wide enough that
+     * a last-bit change in the noise cannot flap it and narrow enough that
+     * either direction is a failure: fix the seam and this goes red asking to
+     * become `< 1` like the rest, and make it worse and it goes red saying so.
+     */
+    const known = step(proxima as Body)
+    expect(known).toBeGreaterThan(1_000)
+    expect(known).toBeLessThan(2_000)
   })
 
   it('folds an overlapping stack through a soft ceiling', () => {

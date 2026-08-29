@@ -5234,6 +5234,31 @@ separation, and asserts the gap went with it — 1 m bound against a 2.4 mm wors
 survivor and a 590 m defect. Reintroducing the step fails it on Luna by three
 orders of magnitude.
 
+**And the same class of step, twice more, at plate boundaries.** `hypsometryBand`
+blended a plate's base toward the average of it and its neighbour with a weight
+that started at **0.5** rather than 0 — and `plate`/`neighbor` swap as you cross
+the line, so half the difference between the two plates stood as a cliff:
+**9,433.9 m on Proxima Centauri II, 46% of that world's whole relief budget**,
+and 891.2 m on Earth. `beltBand` then read `plate.continental` and `plate.step`
+where they flip while `edge` is _one_, which is a second 1,347.6 m step on Earth
+— and the hypsometry blend was partly masking it, so correcting that alone made
+Earth **worse**. Both go through one `acrossBoundary` helper now: the average is
+the only combination of two plates that is symmetric under the swap, so weighting
+from it at the line to the plate's own value in the interior is what makes a band
+continuous. A boolean becomes a fraction on the way through, which is what a
+passive margin actually is, and the volcanic arc fades over its own margin rather
+than being gated on a bit that flips.
+
+**What that does not fix, and the shape of what would.** `plateAt` returns the
+second-nearest plate, and _which_ plate that is changes discontinuously along the
+locus where the second and third nearest are equidistant — a network of curves
+through every plate's interior, nowhere near an edge. `acrossBoundary` reads
+`neighbor` by construction and inherits it: **1,532.3 m still stands on Proxima
+Centauri II**, pinned in `geology.test.ts` rather than asserted away. It is the
+same shape as the cube-corner problem `craters.ts` avoids, and the fix is the
+same: a partition of unity over every plate, so no rank identity enters. Every
+Sol body including Earth is continuous.
+
 `TERRAIN_ALGORITHM` does not move. `origin/main` is on v1 and the branch already
 carries the one bump to v2, so v2 has never described a shipped world: changing
 what it means before it merges costs nothing, where a second bump would claim a
