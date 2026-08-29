@@ -5,9 +5,15 @@
 // The rule it enforces is the one already written down: a change is not finished
 // because the browser renders something, it is finished when the layering holds, the
 // types check and the tests pass. Enforcing it here rather than trusting a checklist
-// costs about six seconds:
+// costs about a minute:
 //
-//     graph 0.19s -> lint 0.19s -> typecheck 3.27s -> test 2.16s
+//     graph 0.21s -> lint 0.23s -> typecheck 4.89s -> test 58s
+//
+// Three of those four are free and the fourth is the whole cost. `pnpm test` is what it
+// is because one test in `gameEngine.test.ts` generates a landing's worth of ground
+// through an inline worker, and that figure moves whenever the field gets deeper — so
+// treat it as measured rather than fixed, and re-measure before tightening any budget
+// below rather than reading one off this comment.
 //
 // `pnpm build` is deliberately not in that list, and not for the reason it looks like:
 // its marginal cost is only the 1.7s of vite bundling, because `pnpm build` is
@@ -31,6 +37,11 @@
 //     $CLAUDE_PROJECT_DIR. Running the gate against the main checkout while an agent
 //     edits a worktree would test the wrong tree and pass for the wrong reason.
 //
+// The `timeout` on the Stop hook in .claude/settings.json has to stay above the sum of
+// every stage budget below — 840 s, hence 900. Whichever of the two fires first decides
+// what a stall looks like, and only one of them can say which stage stalled: a hook
+// killed by the harness reports nothing at all.
+//
 // Escape hatch: IR_SKIP_GATE=1.
 
 import { execFileSync } from 'node:child_process'
@@ -49,16 +60,30 @@ const MAX_REPORT_CHARS = 6000
 
 /** graph and lint are near-free and catch the two failures that are structural rather
  *  than local, so they run first: a layering violation or a cycle makes every later
- *  stage's output noise. */
+ *  stage's output noise.
+ *
+ *  Each carries its own `timeout`, because one budget for all four has to be sized for
+ *  the slowest and is then no guard at all on the other three. A stage that reaches its
+ *  timeout is *hung* — the numbers in the header are the honest cost and every budget
+ *  here is a large multiple of one. `test` gets ten minutes against a measured 58 s,
+ *  because the suite's cost sits almost entirely in one terrain descent whose own
+ *  runtime moves by a factor of two with how busy the machine is; a budget that is
+ *  merely comfortable on an idle machine turns every parallel build into a false red. */
 const STAGES = [
-  { name: 'graph', args: ['graph'], why: 'layering or a cycle in packages/*' },
-  { name: 'lint', args: ['lint'], why: 'oxlint' },
+  {
+    name: 'graph',
+    args: ['graph'],
+    why: 'layering or a cycle in packages/*',
+    timeout: 60_000,
+  },
+  { name: 'lint', args: ['lint'], why: 'oxlint', timeout: 60_000 },
   {
     name: 'typecheck',
     args: ['typecheck'],
     why: 'one of the five tsconfig projects',
+    timeout: 120_000,
   },
-  { name: 'test', args: ['test'], why: 'vitest' },
+  { name: 'test', args: ['test'], why: 'vitest', timeout: 600_000 },
 ]
 
 const stdin = readFileSync(0, 'utf8')
@@ -145,11 +170,17 @@ if (!cursorHook) {
   writeFileSync(counter, JSON.stringify({ prompt, blocks: blocks + 1 }))
 }
 
-const report =
-  `Definition of done not met: \`pnpm ${failure.name}\` failed (${failure.why}).\n\n` +
-  `${failure.output}\n\n` +
-  `Fix this before finishing. If the failure predates your change, say so instead of working around it. ` +
-  `Set IR_SKIP_GATE=1 to suppress this gate.`
+const report = failure.timedOut
+  ? `\`pnpm ${failure.name}\` did not finish: ${failure.why}, so the output below stops mid-run ` +
+    `and names nothing.\n\n` +
+    `${failure.output}\n\n` +
+    `This is not a red stage. Either something hangs, or the stage has outgrown its budget in ` +
+    `.claude/hooks/gate.mjs — time \`pnpm ${failure.name}\` by hand before assuming which. ` +
+    `Set IR_SKIP_GATE=1 to suppress this gate.`
+  : `Definition of done not met: \`pnpm ${failure.name}\` failed (${failure.why}).\n\n` +
+    `${failure.output}\n\n` +
+    `Fix this before finishing. If the failure predates your change, say so instead of working around it. ` +
+    `Set IR_SKIP_GATE=1 to suppress this gate.`
 
 if (cursorHook) {
   finish({ followup_message: report })
@@ -167,7 +198,7 @@ function run() {
         cwd,
         stdio: ['ignore', 'pipe', 'pipe'],
         encoding: 'utf8',
-        timeout: 240_000,
+        timeout: stage.timeout,
       })
     } catch (error) {
       // A stage's diagnostics are on stdout for tsc and vitest and on stderr for the
@@ -178,6 +209,26 @@ function run() {
         raw.length > MAX_REPORT_CHARS
           ? `…truncated…\n${raw.slice(-MAX_REPORT_CHARS)}`
           : raw || `(no output; exit ${error.status})`
+
+      /*
+       * A killed stage is not a failed one, and everything downstream reads it as one
+       * unless this says otherwise.
+       *
+       * `execFileSync` SIGTERMs at its `timeout` and throws the same shape a non-zero
+       * exit throws — `status` is null rather than a code, and `stdout` holds whatever
+       * had been written when the axe fell. Under the dot reporter that is a row of
+       * dots naming nothing, so the report read "`pnpm test` failed (vitest)" over a
+       * green suite that had simply not finished, and the only honest fix — a bigger
+       * budget — was the one thing the message gave no reason to reach for.
+       */
+      if (error.code === 'ETIMEDOUT') {
+        return {
+          ...stage,
+          timedOut: true,
+          why: `killed after ${stage.timeout / 1000}s`,
+          output,
+        }
+      }
       return { ...stage, output }
     }
   }
