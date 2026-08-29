@@ -4,7 +4,12 @@ import { rootSeed, type Seed } from '@inertialref/procedural'
 import { Vec, vec3 } from '@inertialref/spatial'
 import { regionAddress } from './address.ts'
 import { hypsometryBand, plateContext } from './bands.ts'
-import { craterCountAbove, craterField, softLimit } from './craters.ts'
+import {
+  craterCountAbove,
+  craterField,
+  craterFieldWithin,
+  softLimit,
+} from './craters.ts'
 import { TEST_CATALOG } from './catalog/fixture.ts'
 import { catalogStub, MILKY_WAY } from './galaxy.ts'
 import {
@@ -229,6 +234,48 @@ describe('the crater field', () => {
     // Rims are a fifth of the cavity depth, so the field is asymmetric and the
     // sign of that asymmetry is the whole reason craters read as craters.
     expect(highest).toBeLessThan(-deepest)
+  })
+
+  it('walks far enough out to find every crater that reaches it', () => {
+    /*
+     * The containment claim, held by running the walk the claim is about
+     * against a wider one and finding nothing in the difference.
+     *
+     * A crater the walk does not visit is not a small error, it is a *step*:
+     * the crater appears the moment the sample crosses into a cell the walk can
+     * see, at whatever height its apron has there. The ±1 neighborhood this
+     * replaced could not contain the ejecta reach — 1.3 cells, because a
+     * level's largest crater has an angular radius of half a cell — and lost up
+     * to 158 m of ejecta on about 30% of directions.
+     *
+     * Reach is only half of how wide the walk has to be. The other half is that
+     * the lattice is cubes in ℝ³ while the field is a shell cutting through
+     * them, so a crater's center sits off the sphere by up to the cell's own
+     * width along the radius, and is indexed there while its profile is
+     * measured from its projection. Walking `reach` alone still lost 34 m on
+     * Luna, which is what makes this a test rather than an argument.
+     *
+     * Two cells wider is the reference because the bound it is checking against
+     * peaks at 2.2, so a walk two cells past it cannot be short. Twelve
+     * thousand directions on two bodies is enough to find it: dropping the
+     * radial half of the bound fails this by 506 m on Luna.
+     */
+    for (const name of ['Luna', 'Iapetus']) {
+      const body = find(name)
+      const sketch = terrainSketch(body.surface)
+      const grammar = body.surface.grammar
+      let worst = 0
+      for (const direction of sphere(12_000)) {
+        const gap = Math.abs(
+          craterField(sketch, grammar, direction) -
+            craterFieldWithin(sketch, grammar, direction, 2),
+        )
+        if (gap > worst) worst = gap
+      }
+      // Not "small": equal. Both walks evaluate the same craters in the same
+      // order, so anything but zero is a crater one of them did not see.
+      expect(`${name}: ${worst}`).toBe(`${name}: 0`)
+    }
   })
 
   it('crosses a cube-face corner without a step in it', () => {

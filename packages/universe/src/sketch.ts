@@ -237,9 +237,12 @@ export function craterLadder(
     const diameter = largest / 2 ** level
     if (diameter < floor) break
     // Cells per unit along an axis of direction space. A crater of diameter D
-    // subtends D/R, so a cell of that size holds exactly one at most, and a
-    // sample's 3×3×3 neighborhood is guaranteed to contain every crater whose
-    // support reaches it.
+    // subtends D/R, so a cell of that size holds exactly one at most — which
+    // sets the density and nothing else. **How far a sample has to walk to find
+    // every crater that reaches it is `craters.ts`'s business, not this one's**,
+    // and it is wider than a cell: the ejecta reach is 1.3 of them and the shell
+    // is not flat against the lattice. Writing the containment down here as a
+    // ±1 neighborhood is what made it look settled while it was not.
     const cells = grammar.meanRadius / diameter
     levels.push({
       cells,
@@ -287,7 +290,7 @@ export const CANONICAL_AMPLITUDE_FLOOR: Meters = 0.5
  * body's craters read at from orbit down to a landing.
  *
  * **It is a cost ceiling and it sets the streaming depth, and both are worth
- * stating.** Each level is twenty-seven cell tests and up to two hashes per
+ * stating.** Each level is a hundred-odd cell tests and up to two hashes per
  * surviving cell, so the band is linear in this. And `surfaceDetailFloor` lands
  * two to three levels below whatever the finest crater is — a rim is about a
  * seventh of its crater wide, so resolving one to half a meter takes samples

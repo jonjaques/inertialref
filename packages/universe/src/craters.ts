@@ -1,6 +1,6 @@
 import type { Meters } from '@inertialref/shared'
 import * as procedural from '@inertialref/procedural'
-import type { Vec3 } from '@inertialref/spatial'
+import { type Vec3, vec3 } from '@inertialref/spatial'
 import { craterDepth, type SurfaceGrammar } from './grammar.ts'
 import type { CraterLevel, TerrainSketch } from './sketch.ts'
 
@@ -26,10 +26,21 @@ import type { CraterLevel, TerrainSketch } from './sketch.ts'
  * the same crater from every patch, at every level, on both sides of every face
  * edge, by construction rather than by arithmetic.
  *
- * The cost of that is a 3×3×3 neighborhood instead of 3×3. Most of those
- * twenty-seven cells do not touch the unit sphere at all, and the box-sphere
+ * The cost of that is a three-dimensional neighborhood instead of a flat one.
+ * Most of its cells do not touch the unit sphere at all, and the box-sphere
  * test that rejects them is squared distances and two compares — an order of
  * magnitude cheaper than the hash it avoids.
+ *
+ * **How wide that neighborhood is comes from the ejecta reach, and does not fit
+ * in a ±1 walk.** A level's cell is one largest-crater diameter across, so that
+ * crater's radius is half a cell and its apron runs `EJECTA_REACH` of those —
+ * 1.3 cells, against the one cell a ±1 walk contains. The apron of a crater in
+ * the next cell out was therefore never summed, and it did not fade out at the
+ * boundary: it *appeared* there, as a step in the field, on about 30% of
+ * directions and up to 158 m of it. `levelContribution` derives its own bounds
+ * from the reach instead, which is three or four cells an axis rather than
+ * three, and `craterFieldWithin` lets the test walk wider still and find
+ * nothing more.
  *
  * Rays are not here. A young crater's rays are an *albedo* field, not a height
  * one, which is how Tycho actually reads from orbit; they belong to the
@@ -70,6 +81,7 @@ const EJECTA_REACH = 2.6
 const RIM_INNER = 0.7
 const RIM_OUTER = 1.5
 
+
 /**
  * The crater field's contribution at a direction, meters.
  *
@@ -82,7 +94,47 @@ export function craterField(
   grammar: SurfaceGrammar,
   direction: Vec3,
 ): Meters {
+  return craterFieldWithin(sketch, grammar, direction, 0)
+}
+
+/**
+ * The same field, with every level's neighborhood widened by `extra` cells.
+ *
+ * Exported for the one test that can hold the containment claim, because the
+ * claim is about what the walk does *not* visit and the only way to see that is
+ * to visit it. `extra` of zero is what ships; a test compares it against two and
+ * asserts the difference is nothing, over enough directions that a crater
+ * straddling a cell boundary has to turn up in some of them.
+ */
+export function craterFieldWithin(
+  sketch: TerrainSketch,
+  grammar: SurfaceGrammar,
+  direction: Vec3,
+  extra: number,
+): Meters {
   const radius = grammar.meanRadius
+  /*
+   * How radial each axis is here, how tangent, and how thick a cell is along
+   * the radius. Every level's neighborhood is sized from these three, and they
+   * are a property of the direction rather than of the level, so they are
+   * computed once for the whole ladder. `levelContribution` says what each one
+   * is doing.
+   *
+   * `slop` is a cube's own width along `direction` — the support function of a
+   * unit cube, which is the sum of the absolute components — and it runs from
+   * one cell face-on to √3 corner-on.
+   */
+  const along = vec3(
+    Math.abs(direction.x),
+    Math.abs(direction.y),
+    Math.abs(direction.z),
+  )
+  const spread = vec3(
+    Math.sqrt(Math.max(0, 1 - direction.x * direction.x)),
+    Math.sqrt(Math.max(0, 1 - direction.y * direction.y)),
+    Math.sqrt(Math.max(0, 1 - direction.z * direction.z)),
+  )
+  const slop = along.x + along.y + along.z
   let total = 0
   for (let index = 0; index < sketch.craterLevels.length; index += 1) {
     const level = sketch.craterLevels[index] as CraterLevel
@@ -93,6 +145,10 @@ export function craterField(
       grammar,
       direction,
       radius,
+      along,
+      spread,
+      slop,
+      extra,
     )
   }
   return total
@@ -105,37 +161,114 @@ function levelContribution(
   grammar: SurfaceGrammar,
   direction: Vec3,
   radius: Meters,
+  along: Vec3,
+  spread: Vec3,
+  slop: number,
+  extra: number,
 ): number {
   const cells = level.cells
   const size = 1 / cells
-  const baseX = Math.floor(direction.x * cells)
-  const baseY = Math.floor(direction.y * cells)
-  const baseZ = Math.floor(direction.z * cells)
+  /*
+   * How far this level can throw, in cells.
+   *
+   * The largest crater the level places is `level.diameter`, its ejecta reach
+   * `EJECTA_REACH` of that crater's *radius*, and a cell is `size` of direction
+   * space — so this is that reach measured in cells. Derived from the level
+   * rather than written down as 1.3, so that changing `EJECTA_REACH` or how
+   * `craterLadder` sizes a cell moves the walk with it instead of silently
+   * truncating the apron.
+   */
+  const reach = ((EJECTA_REACH * level.diameter) / (2 * radius)) * cells
+  /*
+   * How wide the neighborhood has to be, per axis — and it is not the same on
+   * all three, which is the whole reason this is arithmetic rather than a
+   * literal ±1.
+   *
+   * **Two displacements separate a crater's cell from the sample's, and they
+   * are perpendicular.** The ejecta reach lies in the tangent plane. The other
+   * is radial and is the one the old walk had no idea about: the lattice is
+   * cubes in ℝ³ and the field is a shell cutting through them, so a cell's
+   * jittered center is a point *near* the sphere rather than on it, while the
+   * profile measures from that point's projection. A crater directly under the
+   * sample can therefore be indexed a whole cell away, purely because its
+   * center sits above or below the shell — and the bound on that is the cell's
+   * own width along the radius, which is `slop`.
+   *
+   * So an axis takes `reach` times how tangent it is here plus `slop` times how
+   * radial, which never exceeds √(reach² + slop²). Splitting them is worth the
+   * arithmetic: spending the sum on all three axes is 3.0 cells everywhere
+   * where the split peaks at 2.2 and sits near 2.1, which on a lunar patch is
+   * 5.1 cells an axis rather than 7.
+   *
+   * The last two terms are the curvature the small-cell picture drops, and they
+   * matter only at the top of the ladder, where a cell is a tenth of the sphere
+   * across: `reach²·size/2` is how far a chord of that length falls away from
+   * the tangent plane, and `slop·reach·size` is the radial offset applied to a
+   * direction that has already moved by the reach.
+   */
+  const bend = (reach * reach * size) / 2
+  const curve = slop * reach * size
+  const spanX = reach * spread.x + (slop + bend) * along.x + curve + extra
+  const spanY = reach * spread.y + (slop + bend) * along.y + curve + extra
+  const spanZ = reach * spread.z + (slop + bend) * along.z + curve + extra
+  const fromX = Math.floor(direction.x * cells - spanX)
+  const toX = Math.floor(direction.x * cells + spanX)
+  const fromY = Math.floor(direction.y * cells - spanY)
+  const toY = Math.floor(direction.y * cells + spanY)
+  const fromZ = Math.floor(direction.z * cells - spanZ)
+  const toZ = Math.floor(direction.z * cells + spanZ)
   let total = 0
 
-  for (let dx = -1; dx <= 1; dx += 1) {
-    const ix = baseX + dx
+  for (let ix = fromX; ix <= toX; ix += 1) {
     const loX = ix * size
     const hiX = loX + size
     // Nearest and farthest squared distance from the origin to this slab. A
     // cell intersects the unit sphere exactly when the nearest is inside it and
     // the farthest is outside — which is a tighter test than the cell's
-    // bounding sphere and rejects a third more of the twenty-seven.
+    // bounding sphere and rejects a third of them.
     const nearX = loX > 0 ? loX * loX : hiX < 0 ? hiX * hiX : 0
+    /*
+     * The same rejection, partially summed, and left early where it can be.
+     *
+     * A neighborhood wide enough to contain the ejecta reach spends most of its
+     * cells off the shell, and reaching the full three-axis test once per cell
+     * to find that out is the walk's largest cost. `nearX` alone throws away a
+     * whole plane and `nearX + nearY` a whole row — and both are *monotone*
+     * once the index is past zero, where the slab is moving away from the
+     * origin rather than toward it, so the tail of a row can be abandoned
+     * rather than scanned.
+     */
+    if (nearX > 1) {
+      if (ix >= 0) break
+      continue
+    }
     const farX = Math.max(loX * loX, hiX * hiX)
-    for (let dy = -1; dy <= 1; dy += 1) {
-      const iy = baseY + dy
+    for (let iy = fromY; iy <= toY; iy += 1) {
       const loY = iy * size
       const hiY = loY + size
       const nearY = loY > 0 ? loY * loY : hiY < 0 ? hiY * hiY : 0
+      if (nearX + nearY > 1) {
+        if (iy >= 0) break
+        continue
+      }
       const farY = Math.max(loY * loY, hiY * hiY)
-      for (let dz = -1; dz <= 1; dz += 1) {
-        const iz = baseZ + dz
+      const acrossXY = nearX + nearY
+      for (let iz = fromZ; iz <= toZ; iz += 1) {
         const loZ = iz * size
         const hiZ = loZ + size
         const nearZ = loZ > 0 ? loZ * loZ : hiZ < 0 ? hiZ * hiZ : 0
-        if (nearX + nearY + nearZ > 1) continue
+        if (acrossXY + nearZ > 1) {
+          if (iz >= 0) break
+          continue
+        }
         const farZ = Math.max(loZ * loZ, hiZ * hiZ)
+        /*
+         * A cell wholly inside the sphere. There is no early exit at this end
+         * and the obvious one is wrong: `farZ` bottoms out in the middle of the
+         * row rather than at an end, so a run of interior cells is a *band*
+         * with shell on both sides of it. Breaking here dropped 18 km of crater
+         * on Luna, all of it on the far side of the band.
+         */
         if (farX + farY + farZ < 1) continue
 
         const hash = pcg4d(ix ^ seed, iy, iz, index)
