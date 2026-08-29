@@ -689,15 +689,25 @@ describe('the band stack', () => {
 
   it('derives the same sketch whatever order it is asked in', () => {
     /*
-     * The rule that generation may never depend on order, at the one place this
-     * phase adds state: the sketch cache. Two bodies, interleaved, and the
-     * answers have to be the ones each would get alone.
+     * The rule that generation may never depend on order, at the two places
+     * this phase adds state: the sketch cache and the `WeakMap` in front of it.
+     * Two bodies, interleaved, and the answers have to be the ones each would
+     * get alone.
+     *
+     * **The copy is the half that reaches the string cache.** `terrainSketch`
+     * answers a repeat of the same object from the `WeakMap` and returns before
+     * the key is built, so asserting only on `luna.surface` tests an identity
+     * lookup and nothing else — an eviction policy that dropped a live entry
+     * would pass it. A structural copy has a different identity and the same
+     * key, so it is the assertion the FIFO cap and the key itself are visible
+     * through.
      */
     const luna = find('Luna')
     const earth = find('Earth')
     const first = terrainSketch(luna.surface)
     terrainSketch(earth.surface)
     expect(terrainSketch(luna.surface)).toBe(first)
+    expect(terrainSketch({ ...luna.surface })).toBe(first)
     const direction = vec3(0.3, 0.5, 0.8)
     const a = elevationAt(luna.surface, direction)
     elevationAt(earth.surface, direction)
