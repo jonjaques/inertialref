@@ -203,6 +203,13 @@ export const WINGS = [
         ],
       },
       {
+        /* A plan describes what is not built yet, so it is not a guide — a
+           reader who follows a guide expects the system to already behave that
+           way. Filed beside them because the audience is the same one. */
+        label: 'Plans',
+        pages: [['docs/plans/headless-webgpu.md', 'Headless WebGPU']],
+      },
+      {
         label: 'For Agents',
         pages: [
           ['AGENTS.md', 'The Working Card'],
