@@ -55,6 +55,25 @@ export const isPane = (zone: DockZone): zone is PaneZone =>
  * is a drop with no stack to insert into — so neither has a `DockZoneView` and
  * neither belongs here.
  */
+/**
+ * The panes' open state. Both open is the arrangement a fresh visitor gets.
+ *
+ * Here rather than in `useWorkspace.ts`, where the hook that spends it lives,
+ * because `state/preferences.ts` declares the key it is stored under and that
+ * hook is built on the registry — declaring the shape beside the hook is a
+ * cycle. `layout.ts` is the algebra both sides already depend on.
+ */
+export type PaneState = { readonly [Z in PaneZone]: boolean }
+
+export const BOTH_OPEN: PaneState = { left: true, right: true }
+
+export const isPaneState = (value: unknown): value is PaneState =>
+  typeof value === 'object' &&
+  value !== null &&
+  PANE_ZONES.every(
+    (zone) => typeof (value as Record<string, unknown>)[zone] === 'boolean',
+  )
+
 export const DROP_ZONES = PANE_ZONES
 
 export type DockLayout = {
@@ -223,7 +242,7 @@ export function slotIndex(
 /**
  * Reconcile a stored layout with the panels this build actually has.
  *
- * `localStorage` outlives the code that wrote it, which `hud/panelState.ts`
+ * `localStorage` outlives the code that wrote it, which `state/accept.ts`
  * already learned the hard way with a tab name. A layout is worse than a tab
  * name: a renamed panel leaves a dead string sitting in a zone forever, taking
  * up a slot and rendering nothing, and a *new* panel appears in no zone at all

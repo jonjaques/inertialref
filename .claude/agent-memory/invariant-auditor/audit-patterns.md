@@ -386,3 +386,75 @@ in `packages/rendering/src/lens.ts:11` and `terrainSelect.ts:70` — and
 **The check:** when a plan document gains a "did not survive contact" paragraph, grep
 the falsified number across `packages/` and `apps/`. A phase that ships a measurement
 updates the plan and the ADR and forgets the module headers that motivated the work.
+
+## A new host port that writes a value React already owns
+
+`HarnessHost.setFlightLens` (Phase 1.6) writes `engine.flightLens` directly. Its
+docstring argues it is not a second producer — true about _precedence_, and the wrong
+question. The flight lens's owner is `usePersistentState(CAMERA_LENS)` in `App`, mirrored
+into the engine by an effect keyed `[engine, lensFlare, lens, aa]`. So a port write is
+invisible to the panel that displays the value, and the next change to _any_ of those
+deps reassigns the stale React value over it. Measured: `the-rings` fits 80°, stands at
+2.249 radii; on a lens-flare toggle the lens reverts to 65° and Saturn goes from 0.66 to
+0.81 of the frame height with the camera unmoved.
+
+**The check, and it generalizes to every `PresentationHost` port added:** find who else
+writes the field. If one of them is React state, the port needs to go through the React
+setter (or the field needs to stop being React state). "It writes the same field a
+slider writes" is the claim to disbelieve — a slider writes through `onX`, not the field.
+
+Companion tell: the docstring says the lens "comes back rather than being applied" while
+the body calls `#fitLens` on both branches. `ir.rise` really does return-without-applying;
+`ir.preset` does not. When a docstring copies its sibling's argument, check the body.
+
+## `viewport` in this repo is _device_ pixels; pointer deltas are CSS pixels
+
+`GameEngine.viewportPixels` takes `gl.domElement.width` and divides out only the
+_supersample_ factor — devicePixelRatio stays in, deliberately, because the terrain
+predicate and the circle of confusion want physical pixels. `pixelAngle(lens, viewport)`
+is therefore radians per _device_ pixel. Anything that multiplies it by a pointer delta
+(`clientX` differences, `movementX`) is off by the DPR: half speed on a 2× Retina, and
+`dprCeiling` caps at 2 fine / 1.5 coarse. `Observatory.dragSensitivity()` does exactly
+this, under a comment claiming "the ground under the pointer follows the pointer".
+
+**The check:** grep new uses of `pixelAngle` / `pixelsPerRadian` and ask what unit the
+other operand is in. `BASELINE_VIEWPORT`'s "display pixels" comment is what makes this
+easy to get wrong.
+
+## The mirror drift fired a third time, in its usual direction
+
+Phase 1.6 added `chrome` and `labels` to `Stance` and left the presentation-switch bullet
+(`AGENTS.md:61`, `.claude/rules/react-shell.md:19`) enumerating the previous five, and
+`presentation.ts:4`'s header saying "Five presentation fields" over seven. Adding three
+_new_ invariants in the same diff was done perfectly — bullet, mirror, invariant-map row,
+matching Cursor globs. **Amending is what gets missed, every time.** Diff the type
+definition, not the prose: any new field on `Stance`, `Bindings`, `Presentation` etc. is a
+grep across `AGENTS.md`, `.claude/rules/`, and the module header.
+
+## A new "provable by grep" claim in an ADR is a grep you should run
+
+ADR-0018 § Consequences: "One `addEventListener('keydown'`, one `localStorage` call site,
+and no key name written as a string literal in a label." First two hold. The third does
+not — `hud/CutsceneTransport.tsx:45` passes `label="Stop and restore the ship (Esc)"` to
+`TransportButton`, which spends it as `aria-label`. The file is not in the diff, which is
+the whole reason it survived: a new invariant is audited against the diff and violated by
+the tree. **Run the ADR's own grep over the whole tree, not the changed files.**
+
+## Untested because the test host declines the port
+
+`observatory.test.ts`'s `harness()` calls `openSession` with no `host`, so `framingLens`,
+`lensView` and `setFlightLens` are all undefined. Everything the browser does through
+those is therefore exercised at defaults: `ir.preset` fits no lens and composes every
+picture at 65°, and "every one resolves, and takes the frame it names" asserts a `fovDeg`
+that is just the literal echoed out of `PICTURES`. The ordering the code argues about at
+length — fit the lens, _then_ place a `fill` composition — has no test at all.
+
+**The check:** when a verb's behavior is gated on an optional host port, look at what the
+test session passes for `host`. A stub with a mutable field is usually two lines.
+
+## Resolved on this branch — do not re-report
+
+- `Observatory.stand` now guards `focus` on `wanted.address !== this.#target?.address`,
+  so the framing reset a `visit`/`ascend` round trip inherited is fixed.
+- `CAMERA_LENS` gained `revive: reviveLens` (`hud/controls.ts:239`), which restores
+  `focus: Infinity` after the JSON round trip. The Reset-stays-enabled bug is gone.

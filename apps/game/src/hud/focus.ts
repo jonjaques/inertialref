@@ -55,8 +55,13 @@ export function releaseFocus(event: MouseEvent<HTMLElement>): void {
  * firing mid-typing in whichever handler was missed. The keys are not
  * remapped and the field is not special — a handler simply declines to read
  * input aimed elsewhere.
+ *
+ * With no DOM at all — the test suite, which runs in plain Node by design —
+ * nothing is being typed into, and saying so is what lets the dispatcher's
+ * decisions be asserted there rather than only in a browser.
  */
 export function isTyping(event: KeyboardEvent): boolean {
+  if (typeof HTMLElement === 'undefined') return false
   const target = event.target
   if (!(target instanceof HTMLElement)) return false
   return (
@@ -81,9 +86,11 @@ export function isTyping(event: KeyboardEvent): boolean {
  * navigable if the focused control still hears its own keys.
  *
  * From the canvas or the body — where focus is during flight, because every
- * control hands it straight back on a *pointer* click — nothing declines.
+ * control hands it straight back on a *pointer* click — nothing declines. So
+ * does a run with no DOM; see `isTyping`.
  */
 export function isOverlayControl(event: KeyboardEvent): boolean {
+  if (typeof HTMLElement === 'undefined') return false
   const target = event.target
   return target instanceof HTMLElement && target.closest('.hud-layer') !== null
 }

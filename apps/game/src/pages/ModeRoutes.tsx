@@ -43,6 +43,16 @@ interface ModeRouteProps {
    * menu is not a place with a workspace in it.
    */
   readonly dev: DevWorkspace
+  /**
+   * Say what a verb just did, through the notice `App` already flashes.
+   *
+   * The flight mode needs it now that the Catalog is in its workspace: `Orbit`
+   * and `Land` are teleports, and a teleport with no word for it is a picture
+   * that changed for a reason nothing on screen gives. The planetarium keeps
+   * its own surface, because it also has failures to report and a failure is
+   * not a confirmation.
+   */
+  readonly onNotice: (message: string) => void
 }
 
 /**
@@ -75,6 +85,7 @@ export function ModeRoutes(props: ModeRouteProps) {
             engine={props.engine}
             status={props.status}
             dev={props.dev}
+            onNotice={props.onNotice}
           />
         }
       />

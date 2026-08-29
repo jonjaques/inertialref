@@ -4,6 +4,7 @@ import { mediaPath } from '@inertialref/protocol'
 import type { CinematicTextState, GameEngine } from '../engine/GameEngine.ts'
 import { CutsceneTransport } from './CutsceneTransport.tsx'
 import { labelStyle, textStyle } from './cutsceneText.ts'
+import { useAction, useKeyContext } from '../input/useKeymap.ts'
 import { useScrubber } from './useScrubber.ts'
 import { useEngine } from '../state/engineStore.ts'
 
@@ -90,15 +91,18 @@ export function CutsceneOverlay({
     setTexts((current) => current ?? engine.cinematic?.texts ?? null)
   }, [engine, sceneId, transport])
 
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape' && engine.cinematic !== null) {
-        engine.harness.stopCutscene()
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [engine])
+  /*
+   * A running scene is a context, and Escape skips it.
+   *
+   * The claim is live only while a scene is actually playing, which is the
+   * `engine.cinematic !== null` the listener used to check on every keystroke:
+   * as a context it is checked once, when the scene starts and stops, and the
+   * dispatcher never has to be told about a mode that is not running.
+   */
+  useKeyContext({ context: 'cutscene' }, transport !== null)
+  useAction('cutscene.skip', () => {
+    if (engine.cinematic !== null) engine.harness.stopCutscene()
+  })
 
   /*
    * Adopt the reference audio when this deployment has it.

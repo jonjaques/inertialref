@@ -40,8 +40,12 @@ import type { Playhead } from '../cinema/session.ts'
 export interface PresentationSnapshot {
   readonly showShip: boolean
   readonly showOrbits: boolean
+  /** Names on the sky. A stance, so a capture can push it off. */
+  readonly labels: boolean
   /** How much of the lens's artifact stack is showing, 0..1. */
   readonly flareArtifacts: number
+  /** Whether the interface is in the frame at all. False is the plate state. */
+  readonly chrome: boolean
 }
 
 /**
@@ -94,7 +98,9 @@ export interface EngineSource {
   readonly cinematic: object | null
   readonly showShip: boolean
   readonly showOrbits: boolean
+  readonly labels: boolean
   readonly flareArtifacts: number
+  readonly chrome: boolean
   /**
    * The cutscene session's tick.
    *
@@ -108,7 +114,12 @@ export interface EngineSource {
 const NOTHING_DRAWN: PresentationSnapshot = {
   showShip: false,
   showOrbits: false,
+  labels: false,
   flareArtifacts: 0,
+  // True before the first sample, because the interface has to be on screen
+  // while the engine is still starting: the boot cover is chrome, and a shell
+  // that opened with everything hidden would be a blank page with no way in.
+  chrome: true,
 }
 
 const IDLE: EngineSnapshot = {
@@ -134,7 +145,9 @@ export function sampleOnce(store: EngineStore, source: EngineSource): void {
     presentation: {
       showShip: source.showShip,
       showOrbits: source.showOrbits,
+      labels: source.labels,
       flareArtifacts: source.flareArtifacts,
+      chrome: source.chrome,
     },
     playhead: source.cutscene.sample(),
   })

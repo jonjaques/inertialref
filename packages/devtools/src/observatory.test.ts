@@ -4,12 +4,21 @@ import { AU, type Meters } from '@inertialref/shared'
 import { TEST_CATALOG } from '@inertialref/universe'
 import {
   type FrameId,
+  Quaternion as Q,
   UV,
   type UniverseVector,
   Vec,
+  type Vec3,
+  vec3,
 } from '@inertialref/spatial'
 import { createInlineWorker, createTaskRegistry } from '@inertialref/workers'
-import { MAX_OBSERVER_DISTANCE } from '@inertialref/rendering'
+import {
+  type Lens,
+  LENS_PRESETS,
+  MAX_OBSERVER_DISTANCE,
+  verticalFov,
+  verticalFovDegrees,
+} from '@inertialref/rendering'
 import { openSession, type Session } from './session.ts'
 import type { GameHarness } from './harness.ts'
 import type { ObserverPose } from './observatory.ts'
@@ -23,14 +32,39 @@ import type { ObserverPose } from './observatory.ts'
  * the same act as going there. The last one is the whole architectural claim
  * the planetarium rests on and it is one line to check.
  */
-function harness(): { harness: GameHarness; session: Session } {
+function harness(): {
+  harness: GameHarness
+  session: Session
+  lens: () => Lens
+} {
   const registry = createTaskRegistry()
+  /*
+   * The session gets a lens the way a browser does, and it has to.
+   *
+   * With no host, `framingLens` and `setFlightLens` are both absent:
+   * `Observatory.#lens` falls back to `LENS_PRESETS.flight` and `#fitLens` is a
+   * silent no-op — so every picture composes at 65° whatever it names, and the
+   * `fovDeg` a test asserts against is the literal echoed back out of
+   * `PICTURES`. `preset`'s central claim, that a `fill` standoff is solved
+   * *against* the lens and so the lens is fitted first, was exercised by
+   * nothing: swapping the two lines left the suite green while `the-rings`
+   * moved from 2.249 radii to 2.735.
+   *
+   * Two lines of host is the whole fix, and it makes the ordering assertable.
+   */
+  let held: Lens = LENS_PRESETS.flight
   const session = openSession({
     seed: 'inertialref',
     workers: () => createInlineWorker(registry),
     catalog: TEST_CATALOG,
+    host: {
+      framingLens: () => held,
+      setFlightLens: (next) => {
+        held = next
+      },
+    },
   })
-  return { harness: session.harness, session }
+  return { harness: session.harness, session, lens: () => held }
 }
 
 /** A sample that must exist. Keeps the assertions about geometry, not nulls. */
@@ -358,5 +392,259 @@ describe('the observatory', () => {
     expect(status.altitude).toBeGreaterThan(0)
     expect(status.altitudeText).toMatch(/\d/)
     expect(status.state.distance).toBeLessThan(AU)
+  })
+})
+
+describe('the compositions, through the camera rather than the hull', () => {
+  it('lands the low ones on the surface arm and the rest in orbit', () => {
+    /*
+     * The claim that removes the second list. `glint`, `sunset` and `oblique`
+     * were ship-only bookmarks, not because a hull is needed to take them but
+     * because they aim somewhere other than the body's center and the orbit
+     * arm's pose is `lookAlong(−offset, up)`, always. With the aim solved as an
+     * offset the observatory can take all sixteen — and the two that stand off
+     * below 1.5 radii land on the arm that goes there.
+     */
+    const { harness: ir, session } = harness()
+    ir.look('s:SOL/b:2')
+
+    const orbiting = ir.compose('glint')
+    expect(orbiting.surface).toBeNull()
+    // An aimed composition is the one that has a look offset at all; the nine
+    // drawn framings are centre-aimed and must be bit-identical to their old
+    // poses, which `packages/rendering` states as a property.
+    expect(orbiting.aimed).toBe(true)
+
+    const standing = ir.compose('sunset')
+    expect(standing.surface).not.toBeNull()
+    // 1.04 radii is four hundredths of a radius up — 255 km over Earth.
+    expect(standing.surface?.stance.height).toBeGreaterThan(0)
+    expect(standing.surface?.stance.height).toBeLessThan(0.05 * 6.371e6)
+
+    expect(ir.compose('portrait').aimed).toBe(false)
+    session.dispose()
+  })
+
+  it('aims a surface composition at the sun, on a body whose axis is tilted', () => {
+    /*
+     * The frame conversion, stated where it is visible.
+     *
+     * `placeComposition` solves the aim in the axes the sun line is given in —
+     * universe — and a stance is held in the body's own, which the spin pose
+     * tilts by `axialTilt`. A heading is measured against a triad built on the
+     * pole of *whichever* axes it was solved in, so carrying the angle across
+     * instead of the direction rotates the camera about the local vertical by
+     * that tilt: 5.31° off the sunward limb on Earth, 14.36° for `oblique`,
+     * and zero only on a body with no tilt at all.
+     *
+     * Measured as a horizontal bearing rather than as a heading, because the
+     * bearing is the composition's own claim — `sunset` looks along the ground
+     * toward the star — and it is the one quantity the mistake moves.
+     */
+    const { harness: ir, session } = harness()
+    ir.look('s:SOL/b:2', { ease: false })
+    for (const id of ['sunset', 'oblique']) {
+      ir.compose(id)
+      const pose = posed(ir.observerSample(0))
+      const centre = originOf(session, ir.observatory.target?.frame ?? '')
+      const star = originOf(session, 's:SOL')
+      const up = Vec.normalize(UV.difference(pose.position, centre))
+      const flat = (v: Vec3): Vec3 =>
+        Vec.normalize(Vec.sub(v, Vec.scale(up, Vec.dot(v, up))))
+      const forward = flat(Q.rotate(pose.orientation, vec3(0, 0, -1)))
+      const toStar = flat(Vec.normalize(UV.difference(star, pose.position)))
+      const bearing =
+        (Math.acos(Math.max(-1, Math.min(1, Vec.dot(forward, toStar)))) * 180) /
+        Math.PI
+      expect(bearing, id).toBeLessThan(1)
+    }
+    session.dispose()
+  })
+
+  it('re-solves against the star, so a composition means one picture', () => {
+    // The bug `placeShot` documents, met on this arm: a phase solved once
+    // against a stale sun line is right in one season and wrong in the other
+    // three. Both calls go through `#starDirection` at `renderTime`.
+    const { harness: ir, session } = harness()
+    ir.look('s:SOL/b:2')
+    const first = ir.compose('half')
+    const second = ir.compose('half')
+    expect(second.state.azimuth).toBeCloseTo(first.state.azimuth, 12)
+    session.dispose()
+  })
+})
+
+describe('a rise', () => {
+  it('stands on the moon and looks at the planet', () => {
+    /*
+     * Earthrise, end to end. The verb refuses on a body with nothing going
+     * round it, stands on the moon rather than on the subject, and hands back
+     * the field of view it solved — which the observatory deliberately does not
+     * apply, because it has no lens of its own.
+     */
+    const { harness: ir, session } = harness()
+    ir.look('s:SOL/b:2.0')
+    const { status, fovDeg } = ir.rise()
+    expect(status.surface).not.toBeNull()
+    // The eye is a fraction of Luna's own radius up — 110 km, which is where
+    // the photograph was taken from.
+    expect(status.surface?.stance.height).toBeGreaterThan(50_000)
+    expect(status.surface?.stance.height).toBeLessThan(200_000)
+    // Earth is 1.9° across from here, so the solve wants 11.4° and gets the
+    // 20° floor. Stated as the floor rather than as a range, because the clamp
+    // is the interesting fact: a lens below 20° is its own phase.
+    expect(fovDeg).toBe(20)
+    session.dispose()
+  })
+
+  it('refuses a body with nothing to see rise', () => {
+    const { harness: ir, session } = harness()
+    ir.look('s:SOL/b:0')
+    // Mercury has no moons, so there is no second body for the picture to be
+    // about. A card that silently did nothing would be worse than the refusal.
+    expect(() => ir.rise()).toThrow(/rise/i)
+    session.dispose()
+  })
+})
+
+describe('the pictures', () => {
+  it('every one resolves, and takes the frame it names', () => {
+    /*
+     * The half of `presets:check` that needs a world. The script's job is the
+     * plate on disk and the composition id; this is the claim neither a
+     * filesystem nor a type can make — that the address still names a body in
+     * the catalog this build ships, and that the framing it asks for is one the
+     * observatory can actually take.
+     *
+     * The failure it guards is specific and quiet: a preset is a button, and a
+     * button whose address stopped resolving throws out of an onClick. The
+     * phase these exist for is a review, so a picture that has gone missing has
+     * to be a red test rather than a discovery on review day.
+     */
+    const { harness: ir, session } = harness()
+    for (const { id } of ir.presets()) {
+      const { status, fovDeg, picture } = ir.preset(id)
+      expect(status.target, id).not.toBeNull()
+      expect(status.target?.address, id).toContain(
+        picture.address.replace('s:', ''),
+      )
+      // A lens the slider can actually be set to. A picture composed at an
+      // angle the control cannot reach is a frame nobody can reproduce by hand.
+      expect(fovDeg, id).toBeGreaterThanOrEqual(20)
+      expect(fovDeg, id).toBeLessThanOrEqual(110)
+    }
+    session.dispose()
+  })
+
+  it('puts Earthrise on Luna and everything else on its subject', () => {
+    // The one that is about two bodies, checked against the one thing that
+    // distinguishes it: the camera ends up standing, on the moon, not framing
+    // the planet the picture is of.
+    const { harness: ir, session } = harness()
+    const earthrise = ir.preset('earthrise')
+    expect(earthrise.status.surface).not.toBeNull()
+    expect(earthrise.status.target?.name).toBe('Luna')
+
+    const marble = ir.preset('blue-marble')
+    expect(marble.status.surface).toBeNull()
+    expect(marble.status.target?.name).toBe('Earth')
+    session.dispose()
+  })
+})
+
+describe('a picture fits the lens it names', () => {
+  it('leaves the lens where a rise solved it', () => {
+    // A rise solves its own field from the parent's angular size, so the fit
+    // has to happen *after* the stance rather than before it.
+    const { harness: ir, session, lens } = harness()
+    const taken = ir.preset('earthrise')
+    expect(verticalFovDegrees(lens())).toBeCloseTo(taken.fovDeg, 6)
+    expect(taken.fovDeg).toBe(20)
+    session.dispose()
+  })
+
+  it('composes at the fitted lens, not at the one before it', () => {
+    /*
+     * The claim stated without reaching into private state: take a picture at
+     * 80°, then take one at 65°, and the standoff for the *same* fill has to
+     * differ — a wider field frames the same fraction from nearer.
+     */
+    const { harness: ir, session } = harness()
+    const wide = ir.preset('the-rings')
+    // `desired`, not `state`: the orbit arm eases, and the ease only runs
+    // inside `sample()`, which is the render loop's to call. Headlessly nothing
+    // draws, so `state` is wherever the camera was when the verb was issued —
+    // reading it here compared two focus distances and passed for the wrong
+    // reason on the first run.
+    const wideDistance = wide.status.desired.distance
+
+    ir.preset('blue-marble')
+    ir.look('s:SOL/b:5')
+    const narrow = ir.compose('high-angle')
+
+    expect(narrow.desired.distance).toBeGreaterThan(wideDistance)
+    // 65° against 80° on one fill: the standoff is `r / sin(fill · fov/2)`, so
+    // 2.734 radii against 2.249 — 22%, not a rounding difference.
+    expect(narrow.desired.distance / wideDistance).toBeCloseTo(1.216, 2)
+    session.dispose()
+  })
+})
+
+describe('the drag sensitivity', () => {
+  it('is per CSS pixel, not per display pixel', () => {
+    /*
+     * The claim is "the ground under the pointer follows the pointer", and a
+     * pointer delta arrives in CSS pixels. `pixelAngle` answers in *display*
+     * pixels — the viewport keeps the device ratio deliberately, because the
+     * terrain predicate and the circle of confusion are claims about physical
+     * pixels — so the two have to be reconciled somewhere.
+     *
+     * The check that catches the conflation: the same window at 1× and at 2×
+     * must drag at the same rate. Without the ratio the 2× answer is half, so
+     * the picture moves at half the speed of the hand on every Retina display
+     * and at two thirds on a phone, which is the case free look exists for.
+     */
+    const rate = (ratio: number): number => {
+      const registry = createTaskRegistry()
+      const session = openSession({
+        seed: 'inertialref',
+        workers: () => createInlineWorker(registry),
+        catalog: TEST_CATALOG,
+        host: {
+          lensView: () => ({
+            lens: LENS_PRESETS.flight,
+            // A 1000×750 CSS window, at whatever ratio the display has.
+            viewport: { width: 1000 * ratio, height: 750 * ratio },
+          }),
+          pixelRatio: () => ratio,
+        },
+      })
+      const sensitivity = session.harness.observatory.dragSensitivity()
+      session.dispose()
+      return sensitivity
+    }
+    expect(rate(2)).toBeCloseTo(rate(1), 12)
+    expect(rate(1.5)).toBeCloseTo(rate(1), 12)
+
+    /*
+     * And the absolute value is the lens's own, through `pixelAngle` — which is
+     * the *tangent* form, `2·tan(fov/2)/height`, rather than `fov/height`.
+     * That is the angle a pixel actually subtends at the center of a
+     * projection, and it is the identity the terrain predicate and the LOD
+     * thresholds already stand on: at 65° over 750 pixels it is 1.699 mrad
+     * against the naive 1.513, an 11% difference that would put this arm and
+     * the refinement predicate on two different ideas of a pixel.
+     */
+    const tangent = (2 * Math.tan(verticalFov(LENS_PRESETS.flight) / 2)) / 750
+    expect(rate(1) * 0.005).toBeCloseTo(tangent, 9)
+    expect(tangent * 1000).toBeCloseTo(1.699, 3)
+  })
+
+  it('falls back to the reference rate with no display', () => {
+    // Headlessly the gesture is a number in a script rather than a hand on a
+    // surface, and there is no viewport for an angle to be measured over.
+    const { harness: ir, session } = harness()
+    expect(ir.observatory.dragSensitivity()).toBe(1)
+    session.dispose()
   })
 })

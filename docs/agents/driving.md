@@ -59,6 +59,9 @@ It moves a camera and nothing else:
 
 ```js
 ir.visit('g:milky-way/s:SOL/b:5.6', { site: 'summit', height: 2 })
+ir.preset('earthrise') // a named picture: address, framing and lens, in one call
+ir.chrome(false) // the interface out of the frame — the state a plate is taken in
+ir.layers(false) // names and traces off, which is a different claim from the chrome
 ir.terrain() // what the live streamer holds this frame — null headlessly
 ir.ascend() // back to the framing the camera left
 ```
@@ -121,17 +124,23 @@ earlier, so a probe on it captures an unlit canvas.
 ## The author's instruments
 
 Press the bug in the IR menu at the bottom center of the frame, or `` ` ``.
-Six panels appear, all closed: navigate, controls, telemetry, perf, graphics,
-camera. Every panel calls the harness and nothing else, so anything you can
-do by clicking is reproducible in a test.
+Four panels appear, all closed: controls, telemetry, perf, graphics. Every
+panel calls the harness and nothing else, so anything you can do by clicking is
+reproducible in a test. The Controls panel carries a **Harness** section —
+cutscenes, scenarios and the self-test — which is where scaffolding belongs.
 
-`G` opens navigate, `P` opens perf, and `H` hides or restores both panes.
+`P` opens perf, `H` clears both panes and `Shift+H` clears every piece of
+chrome, which is the state a plate is taken in. All three are defaults; the
+bindings live at `/settings/controls` and `?` prints the live ones.
 
-The camera panel is where the observatory reads out — range, altitude, frame
-fill, the two orbit angles, the address and the frame id — because those are
+Going somewhere is the **Catalog**, and it is not one of these: it is a panel of
+the product's own, in the planetarium and in the flight workspace, with a verb
+that depends on the mode.
+
+The planetarium's **Camera** panel is where the observatory reads out — range,
+altitude, frame fill, the two orbit angles and the address — because those are
 facts about where the camera is standing rather than about the body in front of
-it. The planetarium's object panel is the body's record and carries none of
-them.
+it. The object panel is the body's record and carries none of them.
 
 Look at the perf panel before optimizing anything, and before believing a
 performance claim in a design document.

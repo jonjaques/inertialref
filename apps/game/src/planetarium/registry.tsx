@@ -1,7 +1,8 @@
-import { Eye, Layers, Mountain, Sun } from 'lucide-react'
+import { Aperture, Eye, Image, Mountain, Sun } from 'lucide-react'
 import type { DockPanelDefinition } from '../dock/panels.ts'
 import { Neighbourhood, StarBody } from '../icons/index.tsx'
 import type { PlanetariumContext } from './context.ts'
+import { CameraPanel } from './CameraPanel.tsx'
 import { CataloguePanel } from './CataloguePanel.tsx'
 import { ObjectPanel } from './ObjectPanel.tsx'
 import { PresetsPanel } from './PresetsPanel.tsx'
@@ -52,22 +53,42 @@ export function planetariumPanels(
       render: () => <ObjectPanel {...context} />,
     },
     {
+      id: 'camera',
+      title: 'Camera',
+      /*
+       * The aperture — the glyph `GraphicsPanel` argues it must not have, for
+       * exactly the reason it belongs here. An aperture is the one thing in an
+       * optical system this panel is actually about, and the panel that carries
+       * anti-aliasing and the extended-range output is about what the *display*
+       * is asked to show. In a bar read by shape and position, the two of them
+       * signed over to the same idea was two buttons that looked like they did
+       * each other's job.
+       */
+      icon: Aperture,
+      zone: 'right',
+      hint: 'the eye: where it looks, how far, and through what',
+      render: () => <CameraPanel {...context} />,
+    },
+    {
       id: 'view',
       title: 'View',
+      // The eye stays here, and it is the right glyph now that it is the only
+      // thing on this panel: what is *drawn over* the sky is a question about
+      // seeing rather than about optics.
       icon: Eye,
       zone: 'right',
-      hint: 'names, orbit traces, the ship and the lens',
+      hint: 'names, orbit traces and the ship',
       render: () => <ViewPanel {...context} />,
     },
     {
       id: 'presets',
-      title: 'Shots',
-      // Layers, because a shot is where the light and the framing are stacked
-      // into one press. `Sparkles` was the registry's "something magic happens"
-      // glyph and said nothing about what.
-      icon: Layers,
+      title: 'Presets',
+      // A picture, because the top tier of this panel is one: the thumbnails
+      // are captures rather than drawings. `Layers` was right while the panel
+      // was compositions alone and says nothing about a fixture.
+      icon: Image,
       zone: 'right',
-      hint: 'nine composed shots, the light, and the way out',
+      hint: 'seven pictures, sixteen compositions, the light and the way out',
       render: () => <PresetsPanel {...context} />,
     },
     {

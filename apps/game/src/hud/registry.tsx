@@ -1,17 +1,8 @@
-import {
-  Activity,
-  Camera,
-  Compass,
-  Gauge,
-  MonitorCog,
-  Radio,
-} from 'lucide-react'
+import { Activity, Gauge, MonitorCog, Radio } from 'lucide-react'
 import type { DockPanelDefinition } from '../dock/panels.ts'
-import { CameraPanel } from './CameraPanel.tsx'
 import type { DevContext } from './context.ts'
 import { ControlsPanel } from './ControlsPanel.tsx'
 import { GraphicsPanel } from './GraphicsPanel.tsx'
-import { NavPanel } from './NavPanel.tsx'
 import { PerfPanel } from './PerfPanel.tsx'
 import { TelemetryPanel } from './TelemetryPanel.tsx'
 
@@ -32,7 +23,14 @@ import { TelemetryPanel } from './TelemetryPanel.tsx'
  * right, so a telemetry-and-navigate session opens with one on each side and
  * nothing overlapping.
  *
- * A sixth panel that was never a tab: `controls`. The transport strip under the
+ * The camera is not among them any more, and its absence is the phase's own
+ * argument. The aperture, the focus and the exposure were reached by pressing
+ * the console key, in the mode whose entire subject is looking — so the eye
+ * moved to a planetarium panel of its own, and `/settings/camera` keeps the
+ * lens section because a lens is a persisted preference and the same component
+ * draws it.
+ *
+ * A panel that was never a tab: `controls`. The transport strip under the
  * old dock header held the clock, the attitude helpers and the save slot, and
  * it stayed on screen whichever tab was showing. With no tabs there is nothing
  * for it to stay on screen *over*, so it is a panel like the rest.
@@ -46,27 +44,18 @@ import { TelemetryPanel } from './TelemetryPanel.tsx'
 export function devPanels(context: DevContext): readonly DockPanelDefinition[] {
   return [
     {
-      id: 'navigate',
-      title: 'Navigate',
-      icon: Compass,
-      zone: 'right',
-      defaultOpen: false,
-      hint: 'where you can go, and how to get there',
-      render: () => (
-        <NavPanel engine={context.engine} onNotice={context.onNotice} />
-      ),
-    },
-    {
       id: 'controls',
       title: 'Controls',
       icon: Gauge,
       zone: 'right',
       defaultOpen: false,
-      hint: 'the clock, the attitude helpers and the save slot',
+      hint: 'the clock, the attitude helpers, the save slot and the harness',
       render: () => (
         <ControlsPanel
+          engine={context.engine}
           world={context.status?.world ?? null}
           commands={context.commands}
+          onNotice={context.onNotice}
         />
       ),
     },
@@ -90,15 +79,6 @@ export function devPanels(context: DevContext): readonly DockPanelDefinition[] {
       render: () => (
         <GraphicsPanel graphics={context.graphics} render={context.render} />
       ),
-    },
-    {
-      id: 'camera',
-      title: 'Camera',
-      icon: Camera,
-      zone: 'right',
-      defaultOpen: false,
-      hint: 'the lens, and what it is looking through',
-      render: () => <CameraPanel camera={context.camera} />,
     },
     {
       id: 'telemetry',

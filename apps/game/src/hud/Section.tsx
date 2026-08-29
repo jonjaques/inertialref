@@ -6,7 +6,7 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
 import { FOCUS_RING, releaseFocus } from './focus.ts'
-import { isBoolean, usePersistentState } from './panelState.ts'
+import { SECTION_OPEN, usePersistentState } from '../state/preferences.ts'
 
 /*
  * A titled, collapsible group — the unit every panel in the dock is built
@@ -31,14 +31,25 @@ export function Section({
   id,
   title,
   trailing,
+  defaultOpen = true,
   children,
 }: {
   id: string
   title: string
   trailing?: string
+  /**
+   * Whether it opens the first time it is ever drawn.
+   *
+   * Every section in the app opens, and the Camera panel's Optics is the one
+   * that does not: it is eight derived readings rather than controls, and a
+   * planetarium panel whose first screen is the Airy disk is describing the
+   * instrument to somebody who came to look at Saturn. It still persists like
+   * the rest, so opening it once is a decision that sticks.
+   */
+  defaultOpen?: boolean
   children: ReactNode
 }) {
-  const [open, setOpen] = usePersistentState(`section.${id}`, true, isBoolean)
+  const [open, setOpen] = usePersistentState(SECTION_OPEN.of(id, defaultOpen))
   const Chevron = open ? ChevronDown : ChevronRight
   return (
     <Collapsible open={open} onOpenChange={setOpen} className="mb-2 last:mb-0">

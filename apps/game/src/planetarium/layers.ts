@@ -1,5 +1,5 @@
 import type { OrbitScope } from '../engine/presentation.ts'
-import { oneOf } from '../hud/panelState.ts'
+import { oneOf } from '../state/accept.ts'
 
 /*
  * The names for the things the View panel switches on and off.
@@ -29,7 +29,7 @@ export const LABEL_DENSITIES: readonly LabelDensity[] = [
 ]
 
 /*
- * `oneOf` from `hud/panelState.ts`, which is the closed-set validator every
+ * `oneOf` from `state/accept.ts`, which is the closed-set validator every
  * persisted setting already goes through. Written out, each of these is a
  * third and fourth copy of the same three lines — and `isOrbitScope` had also
  * re-declared `OrbitScope` as a literal union, so adding a scope in

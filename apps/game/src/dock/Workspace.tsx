@@ -9,6 +9,7 @@ import { DEV_GROUP, groupsFor, visiblePanels } from './workspace.ts'
 import { allPanels } from './panels.ts'
 import { isOpen, useWorkspace } from './useWorkspace.ts'
 import { useWorkspaceKeys } from './useWorkspaceKeys.ts'
+import { useChromeHidden } from '../hud/chrome.ts'
 import { useCompact } from '../hud/viewport.ts'
 
 /*
@@ -50,6 +51,15 @@ export function Workspace({
   readonly dev: DevWorkspace
 }) {
   const compact = useCompact()
+  /*
+   * Out of the frame entirely while the chrome is cleared.
+   *
+   * After the hooks, never before one: `Shift+H` toggles this many times a
+   * session, and a return above `useWorkspace` would change the hook order.
+   * The panels keep their arrangement because nothing about the layout is
+   * touched — this is a render decision, exactly like the disclosure's.
+   */
+  const chromeHidden = useChromeHidden()
   const groups = groupsFor(title, panels, dev)
   /*
    * Every panel, guarded ones included, is `known` to the layout.
@@ -76,6 +86,13 @@ export function Workspace({
    * closed is worse than no shortcut at all.
    */
   useWorkspaceKeys(workspace, {
+    // Not while the chrome is cleared: this component returns `null` there, and
+    // a key that rearranged a dock nobody can see would persist the change.
+    enabled: !chromeHidden,
+    // The number row addresses positions in *this* mode's menu, which is why
+    // it is the visible list rather than a constant: "the third panel" means a
+    // different panel in the planetarium than in flight.
+    panels: visible.map((panel) => panel.id),
     onToggle: (panel) => {
       if (byId.has(panel) && isOpen(workspace.layout, panel)) {
         workspace.hide(panel)
@@ -104,6 +121,8 @@ export function Workspace({
    * menu carries that is not a panel — simply did not exist on a phone, and a
    * mode had no way out of itself.
    */
+  if (chromeHidden) return null
+
   if (compact) {
     return (
       <DockProvider>

@@ -20,7 +20,7 @@ import { Action } from './Action.tsx'
  *
  * A class because there is still no hook form of this. It catches renders,
  * lifecycles and effects and nothing else: not event handlers, not rejected
- * promises, not the cutscene's rAF loop. `NavPanel.run`'s try/catch is not made
+ * promises, not the cutscene's rAF loop. A panel's own try/catch is not made
  * redundant by any of this, and neither is `probeHealth`'s.
  */
 

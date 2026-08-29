@@ -1,13 +1,21 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Search, SlidersHorizontal, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { useTravelTargets } from '../hud/useTravelTargets.ts'
 import { FOCUS_RING, releaseFocus } from '../hud/focus.ts'
-import { isBoolean, oneOf, usePersistentState } from '../hud/panelState.ts'
+import { attempt } from '../hud/notice.ts'
+import { useAction } from '../input/useKeymap.ts'
+import {
+  CATALOGUE_CLASSES,
+  CATALOGUE_FILTERING,
+  CATALOGUE_RADIUS,
+  usePersistentState,
+} from '../state/preferences.ts'
 import { CatalogueRow } from './CatalogueRow.tsx'
 import { NeighbourhoodRail } from './NeighbourhoodRail.tsx'
-import type { PlanetariumContext } from './context.ts'
+import type { GameEngine } from '../engine/GameEngine.ts'
+import { TargetActions } from '../hud/TargetActions.tsx'
 import {
   groupBySystem,
   indentOf,
@@ -15,7 +23,7 @@ import {
   neighbours,
   systemOfAddress,
 } from './catalogue.ts'
-import { ALL_CLASSES, OBJECT_CLASSES } from './kinds.ts'
+import { ALL_CLASSES, OBJECT_CLASSES, RADII } from './kinds.ts'
 
 /*
  * Everything within reach, and a way through it.
@@ -44,9 +52,6 @@ import { ALL_CLASSES, OBJECT_CLASSES } from './kinds.ts'
  * tested there. This file is the controls and the layout.
  */
 
-/** How far the survey reaches. The radii a person actually asks for. */
-const RADII = ['5', '10', '25', '50'] as const
-
 /**
  * How many systems the list will draw at once.
  *
@@ -58,36 +63,44 @@ const RADII = ['5', '10', '25', '50'] as const
  */
 const MAX_SYSTEMS = 200
 
-/** Where it opens: far enough to hold the nearest half-dozen stars. */
-const DEFAULT_RADIUS = '10'
-
 /** One allocation for every collapsed group, rather than one per group. */
 const NOTHING_VISIBLE: ReadonlySet<string> = new Set()
 
-export function CataloguePanel({ engine, target, focus }: PlanetariumContext) {
+export function CataloguePanel({
+  engine,
+  target,
+  focus,
+  onNotice,
+  verbs = 'look',
+}: {
+  readonly engine: GameEngine
+  /** The address the mode considers current, drawn as selected. */
+  readonly target: string | null
+  /** What a row does in `look` mode: move the camera, and write the URL. */
+  readonly focus: (address: string) => void
+  readonly onNotice: (message: string) => void
+  /**
+   * What a row offers, which depends on the mode rather than on the panel.
+   *
+   * In the planetarium a row *looks*: the observatory holds the camera, so
+   * "go to" would teleport a ship nobody can see and the panel would appear to
+   * do nothing — which is exactly what the deleted Navigate panel did there.
+   * In flight a row offers Orbit and Land, with Face and Burn beside them,
+   * because they are the only way to point a hull at a thing.
+   *
+   * One navigator, two verbs. The alternative — a smaller author's Travel panel
+   * — keeps two navigators, which is the ambiguity this replaces.
+   */
+  readonly verbs?: 'look' | 'travel'
+}) {
   const [query, setQuery] = useState('')
-  const [radius, setRadius] = usePersistentState<string>(
-    'planetarium.catalogue.radius',
-    DEFAULT_RADIUS,
-    oneOf(RADII),
-  )
-  const [classes, setClasses] = usePersistentState<readonly string[]>(
-    'planetarium.catalogue.classes',
-    ALL_CLASSES,
-    // Membership in the live set, not merely "an array of strings". The point
-    // of a validator here is the value that survives a *rename* — a stored id
-    // no chip answers to parses perfectly and quietly hides a whole class.
-    (value): value is readonly string[] =>
-      Array.isArray(value) &&
-      value.every(
-        (one) => typeof one === 'string' && ALL_CLASSES.includes(one),
-      ),
-  )
-  const [filtering, setFiltering] = usePersistentState(
-    'planetarium.catalogue.filtering',
-    false,
-    isBoolean,
-  )
+  /** The row a traveling reader has picked, and whose verbs are showing. */
+  const [selected, setSelected] = useState<string | null>(null)
+  /** The search field, for the `nav.goTo` binding to put focus into. */
+  const field = useRef<HTMLInputElement>(null)
+  const [radius, setRadius] = usePersistentState(CATALOGUE_RADIUS)
+  const [classes, setClasses] = usePersistentState(CATALOGUE_CLASSES)
+  const [filtering, setFiltering] = usePersistentState(CATALOGUE_FILTERING)
   /*
    * The systems the reader has decided about, and what they decided.
    *
@@ -141,7 +154,21 @@ export function CataloguePanel({ engine, target, focus }: PlanetariumContext) {
    * this ("a search reaches the whole catalog whatever this says"); the code
    * now agrees with it.
    */
+  /**
+   * What pressing a row does, which is the mode's answer rather than this
+   * panel's. Looking moves a camera; traveling picks a destination and offers
+   * the verbs that reach it.
+   */
+  const act = (address: string): void => {
+    if (verbs === 'look') {
+      focus(address)
+      return
+    }
+    setSelected(address)
+  }
+
   const groups = groupBySystem(rows, searching ? ALL_CLASSES : classes)
+  const chosen = rows.find((row) => row.address === selected) ?? null
   const near = neighbours(rows, lightYears)
   /*
    * What the filter took, counted against the survey rather than against what
@@ -214,12 +241,25 @@ export function CataloguePanel({ engine, target, focus }: PlanetariumContext) {
     0,
   )
 
+  /*
+   * `/` focuses the search, which is what the table has always claimed it does.
+   *
+   * Registered here because this is the panel that owns the field. The binding
+   * is global rather than per-mode: the catalog is in the flight workspace as
+   * well as the planetarium's, and "go to" means the same thing in both. It is
+   * live only while the panel is drawn, which is the honest scope — the
+   * dispatcher declines a chord no handler claims, so `/` stays the browser's
+   * in a mode with no catalog on screen.
+   */
+  useAction('nav.goTo', () => field.current?.focus())
+
   return (
     <div className="flex min-h-0 flex-col gap-2">
       <div className="flex items-center gap-1.5">
         <label className="flex min-w-0 flex-1 items-center gap-1.5 rounded border border-slate-700/60 bg-slate-900/60 px-2 transition-colors focus-within:border-sky-500/60">
           <Search aria-hidden className="size-3 shrink-0 text-slate-400" />
           <Input
+            ref={field}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Name or address"
@@ -364,7 +404,7 @@ export function CataloguePanel({ engine, target, focus }: PlanetariumContext) {
           stars={near}
           radiusLightYears={lightYears}
           target={home}
-          onFocus={focus}
+          onFocus={act}
         />
       )}
 
@@ -378,7 +418,10 @@ export function CataloguePanel({ engine, target, focus }: PlanetariumContext) {
               <ul className="flex flex-col">
                 <CatalogueRow
                   row={group.system}
-                  selected={group.system.address === target}
+                  selected={
+                    group.system.address ===
+                    (verbs === 'travel' ? selected : target)
+                  }
                   indent={0}
                   measure={measureOf(group.system)}
                   {...(group.bodies.length > 0
@@ -396,17 +439,20 @@ export function CataloguePanel({ engine, target, focus }: PlanetariumContext) {
                           }),
                       }
                     : {})}
-                  onFocus={() => focus(group.system.address)}
+                  onFocus={() => act(group.system.address)}
                 />
                 {open &&
                   group.bodies.map((body) => (
                     <CatalogueRow
                       key={body.address}
                       row={body}
-                      selected={body.address === target}
+                      selected={
+                        body.address ===
+                        (verbs === 'travel' ? selected : target)
+                      }
                       indent={indentOf(body, visible)}
                       measure={measureOf(body)}
-                      onFocus={() => focus(body.address)}
+                      onFocus={() => act(body.address)}
                     />
                   ))}
                 {!open && group.bodies.length > 0 && (
@@ -440,6 +486,39 @@ export function CataloguePanel({ engine, target, focus }: PlanetariumContext) {
           </li>
         )}
       </ul>
+
+      {/*
+       * The verbs, under the list, for the mode that has any.
+       *
+       * A fixed slot rather than a row that appears and disappears: the list
+       * above scrolls, and a bar that grew into existence on the first click
+       * would shift every row under the pointer at the moment somebody was
+       * aiming at one.
+       */}
+      {verbs === 'travel' && (
+        <div className="min-h-[2.75rem] shrink-0 rounded border border-slate-800/80 bg-slate-900/40 px-2 py-1">
+          {chosen === null ? (
+            <span className="type-ui text-slate-400">pick somewhere to go</span>
+          ) : (
+            <>
+              <div
+                className="truncate text-slate-300"
+                title={`${chosen.name} · ${chosen.address}`}
+              >
+                {chosen.name}{' '}
+                <span className="text-slate-400">{chosen.address}</span>
+              </div>
+              <div className="mt-1 flex flex-wrap gap-1">
+                <TargetActions
+                  engine={engine}
+                  target={chosen}
+                  run={(label, action) => attempt(onNotice, label, action)}
+                />
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* One line, and it only appears when it has something to say: how much
           of the survey is on screen, and how much the chips are holding back.

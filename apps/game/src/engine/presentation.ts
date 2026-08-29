@@ -1,9 +1,10 @@
 /*
  * What is drawn, and who is allowed to say so.
  *
- * Five presentation fields — `showShip`, `showOrbits`, `orbitScope`,
- * `flareArtifacts`, and the observatory's target. Four of them were written on
- * mode entry under three different disciplines, none of them owned:
+ * Seven presentation fields — `showShip`, `showOrbits`, `orbitScope`, `labels`,
+ * `flareArtifacts`, `chrome`, and the observatory's target. Four of the
+ * original five were written on mode entry under three different disciplines,
+ * none of them owned:
  *
  *   - the menu captured the previous values and restored them
  *   - the planetarium restored to hard-coded literals, so leaving it after
@@ -25,8 +26,8 @@
  * mode's stance applying, which fits ADR-0011's "the mode is never held in
  * state" more tightly than anything here does.
  *
- * The deciding constraint is `NavPanel`'s in-planetarium ship toggle: a user
- * override on top of the mode's stance. The table needs a second channel for
+ * The deciding constraint is the in-planetarium ship toggle — `ViewPanel`'s
+ * now — which is a user override on top of the mode's stance. The table needs a second channel for
  * it — and then a rule for what happens to that channel when the mode changes,
  * which is a restore rule wearing a different hat. **A stack gets it free**:
  * the toggle is just another push, and `release()` means "whatever was under
@@ -71,6 +72,18 @@ export interface Stance {
   /** Orbit traces. */
   readonly showOrbits?: boolean
   /**
+   * Names on the sky.
+   *
+   * A stance rather than a prop threaded from the preference that sets it, and
+   * the rule has no carve-out for the fields that look like preferences —
+   * `orbitScope` is the precedent. What decided it here is the plate rig: a
+   * thumbnail of a picture is a thumbnail of what the *camera* does, and the
+   * layers are the viewer's, drawn over whatever it does. A capture has to be
+   * able to say "not this time" without editing somebody's stored settings, and
+   * a push is what that is.
+   */
+  readonly labels?: boolean
+  /**
    * How many of them: the subject's own context, or every orbit in the system.
    *
    * A stance field rather than a panel's own boolean, because it is a
@@ -90,24 +103,42 @@ export interface Stance {
    * lifetime*, not on the camera — see the guardrail above.
    */
   readonly observatory?: boolean
+  /**
+   * Whether the interface is in the frame at all.
+   *
+   * A presentation switch like the rest, and it is here rather than in React
+   * state for the reason the others are: `Shift+H` is a viewer's override on
+   * top of a mode's stance, `ir.chrome(false)` is a script's, and a plate is
+   * defined as the frame taken with it false. A boolean in `App` could be
+   * reached by the first of those and by neither of the others.
+   *
+   * What it clears is chrome — panes, menu, reticle, flight strip, notices. The
+   * sky labels are content and stay, which is why this is not the gate a
+   * cutscene uses: that one unmounts the mode outright.
+   */
+  readonly chrome?: boolean
 }
 
 /** What is actually drawn, once every layer has had its say. */
 export interface Presentation {
   readonly showShip: boolean
   readonly showOrbits: boolean
+  readonly labels: boolean
   readonly orbitScope: OrbitScope
   readonly flareArtifacts: number
   readonly observatory: boolean
+  readonly chrome: boolean
 }
 
 /** The stance with nothing pushed: a flight camera on a visible ship. */
 export const GROUND_STANCE: Presentation = {
   showShip: true,
   showOrbits: false,
+  labels: true,
   orbitScope: 'context',
   flareArtifacts: 1,
   observatory: false,
+  chrome: true,
 }
 
 /** A pushed layer, until it is released. */
@@ -131,7 +162,7 @@ export interface PresentationStack {
  * Resolve a stack of stances, bottom to top.
  *
  * Last writer wins per field, which is what makes an override a push rather
- * than a special case: `NavPanel` pushes `{ showShip: false }` over the
+ * than a special case: `ViewPanel` pushes `{ showShip: false }` over the
  * planetarium's stance and neither of them has to know about the other.
  */
 export function resolveStances(layers: readonly Stance[]): Presentation {
@@ -140,9 +171,11 @@ export function resolveStances(layers: readonly Stance[]): Presentation {
     resolved = {
       showShip: layer.showShip ?? resolved.showShip,
       showOrbits: layer.showOrbits ?? resolved.showOrbits,
+      labels: layer.labels ?? resolved.labels,
       orbitScope: layer.orbitScope ?? resolved.orbitScope,
       flareArtifacts: layer.flareArtifacts ?? resolved.flareArtifacts,
       observatory: layer.observatory ?? resolved.observatory,
+      chrome: layer.chrome ?? resolved.chrome,
     }
   }
   return resolved
@@ -167,9 +200,11 @@ export function createPresentationStack(
     if (
       next.showShip === last.showShip &&
       next.showOrbits === last.showOrbits &&
+      next.labels === last.labels &&
       next.orbitScope === last.orbitScope &&
       next.flareArtifacts === last.flareArtifacts &&
-      next.observatory === last.observatory
+      next.observatory === last.observatory &&
+      next.chrome === last.chrome
     ) {
       return
     }

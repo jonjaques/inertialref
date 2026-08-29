@@ -50,6 +50,35 @@ function useMediaQuery(query: string): boolean {
 export const useCompact = (): boolean => useMediaQuery(COMPACT_QUERY)
 
 /**
+ * How many display pixels one CSS pixel is, live.
+ *
+ * Read once it is wrong for the same reasons the two queries above are: a
+ * window dragged from a Retina display to a 1× one changes it, and so does
+ * browser zoom, neither of which re-renders anything on its own. Two things
+ * spend it and they have to agree — the drawing buffer's size, and the drag
+ * sensitivity, which converts a pointer delta in CSS pixels into an angle
+ * solved per display pixel. A stale ratio moves the picture at the wrong rate
+ * against a buffer that already rescaled.
+ *
+ * `matchMedia` rather than a `resize` listener: a `(resolution: Ndppx)` query
+ * stops matching the moment the ratio moves, whatever moved it, and a resize
+ * event is neither necessary nor sufficient for that.
+ */
+export function useDevicePixelRatio(): number {
+  const [ratio, setRatio] = useState(() =>
+    typeof window === 'undefined' ? 1 : window.devicePixelRatio,
+  )
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return
+    const list = window.matchMedia(`(resolution: ${ratio}dppx)`)
+    const update = (): void => setRatio(window.devicePixelRatio)
+    list.addEventListener('change', update)
+    return () => list.removeEventListener('change', update)
+  }, [ratio])
+  return ratio
+}
+
+/**
  * Whether this machine is pointed at with a finger.
  *
  * Live, and it has one subscriber: `App` uses it to pick the ceiling on the

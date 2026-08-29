@@ -1,6 +1,7 @@
 import { LIGHT_YEAR, type Meters } from '@inertialref/shared'
 import {
   type Quat,
+  Quaternion as Q,
   UV,
   type UniverseVector,
   Vec,
@@ -49,6 +50,36 @@ export interface ObserverState {
   /** Meters from the target's center. Always positive. */
   readonly distance: Meters
 }
+
+/**
+ * Where the head is turned, relative to whatever the pose aims at.
+ *
+ * Three numbers say where the camera *is*; these two say where it looks from
+ * there. They are separate because the orbit arm aims at one point by
+ * construction — `lookAlong(−offset, up)` is the target's center, always — and
+ * a planetarium in which the only thing you can look at is the middle of the
+ * subject cannot show you a moon beside a disk, a limb, or the sky.
+ *
+ * An offset rather than a replacement, so the composed aim stays the thing it
+ * is measured against: a shot solves angles and a distance, and the viewer
+ * turns their head from there. Zero is the composed aim itself, and
+ * `observerPose` returns the identical pose for it — the compositions are
+ * fitted against that number and a rewrite that quietly went through the
+ * quaternion product would move every one of them by an ulp.
+ */
+export interface LookOffset {
+  /** Around the camera's own up axis. Unbounded — it wraps by construction. */
+  readonly yaw: number
+  /** Above the camera's own right axis. Clamped by `ELEVATION_LIMIT`. */
+  readonly pitch: number
+}
+
+/** Looking exactly where the pose aims. */
+export const NO_LOOK: LookOffset = Object.freeze({ yaw: 0, pitch: 0 })
+
+/** Whether an offset is the composed aim itself, and so costs nothing. */
+export const isCentred = (look: LookOffset): boolean =>
+  look.yaw === 0 && look.pitch === 0
 
 /**
  * How close to a pole the camera may get, radians.
@@ -169,6 +200,55 @@ export function applyDrag(
 }
 
 /**
+ * A drag, in pixels, applied to the *look* instead of to the orbit.
+ *
+ * The same signs as `applyDrag`, and that is the whole of the design: both
+ * gestures are the grab every map uses, so the thing under the pointer goes
+ * where the pointer goes. Orbiting pulls the globe's near face and looking
+ * pulls the picture, and a build that signed the second one like a
+ * first-person mouse-look would have two drags on one surface that felt
+ * inverted against each other with nothing on screen saying which was which.
+ *
+ * The pitch clamps for `ELEVATION_LIMIT`'s reason rather than a restatement of
+ * it: `lookAlong` levels the frame against an up hint, so a view aimed exactly
+ * along that hint has no horizon to level and rolls a half turn in one
+ * pointer-pixel.
+ */
+export function applyLook(
+  look: LookOffset,
+  dxPixels: number,
+  dyPixels: number,
+  sensitivity = 1,
+): LookOffset {
+  const k = DRAG_RADIANS_PER_PIXEL * sensitivity
+  return {
+    yaw: look.yaw + dxPixels * k,
+    pitch: clampElevation(look.pitch + dyPixels * k),
+  }
+}
+
+/**
+ * The look offset that aims the camera along `forward`, in the camera's axes.
+ *
+ * The inverse of `turn`, and the reason the aimed compositions can be
+ * expressed at all: a limb or a specular point is a place on the sphere, and
+ * what the pose needs is the two angles that put it in the middle of the
+ * frame. Solved in the base camera's own axes, so the caller's only job is to
+ * rotate the direction into them.
+ *
+ * `atan2(−x, −z)` rather than `atan2(x, z)` because −Z is forward: the naive
+ * pair is off by a half turn, which aims the camera at the antipode of the
+ * point it was asked for and reads as the composition having no effect at all.
+ */
+export function lookToward(forward: Vec3): LookOffset {
+  const d = Vec.normalize(forward)
+  return {
+    yaw: Math.atan2(-d.x, -d.z),
+    pitch: clampElevation(Math.asin(Math.max(-1, Math.min(1, d.y)))),
+  }
+}
+
+/**
  * A zoom, as a multiplier on distance.
  *
  * `factor` above 1 retreats. Wheel notches and pinch gestures both arrive here:
@@ -223,16 +303,36 @@ export function framingDistance(
 export function observerPose(
   target: UniverseVector,
   state: ObserverState,
+  look: LookOffset = NO_LOOK,
 ): { readonly position: UniverseVector; readonly orientation: Quat } {
   const offset = observerOffset(state)
   const position = UV.translate(target, offset)
   // The camera looks *inwards*, and the pole is up. `lookAlong` handles the
   // one degenerate case this cannot reach — the elevation clamp is what keeps
   // the view direction off the pole in the first place.
-  return {
-    position,
-    orientation: lookAlong(Vec.negate(offset), vec3(0, 1, 0)),
-  }
+  const aimed = lookAlong(Vec.negate(offset), vec3(0, 1, 0))
+  return { position, orientation: turn(aimed, look) }
+}
+
+/**
+ * A base orientation with a free-look offset turned onto it.
+ *
+ * Both rotations are in the camera's *own* axes and in this order: yaw about
+ * the base camera's up, then pitch about the yawed camera's right. Reversed,
+ * pitching first tilts the axis the yaw then runs about, so a look that is up
+ * and to the left arrives rolled — the horizon goes off level for a gesture
+ * that never asked it to.
+ *
+ * A centred offset returns the base quaternion itself rather than its product
+ * with the identity. The product is exact for every field, but `isCentred` is
+ * the claim the compositions rest on and stating it as a branch is what makes
+ * it hold under a later change to `multiply`.
+ */
+export function turn(base: Quat, look: LookOffset): Quat {
+  if (isCentred(look)) return base
+  const yaw = Q.fromAxisAngle(vec3(0, 1, 0), look.yaw)
+  const pitch = Q.fromAxisAngle(vec3(1, 0, 0), clampElevation(look.pitch))
+  return Q.multiply(Q.multiply(base, yaw), pitch)
 }
 
 /** The camera's displacement from the target, in the reference plane's axes. */

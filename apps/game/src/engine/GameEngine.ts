@@ -67,6 +67,7 @@ import {
 } from '../cinema/session.ts'
 import {
   createPresentationStack,
+  type StanceHandle,
   type OrbitScope,
   type PresentationStack,
 } from './presentation.ts'
@@ -315,6 +316,46 @@ export class GameEngine implements PresentationHost {
   }
 
   /**
+   * Where a lens the engine did not choose goes.
+   *
+   * Installed by the shell, because the shell *owns* the lens: `camera.lens` is
+   * a persisted preference and an effect mirrors it onto `flightLens` whenever
+   * any render preference changes. A verb that wrote the field directly would
+   * therefore hold the picture only until the next unrelated toggle — press
+   * The Rings, change the anti-aliasing, and Saturn goes from 0.660 of the
+   * frame height to 0.812 with the A ring's outer edge off both sides, which is
+   * exactly what that picture's 80° exists to prevent.
+   *
+   * Null headlessly, where there is no preference and no panel, and the field
+   * is the whole of the truth.
+   */
+  onLensRequest: ((lens: Lens) => void) | null = null
+
+  /**
+   * Fit a lens, through whoever owns it — and **both** writes are required.
+   *
+   * The field first, because it is what `framingLens()` answers *this instant*
+   * and `ir.preset` composes on the very next line: a `fill` standoff is solved
+   * against the lens, so a fit that only queued a React state update would
+   * compose against the lens from a moment ago. Measured: `the-rings` landed at
+   * 2.735 radii instead of 2.249, which is the 65° answer wearing an 80° label.
+   *
+   * Then the shell's setter, because the field alone does not survive. The
+   * preference is the owner and an effect re-asserts it onto this field on
+   * every render-preference change, so a lens written here and nowhere else
+   * holds its picture until the next unrelated toggle — press The Rings, change
+   * the anti-aliasing, and Saturn goes from 0.660 of the frame height to 0.812
+   * with the A ring's outer edge off both sides.
+   *
+   * Not a second producer: `engine.lens` still resolves cutscene-then-flight,
+   * and this writes the one flight lens a panel's slider also writes.
+   */
+  requestLens(lens: Lens): void {
+    this.flightLens = lens
+    this.onLensRequest?.(lens)
+  }
+
+  /**
    * The flight lens alone — what the observatory's framing solver reads.
    *
    * Separate from `lensView` because that one resolves cutscene-first, and the
@@ -347,6 +388,25 @@ export class GameEngine implements PresentationHost {
    * The place to spend on sharper terrain is `cellPixels`.
    */
   supersample = 1
+
+  /**
+   * How many *display* pixels one CSS pixel is, written by the shell.
+   *
+   * Named for what it holds rather than for the port that reads it, because
+   * `GameEngine` implements `PresentationHost` and a field cannot share a name
+   * with the method the interface asks for.
+   *
+   * The companion to `supersample` and a different number: that one is the
+   * factor the buffer is inflated by for anti-aliasing and is divided back out,
+   * this one is the device ratio and is deliberately kept — the terrain
+   * predicate and the circle of confusion are claims about physical pixels.
+   *
+   * What needs it is the pointer. A drag delta arrives in CSS pixels, and a
+   * sensitivity solved from `pixelAngle` alone is per display pixel: on a 2×
+   * display it moves the picture at half the rate of the hand, and on a phone,
+   * which is the case free look exists for, at two thirds.
+   */
+  displayRatio = 1
 
   #viewport: Viewport | null = null
 
@@ -387,6 +447,39 @@ export class GameEngine implements PresentationHost {
    * Pushed and released like `showShip`, through `presentation`.
    */
   flareArtifacts = 1
+
+  /**
+   * Whether the interface is in the frame.
+   *
+   * A plain field written by the presentation stack beside `showShip`, so the
+   * sampler publishes it and every piece of chrome reads one answer. `Shift+H`,
+   * `ir.chrome(false)` and a capture script all reach it through `setChrome`.
+   */
+  chrome = true
+
+  /** Names on the sky. A stance field, so a capture can push it off. */
+  labels = true
+
+  /**
+   * The layer stance a capture holds, while it holds one.
+   *
+   * Names and traces together, because they are one question to the thing that
+   * asks it: a plate shows what the preset does, and both of these are drawn
+   * over whatever it does.
+   */
+  #layerStance: StanceHandle | null = null
+
+  setLayers(visible: boolean): void {
+    if (visible) {
+      this.#layerStance?.release()
+      this.#layerStance = null
+      return
+    }
+    this.#layerStance ??= this.presentation.push({
+      labels: false,
+      showOrbits: false,
+    })
+  }
 
   /*
    * The host's renderer, once it has one. `null` under Node, and for as long as
@@ -511,6 +604,10 @@ export class GameEngine implements PresentationHost {
         terrain: () => this.terrain(),
         lensView: () => this.lensView(),
         framingLens: () => this.framingLens(),
+        pixelRatio: () => this.displayRatio,
+        setFlightLens: (lens) => this.requestLens(lens),
+        setChrome: (visible) => this.setChrome(visible),
+        setLayers: (visible) => this.setLayers(visible),
         onWorldReplaced: () => this.#invalidateDerived(),
       },
     })
@@ -530,8 +627,10 @@ export class GameEngine implements PresentationHost {
     this.presentation = createPresentationStack((stance) => {
       this.showShip = stance.showShip
       this.showOrbits = stance.showOrbits
+      this.labels = stance.labels
       this.orbitScope = stance.orbitScope
       this.flareArtifacts = stance.flareArtifacts
+      this.chrome = stance.chrome
       // The observatory's *lifetime*, not the camera: a layer that was holding
       // a target releases it on the way out, and the camera falls back to the
       // ship through the precedence in `#step` exactly as it always did.
@@ -545,6 +644,32 @@ export class GameEngine implements PresentationHost {
   /** Live read, never a captured reference — loading a save replaces it. */
   get world(): World {
     return this.session.world
+  }
+
+  /**
+   * The layer that holds the interface out of the frame, while there is one.
+   *
+   * A push rather than a field, because clearing the chrome is a viewer's
+   * override on top of whatever the mode asked for — the same shape as the
+   * ship toggle — and `release()` means "whatever was underneath" rather than
+   * a literal `true` that a later mode might not have wanted.
+   */
+  #chromeStance: StanceHandle | null = null
+
+  /**
+   * Put the interface in or out of the frame.
+   *
+   * Here rather than in React state so that `Shift+H`, `ir.chrome(false)` and
+   * a plate script all reach one switch. It is the state a plate is defined to
+   * be taken in, and a plate has to be reproducible from a script.
+   */
+  setChrome(visible: boolean): void {
+    if (visible) {
+      this.#chromeStance?.release()
+      this.#chromeStance = null
+      return
+    }
+    this.#chromeStance ??= this.presentation.push({ chrome: false })
   }
 
   /* ----------------------------------------------------------------------- */

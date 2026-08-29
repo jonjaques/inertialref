@@ -58,8 +58,8 @@ Violating one of these is a rewrite later, not a refactor.
   `apps/game/src/state/engineStore.ts`. Subscribe to the narrowest slice you
   need, and do not add a timer of your own — one sampler owns the rate.
 - **Never write a presentation switch directly.** `showShip`, `showOrbits`,
-  `orbitScope`, `flareArtifacts` and the observatory's target go through
-  `engine.presentation`: a mode pushes a stance on mount and releases it on
+  `orbitScope`, `labels`, `flareArtifacts`, `chrome` and the observatory's
+  target go through `engine.presentation`: a mode pushes a stance on mount and releases it on
   unmount, a panel's override is another push, and `release()` restores what
   was underneath rather than a literal. The rule has no carve-out for the
   fields that look like preferences — `orbitScope` is read by the frame loop,
@@ -174,6 +174,37 @@ Violating one of these is a rewrite later, not a refactor.
   angle from `DEFAULT_LENS` and is the one exception, because it is a
   constructor argument rather than a writer.
   [ADR-0017](docs/adr/0017-the-lens.md).
+- **Never add a second window-level key listener.** `input/keymapStore.ts` owns
+  the one `keydown` in `apps/game/src`, and there were six: two read `event.key`
+  and four read `event.code`, which is why `+` carried a comment about `Shift`. A
+  mode registers a handler for an **action id** (`useAction`) and declares which
+  **context** it is (`useKeyContext`); it never sees a key. Conflicts are checked
+  against `LIVE_SETS` — every set of contexts that can be live at one moment —
+  because `global` is live alongside everything, and "conflicts within a context"
+  misses exactly the pair that shipped as a bug: `Space` was the pause key and
+  the cinema transport, both handlers ran, and `clock.paused` flipped twice.
+  [ADR-0018](docs/adr/0018-the-instrument.md).
+- **Never call `localStorage` outside `state/preferences.ts`.** Every key is
+  declared there once — default, guard, revive, migrate, group — and a call site
+  takes the _definition_ rather than a key string, so an unregistered preference
+  is a name that does not resolve. The rule is not tidiness: the export, the
+  import and the live subscription each have to know the whole set, and none of
+  them is possible with the calls spread out. An import reaches mounted hooks
+  through that subscription, because a reload here rebuilds the renderer.
+- **Never write a key name in a label.** Not in a title, not in an `aria-label`,
+  not in a help table. `useActionTitle(id, text)` and `KeySheet` read the live
+  chord, which is the only kind of help a rebindable build can have — and the
+  two hand-maintained tables of prose that named keys as string literals are
+  exactly what `/settings/controls` was printing while it said rebinding was not
+  built.
+- **Never turn the head at a constant radians-per-pixel.** Drag sensitivity is
+  `pixelAngle(lens, viewport)`, so the ground under the pointer follows the
+  pointer; a bare constant swung the frame through three of its own field-widths on a 100 px
+  drag at 8× zoom. The aim is a `LookOffset` on the pose, and it is cleared by
+  whatever **replaces** the pose — a focus, a frame, a stand, a composed set of
+  angles — and by nothing else, so a viewer who turned to look at Io beside
+  Jupiter is still looking at Io after the wheel.
+  [ADR-0018](docs/adr/0018-the-instrument.md).
 - **Never let the planetarium write canonical state.** The observatory
   resolves an address, asks the world where that is at `renderTime`, and
   returns a pose. No teleport, no clock, no entity write, no save.

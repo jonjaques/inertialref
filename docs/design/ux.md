@@ -36,7 +36,8 @@ clicking.
 | `/planetarium?at=…`                                  | [The planetarium](planetarium.md)                                    | `planetarium` |
 | `/cinema`, `/cinema/:id`                             | [The cinema player](cinema.md)                                       | `cinema`      |
 | `/docs`, `/docs/*`                                   | The documentation, over a masthead framed on a real body             | `docs`        |
-| `/settings/:section?`                                | Display, camera, controls                                            | _a dialog_    |
+| `/settings/:section?`                                | Display, camera, controls, data                                      | _a dialog_    |
+| `/keys`                                              | Every binding this build has                                         | _a dialog_    |
 | `/about`                                             | What this is                                                         | _a dialog_    |
 | `/sign-in`, `/sign-up`, `/profile`, `/auth/callback` | Accounts ⬜                                                          | _a dialog_    |
 
@@ -59,11 +60,17 @@ and a form that looks real is one they will type a real one into.
 
 ### The debug overlay
 
-The dev dock — navigation, controls, telemetry, performance, graphics, camera —
-is the author's instrument and is **off by default**, toggled by `` ` `` or the
-shell bar. A first-time visitor should never meet it; nothing on this page
-describes it, and the cockpit it will eventually be replaced by is specified
-below.
+The dev dock — controls, telemetry, performance, graphics — is the author's
+instrument and is **off by default**, toggled by `` ` `` or the shell bar. A
+first-time visitor should never meet it; nothing on this page describes it, and
+the cockpit it will eventually be replaced by is specified below.
+
+Two things are deliberately not behind it. **Going somewhere** is the Catalog, a
+panel of the product's own that both the planetarium and the flight workspace
+carry, because a navigator filed under the author's scaffolding is a navigator
+a player never finds. **The camera** is a planetarium panel, because the
+aperture and the focus belong to the mode whose entire subject is looking.
+[ADR-0018](../adr/0018-the-instrument.md).
 
 ### Dockable panels
 
@@ -336,8 +343,30 @@ not punish having one.
 | **Gamepad**          | Full parity        | Dual sticks for rotation and translation; pips on the d-pad                                                                                              |
 | **HOTAS / HOSAS**    | Full 6-DoF binding | Direct axis binding, no emulation layer, per-device profiles. **Chromium only** — see below                                                              |
 
-Everything is rebindable, including modifier layers. Bindings are part of the
-save and sync across modes.
+**Everything is rebindable, including modifier layers**, and the editor is
+`/settings/controls`: a row per act, press it to capture the next chord, a
+conflict named in place, reset per row and for all. Every label in the interface
+that names a key reads the live chord for the act rather than a string, so a
+rebind reaches the keys sheet, the panel tooltips and the screen reader in the
+same commit that stores it. `?` opens the sheet from any mode.
+
+A binding is a **physical key**, not a character: `+` is `Shift+Equal` on every
+layout this ships to, so a chord tied to what the key types would not survive a
+change of keyboard. The label goes the other way — `navigator.keyboard` where it
+exists, a US table where it does not.
+
+`Tab`, `Escape`, `F11`, `F12` and anything with `Ctrl` or `Cmd` cannot be bound.
+Those belong to the browser, and a mode that claims `Tab` owns focus navigation
+whether it means to or not.
+
+**Where they are stored.** `controls.keymap` in this browser, as overrides only
+— a stored copy of the whole table stops tracking the defaults, so an act whose
+default later moves is frozen at the old one for everybody who ever opened the
+editor. Preferences are not part of the universe, so they are not in a save;
+`/settings/data` exports them as a file, which is how they reach a second
+machine. Bindings in the save, and syncing them to an account, come with the
+account — the `controls` group is what would go.
+[ADR-0018](../adr/0018-the-instrument.md).
 
 ### What a browser can actually do with a HOTAS
 
@@ -410,7 +439,7 @@ looking at things.
 | **Color**           | No information conveyed by color alone. Provenance uses **dash pattern** as well as opacity; scan state uses **glyphs**. Protanopia, deuteranopia and tritanopia palettes.                                                                                                                                                                                                                                                                                               |
 | **Contrast**        | HUD elements meet 4.5:1 against the brightest plausible background — which, in this game, is a star filling the canopy. That is the design case, not a corner case.                                                                                                                                                                                                                                                                                                      |
 | **Subtitles**       | All correspondence is text already. Audio cues that convey information — heat warning, lock warning, scan complete — have visual equivalents, always.                                                                                                                                                                                                                                                                                                                    |
-| **Remapping**       | Everything, including modifiers. No fixed keys.                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| **Remapping**       | ✅ Everything, including modifiers, at `/settings/controls`, and every label prints the live chord rather than a string. The exception is the four keys the browser owns — `Tab`, `Escape`, `F11`, `F12` — and anything with `Ctrl` or `Cmd`; see [controls](#controls) for why a mode that claims `Tab` owns focus navigation whether it means to or not.                                                                                                               |
 | **Input**           | Full one-handed control scheme; no chorded inputs required; no timing-critical inputs outside combat                                                                                                                                                                                                                                                                                                                                                                     |
 | **Reduced motion**  | Disables the jump tunnel visual, the map cross-fades, and HUD animation                                                                                                                                                                                                                                                                                                                                                                                                  |
 | **Audio**           | Independent music / effects / interface / voice-adjacent sliders; mono downmix                                                                                                                                                                                                                                                                                                                                                                                           |

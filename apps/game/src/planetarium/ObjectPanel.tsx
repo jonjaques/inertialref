@@ -16,8 +16,8 @@ import type { PlanetariumContext } from './context.ts'
  * angles and the address string: four readings about the *instrument*, on a
  * page whose subject is Mars, and the only thing it said about Mars was a
  * radius. Those four are readings about where you are standing, they are
- * genuinely useful while authoring, and they are in the author's Camera
- * instrument now — `hud/CameraPanel.tsx`, beside the lens they belong to.
+ * genuinely useful while authoring, and they are on the planetarium's own
+ * Camera panel — `planetarium/CameraPanel.tsx`, beside the lens they belong to.
  *
  * What is here instead is `dossier.ts`: mass in kilograms and in Earths, the
  * three half-extents of a body gravity never rounded off, the orbit in the

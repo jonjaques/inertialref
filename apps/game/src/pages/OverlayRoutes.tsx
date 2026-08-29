@@ -6,10 +6,12 @@ import type {
   HudRenderState,
 } from '../hud/controls.ts'
 import { AboutPage } from './AboutPage.tsx'
+import { KeysPage } from './KeysPage.tsx'
 import { AuthCallbackPage } from './AuthCallbackPage.tsx'
 import { overlaySurface } from './paths.ts'
 import {
   ABOUT,
+  KEYS,
   AUTH_CALLBACK,
   PROFILE,
   SETTINGS,
@@ -73,6 +75,7 @@ export function OverlayRoutes({ graphics, camera, render }: OverlayRouteProps) {
           }
         />
         <Route path={ABOUT} element={<AboutPage />} />
+        <Route path={KEYS} element={<KeysPage />} />
         <Route path={SIGN_IN} element={<SignInPage />} />
         <Route path={SIGN_UP} element={<SignUpPage />} />
         <Route path={PROFILE} element={<ProfilePage />} />

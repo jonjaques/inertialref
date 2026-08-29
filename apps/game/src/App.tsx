@@ -2,34 +2,30 @@ import { Canvas } from '@react-three/fiber'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useStore } from 'zustand'
 import { AnimatePresence, motion } from 'motion/react'
-import { useLocation } from 'react-router'
+import { useLocation, useNavigate } from 'react-router'
 import type { StarCatalog } from '@inertialref/universe'
-import { lensForFov } from '@inertialref/rendering'
-import {
-  DEFAULT_FOV_DEG,
-  DEFAULT_LENS,
-  GameEngine,
-} from './engine/GameEngine.ts'
+import { DEFAULT_FOV_DEG, GameEngine } from './engine/GameEngine.ts'
 import type {
   CameraState,
   GraphicsState,
   HudCommands,
   HudRenderState,
 } from './hud/controls.ts'
-import { FOV_MAX, FOV_MIN, isLens, reviveLens } from './hud/controls.ts'
 import { BootOverlay } from './hud/BootOverlay.tsx'
+import { ChromeContext } from './hud/chrome.ts'
 import { CutsceneOverlay } from './hud/CutsceneOverlay.tsx'
 import { ErrorBoundary } from './hud/ErrorBoundary.tsx'
-import { isTyping } from './hud/focus.ts'
 import { TrackOverlay } from './hud/TrackOverlay.tsx'
-import { useCoarsePointer } from './hud/viewport.ts'
+import { useCoarsePointer, useDevicePixelRatio } from './hud/viewport.ts'
 import {
-  isBoolean,
-  numberWithin,
-  readPreference,
-  oneOf,
+  CAMERA_LENS,
+  DEBUG_ON,
+  RENDER_AA,
+  RENDER_HDR,
+  RENDER_LENS_FLARE,
   usePersistentState,
-} from './hud/panelState.ts'
+} from './state/preferences.ts'
+import { useAction } from './input/useKeymap.ts'
 import { devPanels } from './hud/registry.tsx'
 import { nextWarp } from './hud/warp.ts'
 import { useShipControls } from './hud/useShipControls.ts'
@@ -47,19 +43,23 @@ import {
   type RendererHandle,
 } from './render/createRenderer.ts'
 import {
-  AA_LEVELS,
   type AaLevel,
   aaAntialias,
   aaDprFactor,
   dprCeiling,
-  OUTPUT_PREFERENCES,
   type OutputPreference,
   type RendererDescription,
 } from './render/output.ts'
 import { DocumentMeta } from './pages/DocumentMeta.tsx'
 import { ModeRoutes } from './pages/ModeRoutes.tsx'
 import { OverlayRoutes } from './pages/OverlayRoutes.tsx'
-import { modeForPath, resolvedLocation } from './pages/paths.ts'
+import {
+  KEYS,
+  modeForPath,
+  overlayState,
+  resolvedLocation,
+  SETTINGS,
+} from './pages/paths.ts'
 import { SceneView } from './scene/SceneView.tsx'
 import {
   engineStore,
@@ -159,6 +159,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    * what went wrong at length.
    */
   const location = useLocation()
+  const navigate = useNavigate()
   const mode = modeForPath(resolvedLocation(location).pathname)
 
   /*
@@ -169,7 +170,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    * so a first-time visitor should never meet it. Persisted, because somebody
    * who turned it on is working, and a reload is part of working.
    */
-  const [debug, setDebug] = usePersistentState('debug.on', false, isBoolean)
+  const [debug, setDebug] = usePersistentState(DEBUG_ON)
   /*
    * Every restored preference is checked against what this build accepts.
    *
@@ -182,6 +183,16 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    */
   const [notice, setNotice] = useState<string | null>(null)
   /*
+   * Every piece of interface out of the frame — `Shift+H`, and the state a
+   * plate is captured in.
+   *
+   * A presentation stance rather than React state, so `ir.chrome(false)` and a
+   * capture script reach the same switch a viewer does. Deliberately not
+   * persisted, and deliberately not the cutscene's gate: that one unmounts the
+   * mode, which would take the sky labels with it. See `hud/chrome.ts`.
+   */
+  const chromeHidden = !useEngine((snapshot) => snapshot.presentation.chrome)
+  /*
    * The three-state HDR override.
    *
    * `docs/design/art.md` calls it mandatory, and spike 1 is why: `auto` is a
@@ -190,27 +201,15 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    * directions. Persisted, because a player who turned it off did not mean
    * "until the next reload".
    */
-  const [hdr, setHdr] = usePersistentState<OutputPreference>(
-    'render.hdr',
-    'auto',
-    oneOf(OUTPUT_PREFERENCES),
-  )
+  const [hdr, setHdr] = usePersistentState(RENDER_HDR)
   /*
    * The graphics and camera panels' knobs. Persisted like the HDR override —
    * a lens flare turned off to chase an artifact should stay off across the
    * reload that tests the fix — and mirrored onto plain engine fields below,
    * because the frame loop reads them and must not touch React to do it.
    */
-  const [lensFlare, setLensFlare] = usePersistentState(
-    'render.lensFlare',
-    true,
-    isBoolean,
-  )
-  const [aa, setAa] = usePersistentState<AaLevel>(
-    'render.aa',
-    '2x',
-    oneOf(AA_LEVELS),
-  )
+  const [lensFlare, setLensFlare] = usePersistentState(RENDER_LENS_FLARE)
+  const [aa, setAa] = usePersistentState(RENDER_AA)
   /*
    * The lens, and the one preference in here that has changed shape.
    *
@@ -222,18 +221,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    * guarded the one: `localStorage` outlives the code that wrote it, and a
    * focal length of zero is a division rather than a wide lens.
    */
-  const [lens, setLens] = usePersistentState(
-    'camera.lens',
-    DEFAULT_LENS,
-    isLens,
-    () => {
-      const held = readPreference('camera.fov', numberWithin(FOV_MIN, FOV_MAX))
-      return held === null ? null : lensForFov(held)
-    },
-    // JSON has no infinity, and a lens focused at infinity is the ordinary
-    // case. See `reviveLens`.
-    reviveLens,
-  )
+  const [lens, setLens] = usePersistentState(CAMERA_LENS)
   const [dynamicRangeHigh, setDynamicRangeHigh] = useState(
     () => window.matchMedia(EXTENDED_RANGE_QUERY).matches,
   )
@@ -284,6 +272,23 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
   // without, and reading it once at startup gets that permanently wrong.
   useEffect(() => watchDynamicRange(setDynamicRangeHigh), [])
 
+  /*
+   * The shell owns the lens, so the engine is told where to send one.
+   *
+   * `ir.preset` and `ir.rise` solve a lens as part of the picture, and the
+   * effect below re-asserts `lens` onto `engine.flightLens` on every render
+   * preference change — so a verb that wrote the field would hold its picture
+   * only until the next unrelated toggle. Routing it into the preference is
+   * what makes a preset's lens survive, and what keeps the panel's sliders
+   * agreeing with the picture on screen.
+   */
+  useEffect(() => {
+    engine.onLensRequest = setLens
+    return () => {
+      engine.onLensRequest = null
+    }
+  }, [engine, setLens])
+
   useEffect(() => {
     engine.lensFlare = lensFlare
     engine.flightLens = lens
@@ -324,6 +329,20 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    * the buffer rather than rebuilding the renderer around it.
    */
   const coarse = useCoarsePointer()
+  /*
+   * The ratio the drawing buffer is actually built at, once.
+   *
+   * `<Canvas dpr>` below and `engine.displayRatio` have to be the same number —
+   * the pointer's half of it converts a drag delta in CSS pixels into an angle
+   * `pixelAngle` answers per *display* pixel, so a disagreement moves the
+   * picture at the wrong rate against a buffer that has already rescaled.
+   * Written twice they disagree the moment `devicePixelRatio` moves, which
+   * browser zoom and a drag between displays both do without changing `coarse`.
+   */
+  const displayRatio = Math.min(useDevicePixelRatio(), dprCeiling(coarse))
+  useEffect(() => {
+    engine.displayRatio = displayRatio
+  }, [engine, displayRatio])
 
   /*
    * Verify that boot actually put pixels on screen.
@@ -403,6 +422,10 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
       const next = nextWarp(engine.world.clock.timeScale, direction)
       engine.world.clock.setTimeScale(next)
       flash(`time warp ${next}×`)
+    },
+    realTime: () => {
+      engine.world.clock.setTimeScale(1)
+      flash('time warp 1×')
     },
     toggleAssist: () =>
       flash(`flight assist ${engine.toggleFlightAssist() ? 'on' : 'off'}`),
@@ -505,52 +528,60 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
     onOpenChange: setDebug,
   }
 
-  useShipControls(
-    engine,
-    {
-      onToggleAssist: commands.toggleAssist,
-      onKillRotation: commands.killRotation,
-      onPause: commands.togglePause,
-      onWarp: commands.warp,
-      onSave: commands.save,
-      onLoad: commands.load,
-    },
-    // The flight axes belong to the flight modes. The planetarium binds the
-    // arrows to orbiting a camera and `F` to framing a target, and the cinema
-    // player binds them to stepping frames — two window handlers claiming one
-    // key is not something a player can diagnose.
-    //
-    // Space is the same argument, and it was missed: the cinema player binds
-    // it to its own transport, so both handlers ran and one press flipped
-    // `clock.paused` twice — the documented play/pause control did nothing at
-    // all, with nothing to see in the console.
-    //
-    // The reading room is the other claim on Space, and it is the browser's:
-    // `docs` is the one mode that is a scrolling document, where Space is page
-    // down. Bound here it is neither — `preventDefault` takes the scroll and
-    // the press pauses the simulation behind the words instead, which is a
-    // control nobody reading a page asked for and nothing on screen explains.
-    { axes: mode === 'flight', pause: mode !== 'cinema' && mode !== 'docs' },
-  )
-
   /*
-   * The debug overlay's own key.
+   * The transport verbs, bound in every mode.
    *
-   * Backquote, because it is the console key in every game that has one, it is
-   * not a flight axis, and it is not typed into anything here. Bound at the
-   * window like the rest, and declining the keystroke when it was aimed at a
-   * text field is the same courtesy `useShipControls` extends.
+   * No flags. Which keys are live where is a question about contexts, and each
+   * mode answers it for itself: the flight axes are `flight`, the cinema's
+   * transport shadows the global pause because it is more specific, and the
+   * reading room mutes the pause outright. A boolean threaded through here to
+   * turn part of a listener off would be the shell answering a question it
+   * cannot see the answer to.
    */
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent): void => {
-      if (event.code !== 'Backquote' || event.metaKey || event.ctrlKey) return
-      if (isTyping(event)) return
-      event.preventDefault()
-      setDebug(!debug)
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [debug, setDebug])
+  useShipControls(engine, {
+    onToggleAssist: commands.toggleAssist,
+    onKillRotation: commands.killRotation,
+    onPause: commands.togglePause,
+    onWarp: commands.warp,
+    onSave: commands.save,
+    onLoad: commands.load,
+  })
+  useAction('time.normal', commands.realTime)
+  useAction('chrome.instruments', () => setDebug(!debug))
+  /*
+   * Asked of the engine, not of the snapshot.
+   *
+   * `chromeHidden` is republished by the sampler at 8 Hz, so two presses inside
+   * one interval both read the same stale answer: the second asks for the
+   * state the first already set, `#chromeStance ??=` makes it a no-op, and the
+   * interface stays gone after a press that asked for it back.
+   */
+  useAction('chrome.all', () => engine.setChrome(!engine.chrome))
+  /*
+   * The two dialogs a key opens, as navigations rather than as state.
+   *
+   * `overlayState` carries the mode's own location along, which is what keeps
+   * the mode mounted behind the dialog — without it `ModeRoutes` re-resolves at
+   * `/keys`, matches nothing, falls through to the menu and tears down the
+   * session the reader was asking about.
+   *
+   * `resolvedLocation` and not the raw one, because these two are reachable
+   * *from inside a dialog*: with `/keys` up, `location` is already `/keys`, and
+   * carrying that along would make the sheet its own background — which is the
+   * same teardown by a longer route, and needs two Escapes to get out of.
+   */
+  useAction(
+    'chrome.keys',
+    () =>
+      void navigate(KEYS, { state: overlayState(resolvedLocation(location)) }),
+  )
+  useAction(
+    'chrome.settings',
+    () =>
+      void navigate(SETTINGS, {
+        state: overlayState(resolvedLocation(location)),
+      }),
+  )
 
   return (
     /*
@@ -592,10 +623,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
         // lower. `dprCeiling` is where the handheld figure and its argument
         // live; the short version is that this scene is fragment-bound close to
         // a planet and a phone is shading the whole display three times over.
-        dpr={
-          Math.min(window.devicePixelRatio, dprCeiling(coarse)) *
-          aaDprFactor(aa)
-        }
+        dpr={displayRatio * aaDprFactor(aa)}
         // R3F configures the renderer *after* the factory resolves and sets its
         // own tone mapping while doing so. This is where ours goes back.
         onCreated={(state) => {
@@ -665,71 +693,73 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
        * composited over a star at twice diffuse white. See
        * `components/ui/tooltip.tsx`.
        */}
-      <div className="hud-layer pointer-events-none absolute">
-        {/* Renders nothing at all when no cutscene is running. While one is,
+      <ChromeContext value={chromeHidden}>
+        <div className="hud-layer pointer-events-none absolute">
+          {/* Renders nothing at all when no cutscene is running. While one is,
             every other piece of chrome below unmounts — Esc skips, and the
             dock comes straight back. */}
-        <div className="pointer-events-none absolute inset-0 z-10">
-          <ErrorBoundary
-            what="the cutscene overlay"
-            className="type-readout pointer-events-auto absolute bottom-5 left-1/2 w-[34rem] max-w-[80%] -translate-x-1/2"
-          >
-            {/* The scene's own screen-space layer: blackout, titles, audio. Its
+          <div className="pointer-events-none absolute inset-0 z-10">
+            <ErrorBoundary
+              what="the cutscene overlay"
+              className="type-readout pointer-events-auto absolute bottom-5 left-1/2 w-[34rem] max-w-[80%] -translate-x-1/2"
+            >
+              {/* The scene's own screen-space layer: blackout, titles, audio. Its
                 transport is the *debug* one — the cinema player provides the
                 real controls, and two transports on screen at once would be two
                 playheads a person could disagree with, so it is off in the
                 cinema mode however the debug overlay is set. */}
-            <CutsceneOverlay
-              engine={engine}
-              transport={debug && mode !== 'cinema'}
-            />
-          </ErrorBoundary>
-          {/* The reference edit's tracked subject over the render, behind
+              <CutsceneOverlay
+                engine={engine}
+                transport={debug && mode !== 'cinema'}
+              />
+            </ErrorBoundary>
+            {/* The reference edit's tracked subject over the render, behind
               `ir.trackOverlay(true)` and drawn by nothing else. After the
               overlay above and so above its blackout, which is the point: the
               boxes have to be readable through a fade. Its own boundary,
               because a debug surface that throws must not take the titles with
               it. */}
-          <ErrorBoundary what="the track overlay">
-            <TrackOverlay engine={engine} />
-          </ErrorBoundary>
-        </div>
-        {/*
-         * The mode: the menu, a flight session, the planetarium, the player.
-         *
-         * Its own boundary, separate from the cutscene layer's. The scene is
-         * outside both: `<Canvas>` is a sibling of `.hud-layer` and nothing in
-         * here can reach it, so a throw in a panel loses the panel and not the
-         * picture. Each panel carries its own boundary inside this one — see
-         * `dock/PanelChrome.tsx` — so one failing readout does not take the
-         * menu that could close it down with it.
-         */}
-        {/*
-         * The one exception to "a cutscene hides every other piece of chrome":
-         * the cinema player *is* the chrome for a playing scene, and unmounting
-         * it would stop the scene it is playing — its cleanup calls
-         * `stopCutscene`, so gating it on `!cinema` made pressing play stop the
-         * cutscene a fraction of a second later, with nothing to explain it.
-         */}
-        {(!cinema || mode === 'cinema') && (
-          <div
-            className={`pointer-events-none absolute inset-0 ${mode === 'cinema' ? 'z-30' : 'z-0'}`}
-          >
-            <ErrorBoundary
-              what={`the ${mode} mode`}
-              className="pointer-events-auto absolute inset-0"
-            >
-              <ModeRoutes
-                engine={engine}
-                status={status}
-                camera={cameraState}
-                dev={dev}
-              />
+            <ErrorBoundary what="the track overlay">
+              <TrackOverlay engine={engine} />
             </ErrorBoundary>
           </div>
-        )}
+          {/*
+           * The mode: the menu, a flight session, the planetarium, the player.
+           *
+           * Its own boundary, separate from the cutscene layer's. The scene is
+           * outside both: `<Canvas>` is a sibling of `.hud-layer` and nothing in
+           * here can reach it, so a throw in a panel loses the panel and not the
+           * picture. Each panel carries its own boundary inside this one — see
+           * `dock/PanelChrome.tsx` — so one failing readout does not take the
+           * menu that could close it down with it.
+           */}
+          {/*
+           * The one exception to "a cutscene hides every other piece of chrome":
+           * the cinema player *is* the chrome for a playing scene, and unmounting
+           * it would stop the scene it is playing — its cleanup calls
+           * `stopCutscene`, so gating it on `!cinema` made pressing play stop the
+           * cutscene a fraction of a second later, with nothing to explain it.
+           */}
+          {(!cinema || mode === 'cinema') && (
+            <div
+              className={`pointer-events-none absolute inset-0 ${mode === 'cinema' ? 'z-30' : 'z-0'}`}
+            >
+              <ErrorBoundary
+                what={`the ${mode} mode`}
+                className="pointer-events-auto absolute inset-0"
+              >
+                <ModeRoutes
+                  engine={engine}
+                  status={status}
+                  camera={cameraState}
+                  dev={dev}
+                  onNotice={flash}
+                />
+              </ErrorBoundary>
+            </div>
+          )}
 
-        {/* A notice echoes what was asked for, and one of the things that can
+          {/* A notice echoes what was asked for, and one of the things that can
             be asked for is whatever was typed into the address field. Bounded
             so a paste is a truncated sentence rather than a band across the
             bottom of the frame.
@@ -747,43 +777,43 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
             arriving while the first is up crossfades rather than swapping text
             inside a box that never moved. Transform is dropped for anyone who
             asks for reduced motion; see `MotionConfig` in `main.tsx`. */}
-        {/* The cinema exception again, and for the same reason as the dialog
+          {/* The cinema exception again, and for the same reason as the dialog
             band below: the player's workspace carries the save, warp and HDR
             controls, and this notice is the only confirmation any of them
             gives — visually and to a screen reader. Suppressed there, the
             commands ran silently. In every other mode a cutscene still takes
             the notice out of the picture. */}
-        <AnimatePresence>
-          {(!cinema || mode === 'cinema') && notice !== null && (
-            <motion.div
-              key={notice}
-              /* Announced, not just drawn. This is the only confirmation most
+          <AnimatePresence>
+            {(!cinema || mode === 'cinema') && notice !== null && (
+              <motion.div
+                key={notice}
+                /* Announced, not just drawn. This is the only confirmation most
                  commands give — `hdr extended`, `go to SOL`, `saved` — and it
                  is gone in 2.5 seconds, so a reader that never hears it gets no
                  feedback at all. `polite` rather than `assertive`: it is a
                  receipt for something the user just did, not an interruption. */
-              role="status"
-              aria-live="polite"
-              title={notice}
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 4 }}
-              transition={{ duration: 0.15 }}
-              /* The accent is the edge, not the ground. `bg-sky-500/20` alone
+                role="status"
+                aria-live="polite"
+                title={notice}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 4 }}
+                transition={{ duration: 0.15 }}
+                /* The accent is the edge, not the ground. `bg-sky-500/20` alone
                  is 80% scene, so over a sunlit planet the notice composited to
                  1.3:1 and the thing it was echoing back — often whatever was
                  just typed into the address field — was unreadable at exactly
                  the moment it was worth reading. The panel ground carries it;
                  the accent stays what it is everywhere else in this system, a
                  material rather than a fill behind text. */
-              className="type-readout pointer-events-none absolute bottom-16 left-1/2 z-30 max-w-[min(36rem,calc(100%-1.5rem))] -translate-x-1/2 truncate rounded border border-sky-500/40 bg-slate-950/85 px-3 py-1 text-sky-200 backdrop-blur"
-            >
-              {notice}
-            </motion.div>
-          )}
-        </AnimatePresence>
+                className="type-readout pointer-events-none absolute bottom-16 left-1/2 z-30 max-w-[min(36rem,calc(100%-1.5rem))] -translate-x-1/2 truncate rounded border border-sky-500/40 bg-slate-950/85 px-3 py-1 text-sky-200 backdrop-blur"
+              >
+                {notice}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-        {/* Dialogs, over a running simulation and over whatever mode is behind
+          {/* Dialogs, over a running simulation and over whatever mode is behind
             them. Inside the layer so they inherit the standard-range clamp; a
             sibling of `<Canvas>`, so navigating cannot remount the renderer.
 
@@ -794,41 +824,42 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
             nothing, and a second press wrapped the dead `/settings` as the new
             background and killed the scene. Elsewhere a cutscene still clears
             the frame. */}
-        {(!cinema || mode === 'cinema') && (
-          <div className="pointer-events-none absolute inset-0 z-40">
-            <ErrorBoundary
-              what="the page overlay"
-              className="pointer-events-auto absolute inset-0"
-            >
-              <OverlayRoutes
-                graphics={graphicsState}
-                camera={cameraState}
-                render={renderState}
-              />
-            </ErrorBoundary>
-          </div>
-        )}
+          {(!cinema || mode === 'cinema') && (
+            <div className="pointer-events-none absolute inset-0 z-40">
+              <ErrorBoundary
+                what="the page overlay"
+                className="pointer-events-auto absolute inset-0"
+              >
+                <OverlayRoutes
+                  graphics={graphicsState}
+                  camera={cameraState}
+                  render={renderState}
+                />
+              </ErrorBoundary>
+            </div>
+          )}
 
-        {/* The loading screen. Mounted from the first commit — it is what
+          {/* The loading screen. Mounted from the first commit — it is what
             keeps React's clearing of the index.html placeholder from flashing
             an unlit canvas — and gone for good once its fade completes. A
             boundary of its own: a throw in here must cost the cover, never
             the session under it. */}
-        {boot !== 'done' && (
-          <div className="pointer-events-none absolute inset-0 z-50">
-            <ErrorBoundary
-              what="the loading screen"
-              className="type-readout pointer-events-auto absolute bottom-3 left-3"
-            >
-              <BootOverlay
-                phase={boot === 'revealing' ? 'revealing' : 'booting'}
-                status={bootStatus}
-                onRevealed={firstLight.revealed}
-              />
-            </ErrorBoundary>
-          </div>
-        )}
-      </div>
+          {boot !== 'done' && (
+            <div className="pointer-events-none absolute inset-0 z-50">
+              <ErrorBoundary
+                what="the loading screen"
+                className="type-readout pointer-events-auto absolute bottom-3 left-3"
+              >
+                <BootOverlay
+                  phase={boot === 'revealing' ? 'revealing' : 'booting'}
+                  status={bootStatus}
+                  onRevealed={firstLight.revealed}
+                />
+              </ErrorBoundary>
+            </div>
+          )}
+        </div>
+      </ChromeContext>
     </div>
   )
 }

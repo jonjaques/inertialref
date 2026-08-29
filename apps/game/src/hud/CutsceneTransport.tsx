@@ -1,4 +1,5 @@
 import { Pause, Play, RotateCcw, X } from 'lucide-react'
+import { useActionTitle } from '../input/useKeymap.ts'
 import { FrameScrubber } from './FrameScrubber.tsx'
 import { TransportButton } from './TransportButton.tsx'
 
@@ -29,6 +30,9 @@ export function CutsceneTransport({
   onTogglePlay: () => void
   onStop: () => void
 }) {
+  // The live chord rather than `(Esc)` written into an `aria-label`: a key name
+  // in a label is a binding the editor cannot move.
+  const stop = useActionTitle('cutscene.skip', 'Stop and restore the ship')
   return (
     <div className="pointer-events-auto absolute bottom-5 left-1/2 flex w-[34rem] max-w-[80%] -translate-x-1/2 items-center gap-2 rounded-lg border border-slate-700/50 bg-slate-950/70 px-3 py-1.5 type-readout text-slate-300 backdrop-blur">
       <TransportButton
@@ -41,11 +45,7 @@ export function CutsceneTransport({
         icon={paused ? Play : Pause}
         onClick={onTogglePlay}
       />
-      <TransportButton
-        label="Stop and restore the ship (Esc)"
-        icon={X}
-        onClick={onStop}
-      />
+      <TransportButton label={stop} icon={X} onClick={onStop} />
       <FrameScrubber
         frame={frame}
         durationFrames={durationFrames}

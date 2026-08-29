@@ -31,6 +31,8 @@ export function SwitchRow({
   on,
   onChange,
   bordered = false,
+  disabled = false,
+  title,
 }: {
   label: string
   /** The half that explains it. Truncates — it is the expendable one. */
@@ -40,13 +42,26 @@ export function SwitchRow({
   onChange: (on: boolean) => void
   /** A framed row, for panels that are a list of switches and nothing else. */
   bordered?: boolean
+  /**
+   * Shown, dimmed, and not operable.
+   *
+   * For a switch whose *state* is still worth reading when the thing that sets
+   * it is elsewhere — free look while standing, where a drag always turns the
+   * head. Hiding it instead would make the row appear and disappear as the
+   * camera descends, which reads as a fault rather than as a mode.
+   */
+  disabled?: boolean
+  /** Overrides `detail` as the tooltip, for a row that carries a key. */
+  title?: string
 }) {
   const id = useId()
   return (
     <label
       htmlFor={id}
-      title={detail}
-      className={`flex min-h-9 cursor-pointer items-center gap-2.5 rounded py-1.5 transition-colors ${
+      title={title ?? detail}
+      className={`flex min-h-9 items-center gap-2.5 rounded py-1.5 transition-colors ${
+        disabled ? 'cursor-default opacity-45' : 'cursor-pointer'
+      } ${
         bordered
           ? 'border border-slate-800/80 bg-slate-900/40 px-2 hover:border-sky-500/40'
           : 'px-1 hover:text-slate-200'
@@ -88,6 +103,7 @@ export function SwitchRow({
         id={id}
         size="sm"
         checked={on}
+        disabled={disabled}
         onCheckedChange={onChange}
         onClick={releaseFocus}
         className="shrink-0"

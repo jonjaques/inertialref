@@ -4,19 +4,27 @@ import { useSearchParams } from 'react-router'
 import type { PerspectiveCamera } from 'three/webgpu'
 import { DEFAULT_FILL } from '@inertialref/devtools'
 import type { GameEngine } from '../engine/GameEngine.ts'
-import type { OrbitScope, StanceHandle } from '../engine/presentation.ts'
+import type { StanceHandle } from '../engine/presentation.ts'
 import type { CameraState } from '../hud/controls.ts'
 import { Workspace } from '../dock/Workspace.tsx'
 import type { DevWorkspace } from '../dock/workspace.ts'
 import {
-  isBoolean,
-  numberWithin,
+  PLANETARIUM_FLARE,
+  PLANETARIUM_LABEL_DENSITY,
+  PLANETARIUM_LABEL_MINOR,
+  PLANETARIUM_LABELS,
+  PLANETARIUM_ORBIT_SCOPE,
+  PLANETARIUM_ORBITS,
+  PLANETARIUM_HINTED,
+  PLANETARIUM_SHIP,
   usePersistentState,
-} from '../hud/panelState.ts'
+} from '../state/preferences.ts'
+import { useChromeHidden } from '../hud/chrome.ts'
+import { useKeyLabel } from '../input/useKeymap.ts'
+import { useEngine } from '../state/engineStore.ts'
 import { QUERY } from '../pages/paths.ts'
 import type { PlanetariumContext } from './context.ts'
 import { planetariumPanels } from './registry.tsx'
-import { isLabelDensity, isOrbitScope, type LabelDensity } from './layers.ts'
 import { pick } from './pick.ts'
 import { projectScene } from './project.ts'
 import { SkyLabels } from './SkyLabels.tsx'
@@ -53,50 +61,60 @@ export function PlanetariumMode({
   const requested = params.get(QUERY.at)
 
   const [target, setTarget] = useState<string | null>(null)
-  const [labels, setLabels] = usePersistentState(
-    'planetarium.labels',
-    true,
-    isBoolean,
-  )
-  const [orbits, setOrbits] = usePersistentState(
-    'planetarium.orbits',
-    true,
-    isBoolean,
-  )
-  const [ship, setShip] = usePersistentState(
-    'planetarium.ship',
-    false,
-    isBoolean,
-  )
+  const [labels, setLabels] = usePersistentState(PLANETARIUM_LABELS)
+  const [orbits, setOrbits] = usePersistentState(PLANETARIUM_ORBITS)
+  const [ship, setShip] = usePersistentState(PLANETARIUM_SHIP)
   const [labelDensity, setLabelDensity] = usePersistentState(
-    'planetarium.labelDensity',
-    'normal' as LabelDensity,
-    isLabelDensity,
+    PLANETARIUM_LABEL_DENSITY,
   )
   const [labelMinor, setLabelMinor] = usePersistentState(
-    'planetarium.labelMinor',
-    false,
-    isBoolean,
+    PLANETARIUM_LABEL_MINOR,
   )
   const [orbitScope, setOrbitScope] = usePersistentState(
-    'planetarium.orbitScope',
-    'context' as OrbitScope,
-    isOrbitScope,
+    PLANETARIUM_ORBIT_SCOPE,
   )
+  const [flare, setFlare] = usePersistentState(PLANETARIUM_FLARE)
   /*
-   * Glare starts where the flight modes have it, which is all the way up.
+   * What the mode has to say, and whether it is a complaint.
    *
-   * `numberWithin` rather than a bare number check: a stored value reaches
-   * `flareArtifacts` and from there the composite, and `panelState.ts` is
-   * explicit that a value from a build that meant something else is not a value
-   * somebody nearly chose.
+   * Two tones on one surface, because there is one place on screen where this
+   * mode reports back and a preset that moved the camera and the lens has to
+   * say so — "Earthrise — Luna, 20°" is not a failure, and drawing it in the
+   * rose the address errors use would read as one. Everything else about the
+   * surface, including that `Shift+H` clears it, stays the same.
    */
-  const [flare, setFlare] = usePersistentState(
-    'planetarium.flare',
-    1,
-    numberWithin(0, 1),
+  const [notice, setNotice] = useState<{
+    text: string
+    tone: 'error' | 'said'
+  } | null>(null)
+  /*
+   * Whether the primary drag and the arrow keys look instead of orbiting.
+   *
+   * Session state rather than a preference, and the two ways in are why: the
+   * secondary button always looks, so a mouse never needs this — it is the only
+   * way in on a phone and with a keyboard alone. Somebody who turned it on for
+   * one picture has not said anything about the next session, and a planetarium
+   * that opened with the drag doing something other than orbiting would be a
+   * mode whose primary gesture had silently changed.
+   */
+  const [freeLook, setFreeLook] = useState(false)
+  const [hinted, setHinted] = usePersistentState(PLANETARIUM_HINTED)
+  // The sheet's own chord, so the hint cannot name a key the editor has moved.
+  const keysLabel = useKeyLabel('chrome.keys')
+  const chromeHidden = useChromeHidden()
+  const drawLabels = useEngine((snapshot) => snapshot.presentation.labels)
+  /*
+   * Whether the camera is on the ground, sampled with the rest of the status.
+   *
+   * A boolean, so it bails out of the re-render with `Object.is` — the whole
+   * observer status is a fresh object graph eight times a second and selecting
+   * it here would rebuild this mode at that rate.
+   */
+  const standing = useEngine(
+    (snapshot) =>
+      snapshot.observer?.surface !== null &&
+      snapshot.observer?.surface !== undefined,
   )
-  const [notice, setNotice] = useState<string | null>(null)
 
   /*
    * The mode's stance: what it wants drawn while it is on screen.
@@ -126,10 +144,11 @@ export function PlanetariumMode({
       showShip: ship,
       showOrbits: orbits,
       orbitScope,
+      labels,
       flareArtifacts: flare,
       observatory: true,
     })
-  }, [engine, ship, orbits, orbitScope, flare])
+  }, [engine, ship, orbits, orbitScope, labels, flare])
 
   const focus = useCallback(
     (address: string, options: { url?: boolean } = {}) => {
@@ -151,7 +170,10 @@ export function PlanetariumMode({
           )
         }
       } catch (cause) {
-        setNotice(cause instanceof Error ? cause.message : String(cause))
+        setNotice({
+          text: cause instanceof Error ? cause.message : String(cause),
+          tone: 'error',
+        })
       }
     },
     [engine, setParams],
@@ -205,6 +227,9 @@ export function PlanetariumMode({
     frameSubject: () => {
       engine.harness.observatory.frameTarget()
     },
+    freeLook,
+    onFreeLook: setFreeLook,
+    onNotice: (text: string) => setNotice({ text, tone: 'said' }),
   } satisfies PlanetariumContext)
 
   /*
@@ -241,6 +266,13 @@ export function PlanetariumMode({
     onPick,
     onFrame: () => engine.harness.observatory.frameTarget(DEFAULT_FILL),
     onReset: () => focus(DEFAULT_TARGET),
+    standing,
+    freeLook,
+    onFreeLook: setFreeLook,
+    // Idempotent: the hook fires this on every gesture and the preference is
+    // already true after the first, so the write happens once and the effect
+    // that persists it bails on the rest.
+    onGesture: () => setHinted(true),
   })
 
   return (
@@ -267,16 +299,38 @@ export function PlanetariumMode({
        * and a drag that starts in the 44 px a landscape iPhone keeps at each
        * side is still a drag.
        */}
+      {/* The cursor says which act a drag is: `grab` for the orbit, `move`
+          for the look. Standing, a drag always turns the head, so the two
+          conditions are the same question asked of two things. */}
       <div
         ref={surface}
         className="hud-bleed pointer-events-auto absolute touch-none select-none"
-        style={{ cursor: 'grab' }}
+        style={{ cursor: freeLook || standing ? 'move' : 'grab' }}
         aria-hidden
       />
 
+      {!hinted && !chromeHidden && (
+        /*
+         * The one thing a planetarium has to say before it says anything else.
+         *
+         * Every gesture here is discoverable by trying it and none of them is
+         * discoverable by looking, which is the specific failure a scene with
+         * no chrome in it has. It leaves on the first gesture and stays gone —
+         * a hint that came back on the next reload would be an advertisement
+         * rather than an introduction, which is why it is a preference and not
+         * session state.
+         */
+        <p className="type-ui pointer-events-none absolute bottom-20 left-1/2 -translate-x-1/2 text-balance text-slate-400">
+          drag to orbit · wheel to dolly · click to focus · {keysLabel ?? '?'}{' '}
+          for keys
+        </p>
+      )}
+
       <SkyLabels
         engine={engine}
-        enabled={labels}
+        // The stance, not the preference: a capture pushes `labels: false` over
+        // it, and reading the preference here would draw the names anyway.
+        enabled={drawLabels}
         density={labelDensity}
         minor={labelMinor}
         target={target}
@@ -284,14 +338,23 @@ export function PlanetariumMode({
 
       {/* The aiming point. Small, dim and always there: it is the answer to
           "what will a click hit", and in a mode with no ship it is the only
-          thing anchoring the center of the frame. */}
-      <div className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-        <div className="size-1.5 rounded-full border border-sky-300/40" />
-      </div>
+          thing anchoring the center of the frame. Chrome, so `Shift+H` clears
+          it — the labels above are content and stay. */}
+      {!chromeHidden && (
+        <div className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+          <div className="size-1.5 rounded-full border border-sky-300/40" />
+        </div>
+      )}
 
-      {notice !== null && (
-        <p className="pointer-events-none absolute top-14 left-1/2 -translate-x-1/2 rounded border border-rose-500/40 bg-slate-950/85 px-3 py-1 type-readout text-rose-200 backdrop-blur">
-          {notice}
+      {notice !== null && !chromeHidden && (
+        <p
+          className={`pointer-events-none absolute top-14 left-1/2 -translate-x-1/2 rounded border bg-slate-950/85 px-3 py-1 type-readout backdrop-blur ${
+            notice.tone === 'error'
+              ? 'border-rose-500/40 text-rose-200'
+              : 'border-sky-500/40 text-sky-200'
+          }`}
+        >
+          {notice.text}
         </p>
       )}
 

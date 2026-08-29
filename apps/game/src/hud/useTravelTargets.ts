@@ -3,14 +3,18 @@ import type { TravelTarget } from '@inertialref/devtools'
 import type { GameEngine } from '../engine/GameEngine.ts'
 
 /*
- * Where can I go — asked once, by both panels that ask it.
+ * Where can I go — asked once, by the one panel that asks it.
  *
- * `hud/NavPanel.tsx` and `planetarium/CataloguePanel.tsx` each owned a poll, a
- * try/catch, a "has the survey completed once" flag and a filter, and they had
- * drifted: two radii, two rates, and only one of them distinguished "surveying
- * …" from "there is nothing here". Both filtered the survey's *result* with
- * `.includes()`, which made a search box a search of a few light years rather
- * than of the catalog.
+ * Two panels owned a copy of this: a poll, a try/catch, a "has the survey
+ * completed once" flag and a filter each, and they had drifted to two radii and
+ * two rates, with only one of them distinguishing "surveying…" from "there is
+ * nothing here". Both filtered the survey's *result* with `.includes()`, which
+ * made a search box a search of a few light years rather than of the catalog.
+ *
+ * There is one panel now — `planetarium/CataloguePanel.tsx`, drawn in the
+ * planetarium and in flight with a verb that depends on the mode — and this
+ * hook is still separate from it, because the survey is a question about the
+ * sky rather than about a component.
  *
  * The interface splits by question, which is what `StarCatalog.search` and
  * `travelTargets` now are:

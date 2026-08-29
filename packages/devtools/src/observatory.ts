@@ -19,8 +19,10 @@ import {
   bodyFixedFrameId,
   bodyFrameId,
   datumRadius,
+  directionToGeodetic,
   formatAddress,
   geodeticDirection,
+  parentOf,
   hasSolidSurface,
   parseAddress,
   findBody,
@@ -39,6 +41,7 @@ import {
   anglesForPhase,
   angularRadius,
   applyDrag,
+  applyLook,
   applyZoom,
   approachState,
   clampDistance,
@@ -47,16 +50,27 @@ import {
   clampPitch,
   clampStanceHeight,
   distanceBounds,
+  DRAG_RADIANS_PER_PIXEL,
+  findComposition,
   framingDistance,
   heightForScrub,
   horizonPitch,
+  isCentred,
+  type LookOffset,
+  NO_LOOK,
   MIN_STANCE_HEIGHT,
   type ObserverState,
   observerPose,
   type Lens,
   LENS_PRESETS,
+  pixelAngle,
+  placeComposition,
+  RISE_CLEARANCE,
+  riseFov,
+  riseStance,
   scrubForHeight,
   shortestAngle,
+  stanceToward,
   type SurfaceStance,
   surfaceHeightBounds,
   surfaceStancePose,
@@ -144,6 +158,10 @@ export interface SurfaceStatus {
 export interface ObserverStatus {
   readonly target: ObserverTarget | null
   readonly state: ObserverState
+  /** Where the head is turned, relative to what the pose aims at. */
+  readonly look: LookOffset
+  /** Whether the head is turned at all — what the panel's readout keys off. */
+  readonly aimed: boolean
   /** Where the camera is easing to. Equal to `state` once it has arrived. */
   readonly desired: ObserverState
   /** True while a fly-to is still visibly moving. */
@@ -188,6 +206,17 @@ const ARRIVED_LOG_EPSILON = 1e-3
  */
 export const DEFAULT_FILL = 0.55
 
+/**
+ * How high a rise stands, as a fraction of the body's own radius.
+ *
+ * 0.063 puts the eye 110 km over Luna, which is where the Apollo 8 frame was
+ * taken from — low enough that the horizon is a curve rather than a limb, high
+ * enough that the parent clears ground the geology has not been built yet.
+ * Relative to the radius rather than a fixed height, because the same fraction
+ * has to make a picture on Phobos (710 m up) and on Ganymede (166 km).
+ */
+export const RISE_HEIGHT_RADII = 0.063
+
 export class Observatory {
   readonly #host: HarnessHost
   #target: ObserverTarget | null = null
@@ -205,6 +234,22 @@ export class Observatory {
   #stance: SurfaceStance | null = null
   /** Which survey site the stance came from, when it came from one. */
   #site: string | null = null
+  /**
+   * Where the head is turned, relative to whatever the pose aims at.
+   *
+   * The orbit arm aims at the target's center by construction, so without this
+   * there is no way to look at a limb, at a moon beside the disk, or at the sky
+   * at all. It is an *offset* rather than a replacement, so a composition still
+   * means what it says and the viewer turns their head from there.
+   *
+   * **Cleared by whatever replaces the pose, and by nothing else.** A focus, a
+   * frame, a home, a shot, a preset — those are new pictures. A drag, a dolly,
+   * a wheel notch and leaving and re-entering the mode are not, so a viewer who
+   * turned to look at Io beside Jupiter is still looking at Io after the wheel.
+   * The surface arm keeps its offset in the stance's own heading and pitch,
+   * which is what those two numbers already are.
+   */
+  #look: LookOffset = NO_LOOK
 
   constructor(host: HarnessHost) {
     this.#host = host
@@ -241,7 +286,9 @@ export class Observatory {
     // where the viewer was before the descent.
     if (this.#stance !== null) return this.#surfacePose()?.position ?? null
     const centre = this.#targetPosition(target)
-    return centre === null ? null : observerPose(centre, this.#state).position
+    return centre === null
+      ? null
+      : observerPose(centre, this.#state, this.#look).position
   }
 
   /**
@@ -289,6 +336,10 @@ export class Observatory {
     // target would put the camera at those coordinates on a different world.
     this.#stance = null
     this.#site = null
+    // A focus is a new picture, so the head goes back to center. The other
+    // three writers that replace a pose — `frameTarget`, `setAngles` and
+    // `stand` — do the same; a drag, a dolly and a wheel notch do not.
+    this.#look = NO_LOOK
 
     const distance = clampDistance(
       framingDistance(
@@ -351,6 +402,7 @@ export class Observatory {
     this.#target = null
     this.#stance = null
     this.#site = null
+    this.#look = NO_LOOK
   }
 
   /*
@@ -364,8 +416,19 @@ export class Observatory {
    * ascent on a framing nobody chose and leaves `travelling` true forever,
    * because `sample` never runs the ease that would clear it.
    */
-  /** Orbit by a pointer drag, in pixels. */
-  drag(dxPixels: number, dyPixels: number, sensitivity = 1): void {
+  /**
+   * Orbit by a pointer drag, in pixels.
+   *
+   * The sensitivity defaults to the solved one rather than to 1, so a caller
+   * that omits it gets the lens's own pixel angle instead of a 4.8× drag at the
+   * flight lens. `turn` solves it internally for the same reason; the argument
+   * survives for a script that wants a stated rate.
+   */
+  drag(
+    dxPixels: number,
+    dyPixels: number,
+    sensitivity = this.dragSensitivity(),
+  ): void {
     if (this.#stance !== null) return
     // Both are written, not just the desired: a drag is direct manipulation and
     // must not lag a damping filter. Easing is for travel, not for the hand.
@@ -399,26 +462,142 @@ export class Observatory {
     if (!ease) this.#state = this.#desired
   }
 
-  /** Set the orbit angles directly, in radians. */
-  setAngles(azimuth: number, elevation: number, ease = true): void {
+  /**
+   * Set the orbit angles directly — the panel's presets and every composition.
+   *
+   * The one writer that takes a look offset with the angles, because a
+   * composition that aims at a limb or a specular point is *two* numbers about
+   * the pose and one about the head. Absent, the head goes back to center: a
+   * composed picture replaces the pose, so carrying a viewer's free look into
+   * it would frame something other than what the composition names.
+   */
+  setAngles(
+    azimuth: number,
+    elevation: number,
+    ease = true,
+    look: LookOffset = NO_LOOK,
+  ): void {
     if (this.#stance !== null) return
     this.#desired = {
       ...this.#desired,
       azimuth,
       elevation: clampElevation(elevation),
     }
+    this.#look = look
     if (!ease) this.#state = this.#desired
   }
 
   /** Re-frame the current target so it fills `fill` of the frame height. */
   frameTarget(fill = DEFAULT_FILL): void {
     if (this.#target === null) return
+    // `F` is a new picture of the subject, so the head comes back to it. This
+    // is the difference between framing and dollying, and it is the whole
+    // reason the two have separate verbs.
+    this.#look = NO_LOOK
     this.setDistance(
       framingDistance(
         this.#target.radius,
         verticalFovDegrees(this.#lens),
         fill,
       ),
+    )
+  }
+
+  /* --------------------------------------------------------------------- */
+  /* Free look                                                              */
+  /* --------------------------------------------------------------------- */
+
+  /** Where the head is turned, relative to what the pose aims at. */
+  get look(): LookOffset {
+    return this.#look
+  }
+
+  /**
+   * Turn the head by a drag, in pixels.
+   *
+   * On the ground the offset *is* the heading and the pitch, which the stance
+   * already holds — so this is the one verb that writes through both arms, and
+   * the orbit writers' refusal does not apply to it. That refusal is why this
+   * verb exists: with it and nothing else listening, a drag on Miranda's summit
+   * does nothing at all.
+   *
+   * `sensitivity` is `pixelAngle(lens, viewport) / DRAG_RADIANS_PER_PIXEL` when
+   * a caller has a display, which makes the ground under the pointer follow the
+   * pointer at any lens. Solved here rather than at the call site because the
+   * observatory already reads the lens and a second reader of it is a second
+   * idea of the optics.
+   */
+  turn(dxPixels: number, dyPixels: number): void {
+    const sensitivity = this.dragSensitivity()
+    const stance = this.#stance
+    if (stance !== null) {
+      const k = DRAG_RADIANS_PER_PIXEL * sensitivity
+      this.#stance = {
+        ...stance,
+        // The same grab metaphor the orbit uses: the ground follows the hand.
+        heading: stance.heading - dxPixels * k,
+        pitch: clampPitch(stance.pitch + dyPixels * k),
+      }
+      return
+    }
+    this.#look = applyLook(this.#look, dxPixels, dyPixels, sensitivity)
+  }
+
+  /** Aim the head at an absolute offset, radians. `ir.aim`. */
+  setLook(yaw: number, pitch: number): void {
+    const stance = this.#stance
+    if (stance !== null) {
+      this.#stance = { ...stance, heading: yaw, pitch: clampPitch(pitch) }
+      return
+    }
+    this.#look = { yaw, pitch: clampElevation(pitch) }
+  }
+
+  /** Back to whatever the pose aims at. */
+  centre(): void {
+    if (this.#stance !== null) {
+      this.levelToHorizon()
+      return
+    }
+    this.#look = NO_LOOK
+  }
+
+  /**
+   * Radians of camera motion per pixel of pointer, over the reference rate.
+   *
+   * A drag moves the picture by the pixels dragged at any lens, which
+   * `DRAG_RADIANS_PER_PIXEL` alone cannot do: it is a constant, so at 8× zoom
+   * on the flight lens a 100 px drag swings the frame through three of its own
+   * field-widths, and eleven at the telephoto end.
+   *
+   * **Two pixel counts, and they are not the same one.** `pixelAngle` is
+   * radians per *display* pixel — the viewport keeps the device ratio, because
+   * the terrain predicate and the circle of confusion are claims about physical
+   * pixels — and a pointer delta arrives in CSS pixels. On a 2× display the
+   * uncorrected answer moves the picture at half the rate of the hand, and on a
+   * phone at two thirds, which is the case free look exists for.
+   *
+   * 1 when there is no display to measure: headlessly the gesture is a number
+   * in a script rather than a hand on a surface.
+   */
+  dragSensitivity(): number {
+    const view = this.#host.lensView?.()
+    if (view === null || view === undefined) return 1
+    /*
+     * Whatever the host reports, floored only against nonsense.
+     *
+     * An absent port is already 1 by the `??`, so a clamp at 1 could only ever
+     * fire on a ratio a host genuinely reported below one — which is exactly
+     * what `devicePixelRatio` is with the browser zoomed out (0.8 at 80%, 0.67
+     * at 67%). The buffer really is that many device pixels per CSS pixel
+     * there, so throwing the correction away moves the picture at 1.49× the
+     * rate of the hand: the same defect as the 2× case, in the other
+     * direction.
+     */
+    const ratio = this.#host.pixelRatio?.() ?? 1
+    const usable = Number.isFinite(ratio) && ratio > 0 ? ratio : 1
+    return (
+      (pixelAngle(view.lens, view.viewport) * usable) / DRAG_RADIANS_PER_PIXEL
     )
   }
 
@@ -445,6 +624,195 @@ export class Observatory {
   /** The band the current target permits. Panels draw sliders against it. */
   bounds(): { readonly min: Meters; readonly max: Meters } {
     return distanceBounds(this.#target?.radius ?? 0)
+  }
+
+  /**
+   * Take a named composition of whatever is being looked at.
+   *
+   * The observatory's placer, beside the ship's. One list, two placers, and the
+   * difference is what they move: `placeShot` teleports a hull and this moves a
+   * camera, so `ir.shot('gibbous')` and `compose('gibbous')` end with the same
+   * picture and only one of them changes canonical state.
+   *
+   * Which arm it lands on is `placeComposition`'s decision and it is a real
+   * one: the orbit arm clamps at 1.5 radii, and `sunset` at 1.04 radii *is* a
+   * stance four hundredths of a radius up. Three of the sixteen were ship-only
+   * for exactly this reason before the surface arm existed to receive them.
+   */
+  compose(id: string): ObserverStatus {
+    const composition = findComposition(id)
+    const body = this.#body()
+    const toStar = this.#starDirection()
+    if (body === null || toStar === null) {
+      throw new Error(
+        `${this.#target?.name ?? 'nothing'} has no star to compose against`,
+      )
+    }
+    const placement = placeComposition(
+      composition,
+      body.radius,
+      toStar,
+      verticalFovDegrees(this.#lens),
+    )
+    if (placement.kind === 'orbit') {
+      // The stance goes first: `setAngles` refuses while one is held, and a
+      // composition above the floor is a claim about the orbit arm.
+      this.#stance = null
+      this.#site = null
+      this.setDistance(placement.distance)
+      this.setAngles(
+        placement.azimuth,
+        placement.elevation,
+        true,
+        placement.look,
+      )
+      return this.status()
+    }
+    /*
+     * The sun direction is in universe axes and a stance is in the body's own,
+     * so the placement's `up` has to come back through the spin pose. Without
+     * this a composition lands at the right angle to the star and on whatever
+     * longitude the body happened to be showing at the instant it was solved,
+     * which is a different place every time the same button is pressed.
+     */
+    const up = this.#toBodyFixed(placement.up)
+    const forward = this.#toBodyFixed(placement.forward)
+    if (up === null || forward === null)
+      throw new Error(`${body.name} is not turning`)
+    /*
+     * *Both* directions come back through the spin pose, and then the heading
+     * is solved.
+     *
+     * A heading is measured against a triad built on the pole of the axes it
+     * was solved in, so it cannot be carried across a frame change. Solved
+     * against universe north and applied against the body's own — which is
+     * tilted by `axialTilt` — `sunset` aims 5.31° off the sunward limb on
+     * Earth and `oblique` 14.36°, which is the whole subject of both pictures.
+     * `pitch` would survive, being a dot product with `up`; it is solved here
+     * anyway so there is one place the pair comes from.
+     */
+    const { latitude, longitude } = directionToGeodetic(up)
+    const aimed = stanceToward(up, forward)
+    return this.stand(this.#target?.address, {
+      latitude,
+      longitude,
+      height: placement.height,
+      heading: aimed.heading,
+      pitch: aimed.pitch,
+    })
+  }
+
+  /**
+   * Stand on this body with its parent a stated clearance over the horizon.
+   *
+   * Earthrise, and the two-body composition it is the only example of. Every
+   * other picture here is relative to whatever is under the camera; this one
+   * names the *other* body, which is why it needs a verb of its own and why the
+   * lens is solved with it — Earth is 1.9° across from Luna and Mars is 42.39°
+   * from Phobos, and one focal length is not the picture for both.
+   *
+   * Returns the field of view it solved, because the caller has to fit it: the
+   * observatory has no lens of its own by design (`#lens` says why), so the
+   * shell writes `engine.flightLens` and the standoff arithmetic here reads it
+   * back.
+   */
+  rise(
+    options: { readonly clearance?: Radians; readonly height?: Meters } = {},
+  ): { readonly status: ObserverStatus; readonly fovDeg: number } {
+    const body = this.#body()
+    if (body === null) throw new Error('The observatory is not on a body')
+    const parent = this.#parentBody(body)
+    if (parent === null) {
+      throw new Error(`Nothing for ${body.name} to see rise`)
+    }
+    const toParent = this.#toBodyFixedOffset(parent)
+    if (toParent === null) {
+      throw new Error(`${parent.name} is not where ${body.name} can see it`)
+    }
+    const distance = Vec.length(toParent)
+    const fovDeg = riseFov(parent.radius, distance)
+    const height = clampStanceHeight(
+      options.height ?? RISE_HEIGHT_RADII * body.radius,
+      body.radius,
+    )
+    const stance = riseStance(
+      body.radius,
+      toParent,
+      height,
+      options.clearance ?? RISE_CLEARANCE,
+      fovDeg,
+    )
+    const { latitude, longitude } = directionToGeodetic(stance.up)
+    return {
+      status: this.stand(this.#target?.address, {
+        latitude,
+        longitude,
+        height: stance.height,
+        heading: stance.heading,
+        pitch: stance.pitch,
+      }),
+      fovDeg,
+    }
+  }
+
+  /** The body this one goes round, when it is a moon of one. */
+  #parentBody(body: Body): Body | null {
+    try {
+      const address = parseAddress(formatAddress(body.address))
+      if (address.kind !== 'body') return null
+      const system = this.#host.world.system(address.system)
+      if (system === undefined) return null
+      return parentOf(system, body)
+    } catch {
+      return null
+    }
+  }
+
+  /** A universe-axes direction, in the body's own rotating axes. */
+  #toBodyFixed(direction: Vec3): Vec3 | null {
+    const body = this.#body()
+    if (body === null) return null
+    try {
+      const spin = this.#host.world.frames.pose(
+        bodyFixedFrameId(body.address),
+        this.#host.world.clock.renderTime,
+      )
+      return Q.rotateInverse(spin.orientation, direction)
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * The displacement to another body, in this one's rotating axes.
+   *
+   * A displacement rather than a direction, and `riseStance` says at length why
+   * that matters: read as a direction the answer is wrong by up to
+   * `asin((R + h)/d)`, which for Earth from Luna is 0.28° against a clearance
+   * being solved for of 3°.
+   *
+   * `renderTime`, like everything else that places something for the picture.
+   */
+  #toBodyFixedOffset(other: Body): Vec3 | null {
+    const body = this.#body()
+    if (body === null) return null
+    const world = this.#host.world
+    try {
+      const here = world.frames.pose(
+        bodyFixedFrameId(body.address),
+        world.clock.renderTime,
+      )
+      const there = world.frames.pose(
+        bodyFrameId(other.address),
+        world.clock.renderTime,
+      ).position
+      return Q.rotateInverse(
+        here.orientation,
+        UV.difference(there, here.position),
+      )
+    } catch {
+      return null
+    }
   }
 
   /* --------------------------------------------------------------------- */
@@ -548,6 +916,9 @@ export class Observatory {
       pitch: clampPitch(options.pitch ?? horizonPitch(body.radius, height)),
     }
     this.#site = site?.id ?? null
+    // The stance carries its own heading and pitch, so the orbit arm's offset
+    // would come back on the ascent aimed at something nobody chose.
+    this.#look = NO_LOOK
     log.info('observatory standing', {
       address: this.#target?.address,
       site: this.#site,
@@ -696,6 +1067,8 @@ export class Observatory {
       target: this.#target,
       state: this.#state,
       desired: this.#desired,
+      look: this.#look,
+      aimed: !isCentred(this.#look),
       travelling: !this.#arrived(),
       // Standing, the reader wants the height above the ground under their feet
       // — not the distance from a datum the orbit arm was last left at.
@@ -728,7 +1101,7 @@ export class Observatory {
 
     const centre = this.#targetPosition(target)
     if (centre === null) return null
-    return observerPose(centre, this.#state)
+    return observerPose(centre, this.#state, this.#look)
   }
 
   /** Whether the ease has close enough that holding it open is noise. */

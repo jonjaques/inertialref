@@ -1,5 +1,7 @@
 import {
   DEFAULT_GAUGE,
+  FOV_MAX,
+  FOV_MIN,
   type Lens,
   lensForFov,
   verticalFovDegrees,
@@ -23,16 +25,17 @@ import type { RendererDescription } from '../render/output.ts'
  * anti-aliasing switches that disagree.
  */
 
-/**
- * The field-of-view range, once.
+/*
+ * The field-of-view range is `lens.ts`'s, re-exported.
  *
- * 20° is a telephoto; past 110° everything fisheyes. Stated as angles even
- * though the lens is canonically a focal length, because the *limits* are
- * perceptual claims about a picture and a focal length is only a claim about a
- * picture once you know the gauge. Both ends are converted below.
+ * It was declared here, beside the slider that spends it, which was right until
+ * two things outside the shell had to solve against the same range: the lens a
+ * rise is framed with, which clamps at the long end and says so, and the
+ * terrain predicate, whose saturation at 20° is why the long end is there. Two
+ * copies of a perceptual limit is how a slider ends up offering an angle the
+ * solver will not produce.
  */
-export const FOV_MIN = 20
-export const FOV_MAX = 110
+export { FOV_MAX, FOV_MIN }
 
 /** The same two limits as glass, on a 24 mm gauge: 8.40 mm and 68.06 mm. */
 export const FOCAL_MIN = lensForFov(FOV_MAX).focalLength
@@ -190,7 +193,7 @@ export type LensChannelId = keyof typeof LENS_CHANNELS
 /**
  * What a restored `camera.lens` has to prove before it is believed.
  *
- * The same argument as every other guard in `panelState.ts`, with more surface:
+ * The same argument as every other guard in `state/accept.ts`, with more surface:
  * `localStorage` outlives the code that wrote it, and a lens is seven numbers
  * where the field of view was one. A focal length of zero is a division; a NaN
  * anywhere in here is a NaN projection matrix and a frame that draws nothing.
@@ -276,6 +279,14 @@ export interface HudRenderState {
 export interface HudCommands {
   readonly togglePause: () => void
   readonly warp: (direction: number) => void
+  /**
+   * Back to one second per second, in one press.
+   *
+   * Not `warp(-1)` repeated: the ladder is seven rungs, so leaving 100,000×
+   * costs six presses and six notices. The transport strip has had the button
+   * since the dock existed and the keyboard has not had the key.
+   */
+  readonly realTime: () => void
   readonly toggleAssist: () => void
   readonly killRotation: () => void
   readonly save: () => void

@@ -290,7 +290,7 @@ export const MoonBody = createLucideIcon('MoonBody', [
  * The two specks are the definition. Since 2006 the line between a planet and a
  * dwarf is not size, shape or composition — Ceres and Pluto are both round —
  * it is whether the body has cleared its neighborhood, and everything that has
- * not is still travelling with the rubble it formed from. Drawing that is the
+ * not is still traveling with the rubble it formed from. Drawing that is the
  * only way this glyph says anything a smaller circle would not.
  */
 export const DwarfPlanet = createLucideIcon('DwarfPlanet', [

@@ -1,5 +1,5 @@
 ---
-globs: apps/game/src/**/*.tsx,apps/game/src/pages/**,apps/game/src/state/**
+globs: apps/game/src/**/*.tsx,apps/game/src/input/**,apps/game/src/pages/**,apps/game/src/state/**
 alwaysApply: false
 ---
 

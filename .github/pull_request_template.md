@@ -22,8 +22,11 @@
 <!-- Encouraged, and close to required for anything visible. A still, a before/after
      pair, or a short capture beats a paragraph describing a frame.
 
-     `/drive` runs the harness: `ir.shot()` for a still, `ir.play()` / `ir.seekCutscene()`
-     for a beat. Say what the picture is of and at what scale or frame — a screenshot
+     `/drive` runs the harness: `ir.preset('blue-marble')` for a still — an address, a
+     framing and a lens, so the same frame comes back every time — with `ir.chrome(false)`
+     and `ir.layers(false)` for the state a plate is taken in. `ir.play()` /
+     `ir.seekCutscene()` for a beat. `ir.shot()` teleports the *ship* into a composition,
+     which is a different act and changes canonical state. Say what the picture is of and at what scale or frame — a screenshot
      with no caption is not evidence of anything.
 
      Drag files in, or reference them as ![caption](url). -->

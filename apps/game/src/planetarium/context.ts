@@ -40,6 +40,28 @@ export interface PlanetariumContext {
   /** The lens, and the only writer of it — see `hud/controls.ts`. */
   readonly camera: CameraState
   /**
+   * Whether the primary drag and the arrow keys turn the head instead of
+   * orbiting.
+   *
+   * Session state, not a preference, and the two ways in are why: the secondary
+   * button always looks, so a mouse never needs this — it is the only way in on
+   * a phone and with a keyboard alone. Somebody who turned it on for one
+   * picture has not said anything about the next session, and a planetarium
+   * whose primary gesture had silently changed since last time would be a mode
+   * that had to be re-learned.
+   */
+  readonly freeLook: boolean
+  readonly onFreeLook: (on: boolean) => void
+  /**
+   * Say what a press just did, through the notice the mode already flashes.
+   *
+   * A preset moves the camera *and* the lens, and two changes with no word for
+   * them is a picture a viewer has to reverse-engineer. It is the same notice
+   * the address bar and the harness verbs use, which is deliberate: one place
+   * on screen where the interface reports what it was asked for.
+   */
+  readonly onNotice: (message: string) => void
+  /**
    * Move the camera in or out by `notches` of the wheel's own step.
    *
    * The *dolly*, which is not the zoom and not the framing. One control cannot

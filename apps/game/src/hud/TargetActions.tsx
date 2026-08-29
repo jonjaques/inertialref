@@ -18,7 +18,7 @@ const DEBUG_LANDING_SITE = { latitude: 0.35, longitude: -1.1 }
  * component: you cannot land on a star system and "generate" means nothing for
  * a planet whose system is already resolved. Every one of them is a harness
  * call, so anything clicked here is reproducible from the console and from a
- * headless test — which is the rule `NavPanel` exists under.
+ * headless test — which is the rule every panel here is written under.
  */
 export function TargetActions({
   engine,
@@ -27,7 +27,7 @@ export function TargetActions({
 }: {
   engine: GameEngine
   target: TravelTarget
-  /** The panel's own try/catch-and-report. See `NavPanel`. */
+  /** The panel's own try/catch-and-report. See `CataloguePanel`. */
   run: (label: string, action: () => void) => void
 }) {
   if (target.kind === 'system')

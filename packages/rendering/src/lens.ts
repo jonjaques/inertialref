@@ -283,6 +283,23 @@ export const DEFAULT_ISO = 100
 export const FLIGHT_FOV = 65
 export const CINEMATIC_FOV = 45
 
+/**
+ * The angles a lens on this build may be set to, degrees.
+ *
+ * 20° is a telephoto; past 110° everything fisheyes. Stated as angles even
+ * though the lens is canonically a focal length, because the *limits* are
+ * perceptual claims about a picture and a focal length is only a claim about a
+ * picture once you know the gauge.
+ *
+ * Here rather than beside the slider that spends them, because two things
+ * outside the shell solve against the same range: `riseStance`'s lens, which
+ * clamps at the long end and says so, and the terrain predicate, whose
+ * saturation at 20° is the reason the long end is where it is
+ * (`TERRAIN-PLAN.md` § 8).
+ */
+export const FOV_MIN = 20
+export const FOV_MAX = 110
+
 export const LENS_PRESETS = {
   flight: lensForFov(FLIGHT_FOV),
   cinematic: lensForFov(CINEMATIC_FOV),

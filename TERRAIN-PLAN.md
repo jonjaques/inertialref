@@ -4,7 +4,8 @@ An engineering plan for the terrain milestone: growing the three-band
 heightfield into a geology, the single-level 3×3 patch window into a planet
 that holds together from orbit down to standing at the foot of a mountain, and
 the field-of-view constant the whole refinement predicate rests on into a lens
-with an aperture on it. Written 26 Aug 2026 against a clean `main`, the measured budgets in
+with an aperture on it, and the panels that lens is operated from into an
+instrument a hand can hold. Written 26 Aug 2026 against a clean `main`, the measured budgets in
 [`docs/design/technical.md`](docs/design/technical.md), and a survey of the
 2025–26 state of the art (sources inline throughout). Where a claim is a
 judgment rather than a measurement, it says so.
@@ -55,7 +56,7 @@ The foundations are real and none of them move.
 | Elevation as a pure function of (seed, direction)         | `terrain.ts:165` `elevationAt`                                          | The whole determinism regime; also the only thing that makes planetary scale storable at all (§ 4)                           |
 | `BodyFixedDirection` brand                                | `terrain.ts:49`                                                         | Sampling in inertial axes has shipped twice as a bug                                                                         |
 | One owner of the sea clamp                                | `terrain.ts:206` `groundElevation`                                      | Physics and mesh agree on where the ocean is                                                                                 |
-| Worker-generated heightfields, transferred not copied     | `packages/workers/src/tasks.ts:199`                                     | Capability check 10 proves worker ≡ main thread. The cost is **12.8 ms/patch**, not the ≤ 8 ms the budget claimed — see § 11 |
+| Worker-generated heightfields, transferred not copied     | `packages/workers/src/tasks.ts:199`                                     | Capability check 10 proves worker ≡ main thread. The cost is **12.8 ms/patch**, not the ≤ 8 ms the budget claimed — see § 12 |
 | Reconciling streamer, heightfield cache across rebases    | `apps/game/src/engine/terrainStreamer.ts`                               | Loading is an ordinary operation, not a mode                                                                                 |
 | Body-fixed, anchor-relative patch vertices                | `packages/rendering/src/terrainMesh.ts:62`                              | Baking pose into vertices was ~865 m/frame of ground slide                                                                   |
 | Eye-relative log compression, angular size exact          | `packages/rendering/src/placement.ts:115`                               | Measured from anywhere else, small bodies vibrate                                                                            |
@@ -81,7 +82,7 @@ What stands between today and "rich terrain from orbit to on foot":
 | Procgen bodies are featureless at `sphere` tier                                                   | The world you approach is not the world you land on — relief appears only below the streaming threshold                                                                                                                                                                                                                                                                                                                                               |
 | No scatter                                                                                        | Nothing at human scale; the last octave of noise is the smallest thing that exists                                                                                                                                                                                                                                                                                                                                                                    |
 | Planetarium clamps at 1.5 radii (`observer.ts:98`)                                                | ~~No way to _inspect_ a surface without flying a ship to it~~ — closed by Phase 0's surface arm                                                                                                                                                                                                                                                                                                                                                       |
-| No terrain perf baseline                                                                          | ~~The 1.0 ms terrain line is designed, not enforced~~ — measured by Phase 0; see § 11                                                                                                                                                                                                                                                                                                                                                                 |
+| No terrain perf baseline                                                                          | ~~The 1.0 ms terrain line is designed, not enforced~~ — measured by Phase 0; see § 12                                                                                                                                                                                                                                                                                                                                                                 |
 | **The streaming rules measure altitude from the datum**                                           | ~~`terrainLevelFor` and `terrainOpacity` take `distance − radius`, which for a camera on the ground is `groundElevation + height`. A summit streams a level coarse; a summit above `radius · 2^(5.5 − maxLevel)` is **not drawn at all** — two of Miranda's six survey sites are ground that cannot be looked at, at any altitude.~~ Found by Phase 0, closed by Phase 1: distance is measured to the shell of ground itself, and both rules are gone |
 | **There is no lens, so the screen-space-error predicate guesses one**                             | ~~The engine states its field of view in nine places and three values, and `selectTerrain` reads none of them — it assumes 60° over 1080 px, which is neither the flight lens nor the cinematic one.~~ Closed by Phase 1.5: the predicate reads the lens the picture is taken with, in display pixels, and aperture, f-number, focus and exposure exist. [ADR-0017](docs/adr/0017-the-lens.md)                                                        |
 
@@ -403,7 +404,7 @@ Sixteen times, four levels of refinement, and 263× the patches between the two
 ends of controls a player reaches with two sliders — against a `maxPatches` of
 384 whose whole job is to be a safety net rather than a working limit. The
 field-of-view slider reaches it on its own, and what the cap does when it is
-reached is degrade the entire disk by a level, silently. § 11's 12.8 ms is the
+reached is degrade the entire disk by a level, silently. § 12's 12.8 ms is the
 cost of one patch; how many there are is the number nothing currently states.
 
 None of this is an argument for clamping the slider. It is the argument for the
@@ -562,7 +563,330 @@ false at both ends or the number that makes it true recorded.
 
 ---
 
-## 9. Landing controls, harnesses, and sims
+## 9. The instrument
+
+The lens exists and the terrain reads it. What is missing is the thing a hand
+operates it through. The planetarium is the mode whose whole subject is
+looking, and its controls for looking are spread across three surfaces, two of
+them behind a disclosure meant for the author. Phase 2 is judged from plates
+composed through these controls, which is the argument § 8 made about the
+predicate, one step further out: fix the instrument before anything is judged
+with it.
+
+### What exists, and where it is
+
+| Surface                                               | Holds                                                                                                                                                                                                                                                                                                             | Reached by                                                 |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| **View** panel (`planetarium/ViewPanel.tsx`)          | Layers — names with a density and the minor-body switch, orbit traces with a scope, the ship — and a Lens section beside them: focal length, zoom, dolly in and out, frame, glare                                                                                                                                 | The planetarium menu                                       |
+| **Shots** panel (`planetarium/PresetsPanel.tsx`)      | Nine drawn compositions relative to the subject — phase, tilt, fill — a row of five phases, and two absolute step-backs                                                                                                                                                                                           | The planetarium menu                                       |
+| **Camera** instrument (`hud/CameraPanel.tsx`)         | All four lens channels — focal, zoom, aperture, focus — the Optics readouts (field, sharp band, hyperfocal, aperture diameter, blur circle, Airy disk, resolution, exposure), the observatory's pose (range, altitude, fill, azimuth and elevation) and the address                                               | The `` ` `` disclosure, then its glyph; `/settings/camera` |
+| **Navigate** instrument (`hud/NavPanel.tsx`)          | Go to; a destination list with Orbit, Land, Face and Burn; the seven ship bookmarks; a ship toggle; cutscenes; scenarios; the self-test                                                                                                                                                                           | The `` ` `` disclosure, or `G`                             |
+| **Ship bookmarks** (`packages/devtools/src/shots.ts`) | Seven compositions — full-face, gibbous, half, crescent, glint, sunset, oblique — each with an `aim` of center, limb or specular, placed by teleporting the ship                                                                                                                                                  | `ir.shot`, and Navigate                                    |
+| **Catalog**, **Object**, **Surface**, **Time**        | The index; the record; standing; the clock                                                                                                                                                                                                                                                                        | The planetarium menu                                       |
+| **Keys**                                              | Six window-level `keydown` listeners: `useShipControls` (the axes, `Z`, `X`, `Space`, `[`, `]`, `F5`, `F9`), `useWorkspaceKeys` (`H`, `G`, `P`), `useObserverInput` (arrows, `+`, `−`, `F`, `Home`), `App` (`` ` ``), `CinemaPlayer` (`Space`, arrows), and `Escape` in the overlay page and the cutscene overlay | —                                                          |
+| **Preferences** (`hud/panelState.ts`)                 | A dozen named keys under `ir.hud.` — the debug flag, HDR, anti-aliasing, the flare, the lens, seven planetarium layers — and two families, every section's open state and the four records each mode's workspace keeps, each behind an `Accept` guard                                                             | `localStorage`, and nothing else                           |
+
+Seven things follow from that table, and each is a fact about the build rather
+than a complaint about it.
+
+**The camera has no panel in the mode that is about looking.** The aperture,
+the focus and the exposure are reached by pressing the console key. The View
+panel, whose title is a claim about what is drawn _over_ the sky, carries two
+of the four lens channels beside the layers. `CameraPanel`'s own copy points
+the reader at "navigate → shots", a section that composes the ship.
+
+**Two lists of compositions share a vocabulary and not a mechanism.**
+`gibbous` in `presets.ts` and `gibbous` in `shots.ts` come out of one solver,
+`anglesForPhase`, and mean the same picture — but one moves a camera and the
+other teleports a hull; three compositions exist only for the hull (`glint`,
+`sunset`, `oblique`), because they aim somewhere other than the center and the
+observatory cannot; and none of the sixteen is a picture of a _particular_
+place. Every one is relative to whatever is under the camera.
+
+**Earthrise is a crescent.** The shot is `{phase: 132, tilt: 8, fill: 0.32}`:
+the subject, small and low, as a crescent. The photograph the name belongs to
+is taken from 110 km over Luna, looking along the ground, with Earth a few
+degrees above the limb — a picture of two bodies, in which the subject is the
+one being stood on.
+
+**The observatory looks at one point.** `observerPose` is
+`lookAlong(−offset, up)`: the orbit arm aims at the target's center, always.
+There is no way to look at a limb, at a moon beside the disk, or at the sky
+without a solver choosing the angles; and on the ground, where heading and
+pitch exist, no gesture drives them — the orbit writers refuse while standing
+and nothing else listens, so a drag on Miranda's summit does nothing at all.
+
+**Navigate is the product's navigation, filed under the author's
+instruments.** In the planetarium the observatory holds the camera, so Go to,
+Orbit and Land teleport a ship nobody can see and the panel appears to do
+nothing; in flight, where `FlightMode` contributes no panels of its own, it is
+the only way to go anywhere. `G` is bound to it, and
+[ux](docs/design/ux.md#the-screen-inventory) reserves `G` for the galaxy map.
+
+**Six listeners, two key models, and the labels hard-code the keys.** Two of
+the six read `event.key` and four read `event.code`, which is why `+` carries
+a comment about `Shift`. `( [ )`, `Space`, `F5`, `(Z)`, `(X)` and ``( ` )``
+are string literals in five files; `CONTROL_HELP` and `PLANETARIUM_HELP` are
+two more tables kept in step by hand; `/settings/controls` prints them and says
+rebinding is not built. [ux § controls](docs/design/ux.md#controls) says
+everything is rebindable.
+
+**The preferences have guards and no census.** Every key is validated on the
+way in and nothing can list them, so nothing can export them, and a second
+machine starts from the defaults.
+
+### The decisions
+
+**View is what is drawn over the sky. Camera is the eye.** Two panels, two
+questions, and the split is by what the control _changes_: a layer changes
+pixels the scene does not own — names, traces, the ship — and the camera
+changes the picture itself. So View keeps Layers and nothing else, and a new
+planetarium **Camera** panel takes the eye whole: the aim (below), the pose
+readouts the author's instrument carries, dolly and frame, all four lens
+channels, the glare — an aperture's own artifact, so a lens control — and the
+Optics readouts, in the one section whose default is closed. The author's
+Camera instrument retires; `/settings/camera` keeps the lens section, because
+the lens is a persisted preference and the same component draws it. Surface
+stays a panel of its own: it is the eye on the ground, but its question is
+_where can I stand_, and that is a list.
+
+**Free look is an offset on the aim, and it persists until the pose is
+replaced.** The orbit arm's pose gains `look: {yaw, pitch}`, composed after the
+center-aim orientation; on the ground the offset _is_ heading and pitch, which
+the stance already holds. A zero offset is bit-identical to today's pose, which
+is what `compositions.test.ts` holds. The offset is cleared by whatever
+replaces the pose — a focus, `F`, `Home`, a shot, a preset — and by nothing
+else: not a drag, not a dolly, not leaving and re-entering the mode, so a
+viewer who turned to look at Io beside Jupiter is still looking at Io after the
+wheel. Two ways in, because two kinds of hand: the **secondary button** drags
+the look (the input surface suppresses its own context menu, and only its own —
+a sky has no menu), and a **toggle**, `L` and a switch on the Camera panel,
+makes the primary drag and the arrow keys look instead of orbit, which is the
+only way on a phone and with a keyboard alone. A drag while standing drives
+heading and pitch through the same offset; the orbit writers keep their
+refusal. Pitch clamps short of the pole for the reason `ELEVATION_LIMIT`
+exists.
+
+**A drag moves the picture by the pixels dragged, at any lens.**
+`DRAG_RADIANS_PER_PIXEL` is a constant, so at 8× zoom a 100 px drag swings the frame through three of its own
+field-widths. The sensitivity for the orbit and for the
+look is `pixelAngle(lens, viewport)`, so the ground under the pointer follows
+the pointer — the lens exists, and this is one of the things it is for.
+
+**Aim generalizes the two shot lists into one.** `aim: centre | limb |
+specular` is a solve for a look offset — where the limb or the specular point
+falls on the sphere, and the yaw and pitch that put it at the frame position
+the composition asks for. With that solve in `packages/rendering`, `glint`,
+`sunset` and `oblique` are observatory shots too, and the ship bookmarks and
+the drawn shots are one list of **compositions** with two placers: the ship's,
+which teleports (`placeShot`, unchanged), and the observatory's, which lands a
+composition on whichever arm its distance permits — the orbit arm above 1.5
+radii, the surface arm below it at the height the composition names, since a
+stance 0.04 radii up is what `sunset` is. The nine drawn shots keep their
+thumbnails; the three aimed ones gain them.
+
+**Earthrise is a two-body composition, and it says which two.** A _rise_ is a
+stance on a moon with its parent a stated clearance above the horizon.
+`riseStance(radius, toParent, height, clearance)` puts the eye on the great
+circle from the sub-parent point, at the angular distance where the parent
+sits `clearance` above the horizon, heading on the parent's bearing, pitch at
+the horizon's dip plus enough to hold the horizon in the lower third. Pure, in
+`packages/rendering`, and a property: the parent's elevation over the horizon
+equals `clearance` and the heading bears on it, for random radii, heights and
+parent directions. The lens is solved as well — the parent subtends a stated
+fraction of the frame height, clamped to the slider's range — because Earth
+from Luna is 1.9° across and Mars from Phobos is 42°, and one focal length is
+not the picture for both. Then the panel's rule: when the subject is a moon,
+its parent rises; when the subject is a planet, the ground is its largest moon
+and the planet rises — Luna, Ganymede, Titan, Phobos — with the address bar
+following, because the URL is the document; a planet with nothing going round
+it, and a star, get a disabled card that says so. Tidal locking is what makes
+the picture stable: Luna, the Galileans, Titan and Phobos all hold their parent
+fixed in the sky, and what cycles is the parent's phase. A generated moon that
+spins solves against the parent's direction at `renderTime` in body-fixed
+axes, so the picture is right at the instant and pressing the card again
+re-solves it.
+
+**Presets are two tiers, and the top tier is a picture that already exists.**
+The panel is **Presets**. Its first tier, _Pictures_, is a handful of absolute
+compositions — an address, a composition or a rise, and a lens — that produce
+the same picture every time they are pressed, and their thumbnails are
+**plates**: captured through `scripts/drive.mjs` and vendored, because a drawn
+diagram of a picture that exists is a worse thumbnail than the picture.
+`pnpm presets:plates` regenerates them; a check in `pnpm check` proves every
+preset has its plate and resolves in the catalog, the way `brand:check` proves
+the mark. A preset sets the camera and nothing about the layers: names and
+traces are the viewer's, and a button that turned them off would be the
+interface reasserting itself. The second tier is the sixteen compositions,
+relative to the subject, with the light row and the step-backs beneath them as
+they are.
+
+The candidate pictures, chosen from what the renderer already does well. The
+list is a judgment and the plate review settles it, not this table:
+
+| Picture             | Where          | Composition                                                                  |
+| ------------------- | -------------- | ---------------------------------------------------------------------------- |
+| Earthrise           | Luna, standing | a rise toward Earth from 110 km, the horizon in the lower third              |
+| Blue Marble         | Earth          | full face, 0.72 fill                                                         |
+| Night Side          | Earth          | backlit at 172° — the dark disk inside its own airglow, the cities showing   |
+| The Rings           | Saturn         | high angle, gibbous, the rings open across the frame                         |
+| Titan's Haze        | Titan          | a rim-lit crescent — the thickest atmosphere shell in the model, 1.155 radii |
+| Raking Mars         | Mars           | the terminator at 88°, relief at its longest                                 |
+| Jupiter and Company | Jupiter        | wide, 0.18 fill, the Galileans in the frame                                  |
+
+A standing picture of terrain joins the list when Phase 2 gives it a geology to
+stand on; the mechanism is the stance the Surface panel already produces.
+
+**Navigate is deleted, and its four live verbs go where the product's
+navigation is.** The Catalog is the one navigator. It joins the flight
+workspace — `FlightMode` contributes it — with a verb that depends on the mode:
+in the planetarium a row _looks_ (`ir.look`); in flight a row offers Orbit and
+Land (`ir.goTo`, `ir.land`), with Face and Burn beside them because they are
+the only way to point a hull at a thing. The ship toggle is already on View.
+Cutscenes, scenarios and the self-test are the author's and move to a
+_Harness_ section of the author's Controls instrument. `G` is unbound and stays
+reserved. The alternative — a smaller author's _Travel_ panel — keeps two
+navigators, which is the ambiguity the phase exists to remove.
+
+**One key dispatcher, actions by id, chords by `code`.**
+`apps/game/src/input/keymap.ts` holds an `ACTIONS` table — id, label, group,
+the **context** it is live in, the default chord, and whether a focused control
+may decline it — and `useKeymap` is the single window listener: `keydown` and
+`keyup`, `isTyping` and `isOverlayControl` once, a chord resolved against the
+contexts live right now, and the action dispatched to whatever registered for
+it (`useAction(id, fn)` in the mode or hook that serves it). The flight axes
+are the same table's held set. A chord is a `code` and modifiers, because `+`
+is `Shift+Equal` on every layout this ships to and a binding tied to the
+physical key is the only kind that survives a keyboard change; the _label_
+comes from `navigator.keyboard.getLayoutMap()` where it exists and from a table
+where it does not. Contexts are `global`, `flight`, `planetarium`, `standing`,
+`cinema` and `docs`, and a chord may mean different things in disjoint contexts
+— `F` descends in flight and frames in the planetarium — so conflicts are
+detected within a context and never across. The editor refuses `Tab`,
+`Escape`, `F11`, `F12` and any chord with `Meta` or `Ctrl`: those are the
+browser's, and a mode that claims one owns focus navigation whether it means
+to or not.
+
+The default table — every core act, on a key, in one place:
+
+| Context     | Act                                                                             | Default                                            |
+| ----------- | ------------------------------------------------------------------------------- | -------------------------------------------------- |
+| global      | pause · slower · faster · normal time                                           | `Space` · `[` · `]` · `\`                          |
+| global      | save · load                                                                     | `F5` · `F9`                                        |
+| global      | go to — focus the Catalog's search, which takes anything `ir.goTo` takes        | `/`                                                |
+| global      | both panes · all chrome · the instruments · the keys sheet · settings           | `H` · `Shift+H` · `` ` `` · `?` · `,`              |
+| global      | the mode's panels, in menu order · perf                                         | `1`–`7` · `P`                                      |
+| flight      | fore/aft · left/right · up/down · pitch and yaw · roll · assist · kill rotation | `W S` · `A D` · `R F` · arrows · `Q E` · `Z` · `X` |
+| planetarium | orbit, Shift for coarse · dolly · frame · home · free look                      | arrows · `=` `−` · `F` · `Home` · `L`              |
+| standing    | height up and down · leave                                                      | `PageUp` `PageDown` · `Backspace`                  |
+| cinema      | play and pause · step, Shift for a second · the library                         | `Space` · arrows · `Escape`                        |
+
+Every label that names a key reads it from the table — `Action` and
+`MenuToggle` take an action id and print its live chord in the tooltip — and
+`CONTROL_HELP` and `PLANETARIUM_HELP` are derived from `ACTIONS`, so the six
+string literals go. `/settings/controls` becomes the editor: a row per action
+grouped by context, press the chord to capture the next key, a conflict named
+in place, reset per row and for all. The overrides persist as
+`controls.keymap`, `{[actionId]: chord | null}`, behind an `Accept` that drops
+unknown ids and unparsable chords. Gamepad and HOTAS are out of scope, and the
+action ids are their seam ([ux § controls](docs/design/ux.md#controls)).
+
+**The preferences get a registry, and the registry is what exports.**
+`apps/game/src/state/preferences.ts` declares every key — default, `Accept`,
+`revive`, `migrate`, and a group: display, camera, controls, planetarium,
+workspace — and `usePersistentState` is built on it, so a call site naming an
+unregistered key is a type error and the one `localStorage` call site is that
+file. Dynamic keys — `section.<id>`, the per-mode workspace records — register
+as families with a prefix and one guard. Export is a downloaded JSON,
+`{app, version, exported, preferences}`; import is a file picker, every entry
+validated by its own guard, a preview of what applies and what is dropped and
+why, then apply. Applying reaches the mounted hooks through a subscription in
+`usePersistentState`, so nothing reloads — except that `render.hdr` and
+`render.aa` rebuild the renderer, which they do from a switch today. _Reset
+everything_ sits beside it, confirmed. `/settings/data` is the fourth section.
+Bindings in the save, which [ux](docs/design/ux.md#controls) promises, come
+later; the `controls` group is what will sync.
+
+**Polish is a list of claims a reviewer can check.**
+
+- Every tooltip on a control with a key carries the key, from the keymap; none
+  carries a string literal.
+- `?` opens the keys sheet from any mode. The planetarium shows a first-visit
+  hint — _drag to orbit · wheel to dolly · click to focus · ? for keys_ — that
+  leaves on the first gesture and stays gone (`planetarium.hinted`).
+- A preset or a shot says what it did, through the notice `App` already
+  flashes: _Earthrise — standing on Luna, 68 mm_.
+- The cursor says which act a drag is: `grab` for orbit, `move` for look, and
+  it changes when `L` is on.
+- No control is on screen whose effect is null. The audit: dolly and the orbit
+  compositions while standing (disabled, _in orbit only_); a rise on a body
+  with nothing round it; the free-look toggle on a phone, where it is the only
+  way in.
+- The Camera panel's Optics section is the one whose default is closed; every
+  other section opens, and all of them persist.
+- Every number that changes under the pointer is `type-readout` and
+  `tabular-nums`.
+- The menu's glyphs do not collide: Camera takes the aperture — the glyph
+  `GraphicsPanel` argues it must not have, for exactly the reason it belongs
+  here — Presets takes a picture, and View keeps the eye.
+- The compact sheet gets the Camera tab, and the hero plates are the
+  thumbnails a phone needs.
+- The keys editor is keyboard-operable, and capture announces through
+  `aria-live`.
+- `Shift+H` clears every piece of chrome — panes, menu, reticle, notice — and
+  leaves the labels, which are content. It is the state a plate is captured in.
+
+### What Phase 1.6 lands
+
+1. **`planetarium/CameraPanel.tsx`** — aim, pose readouts, dolly and frame, the
+   four lens channels, glare, Optics. `ViewPanel` is Layers. The author's
+   Camera instrument leaves `hud/registry.tsx`; `/settings/camera` renders the
+   lens section.
+2. **Free look.** `observer.ts` gains the look offset and `observerPose` takes
+   it; `Observatory.look(dx, dy)` and an `aim` readout; cleared by focus, frame,
+   home, shot and preset; sensitivity from `pixelAngle`; the secondary button
+   and `L`; a drag while standing drives heading and pitch. `ir.aim(yaw, pitch)`.
+3. **One list of compositions** in `packages/rendering/src/compositions.ts`,
+   with the aim solve; `shots.ts` reads it for the ship placer; the observatory
+   places any composition on the arm its distance permits.
+4. **`riseStance`** beside `surfaceStance.ts`, `Observatory.rise()`,
+   `ir.rise()`, and `primaryMoon(body)` in `packages/universe`. Earthrise is a
+   rise.
+5. **Presets** — the panel renamed, two tiers, `planetarium/pictures.ts` as
+   data, plates under `apps/game/public/presets/`, `pnpm presets:plates`,
+   `presets:check` in `pnpm check`, `ir.preset(id)`.
+6. **Navigate deleted.** The Catalog in the flight workspace with mode-aware
+   verbs; the Harness section on the Controls instrument; `G` unbound.
+7. **`input/keymap.ts`** and `useKeymap`; the six listeners become one; the
+   editor at `/settings/controls`; `controls.keymap`; labels and help derived
+   from `ACTIONS`; the `?` sheet.
+8. **`state/preferences.ts`**; `usePersistentState` on it; `/settings/data`
+   with export, import and reset; the subscription that makes an import live.
+9. **Documentation** — § 13.
+
+**Deferred, with the seam named:** gamepad and HOTAS (the action ids);
+bindings in the save (the `controls` group); a bookmark store (a preset whose
+address the viewer wrote is a bookmark, and `pictures.ts` is the record — the
+store is what is missing); the flight canopy's hold-to-free-look (the aim
+offset is the mechanism; the chase camera is the flight arm's to compose);
+photo-mode export (the plate capture is the same act); a lens below 20°, which
+Earthrise at the photograph's framing asks for and the terrain predicate's
+saturation at 20° (§ 8) answers.
+
+**Done means:** one `addEventListener('keydown'` in `apps/game/src` outside
+tests and one `localStorage` call site, both provable by grep; no key name as
+a string literal in a label; the compositions test unmoved with a zero look
+offset; the keymap's defaults collision-free per context and its chords
+round-tripping through their serialization; `import(export())` the identity
+and a garbage import a no-op, as properties; `riseStance`'s clearance and
+bearing as properties; every picture resolving and carrying a plate, with the
+pictures themselves signed off by review; flight reaching `goTo` and `land`
+through the Catalog in the browser check `/ship` runs; and every verb a
+planetarium button offers reachable as a harness verb.
+
+---
+
+## 10. Landing controls, harnesses, and sims
 
 This is deliberately Phase 0, not an afterthought: every later phase is
 judged through this rig.
@@ -652,7 +976,7 @@ Phase 5 lands.
 
 ---
 
-## 10. Phases
+## 11. Phases
 
 Each phase is a shippable PR train with its own plates and its own green
 gate; nothing waits for the whole plan.
@@ -663,7 +987,7 @@ verbs (`ir.sites`, `ir.visit`, `ir.ascend`, `ir.descend`, `ir.terrain`,
 descent scenario and `pnpm sim --terrain-baseline`. No generator changes. The
 numbers and the three defects it found are in
 [`CONTEXT.md`](CONTEXT.md#the-terrain-rig-and-the-three-defects-it-found-on-its-first-run-26-aug-2026);
-the two that change this plan are folded into § 3 and § 11 above.
+the two that change this plan are folded into § 3 and § 12 above.
 
 Two things it could not deliver as written, stated rather than quietly dropped.
 **Frame cost and draw calls are still unmeasured** — they are browser facts, the
@@ -723,6 +1047,41 @@ and a balanced whole-disk tree has a floor of its own. A predicate bounded above
 by the field's own detail cannot spend the square. The direction of every
 conclusion in § 8 holds; the magnitude at the narrow end does not.
 
+**Phase 1.6 — the instrument. Landed 28 Aug 2026.** § 9, in full: View split from a Camera panel
+that carries the whole eye; free look as an aim offset that persists until the
+pose is replaced; one list of compositions, with the aim solve that makes
+Earthrise a rise; Presets in two tiers with captured plates; Navigate deleted
+into the Catalog; one key dispatcher with an editor and a keymap preference; a
+preference registry with export and import; and the polish list. No generator
+changes and no new geometry.
+
+Why it sits between the lens and the geology is the argument Phase 1.5 makes,
+one step further out. The plates Phase 2 is judged from are composed through
+these controls, and a geology reviewed by dragging a camera that can only look
+at a body's center, with the aperture behind the console key, is judged through
+the wrong instrument. The presets are also the fixture that review needs —
+_the same picture, every time_ is what a before/after plate is — and building
+them before the geology means the review starts on its first day rather than
+after a week of composing.
+
+_Done means:_ § 9's "done means", plus the zoo plates (§ 10) re-captured
+through `ir.preset` and `Shift+H`, so that every later phase's before/after is
+one command. [ADR-0018](docs/adr/0018-the-instrument.md) is the record and
+[`CONTEXT.md`](CONTEXT.md#the-instrument-the-lens-is-operated-from-28-aug-2026)
+has the numbers: one `keydown` listener where there were nine, one `localStorage`
+call site where there were five, and the 0.28° that decides whether a rise reads
+the parent as a direction or as a displacement.
+
+Two things it did not deliver as written, stated rather than quietly dropped.
+**The zoo plates are not re-captured**: `ir.preset` names seven pictures of
+particular places and the zoo is a set of _sites_, so the fixture the terrain
+phases compare against is still `ir.visit` plus the drive rig — the preset tier
+is the mechanism it will use, and the seven pictures are the proof it works. And
+**Earthrise is framed at 20° rather than the photograph's framing**, because the
+lens below 20° is deferred with the terrain predicate's saturation that motivates
+it; the geometry is right and the parent is smaller in the frame than in the
+photograph.
+
 **Phase 2 — the geology.** New procedural primitives, grammar, sketch, band
 stack, archetypes; terrain algorithm v2 in one bump; golden vectors extended;
 zoo plates reviewed body by body against § 6's anchors. This is the phase
@@ -755,7 +1114,7 @@ mapped-body carve-out; CBT if draw submission ever dominates.
 
 ---
 
-## 11. Risks, stated as such
+## 12. Risks, stated as such
 
 - **Per-sample cost, and it is already over.** Phase 0 measured **12.8 ms** per
   65×65 patch against a documented ≤ 8 ms that carried no machine and no date —
@@ -795,10 +1154,32 @@ mapped-body carve-out; CBT if draw submission ever dominates.
 - **The lens is presentation and must stay there.** It lives in
   `packages/rendering`, never on an entity, never in a save beyond a
   preference, and the state hash of a flying session does not know it exists.
+- **Free look spends the orbit camera's one promise.** A camera that orbits a
+  subject cannot be lost; one that can look away can. It is bounded three ways:
+  the offset is cleared by every snap, the Camera panel says it is on and by
+  how much, and pitch clamps short of the pole for the singularity
+  `ELEVATION_LIMIT` names.
+- **Deleting Navigate deletes the flight modes' only travel surface.** The
+  Catalog carries it, and the browser check `/ship` runs has to fly somewhere
+  _from the flight mode_ rather than only look from the planetarium — or the
+  deletion ships a mode with no way out of Sol.
+- **Plates rot.** A renderer change makes every hero thumbnail a picture of
+  the previous renderer, and `presets:check` proves presence, not likeness.
+  Regeneration is one command; noticing is the plate review every visual phase
+  already owes the zoo (§ 10), which now owes the pictures too.
+- **A physical binding wears the wrong caption on the wrong layout.** Firefox
+  has no `getLayoutMap`, so `KeyQ` reads _Q_ there on a keyboard whose key
+  prints _A_. The binding is right and the caption is the browser's to fix; the
+  editor says so rather than hiding it.
+- **An import writes every preference at once.** A malformed lens, or a layout
+  naming panels this build does not have, is guarded per key — the guards
+  exist because `localStorage` outlives the code that wrote it, and a file is
+  `localStorage` from another machine — and the two preferences that rebuild
+  the renderer apply last, once.
 
 ---
 
-## 12. Documentation obligations
+## 13. Documentation obligations
 
 An ADR for the terrain architecture (grammar/sketch/band-stack, the
 canonical-versus-presentational floor, the density reframe, the GPU-as-cache
@@ -821,6 +1202,23 @@ path-scoped one-liner in `.claude/rules/rendering.md`;
 to describe the controls that exist rather than the one slider that stood in
 for them.
 
+A third ADR, for the instrument, because § 9 settles things a later change
+would otherwise relitigate one panel at a time: that the aim is an offset on
+the pose and free look persists until the pose is replaced; that compositions
+are one list with two placers, and a composition below the orbit floor lands on
+the surface arm; that the keymap has one dispatcher, chords by `code`, and
+contexts that may share a chord; and that preferences are a registry with one
+storage call site. `AGENTS.md` gains three invariants — never a second
+window-level key listener, never a `localStorage` call outside
+`preferences.ts`, never a key name in a label — with the one-liners in
+`.claude/rules/react-shell.md`.
+[planetarium § the tools](docs/design/planetarium.md#the-tools) and
+[§ the camera](docs/design/planetarium.md#the-camera) describe the panels that
+exist; [ux § controls](docs/design/ux.md#controls) says what is rebindable and
+where it is stored, and the routes table gains `/settings/data`;
+[the harness guide](docs/guides/harness.md) lists `ir.aim`, `ir.rise` and
+`ir.preset`; the drive skill's capture recipe uses `Shift+H` and a preset.
+
 ---
 
 ## Related
@@ -832,3 +1230,5 @@ for them.
 - [On foot](docs/design/onfoot.md) — the mode the canonical floor eventually answers to
 - [Art](docs/design/art.md) — the sensor fiction § 8 implements, and the photo mode that spends it
 - [ADR-0010](docs/adr/0010-cinematic-director.md) — the other camera the lens has to serve
+- [Planetarium](docs/design/planetarium.md) · [UX](docs/design/ux.md) — the mode § 9 gives an instrument to, and the controls it promises
+- [ADR-0011](docs/adr/0011-application-shell-and-modes.md) · [ADR-0012](docs/adr/0012-dockable-panels.md) — the shell and the panels the instrument is built from

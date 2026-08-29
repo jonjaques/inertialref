@@ -587,7 +587,8 @@ by shape and position. Each carries a real tooltip, because with no visible text
 the hint _is_ the label.
 
 **Tabs are gone.** The dev dock's five-tab strip decided that exactly one
-readout could be on screen; they are six panels now.
+readout could be on screen; they are four panels now — the camera moved to the
+planetarium, where looking is the whole subject, and traveling is the Catalog's.
 
 ### Panel (signature)
 

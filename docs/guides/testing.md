@@ -268,7 +268,7 @@ otherwise assert in prose.
 pnpm test                       # everything
 pnpm vitest run world.test      # one file
 pnpm vitest                     # watch
-pnpm check                      # graph, brand, format, lint, typecheck, test, build
+pnpm check                      # graph, brand, presets, format, lint, typecheck, test, build
 ```
 
 ---

@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import type { GameEngine } from '../engine/GameEngine.ts'
+import { useActions, useKeyContext } from '../input/useKeymap.ts'
+import type { ActionId } from '../input/keymap.ts'
 import {
   centroid,
   GESTURE_START,
   type GesturePhase,
   gestureStep,
-  keyAction,
   type Point,
   spread,
   wheelNotches,
@@ -20,23 +21,44 @@ import {
  * bookkeeping, and it removes the class of bug where a device fires both
  * families and the camera moves twice per gesture.
  *
- * The gesture arithmetic itself is in `gestures.ts` and tested there. What is
- * here is the bookkeeping that only a browser has: which pointers are down,
- * what the previous sample was, and whether a press that never moved should be
- * treated as a click.
+ * The gesture arithmetic itself is in `gestures.ts` and tested there; the keys
+ * are `input/keymap.ts` and dispatched from one listener the whole app shares.
+ * What is here is the bookkeeping that only a browser has: which pointers are
+ * down, what the previous sample was, and whether a press that never moved
+ * should be treated as a click.
+ *
+ * **Two ways to look, because there are two kinds of hand.** The secondary
+ * button drags the look and suppresses its own context menu — only its own; a
+ * sky has no menu, and taking the menu off the whole document to do it would be
+ * the interface reaching outside itself. The toggle is the other way, and it is
+ * the *only* way on a phone and with a keyboard alone: with it on, the primary
+ * drag and the arrow keys look instead of orbiting.
  */
 
 /** Movement under this, in pixels, and the press was a click rather than a drag. */
 const CLICK_SLOP = 5
 
+/** How far one arrow-key press moves the camera, in the pixels a drag speaks. */
+const KEY_STEP_PIXELS = 24
+
+/** What the four arrow actions do, as a pixel delta. */
+const ARROWS: Readonly<Record<string, Point>> = {
+  'observe.left': { x: -1, y: 0 },
+  'observe.right': { x: 1, y: 0 },
+  'observe.up': { x: 0, y: -1 },
+  'observe.down': { x: 0, y: 1 },
+}
+
+const ARROW_IDS = Object.keys(ARROWS) as readonly ActionId[]
+
 export interface ObserverInputOptions {
-  /** Off in every other mode; the listeners are not attached at all. */
+  /** Off in every other mode; the surface listeners are not attached at all. */
   readonly enabled: boolean
   /**
    * A click that was not a drag, in **client** pixels.
    *
    * Client rather than element-relative, and the distinction is load-bearing
-   * now that the surface carries `hud-bleed`: its own box starts at
+   * because the surface carries `hud-bleed`: its own box starts at
    * `-safe-area-inset-left`, so an element-relative point is 44 px out on a
    * landscape iPhone. The only consumer projects the scene into
    * `window.innerWidth`/`innerHeight`, which is client space, so this is the
@@ -47,6 +69,20 @@ export interface ObserverInputOptions {
   readonly onFrame: () => void
   /** `Home` — back to where the session opened. */
   readonly onReset: () => void
+  /** Whether the observatory is standing, so `standing` is a live context. */
+  readonly standing: boolean
+  /** Whether the primary drag and the arrows look instead of orbiting. */
+  readonly freeLook: boolean
+  readonly onFreeLook: (on: boolean) => void
+  /**
+   * Somebody did something with the camera.
+   *
+   * The first-visit hint's exit. Fired on every gesture rather than only the
+   * first, because "was this the first" is the caller's question — the
+   * preference it writes is idempotent, and a hook that tried to answer it
+   * would be a second place that has to agree about what counts as a gesture.
+   */
+  readonly onGesture: () => void
 }
 
 export function useObserverInput(
@@ -67,6 +103,51 @@ export function useObserverInput(
   const latest = useRef(options)
   latest.current = options
 
+  useKeyContext({ context: 'planetarium' })
+  // Only while the camera is actually on the ground: `PageUp` and `Backspace`
+  // mean nothing in orbit, and a binding that fired there would be a control
+  // with a null effect.
+  useKeyContext({ context: 'standing' }, options.standing)
+
+  useActions(ARROW_IDS, (id, event) => {
+    if (event.phase !== 'down') return
+    const step = ARROWS[id]
+    if (step === undefined) return
+    // Shift is a magnitude, not a second binding: fine control near a surface
+    // and coarse control between stars are the same two gestures.
+    const scale = KEY_STEP_PIXELS * (event.shift ? 4 : 1)
+    const dx = step.x * scale
+    const dy = step.y * scale
+    const observatory = engine.harness.observatory
+    latest.current.onGesture()
+    if (latest.current.freeLook || observatory.standing) {
+      observatory.turn(dx, dy)
+      return
+    }
+    observatory.drag(dx, dy, observatory.dragSensitivity())
+  })
+
+  useActions(['observe.in'], () => engine.harness.observatory.zoomNotches(-1))
+  useActions(['observe.out'], () => engine.harness.observatory.zoomNotches(1))
+  useActions(['observe.frame'], () => latest.current.onFrame())
+  useActions(['observe.home'], () => latest.current.onReset())
+  useActions(['observe.freeLook'], () =>
+    latest.current.onFreeLook(!latest.current.freeLook),
+  )
+
+  useActions(['stand.leave'], () => engine.harness.observatory.leaveSurface())
+  useActions(['stand.up', 'stand.down'], (id, event) => {
+    if (event.phase !== 'down') return
+    const observatory = engine.harness.observatory
+    const status = observatory.status()
+    const scrub = status.surface?.scrub
+    if (scrub === undefined) return
+    // A tenth of the travel per press, which on Earth's six decades is about
+    // four times the height each time — the same ratio the scrub slider spends
+    // its logarithm on.
+    observatory.setStanceScrub(scrub + (id === 'stand.up' ? 0.1 : -0.1))
+  })
+
   useEffect(() => {
     const node = surface
     if (node === null || !options.enabled) return
@@ -84,6 +165,8 @@ export function useObserverInput(
     let phase: GesturePhase = GESTURE_START
     let travelled = 0
     let pressedAt: Point | null = null
+    /** Whether the gesture in flight is a look rather than an orbit. */
+    let looking = false
 
     /*
      * The surface's rectangle, read when a gesture starts and not again.
@@ -104,12 +187,23 @@ export function useObserverInput(
     })
 
     const onPointerDown = (event: PointerEvent): void => {
-      // Only the primary button orbits. The secondary one is the context menu
-      // and the middle one is the browser's autoscroll; claiming either would
-      // be taking a platform gesture to do something a drag already does.
-      if (event.pointerType === 'mouse' && event.button !== 0) return
+      /*
+       * The primary button orbits and the secondary looks; the middle one is
+       * the browser's autoscroll and stays the browser's.
+       *
+       * The secondary button is claimed, and only because there are two things
+       * a drag can do. Claiming a platform gesture to do what the primary drag
+       * already does would not be worth the context menu it costs.
+       */
+      if (
+        event.pointerType === 'mouse' &&
+        event.button !== 0 &&
+        event.button !== 2
+      )
+        return
       // Re-measured only when a gesture begins from nothing: a rotation or a
       // browser-chrome change between gestures does move the surface.
+      latest.current.onGesture()
       if (down.size === 0) rect = node.getBoundingClientRect()
       node.setPointerCapture(event.pointerId)
       down.set(event.pointerId, local(event))
@@ -117,6 +211,8 @@ export function useObserverInput(
       phase = { centre: centroid(points), spread: spread(points) }
       if (down.size === 1) {
         travelled = 0
+        looking =
+          event.button === 2 || latest.current.freeLook || observatory.standing
         // Client coordinates, not `phase.centre`. The gesture arithmetic only
         // ever reads *differences*, so the element's own offset cancels out of
         // it; a pick is an absolute position and the projection it is tested
@@ -138,8 +234,18 @@ export function useObserverInput(
       // bookkeeping only a browser has.
       const step = gestureStep(phase, [...down.values()])
       travelled += step.travelled
-      if (step.orbit.x !== 0 || step.orbit.y !== 0)
-        observatory.drag(step.orbit.x, step.orbit.y)
+      if (step.orbit.x !== 0 || step.orbit.y !== 0) {
+        // The sensitivity is the lens's own pixel angle, so the ground under
+        // the pointer follows the pointer at any focal length. A constant
+        // radians-per-pixel swings the frame through three of its own field-widths at 8×.
+        if (looking) observatory.turn(step.orbit.x, step.orbit.y)
+        else
+          observatory.drag(
+            step.orbit.x,
+            step.orbit.y,
+            observatory.dragSensitivity(),
+          )
+      }
       if (step.zoom !== 1) observatory.zoom(step.zoom)
       phase = step
     }
@@ -153,16 +259,20 @@ export function useObserverInput(
       if (down.size === 0) {
         // A press that never traveled is a click. Checked on release rather
         // than on down, because on a touch screen there is no way to know at
-        // press time which one it will turn out to be.
+        // press time which one it will turn out to be. Only the primary
+        // button's — a right-click that did not move is a menu somebody asked
+        // for and did not get, not a pick.
         if (
           pressedAt !== null &&
           travelled < CLICK_SLOP &&
-          event.type === 'pointerup'
+          event.type === 'pointerup' &&
+          event.button !== 2
         ) {
           latest.current.onPick(pressedAt)
         }
         phase = GESTURE_START
         pressedAt = null
+        looking = false
         return
       }
       // A finger lifted from a multi-touch gesture: the centroid and spread
@@ -178,53 +288,34 @@ export function useObserverInput(
       // is a console warning and nothing else.
       event.preventDefault()
       const notches = wheelNotches(event.deltaY, event.deltaMode)
-      if (notches !== 0) observatory.zoomNotches(notches)
+      if (notches === 0) return
+      latest.current.onGesture()
+      observatory.zoomNotches(notches)
     }
 
-    const onKeyDown = (event: KeyboardEvent): void => {
-      // A key typed into the search box is not a camera command. The focus
-      // check is here rather than in `keyAction` because "is something else
-      // listening" is a fact about the document, not about the key.
-      const active = document.activeElement
-      if (
-        active instanceof HTMLInputElement ||
-        active instanceof HTMLTextAreaElement ||
-        (active instanceof HTMLElement && active.isContentEditable)
-      )
-        return
-
-      const action = keyAction(event)
-      if (action === null) return
-      event.preventDefault()
-      switch (action.kind) {
-        case 'orbit':
-          observatory.drag(action.dx, action.dy)
-          break
-        case 'zoom':
-          observatory.zoomNotches(action.notches)
-          break
-        case 'frame':
-          latest.current.onFrame()
-          break
-        case 'reset':
-          latest.current.onReset()
-          break
-      }
-    }
+    /*
+     * The context menu, on this surface and nowhere else.
+     *
+     * The secondary button drags the look, and a menu opening on release would
+     * make the gesture unusable. Bound to the node rather than the document so
+     * every other right-click in the interface — a panel, a link, an address to
+     * copy — still gets the menu the platform provides.
+     */
+    const onContextMenu = (event: MouseEvent): void => event.preventDefault()
 
     node.addEventListener('pointerdown', onPointerDown)
     node.addEventListener('pointermove', onPointerMove)
     node.addEventListener('pointerup', release)
     node.addEventListener('pointercancel', release)
     node.addEventListener('wheel', onWheel, { passive: false })
-    window.addEventListener('keydown', onKeyDown)
+    node.addEventListener('contextmenu', onContextMenu)
     return () => {
       node.removeEventListener('pointerdown', onPointerDown)
       node.removeEventListener('pointermove', onPointerMove)
       node.removeEventListener('pointerup', release)
       node.removeEventListener('pointercancel', release)
       node.removeEventListener('wheel', onWheel)
-      window.removeEventListener('keydown', onKeyDown)
+      node.removeEventListener('contextmenu', onContextMenu)
     }
   }, [engine, surface, options.enabled])
 

@@ -2,6 +2,7 @@ import { useEffect, useRef, type ReactNode } from 'react'
 import { motion } from 'motion/react'
 import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { useAction, useKeyContext } from '../input/useKeymap.ts'
 import { useOverlay } from './useOverlay.ts'
 
 /*
@@ -43,23 +44,16 @@ export function OverlayPage({
   const { close } = useOverlay()
 
   /*
-   * Escape closes. Bound at the window rather than on the panel because focus
-   * during flight lives on the body — every control in this overlay hands it
-   * straight back, see `hud/focus.ts` — so a handler on a focused element
-   * would only fire for somebody who had just clicked something.
+   * Escape closes, and the dialog says so by *being* a context.
    *
-   * It cannot collide with the cutscene's own Escape: routed pages unmount
-   * while a cutscene is running, along with the rest of the chrome.
+   * A listener of its own would be right about the key and wrong about the
+   * arbitration: a routed dialog leaves the mode mounted behind it, so the
+   * mode's own bindings are still live and Escape is the one key three things
+   * legitimately want. The context is more specific than every mode's, so it
+   * takes Escape while it is up and hands it straight back when it closes.
    */
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent): void => {
-      if (event.key !== 'Escape') return
-      event.preventDefault()
-      close()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [close])
+  useKeyContext({ context: 'dialog' })
+  useAction('overlay.close', close)
 
   /*
    * Focus goes in when the dialog opens, and back where it came from when it

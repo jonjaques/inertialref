@@ -4297,7 +4297,7 @@ projection pass, not by `GameEngine.#step`.
 
 ## The terrain rig, and the three defects it found on its first run (26 Aug 2026)
 
-Phase 0 of [`TERRAIN-PLAN.md`](TERRAIN-PLAN.md) § 9: the instrument every later
+Phase 0 of [`TERRAIN-PLAN.md`](TERRAIN-PLAN.md) § 10: the instrument every later
 phase is judged through, built before any of them so the phase that triples the
 per-sample cost has something to be a regression against. No generator changes.
 
@@ -4456,7 +4456,7 @@ headless runner. Attach Browser is Chrome on 9222.
 
 ## The quadtree covers the disk, and three things it had to learn first (27 Aug 2026)
 
-Phase 1 of [`TERRAIN-PLAN.md`](TERRAIN-PLAN.md) § 9. A 3×3 window at one level
+Phase 1 of [`TERRAIN-PLAN.md`](TERRAIN-PLAN.md) § 10. A 3×3 window at one level
 becomes a restricted, morphing quadtree walked from the six cube faces.
 [ADR-0015](docs/adr/0015-terrain-level-of-detail.md) is the decision record.
 
@@ -4937,6 +4937,118 @@ defocus _pass_ can be deferred while the _parameters_ cannot. And the circle of
 confusion is a display pixel rather than a film convention: 23.7 µm on a 24 mm
 gauge over 1520 px, against the 29 µm full-frame print rule, close enough to be
 a sanity check and moving with the display the way the blur it predicts does.
+
+## The instrument the lens is operated from (28 Aug 2026)
+
+[ADR-0017](docs/adr/0017-the-lens.md) gave the camera a lens and the terrain a
+predicate that reads it. What nothing had was a hand on either: the planetarium
+is the mode whose whole subject is looking, and its controls for looking were on
+three surfaces, two behind the author's disclosure. The aperture, the focus and
+the exposure were behind the console key.
+
+Phase 1.6 of [`TERRAIN-PLAN.md`](TERRAIN-PLAN.md) § 9, in full.
+[ADR-0018](docs/adr/0018-the-instrument.md) is the record.
+
+**Two grep-able claims, and they are the point.** One
+`addEventListener('keydown'` in `apps/game/src` outside tests, where there were
+nine; one `localStorage` call site, where there were five. Neither is tidiness —
+`input/keymapStore.ts` can arbitrate a chord only because it sees every one, and
+the preference export exists only because one file knows the whole set.
+
+**The `Space` bug, as an ordering.** `Space` was the global pause key and the
+cinema player's transport. Both listeners were on the window, `preventDefault`
+does not stop the other (only `stopImmediatePropagation` would), so one press
+flipped `clock.paused` twice: the documented play/pause control did nothing at
+all, with nothing in the console. `LIVE_SETS` enumerates every set of contexts
+that can be live at one moment, and the check runs against those rather than
+per-context — because `global` is live beside everything, and a rule phrased as
+"conflicts within a context" misses exactly this pair. Four shadows total, all
+deliberate, pinned in a test: `Space` (cinema over pause), `Escape` twice (a
+dialog and a running scene over the cinema library), and `/` (the reading room's
+search over the catalog's).
+
+**Three shell flags disappeared into contexts.** `axes: mode === 'flight'`,
+`pause: mode !== 'cinema'` and `mode !== 'docs'` were booleans threaded through
+`App` that turned parts of a listener off. They are a context claim, a
+specificity, and a mute declared where the reading room is.
+
+**The rise geometry, and the 0.28° that decides it.** `riseStance` takes a
+_displacement_ to the parent rather than a direction. Read as a direction the
+answer is wrong by `asin((R + h)/d)` — 0.28° for Earth from Luna, against a
+clearance being solved for of 3°, so 9% of the answer. The quadratic in `cos θ`
+closes; both roots satisfy the squared equation and only the one whose
+`d·cos θ − r` agrees in sign with `sin α` satisfies the original, and the other
+stands the eye on the far side of the body with the parent under its feet. The
+round trip against `riseClearance` holds to 1e-9 radians over Phobos-to-Ganymede
+radii, three to two thousand parent-radii out, at any parent direction.
+
+**The lens spans twenty-two to one across the pairs a rise has to work for.**
+Earth is 1.90° across from Luna and Mars is 42.39° from Phobos, so the lens is
+part of the picture rather than a setting beside it. `riseFov` clamps to the
+slider's 20–110°, which is doing real work at the long end: Earthrise wants
+11.4° and gets 20°, because that is where the terrain predicate saturates
+(§ 8). The captured plate is right otherwise — Earth over the lunar limb from
+110 km, horizon on the lower-third line.
+
+**Three of sixteen compositions were ship-only, and the reason was one line.**
+`observerPose` is `lookAlong(−offset, up)` — the target's center, always — so
+`glint`, `sunset` and `oblique`, which aim at a limb or a specular point, could
+only be taken by teleporting a hull. With the aim solved as a look offset there
+is one list and two placers. `sunset` at 1.04 radii and `oblique` at 1.35 land
+on the _surface_ arm, which is the honest reading of what they are: a stance
+four hundredths of a radius up.
+
+**A zero look offset returns the base quaternion itself**, not its product with
+the identity. The product is exact for every field; stating it as a branch is
+what keeps it true under a later change to `multiply`, and the compositions are
+fitted against that pose.
+
+**A drag now moves the picture by the pixels dragged.**
+`DRAG_RADIANS_PER_PIXEL` is a constant, so at 8× zoom a 100 px drag swung the frame through three of its own
+field-widths. The sensitivity is `pixelAngle(lens,
+viewport)`.
+
+**Two the audit found before it shipped**, and both are the same shape — a
+number that was right in one unit and read in another.
+
+`ir.preset` fitted its lens by writing `engine.flightLens`, and the shell owns
+that field: `camera.lens` is a persisted preference and an effect re-asserts it
+on every render-preference change. So a picture held its lens until the next
+unrelated toggle — press The Rings, change the anti-aliasing, and Saturn goes
+from 0.660 of the frame height to 0.812 with the A ring's outer edge off both
+sides, which is exactly what that picture's 80° exists to prevent.
+`requestLens` writes **both**: the field, because `framingLens()` is read on the
+very next line and a `fill` standoff is solved against it, and the shell's
+setter, because that is what survives. Routing through React alone was tried and
+is wrong for the first reason — the state update is asynchronous, so `the-rings`
+composed at 2.735 radii wearing an 80° label instead of 2.249.
+
+And the drag sensitivity was radians per **display** pixel while a pointer delta
+is in **CSS** pixels. `lensView().viewport` keeps the device ratio deliberately —
+the terrain predicate and the circle of confusion are claims about physical
+pixels — so on a 2× display the picture moved at half the rate of the hand, and
+on a phone at two thirds, which is the case free look exists for.
+`GameEngine.displayRatio` is the missing factor and `dragSensitivity` spends it;
+the test is that the same CSS window drags at one rate at 1×, 1.5× and 2×.
+
+### Bugs this pass found, worth not reintroducing
+
+- **A plate captured from the menu is seven files, all the right size, all
+  wrong.** `ir.preset` moves the observatory, and the observatory produces a
+  camera only while a layer is holding it — a stance the planetarium pushes on
+  mount. Every verb succeeded and every capture was a picture of the menu.
+  `scripts/presets/plates.mjs` names the page for this reason.
+- **`chordLabel` printed `Shift + /` on Chromium and `?` everywhere else.**
+  `getLayoutMap()` answers what a key types _unshifted_, so a rule of "use the
+  US shifted table only when there is no map" is inverted on the one browser
+  family that has the information. The test compares the unshifted character
+  instead, and names AZERTY's `Slash` as the case where the table is genuinely
+  wrong.
+- **A key-up compared as a whole chord misses its own key-down.** Shift can go
+  down or up between press and release, and for a held axis "misses" means the
+  thruster never stops. The release matches on the physical code alone.
+- **An inline `--js` IIFE returns `null` through the driver.** The multi-step
+  capture is a `--file`, which is what `scripts/drive.mjs --help` already says.
 
 ## Known gaps
 

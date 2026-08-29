@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import fc from 'fast-check'
 import { Quaternion as Q, Vec, vec3 } from '@inertialref/spatial'
+import { FLIGHT_FOV, standoffRadii } from '@inertialref/rendering'
 import { findShot, lookAlong, placeShot, SHOTS } from './shots.ts'
 
 /*
@@ -48,7 +49,10 @@ describe('placeShot', () => {
     const sun = Vec.normalize(vec3(1, 0.1, 0.2))
     for (const shot of SHOTS) {
       const { position } = placeShot(shot, RADIUS, sun)
-      expect(Vec.length(position)).toBeCloseTo(shot.distanceRadii * RADIUS, 3)
+      expect(Vec.length(position)).toBeCloseTo(
+        standoffRadii(shot, FLIGHT_FOV) * RADIUS,
+        3,
+      )
     }
     // The SOI clamp: a small moon cannot host a 5-radius shot, and the floor
     // beats the ceiling when the two collide, as in `viewingAltitudeKm`.

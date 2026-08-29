@@ -26,7 +26,9 @@ const status = (tick: number): HarnessStatus =>
 const idle = {
   showShip: true,
   showOrbits: false,
+  labels: true,
   flareArtifacts: 1,
+  chrome: true,
   cutscene: { sample: (): Playhead | null => null },
   harness: {
     status: () => status(0),
@@ -38,7 +40,13 @@ const EMPTY: EngineSnapshot = {
   status: null,
   cinema: false,
   observer: null,
-  presentation: { showShip: false, showOrbits: false, flareArtifacts: 0 },
+  presentation: {
+    showShip: false,
+    showOrbits: false,
+    labels: false,
+    flareArtifacts: 0,
+    chrome: true,
+  },
   playhead: null,
 }
 
@@ -167,7 +175,9 @@ describe('the engine sampler', () => {
     expect(store.getState().presentation).toEqual({
       showShip: false,
       showOrbits: true,
+      labels: true,
       flareArtifacts: 1,
+      chrome: true,
     })
   })
 

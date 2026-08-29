@@ -1,124 +1,50 @@
 import { type Quat, Vec, type Vec3, vec3 } from '@inertialref/spatial'
-import { lookAlong } from '@inertialref/rendering'
+import {
+  aimPoint,
+  type Composition,
+  COMPOSITIONS,
+  compositionIds,
+  FLIGHT_FOV,
+  findComposition,
+  lookAlong,
+  standoffRadii,
+} from '@inertialref/rendering'
 
 /*
- * Camera bookmarks: named, repeatable compositions of a body.
+ * The ship's placer for a composition: where a hull goes to take the picture.
  *
+ * The list itself lives in `packages/rendering/src/compositions.ts`, and that
+ * is the load-bearing part: two lists sharing a vocabulary and not a mechanism
+ * is how `gibbous` here and `gibbous` in the planetarium's presets come to mean
+ * two pictures. One list and two placers instead — one teleports a hull, the
+ * other moves a camera — and this file is one of them. The three that aim
+ * somewhere other than the body's center reach both arms because the aim is a
+ * look offset rather than something only a hull's orientation can express.
+ *
+ * What is left here is the placement: pure geometry in the body's frame, so it
+ * is testable in Node and the same composition works on any body in any system.
  * The debug orbit parks one radius up, where the body subtends 60° in a 65°
- * field of view — the framing for *flying at* a planet, and the wrong one for
- * looking at it. From two radii you see a magnified 60° cap of the globe, so
- * the continents read enormous and the limb foreshortens; every photograph
- * anyone recognizes was taken from much further back. Blue Marble is a 4.5
- * body-radii shot. These bookmarks put the ship where the photographs were
- * taken, which is what makes "does the render match the photo" a question that
- * can be answered by looking.
- *
- * Pure geometry in the body's frame, so the placement is testable in Node and
- * the same bookmark works on any body in any system. The angles are the
- * photographer's terms:
- *
- * - `phase` is the sun–body–camera angle: 0° is full face, 90° half lit,
- *   150° a crescent.
- * - `elevation` lifts the camera out of the body's equatorial plane, which
- *   keeps a pole in the shot and stops every framing from being flat-on.
- * - `aim` decides what sits in the middle of the frame: the body's center, the
- *   sunward horizon (the ISS sunset composition), or the specular point where
- *   the star reflects off the surface (the sun-glint composition).
+ * field — the framing for *flying at* a planet, and the wrong one for looking
+ * at it. From two radii you see a magnified 60° cap of the globe, so the
+ * continents read enormous and the limb foreshortens; every photograph anyone
+ * recognizes was taken much further back. Blue Marble is a 4.5 body-radii shot.
+ * These put the ship where the photographs were taken, which is what makes
+ * "does the render match the photo" a question that can be answered by looking.
  */
-
-export type ShotAim = 'centre' | 'limb' | 'specular'
-
-export interface ShotDefinition {
-  readonly name: string
-  /** One line for the dock and `ir.shots()`. */
-  readonly description: string
-  /** Camera distance from the body's center, in body radii. */
-  readonly distanceRadii: number
-  /** Sun–body–camera angle, degrees. */
-  readonly phaseDeg: number
-  /** Lift out of the body's equatorial plane, degrees. */
-  readonly elevationDeg: number
-  readonly aim: ShotAim
-  /**
-   * Radial lift of the aim point, in body radii. Positive tilts the camera
-   * toward space, dropping the horizon into the frame's lower third — the
-   * ISS dusk composition, where the sun sits low, not dead center.
-   */
-  readonly aimLift?: number
-}
 
 /**
- * The bookmark list. Each is composed against a specific photographic
- * reference; the point is that the render can be held next to the photograph.
+ * The list, as the ship placer sees it.
+ *
+ * An alias rather than a copy: two names for one array is how a build ends up
+ * with a bookmark the console can frame and the panel cannot.
  */
-export const SHOTS: readonly ShotDefinition[] = [
-  {
-    name: 'full-face',
-    description: 'the whole lit disk, north up — the Blue Marble framing',
-    distanceRadii: 5.2,
-    phaseDeg: 12,
-    elevationDeg: 8,
-    aim: 'centre',
-  },
-  {
-    name: 'gibbous',
-    description: 'three-quarter lit, shadow sculpting the terrain',
-    distanceRadii: 3.4,
-    phaseDeg: 55,
-    elevationDeg: 10,
-    aim: 'centre',
-  },
-  {
-    name: 'half',
-    description: 'terminator down the middle of the disk',
-    distanceRadii: 3.2,
-    phaseDeg: 90,
-    elevationDeg: 5,
-    aim: 'centre',
-  },
-  {
-    name: 'crescent',
-    description: 'thin crescent, atmosphere ringing the dark limb',
-    distanceRadii: 4.0,
-    phaseDeg: 147,
-    elevationDeg: 5,
-    aim: 'centre',
-  },
-  {
-    name: 'glint',
-    description: 'the star mirrored off the surface, oceans if it has them',
-    distanceRadii: 2.3,
-    phaseDeg: 38,
-    elevationDeg: 12,
-    aim: 'specular',
-  },
-  {
-    name: 'sunset',
-    description: 'low over the night side, sun on the horizon — the ISS limb',
-    distanceRadii: 1.04,
-    phaseDeg: 104,
-    elevationDeg: 0,
-    aim: 'limb',
-    aimLift: 0.045,
-  },
-  {
-    name: 'oblique',
-    description: 'low and slanted, surface receding into the haze at the limb',
-    distanceRadii: 1.35,
-    phaseDeg: 62,
-    elevationDeg: 0,
-    aim: 'limb',
-  },
-]
+export type ShotDefinition = Composition
+export const SHOTS: readonly Composition[] = COMPOSITIONS
 
-export const shotNames = (): readonly string[] => SHOTS.map((s) => s.name)
+export const shotNames = (): readonly string[] => compositionIds()
 
-export function findShot(name: string): ShotDefinition {
-  const shot = SHOTS.find((candidate) => candidate.name === name)
-  if (shot === undefined) {
-    throw new Error(`Unknown shot "${name}". Try: ${shotNames().join(', ')}`)
-  }
-  return shot
+export function findShot(name: string): Composition {
+  return findComposition(name)
 }
 
 export interface ShotPlacement {
@@ -140,12 +66,17 @@ export interface ShotPlacement {
  *   the sphere-of-influence clamp, so a bookmark on a small moon does not park
  *   the ship outside the frame it is being parked in. The floor always wins:
  *   there is no composition from inside the ground.
+ * @param fovDeg      the field a `fill` standoff is solved against. Unused by a
+ *   composition that names its standoff in radii, which is every one of the
+ *   seven composed against a photograph — see `compositions.test.ts`, which
+ *   holds them to that.
  */
 export function placeShot(
-  shot: ShotDefinition,
+  shot: Composition,
   bodyRadius: number,
   toStar: Vec3,
   maxDistance = Infinity,
+  fovDeg: number = FLIGHT_FOV,
 ): ShotPlacement {
   const pole = vec3(0, 1, 0)
   const sun = Vec.normalize(toStar)
@@ -157,9 +88,9 @@ export function placeShot(
    * plane — rotation about the pole preserves a vector's poleward component,
    * so the sun–body–camera angle it produced was `acos(s_y² + (1 − s_y²)·cos φ)`
    * rather than φ. In this basis the phase is exact for any sun direction, and
-   * the elevation spends its degrees tilting the swing plane instead, which is
-   * all it was ever for: getting a pole into frame so the composition is not
-   * dead flat.
+   * the tilt spends its degrees rolling the swing plane instead, which is all
+   * it was ever for: getting a pole into frame so the composition is not dead
+   * flat.
    */
   const horizontal = Vec.cross(pole, sun)
   const east =
@@ -169,10 +100,10 @@ export function placeShot(
   const poleward = Vec.cross(sun, east)
 
   const phase = (shot.phaseDeg * Math.PI) / 180
-  const elevation = (shot.elevationDeg * Math.PI) / 180
+  const tilt = (shot.tiltDeg * Math.PI) / 180
   const swing = Vec.add(
-    Vec.scale(east, Math.cos(elevation)),
-    Vec.scale(poleward, Math.sin(elevation)),
+    Vec.scale(east, Math.cos(tilt)),
+    Vec.scale(poleward, Math.sin(tilt)),
   )
   const direction = Vec.normalize(
     Vec.add(Vec.scale(sun, Math.cos(phase)), Vec.scale(swing, Math.sin(phase))),
@@ -181,7 +112,7 @@ export function placeShot(
   const floor = bodyRadius * 1.03
   const distance = Math.max(
     floor,
-    Math.min(shot.distanceRadii * bodyRadius, maxDistance),
+    Math.min(standoffRadii(shot, fovDeg) * bodyRadius, maxDistance),
   )
   const position = Vec.scale(direction, distance)
 
@@ -213,41 +144,25 @@ export function placeShot(
   return { position, orientation, along }
 }
 
-/** What sits in the middle of the frame. */
-function aimPoint(
-  aim: ShotAim,
-  position: Vec3,
-  bodyRadius: number,
-  sun: Vec3,
-): Vec3 {
-  if (aim === 'centre') return Vec.ZERO
-
-  const radial = Vec.normalize(position)
-  if (aim === 'specular') {
-    // The star's reflection sits where the surface normal bisects the view and
-    // sun directions. Halfway between the sub-camera and sub-solar points is
-    // exact for a distant camera and within a degree everywhere a shot goes.
-    const normal = Vec.normalize(Vec.lerp(radial, sun, 0.5))
-    return Vec.scale(normal, bodyRadius)
-  }
-
-  // The horizon, in the sun's direction: the point of the limb a low camera
-  // actually sees the sun set behind. The horizon sits `acos(R/r)` away from
-  // the sub-camera point, along the great circle toward the star.
-  const towardSun = Vec.normalize(
-    Vec.sub(sun, Vec.scale(radial, Vec.dot(sun, radial))),
-  )
-  const horizon = Math.acos(
-    Math.min(1, bodyRadius / Math.max(Vec.length(position), bodyRadius)),
-  )
-  return Vec.scale(
-    Vec.add(
-      Vec.scale(radial, Math.cos(horizon)),
-      Vec.scale(towardSun, Math.sin(horizon)),
-    ),
-    bodyRadius,
-  )
-}
+/**
+ * A composition built from a standoff in radii, for a caller with no list.
+ *
+ * `tng-intro` is the caller: its beats name a distance, a phase and a tilt at
+ * the point of use and have no business being in a list of named pictures.
+ */
+export const standoffShot = (
+  distanceRadii: number,
+  phaseDeg: number,
+  tiltDeg: number,
+): Composition => ({
+  id: 'cinematic',
+  label: 'Cinematic',
+  why: '',
+  phaseDeg,
+  tiltDeg,
+  standoff: { kind: 'radii', radii: distanceRadii },
+  aim: 'centre',
+})
 
 /*
  * `lookAlong` moved to `@inertialref/rendering`'s cinematic module — the

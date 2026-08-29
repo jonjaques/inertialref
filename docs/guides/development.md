@@ -21,9 +21,11 @@ pnpm typecheck        # five tsconfig projects
 pnpm lint             # oxlint, not eslint
 pnpm graph            # dependency layering and cycle check
 pnpm brand            # regenerate brand artifacts from design/brand/brandmark.svg
+pnpm presets:plates   # recapture the seven preset thumbnails through the renderer
+pnpm presets:check    # every picture has a plate, every composition it names resolves
 pnpm docs:build       # render docs/ and packages/* into the documentation site
 pnpm build            # optional media pull, docs, typecheck, then Vite build
-pnpm check            # graph, brand, format, lint, typecheck, test, build
+pnpm check            # graph, brand, presets, format, lint, typecheck, test, build
 
 pnpm sim --self-test           # headless run plus the twelve capability checks
 pnpm vitest run <substring>    # a single test file
@@ -168,6 +170,18 @@ share card, the web manifest, `robots.txt`, `sitemap.xml`, or
 card has a second source, `design/brand/og-plate.png` — a captured frame of the
 renderer that its type is composited over. `scripts/brand/og.mjs` carries the
 framing it was shot at, so it can be shot again.
+
+**Preset plates** are the thumbnails under the planetarium's Presets panel, in
+`apps/game/public/presets/`. `pnpm presets:plates` recaptures them — all seven,
+or one by id — by driving Chrome against `pnpm dev`, so a dev server has to be
+up and the machine needs a GPU. They are vendored for the reason the share card
+is: a build that needed a GPU would not run in CI, on a fork, or on a machine
+with no display, and the one thing a thumbnail may not do is be absent.
+`pnpm presets:check` is in `pnpm check` and proves only that each picture has a
+plate and names a composition that still resolves — nothing can check that a
+plate still _looks_ like the picture, because comparing it to what the renderer
+produces now is the review itself. Recapture, and a diff in `git status` is the
+signal.
 
 **The documentation site** at `/docs` is generated. `pnpm docs:build` renders
 every markdown file under `docs/`, plus `AGENTS.md`, and every export of
