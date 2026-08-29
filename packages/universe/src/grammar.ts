@@ -156,6 +156,14 @@ export interface SurfaceGrammar {
   readonly meanRadius: Meters
   readonly temperature: Kelvin
   /**
+   * And what the ground under that air is at, Kelvin.
+   *
+   * Equal to `temperature` on an airless body and three times it on Venus. It
+   * is the one the surface answers to — where the volatiles condense, and
+   * eventually how fast the rock creeps. See `surfaceTemperature`.
+   */
+  readonly groundTemperature: Kelvin
+  /**
    * Atmospheric column mass, kg/m². Zero on an airless world.
    *
    * `surfaceDensity · scaleHeight`, which is `P/g` — Earth comes out at 10,200
@@ -236,6 +244,40 @@ export const meanDensity = (mass: Kilograms, radius: Meters): number =>
  */
 export const equilibriumTemperature = (flux: number): Kelvin =>
   ((0.8 * flux) / (4 * STEFAN_BOLTZMANN)) ** 0.25
+
+/**
+ * What the *ground* is at, once the air over it has been counted, Kelvin.
+ *
+ * The equilibrium temperature is the temperature of a bare rock in that orbit,
+ * and on any body with a real atmosphere it is not the temperature of anything:
+ * Venus radiates at 232 K and its surface is at 737. That factor of three is
+ * the whole difference between a world whose poles hold frost and a world with
+ * a lead-melting equator, and a cover field that reads the equilibrium figure
+ * puts an ice cap on Venus.
+ *
+ * The form is fitted rather than derived — a radiative-convective solution
+ * needs the composition, and the generator does not have one — to the three
+ * bodies where both numbers are measured: Mars is 213 K over 220 kg/m² of air
+ * and 210 K on the ground, Earth 263 over 10,200 and 288, Venus 310 over
+ * 1.0 × 10⁶ and 737. The fourth power is what makes it ignore Mars and dominate
+ * Venus, which is the shape the real curve has: greenhouse forcing is
+ * logarithmic in column mass per band and the bands saturate and widen, so the
+ * effect accelerates once the atmosphere is optically thick everywhere.
+ */
+export function surfaceTemperature(
+  equilibrium: Kelvin,
+  airMass: number,
+): Kelvin {
+  if (!(airMass > GREENHOUSE_FLOOR)) return equilibrium
+  const decades = Math.log10(airMass / GREENHOUSE_FLOOR)
+  return equilibrium * (1 + GREENHOUSE_GAIN * decades ** 4)
+}
+
+/** Below this column mass an atmosphere warms nothing measurable, kg/m². */
+const GREENHOUSE_FLOOR = 100
+
+/** Fitted against Earth and Venus; see `surfaceTemperature`. */
+const GREENHOUSE_GAIN = 0.0076
 
 /**
  * The three limits on peak relief, whichever bites first.
@@ -451,6 +493,7 @@ export function surfaceGrammar(
     density,
     meanRadius,
     temperature,
+    groundTemperature: surfaceTemperature(temperature, airMass),
     airMass,
     tidalProxy,
     reliefLimit: limit,

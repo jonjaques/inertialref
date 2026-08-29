@@ -22,6 +22,13 @@ import {
   volcanicBand,
 } from './bands.ts'
 import { craterField, softLimit } from './craters.ts'
+import {
+  BARE_COVER,
+  COVER_CHANNELS,
+  packCover,
+  type SurfaceCover,
+  surfaceCover,
+} from './cover.ts'
 import { CANONICAL_AMPLITUDE_FLOOR, terrainSketch } from './sketch.ts'
 import type { Body, SurfaceParameters } from './system.ts'
 
@@ -282,11 +289,36 @@ export function elevationAt(
   surface: SurfaceParameters,
   direction: Vec3,
 ): Meters {
-  const d = Vec.normalize(direction)
+  return evaluate(surface, Vec.normalize(direction), null, 0)
+}
+
+/**
+ * The band stack, with the cover field written out beside the height.
+ *
+ * One function rather than two because the cover reads three things the height
+ * evaluation computes and discards — the crater sum, the plates near the
+ * sample, and the crater band's own ceiling — and the crater sum is most of a
+ * patch's cost. Asking for it a second time to decide where the mare are would
+ * double the most expensive band in the stack to learn something it had just
+ * finished working out.
+ *
+ * `out` is null on the path physics and the contact test take, which is the
+ * overwhelming majority of the calls: `elevationAt` runs per contact test per
+ * tick, and the ground under a ship has no material.
+ */
+function evaluate(
+  surface: SurfaceParameters,
+  d: Vec3,
+  out: Uint8Array | null,
+  at: number,
+): Meters {
   const grammar = surface.grammar
   const sketch = terrainSketch(surface)
   const budget = surface.maxElevation
-  if (budget <= 0) return 0
+  if (budget <= 0) {
+    if (out !== null) packCover(BARE_COVER, out, at)
+    return 0
+  }
   const bands = grammar.bands
   // Three of the bands below read the plate this sample sits on. One lookup,
   // handed to all three — see `plateContext`.
@@ -304,13 +336,63 @@ export function elevationAt(
     height += bands.ice * iceBand(sketch, grammar, d, bands.ice * budget)
   }
   let elevation = height * budget
+  const craterLimit = bands.craters * budget
+  /*
+   * The **raw** sum is what the cover reads, and the difference is not a
+   * detail. `softLimit` is a `tanh`, and on a saturated world the sum runs
+   * several times the limit everywhere — Luna's median direction is at
+   * −2.2 ceilings and its first percentile at −6.6 — so the limited value is
+   * within 2% of the asymptote over half the body and carries no information
+   * about which ground is a basin. Reading the mare off it flooded 49% of the
+   * Moon.
+   */
+  let craters = 0
   if (sketch.craterLevels.length > 0) {
-    elevation += softLimit(
-      craterField(sketch, grammar, d),
-      bands.craters * budget,
+    craters = craterField(sketch, grammar, d)
+    elevation += softLimit(craters, craterLimit)
+  }
+  if (out !== null) {
+    packCover(
+      surfaceCover(sketch, grammar, d, plates, craters, craterLimit),
+      out,
+      at,
     )
   }
   return elevation
+}
+
+/**
+ * The ground below a direction, with what it is made of written into `out`.
+ *
+ * The sea clamp applies to the height and not to the cover: an ocean is a
+ * material the renderer decides on from the elevation it is handed, and the
+ * seabed's own composition is what would show through a shallow one. See
+ * `groundElevation` for why the clamp has exactly one owner.
+ */
+export function groundCoverAt(
+  surface: SurfaceParameters,
+  direction: Vec3,
+  out: Uint8Array,
+  at: number,
+): Meters {
+  const sea = seaDatumElevation(surface)
+  const elevation = evaluate(surface, Vec.normalize(direction), out, at)
+  return sea === null ? elevation : Math.max(elevation, sea)
+}
+
+/** The cover at a direction, as a record. The readable form, for tests. */
+export function surfaceCoverAt(
+  surface: SurfaceParameters,
+  direction: Vec3,
+): SurfaceCover {
+  const bytes = new Uint8Array(COVER_CHANNELS)
+  evaluate(surface, Vec.normalize(direction), bytes, 0)
+  return {
+    bright: (bytes[0] as number) / 255,
+    dark: (bytes[1] as number) / 255,
+    mineral: (bytes[2] as number) / 255,
+    ice: (bytes[3] as number) / 255,
+  }
 }
 
 /**
@@ -647,6 +729,16 @@ export interface Heightfield {
    * that arithmetic is written once.
    */
   readonly elevations: Float32Array
+  /**
+   * What the ground is made of, four bytes a vertex, row-major over the patch.
+   *
+   * `resolution²` samples with **no border**, unlike `elevations`: the border
+   * rows exist to be differenced against and nothing differences the cover, so
+   * generating them would be 12.7% of a band stack spent on samples no
+   * attribute carries. Sample (row, col) is at `(row · resolution + col) · 4`.
+   * See `cover.ts` for what the four are.
+   */
+  readonly cover: Uint8Array
   /** Over the patch itself. The border is generated but not summarized. */
   readonly minElevation: Meters
   readonly maxElevation: Meters
@@ -708,6 +800,7 @@ export function generateHeightfield(
   )
   const stride = resolution + 2 * border
   const elevations = new Float32Array(stride * stride)
+  const cover = new Uint8Array(resolution * resolution * COVER_CHANNELS)
   const step = resolution - 1
   let min = Infinity
   let max = -Infinity
@@ -716,14 +809,21 @@ export function generateHeightfield(
     for (let col = -border; col < resolution + border; col += 1) {
       const s = col / step
       const index = (row + border) * stride + (col + border)
-      elevations[index] = groundElevation(
-        surface,
-        regionDirection(region, s, t),
-      )
+      const direction = regionDirection(region, s, t)
       // The extremes describe the patch, not the border: they size the bounding
       // volume the renderer culls against, and a border sample is ground the
-      // next patch draws.
-      if (row < 0 || col < 0 || row >= resolution || col >= resolution) continue
+      // next patch draws. The cover is the patch's too, for the same reason and
+      // one more — it is a vertex attribute, and the border has no vertices.
+      if (row < 0 || col < 0 || row >= resolution || col >= resolution) {
+        elevations[index] = groundElevation(surface, direction)
+        continue
+      }
+      elevations[index] = groundCoverAt(
+        surface,
+        direction,
+        cover,
+        (row * resolution + col) * COVER_CHANNELS,
+      )
       // Read back rather than kept: the array is Float32 and the extremes have
       // to bound *it*, not the float64 the generator computed. A bounding
       // volume sized from a value the mesh does not contain is a volume that
@@ -738,6 +838,7 @@ export function generateHeightfield(
     resolution,
     border,
     elevations,
+    cover,
     minElevation: min,
     maxElevation: max,
   }

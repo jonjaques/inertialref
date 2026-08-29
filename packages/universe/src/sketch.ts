@@ -9,6 +9,7 @@ import {
   smoothstep,
 } from '@inertialref/procedural'
 import { Vec, type Vec3, vec3 } from '@inertialref/spatial'
+import { type RayCrater, rayCraters } from './craters.ts'
 import type { SurfaceGrammar } from './grammar.ts'
 import type { SurfaceParameters } from './system.ts'
 
@@ -103,6 +104,12 @@ export interface BandSeeds {
   readonly warpX: Seed
   readonly warpY: Seed
   readonly warpZ: Seed
+  /** Which basins flooded. See `cover.ts`. */
+  readonly mare: Seed
+  /** Compositional variation across the crust. */
+  readonly mineral: Seed
+  /** The ragged edge of a polar cap. */
+  readonly frost: Seed
 }
 
 export interface TerrainSketch {
@@ -110,8 +117,33 @@ export interface TerrainSketch {
   readonly hotspots: readonly Hotspot[]
   /** Coarsest first. Empty on a world the grammar gives no craters. */
   readonly craterLevels: readonly CraterLevel[]
+  /**
+   * The young large craters, youngest first, for the albedo their rays write.
+   *
+   * On the sketch rather than found per sample because finding them is a walk
+   * over every coarse cell on the body and reading them is sixteen dot
+   * products. See `rayCraters`.
+   */
+  readonly rayCraters: readonly RayCrater[]
   readonly stripes: readonly StripeAxis[]
   readonly seeds: BandSeeds
+  /**
+   * The hemisphere the melt reached: the axis the mare gate is built on.
+   *
+   * A degree-one asymmetry, because that is what the measurement is. Lunar
+   * mare covers 31% of the near side and 2% of the far side, and the
+   * explanation is a crust tens of kilometres thinner on one side of the body
+   * — one lobe, not a patchwork. A noise field alone cannot produce that
+   * however it is tuned: its power is spread over several degrees, so it makes
+   * a body with basalt everywhere in patches rather than a body with a near
+   * side.
+   *
+   * Seeded rather than derived from the primary, which the sketch cannot see —
+   * a worker has the surface and nothing else. Tidal locking is the reason a
+   * real body's asymmetry points where it does; that it *has* one is the part
+   * this models.
+   */
+  readonly mareAxis: Vec3
   /** The surface seed, folded to the one lane a lattice hash carries. */
   readonly latticeSeed: number
 }
@@ -541,10 +573,16 @@ function derive(seed: Seed, grammar: SurfaceGrammar): TerrainSketch {
     }
   }
 
+  const craterLevels = craterLadder(grammar)
+  const lattice = latticeSeed(seed)
+  const mareAxis = Vec.normalize(new Rng(deriveSeed(seed, 'mare')).unitVector())
+
   return {
     plates,
     hotspots,
-    craterLevels: craterLadder(grammar),
+    craterLevels,
+    rayCraters: rayCraters(lattice, craterLevels, grammar),
+    mareAxis,
     stripes,
     seeds: {
       hypsometry: deriveSeed(seed, 'hypsometry'),
@@ -556,8 +594,11 @@ function derive(seed: Seed, grammar: SurfaceGrammar): TerrainSketch {
       warpX: deriveSeed(seed, 'warp:x'),
       warpY: deriveSeed(seed, 'warp:y'),
       warpZ: deriveSeed(seed, 'warp:z'),
+      mare: deriveSeed(seed, 'mare'),
+      mineral: deriveSeed(seed, 'mineral'),
+      frost: deriveSeed(seed, 'frost'),
     },
-    latticeSeed: latticeSeed(seed),
+    latticeSeed: lattice,
   }
 }
 

@@ -1,6 +1,6 @@
 import type { Meters } from '@inertialref/shared'
 import * as procedural from '@inertialref/procedural'
-import { type Vec3, vec3 } from '@inertialref/spatial'
+import { Vec, type Vec3, vec3 } from '@inertialref/spatial'
 import { craterDepth, type SurfaceGrammar } from './grammar.ts'
 import type { CraterLevel, TerrainSketch } from './sketch.ts'
 
@@ -42,9 +42,15 @@ import type { CraterLevel, TerrainSketch } from './sketch.ts'
  * three, and `craterFieldWithin` lets the test walk wider still and find
  * nothing more.
  *
- * Rays are not here. A young crater's rays are an *albedo* field, not a height
- * one, which is how Tycho actually reads from orbit; they belong to the
- * material in the phase after this.
+ * **Rays are albedo, not height, and they are at the bottom of this file.** A
+ * young crater's rays are thin bright ejecta lying on darker mature ground, not
+ * a shape — Tycho's rays cast no shadow at any sun angle and reach twenty times
+ * farther than its apron does. So they are not summed into the profile and they
+ * are not walked on the lattice: sixteen radii of reach is a neighborhood
+ * hundreds of cells wide, which is a whole ladder's cost per sample for a
+ * handful of craters. `rayCraters` enumerates those few once per body, out of
+ * the same lattice and the same hashes, and `rayBrightness` evaluates them as a
+ * short list.
  */
 
 /*
@@ -482,4 +488,318 @@ export const craterCountAbove = (
     total += 4 * Math.PI * level.cells * level.cells * level.density
   }
   return total
+}
+
+/* ---------------------------------------------------------------------------
+ * Ray craters
+ * ------------------------------------------------------------------------- */
+
+/**
+ * A named young crater: the ones whose rays are visible from orbit.
+ *
+ * Rays are albedo rather than height, so nothing here is read by `craterField`.
+ * What this type exists to guarantee is that the two agree about *where the
+ * crater is* — a ray system centered on ground with no bowl under it is the one
+ * way this can look obviously wrong, and it is the way it looks wrong if the
+ * rays are placed by a second, independent draw.
+ *
+ * So these are not new craters. They are craters the lattice already places,
+ * enumerated once per body and kept, and every field on them is read back from
+ * the same two hashes `levelContribution` reads.
+ */
+export interface RayCrater {
+  /** The jittered center, normalized. Body-fixed. */
+  readonly axis: Vec3
+  readonly diameter: Meters
+  /** Half the crater's own angular width, radians. */
+  readonly angularRadius: number
+  /** 0 fresh, 1 ancient — the draw the height profile degrades with. */
+  readonly age: number
+  /**
+   * Cosine of the angle the rays reach, for the rejection test.
+   *
+   * Stored rather than derived per sample because the test runs for every
+   * crater on the body at every sample and the reach is a property of the
+   * crater: sixteen `cos` calls a sample is more than the whole ray field
+   * costs when nothing is in range.
+   */
+  readonly cosReach: number
+  /** An orthonormal pair spanning the tangent plane at `axis`. */
+  readonly tangent: Vec3
+  readonly bitangent: Vec3
+  /** One phase per entry of `RAY_HARMONICS`, radians. */
+  readonly phases: Float64Array
+}
+
+/**
+ * How far a ray system reaches, in crater radii.
+ *
+ * Tycho is 86 km across on a 1,737 km Moon and its rays run about 1,500 km,
+ * which is 35 of its own radii — the extreme rather than the norm, and it is
+ * the one every eye has seen. Sixteen is the working figure: Copernicus's
+ * system reaches roughly that, and a reach measured in radii means the same
+ * number serves a 90 km crater on Luna and a 900 km one on Iapetus.
+ */
+const RAY_REACH = 16
+
+/**
+ * The finest lattice rays are drawn from, in cells per unit of direction space.
+ *
+ * Equivalently: a crater smaller than `meanRadius / 24` gets no rays. That is
+ * 72 km on Luna, which keeps Tycho and Copernicus and drops Kepler — and it is
+ * a cost bound as much as a judgment. The enumeration below walks every cell of
+ * every qualifying level once per body, which is `(4π/3)·cells³` cell tests;
+ * at 24 the whole ladder above it comes to about 27,000, and each step finer
+ * multiplies that by eight.
+ *
+ * The judgment is defensible on its own terms too. A ray system is bright
+ * because it is *thin ejecta over a darker mature surface*, and how far it
+ * throws scales with the crater, so a small crater's rays are a feature you
+ * have to land next to. This field is for the ones you can see from space.
+ */
+const RAY_LATTICE_CELLS = 24
+
+/** Craters older than this have lost their rays to space weathering. */
+const RAY_AGE = 0.22
+
+/** The most a body carries. See the loop's own note on why there is a cap. */
+const MAX_RAY_CRATERS = 16
+
+/**
+ * Azimuthal harmonics of the ray pattern, as integer frequencies.
+ *
+ * Integers because the pattern has to close: the azimuth is an angle and a
+ * non-integer frequency puts a seam along the crater's prime meridian, which
+ * draws as one ray that is brighter on one side than the other. Coprime and
+ * spread over a decade because a sum of harmonics at nearby frequencies beats
+ * rather than looking irregular — these produce a pattern that does not repeat
+ * anywhere on the circle.
+ */
+const RAY_HARMONICS = [7, 11, 17, 23, 31, 43] as const
+
+/**
+ * The young large craters of a body, in age order.
+ *
+ * Walked once per body, at sketch derivation, over the levels of the ladder
+ * coarse enough to qualify. The walk is the same one `levelContribution` makes
+ * — the same cell test, the same two hashes, the same diameter and jitter — so
+ * every crater returned is a crater the height field actually digs.
+ *
+ * The cap is not an optimization: it is what makes the per-sample cost a
+ * constant. A saturated world has thousands of craters above the cutoff and
+ * hundreds of them young, and evaluating a ray pattern against all of them at
+ * every sample would cost more than the height field it decorates. Sixteen is
+ * about what a real body shows — Luna has two ray systems that dominate and a
+ * handful that do not — and taking the *youngest* sixteen means the ones that
+ * survive are the ones with the brightest rays.
+ */
+export function rayCraters(
+  latticeSeed: number,
+  levels: readonly CraterLevel[],
+  grammar: SurfaceGrammar,
+): readonly RayCrater[] {
+  const found: {
+    ix: number
+    iy: number
+    iz: number
+    index: number
+    diameter: Meters
+    age: number
+    jx: number
+    jy: number
+    jz: number
+  }[] = []
+
+  for (let index = 0; index < levels.length; index += 1) {
+    const level = levels[index] as CraterLevel
+    if (level.cells > RAY_LATTICE_CELLS) continue
+    const cells = level.cells
+    const size = 1 / cells
+    const span = Math.ceil(cells) + 1
+    for (let ix = -span; ix <= span; ix += 1) {
+      const loX = ix * size
+      const hiX = loX + size
+      const nearX = loX > 0 ? loX * loX : hiX < 0 ? hiX * hiX : 0
+      if (nearX > 1) continue
+      const farX = Math.max(loX * loX, hiX * hiX)
+      for (let iy = -span; iy <= span; iy += 1) {
+        const loY = iy * size
+        const hiY = loY + size
+        const nearY = loY > 0 ? loY * loY : hiY < 0 ? hiY * hiY : 0
+        if (nearX + nearY > 1) continue
+        const farY = Math.max(loY * loY, hiY * hiY)
+        for (let iz = -span; iz <= span; iz += 1) {
+          const loZ = iz * size
+          const hiZ = loZ + size
+          const nearZ = loZ > 0 ? loZ * loZ : hiZ < 0 ? hiZ * hiZ : 0
+          if (nearX + nearY + nearZ > 1) continue
+          const farZ = Math.max(loZ * loZ, hiZ * hiZ)
+          if (farX + farY + farZ < 1) continue
+
+          const hash = pcg4d(ix ^ latticeSeed, iy, iz, index)
+          const draw = toUnit(hash.x)
+          if (draw >= level.density) continue
+          const shape = pcg4d(iy, iz, ix ^ latticeSeed, index + 8_191)
+          const age = toUnit(shape.x)
+          if (age >= RAY_AGE) continue
+
+          found.push({
+            ix,
+            iy,
+            iz,
+            index,
+            diameter: level.diameter * (0.5 + (0.5 * draw) / level.density),
+            age,
+            jx: (ix + toUnit(hash.y)) * size,
+            jy: (iy + toUnit(hash.z)) * size,
+            jz: (iz + toUnit(hash.w)) * size,
+          })
+        }
+      }
+    }
+  }
+
+  /*
+   * Youngest first, ties broken by the cell so the result cannot depend on the
+   * order the walk happened to visit in. `age` is a 32-bit draw and a body can
+   * carry thousands of craters, so ties are rare rather than impossible — and
+   * "rare" is exactly the kind of order dependence that ships and then cannot
+   * be reproduced.
+   */
+  found.sort(
+    (a, b) =>
+      a.age - b.age ||
+      a.index - b.index ||
+      a.ix - b.ix ||
+      a.iy - b.iy ||
+      a.iz - b.iz,
+  )
+
+  const craters: RayCrater[] = []
+  for (const it of found.slice(0, MAX_RAY_CRATERS)) {
+    const length = Math.sqrt(it.jx * it.jx + it.jy * it.jy + it.jz * it.jz)
+    if (length < 1e-12) continue
+    const axis = vec3(it.jx / length, it.jy / length, it.jz / length)
+    const angularRadius = it.diameter / (2 * grammar.meanRadius)
+    const [tangent, bitangent] = tangentFrame(axis)
+    const phases = new Float64Array(RAY_HARMONICS.length)
+    for (let k = 0; k < RAY_HARMONICS.length; k += 1) {
+      const spin = pcg4d(it.ix, it.iy, it.iz ^ latticeSeed, 4_099 + k)
+      phases[k] = toUnit(spin.x) * 2 * Math.PI
+    }
+    craters.push({
+      axis,
+      diameter: it.diameter,
+      angularRadius,
+      age: it.age,
+      cosReach: Math.cos(Math.min(Math.PI, angularRadius * RAY_REACH)),
+      tangent,
+      bitangent,
+      phases,
+    })
+  }
+  return craters
+}
+
+/**
+ * Two unit vectors spanning the plane perpendicular to `axis`.
+ *
+ * The choice of *which* pair is arbitrary and has to be deterministic, which is
+ * the whole content of the branch: taking the cross product against a fixed
+ * axis degenerates when `axis` is that axis, and a crater at the body's pole is
+ * not a rare enough case to leave to chance.
+ */
+function tangentFrame(axis: Vec3): readonly [Vec3, Vec3] {
+  const helper =
+    Math.abs(axis.y) < 0.9 ? vec3(0, 1, 0) : vec3(1, 0, 0)
+  const tangent = Vec.normalize(Vec.cross(helper, axis))
+  return [tangent, Vec.cross(axis, tangent)]
+}
+
+/**
+ * How bright a ray system leaves the ground at a direction, 0 to 1.
+ *
+ * Two terms with different reach. The **continuous ejecta** is the bright halo
+ * inside about 2.6 crater radii — the same deposit the height field raises as
+ * an apron, seen as fresh rock over mature regolith. The **rays** are thin
+ * filaments running out to sixteen radii, and they are what makes a young
+ * crater read as young from a hundred thousand kilometers away.
+ *
+ * Both fade with the crater's own age. Nothing about brightness survives space
+ * weathering: a lunar ray system is gone in about a billion years while the
+ * bowl it came from is still there, which is why age drives this far harder
+ * than it drives the profile in `craterProfile`.
+ */
+export function rayBrightness(
+  craters: readonly RayCrater[],
+  grammar: SurfaceGrammar,
+  direction: Vec3,
+): number {
+  if (craters.length === 0) return 0
+  /*
+   * Air erases rays, and it erases them long before it erases the crater.
+   * Mars keeps a trace of the brightest; Venus, at a hundred times Earth's
+   * column, has none at all and never did.
+   */
+  const weather = 1 - grammar.air
+  if (weather <= 0) return 0
+
+  let total = 0
+  for (const crater of craters) {
+    const cosine =
+      direction.x * crater.axis.x +
+      direction.y * crater.axis.y +
+      direction.z * crater.axis.z
+    if (cosine <= crater.cosReach) continue
+    const theta = Math.acos(Math.min(1, cosine))
+    const t = theta / crater.angularRadius
+    // Freshness, not age: 1 the instant it forms, 0 at the cutoff. Squared
+    // because brightness decays faster than linearly with exposure.
+    const fresh = (1 - crater.age / RAY_AGE) ** 2
+
+    // The continuous deposit. Brightest just outside the rim, where the
+    // blanket is thickest, and gone by the time the apron is.
+    let value =
+      0.85 * (1 - smoothstep(RIM_INNER, EJECTA_REACH, Math.max(t, RIM_INNER)))
+
+    if (t > 1.2) {
+      const px =
+        direction.x * crater.tangent.x +
+        direction.y * crater.tangent.y +
+        direction.z * crater.tangent.z
+      const py =
+        direction.x * crater.bitangent.x +
+        direction.y * crater.bitangent.y +
+        direction.z * crater.bitangent.z
+      const azimuth = Math.atan2(py, px)
+      let wave = 0
+      for (let k = 0; k < RAY_HARMONICS.length; k += 1) {
+        wave +=
+          Math.cos(
+            (RAY_HARMONICS[k] as number) * azimuth +
+              (crater.phases[k] as number),
+          ) / RAY_HARMONICS.length
+      }
+      /*
+       * The filaments, and the threshold is what makes them filaments.
+       *
+       * A sum of harmonics is a lumpy field between −1 and 1; cutting it high
+       * leaves only the peaks, which are narrow wedges radiating from the
+       * center. Raising the cut with distance is what makes a ray *taper* —
+       * near the rim most azimuths are covered and far out only the strongest
+       * few survive, which is what the photographs show and what a constant
+       * threshold cannot produce.
+       */
+      const reach = t / RAY_REACH
+      const cut = 0.1 + 0.62 * reach
+      const filament = smoothstep(cut, Math.min(1, cut + 0.28), wave)
+      // Ejecta thins as it flies: r^-1.6 over the tangent plane, faded to
+      // nothing at the reach so a ray ends rather than being truncated.
+      const radial = (1 - smoothstep(0.55, 1, reach)) / t ** 1.6
+      value += 5.2 * filament * radial
+    }
+
+    total += value * fresh
+  }
+  return Math.min(1, total * weather)
 }
