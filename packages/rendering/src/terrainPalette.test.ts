@@ -42,11 +42,25 @@ describe('the terrain palette', () => {
    * highlands. Everything else is scaled beside it, so if this drifts the whole
    * palette has.
    */
-  it('puts a mare at 0.54 of the ground around it', () => {
-    for (const name of ['Luna', 'Mercury', 'Callisto']) {
+  it('puts a mare at 0.54 of the ground around it, where nothing else says so', () => {
+    for (const name of ['Iapetus', 'Enceladus']) {
       const palette = terrainPalette(find(name))
       const ratio = grey(palette.basalt) / grey(palette.regolith)
       expect(`${name}: ${ratio.toFixed(2)}`).toBe(`${name}: 0.54`)
+    }
+  })
+
+  /*
+   * And half as far where a photograph already knows. The archive's map of Luna
+   * has its maria in it; a full-strength ratio on top is the same claim made
+   * twice, and it multiplied — an evaporite at 1.9 over ground the map had
+   * already drawn pale turned every lowland on Earth to snow.
+   */
+  it('halves a deposit\'s own brightness where a map carries it', () => {
+    for (const name of ['Luna', 'Mercury', 'Mars']) {
+      const palette = terrainPalette(find(name))
+      const ratio = grey(palette.basalt) / grey(palette.regolith)
+      expect(`${name}: ${ratio.toFixed(2)}`).toBe(`${name}: 0.77`)
     }
   })
 

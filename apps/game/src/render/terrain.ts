@@ -9,7 +9,7 @@ import {
 } from 'three/webgpu'
 import {
   acos,
-  atan2,
+  atan,
   attribute,
   clamp,
   cross,
@@ -28,10 +28,10 @@ import {
   min,
   positionLocal,
   pow,
-  round,
   saturate,
   sign,
   smoothstep,
+  sqrt,
   texture,
   uniform,
   varying,
@@ -85,10 +85,10 @@ export interface TerrainMaterial {
   readonly sunDirection: { value: Vector3 }
   readonly sunColour: { value: Color }
   readonly sunIntensity: { value: number }
-  /** Mean radius of the body the patches belong to, meters. */
-  readonly bodyRadius: { value: number }
+  /** How much sky one display pixel subtends, radians. See `pixelAngle`. */
+  setPixelAngle(radians: number): void
   /** Point the material at one body's surface appearance. Idempotent. */
-  setPalette(palette: TerrainPalette, meanRadius: number): void
+  setPalette(palette: TerrainPalette, datumRadius: number): void
   /**
    * The archive's albedo map for this body, or null where there is none.
    *
@@ -135,7 +135,6 @@ export function createTerrainMaterial(): TerrainMaterial {
   const sunDirection = uniform(new Vector3(1, 0, 0))
   const sunColour = uniform(new Color(1, 1, 1))
   const sunIntensity = uniform(1)
-  const bodyRadius = uniform(1)
   const macroFrequency = uniform(1)
 
   /*
@@ -168,6 +167,14 @@ export function createTerrainMaterial(): TerrainMaterial {
   const skyColour = uniform(new Color(0, 0, 0))
   const skyStrength = uniform(0)
   const sunsetTint = uniform(new Color(1, 1, 1))
+  /**
+   * How much of the sky one display pixel subtends, radians.
+   *
+   * The lens's own figure, written by the host from the same `LensView` the
+   * terrain selection was made against — so the detail fades out exactly where
+   * the mesh it decorates stops being refined, and a zoom moves both together.
+   */
+  const pixelAngle = uniform(1e-3)
   /*
    * The archive's own picture of this body, and whether there is one.
    *
@@ -205,6 +212,19 @@ export function createTerrainMaterial(): TerrainMaterial {
    */
   const anchor = uniform(new Vector3()).onObjectUpdate(
     ({ object }) => (object?.userData.anchor as Vector3 | undefined) ?? ZERO,
+  )
+  /*
+   * How far the *rounded* anchor sits above the datum, meters.
+   *
+   * An anchor is a point on the datum sphere by construction, so this would be
+   * zero — except that the uniform above is float32, and half a metre is one
+   * step at Earth's radius. Measured in float64 against the same rounded
+   * vector the shader receives, so `altitude` below is exact rather than
+   * exact-up-to-a-per-patch-offset. A constant offset per patch is a grid of
+   * rectangles across a flat sea.
+   */
+  const anchorAltitude = uniform(0).onObjectUpdate(
+    ({ object }) => (object?.userData.anchorAltitude as number | undefined) ?? 0,
   )
 
   /*
@@ -257,12 +277,52 @@ export function createTerrainMaterial(): TerrainMaterial {
 
     /* --- where on the body this is ---------------------------------------- */
 
-    const place = anchor.add(local)
-    const radius = length(place)
-    // The outward radial: the geometric normal of the datum, which is what
-    // altitude, latitude and the terminator are all measured against.
-    const up = place.div(max(radius, float(1)))
-    const altitude = radius.sub(bodyRadius)
+    /*
+     * The outward radial — the geometric normal of the datum, which altitude,
+     * latitude, the terminator and the map's own longitude are all measured
+     * against — built so that it can be *differentiated*.
+     *
+     * `normalize(anchor + local)` is the obvious form and its value is fine.
+     * Its derivative is not: at Earth's radius one float32 step is half a metre
+     * and a pixel two kilometres up covers a few, so the screen-space
+     * difference of that sum is a tenth noise and constant-biased per patch.
+     * Everything downstream of the derivative then reads per-patch — which drew
+     * the flat sea as a grid of rectangles, because the mip level the albedo map
+     * was sampled at changed at every patch boundary.
+     *
+     * `anchor + local = |anchor| · (anchorDir + local/|anchor|)`, exactly, and
+     * the direction of the right-hand side is a unit vector plus a small,
+     * precise increment. The derivative below is then taken from `local` alone.
+     */
+    const anchorLength = max(length(anchor), float(1))
+    const anchorDirection = anchor.div(anchorLength)
+    const up = normalize(anchorDirection.add(local.div(anchorLength)))
+    const radius = length(anchor.add(local))
+
+    /*
+     * Altitude, without subtracting two planetary radii from each other.
+     *
+     * `length(anchor + local) − datumRadius` is the obvious form and it is
+     * unusable: both terms are 6.4 × 10⁶ on Earth, where one float32 step is
+     * half a metre, so the difference arrives quantized to half a metre — inside
+     * a water band four metres wide. The shoreline came out as a stair, and the
+     * morph walks `local` across those steps every frame as the camera moves,
+     * so the stair *crawled*. Two kilometres above an island chain that is the
+     * coastline visibly warping several times a second.
+     *
+     * The cancellation is avoided rather than tolerated. Since
+     * `|p|² − |a|² = 2(a·l) + l·l` exactly, and `|p| − |a|` is that over
+     * `|p| + |a|`, the large numbers never meet: `a·l` is 6 × 10⁸ against a
+     * `local` of a hundred metres, and the quotient lands within ten microns.
+     * `anchorAltitude` carries the last half-metre — how far the *rounded*
+     * anchor sits off the datum, measured in float64 against the same vector
+     * the uniform holds.
+     */
+    const altitude = dot(anchor, local)
+      .mul(2)
+      .add(dot(local, local))
+      .div(max(radius.add(anchorLength), float(1)))
+      .add(anchorAltitude)
     const relief = saturate(altitude.div(max(maxElevation, float(1))))
 
     const normal = normalize(shadedNormal)
@@ -274,17 +334,33 @@ export function createTerrainMaterial(): TerrainMaterial {
     /* --- the detail field -------------------------------------------------- */
 
     /*
-     * How much ground one pixel covers, in meters.
+     * How much ground one pixel covers, in meters — from the lens and the
+     * distance, **not** from a screen-space derivative.
      *
      * Every octave below fades out once this passes its own wavelength, which
      * is the whole of this material's anti-aliasing: a noise field sampled
      * finer than the pixel grid is white noise that crawls when the camera
-     * moves, and no amount of mip biasing exists to save it because there is no
-     * texture to mip. It doubles as the fix for the one seam the micro octave
-     * has — the patch-local phase jump is only ever visible at a distance where
-     * the octave carrying it has already faded to nothing.
+     * moves, and there is no mip chain to save it because there is no texture.
+     * It doubles as the fix for the one seam the micro octave has — the
+     * patch-local phase jump is only visible at a distance where the octave
+     * carrying it has already faded to nothing.
+     *
+     * `max(length(dFdx(local)), …)` is the obvious way to measure it and it is
+     * wrong in a way that is invisible until you look at flat ground: `local`
+     * is linear across a triangle, so its screen derivative is **constant over
+     * the whole triangle** and steps at every edge. The fade then steps with
+     * it, and at two kilometres up — where the far ground is coarse enough that
+     * one cell covers a hundred pixels — the ground draws as flat-toned
+     * quadrilaterals, each one a mesh cell wearing its own amount of detail.
+     *
+     * The distance to the eye is exact and continuous, the lens's pixel angle
+     * is a uniform, and their product is the same number without the staircase.
+     * Divided by how square-on the surface is, because a grazing pixel covers
+     * far more ground than a head-on one and it is grazing pixels that alias.
      */
-    const footprint = max(length(dFdx(local)), length(dFdy(local)))
+    const view = normalize(eyeLocal.sub(local))
+    const squareOn = max(dot(normal, view).abs(), float(0.08))
+    const footprint = length(eyeLocal.sub(local)).mul(pixelAngle).div(squareOn)
 
     const macroFade = oneMinus(
       smoothstep(float(MACRO_METRES * 0.25), float(MACRO_METRES), footprint),
@@ -316,9 +392,71 @@ export function createTerrainMaterial(): TerrainMaterial {
      * rule for what happens when three weights all say 0.4; a stack of `mix`es
      * says the ice is on top of the sand, which is true.
      */
-    const flat = oneMinus(smoothstep(repose.mul(0.55), repose.mul(1.7), slope))
+    /*
+     * How flat, twice — and both bands are **wide** on purpose.
+     *
+     * Every deposit here is chosen from the mesh's own normal, and the mesh is
+     * a level of detail: two patches covering adjacent ground at different
+     * levels genuinely report different slopes for it, by about the error the
+     * selection refines to. A narrow band turns that difference into a step in
+     * the material, and near-flat ground sits inside the band — measured on
+     * Earth's coastal plain with `level` running from 11° to 23°, the ground
+     * drew as flat-toned quadrilaterals differing by 4%, one per mesh cell.
+     *
+     * Widened to reach the angle of repose itself, the same LOD difference
+     * moves the weight by a fraction of a percent, because near-flat ground is
+     * no longer in the transition at all. It costs nothing: the deposits are
+     * *about* the angle of repose, and 33° is where loose material stops
+     * resting whatever it is made of.
+     *
+     * The real fix is for the deposits to read the canonical field rather than
+     * the mesh, which means more channels on the cover and belongs with the
+     * scatter that will want them.
+     */
+    const flat = oneMinus(smoothstep(repose.mul(0.6), repose.mul(2.2), slope))
     // A dune sea and a playa need flatter ground than a regolith mantle does.
-    const level = oneMinus(smoothstep(repose.mul(0.12), repose.mul(0.5), slope))
+    const level = oneMinus(smoothstep(repose.mul(0.05), repose.mul(1), slope))
+
+    /*
+     * Water is a different material, not a different colour — and it is decided
+     * *before* the deposits, because two of them are nonsense underneath it.
+     *
+     * `groundElevation` clamps the mesh **to** the sea datum, so an ocean is
+     * already flat geometry sitting at a known altitude and the test is one
+     * comparison rather than a mask that has to be generated, streamed and
+     * morphed. The band is two metres, which is a few times the eighth of a
+     * metre float32 resolves an altitude to at planetary scale: narrower and
+     * the shoreline shimmers, wider and it is a beach.
+     *
+     * An ocean is also the flattest and lowest ground on the body, which is the
+     * evaporite's own definition — so without this gate Earth's entire sea
+     * surface came out as salt flat at 2.4 times the reference, and the water
+     * underneath it was a white sheet.
+     */
+    const water = seaEnabled.mul(
+      oneMinus(smoothstep(seaDatum.sub(2), seaDatum.add(2), altitude)),
+    )
+    const dry = oneMinus(water)
+    /*
+     * Low ground, measured from the *shoreline* rather than from the datum.
+     *
+     * A playa is a lake bed that dried, so what makes ground low is how far it
+     * is above the water — and on an ocean world the datum is not the water.
+     * `seaDatum` is zero where there is no sea, which is the same expression.
+     *
+     * The band is narrow because a closed basin floor is a narrow thing. Half a
+     * percent to five percent of the relief budget is 40 to 500 m above the
+     * shoreline on Earth; taken out to a fifth of the budget instead, which was
+     * the first reading of "low", every flat hectare below two and a half
+     * kilometres was a salt flat and the whole planet's lowland went white.
+     */
+    const lowGround = oneMinus(
+      smoothstep(
+        seaDatum.add(maxElevation.mul(0.004)),
+        seaDatum.add(maxElevation.mul(0.05)),
+        altitude,
+      ),
+    )
 
     const mantled = flat
     const flooded = saturate(cover.y).mul(oneMinus(mapped))
@@ -329,13 +467,9 @@ export function createTerrainMaterial(): TerrainMaterial {
      * flanks of Tharsis.
      */
     const blown = saturate(
-      aeolian.mul(level).mul(oneMinus(smoothstep(0.25, 0.7, relief))),
+      aeolian.mul(level).mul(dry).mul(oneMinus(smoothstep(0.25, 0.7, relief))),
     )
-    const dried = saturate(
-      evaporitic
-        .mul(level)
-        .mul(oneMinus(smoothstep(float(0.02), float(0.25), relief))),
-    )
+    const dried = saturate(evaporitic.mul(level).mul(dry).mul(lowGround))
     // Volatiles last, because they condense on top of everything else.
     const frozen = saturate(cover.w)
 
@@ -361,8 +495,17 @@ export function createTerrainMaterial(): TerrainMaterial {
     const invented = oneMinus(mapped)
     // The compositional ramp, as a tint on whatever deposit won.
     const mineral = mix(mineralLow, mineralHigh, mix(float(0.5), cover.z, invented))
-    // Mottling: the detail field spent on reflectance rather than on shape.
-    const mottle = float(1).add(detail.mul(grain))
+    /*
+     * Mottling: the detail field spent on reflectance rather than on shape, and
+     * nothing at all on water.
+     *
+     * The fine octave is patch-local, so its phase jumps at a patch boundary —
+     * invisible against ground that has its own structure, and a grid of
+     * rectangles across a flat sea, which has none. A wave field is not in this
+     * noise and mottling an ocean with rock grain is the one thing that would
+     * make it read as wet concrete.
+     */
+    const mottle = float(1).add(detail.mul(grain).mul(dry))
     // And the one high-contrast feature an airless world has.
     const fresh = mix(float(1), freshGain, saturate(cover.x).mul(invented))
 
@@ -382,16 +525,44 @@ export function createTerrainMaterial(): TerrainMaterial {
      * pole. Wrapping the derivative into half a turn is exact everywhere except
      * a fragment that genuinely spans half the planet.
      */
-    const longitude = atan2(place.z, place.x.negate())
     const mapUv = vec2(
-      longitude.mul(1 / (2 * Math.PI)),
+      atan(up.z, up.x.negate()).mul(1 / (2 * Math.PI)),
       oneMinus(acos(clamp(up.y, -1, 1)).mul(1 / Math.PI)),
     )
-    const rawDx = dFdx(mapUv)
-    const rawDy = dFdy(mapUv)
-    const mapDx = vec2(rawDx.x.sub(round(rawDx.x)), rawDx.y)
-    const mapDy = vec2(rawDy.x.sub(round(rawDy.x)), rawDy.y)
-    const published = mix(vec3(1), sampled(albedoMap, mapUv, mapDx, mapDy), mapped)
+    /*
+     * And its gradients, analytically, from the *tangential* part of a
+     * precise screen-space step.
+     *
+     * `d(up) = (I − up⊗up)·d(local)/|anchor|`, and the two texture axes follow
+     * from differentiating the pair above: longitude gives
+     * `(z·dx − x·dz)/(x² + z²)` and latitude `dy/√(1 − y²)`, sharing the same
+     * denominator because `x² + z² = 1 − y²` on a unit vector.
+     *
+     * The wrap goes away with it. A `dFdx` of a longitude computed from an
+     * `atan` jumps by a whole turn along one meridian, which selects the
+     * coarsest mip and draws a blurred stripe from pole to pole; the analytic
+     * form is continuous there because the *angle* is the thing that wrapped,
+     * not its rate of change.
+     */
+    const horizontal = max(oneMinus(up.y.mul(up.y)), float(1e-8))
+    const uvGradient = (
+      step: ReturnType<typeof dFdx>,
+    ): ReturnType<typeof vec2> => {
+      const along = step.sub(up.mul(dot(step, up))).div(anchorLength)
+      return vec2(
+        up.z
+          .mul(along.x)
+          .sub(up.x.mul(along.z))
+          .div(horizontal)
+          .mul(1 / (2 * Math.PI)),
+        along.y.div(sqrt(horizontal)).mul(1 / Math.PI),
+      )
+    }
+    const published = mix(
+      vec3(1),
+      sampled(albedoMap, mapUv, uvGradient(dFdx(local)), uvGradient(dFdy(local))),
+      mapped,
+    )
 
     /*
      * The ceiling, spent once and here.
@@ -409,19 +580,19 @@ export function createTerrainMaterial(): TerrainMaterial {
     )
 
     /*
-     * Water is a different material, not a different colour.
+     * Not all the way to the deep-ocean colour where there is a map.
      *
-     * `groundElevation` clamps the mesh *to* the sea datum, so an ocean is
-     * already flat geometry sitting at a known altitude — which means the test
-     * is one comparison rather than a mask that has to be generated, streamed
-     * and morphed. The band is two metres because that is a few times the
-     * eighth of a metre float32 resolves an altitude to at planetary scale;
-     * narrower and the shoreline shimmers, wider and it is a beach.
+     * A photograph's "ocean" is mostly bathymetry wearing water's colour, which
+     * is why the open sea has to be replaced — but the banks and the reefs in it
+     * are real turquoise that no depth test here can reproduce. The same 0.65
+     * `render/planet.ts` keeps them with, for the same reason. On a body with no
+     * map there is nothing to keep, and the replacement is total.
      */
-    const water = seaEnabled.mul(
-      oneMinus(smoothstep(seaDatum.sub(2), seaDatum.add(2), altitude)),
+    const surfaceAlbedo = mix(
+      ground,
+      oceanColour,
+      water.mul(mix(float(1), float(0.65), mapped)),
     )
-    const surfaceAlbedo = mix(ground, oceanColour, water)
     // Water is smooth and rock is not; the glint below is what the roughness
     // is actually spent on.
     const surfaceRoughness = mix(roughness, float(0.06), water)
@@ -442,12 +613,27 @@ export function createTerrainMaterial(): TerrainMaterial {
      * flat sea with rock grain is the one thing that would make an ocean read
      * as wet concrete.
      */
-    const height = detail
-      .mul(float(MICRO_RELIEF))
-      .mul(bump)
-      .mul(oneMinus(water))
-    const sigmaX = normalize(dFdx(local))
-    const sigmaY = normalize(dFdy(local))
+    const height = detail.mul(float(MICRO_RELIEF)).mul(bump).mul(dry)
+    /*
+     * The position derivatives are **not** normalized, and that is the one
+     * place this departs from `bumpMap()` in TSL.
+     *
+     * The built-in differences a *texture*, so its `dH` is dimensionless and
+     * normalizing the position derivatives is what makes the result independent
+     * of the texture's scale. Here `height` is in metres, so the two halves have
+     * to be measured against the same ruler: left normalized, `det` is a
+     * per-triangle constant while `dH` grows with the pixel footprint, which
+     * makes the bump strengthen with distance *and* step at every triangle
+     * edge. At two kilometres up, with the far ground coarse enough that one
+     * cell covers a hundred pixels, that draws flat-toned quadrilaterals across
+     * the plain.
+     *
+     * Unnormalized, `det` goes as the footprint squared and so does the
+     * gradient term, so the quotient is scale-free — which is what Mikkelsen's
+     * derivation actually says.
+     */
+    const sigmaX = dFdx(local)
+    const sigmaY = dFdy(local)
     const r1 = cross(sigmaY, normal)
     const r2 = cross(normal, sigmaX)
     const determinant = dot(sigmaX, r1)
@@ -459,7 +645,6 @@ export function createTerrainMaterial(): TerrainMaterial {
     /* --- the light ---------------------------------------------------------- */
 
     const sun = normalize(sunDirection)
-    const view = normalize(eyeLocal.sub(local))
 
     /*
      * The terminator is measured against the *radial*, not the shading normal,
@@ -559,8 +744,10 @@ export function createTerrainMaterial(): TerrainMaterial {
     sunDirection,
     sunColour,
     sunIntensity,
-    bodyRadius,
-    setPalette(palette, meanRadius) {
+    setPixelAngle(radians) {
+      pixelAngle.value = radians
+    },
+    setPalette(palette, datumRadius) {
       write(rock, palette.rock)
       write(regolith, palette.regolith)
       write(basalt, palette.basalt)
@@ -610,8 +797,7 @@ export function createTerrainMaterial(): TerrainMaterial {
        * serve a 236 km moon and a 6,371 km planet: four kilometres of ground is
        * four kilometres of ground on both.
        */
-      macroFrequency.value = (2 * Math.PI * meanRadius) / MACRO_METRES
-      bodyRadius.value = meanRadius
+      macroFrequency.value = (2 * Math.PI * datumRadius) / MACRO_METRES
     },
     setAlbedoMap(map) {
       albedoMap.value = map ?? BLANK

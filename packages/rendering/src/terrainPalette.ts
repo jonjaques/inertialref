@@ -255,6 +255,20 @@ export function terrainPalette(body: Body): TerrainPalette {
    * window is generous at the top because "ever" covers a body's whole history
    * and the generator carries one temperature.
    */
+  /*
+   * How far a deposit's own brightness is allowed to move the ground.
+   *
+   * Full strength where the palette *is* the albedo. Halved where a photograph
+   * is, because the archive already knows which of a body's plains are bright:
+   * Luna's maria are in its map and Mars's dust is in its. Applied at full
+   * strength on top, the two claims multiply — an evaporite at 1.9 over ground
+   * the map has already drawn pale came out as snow across every lowland on
+   * Earth. What the deposits still carry there is their *hue*, their roughness
+   * and their grain, which no map at ten kilometres a texel has an opinion on.
+   */
+  const depositGain = body.appearance.texture === null ? 1 : 0.5
+  const deposit = (ratio: number): number => 1 + (ratio - 1) * depositGain
+
   const liquidEver =
     air > 0 && grammar.groundTemperature < 450
       ? Math.min(1, air * 1.5) * (sea === null ? 0.35 : 1)
@@ -271,25 +285,25 @@ export function terrainPalette(body: Body): TerrainPalette {
      * does here.
      */
     rock: {
-      albedo: scale(base, 1.18, 0.94),
+      albedo: scale(base, deposit(1.18), 0.94),
       roughness: 0.95,
       grain: 0.3,
       bump: 1,
     },
     regolith: {
-      albedo: scale(base, 1, 1),
+      albedo: scale(base, deposit(1), 1),
       roughness: 1,
       grain: 0.18,
       bump: 0.55,
     },
     basalt: {
-      albedo: scale(base, BASALT_RATIO, 0.86),
+      albedo: scale(base, deposit(BASALT_RATIO), 0.86),
       roughness: 0.95,
       grain: 0.12,
       bump: 0.4,
     },
     sand: {
-      albedo: scale(base, 1.22, 1.12),
+      albedo: scale(base, deposit(1.22), 1.12),
       roughness: 0.9,
       grain: 0.1,
       // Ripples and slip faces: fines carry more relief per meter than the rock
@@ -297,7 +311,7 @@ export function terrainPalette(body: Body): TerrainPalette {
       bump: 0.75,
     },
     evaporite: {
-      albedo: scale(base, 2.4, 0.45),
+      albedo: scale(base, deposit(1.9), 0.45),
       roughness: 0.72,
       grain: 0.08,
       bump: 0.15,
@@ -311,7 +325,7 @@ export function terrainPalette(body: Body): TerrainPalette {
      */
     ice: {
       albedo: mixToward(
-        scale(base, 1.6, 0.7),
+        scale(base, deposit(1.6), 0.7),
         { r: 0.74, g: 0.79, b: 0.86 },
         0.78 - 0.2 * air,
       ),

@@ -359,8 +359,27 @@ export interface TerrainState {
   readonly orientation: Q.Quat | null
   /** The body's centre in render space, for the direction of its star. */
   readonly centre: Vec3 | null
-  /** `(a·b·c)^(1/3)` of the body, meters. */
-  readonly meanRadius: Meters
+  /**
+   * The radius the patches were **built** on, meters.
+   *
+   * `body.radius`, which is the equatorial one, because that is what `#build`
+   * hands `buildPatch` and therefore what every vertex is measured from. Not
+   * the mean radius, and the difference is not academic: on Earth they are 7 km
+   * apart, which is twenty times the ocean datum. Read against the mean, an
+   * altitude of "at sea level" came out at 7,356 m — so no water was ever
+   * detected, and the highland, dune and evaporite gates were all reading a
+   * relief fraction of 0.74 on ground at the shoreline.
+   */
+  readonly datumRadius: Meters
+  /**
+   * The optics the selection was made against, or null when nothing streams.
+   *
+   * The material composes through the same lens the predicate refined against,
+   * which is what keeps the detail fading out exactly where the mesh carrying
+   * it stops being refined — and what makes a zoom move both together instead
+   * of leaving one behind.
+   */
+  readonly lens: LensView | null
 }
 
 export class TerrainStreamer {
@@ -391,7 +410,7 @@ export class TerrainStreamer {
     eye: Vec3
   } | null = null
   #palette: TerrainPalette | null = null
-  #meanRadius = 1
+  #datumRadius = 1
   /**
    * Last eye in body-fixed axes, for the velocity the request set is
    * extrapolated along.
@@ -534,7 +553,8 @@ export class TerrainStreamer {
       palette: this.#palette,
       orientation: pose?.orientation ?? null,
       centre: pose?.position ?? null,
-      meanRadius: this.#meanRadius,
+      datumRadius: this.#datumRadius,
+      lens: this.#lensView,
     }
   }
 
@@ -607,7 +627,7 @@ export class TerrainStreamer {
       eye: eyeLocal,
     }
     this.#palette = terrainPalette(surface)
-    this.#meanRadius = surface.surface.grammar.meanRadius
+    this.#datumRadius = surface.radius
 
     const { lens, viewport } = this.lensView ?? DEFAULT_LENS_VIEW
     this.#lensView = this.lensView ?? DEFAULT_LENS_VIEW

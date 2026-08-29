@@ -12,7 +12,7 @@ import {
 } from 'three/webgpu'
 import { Quaternion as Q, Vec } from '@inertialref/spatial'
 import { HEIGHTFIELD_RESOLUTION } from '@inertialref/universe'
-import { patchIndices } from '@inertialref/rendering'
+import { patchIndices, pixelAngle } from '@inertialref/rendering'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { GEOMETRY_CACHE } from '../engine/terrainStreamer.ts'
 import { texturesFor } from '../render/planetTextures.ts'
@@ -126,6 +126,7 @@ export function TerrainPatches({ engine }: { engine: GameEngine }) {
       height: gl.domElement.height,
     }
     const state = engine.terrainState()
+    const datumRadius = state.datumRadius
     /*
      * The body's own appearance, and the star that lights it.
      *
@@ -136,7 +137,22 @@ export function TerrainPatches({ engine }: { engine: GameEngine }) {
      * world space per fragment to meet a world-space sun.
      */
     if (state.palette !== null && state.orientation !== null) {
-      terrain.setPalette(state.palette, state.meanRadius)
+      terrain.setPalette(state.palette, state.datumRadius)
+      /*
+       * The pixel angle of the **drawing buffer**, not of the display.
+       *
+       * The selection deliberately measures in display pixels: a two-times
+       * display wants twice the patches for the same picture and a two-times
+       * supersample does not. Anti-aliasing is the opposite question — what
+       * matters is the grid the samples actually land on — so the lens's own
+       * angle is scaled back up by however much the buffer is supersampled.
+       */
+      if (state.lens !== null) {
+        const display = pixelAngle(state.lens.lens, state.lens.viewport)
+        const supersample =
+          state.lens.viewport.height / Math.max(1, gl.domElement.height)
+        terrain.setPixelAngle(display * supersample)
+      }
       /*
        * The same texture set `Bodies.tsx` draws the sphere from, looked up by
        * the same key. Not passed down from there, because the two components
@@ -236,13 +252,21 @@ export function TerrainPatches({ engine }: { engine: GameEngine }) {
         mesh = new Mesh(geometry, material)
         mesh.userData.eyeLocal = new Vector3()
         mesh.userData.morphBand = new Vector2()
-        // Body-fixed and constant for the life of the patch, which is what
-        // turns an anchor-relative vertex back into a place on the planet.
-        mesh.userData.anchor = new Vector3(
-          patch.anchor.x,
-          patch.anchor.y,
-          patch.anchor.z,
-        )
+        /*
+         * Body-fixed and constant for the life of the patch, which is what
+         * turns an anchor-relative vertex back into a place on the planet.
+         *
+         * `Math.fround` is not decoration: the uniform is float32, and the
+         * material's altitude arithmetic is exact only if the offset beside it
+         * describes the vector the shader actually gets rather than the float64
+         * one this array was built from. Half a metre at Earth's radius, which
+         * is a quarter of the water band.
+         */
+        const ax = Math.fround(patch.anchor.x)
+        const ay = Math.fround(patch.anchor.y)
+        const az = Math.fround(patch.anchor.z)
+        mesh.userData.anchor = new Vector3(ax, ay, az)
+        mesh.userData.anchorAltitude = Math.hypot(ax, ay, az) - datumRadius
         mesh.userData.patch = patch
         meshes.set(key, mesh)
       }
