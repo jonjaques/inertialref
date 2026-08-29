@@ -1,11 +1,5 @@
 import type { Meters } from '@inertialref/shared'
-import {
-  falloff,
-  pcg4d,
-  ring,
-  smoothstep,
-  toUnit,
-} from '@inertialref/procedural'
+import * as procedural from '@inertialref/procedural'
 import type { Vec3 } from '@inertialref/spatial'
 import { craterDepth, type SurfaceGrammar } from './grammar.ts'
 import type { CraterLevel, TerrainSketch } from './sketch.ts'
@@ -33,14 +27,34 @@ import type { CraterLevel, TerrainSketch } from './sketch.ts'
  * edge, by construction rather than by arithmetic.
  *
  * The cost of that is a 3×3×3 neighborhood instead of 3×3. Most of those
- * twenty-seven cells do not touch the unit sphere at all, and the shell test
- * that rejects them is three multiplies and a compare — an order of magnitude
- * cheaper than the hash it avoids.
+ * twenty-seven cells do not touch the unit sphere at all, and the box-sphere
+ * test that rejects them is squared distances and two compares — an order of
+ * magnitude cheaper than the hash it avoids.
  *
  * Rays are not here. A young crater's rays are an *albedo* field, not a height
  * one, which is how Tycho actually reads from orbit; they belong to the
  * material in the phase after this.
  */
+
+/*
+ * The imported primitives, bound to module-local names once.
+ *
+ * A `import { toUnit }` and a `toUnit(…)` are the same thing everywhere this
+ * code actually runs. Under **vitest** they are not: Vite's SSR transform
+ * rewrites every reference to an imported binding into a property read on a
+ * module-namespace object, and this loop reads four of them per crater cell
+ * over a million cells a patch. Measured, that is 98 ms a patch under the test
+ * runner against 20 under Node's own loader — and it is what made the four
+ * tests that stream a whole landing take two minutes each.
+ *
+ * Binding them here pays the property read once per module rather than once per
+ * call, and it is a rename rather than a copy: the functions, the formulas and
+ * the docstrings all still live in `packages/procedural`. It is worth the two
+ * lines *only here*. The same change to `bands.ts`, which calls the same
+ * primitives ten times per sample rather than a million times per patch, moved
+ * the measurement by 0.7 ms and was reverted.
+ */
+const { falloff, pcg4d, ring, smoothstep, toUnit } = procedural
 
 /** How far past its own rim a crater's ejecta reaches, in crater radii. */
 const EJECTA_REACH = 2.6
@@ -314,7 +328,3 @@ export const craterCountAbove = (
   }
   return total
 }
-
-/** Whether a body's grammar puts any craters on it at all. */
-export const hasCraters = (grammar: SurfaceGrammar): boolean =>
-  grammar.craterDensity > 0 && grammar.largestCrater > 0

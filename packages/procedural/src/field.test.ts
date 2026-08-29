@@ -1,9 +1,9 @@
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { fbmField, gradientNoise3, ridgedField, warpOffset } from './field.ts'
-import { latticeSeed, pcg3d, pcg4d, toSigned, toUnit } from './lattice.ts'
-import { falloff, gain, ring, smoothstep } from './profile.ts'
-import { deriveSeed, rootSeed } from './seed.ts'
+import { fbmField, gradientNoise3, ridgedField } from './field.ts'
+import { latticeSeed, pcg3d, pcg4d, toUnit } from './lattice.ts'
+import { falloff, ring, smoothstep } from './profile.ts'
+import { rootSeed } from './seed.ts'
 
 const ROOT = rootSeed('inertialref')
 
@@ -87,8 +87,6 @@ describe('the lattice hash', () => {
   it('converts to floats in range', () => {
     expect(toUnit(0)).toBe(0)
     expect(toUnit(0xffff_ffff)).toBeLessThan(1)
-    expect(toSigned(0)).toBe(-1)
-    expect(toSigned(0x8000_0000)).toBe(0)
   })
 })
 
@@ -221,28 +219,6 @@ describe('analytic-derivative noise', () => {
     }
     expect(damped).toBeLessThan(plain)
   })
-
-  it('warps along three independent lanes', () => {
-    // A warp whose lanes correlate drags every feature along one diagonal, which
-    // is the classic domain-warp artifact and is invisible in a unit test that
-    // only checks the range.
-    const seeds = [
-      deriveSeed(ROOT, 'wx'),
-      deriveSeed(ROOT, 'wy'),
-      deriveSeed(ROOT, 'wz'),
-    ] as const
-    let sameSign = 0
-    for (let i = 0; i < 200; i += 1) {
-      const w = warpOffset(seeds[0], seeds[1], seeds[2], i * 0.11, 0.3, -0.7)
-      if (
-        Math.sign(w.x) === Math.sign(w.y) &&
-        Math.sign(w.y) === Math.sign(w.z)
-      )
-        sameSign += 1
-    }
-    // A quarter of the time by chance; anything near 200 is one field copied.
-    expect(sameSign).toBeLessThan(100)
-  })
 })
 
 describe('profile primitives', () => {
@@ -261,9 +237,6 @@ describe('profile primitives', () => {
     expect(ring(0.3, 0.3)).toBeCloseTo(1, 12)
     expect(smoothstep(0, 1, 0)).toBe(0)
     expect(smoothstep(0, 1, 1)).toBe(1)
-    expect(gain(0.5, 3)).toBeCloseTo(0.5, 12)
-    expect(gain(0, 3)).toBe(0)
-    expect(gain(1, 3)).toBe(1)
   })
 
   it('are monotonic where they claim to be', () => {
@@ -274,7 +247,6 @@ describe('profile primitives', () => {
         (a, b) => {
           const [lo, hi] = a < b ? [a, b] : [b, a]
           expect(smoothstep(0, 1, lo)).toBeLessThanOrEqual(smoothstep(0, 1, hi))
-          expect(gain(lo, 2.5)).toBeLessThanOrEqual(gain(hi, 2.5))
           expect(falloff(lo)).toBeGreaterThanOrEqual(falloff(hi))
         },
       ),

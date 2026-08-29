@@ -28,13 +28,6 @@ export function smoothstep(edge0: number, edge1: number, x: number): number {
   return t * t * (3 - 2 * t)
 }
 
-/** Quintic step, C2 at both ends — the fade curve, exposed as a profile. */
-export function smootherstep(edge0: number, edge1: number, x: number): number {
-  if (edge0 === edge1) return x < edge0 ? 0 : 1
-  const t = clamp01((x - edge0) / (edge1 - edge0))
-  return t * t * t * (t * (t * 6 - 15) + 10)
-}
-
 /**
  * A radial falloff: 1 at the center, 0 at `t = 1`, flat at both.
  *
@@ -59,16 +52,4 @@ export function falloff(t: number): number {
 export function ring(t: number, peak: number): number {
   if (t <= 0 || t >= 1) return 0
   return t < peak ? smoothstep(0, peak, t) : 1 - smoothstep(peak, 1, t)
-}
-
-/**
- * Perlin's bias/gain, in the form that keeps 0.5 fixed.
- *
- * `k > 1` pushes values toward the ends, which is how a crater floor is made
- * flat and a plate boundary made sharp without touching the field that feeds
- * them.
- */
-export function gain(t: number, k: number): number {
-  const x = clamp01(t)
-  return x < 0.5 ? 0.5 * (2 * x) ** k : 1 - 0.5 * (2 - 2 * x) ** k
 }

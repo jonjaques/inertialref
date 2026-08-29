@@ -30,12 +30,11 @@ import { GameEngine } from './GameEngine.ts'
 /**
  * How long the four terrain-streaming tests below are given, milliseconds.
  *
- * Two minutes, against the suite's twenty seconds, and against the twenty these
- * tests took when the ground was three bands of noise. Each of them generates a
- * landing's worth of terrain — about six hundred bordered 65×65 patches at
- * 20 ms apiece — through an **inline** worker, which is to say on this thread.
- * In a browser that is a pool of six and a four-second sharpen; here it is
- * serial, and vitest's transform costs another factor of three on top of that.
+ * Two minutes against the suite's twenty seconds, and they run in forty-five to
+ * seventy. Each generates a landing's worth of terrain — about six hundred
+ * bordered 65×65 patches at 20 ms apiece — through an **inline** worker, which
+ * is to say serially on this thread. In a browser that is a pool of six and a
+ * four-second sharpen.
  *
  * It is a timeout rather than a target: what it guards against is a hang. The
  * thing that would bring it back down is the GPU tile producer
@@ -480,7 +479,31 @@ describe('the game engine, headless', () => {
           await new Promise((resolve) => setTimeout(resolve, 2))
         }
       }
-      await settle(150)
+
+      /*
+       * Settle until the drawn set stops growing, rather than for a fixed count
+       * of frames.
+       *
+       * A fixed count is a number that goes stale every time the field gets
+       * deeper, and this one did: 150 frames placed a whole disk when a disk was
+       * 450 patches, and with the band stack it is 600 and the meshes are built
+       * a handful a frame — so the window below opened while the count was still
+       * climbing, and "it must not shrink" failed against its own warm-up. What
+       * the assertion needs is *converged*, so that is what is waited for.
+       *
+       * Twenty still frames is convergence and six hundred is the cap. If the
+       * oscillation this guards against came back the count would never settle,
+       * the cap would run out, and the window would then see the collapse — so
+       * the loop cannot hide the defect by failing to finish.
+       */
+      let previous = -1
+      let steady = 0
+      for (let i = 0; i < 600 && steady < 20; i += 1) {
+        await settle(1)
+        const placed = game.terrain()?.patches ?? 0
+        steady = placed <= previous ? steady + 1 : 0
+        previous = placed
+      }
 
       const drawn: number[] = []
       for (let i = 0; i < 60; i += 1) {

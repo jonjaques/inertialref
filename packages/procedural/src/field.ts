@@ -335,34 +335,3 @@ export function ridgedField(
     dz: (dz / norm) * 2,
   }
 }
-
-/**
- * A vector-valued offset for domain warping, in the input's own units.
- *
- * Three decorrelated fBm fields — decorrelated by seed rather than by the usual
- * large integer offsets, because an offset that is not large enough correlates
- * the lanes and warps everything along one diagonal. Cheaper here than the
- * usual "evaluate the same noise at three shifted points", and exactly as
- * deterministic.
- */
-export interface Warp {
-  readonly x: number
-  readonly y: number
-  readonly z: number
-}
-
-export function warpOffset(
-  seedX: Seed,
-  seedY: Seed,
-  seedZ: Seed,
-  x: number,
-  y: number,
-  z: number,
-  options: Partial<FieldOptions> = {},
-): Warp {
-  return {
-    x: fbmField(seedX, x, y, z, options).value,
-    y: fbmField(seedY, x, y, z, options).value,
-    z: fbmField(seedZ, x, y, z, options).value,
-  }
-}

@@ -219,6 +219,16 @@ no lander has taken a sample.
 **A save written before this points at different ground.** That is what the
 version bump is for, and doing it once is why the geology is one phase.
 
+**One file imports its primitives through a namespace, and the comment says
+why.** Vite's SSR transform — which is what `vitest` runs, and what nothing else
+in this project does — rewrites every reference to an imported binding into a
+property read on a module-namespace object. `craters.ts` reads four of them per
+crater cell over a million cells a patch, which put a patch at 98 ms under the
+test runner against 20 under Node's own loader. Destructuring the namespace once
+brought it to 25. It is a rename rather than a copy, it is worth it in exactly
+that one file, and it is recorded because the obvious reading of it is that
+somebody was avoiding an import.
+
 ## Related
 
 - [ADR-0005](0005-procedural-seeds.md) — the seed regime this is a pure function of

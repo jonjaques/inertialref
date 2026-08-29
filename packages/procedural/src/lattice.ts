@@ -105,6 +105,3 @@ export function latticeSeed(seed: Seed): number {
 
 /** A uint32 as a float in [0, 1). */
 export const toUnit = (value: number): number => (value >>> 0) / 0x1_0000_0000
-
-/** A uint32 as a float in [-1, 1). */
-export const toSigned = (value: number): number => toUnit(value) * 2 - 1

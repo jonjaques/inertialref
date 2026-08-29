@@ -5161,6 +5161,17 @@ Phase 4 synthesizes per pixel rather than meshes.
   else into the top third, so that statistic reads the one-plate world as *more*
   bimodal than Earth. Sarle's coefficient — `(skew² + 1) / kurtosis`, above 5/9
   for two modes — puts Earth at 0.76 and the four stagnant lids at 0.36–0.40.
+- **An imported one-liner costs thirty-five nanoseconds a call under vitest and
+  one under Node.** Vite's SSR transform rewrites every reference to an imported
+  binding into a property read on a module-namespace object. The crater loop
+  reads four of them per cell over a million cells a patch, which put a patch at
+  **98 ms** under the test runner against 20 under Node's own loader — and it is
+  what made the four tests that stream a whole landing take two minutes each.
+  Destructuring the namespace into module-local consts once, in `craters.ts`
+  alone, brought it to 25 ms. It is a rename rather than a copy, and the same
+  change to `bands.ts` — which calls the same primitives ten times per sample
+  rather than a million times per patch — moved the number by 0.7 ms and was
+  reverted. The lesson is about where to measure: the harness is not the build.
 - **A ridge-fold derivative property tested nothing under `fc.double`.** Doubles
   bias toward whole numbers, Perlin noise is identically zero at every lattice
   point, and that is exactly where `1 − |n|` has its kink — so the skip that

@@ -8,7 +8,7 @@ import {
   type Seed,
 } from '@inertialref/procedural'
 import { Vec, type Vec3, vec3 } from '@inertialref/spatial'
-import { craterDepth, type SurfaceGrammar } from './grammar.ts'
+import type { SurfaceGrammar } from './grammar.ts'
 import type { SurfaceParameters } from './system.ts'
 
 /*
@@ -429,15 +429,3 @@ export function terrainSketch(surface: SurfaceParameters): TerrainSketch {
   CACHE.set(key, sketch)
   return sketch
 }
-
-/** The depth of the deepest crater this sketch can place, meters. */
-export const sketchCraterDepth = (
-  sketch: TerrainSketch,
-  grammar: SurfaceGrammar,
-): Meters =>
-  sketch.craterLevels.length === 0
-    ? 0
-    : craterDepth(
-        (sketch.craterLevels[0] as CraterLevel).diameter,
-        grammar.complexDiameter,
-      )
