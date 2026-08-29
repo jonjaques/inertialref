@@ -12,7 +12,8 @@ import {
 } from '../state/preferences.ts'
 import { CatalogueRow } from './CatalogueRow.tsx'
 import { NeighbourhoodRail } from './NeighbourhoodRail.tsx'
-import type { PlanetariumContext } from './context.ts'
+import type { GameEngine } from '../engine/GameEngine.ts'
+import { TargetActions } from '../hud/TargetActions.tsx'
 import {
   groupBySystem,
   indentOf,
@@ -65,8 +66,36 @@ const MAX_SYSTEMS = 200
 /** One allocation for every collapsed group, rather than one per group. */
 const NOTHING_VISIBLE: ReadonlySet<string> = new Set()
 
-export function CataloguePanel({ engine, target, focus }: PlanetariumContext) {
+export function CataloguePanel({
+  engine,
+  target,
+  focus,
+  onNotice,
+  verbs = 'look',
+}: {
+  readonly engine: GameEngine
+  /** The address the mode considers current, drawn as selected. */
+  readonly target: string | null
+  /** What a row does in `look` mode: move the camera, and write the URL. */
+  readonly focus: (address: string) => void
+  readonly onNotice: (message: string) => void
+  /**
+   * What a row offers, which depends on the mode rather than on the panel.
+   *
+   * In the planetarium a row *looks*: the observatory holds the camera, so
+   * "go to" would teleport a ship nobody can see and the panel would appear to
+   * do nothing — which is exactly what the deleted Navigate panel did there.
+   * In flight a row offers Orbit and Land, with Face and Burn beside them,
+   * because they are the only way to point a hull at a thing.
+   *
+   * One navigator, two verbs. The alternative — a smaller author's Travel panel
+   * — keeps two navigators, which is the ambiguity this replaces.
+   */
+  readonly verbs?: 'look' | 'travel'
+}) {
   const [query, setQuery] = useState('')
+  /** The row a travelling reader has picked, and whose verbs are showing. */
+  const [selected, setSelected] = useState<string | null>(null)
   const [radius, setRadius] = usePersistentState(CATALOGUE_RADIUS)
   const [classes, setClasses] = usePersistentState(CATALOGUE_CLASSES)
   const [filtering, setFiltering] = usePersistentState(CATALOGUE_FILTERING)
@@ -123,7 +152,21 @@ export function CataloguePanel({ engine, target, focus }: PlanetariumContext) {
    * this ("a search reaches the whole catalog whatever this says"); the code
    * now agrees with it.
    */
+  /**
+   * What pressing a row does, which is the mode's answer rather than this
+   * panel's. Looking moves a camera; travelling picks a destination and offers
+   * the verbs that reach it.
+   */
+  const act = (address: string): void => {
+    if (verbs === 'look') {
+      focus(address)
+      return
+    }
+    setSelected(address)
+  }
+
   const groups = groupBySystem(rows, searching ? ALL_CLASSES : classes)
+  const chosen = rows.find((row) => row.address === selected) ?? null
   const near = neighbours(rows, lightYears)
   /*
    * What the filter took, counted against the survey rather than against what
@@ -346,7 +389,7 @@ export function CataloguePanel({ engine, target, focus }: PlanetariumContext) {
           stars={near}
           radiusLightYears={lightYears}
           target={home}
-          onFocus={focus}
+          onFocus={act}
         />
       )}
 
@@ -360,7 +403,10 @@ export function CataloguePanel({ engine, target, focus }: PlanetariumContext) {
               <ul className="flex flex-col">
                 <CatalogueRow
                   row={group.system}
-                  selected={group.system.address === target}
+                  selected={
+                    group.system.address ===
+                    (verbs === 'travel' ? selected : target)
+                  }
                   indent={0}
                   measure={measureOf(group.system)}
                   {...(group.bodies.length > 0
@@ -378,17 +424,20 @@ export function CataloguePanel({ engine, target, focus }: PlanetariumContext) {
                           }),
                       }
                     : {})}
-                  onFocus={() => focus(group.system.address)}
+                  onFocus={() => act(group.system.address)}
                 />
                 {open &&
                   group.bodies.map((body) => (
                     <CatalogueRow
                       key={body.address}
                       row={body}
-                      selected={body.address === target}
+                      selected={
+                        body.address ===
+                        (verbs === 'travel' ? selected : target)
+                      }
                       indent={indentOf(body, visible)}
                       measure={measureOf(body)}
-                      onFocus={() => focus(body.address)}
+                      onFocus={() => act(body.address)}
                     />
                   ))}
                 {!open && group.bodies.length > 0 && (
@@ -422,6 +471,48 @@ export function CataloguePanel({ engine, target, focus }: PlanetariumContext) {
           </li>
         )}
       </ul>
+
+      {/*
+       * The verbs, under the list, for the mode that has any.
+       *
+       * A fixed slot rather than a row that appears and disappears: the list
+       * above scrolls, and a bar that grew into existence on the first click
+       * would shift every row under the pointer at the moment somebody was
+       * aiming at one.
+       */}
+      {verbs === 'travel' && (
+        <div className="min-h-[2.75rem] shrink-0 rounded border border-slate-800/80 bg-slate-900/40 px-2 py-1">
+          {chosen === null ? (
+            <span className="type-ui text-slate-400">pick somewhere to go</span>
+          ) : (
+            <>
+              <div
+                className="truncate text-slate-300"
+                title={`${chosen.name} · ${chosen.address}`}
+              >
+                {chosen.name}{' '}
+                <span className="text-slate-400">{chosen.address}</span>
+              </div>
+              <div className="mt-1 flex flex-wrap gap-1">
+                <TargetActions
+                  engine={engine}
+                  target={chosen}
+                  run={(label, action) => {
+                    try {
+                      action()
+                      onNotice(label)
+                    } catch (cause) {
+                      onNotice(
+                        cause instanceof Error ? cause.message : String(cause),
+                      )
+                    }
+                  }}
+                />
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* One line, and it only appears when it has something to say: how much
           of the survey is on screen, and how much the chips are holding back.

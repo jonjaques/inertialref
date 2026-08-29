@@ -1,6 +1,7 @@
 import { Link, useParams } from 'react-router'
 import { Camera, Keyboard, MonitorCog, type LucideIcon } from 'lucide-react'
-import { CameraPanel } from '../hud/CameraPanel.tsx'
+import { LensSection } from '../hud/LensSection.tsx'
+import { OpticsSection } from '../hud/OpticsSection.tsx'
 import type {
   CameraState,
   GraphicsState,
@@ -99,7 +100,18 @@ export function SettingsPage({
       {active === 'display' && (
         <GraphicsPanel graphics={graphics} render={render} />
       )}
-      {active === 'camera' && <CameraPanel camera={camera} />}
+      {active === 'camera' && (
+        <>
+          {/* The same two components the planetarium's Camera panel draws.
+                The lens is a persisted preference, and a second set of sliders
+                for one preference is how a build ends up with two that
+                disagree. What is absent here is the aim and the pose: those are
+                about a camera that is running, and this dialog opens over the
+                menu as readily as over a mode. */}
+          <LensSection camera={camera} />
+          <OpticsSection camera={camera} />
+        </>
+      )}
       {active === 'controls' && <ControlsSection />}
     </OverlayPage>
   )

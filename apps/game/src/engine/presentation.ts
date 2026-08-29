@@ -90,6 +90,20 @@ export interface Stance {
    * lifetime*, not on the camera — see the guardrail above.
    */
   readonly observatory?: boolean
+  /**
+   * Whether the interface is in the frame at all.
+   *
+   * A presentation switch like the rest, and it is here rather than in React
+   * state for the reason the others are: `Shift+H` is a viewer's override on
+   * top of a mode's stance, `ir.chrome(false)` is a script's, and a plate is
+   * defined as the frame taken with it false. A boolean in `App` could be
+   * reached by the first of those and by neither of the others.
+   *
+   * What it clears is chrome — panes, menu, reticle, flight strip, notices. The
+   * sky labels are content and stay, which is why this is not the gate a
+   * cutscene uses: that one unmounts the mode outright.
+   */
+  readonly chrome?: boolean
 }
 
 /** What is actually drawn, once every layer has had its say. */
@@ -99,6 +113,7 @@ export interface Presentation {
   readonly orbitScope: OrbitScope
   readonly flareArtifacts: number
   readonly observatory: boolean
+  readonly chrome: boolean
 }
 
 /** The stance with nothing pushed: a flight camera on a visible ship. */
@@ -108,6 +123,7 @@ export const GROUND_STANCE: Presentation = {
   orbitScope: 'context',
   flareArtifacts: 1,
   observatory: false,
+  chrome: true,
 }
 
 /** A pushed layer, until it is released. */
@@ -143,6 +159,7 @@ export function resolveStances(layers: readonly Stance[]): Presentation {
       orbitScope: layer.orbitScope ?? resolved.orbitScope,
       flareArtifacts: layer.flareArtifacts ?? resolved.flareArtifacts,
       observatory: layer.observatory ?? resolved.observatory,
+      chrome: layer.chrome ?? resolved.chrome,
     }
   }
   return resolved
@@ -169,7 +186,8 @@ export function createPresentationStack(
       next.showOrbits === last.showOrbits &&
       next.orbitScope === last.orbitScope &&
       next.flareArtifacts === last.flareArtifacts &&
-      next.observatory === last.observatory
+      next.observatory === last.observatory &&
+      next.chrome === last.chrome
     ) {
       return
     }

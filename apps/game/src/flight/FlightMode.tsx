@@ -10,6 +10,7 @@ import { FlightStrip } from '../hud/FlightStrip.tsx'
 import { useFlightContext } from '../hud/useShipControls.ts'
 import { DeferredMultiplayer } from './DeferredMultiplayer.tsx'
 import { NotConnected } from './NotConnected.tsx'
+import { flightPanels } from './panels.tsx'
 
 /*
  * Flying.
@@ -29,16 +30,17 @@ const KNOWN = ['solo', 'online', 'multiplayer'] as const
 type PlayMode = (typeof KNOWN)[number]
 
 /** Flight contributes no panels of its own. Named, so the array is stable. */
-const NO_PANELS = [] as const
 
 export function FlightMode({
   engine,
   status,
   dev,
+  onNotice,
 }: {
   engine: GameEngine
   status: HarnessStatus | null
   dev: DevWorkspace
+  onNotice: (message: string) => void
 }) {
   const { mode } = useParams<{ mode?: string }>()
   const play: PlayMode = (KNOWN as readonly string[]).includes(mode ?? '')
@@ -96,12 +98,24 @@ export function FlightMode({
 
       {play === 'online' && <NotConnected />}
 
-      {/* No panels of its own — the cockpit `docs/design/ux.md` specifies is
-          unbuilt, and the flight strip above is the whole of what exists. What
-          this gets is the workspace itself, so the author's instruments are
-          reachable here in exactly the arrangement and by exactly the gestures
-          they are reachable in everywhere else. */}
-      <Workspace id="flight" title="Flight" panels={NO_PANELS} dev={dev} />
+      {/*
+       * One panel of its own, and it is the one the deleted Navigate panel was
+       * standing in for.
+       *
+       * The cockpit `docs/design/ux.md` specifies is unbuilt and the flight
+       * strip above is the whole of what exists — but *going somewhere* is not
+       * scaffolding, and until now the only way to do it in flight was a panel
+       * behind the author's disclosure. The Catalog is the product's one
+       * navigator, so it is here with the verbs a hull has: Orbit and Land,
+       * with Face and Burn beside them, because they are the only way to point
+       * a ship at a thing.
+       */}
+      <Workspace
+        id="flight"
+        title="Flight"
+        panels={flightPanels(engine, onNotice)}
+        dev={dev}
+      />
     </>
   )
 }

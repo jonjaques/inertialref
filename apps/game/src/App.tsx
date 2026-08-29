@@ -179,10 +179,12 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    * Every piece of interface out of the frame — `Shift+H`, and the state a
    * plate is captured in.
    *
-   * Deliberately not persisted and deliberately not the cutscene's gate. See
-   * `hud/chrome.ts`.
+   * A presentation stance rather than React state, so `ir.chrome(false)` and a
+   * capture script reach the same switch a viewer does. Deliberately not
+   * persisted, and deliberately not the cutscene's gate: that one unmounts the
+   * mode, which would take the sky labels with it. See `hud/chrome.ts`.
    */
-  const [chromeHidden, setChromeHidden] = useState(false)
+  const chromeHidden = !useEngine((snapshot) => snapshot.presentation.chrome)
   /*
    * The three-state HDR override.
    *
@@ -508,7 +510,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
   })
   useAction('time.normal', commands.realTime)
   useAction('chrome.instruments', () => setDebug(!debug))
-  useAction('chrome.all', () => setChromeHidden((hidden) => !hidden))
+  useAction('chrome.all', () => engine.setChrome(chromeHidden))
 
   return (
     /*
@@ -683,6 +685,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
                   status={status}
                   camera={cameraState}
                   dev={dev}
+                  onNotice={flash}
                 />
               </ErrorBoundary>
             </div>

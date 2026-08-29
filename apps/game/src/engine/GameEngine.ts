@@ -67,6 +67,7 @@ import {
 } from '../cinema/session.ts'
 import {
   createPresentationStack,
+  type StanceHandle,
   type OrbitScope,
   type PresentationStack,
 } from './presentation.ts'
@@ -388,6 +389,15 @@ export class GameEngine implements PresentationHost {
    */
   flareArtifacts = 1
 
+  /**
+   * Whether the interface is in the frame.
+   *
+   * A plain field written by the presentation stack beside `showShip`, so the
+   * sampler publishes it and every piece of chrome reads one answer. `Shift+H`,
+   * `ir.chrome(false)` and a capture script all reach it through `setChrome`.
+   */
+  chrome = true
+
   /*
    * The host's renderer, once it has one. `null` under Node, and for as long as
    * the capability probe is still running.
@@ -511,6 +521,10 @@ export class GameEngine implements PresentationHost {
         terrain: () => this.terrain(),
         lensView: () => this.lensView(),
         framingLens: () => this.framingLens(),
+        setFlightLens: (lens) => {
+          this.flightLens = lens
+        },
+        setChrome: (visible) => this.setChrome(visible),
         onWorldReplaced: () => this.#invalidateDerived(),
       },
     })
@@ -532,6 +546,7 @@ export class GameEngine implements PresentationHost {
       this.showOrbits = stance.showOrbits
       this.orbitScope = stance.orbitScope
       this.flareArtifacts = stance.flareArtifacts
+      this.chrome = stance.chrome
       // The observatory's *lifetime*, not the camera: a layer that was holding
       // a target releases it on the way out, and the camera falls back to the
       // ship through the precedence in `#step` exactly as it always did.
@@ -545,6 +560,32 @@ export class GameEngine implements PresentationHost {
   /** Live read, never a captured reference — loading a save replaces it. */
   get world(): World {
     return this.session.world
+  }
+
+  /**
+   * The layer that holds the interface out of the frame, while there is one.
+   *
+   * A push rather than a field, because clearing the chrome is a viewer's
+   * override on top of whatever the mode asked for — the same shape as the
+   * ship toggle — and `release()` means "whatever was underneath" rather than
+   * a literal `true` that a later mode might not have wanted.
+   */
+  #chromeStance: StanceHandle | null = null
+
+  /**
+   * Put the interface in or out of the frame.
+   *
+   * Here rather than in React state so that `Shift+H`, `ir.chrome(false)` and
+   * a plate script all reach one switch. It is the state a plate is defined to
+   * be taken in, and a plate has to be reproducible from a script.
+   */
+  setChrome(visible: boolean): void {
+    if (visible) {
+      this.#chromeStance?.release()
+      this.#chromeStance = null
+      return
+    }
+    this.#chromeStance ??= this.presentation.push({ chrome: false })
   }
 
   /* ----------------------------------------------------------------------- */

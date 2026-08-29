@@ -72,7 +72,19 @@ export function PlanetariumMode({
     PLANETARIUM_ORBIT_SCOPE,
   )
   const [flare, setFlare] = usePersistentState(PLANETARIUM_FLARE)
-  const [notice, setNotice] = useState<string | null>(null)
+  /*
+   * What the mode has to say, and whether it is a complaint.
+   *
+   * Two tones on one surface, because there is one place on screen where this
+   * mode reports back and a preset that moved the camera and the lens has to
+   * say so — "Earthrise — Luna, 20°" is not a failure, and drawing it in the
+   * rose the address errors use would read as one. Everything else about the
+   * surface, including that `Shift+H` clears it, stays the same.
+   */
+  const [notice, setNotice] = useState<{
+    text: string
+    tone: 'error' | 'said'
+  } | null>(null)
   /*
    * Whether the primary drag and the arrow keys look instead of orbiting.
    *
@@ -151,7 +163,10 @@ export function PlanetariumMode({
           )
         }
       } catch (cause) {
-        setNotice(cause instanceof Error ? cause.message : String(cause))
+        setNotice({
+          text: cause instanceof Error ? cause.message : String(cause),
+          tone: 'error',
+        })
       }
     },
     [engine, setParams],
@@ -205,6 +220,9 @@ export function PlanetariumMode({
     frameSubject: () => {
       engine.harness.observatory.frameTarget()
     },
+    freeLook,
+    onFreeLook: setFreeLook,
+    onNotice: (text: string) => setNotice({ text, tone: 'said' }),
   } satisfies PlanetariumContext)
 
   /*
@@ -296,8 +314,14 @@ export function PlanetariumMode({
       )}
 
       {notice !== null && !chromeHidden && (
-        <p className="pointer-events-none absolute top-14 left-1/2 -translate-x-1/2 rounded border border-rose-500/40 bg-slate-950/85 px-3 py-1 type-readout text-rose-200 backdrop-blur">
-          {notice}
+        <p
+          className={`pointer-events-none absolute top-14 left-1/2 -translate-x-1/2 rounded border bg-slate-950/85 px-3 py-1 type-readout backdrop-blur ${
+            notice.tone === 'error'
+              ? 'border-rose-500/40 text-rose-200'
+              : 'border-sky-500/40 text-sky-200'
+          }`}
+        >
+          {notice.text}
         </p>
       )}
 

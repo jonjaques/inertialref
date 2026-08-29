@@ -112,6 +112,10 @@ export interface SessionHost {
   readonly lensView?: PresentationHost['lensView']
   /** The flight lens alone, for the observatory's framing solver. */
   readonly framingLens?: PresentationHost['framingLens']
+  /** Fit a lens — `ir.preset` and `ir.rise` each solve one. */
+  readonly setFlightLens?: PresentationHost['setFlightLens']
+  /** Put the interface in or out of the frame, for a plate capture. */
+  readonly setChrome?: PresentationHost['setChrome']
   /**
    * Called after the world is replaced, so a host can drop derived state.
    *
@@ -236,6 +240,12 @@ export function openSession(options: SessionOptions = {}): Session {
     ...(options.host?.framingLens === undefined
       ? {}
       : { framingLens: options.host.framingLens }),
+    ...(options.host?.setFlightLens === undefined
+      ? {}
+      : { setFlightLens: options.host.setFlightLens }),
+    ...(options.host?.setChrome === undefined
+      ? {}
+      : { setChrome: options.host.setChrome }),
   }
 
   const harness = new GameHarness(host)

@@ -1,43 +1,55 @@
 import { AU, LIGHT_YEAR } from '@inertialref/shared'
+import {
+  angularRadius,
+  type Composition,
+  COMPOSITIONS,
+  type Lens,
+  verticalFov,
+} from '@inertialref/rendering'
 import { Button } from '@/components/ui/button'
 import { Action } from '../hud/Action.tsx'
 import { FOCUS_RING, releaseFocus } from '../hud/focus.ts'
 import { Section } from '../hud/Section.tsx'
 import { useEngine, useShallow } from '../state/engineStore.ts'
 import type { PlanetariumContext } from './context.ts'
-import { PHASES, SHOTS } from './presets.ts'
+import { PHASES } from './presets.ts'
+import { PictureCard } from './PictureCard.tsx'
 import { ShotThumb } from './ShotThumb.tsx'
 
 /**
- * Compose the picture: one press each.
+ * Compose the picture: one press each, in two tiers.
  *
- * The mobile answer, and the reason the directive asks for it: a phone has one
+ * **Pictures** are absolute — an address, a framing and a lens — so they
+ * produce the same frame every time they are pressed, and their thumbnails are
+ * *plates*: captured through the renderer and vendored, because a drawn diagram
+ * of a picture that exists is a worse thumbnail than the picture. That is what
+ * makes them fixtures rather than framings, and a fixture is what a
+ * before/after plate is: the geology phase is judged from these, which is why
+ * they exist before the geology does.
+ *
+ * **Compositions** are the tier under them: relative to whatever is under the
+ * camera, sixteen of them, with the light row and the step-backs beneath. There
+ * were two lists of these and now there is one — `gibbous` here and
+ * `ir.shot('gibbous')` come out of one solver and mean one picture, and three
+ * of the sixteen were reachable only by teleporting a hull until the aim became
+ * an offset.
+ *
+ * A preset sets the camera and nothing about the layers. Names and traces are
+ * the viewer's, and a button that turned them off would be the interface
+ * reasserting itself.
+ *
+ * The mobile answer is the other half of why this panel exists: a phone has one
  * finger and no keyboard, so a preset is the only way to reach a framing that
- * would otherwise take a drag, a pinch and a phase solve. It is also the
- * fastest path on a desktop, which is why it is not a mobile-only panel.
- *
- * **Shots are drawn, not named, and there is one list of them.** This panel had
- * two — `Framing` with three word-buttons and `Compositions` with six — and
- * they were never two kinds of thing: a framing is a composition that happens
- * not to move the light. Nine identical rectangles of type, and the two things
- * that separate any two shots are how much of the frame the body fills and
- * where the terminator falls, both of which are pictures. `ShotThumb.tsx` draws
- * them to the same geometry the solver uses, so the thumbnail is a prediction
- * rather than an illustration.
- *
- * What stays as an axis is the light, because changing it *without* losing your
- * framing is the commonest thing anyone does here and a whole shot cannot
- * express it. The two scale jumps are not framings at all — they are absolute
- * distances, and they are the only way out to where a system is a point.
+ * would otherwise take a drag, a pinch and a phase solve.
  */
-export function PresetsPanel({ engine }: PlanetariumContext) {
+export function PresetsPanel({ engine, camera, onNotice }: PlanetariumContext) {
   const observatory = engine.harness.observatory
   /*
    * Two facts, not the status object.
    *
    * `observer` is a fresh object graph on every one of the eight samples a
-   * second, so a selector over the whole thing re-renders a grid of nine SVGs
-   * eight times a second on a camera that has not moved.
+   * second, so a selector over the whole thing re-renders a grid of sixteen
+   * SVGs eight times a second on a camera that has not moved.
    */
   const subject = useEngine(
     useShallow((snapshot) => ({
@@ -49,29 +61,48 @@ export function PresetsPanel({ engine }: PlanetariumContext) {
 
   return (
     <div className="flex flex-col gap-1">
-      {/*
-       * The grid is the panel's subject, so it carries no heading of its own.
-       * A `Section` titled "Shots" inside a panel titled "Shots" is the word
-       * twice in forty pixels, and the disclosure it would buy is the panel's
-       * own collapse doing the same job one row up.
-       */}
-      <div className="mb-2">
+      <Section id="planetarium.presets.pictures" title="Pictures">
+        <div className="grid grid-cols-2 gap-1.5">
+          {engine.harness.presets().map((picture) => (
+            <PictureCard
+              key={picture.id}
+              picture={picture}
+              onTake={() => {
+                const taken = engine.harness.preset(picture.id)
+                // The notice the shell already flashes, saying what the press
+                // did — a preset that moved the camera and the lens with no
+                // word for it is two changes a viewer has to infer.
+                onNotice(
+                  `${taken.picture.label} — ${taken.status.target?.name ?? 'nowhere'}, ${Math.round(taken.fovDeg)}°`,
+                )
+              }}
+            />
+          ))}
+        </div>
+        {/* The lens moves with a picture, which is the thing about them a
+            viewer has to be told once: a composition holds the lens and a
+            picture names one. */}
+        <p className="type-ui mt-1.5 text-pretty text-slate-400">
+          the same frame every time — an address, a framing and a lens. The
+          thumbnails are captures, not drawings.
+        </p>
+      </Section>
+
+      <Section
+        id="planetarium.presets.compositions"
+        title="Compositions"
+        trailing={`${COMPOSITIONS.length}`}
+      >
         <div className="grid grid-cols-3 gap-1.5">
-          {SHOTS.map((shot) => (
+          {COMPOSITIONS.map((composition) => (
             <button
-              key={shot.label}
+              key={composition.id}
               type="button"
               disabled={disabled}
-              title={shot.why}
+              title={composition.why}
               onClick={(event) => {
                 releaseFocus(event)
-                // Light first, then distance. `frameTarget` solves against the
-                // lens and the subject's radius and does not care where the
-                // camera is standing, so the order is free — but it is written
-                // this way round because a reader stepping through it in the
-                // console sees the picture assembled the way it is described.
-                observatory.setPhase(shot.phase, shot.tilt)
-                observatory.frameTarget(shot.fill)
+                observatory.compose(composition.id)
               }}
               /*
                * `rounded` outside, `rounded-sm` on the thumbnail inside, with
@@ -85,19 +116,22 @@ export function PresetsPanel({ engine }: PlanetariumContext) {
               {/*
                * A star is always full, so its thumbnail is drawn full.
                *
-               * `setPhase` returns immediately on a star — it *is* the light,
-               * there is no terminator to swing round — so on one of these only
-               * the `frameTarget` half runs. Drawing the authored phase there
-               * would leave nine thumbnails promising crescents and rim-lit
-               * disks that the press cannot produce, which is the one thing a
-               * thumbnail may not do. At phase 0 they collapse to what a star
-               * actually offers, which is five distinct framings, and the line
-               * under the grid says so.
+               * A star *is* the light — there is no terminator to swing round —
+               * so on one of these only the standoff half of a composition
+               * means anything. Drawing the authored phase there would leave
+               * sixteen thumbnails promising crescents and rim-lit disks that
+               * the press cannot produce, which is the one thing a thumbnail
+               * may not do.
                */}
               <ShotThumb
-                phase={subject.isStar ? 0 : shot.phase}
-                tilt={subject.isStar ? 0 : shot.tilt}
-                fill={shot.fill}
+                phase={subject.isStar ? 0 : composition.phaseDeg}
+                tilt={subject.isStar ? 0 : composition.tiltDeg}
+                // The thumbnail draws a *fill*, and half the list names radii
+                // instead — so the standoff is converted through the lens the
+                // press will actually be solved against, rather than through a
+                // nominal one. A card that promised a framing the button does
+                // not take is the same defect as the phase above.
+                fill={fillOf(composition, camera.lens)}
               />
               {/* Wrapping rather than truncating. Three columns in a 19 rem
                   panel is about seven characters a line, and `truncate` turned
@@ -105,23 +139,23 @@ export function PresetsPanel({ engine }: PlanetariumContext) {
                   cut off. The grid row grows to the tallest card, so two lines
                   cost nothing that a shorter, worse name would have saved. */}
               <span className="type-label px-0.5 pb-0.5 text-center leading-tight text-balance text-slate-300 transition-colors group-hover:text-sky-200">
-                {shot.label}
+                {composition.label}
               </span>
             </button>
           ))}
         </div>
         {subject.isStar && (
           // Enabled rather than disabled, unlike the Light row below: the
-          // framing half of a shot works on anything, and `Close` on a star is
-          // exactly what somebody wants from it. What does not work is said
-          // once, here, rather than left for the reader to infer from nine
-          // presses that all do the same thing.
+          // framing half of a composition works on anything, and `Close` on a
+          // star is exactly what somebody wants from it. What does not work is
+          // said once, here, rather than left for the reader to infer from
+          // sixteen presses that all do the same thing.
           <p className="type-ui mt-1.5 text-pretty text-slate-400">
-            a star is always full — on one, a shot sets the framing and nothing
-            else
+            a star is always full — on one, a composition sets the framing and
+            nothing else
           </p>
         )}
-      </div>
+      </Section>
 
       <Section id="planetarium.presets.phase" title="Light">
         <div className="flex flex-wrap gap-1">
@@ -166,10 +200,10 @@ export function PresetsPanel({ engine }: PlanetariumContext) {
             onClick={() => observatory.setDistance(LIGHT_YEAR)}
           />
         </div>
-        {/* Not framings, which is why they are not shots: a framing is solved
-            against the subject's radius and means the same thing at a moon and
-            at a star, and these are absolute. One AU from Jupiter is a planet
-            in a frame; one AU from Sol is most of the inner system. */}
+        {/* Not framings, which is why they are not compositions: a framing is
+            solved against the subject's radius and means the same thing at a
+            moon and at a star, and these are absolute. One AU from Jupiter is a
+            planet in a frame; one AU from Sol is most of the inner system. */}
         <p className="type-ui mt-1.5 text-pretty text-slate-400">
           absolute distances, not framings — the way out to where a system is a
           point
@@ -177,4 +211,22 @@ export function PresetsPanel({ engine }: PlanetariumContext) {
       </Section>
     </div>
   )
+}
+
+/**
+ * A composition's standoff as a fraction of the frame height.
+ *
+ * Half the list names a `fill` outright and half names body radii, and the
+ * thumbnail draws one thing. Converting through the lens the press will
+ * actually be solved against — rather than through a nominal 65° — is what
+ * keeps the card a prediction: at 8× zoom a 5.2-radii bookmark fills the frame,
+ * and a thumbnail drawn at the flight angle would show a disk a fifth the size.
+ *
+ * A unit sphere, because a fill is a ratio and the body's own radius cancels
+ * out of it — which is the same reason `standoffRadii` solves on one.
+ */
+function fillOf(composition: Composition, lens: Lens): number {
+  if (composition.standoff.kind === 'fill') return composition.standoff.fill
+  const angle = 2 * angularRadius(1, composition.standoff.radii)
+  return Math.min(1, angle / verticalFov(lens))
 }

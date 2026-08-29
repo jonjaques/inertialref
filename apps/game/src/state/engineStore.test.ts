@@ -27,6 +27,7 @@ const idle = {
   showShip: true,
   showOrbits: false,
   flareArtifacts: 1,
+  chrome: true,
   cutscene: { sample: (): Playhead | null => null },
   harness: {
     status: () => status(0),
@@ -38,7 +39,12 @@ const EMPTY: EngineSnapshot = {
   status: null,
   cinema: false,
   observer: null,
-  presentation: { showShip: false, showOrbits: false, flareArtifacts: 0 },
+  presentation: {
+    showShip: false,
+    showOrbits: false,
+    flareArtifacts: 0,
+    chrome: true,
+  },
   playhead: null,
 }
 
@@ -168,6 +174,7 @@ describe('the engine sampler', () => {
       showShip: false,
       showOrbits: true,
       flareArtifacts: 1,
+      chrome: true,
     })
   })
 

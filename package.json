@@ -23,6 +23,8 @@
     "graph": "node scripts/check-graph.mjs",
     "brand": "node scripts/brand/build.mjs",
     "brand:check": "node scripts/brand/build.mjs --check",
+    "presets:plates": "node scripts/presets/plates.mjs",
+    "presets:check": "node scripts/presets/check.mjs",
     "media:pull": "node scripts/media.mjs pull",
     "media:push": "node scripts/media.mjs push",
     "sim": "node --inspect=127.0.0.1:9229 apps/headless/src/main.ts",
@@ -33,7 +35,7 @@
     "solar:fetch": "node apps/ingest/src/main.ts solar",
     "shapes:build": "node apps/ingest/src/main.ts shapes",
     "deploy:worker": "pnpm build && pnpm --filter @inertialref/server run deploy",
-    "check": "pnpm graph && pnpm brand:check && pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+    "check": "pnpm graph && pnpm brand:check && pnpm presets:check && pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",

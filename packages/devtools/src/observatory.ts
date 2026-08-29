@@ -19,8 +19,10 @@ import {
   bodyFixedFrameId,
   bodyFrameId,
   datumRadius,
+  directionToGeodetic,
   formatAddress,
   geodeticDirection,
+  parentOf,
   hasSolidSurface,
   parseAddress,
   findBody,
@@ -49,6 +51,7 @@ import {
   clampStanceHeight,
   distanceBounds,
   DRAG_RADIANS_PER_PIXEL,
+  findComposition,
   framingDistance,
   heightForScrub,
   horizonPitch,
@@ -61,6 +64,10 @@ import {
   type Lens,
   LENS_PRESETS,
   pixelAngle,
+  placeComposition,
+  RISE_CLEARANCE,
+  riseFov,
+  riseStance,
   scrubForHeight,
   shortestAngle,
   type SurfaceStance,
@@ -197,6 +204,17 @@ const ARRIVED_LOG_EPSILON = 1e-3
  * thing in body radii.
  */
 export const DEFAULT_FILL = 0.55
+
+/**
+ * How high a rise stands, as a fraction of the body's own radius.
+ *
+ * 0.063 puts the eye 110 km over Luna, which is where the Apollo 8 frame was
+ * taken from — low enough that the horizon is a curve rather than a limb, high
+ * enough that the parent clears ground the geology has not been built yet.
+ * Relative to the radius rather than a fixed height, because the same fraction
+ * has to make a picture on Phobos (710 m up) and on Ganymede (166 km).
+ */
+export const RISE_HEIGHT_RADII = 0.063
 
 export class Observatory {
   readonly #host: HarnessHost
@@ -570,6 +588,180 @@ export class Observatory {
   /** The band the current target permits. Panels draw sliders against it. */
   bounds(): { readonly min: Meters; readonly max: Meters } {
     return distanceBounds(this.#target?.radius ?? 0)
+  }
+
+  /**
+   * Take a named composition of whatever is being looked at.
+   *
+   * The observatory's placer, beside the ship's. One list, two placers, and the
+   * difference is what they move: `placeShot` teleports a hull and this moves a
+   * camera, so `ir.shot('gibbous')` and `compose('gibbous')` end with the same
+   * picture and only one of them changes canonical state.
+   *
+   * Which arm it lands on is `placeComposition`'s decision and it is a real
+   * one: the orbit arm clamps at 1.5 radii, and `sunset` at 1.04 radii *is* a
+   * stance four hundredths of a radius up. Three of the sixteen were ship-only
+   * for exactly this reason before the surface arm existed to receive them.
+   */
+  compose(id: string): ObserverStatus {
+    const composition = findComposition(id)
+    const body = this.#body()
+    const toStar = this.#starDirection()
+    if (body === null || toStar === null) {
+      throw new Error(
+        `${this.#target?.name ?? 'nothing'} has no star to compose against`,
+      )
+    }
+    const placement = placeComposition(
+      composition,
+      body.radius,
+      toStar,
+      verticalFovDegrees(this.#lens),
+    )
+    if (placement.kind === 'orbit') {
+      // The stance goes first: `setAngles` refuses while one is held, and a
+      // composition above the floor is a claim about the orbit arm.
+      this.#stance = null
+      this.#site = null
+      this.setDistance(placement.distance)
+      this.setAngles(
+        placement.azimuth,
+        placement.elevation,
+        true,
+        placement.look,
+      )
+      return this.status()
+    }
+    /*
+     * The sun direction is in universe axes and a stance is in the body's own,
+     * so the placement's `up` has to come back through the spin pose. Without
+     * this a composition lands at the right angle to the star and on whatever
+     * longitude the body happened to be showing at the instant it was solved,
+     * which is a different place every time the same button is pressed.
+     */
+    const up = this.#toBodyFixed(placement.up)
+    if (up === null) throw new Error(`${body.name} is not turning`)
+    const { latitude, longitude } = directionToGeodetic(up)
+    return this.stand(this.#target?.address, {
+      latitude,
+      longitude,
+      height: placement.height,
+      heading: placement.heading,
+      pitch: placement.pitch,
+    })
+  }
+
+  /**
+   * Stand on this body with its parent a stated clearance over the horizon.
+   *
+   * Earthrise, and the two-body composition it is the only example of. Every
+   * other picture here is relative to whatever is under the camera; this one
+   * names the *other* body, which is why it needs a verb of its own and why the
+   * lens is solved with it — Earth is 1.9° across from Luna and Mars is 42.39°
+   * from Phobos, and one focal length is not the picture for both.
+   *
+   * Returns the field of view it solved, because the caller has to fit it: the
+   * observatory has no lens of its own by design (`#lens` says why), so the
+   * shell writes `engine.flightLens` and the standoff arithmetic here reads it
+   * back.
+   */
+  rise(
+    options: { readonly clearance?: Radians; readonly height?: Meters } = {},
+  ): { readonly status: ObserverStatus; readonly fovDeg: number } {
+    const body = this.#body()
+    if (body === null) throw new Error('The observatory is not on a body')
+    const parent = this.#parentBody(body)
+    if (parent === null) {
+      throw new Error(`Nothing for ${body.name} to see rise`)
+    }
+    const toParent = this.#toBodyFixedOffset(parent)
+    if (toParent === null) {
+      throw new Error(`${parent.name} is not where ${body.name} can see it`)
+    }
+    const distance = Vec.length(toParent)
+    const fovDeg = riseFov(parent.radius, distance)
+    const height = clampStanceHeight(
+      options.height ?? RISE_HEIGHT_RADII * body.radius,
+      body.radius,
+    )
+    const stance = riseStance(
+      body.radius,
+      toParent,
+      height,
+      options.clearance ?? RISE_CLEARANCE,
+      fovDeg,
+    )
+    const { latitude, longitude } = directionToGeodetic(stance.up)
+    return {
+      status: this.stand(this.#target?.address, {
+        latitude,
+        longitude,
+        height: stance.height,
+        heading: stance.heading,
+        pitch: stance.pitch,
+      }),
+      fovDeg,
+    }
+  }
+
+  /** The body this one goes round, when it is a moon of one. */
+  #parentBody(body: Body): Body | null {
+    try {
+      const address = parseAddress(formatAddress(body.address))
+      if (address.kind !== 'body') return null
+      const system = this.#host.world.system(address.system)
+      if (system === undefined) return null
+      return parentOf(system, body)
+    } catch {
+      return null
+    }
+  }
+
+  /** A universe-axes direction, in the body's own rotating axes. */
+  #toBodyFixed(direction: Vec3): Vec3 | null {
+    const body = this.#body()
+    if (body === null) return null
+    try {
+      const spin = this.#host.world.frames.pose(
+        bodyFixedFrameId(body.address),
+        this.#host.world.clock.renderTime,
+      )
+      return Q.rotateInverse(spin.orientation, direction)
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * The displacement to another body, in this one's rotating axes.
+   *
+   * A displacement rather than a direction, and `riseStance` says at length why
+   * that matters: read as a direction the answer is wrong by up to
+   * `asin((R + h)/d)`, which for Earth from Luna is 0.28° against a clearance
+   * being solved for of 3°.
+   *
+   * `renderTime`, like everything else that places something for the picture.
+   */
+  #toBodyFixedOffset(other: Body): Vec3 | null {
+    const body = this.#body()
+    if (body === null) return null
+    const world = this.#host.world
+    try {
+      const here = world.frames.pose(
+        bodyFixedFrameId(body.address),
+        world.clock.renderTime,
+      )
+      const there = world.frames.pose(
+        bodyFrameId(other.address),
+        world.clock.renderTime,
+      ).position
+      return Q.rotateInverse(
+        here.orientation,
+        UV.difference(there, here.position),
+      )
+    } catch {
+      return null
+    }
   }
 
   /* --------------------------------------------------------------------- */

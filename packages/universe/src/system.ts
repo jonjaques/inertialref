@@ -1715,6 +1715,50 @@ export function findBody(
 }
 
 /**
+ * The body a planet's parent-rise is taken from, or null when it has none.
+ *
+ * The largest moon, which is the one a rise composition can rely on: it is
+ * where the picture holds still. Luna, Ganymede, Titan and Phobos are all
+ * tidally locked, so the parent sits fixed in their sky and what cycles is its
+ * phase — a rise from a moon that spins is right at the instant it is solved
+ * and is a different picture an hour later, which the composition handles by
+ * re-solving rather than by remembering.
+ *
+ * Largest by radius rather than by mass, because the thing being chosen is a
+ * place to stand: a dense rock half the diameter of an icy one is the worse
+ * vantage whatever it weighs. A planet with nothing going round it gets null,
+ * and the panel draws a card that says so — an absent card cannot tell "this
+ * planet has no moons" from "this build forgot about it".
+ *
+ * No surface filter here, deliberately. `hasSolidSurface` lives above this file
+ * in the import order, and the caller has to refuse an unstandable body anyway
+ * — `Observatory.stand` does, by name — so a filter here would be a second
+ * refusal that could disagree with the first.
+ */
+export function primaryMoon(planet: Body): Body | null {
+  let best: Body | null = null
+  for (const moon of planet.moons) {
+    if (best === null || moon.radius > best.radius) best = moon
+  }
+  return best
+}
+
+/**
+ * The planet a moon goes round, within one system.
+ *
+ * A search rather than a field, because a body does not carry a parent pointer
+ * and adding one would make the tree cyclic for a serializer that has no reason
+ * to cope with it. Two levels deep is the whole model — a moon of a moon is not
+ * something this generator produces.
+ */
+export function parentOf(system: StarSystem, moon: Body): Body | null {
+  for (const planet of system.planets) {
+    if (planet.moons.some((one) => one.id === moon.id)) return planet
+  }
+  return null
+}
+
+/**
  * Somewhere a ship can actually put down: solid ground, and big enough that the
  * surface is a place rather than a curiosity.
  *

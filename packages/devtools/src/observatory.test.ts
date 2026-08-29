@@ -360,3 +360,124 @@ describe('the observatory', () => {
     expect(status.state.distance).toBeLessThan(AU)
   })
 })
+
+describe('the compositions, through the camera rather than the hull', () => {
+  it('lands the low ones on the surface arm and the rest in orbit', () => {
+    /*
+     * The claim that removes the second list. `glint`, `sunset` and `oblique`
+     * were ship-only bookmarks, not because a hull is needed to take them but
+     * because they aim somewhere other than the body's center and the orbit
+     * arm's pose is `lookAlong(−offset, up)`, always. With the aim solved as an
+     * offset the observatory can take all sixteen — and the two that stand off
+     * below 1.5 radii land on the arm that goes there.
+     */
+    const { harness: ir, session } = harness()
+    ir.look('s:SOL/b:2')
+
+    const orbiting = ir.compose('glint')
+    expect(orbiting.surface).toBeNull()
+    // An aimed composition is the one that has a look offset at all; the nine
+    // drawn framings are centre-aimed and must be bit-identical to their old
+    // poses, which `packages/rendering` states as a property.
+    expect(orbiting.aimed).toBe(true)
+
+    const standing = ir.compose('sunset')
+    expect(standing.surface).not.toBeNull()
+    // 1.04 radii is four hundredths of a radius up — 255 km over Earth.
+    expect(standing.surface?.stance.height).toBeGreaterThan(0)
+    expect(standing.surface?.stance.height).toBeLessThan(0.05 * 6.371e6)
+
+    expect(ir.compose('portrait').aimed).toBe(false)
+    session.dispose()
+  })
+
+  it('re-solves against the star, so a composition means one picture', () => {
+    // The bug `placeShot` documents, met on this arm: a phase solved once
+    // against a stale sun line is right in one season and wrong in the other
+    // three. Both calls go through `#starDirection` at `renderTime`.
+    const { harness: ir, session } = harness()
+    ir.look('s:SOL/b:2')
+    const first = ir.compose('half')
+    const second = ir.compose('half')
+    expect(second.state.azimuth).toBeCloseTo(first.state.azimuth, 12)
+    session.dispose()
+  })
+})
+
+describe('a rise', () => {
+  it('stands on the moon and looks at the planet', () => {
+    /*
+     * Earthrise, end to end. The verb refuses on a body with nothing going
+     * round it, stands on the moon rather than on the subject, and hands back
+     * the field of view it solved — which the observatory deliberately does not
+     * apply, because it has no lens of its own.
+     */
+    const { harness: ir, session } = harness()
+    ir.look('s:SOL/b:2.0')
+    const { status, fovDeg } = ir.rise()
+    expect(status.surface).not.toBeNull()
+    // The eye is a fraction of Luna's own radius up — 110 km, which is where
+    // the photograph was taken from.
+    expect(status.surface?.stance.height).toBeGreaterThan(50_000)
+    expect(status.surface?.stance.height).toBeLessThan(200_000)
+    // Earth is 1.9° across from here, so the solve wants 11.4° and gets the
+    // 20° floor. Stated as the floor rather than as a range, because the clamp
+    // is the interesting fact: a lens below 20° is its own phase.
+    expect(fovDeg).toBe(20)
+    session.dispose()
+  })
+
+  it('refuses a body with nothing to see rise', () => {
+    const { harness: ir, session } = harness()
+    ir.look('s:SOL/b:0')
+    // Mercury has no moons, so there is no second body for the picture to be
+    // about. A card that silently did nothing would be worse than the refusal.
+    expect(() => ir.rise()).toThrow(/rise/i)
+    session.dispose()
+  })
+})
+
+describe('the pictures', () => {
+  it('every one resolves, and takes the frame it names', () => {
+    /*
+     * The half of `presets:check` that needs a world. The script's job is the
+     * plate on disk and the composition id; this is the claim neither a
+     * filesystem nor a type can make — that the address still names a body in
+     * the catalog this build ships, and that the framing it asks for is one the
+     * observatory can actually take.
+     *
+     * The failure it guards is specific and quiet: a preset is a button, and a
+     * button whose address stopped resolving throws out of an onClick. The
+     * phase these exist for is a review, so a picture that has gone missing has
+     * to be a red test rather than a discovery on review day.
+     */
+    const { harness: ir, session } = harness()
+    for (const { id } of ir.presets()) {
+      const { status, fovDeg, picture } = ir.preset(id)
+      expect(status.target, id).not.toBeNull()
+      expect(status.target?.address, id).toContain(
+        picture.address.replace('s:', ''),
+      )
+      // A lens the slider can actually be set to. A picture composed at an
+      // angle the control cannot reach is a frame nobody can reproduce by hand.
+      expect(fovDeg, id).toBeGreaterThanOrEqual(20)
+      expect(fovDeg, id).toBeLessThanOrEqual(110)
+    }
+    session.dispose()
+  })
+
+  it('puts Earthrise on Luna and everything else on its subject', () => {
+    // The one that is about two bodies, checked against the one thing that
+    // distinguishes it: the camera ends up standing, on the moon, not framing
+    // the planet the picture is of.
+    const { harness: ir, session } = harness()
+    const earthrise = ir.preset('earthrise')
+    expect(earthrise.status.surface).not.toBeNull()
+    expect(earthrise.status.target?.name).toBe('Luna')
+
+    const marble = ir.preset('blue-marble')
+    expect(marble.status.surface).toBeNull()
+    expect(marble.status.target?.name).toBe('Earth')
+    session.dispose()
+  })
+})

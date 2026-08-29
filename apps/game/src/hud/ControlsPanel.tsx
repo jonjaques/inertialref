@@ -1,6 +1,9 @@
 import type { WorldInspection } from '@inertialref/devtools'
+import type { GameEngine } from '../engine/GameEngine.ts'
+import { useActionTitle } from '../input/useKeymap.ts'
 import { Action } from './Action.tsx'
 import type { HudCommands } from './controls.ts'
+import { HarnessSection } from './HarnessSection.tsx'
 import { Section } from './Section.tsx'
 
 /*
@@ -15,20 +18,38 @@ import { Section } from './Section.tsx'
  * catalog is on the other side, which is the arrangement it was always
  * fighting the tab strip to get.
  *
- * Every control here duplicates a key binding and says which one in its title.
- * That is a rule rather than a courtesy: `PRODUCT.md` requires everything
- * doable by clicking to be reproducible without a browser, so a button with no
- * keyboard or harness equivalent is a capability the headless runner cannot
- * reach.
+ * Every control here duplicates a key binding and says which one in its title —
+ * and says it by reading the live binding rather than by naming a key in a
+ * string. That is a rule rather than a courtesy: `PRODUCT.md` requires
+ * everything doable by clicking to be reproducible without a browser, so a
+ * button with no keyboard or harness equivalent is a capability the headless
+ * runner cannot reach; and a key printed as a literal is one the editor cannot
+ * move.
+ *
+ * The Harness section at the bottom is where the deleted Navigate panel's
+ * author-only half landed: cutscenes, scenarios and the self test. Navigate's
+ * other half — going places — is the Catalog, which is the product's navigator
+ * and is now in every mode's workspace.
  */
 
 export function ControlsPanel({
+  engine,
   world,
   commands,
+  onNotice,
 }: {
+  engine: GameEngine
   world: WorldInspection | null
   commands: HudCommands
+  onNotice: (message: string) => void
 }) {
+  const pause = useActionTitle('time.pause', 'Pause the simulated clock')
+  const slower = useActionTitle('time.slower', 'Slower')
+  const faster = useActionTitle('time.faster', 'Faster')
+  const assist = useActionTitle('flight.assist', 'Flight assist')
+  const kill = useActionTitle('flight.kill', 'Kill rotation')
+  const save = useActionTitle('session.save', 'Save')
+  const load = useActionTitle('session.load', 'Load')
   return (
     <div className="flex flex-col gap-2">
       <Section id="controls.clock" title="Clock">
@@ -36,14 +57,10 @@ export function ControlsPanel({
           <Action
             label={world?.paused === true ? 'Run' : 'Pause'}
             tone={world?.paused === true ? 'primary' : 'normal'}
-            title="Space"
+            title={pause}
             onClick={commands.togglePause}
           />
-          <Action
-            label="−"
-            title="Slower ( [ )"
-            onClick={() => commands.warp(-1)}
-          />
+          <Action label="−" title={slower} onClick={() => commands.warp(-1)} />
           {/*
            * The one figure on this panel, so it carries the mono. Fixed width
            * and tabular, because it is read while it is being changed: a `100×`
@@ -53,11 +70,7 @@ export function ControlsPanel({
           <span className="type-readout w-12 shrink-0 text-center text-slate-200">
             {world?.timeScale ?? 1}×
           </span>
-          <Action
-            label="+"
-            title="Faster ( ] )"
-            onClick={() => commands.warp(1)}
-          />
+          <Action label="+" title={faster} onClick={() => commands.warp(1)} />
         </div>
       </Section>
 
@@ -65,12 +78,12 @@ export function ControlsPanel({
         <div className="flex flex-wrap items-center gap-1">
           <Action
             label="Flight Assist"
-            title="Flight assist (Z)"
+            title={assist}
             onClick={commands.toggleAssist}
           />
           <Action
             label="Stop Spin"
-            title="Kill rotation (X)"
+            title={kill}
             onClick={commands.killRotation}
           />
         </div>
@@ -78,10 +91,12 @@ export function ControlsPanel({
 
       <Section id="controls.session" title="Session">
         <div className="flex flex-wrap items-center gap-1">
-          <Action label="Save" title="F5" onClick={commands.save} />
-          <Action label="Load" title="F9" onClick={commands.load} />
+          <Action label="Save" title={save} onClick={commands.save} />
+          <Action label="Load" title={load} onClick={commands.load} />
         </div>
       </Section>
+
+      <HarnessSection engine={engine} onNotice={onNotice} />
     </div>
   )
 }

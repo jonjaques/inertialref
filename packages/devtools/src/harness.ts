@@ -46,7 +46,9 @@ import {
   serializeSave,
 } from '@inertialref/persistence'
 import {
+  FLIGHT_FOV,
   type Lens,
+  lensForFov,
   type LensReadout,
   lensReadout,
   type LensView,
@@ -79,6 +81,7 @@ import {
   travelTargets,
   viewingAltitudeKm,
 } from './travel.ts'
+import { findPicture, type Picture, PICTURES } from './pictures.ts'
 import { findShot, placeShot, SHOTS } from './shots.ts'
 import {
   CutsceneDirector,
@@ -201,6 +204,29 @@ export interface PresentationHost {
    * out against the 20.8 Mm the flight lens asks for, 43% too far, permanently.
    */
   framingLens(): Lens
+  /**
+   * Fit a lens, for the two verbs that solve one.
+   *
+   * `preset` and `rise` compose a picture whose lens is part of it — Earth is
+   * 1.9° across from Luna and Mars is 42.39° from Phobos, so a rise that did
+   * not fit its own lens would produce two very different frames under one
+   * name. Optional, because a headless host has no camera to fit it to and the
+   * arithmetic is worth running there anyway.
+   *
+   * Not a second producer of the lens: `engine.lens` still resolves the
+   * cutscene arm first and the flight lens second, and this writes the same
+   * flight lens a panel's slider writes.
+   */
+  setFlightLens?(lens: Lens): void
+  /**
+   * Put the interface in or out of the frame.
+   *
+   * A plate is defined as the frame taken with the chrome cleared, and a plate
+   * has to be reproducible from a script — so the state `Shift+H` reaches has
+   * to be reachable from here too. Optional for the same reason: headlessly
+   * there is no interface to clear.
+   */
+  setChrome?(visible: boolean): void
   /**
    * What the terrain streamer is doing this frame.
    *
@@ -1155,6 +1181,110 @@ export class GameHarness {
     return this.#observatory.status()
   }
 
+  /**
+   * Take a named composition of whatever the camera is on.
+   *
+   * The observatory's placer for the same sixteen `ir.shot` frames with a hull.
+   * `ir.shot('gibbous')` teleports the ship into the picture; this moves the
+   * camera into it, changing no canonical state — and three of the sixteen were
+   * reachable only the first way until the aim became an offset.
+   */
+  compose(id = 'portrait'): ObserverStatus {
+    return this.#observatory.compose(id)
+  }
+
+  /**
+   * Stand on a moon with its parent over the horizon. Earthrise.
+   *
+   * The one composition that names two bodies, so it is the one that cannot be
+   * a `compose` id. The lens it solves comes back rather than being applied: the
+   * observatory has no lens of its own by design, so fitting it is the shell's
+   * — `ir.rise()` from a console reports the angle and leaves the camera panel
+   * alone, which is the honest split rather than a verb that quietly moves a
+   * control somebody else owns.
+   */
+  rise(options: { clearance?: number; height?: number } = {}): {
+    status: ObserverStatus
+    fovDeg: number
+  } {
+    return this.#observatory.rise({
+      ...(options.clearance === undefined
+        ? {}
+        : { clearance: (options.clearance * Math.PI) / 180 }),
+      ...(options.height === undefined ? {} : { height: options.height }),
+    })
+  }
+
+  /**
+   * Take a named picture — the same frame, every time.
+   *
+   * A composition plus the two things a composition leaves out: an address and
+   * a lens. That is what makes it a fixture rather than a framing, and a
+   * fixture is what a before/after plate is — the geology phase is judged from
+   * these, so they exist before the geology does.
+   *
+   * The lens comes back rather than being applied, exactly as `rise` does and
+   * for the same reason: the observatory has no lens of its own by design, so
+   * fitting one is the shell's. A console caller gets told the angle and the
+   * camera panel stays where they left it.
+   */
+  preset(id: string): {
+    status: ObserverStatus
+    fovDeg: number
+    picture: Picture
+  } {
+    const picture = findPicture(id)
+    this.#observatory.focus(picture.address, { ease: false })
+    if (picture.framing.kind === 'rise') {
+      /*
+       * The rise solves its own lens from the geometry, so the stance comes
+       * first and the lens is fitted after. The other order would frame the
+       * horizon against an angle solved for a different picture.
+       */
+      const risen = this.#observatory.rise()
+      this.#fitLens(risen.fovDeg)
+      return { status: risen.status, fovDeg: risen.fovDeg, picture }
+    }
+    const fovDeg = picture.fovDeg ?? FLIGHT_FOV
+    // The other order, and for the reverse reason: a `fill` standoff is solved
+    // against the lens, so the lens has to be fitted before the composition is
+    // placed or the camera stands off at the angle it had a moment ago.
+    this.#fitLens(fovDeg)
+    return {
+      status: this.#observatory.compose(picture.framing.composition),
+      fovDeg,
+      picture,
+    }
+  }
+
+  /**
+   * Fit an angle, where the host has a camera to fit it to.
+   *
+   * Silent headlessly rather than a refusal: `pnpm sim` runs every one of these
+   * for the arithmetic, and there is no display for a field of view to be about.
+   */
+  #fitLens(fovDeg: number): void {
+    this.#host.setFlightLens?.(lensForFov(fovDeg))
+  }
+
+  /**
+   * Put the interface in or out of the frame.
+   *
+   * The harness half of `Shift+H`, and the reason it is a verb at all: a plate
+   * is defined as the frame taken with the chrome cleared, and
+   * `pnpm presets:plates` is a script. A gesture no script can make is a
+   * fixture nobody can regenerate.
+   */
+  chrome(visible: boolean): boolean {
+    this.#host.setChrome?.(visible)
+    return visible
+  }
+
+  /** The pictures `preset` can take. */
+  presets(): readonly { id: string; label: string; why: string }[] {
+    return PICTURES.map(({ id, label, why }) => ({ id, label, why }))
+  }
+
   /* --------------------------------------------------------------------- */
   /* Terrain                                                                */
   /* --------------------------------------------------------------------- */
@@ -1414,6 +1544,10 @@ export class GameHarness {
       '  ir.trackOverlay(on?)          the reference track over a playing scene',
       '  ir.look(target)               planetarium: move the camera, not the ship',
       '  ir.aim(yawDeg, pitchDeg)      turn the head without moving the camera',
+      '  ir.compose(id)                a named composition, camera only',
+      '  ir.rise()                     stand with the parent over the horizon',
+      '  ir.preset(id)                 a named picture: address, framing, lens',
+      '  ir.chrome(false)              clear the interface — the plate state',
       '  ir.observatory                the free camera itself — drag, zoom, setPhase',
       '  ir.sites(address?)            the named places on a body, derived from its own terrain',
       '  ir.visit(address?, {site, height, heading, pitch})',

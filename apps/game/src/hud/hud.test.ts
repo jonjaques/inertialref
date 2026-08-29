@@ -2,7 +2,7 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { openSession } from '@inertialref/devtools'
-import { CameraPanel } from './CameraPanel.tsx'
+import { LensSection } from './LensSection.tsx'
 import type { DevContext } from './context.ts'
 import { ErrorBoundary } from './ErrorBoundary.tsx'
 import { GraphicsPanel } from './GraphicsPanel.tsx'
@@ -130,7 +130,13 @@ describe('the author’s instruments', () => {
 
     const ids = panels.map((panel) => panel.id)
     expect(new Set(ids).size).toBe(ids.length)
-    expect(ids).toContain('navigate')
+    // No `navigate` any more, and its absence is a claim rather than an
+    // omission. It was two things under one title: the product's navigation,
+    // filed under the author's instruments, plus three sections nobody but the
+    // author presses. Going places is the Catalog, which every mode's
+    // workspace carries; the three are a Harness section on `controls`.
+    expect(ids).not.toContain('navigate')
+    expect(ids).toContain('controls')
     expect(ids).toContain('perf')
     for (const panel of panels) {
       expect(['left', 'right']).toContain(panel.zone)
@@ -166,19 +172,16 @@ describe('the author’s instruments', () => {
     expect(markup).toContain('Client Build')
   })
 
-  it('renders the navigate panel without a world to poll yet', () => {
+  it('renders the harness verbs without a world to poll yet', () => {
     // The first paint happens before the status poll has fired once. A panel
     // that only renders once it has data is a panel that crashes on load.
     const session = openSession({ seed: 'inertialref', workers: null })
-    const markup = panelMarkup(devContext(session.harness), 'navigate')
-    // The destination list before the first survey has returned. `starting…`
-    // used to be asserted alongside it and is gone with the thing that said it:
-    // it was the dock header's one-line summary of the world, and a header
-    // shared by five tabs is exactly what a workspace of six panels replaces.
-    expect(markup).toContain('surveying')
-    // Scenario buttons come from the harness, not from a list written twice.
+    const markup = panelMarkup(devContext(session.harness), 'controls')
+    // Scenario buttons come from the harness, not from a list written twice —
+    // the claim the deleted Navigate panel made and this section inherits.
     for (const name of session.harness.scenarios())
       expect(markup).toContain(name)
+    expect(markup).toContain('Self Test')
     session.dispose()
   })
 
@@ -208,12 +211,18 @@ describe('the author’s instruments', () => {
      * that nothing was dropped on the way, because each of these is a verb with
      * a key binding it duplicates.
      */
-    const markup = panelMarkup(devContext(null), 'controls')
+    const session = openSession({ seed: 'inertialref', workers: null })
+    const markup = panelMarkup(devContext(session.harness), 'controls')
     // Title case in the source, because `type-label` and `type-heading` carry
     // the `text-transform` and the strings have to read as language wherever
     // the CSS is not — a `title`, an `aria-label`, a copied string.
     for (const verb of ['Pause', 'Flight Assist', 'Stop Spin', 'Save', 'Load'])
       expect(markup).toContain(verb)
+    // And the key beside each of them is the *live* binding, read from the
+    // keymap — the tooltips used to name keys as string literals, which is a
+    // binding the editor cannot move.
+    expect(markup).toContain('title="Pause the simulated clock · Space"')
+    session.dispose()
   })
 
   it('renders the graphics and camera panels with their controls', () => {
@@ -270,12 +279,21 @@ describe('the author’s instruments', () => {
     expect(graphics).not.toContain('auto →')
 
     const camera = renderToStaticMarkup(
-      createElement(CameraPanel, {
-        camera: { lens: lensForFov(42), onLens: () => {} },
-      }),
+      createElement(
+        KeymapProvider,
+        null,
+        createElement(LensSection, {
+          camera: { lens: lensForFov(42), onLens: () => {} },
+        }),
+      ),
     )
-    // The focal length is what the panel is about, and the angle rides beside
-    // it — 42° is 31.3 mm on the 24 mm gauge.
+    // The lens section, which the planetarium's Camera panel and
+    // `/settings/camera` both draw — one component, because the lens is a
+    // persisted preference and two sets of sliders for one preference is how a
+    // build ends up with two that disagree.
+    //
+    // The focal length is what it is about, and the angle rides beside it —
+    // 42° is 31.3 mm on the 24 mm gauge.
     expect(camera).toContain('31.3 mm')
     expect(camera).toContain('42°')
     expect(camera).toContain('Reset')
