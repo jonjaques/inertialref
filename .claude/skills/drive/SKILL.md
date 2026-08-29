@@ -1,8 +1,8 @@
 ---
 name: drive
-description: Launch, drive and screenshot InertialRef — the headless runner, the CDP driver in scripts/drive.mjs, the window.ir harness, and the browser gotchas (renderer boot, occluded rAF, double capture after a seek) that otherwise cost an hour. Use whenever asked to run the game, verify a change in the real app, capture a still, or step a cutscene. This is the project skill the built-in /run defers to.
+description: Launch, drive and screenshot InertialRef — the headless runner, the CDP driver in scripts/drive.mjs, the window.ir harness, and the browser gotchas (renderer boot, occluded rAF, double capture after a seek) that otherwise cost an hour. Use whenever asked to run the game, verify a change in the real app, capture a still, or step a cutscene — and whenever a visual defect is reported: it carries `--cast` and `scripts/traceFrames.mjs`, which find a strobe a screenshot cannot, and the reason a defect can be invisible at the default window and violent on a retina one. This is the project skill the built-in /run defers to.
 argument-hint: '[what to verify]'
-allowed-tools: Bash(pnpm dev) Bash(pnpm dev:*) Bash(pnpm preview) Bash(pnpm preview:*) Bash(pnpm sim:*) Bash(pnpm vitest:*) Bash(pnpm drive:*) Bash(node scripts/drive.mjs:*)
+allowed-tools: Bash(pnpm dev) Bash(pnpm dev:*) Bash(pnpm preview) Bash(pnpm preview:*) Bash(pnpm sim:*) Bash(pnpm vitest:*) Bash(pnpm drive:*) Bash(node scripts/drive.mjs:*) Bash(pnpm trace:*) Bash(node scripts/traceFrames.mjs:*) Bash(magick:*)
 ---
 
 # Driving InertialRef
@@ -65,15 +65,24 @@ node scripts/drive.mjs --down                                   # when finished
 Steps run in the order written, in one process and one session. Prefer one command with
 five steps to five commands.
 
-| Step            | For                                                                |
-| --------------- | ------------------------------------------------------------------ |
-| `--js <expr>`   | a bare expression is returned, so `--js "ir.terrain()"` prints     |
-| `--file <path>` | a local `.mjs` evaluated in the page, when quoting gets ugly       |
-| `--wait <ms>`   | textures stream in asynchronously after a look or a seek           |
-| `--shot <path>` | a bare filename lands in `.data/drive/`; `.jpg` is the one to read |
-| `--sample <n>`  | `n` consecutive rAF frames, with a min..max per field              |
-| `--logs`        | console output and page errors buffered so far                     |
-| `--reload`      | hard reload, then wait for the renderer                            |
+| Step            | For                                                                     |
+| --------------- | ----------------------------------------------------------------------- |
+| `--js <expr>`   | a bare expression is returned, so `--js "ir.terrain()"` prints          |
+| `--file <path>` | a local `.mjs` evaluated in the page, when quoting gets ugly            |
+| `--wait <ms>`   | textures stream in asynchronously after a look or a seek                |
+| `--shot <path>` | a bare filename lands in `.data/drive/`; `.jpg` is the one to read      |
+| `--sample <n>`  | `n` consecutive rAF frames, with a min..max per field                   |
+| `--cast <n>`    | `n` **rendered** frames, differenced — the only step that sees a strobe |
+| `--logs`        | console output and page errors buffered so far                          |
+| `--reload`      | hard reload, then wait for the renderer                                 |
+
+**Session flags are per invocation, and a mismatched one throws away the state you
+set up.** Every call re-asserts `--url`, `--width`, `--height` and `--dpr`; a second
+call that omits them is a call at the defaults, and the driver re-navigates because
+the attached page is not showing what the URL asks for. That silently discards the
+observatory — `ir.preset('earthrise')` in one invocation and `ir.terrain()` in the
+next reports the menu. Either repeat the whole session line every time, or put the
+setup and the measurement in one invocation. The second is cheaper and always right.
 
 Session flags worth knowing: `--url` (the mode is a function of the path and the query,
 and the driver re-boots unless the attached page is already showing everything the URL
@@ -89,6 +98,52 @@ or not `--logs` was asked for, so a broken page never looks like a blank capture
 For anything about how the app is _served_ — asset headers, the SPA fallback, the service
 worker — point the driver at `pnpm preview` on 8787 instead: `pnpm preview` in one shell,
 then `--url http://localhost:8787/`.
+
+## Seeing a strobe, and where the reporter's frames already are
+
+A still cannot show a strobe **and neither can `--shot`**. `Page.captureScreenshot`
+draws a frame of its own on demand, so a one-frame artifact on a fixed period is
+exactly what it never lands on: eight consecutive shots of a page that was visibly
+jumping twice a second came back identical to six pixels.
+
+`--cast <n>` records what the compositor actually presented and differences it. The
+signal it reports is not "how much changed" but **a frame that differs from both of
+its neighbours while those neighbours are identical to each other** — a static scene
+with one frame departing from it. Motion produces none of those, which is what makes
+a clean result meaningful.
+
+```bash
+node scripts/drive.mjs --url http://localhost:5173/planetarium \
+    --js "ir.preset('earthrise')" --wait 20000 --js "ir.chrome(false)" --cast 200
+# cast: 200 frames in 3.31s (60.4 fps) -> .data/drive/cast
+#   8 events over 15 isolated frames, every 26 frames — 2.31 Hz
+```
+
+It writes the frames, `difference.png` for the first event — the amplified map, which
+is the only thing that answers _where_ — and `cast.mp4`, which is the artifact worth
+attaching to a pull request. A strobe argued in prose is a paragraph; the same strobe
+as five seconds of video is the argument.
+
+**A trace from the reporter is better than any of this.** A Chrome performance trace
+recorded with the Screenshots checkbox carries one JPEG per composited frame at the
+page's real rate, on their machine at their window size:
+
+```bash
+node scripts/traceFrames.mjs ~/Downloads/Trace-*.json.gz
+# url: https://…/planetarium?at=g%3Amilky-way%2Fs%3ASOL%2Fb%3A2
+# 182 frames at 498x394, 3.04s (59.9 fps)
+# 6 events over 6 isolated frames, every 27 frames — 2.22 Hz
+```
+
+It prints the URL the trace was taken of, which is half of what makes the defect
+reproducible. **Ask for one before trying to reproduce a visual bug.** A Firefox
+profile is the other half: its markers show whether the frame rate is even involved,
+and its JS samples answer questions a screenshot cannot — `buildPatch` present on
+every frame of a 4.3 s capture is a terrain streamer that never converged, and no
+picture would have said so.
+
+Both need `imagemagick`; `--cast`'s clip additionally needs `ffmpeg`. Neither is
+optional equipment on this machine and both are in the Brewfile.
 
 ## The harness
 
@@ -156,6 +211,17 @@ handles the first three — they are here because they explain what it is doing.
    `engine.gl` null, which reads as a rendering bug and is not one.
 4. **A wedged Chrome needs `--down` and a fresh start.** Reloading is not always enough
    to recover its GPU state.
+5. **The default rig is 1600×900 at DPR 1, and that is not what anyone is looking at.**
+   Terrain selection is measured in _display pixels_, so the streamer at a retina window
+   asks for four times the patches and behaves like a different subsystem: the geometry
+   cache strobed the whole disk at 2.3 Hz above a 3840×2400 drawing buffer and was
+   perfectly stable at the default. **A defect you cannot reproduce is a defect whose
+   window you have not matched** — get `--width`, `--height` and `--dpr` from the
+   reporter, or read the frame size off their trace, before concluding anything.
+6. **A quiet `--cast` under 40 fps is not an all-clear.** The capture rate is bounded by
+   how fast Chrome encodes a frame; a subsampled stream misses a one-frame artifact by
+   coin toss. The step reports its own rate and says so, but the reflex worth keeping is
+   to read the fps before believing the verdict.
 
 Readiness is `window.engine.gl`, not `window.ir` — the harness appears seconds earlier,
 so a probe on it screenshots an unlit canvas. And a canvas readback is always transparent
