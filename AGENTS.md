@@ -197,6 +197,14 @@ Violating one of these is a rewrite later, not a refactor.
   two hand-maintained tables of prose that named keys as string literals are
   exactly what `/settings/controls` was printing while it said rebinding was not
   built.
+- **Never turn the head at a constant radians-per-pixel.** Drag sensitivity is
+  `pixelAngle(lens, viewport)`, so the ground under the pointer follows the
+  pointer; a bare constant swung the frame through forty field-widths on a 100 px
+  drag at 8× zoom. The aim is a `LookOffset` on the pose, and it is cleared by
+  whatever **replaces** the pose — a focus, a frame, a stand, a composed set of
+  angles — and by nothing else, so a viewer who turned to look at Io beside
+  Jupiter is still looking at Io after the wheel.
+  [ADR-0018](docs/adr/0018-the-instrument.md).
 - **Never let the planetarium write canonical state.** The observatory
   resolves an address, asks the world where that is at `renderTime`, and
   returns a pose. No teleport, no clock, no entity write, no save.

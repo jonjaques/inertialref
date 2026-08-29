@@ -151,7 +151,7 @@ Two notes worth internalising:
   consequence of touching the ground.
 - **`ir.flightAssist(enabled)`** exists and is absent from `ir.help()`. It is
   control input and it is in the state hash, so a test comparing hashes has to
-  know it is there. `ir.scenarios()` lists the four scenario names.
+  know it is there. `ir.scenarios()` lists the five scenario names.
 
 ---
 

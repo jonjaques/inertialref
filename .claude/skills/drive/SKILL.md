@@ -163,14 +163,17 @@ black: the renderer is WebGPU and the swap-chain texture is invalidated at the e
 task that drew it, which is why the driver uses `Page.captureScreenshot`. That composited
 image is also the only one carrying the DOM HUD.
 
-## The dev dock
+## The author's instruments
 
-Open it from the IR menu at the bottom center of the browser, or with `` ` ``. It calls
-the harness and nothing else, so anything you can do by clicking is reproducible in a
-test. `H` hides or restores both panes, `G` opens navigation, and `P` opens perf.
-**Look at the perf tab before optimizing anything**, and before believing a performance
-claim in a design document: the first thing it found was that time warp had never worked
-above 5×.
+Open them from the IR menu at the bottom center of the browser, or with `` ` ``. Four
+panels — controls, telemetry, perf, graphics — each calling the harness and nothing
+else, so anything you can do by clicking is reproducible in a test. Cutscenes,
+scenarios and the self-test are the Controls panel's **Harness** section. `P` opens
+perf, `H` clears both panes, `Shift+H` clears every piece of chrome; they are defaults,
+and `?` prints whatever they are now.
+**Look at the perf panel before optimizing anything**, and before believing a
+performance claim in a design document: the first thing it found was that time warp had
+never worked above 5×.
 
 ## The cutscene reference
 

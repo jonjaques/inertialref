@@ -265,7 +265,7 @@ frame time, engine time, draw calls, triangles, JS heap, and GPU milliseconds pe
 frame — the last measured across a drained queue rather than from
 `renderer.info.render.timestamp`, which
 [lies](spikes.md#2--tsl-and-the-atmosphere-integral). All of it is live in the
-dev dock's **perf** tab. **What is not:** allocation rate, GC pressure, cold load
+dev dock's **perf** panel. **What is not:** allocation rate, GC pressure, cold load
 to interactive, anything at all on the target machine, and any stored baseline —
 so there is still nothing that can fail a pull request for getting slower.
 

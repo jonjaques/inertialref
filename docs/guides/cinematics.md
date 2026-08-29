@@ -20,11 +20,11 @@ Time derives from `renderTime`, never a wall clock. A script's
 
 ## Where the code lives
 
-| Layer                | Path                                              | What it is                                                                                     |
-| -------------------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| Pure arithmetic      | `packages/rendering/src/cinematic.ts`             | Easings, fade envelopes, camera routes, screen-space routes, solvers. Property-tested in Node. |
-| Director and scripts | `packages/devtools/src/cutscene.ts`, `cutscenes/` | A `CutsceneScript` per file; register it in `harness.ts`.                                      |
-| Application          | `apps/game`                                       | `engine.cinematic`, warp-effect quads, the DOM title overlay, the dock's cutscene section.     |
+| Layer                | Path                                              | What it is                                                                                          |
+| -------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Pure arithmetic      | `packages/rendering/src/cinematic.ts`             | Easings, fade envelopes, camera routes, screen-space routes, solvers. Property-tested in Node.      |
+| Director and scripts | `packages/devtools/src/cutscene.ts`, `cutscenes/` | A `CutsceneScript` per file; register it in `harness.ts`.                                           |
+| Application          | `apps/game`                                       | `engine.cinematic`, warp-effect quads, the DOM title overlay, the Controls panel's Harness section. |
 
 Choreograph in the frame. A hull's beats are
 `(frame, screen x, screen y, range)` via `screenOffset` — the same terms a

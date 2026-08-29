@@ -56,21 +56,35 @@ front of Vite and turn every edit into a caching investigation. See
 | `X`         | kill rotation                      |
 | `Space`     | pause                              |
 | `[` / `]`   | time warp down / up                |
+| `\`         | back to real time                  |
 | `F5` / `F9` | save / load                        |
-| `G`         | open the navigate panel            |
+| `/`         | go to — the catalog’s search box   |
+| `` ` ``     | disclose the author’s instruments  |
 | `P`         | open the perf panel                |
-| `H`         | hide or restore both dock panes    |
+| `H`         | clear both dock panes, or restore  |
+| `Shift+H`   | clear every piece of chrome        |
+| `,`         | settings                           |
+| `?`         | every binding this build has       |
 | `Tab`       | move between on-screen controls    |
 
 Flight is full 6-DoF with no artificial "space mode" — the same controls fly
 between stars, into orbit, and down to a landing.
 
+These are the **defaults**. Every act is rebindable at `/settings/controls`, and
+`?` prints the live chords rather than this table — a label that names a key
+reads the binding, so nothing in the interface can disagree with what the key
+actually does.
+
 ---
 
 ## The author's instruments
 
-Press the bug in the IR menu at the bottom center, or `` ` ``, to reveal six
-dockable panels: navigate, controls, telemetry, perf, graphics, and camera.
+Press the bug in the IR menu at the bottom center, or `` ` ``, to reveal four
+dockable panels: controls, telemetry, perf and graphics. They are the author’s,
+and they are scaffolding — going somewhere is the Catalog, which is a panel of
+the product’s own in both the planetarium and the flight workspace, and the eye
+is the planetarium’s Camera panel.
+
 Open telemetry to see the architecture made visible. Four groups repay
 attention on day one:
 
@@ -160,7 +174,7 @@ pnpm lint         # oxlint
 pnpm graph        # dependency layering + cycle check
 pnpm brand        # re-render the icons, the share card and the crawler files
 pnpm build
-pnpm check        # the gate — graph → brand → format → lint → typecheck → test → build
+pnpm check        # the gate — graph → brand → presets → format → lint → typecheck → test → build
 
 pnpm sim --self-test          # headless run + capability checks
 pnpm sim --scenario surface --ticks 2526    # also: --seed, --system, --quiet

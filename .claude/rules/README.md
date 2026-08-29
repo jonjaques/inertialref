@@ -66,7 +66,7 @@ every touch of its directory, and the thing it is competing with for attention i
 | `browser.md`     | every session — no `paths:`                                           |
 | `packages.md`    | anything in `packages/*`                                              |
 | `determinism.md` | the simulation, procedural, universe, spatial or physics core         |
-| `react-shell.md` | any `.tsx` in the client                                              |
+| `react-shell.md` | any `.tsx` in the client, its routes, its state or its keymap         |
 | `rendering.md`   | `render/`, `scene/`, `engine/`, `packages/rendering`, the observatory |
 | `cutscenes.md`   | the cinematic director, its scripts, or `cinema/`                     |
 | `dock.md`        | `apps/game/src/dock`                                                  |

@@ -47,6 +47,7 @@ table is one of those three, not drift.
 | One window-level key listener; actions by id              | [ADR-0018](../adr/0018-the-instrument.md) · [UX § controls](../design/ux.md#controls)                      |
 | No `localStorage` outside `state/preferences.ts`          | [ADR-0018](../adr/0018-the-instrument.md) · [Persistence](../concepts/persistence.md)                      |
 | No key name written into a label                          | [ADR-0018](../adr/0018-the-instrument.md) · [UX § controls](../design/ux.md#controls)                      |
+| The aim is an offset on the pose; drag by the pixel angle | [ADR-0018](../adr/0018-the-instrument.md) · [Planetarium](../design/planetarium.md)                        |
 | The planetarium does not write canonical state            | [Planetarium](../design/planetarium.md)                                                                    |
 | Presentation asks at `renderTime`, not `clock.time`       | [ADR-0006](../adr/0006-simulation-clock.md) · [Planetarium](../design/planetarium.md)                      |
 | Mode chrome needs `pointer-events-auto`                   | [Client](../guides/client.md)                                                                              |

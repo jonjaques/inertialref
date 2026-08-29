@@ -159,6 +159,50 @@ value.
 
 ---
 
+## Preferences are not a save
+
+A save stores references and mutations to a universe. Where somebody put a
+panel, which lens they chose and what they rebound `F` to are none of those, so
+they are not in one — and the two have opposite requirements. A save must be
+portable between machines and versions and is therefore validated as a whole; a
+preference must survive a rename of the thing it names, individually, because
+losing a layout to a changed panel id is a worse outcome than losing the panel.
+
+`apps/game/src/state/preferences.ts` is the registry, and **it holds the only
+`localStorage` call in `apps/game/src`**. That is an invariant rather than a
+convention. Every key is declared there once — default, guard, `revive`,
+`migrate`, and a group — and a call site takes the _definition_ rather than a
+key string, so naming a preference that does not exist is a name that does not
+resolve rather than a typo that silently reads `undefined`.
+
+The reason the calls cannot be spread out is that three things each need the
+whole set:
+
+- **The census.** An export is a list of what is stored, and there was none —
+  every key was guarded on the way in and nothing could enumerate them, so a
+  layout somebody arranged lived on one browser profile.
+- **The import.** Every entry is validated by its own guard and the ones that
+  fail are named, because a file from another build carries keys this one has
+  never heard of and "2 dropped" with no list is a dialog nobody can act on.
+- **The live subscription.** Applying an import reaches every mounted hook
+  through `usePersistentState`, so nothing reloads — and a reload here rebuilds
+  the `WebGPURenderer` and loses the camera, which is the cost this app pays to
+  avoid everywhere else.
+
+An export carries what somebody **chose**, never the defaults. An absent key
+means the default and has to keep meaning that; exporting the defaults would
+turn a fresh profile's file into a snapshot that pins today's values on every
+machine it reaches, so a later change of default would arrive for nobody who had
+ever exported. Keys this build no longer knows are dropped rather than carried,
+because they cannot be validated on the way back in.
+
+`/settings/data` is the page. `import(export())` is the identity and a garbage
+import is a no-op, both as properties in `state/preferences.test.ts` — reachable
+because storage falls back to a `Map` with no `window`, which is the same path a
+private window takes. [ADR-0018](../adr/0018-the-instrument.md).
+
+---
+
 ## Offline-first
 
 Persistence is half of it. The other half is the **service worker** caching the

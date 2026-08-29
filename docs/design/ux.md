@@ -60,11 +60,17 @@ and a form that looks real is one they will type a real one into.
 
 ### The debug overlay
 
-The dev dock — navigation, controls, telemetry, performance, graphics, camera —
-is the author's instrument and is **off by default**, toggled by `` ` `` or the
-shell bar. A first-time visitor should never meet it; nothing on this page
-describes it, and the cockpit it will eventually be replaced by is specified
-below.
+The dev dock — controls, telemetry, performance, graphics — is the author's
+instrument and is **off by default**, toggled by `` ` `` or the shell bar. A
+first-time visitor should never meet it; nothing on this page describes it, and
+the cockpit it will eventually be replaced by is specified below.
+
+Two things are deliberately not behind it. **Going somewhere** is the Catalog, a
+panel of the product's own that both the planetarium and the flight workspace
+carry, because a navigator filed under the author's scaffolding is a navigator
+a player never finds. **The camera** is a planetarium panel, because the
+aperture and the focus belong to the mode whose entire subject is looking.
+[ADR-0018](../adr/0018-the-instrument.md).
 
 ### Dockable panels
 
@@ -433,7 +439,7 @@ looking at things.
 | **Color**           | No information conveyed by color alone. Provenance uses **dash pattern** as well as opacity; scan state uses **glyphs**. Protanopia, deuteranopia and tritanopia palettes.                                                                                                                                                                                                                                                                                               |
 | **Contrast**        | HUD elements meet 4.5:1 against the brightest plausible background — which, in this game, is a star filling the canopy. That is the design case, not a corner case.                                                                                                                                                                                                                                                                                                      |
 | **Subtitles**       | All correspondence is text already. Audio cues that convey information — heat warning, lock warning, scan complete — have visual equivalents, always.                                                                                                                                                                                                                                                                                                                    |
-| **Remapping**       | Everything, including modifiers. No fixed keys.                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| **Remapping**       | ✅ Everything, including modifiers, at `/settings/controls`, and every label prints the live chord rather than a string. The exception is the four keys the browser owns — `Tab`, `Escape`, `F11`, `F12` — and anything with `Ctrl` or `Cmd`; see [controls](#controls) for why a mode that claims `Tab` owns focus navigation whether it means to or not.                                                                                                               |
 | **Input**           | Full one-handed control scheme; no chorded inputs required; no timing-critical inputs outside combat                                                                                                                                                                                                                                                                                                                                                                     |
 | **Reduced motion**  | Disables the jump tunnel visual, the map cross-fades, and HUD animation                                                                                                                                                                                                                                                                                                                                                                                                  |
 | **Audio**           | Independent music / effects / interface / voice-adjacent sliders; mono downmix                                                                                                                                                                                                                                                                                                                                                                                           |

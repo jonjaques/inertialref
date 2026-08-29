@@ -1,6 +1,7 @@
 ---
 paths:
   - 'apps/game/src/**/*.tsx'
+  - 'apps/game/src/input/**'
   - 'apps/game/src/pages/**'
   - 'apps/game/src/state/**'
 ---

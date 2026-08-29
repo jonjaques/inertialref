@@ -193,9 +193,10 @@ pnpm sim --help                # all flags
 - **Genuinely offline** — a service worker caches the app, and with the server
   stopped the game still loads, streams terrain from its workers, and passes all
   twelve capability checks.
-- Six **dockable authoring panels** in the browser — `navigate`, `controls`,
-  `telemetry`, `perf`, `graphics`, and `camera` — that call the harness and
-  nothing else, so anything you can do by clicking is reproducible in a test.
+- **Dockable panels** in the browser — the catalog, the object record, the
+  camera and the presets in the planetarium, and the author's `controls`,
+  `telemetry`, `perf` and `graphics` behind a disclosure — that call the harness
+  and nothing else, so anything you can do by clicking is reproducible in a test.
 
 ### The twelve capabilities, proven
 
@@ -291,23 +292,23 @@ in `packages/*`.
 
 ### Commands
 
-| Command                       | What it does                                                            |
-| ----------------------------- | ----------------------------------------------------------------------- |
-| `pnpm dev`                    | Vite on :5173 **and** the Worker on :8787, in one terminal              |
-| `pnpm dev:client`             | Just Vite — keeps its interactive `r` / `o` / `q` keys                  |
-| `pnpm dev:server`             | Just `wrangler dev`                                                     |
-| `pnpm preview`                | Build, then serve it through the real Worker on :8787                   |
-| `pnpm test`                   | Vitest, Node environment only — no DOM is ever registered               |
-| `pnpm typecheck`              | Five independent tsconfig projects; see below                           |
-| `pnpm lint`                   | **oxlint**, not eslint (`oxlint --fix` applies autofixes)               |
-| `pnpm graph`                  | Dependency layering + cycle check, and prints the graph                 |
-| `pnpm brand`                  | Re-render every icon, the share card and the crawler files              |
-| `pnpm docs:build`             | Render `docs/` and every export of `packages/*` into the site's `/docs` |
-| `pnpm build`                  | Optional media pull, `docs:build`, `typecheck`, then `vite build`       |
-| **`pnpm check`**              | **The gate: graph → brand → format → lint → typecheck → test → build.** |
-| `pnpm sim --self-test`        | Headless run plus the twelve capability checks                          |
-| `pnpm vitest run <substring>` | A single test file                                                      |
-| `pnpm drive --help`           | Drive Chrome over the DevTools Protocol — `--js`, `--shot`, `--sample`  |
+| Command                       | What it does                                                                      |
+| ----------------------------- | --------------------------------------------------------------------------------- |
+| `pnpm dev`                    | Vite on :5173 **and** the Worker on :8787, in one terminal                        |
+| `pnpm dev:client`             | Just Vite — keeps its interactive `r` / `o` / `q` keys                            |
+| `pnpm dev:server`             | Just `wrangler dev`                                                               |
+| `pnpm preview`                | Build, then serve it through the real Worker on :8787                             |
+| `pnpm test`                   | Vitest, Node environment only — no DOM is ever registered                         |
+| `pnpm typecheck`              | Five independent tsconfig projects; see below                                     |
+| `pnpm lint`                   | **oxlint**, not eslint (`oxlint --fix` applies autofixes)                         |
+| `pnpm graph`                  | Dependency layering + cycle check, and prints the graph                           |
+| `pnpm brand`                  | Re-render every icon, the share card and the crawler files                        |
+| `pnpm docs:build`             | Render `docs/` and every export of `packages/*` into the site's `/docs`           |
+| `pnpm build`                  | Optional media pull, `docs:build`, `typecheck`, then `vite build`                 |
+| **`pnpm check`**              | **The gate: graph → brand → presets → format → lint → typecheck → test → build.** |
+| `pnpm sim --self-test`        | Headless run plus the twelve capability checks                                    |
+| `pnpm vitest run <substring>` | A single test file                                                                |
+| `pnpm drive --help`           | Drive Chrome over the DevTools Protocol — `--js`, `--shot`, `--sample`            |
 
 **Do not report a task complete without `pnpm check` passing.** CI runs exactly
 that command, so there is no separate list of CI stages to drift out of step.
@@ -403,7 +404,7 @@ Stated plainly, because discovering these by surprise is worse than reading them
   documented ≤ 8 ms budget, and a whole-disk selection holds 60–91 MB of
   float32 vertex buffers at the flight lens. `pnpm sim --terrain-baseline`
   prints all of it; the [roadmap](docs/roadmap.md#terrain) has the seams.
-- **Almost nothing is measured on the target machine.** The dev dock's perf tab
+- **Almost nothing is measured on the target machine.** The dev dock's perf panel
   (`P`) plots frame time, engine time, draw calls, worker queue and heap, and can
   time GPU frames properly — but every number recorded so far is from an Apple M5
   at 1000×760, not the 2023-class laptop at 1920×1080 the budgets are written

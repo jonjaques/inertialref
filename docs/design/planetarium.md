@@ -381,10 +381,12 @@ a gesture with an invisible effect — worse than no gesture. The panel _set_ is
 still the same stored layout, so a workspace arranged on a desktop and opened on
 a phone keeps its panels and rotating a tablet back restores the columns.
 
-**The shots carry the weight on touch.** A phone has one finger and no keyboard,
-so a composed shot is the only way to reach a framing that would otherwise take a
-drag, a pinch and a phase solve — and a drawn thumbnail is the only way to say
-which framing it is without a caption a phone has no room for.
+**The presets carry the weight on touch.** A phone has one finger and no
+keyboard, so a picture or a composition is the only way to reach a framing that
+would otherwise take a drag, a pinch and a phase solve — and a thumbnail is the
+only way to say which framing it is without a caption a phone has no room for.
+`L` and the Camera panel's switch are the same rule one level down: with no
+secondary button, making the drag _look_ has to be a control.
 
 ---
 

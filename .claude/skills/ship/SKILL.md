@@ -91,7 +91,7 @@ minutes. Launch the audits in a **single message** so they run concurrently, the
 the gate while they work.
 
 ```bash
-pnpm check          # graph, brand, format:check, lint, typecheck, test, build
+pnpm check          # graph, brand, presets, format:check, lint, typecheck, test, build
 pnpm sim --self-test
 ```
 
