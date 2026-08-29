@@ -20,9 +20,10 @@ import {
   convergence,
   type Hotspot,
   plateAt,
+  PLATE_MARGIN,
+  plateProperty,
   type PlateSample,
   type StripeAxis,
-  type TectonicPlate,
   type TerrainSketch,
 } from './sketch.ts'
 
@@ -53,11 +54,11 @@ import {
  * earlier than one with all of it.
  *
  * **The plate lookup is done once and handed round.** Three of the six bands
- * read the plate a sample sits on, and each of them used to call `plateAt`
- * itself — thirty dot products and two arc-cosines, three times over, for an
- * answer that depends on nothing but the direction. `convergence` was paid
- * twice the same way. `plateContext` is that work, done once per sample by
- * `elevationAt` and passed down; it is 4.4 ms a patch on a world with plates.
+ * read the plates a sample sits among, and each of them used to call `plateAt`
+ * itself — a pass over every nucleus, three times over, for an answer that
+ * depends on nothing but the direction. `convergence` was paid twice the same
+ * way. `plateContext` is that work, done once per sample by `elevationAt` and
+ * passed down; it is 4.4 ms a patch on a world with plates.
  *
  * **Only the bands that read a gradient pay for one.** `gradientNoise3` is four
  * times the cost of `noise3` — the value is one trilinear interpolation and the
@@ -104,18 +105,28 @@ export function octavesFor(
 /**
  * How wide a margin each band reads a plate property over.
  *
- * They genuinely differ, which is why there are three of them rather than one:
- * hypsometry changes crust type over a shelf and slope, a mountain belt is an
- * orogen wide, and an arc's volcanoes sit closer to the trench than either.
+ * They are the support radii of `plateProperty`'s weights: a plate this much
+ * farther from the sample than the nearest one has no say in that band. They
+ * genuinely differ, which is why there are three rather than one — hypsometry
+ * changes crust type over a shelf and slope, a mountain belt is an orogen wide,
+ * and an arc's volcanoes sit closer to the trench than either.
  *
  * `HYPSOMETRY_MARGIN` is a quarter of a radian, ~1,600 km on Earth: a
  * continental shelf and slope together, and the scale over which the crust
  * actually changes type. `BELT_MARGIN` is a tenth, ~640 km, which is the width
  * of an orogen — the Andes are 700 km across including the foreland.
+ * `ARC_MARGIN` is 0.06, which is where the volcanoes are rather than where the
+ * orogen is.
+ *
+ * **None of them may exceed `PLATE_MARGIN`**, which is how far `plateAt`
+ * bothers to look: a band blending over a wider margin than the search would be
+ * dividing by a sum it had already truncated, and the answer would jump as a
+ * plate fell out of a set it still had weight in. `geology.test.ts` holds the
+ * three against it.
  */
-const HYPSOMETRY_MARGIN = 0.25
-const BELT_MARGIN = 0.1
-const ARC_MARGIN = 0.06
+export const HYPSOMETRY_MARGIN = PLATE_MARGIN
+export const BELT_MARGIN = 0.1
+export const ARC_MARGIN = 0.06
 
 /**
  * The plate work every band shares, done once per sample.
@@ -150,7 +161,10 @@ export function plateContext(
   if (sample === null) return NO_PLATES
   return {
     sample,
-    across: sample.boundary < BELT_MARGIN ? convergence(sample, direction) : 0,
+    across:
+      sample.boundary < BELT_MARGIN
+        ? convergence(sample, direction, BELT_MARGIN)
+        : 0,
   }
 }
 
@@ -185,43 +199,8 @@ export function hypsometryBand(
   const sample = plates.sample
   if (sample === null) return clamp(swell, -1, 1)
 
-  const base = acrossBoundary(sample, (plate) => plate.base, HYPSOMETRY_MARGIN)
+  const base = plateProperty(sample, (plate) => plate.base, HYPSOMETRY_MARGIN)
   return clamp(base + swell * 0.35, -1, 1)
-}
-
-/**
- * A plate's own property, read so that it is continuous across the boundary.
- *
- * Which plate is `plate` and which is `neighbor` swaps as you step over the
- * line between them, so **any expression that reads one of them and not the
- * other is discontinuous there by construction**. The average is the one
- * combination that is not: it is symmetric under the swap, so it agrees with
- * itself from both sides. Weighting from the average at the line to the plate's
- * own value in its interior is what makes the whole band continuous while still
- * letting a plate be itself away from its edges.
- *
- * The weight has to reach *zero* at the boundary and not a half. Starting at a
- * half leaves half the difference between the two plates standing as a cliff —
- * measured before this: 9,433.9 m on Proxima Centauri II, which is 46% of that
- * world's entire relief budget, and 891.2 m on Earth, across 10⁻⁹ m of ground.
- * `elevationAt` is the one function the mesh and the contact test share, so a
- * step in it is a wall a ship lands on as readily as a wall you can see.
- *
- * `width` is each band's own margin rather than one shared number, because the
- * bands genuinely differ: hypsometry changes crust type over a shelf and slope,
- * a mountain belt is an orogen wide, and an arc's volcanoes sit closer to the
- * trench than either. A boolean becomes a fraction on the way through — the
- * caller asks for `plate.continental ? 1 : 0` and gets continentalness, which is
- * what a passive margin actually is.
- */
-function acrossBoundary(
-  sample: PlateSample,
-  of: (plate: TectonicPlate) => number,
-  width: number,
-): number {
-  const mine = of(sample.plate)
-  const theirs = of(sample.neighbor)
-  return mix((mine + theirs) / 2, mine, smoothstep(0, width, sample.boundary))
 }
 
 /**
@@ -308,26 +287,23 @@ export function beltBand(
   const diverging = Math.max(0, -across)
   const sliding = 1 - Math.abs(across)
   /*
-   * Continentalness and the transform's sense, both read across the boundary.
+   * Continentalness and the transform's sense, both read as a partition.
    *
    * `edge` is *one* at the line and falls to zero away from it, so this band is
-   * at full strength exactly where `plate` and `neighbor` swap — which makes it
-   * the worst place in the field to read a property of one plate and not the
-   * other. Taking `sample.plate.continental` directly flipped `uplift` between
-   * `ranges` and `-0.9·ranges` at a continental-oceanic margin: a 1,347.6 m
-   * step on Earth, and the one the hypsometry band's own half-blend was partly
-   * masking, so correcting that alone made Earth worse rather than better.
-   *
-   * `convergence` needs no such treatment and gets none: it negates both
-   * `toward` and `relative` under the swap, so their dot product is already
-   * symmetric.
+   * at full strength exactly where the plates around a sample change places —
+   * which makes it the worst place in the field to read a property off one of
+   * them by name. Taking `sample.plate.continental` directly flipped `uplift`
+   * between `ranges` and `-0.9·ranges` at a continental-oceanic margin: a
+   * 1,347.6 m step on Earth, and the one the hypsometry band's own half-blend
+   * was partly masking, so correcting that alone made Earth worse rather than
+   * better.
    */
-  const continental = acrossBoundary(
+  const continental = plateProperty(
     sample,
     (plate) => (plate.continental ? 1 : 0),
     BELT_MARGIN,
   )
-  const step = acrossBoundary(sample, (plate) => plate.step, BELT_MARGIN)
+  const step = plateProperty(sample, (plate) => plate.step, BELT_MARGIN)
 
   const uplift = converging * mix(-0.9 * ranges, ranges, continental)
   const opening = diverging * mix(0.55 * ranges, -0.7 * ranges, continental)
@@ -374,7 +350,7 @@ export function volcanicBand(
      * is also the honest picture: an arc sits behind the trench and thins
      * toward it rather than stopping at a line.
      */
-    const continental = acrossBoundary(
+    const continental = plateProperty(
       sample,
       (plate) => (plate.continental ? 1 : 0),
       ARC_MARGIN,

@@ -6,6 +6,7 @@ import {
   latticeSeed,
   Rng,
   type Seed,
+  smoothstep,
 } from '@inertialref/procedural'
 import { Vec, type Vec3, vec3 } from '@inertialref/spatial'
 import type { SurfaceGrammar } from './grammar.ts'
@@ -116,15 +117,55 @@ export interface TerrainSketch {
 }
 
 /**
- * The plate a direction belongs to, and how far it is from the nearest edge.
+ * The widest margin any band reads a plate property over, radians.
  *
- * One pass, two minima. `boundary` is `F2 − F1` in radians of angular distance:
- * zero exactly on a boundary, and half the plate's own width at its center.
+ * It is the support radius of the weights below: a plate more than this much
+ * farther from the sample than the nearest one is has no say in anything, so
+ * `plateAt` need not carry it. Every band's own margin has to be no wider —
+ * `geology.test.ts` holds that, because a band asking for a blend over a margin
+ * the search already truncated would be dividing by a sum that had lost a term
+ * still carrying weight.
+ */
+export const PLATE_MARGIN = 0.25
+
+/**
+ * The plates near a direction, and how much farther each is than the nearest.
+ *
+ * **This is a partition of unity, not a ranking, and the difference is a
+ * kilometre of cliff.** The obvious version returns the nearest plate and the
+ * second-nearest — one pass, two minima, and `F2 − F1` falls out of it for
+ * free. What that version cannot do is be *read*: which plate is second changes
+ * discontinuously along the locus where the second and third nearest are
+ * equidistant, and that is a network of curves through every plate's interior,
+ * nowhere near an edge. Measured either side of one on Proxima Centauri II: the
+ * same nearest plate, base 0.432, with the second jumping from base 0.224 to
+ * −0.894 at a `boundary` of 5.72e-2 — **1,532 m of step**, of a 20,434 m relief
+ * budget, and 3,081 m on Earth. It is the same shape as the cube-corner problem
+ * `craters.ts` avoids: a rank-based lookup has a seam wherever the ranking
+ * changes.
+ *
+ * So the sample carries *every* plate within `PLATE_MARGIN` of the nearest, and
+ * `plateProperty` weights them by a smooth function of how much farther they
+ * are and normalises. No rank identity enters, so a property read this way is
+ * continuous by construction: a plate joins the set at the support radius with
+ * weight zero, and two plates that swap places have equal weight at the instant
+ * they do.
+ *
+ * `boundary` is `F2 − F1` in radians and survives unchanged, because the
+ * *value* of the second distance is continuous even where the plate holding it
+ * is not. `plate` is the nearest, and its identity is discontinuous at a
+ * boundary in exactly the way the second's was at an interior seam — nothing
+ * reads a property off it, and it is here to be the fallback and to be looked
+ * at.
  */
 export interface PlateSample {
   readonly plate: TectonicPlate
-  readonly neighbor: TectonicPlate
+  /** Zero exactly on a boundary, and half the plate's width at its center. */
   readonly boundary: number
+  /** Every plate within `PLATE_MARGIN` of the nearest, the nearest included. */
+  readonly nearby: readonly TectonicPlate[]
+  /** How much farther than the nearest each of those is, radians. Parallel. */
+  readonly excess: readonly number[]
 }
 
 export function plateAt(
@@ -135,7 +176,6 @@ export function plateAt(
   if (plates.length < 2) return null
   let bestIndex = 0
   let best = -Infinity
-  let secondIndex = 1
   let second = -Infinity
   for (let i = 0; i < plates.length; i += 1) {
     const plate = plates[i] as TectonicPlate
@@ -147,39 +187,170 @@ export function plateAt(
       direction.z * plate.axis.z
     if (cosine > best) {
       second = best
-      secondIndex = bestIndex
       best = cosine
       bestIndex = i
     } else if (cosine > second) {
       second = cosine
-      secondIndex = i
     }
   }
   const near = Math.acos(Math.min(1, Math.max(-1, best)))
   const far = Math.acos(Math.min(1, Math.max(-1, second)))
+  /*
+   * The second pass, and it is a threshold in cosines so that it is not a
+   * second arc-cosine per plate.
+   *
+   * Cosine decreases with angle, so "within `PLATE_MARGIN` of the nearest" is
+   * one comparison against `cos(near + PLATE_MARGIN)`, and only the two or
+   * three plates that pass it pay for the arc-cosine that says by how much. On
+   * a twenty-plate world that is twenty dot products and three transcendentals
+   * rather than twenty of each.
+   */
+  const limit = Math.cos(Math.min(Math.PI, near + PLATE_MARGIN))
+  const nearby: TectonicPlate[] = []
+  const excess: number[] = []
+  for (let i = 0; i < plates.length; i += 1) {
+    const plate = plates[i] as TectonicPlate
+    const cosine =
+      direction.x * plate.axis.x +
+      direction.y * plate.axis.y +
+      direction.z * plate.axis.z
+    if (cosine < limit) continue
+    nearby.push(plate)
+    excess.push(Math.acos(Math.min(1, Math.max(-1, cosine))) - near)
+  }
   return {
     plate: plates[bestIndex] as TectonicPlate,
-    neighbor: plates[secondIndex] as TectonicPlate,
     boundary: far - near,
+    nearby,
+    excess,
   }
 }
 
 /**
- * How the two plates at a boundary are moving relative to each other.
+ * How much say a plate has at a sample, given how much farther it is than the
+ * nearest one and how wide the band's margin is.
  *
- * Positive is convergent, negative divergent, and near zero is transform. The
- * normal is the direction from the owning nucleus toward its neighbor, made
- * tangent at the sample — so it is the boundary's own normal wherever the
- * sample is, rather than the normal at either nucleus.
+ * One at the nearest plate, zero at the margin and past it, smooth in between.
+ * The compact support is what makes the sum finite, the continuity is what
+ * makes the whole scheme work, and the zero derivative at the far end is what
+ * lets a plate join the set without a crease. Nothing about it depends on which
+ * plate this is.
+ *
+ * **`(1 − s)/(1 + s)` rather than `1 − s`, and the difference is the shape of a
+ * continental margin.** The plain complement blends too far into a plate's
+ * interior: at half the margin it still gives its neighbour a third of the say,
+ * where the two-plate blend this replaces gave a fifth. On Earth that is the
+ * difference between a bimodal elevation histogram and a smeared one — Sarle's
+ * coefficient reads 0.583 with this and 0.553 with the complement, against the
+ * 5/9 at which a distribution stops having two modes. This form *is* that
+ * two-plate blend wherever only two plates are in range: the ratio it gives the
+ * neighbour is `(1 − s)/(1 + s)`, which is what `mix(average, mine, s)` was
+ * spending all along. What the partition changes is the interior seams and the
+ * triple junctions, and nothing else.
  */
-export function convergence(sample: PlateSample, direction: Vec3): number {
-  const toward = Vec.sub(sample.neighbor.axis, sample.plate.axis)
+const plateWeight = (excess: number, width: number): number => {
+  const s = smoothstep(0, width, excess)
+  return (1 - s) / (1 + s)
+}
+
+/**
+ * A plate's own property, read as a weighted average over every plate nearby.
+ *
+ * Deep inside a plate only that plate has weight and the answer is its own
+ * value. At a boundary the two sides weigh the same and the answer is their
+ * average. At a triple junction three do. There is no step anywhere in that,
+ * because a plate's weight reaches zero before it can leave the set.
+ *
+ * `width` is each band's own margin rather than one shared number, because the
+ * bands genuinely differ: hypsometry changes crust type over a shelf and slope,
+ * a mountain belt is an orogen wide, and an arc's volcanoes sit closer to the
+ * trench than either. A boolean becomes a fraction on the way through — the
+ * caller asks for `plate.continental ? 1 : 0` and gets continentalness, which
+ * is what a passive margin actually is.
+ */
+export function plateProperty(
+  sample: PlateSample,
+  of: (plate: TectonicPlate) => number,
+  width: number,
+): number {
+  let total = 0
+  let weight = 0
+  for (let i = 0; i < sample.nearby.length; i += 1) {
+    const share = plateWeight(sample.excess[i] as number, width)
+    if (share <= 0) continue
+    total += share * of(sample.nearby[i] as TectonicPlate)
+    weight += share
+  }
+  // The nearest plate has zero excess and therefore full weight, so this is
+  // unreachable — and it is the honest answer if a margin ever goes to zero.
+  return weight <= 0 ? of(sample.plate) : total / weight
+}
+
+/**
+ * How the plates at a boundary are moving relative to each other.
+ *
+ * Positive is convergent, negative divergent, and near zero is transform.
+ *
+ * Weighted over *pairs*, for the reason `plateProperty` is weighted over
+ * plates: a convergence computed from the nearest plate and whichever one
+ * happens to be second inherits the second's seam, and near a triple junction
+ * that seam runs through the ground the belt band is loudest on. Every pair
+ * contributes the product of its two weights, and `pairConvergence` is
+ * symmetric, so a pair cannot notice that its members swapped rank.
+ *
+ * There is nothing to weight where only one plate has any, and there the bands
+ * that read this are already at zero: `edge` and the weights share a margin, so
+ * a sample with one plate in range is further from a boundary than the band
+ * reaches.
+ */
+export function convergence(
+  sample: PlateSample,
+  direction: Vec3,
+  width: number,
+): number {
+  let total = 0
+  let weight = 0
+  for (let i = 0; i < sample.nearby.length; i += 1) {
+    const mine = plateWeight(sample.excess[i] as number, width)
+    if (mine <= 0) continue
+    for (let j = i + 1; j < sample.nearby.length; j += 1) {
+      const theirs = plateWeight(sample.excess[j] as number, width)
+      if (theirs <= 0) continue
+      const share = mine * theirs
+      total +=
+        share *
+        pairConvergence(
+          sample.nearby[i] as TectonicPlate,
+          sample.nearby[j] as TectonicPlate,
+          direction,
+        )
+      weight += share
+    }
+  }
+  if (weight <= 0) return 0
+  return Math.max(-1, Math.min(1, total / weight))
+}
+
+/**
+ * The component of two plates' relative motion across the line between them.
+ *
+ * The normal is the direction from one nucleus toward the other, made tangent
+ * at the sample — so it is the boundary's own normal wherever the sample is,
+ * rather than the normal at either nucleus. Symmetric under swapping the two:
+ * both `toward` and `relative` negate, so their dot product does not.
+ */
+function pairConvergence(
+  a: TectonicPlate,
+  b: TectonicPlate,
+  direction: Vec3,
+): number {
+  const toward = Vec.sub(b.axis, a.axis)
   const radial = Vec.dot(toward, direction)
   const normal = Vec.sub(toward, Vec.scale(direction, radial))
   const lengthSquared = Vec.lengthSquared(normal)
   if (lengthSquared < 1e-18) return 0
   const unit = Vec.scale(normal, 1 / Math.sqrt(lengthSquared))
-  const relative = Vec.sub(sample.plate.motion, sample.neighbor.motion)
+  const relative = Vec.sub(a.motion, b.motion)
   return Math.max(-1, Math.min(1, Vec.dot(relative, unit)))
 }
 
