@@ -296,8 +296,10 @@ export interface TerrainSelectOptions {
   /**
    * Refine only into regions this says are drawable.
    *
-   * The streamer's answer is "its heightfield is in the cache". Refining into a
-   * region whose field has not arrived is what produces a hole; stopping at the
+   * The streamer's answer is "its geometry is built" — the mesh rather than the
+   * heightfield, because a region whose field has arrived but whose vertices
+   * have not is one `state()` cannot place. Refining into a region that is not
+   * drawable is what produces a hole; stopping at the
    * parent produces a coarser picture of the same ground, which is what a
    * descent should look like while it loads. Omitted means everything is ready,
    * which is the question the *request* set asks.

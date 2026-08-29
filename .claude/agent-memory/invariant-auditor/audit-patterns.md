@@ -160,9 +160,13 @@ else invalidates. This diff got it right; nothing would have caught it if it had
 ## The tree can move under you mid-audit — and it now does so routinely
 
 On the quadtree review the branch gained a commit and four files gained uncommitted edits
-while I was reading. It fired again on `perf/the-cost-of-a-sample`: a concurrent session was fixing the very
+while I was reading. It fired again on `perf/the-cost-of-a-sample`, twice: a concurrent session was fixing the very
 doc-figure drift I was collecting, so six of my findings evaporated between the grep and the
-write-up. **Re-run the grep immediately before writing, and `git status` with it.**
+write-up — and on the geometry-cache audit a `docs:` commit landed **during the audit** that
+swept `harness.md`, `TERRAIN-PLAN.md`, ADR-0015 and `CONTEXT.md` and resolved four pending
+findings while introducing a fifth. On this repository the docs pass reliably follows the fix
+commit by minutes; audit the fix, then `git log` again before writing, and audit the docs
+commit too — that is where the overclaimed invariant lands. **Re-run the grep immediately before writing, and `git status` with it.**
 On `feat/the-geology` it was worse: a concurrent session **checked the
 main working directory out to an older commit and back** mid-run (`git reflog` showed
 `checkout: moving from feat/the-geology to c71bac5` and back), which silently poisoned a
@@ -354,6 +358,48 @@ each fix works — they usually do — but whether the fix reaches every consume
 thing it fixed. Two shapes from `feat/the-quadtree-covers-the-disk`: a widened effect
 dependency with the render-time guard still on the narrow key, and a local snapshot taken
 before an invalidating call.
+
+## A cap sized from one selection when the keep set is the union of two
+
+The streamer's recurring defect, now three times: `GEOMETRY_CACHE` was
+`DEFAULT_MAX_PATCHES + 128` "because only drawn patches get geometry", while
+`#evict` keeps `drawn ∪ starvedChildren ∪ pyramid(wanted)` — and `wanted` is a
+_second_ `selectTerrain` call at the look-ahead eye. `#evict` cannot delete a
+keep-set member, so a cap below `|keep|` does not bound the map: it pins
+residency at the keep set and makes every non-keep mesh a victim every frame.
+
+`perf/the-cost-of-a-sample` fixed the number (`* 2`) and then, in the follow-up
+docs commit, wrote a **stronger claim than the fix supports**: "`selectTerrain`
+caps the selection, so the keep set is bounded by `DEFAULT_MAX_PATCHES` and not
+by the viewport — measured 1,232 to 1,327 at both 3840×2400 and 5120×2880"
+(ADR-0015 Consequences, `CONTEXT.md`). Measured against the shipped code, on one
+body at one stance, the keep set moves with the viewport in every row: Ganymede
+at 2 km altitude with a 1 km look-ahead is **1,084 / 1,349 / 1,625** at
+1600×900 / 3840×2400 / 5120×2880. Invariance only appears when the camera is
+_stationary_ (the look-ahead collapses, drawn == wanted) or when
+`surfaceDetailFloor` binds before `maxPatches` does. The real ceiling is
+`|drawn| + 4·|starved| + |pyramid(wanted)|` ≈ 2.35× the selection cap, not 1.33×.
+
+**The probe that settles it, ~40 lines and reusable.** Reimplement the streamer's
+private `pyramid` (it walks `regionParent`), then for each body call
+`selectTerrain` twice — once at `direction`, once at a direction offset by
+`lead / body.radius` — and size the union of `drawn.patches`,
+`regionChildren(starved)` and `pyramid(wanted.patches)`. Sweep viewport ×
+look-ahead lead (`PREFETCH_SECONDS` is 2, so 1 km of lead is 500 m/s). Any claim
+of the form "X does not depend on the viewport" is one table away from being
+settled, and the author's version of the table was taken at a hover.
+
+## A regression bound written from the theoretical floor, not the measurement
+
+Same branch: `gameEngine.test.ts` asserts `GEOMETRY_CACHE > (DEFAULT_MAX_PATCHES
+
+- 4. / 3`= 1,365 — the *floor* the docstring itself says holds "before the
+starved rung is counted".`DEFAULT_MAX_PATCHES * 1.5` = 1,536 passes that
+     assertion and still sits under the measured keep set of 1,625 at 5120×2880, so
+     the test admits the whole range [1,366, ~1,860] that reproduces the shipped
+     strobe. When a fix's own commit body quotes measurements (1,597 and 1,713
+     resident), the assertion should be pinned to the largest of them, per CLAUDE.md's
+     "name the limit in the assertion".
 
 ## "One constant instead of two that must agree" usually leaves a smaller twin
 

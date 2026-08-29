@@ -154,9 +154,18 @@ Geometry sized at the selection plus a slack of 128 sat under that floor: the
 streamer built four patches a frame and dropped four it had wanted a moment
 earlier, and every twenty-sixth frame the eviction took a patch the traversal
 was refining through and the disk snapped from 760 patches at level 7 to four at
-level 1. The keep set is bounded by the selection cap rather than by the
-viewport — measured 1,232 to 1,327 at both 3840×2400 and 5120×2880 — so the
-multiple is a bound and not a display-dependent one.
+level 1.
+
+**No multiple of the selection cap bounds that keep set, and the cap in force is
+a measurement rather than a proof.** The request set is _two_ independently
+capped selections — the drawn one and the one taken at the look-ahead eye — so
+its ceiling is around 2.3× the selection cap in the limit, which is more than
+the geometry cache holds. The two coincide at a hover and separate as the
+camera's ground track lengthens, so what moves the keep set is the camera's
+speed as much as the drawing buffer: measured over Luna, Ganymede and Triton it
+runs from 957 at a hover over 1600×900 to 1,824 at a 20 km lead over 5120×2880.
+Twice the cap clears everything measured, by about 11%. Anyone retuning either
+number wants that sweep again rather than the arithmetic.
 
 **Phase 3 owes the sphere-tier shell a material.** The plan's unconditional
 level-0–2 shell wants a per-face normal and albedo bake underneath it; without

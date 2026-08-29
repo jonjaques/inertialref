@@ -5439,12 +5439,19 @@ scene is perfectly static — and the collapse frame differs from both by 30,050
 of which 17,391 are ground, at **2.29 Hz**. On screen every crater flattens to a
 blank shell for one frame, twice a second.
 
-The fix is `DEFAULT_MAX_PATCHES * 2`, and the thing that makes it a bound rather
-than a number that worked on one monitor is that **`selectTerrain` caps the
-selection**, so the keep set is bounded by `DEFAULT_MAX_PATCHES` and not by the
-viewport. Measured keep is 1,232 to 1,327 at both 3840x2400 and 5120x2880 — the
-buffer doubles and the keep set does not move. It is a ceiling rather than an
-allocation, so the sizes that already fit pay nothing. At 3840x2400 the streamer
+The fix is `DEFAULT_MAX_PATCHES * 2`, and the first thing written about it here
+was wrong: that the keep set is bounded by the selection cap and not by the
+viewport, "measured 1,232 to 1,327 at both 3840x2400 and 5120x2880". Both
+measurements were taken at Earthrise, **which is a hover** — and at a hover
+`#lookAhead` collapses to the present, so the drawn selection and the requested
+one are the same set and the keep set really is just one pyramid. Let the camera
+move and they are two independently capped selections whose union grows with
+both the buffer and the ground-track speed: 957 regions at a hover over
+1600x900, 1,824 at a 20 km lead over 5120x2880, on Ganymede and Triton at 500 m.
+So twice the cap is a number that clears everything measured with about 11% to
+spare, not a bound anything proves — and the old cap of 1,152 was under the keep
+set at 1600x900 too, on any camera that was moving. It is a ceiling rather than
+an allocation, so the sizes that already fit pay nothing; full it is 416 MB. At 3840x2400 the streamer
 now converges to 1,597 resident and **901 patches drawn against the 760 it
 managed while thrashing**: correcting the cache made the picture both stable and
 deeper, because a treadmill spends its build budget re-making ground it already

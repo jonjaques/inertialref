@@ -556,16 +556,25 @@ describe('the game engine, headless', () => {
        */
       expect(FIELD_CACHE).toBeGreaterThan(DEFAULT_MAX_PATCHES * 2)
       /*
-       * Geometry is held for the *request* set, not the drawn one, and the
-       * request set is a whole pyramid: a quadtree's ancestors are a third
-       * again as many as its leaves. A cap at `DEFAULT_MAX_PATCHES + 128` sat
-       * under that floor, so `#build` added four patches a frame and `#evict`
-       * dropped four it had just wanted — `starved` never reached zero and the
-       * disk collapsed from 760 patches at level 7 to four at level 1 every
-       * twenty-six frames. Only above a 1600×900 buffer, because that is where
-       * the keep set outgrows the cap, which is why it read as a display bug.
+       * Geometry is held for the *request* set, not the drawn one, and that set
+       * is two independently capped selections — the drawn one and the
+       * look-ahead one — plus the starved rung, so `DEFAULT_MAX_PATCHES` does
+       * not bound it and neither does any multiple of it that can be derived.
+       * A cap under the keep set makes `#build` add four patches a frame while
+       * `#evict` drops four it has just wanted: `starved` never reaches zero,
+       * and the disk collapses from 760 patches at level 7 to four at level 1
+       * every twenty-sixth frame.
+       *
+       * **The bound here is measured, and this is the measurement.** 1,824 is
+       * the largest keep set found over Luna, Ganymede and Triton at 500 m and
+       * 2 km, at ground-track leads to 20 km, over a 5120×2880 drawing buffer —
+       * the corner where the two selections separate furthest. A floor written
+       * from the pyramid alone would be 1,365, and every value between that and
+       * this one reproduces the strobe: at 1,536 Ganymede needs 1,598 with a
+       * 5 km lead. `.scratch` is where the sweep runs; the number is what it
+       * left behind.
        */
-      expect(GEOMETRY_CACHE).toBeGreaterThan((DEFAULT_MAX_PATCHES * 4) / 3)
+      expect(GEOMETRY_CACHE).toBeGreaterThan(1_824)
       // The baseline restates the streamer's multiplier because devtools cannot
       // import apps/game; this is the assertion that keeps the twin honest — a
       // retune of FIELD_CACHE alone silently un-calibrates every ir.descend

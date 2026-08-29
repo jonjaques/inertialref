@@ -183,19 +183,25 @@ because the pyramid is re-asked for every frame: a keep set of the two
 selections' leaves alone turns the cap into a treadmill that evicts a rung,
 re-requests it, and regenerates it at 9 to 37 ms a patch.
 
-**The cap has to clear that keep set, and the drawn selection does not measure
-it.** A quadtree's ancestors are about a third again as many as its leaves, so
-the keep set floors at ~1.33× the selection cap before the starved rung is
-counted — geometry is held at twice the cap, heightfields at three times. Under
-that floor the streamer builds four patches a frame and evicts four it wanted a
-moment earlier, `starved` never falls to zero, and every twenty-sixth frame the
-eviction takes a patch the traversal is refining through: the disk snaps from
-760 patches at level 7 to four at level 1 and back, two to three times a second.
-It follows the display rather than the body — below the drawing buffer where the
-keep set outgrows the cap it never happens at all, which is why 1600×900 is rock
-solid and a Retina window is not — and only the geometry count shows it, because
-refinement gates on the mesh while the heightfield cache sits at its steady
-value.
+**The cap has to clear that keep set, and neither selection measures it.** The
+request set is two independently capped selections — the drawn one and the one
+taken at the look-ahead eye — plus the starved rung, so no multiple of the
+selection cap bounds it: geometry is held at twice the cap and heightfields at
+three times, and both numbers are measurements rather than derivations. Under
+the keep set the streamer builds four patches a frame and evicts four it wanted
+a moment earlier, `starved` never falls to zero, and every twenty-sixth frame
+the eviction takes a patch the traversal is refining through: the disk snaps
+from 760 patches at level 7 to four at level 1 and back, two to three times a
+second.
+
+What decides whether that happens is the **ratio of keep set to cap**, and it
+grows with the camera's speed over the ground as much as with the drawing
+buffer — the two selections coincide at a hover and separate as the lead
+lengthens. Measured over Luna, Ganymede and Triton: 957 regions hovering at
+1600×900, 1,824 at a 20 km ground-track lead at 5120×2880. So a hover at a small
+buffer is the case that never shows it, not a buffer size below which it cannot
+happen. Only the geometry count shows it either way, because refinement gates on
+the mesh while the heightfield cache sits at its steady value.
 
 Patch keys are `body|face.level.i.j` — `terrainPatchKey`, one definition and
 three readers — so the same patch is never requested twice concurrently, and the

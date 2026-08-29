@@ -65,8 +65,9 @@ import { generateHeightfieldTask, type WorkerPool } from '@inertialref/workers'
  * Three rules the quadtree adds, all of them about *when* rather than *what*:
  *
  *   - **Refinement only enters ground that is already there.** The draw set is
- *     selected with a `ready` test against the heightfield cache, so a patch
- *     whose field has not arrived is not a hole — its parent is drawn instead,
+ *     selected with a `ready` test against the *geometry* cache — the mesh, not
+ *     the field, for the reason `#build`'s gate gives — so a patch that is not
+ *     built yet is not a hole; its parent is drawn instead,
  *     covering the same ground more coarsely. A descent therefore sharpens
  *     rather than filling in.
  *   - **The request set leads the camera.** It is selected again at where the
@@ -247,13 +248,29 @@ export const FIELD_CACHE = DEFAULT_MAX_PATCHES * 3
  * **Sized against the request set, not the drawn one.** Only drawn patches are
  * *placed*, but three sets get geometry built and a fourth decides what may be
  * dropped: `#build` takes the drawn set *and* the rung below it, and `#evict`
- * keeps whatever the frame requested — which is the drawn set, the starved
- * children, and the whole pyramid under the ideal selection. A quadtree's
- * ancestors are about a third again as many as its leaves, so that keep set
- * floors at ~1.33× `DEFAULT_MAX_PATCHES` before the starved rung is counted.
- * Measured standing at Earthrise over a 3840×2400 drawing buffer: **1,323
- * regions named by one frame's request list, 1,597 resident once the ladder
- * converges** — both above the 1,152 this was.
+ * keeps whatever the frame requested — the drawn set, the starved children, and
+ * the whole pyramid under the ideal selection.
+ *
+ * **That keep set is two selections, not one, so it is not bounded by
+ * `DEFAULT_MAX_PATCHES`.** `wanted` is a second `selectTerrain` at the
+ * look-ahead eye and is capped independently of the drawn one, so the union's
+ * ceiling is `|drawn| + 4·|starved| + |pyramid(wanted)|` — around 2.3× the
+ * selection cap in the limit, which this number does *not* clear. What makes 2×
+ * safe is measurement rather than arithmetic, and the thing that moves it is the
+ * camera's speed over the ground as much as the buffer: the two selections
+ * coincide at a hover and separate as the lead grows. Worst measured, across
+ * Luna, Ganymede and Triton at 500 m and 2 km with leads to 20 km:
+ *
+ * | buffer     | hover | 5 km lead | 20 km lead |
+ * | ---------- | ----- | --------- | ---------- |
+ * | 1600×900   | 957   | 1,267     | 1,450      |
+ * | 3840×2400  | 1,085 | 1,506     | 1,668      |
+ * | 5120×2880  | 1,193 | 1,711     | **1,824**  |
+ *
+ * So the margin here is about 11%, not the 2× the multiple suggests. Standing
+ * at Earthrise — a hover, where the two selections coincide — one frame's
+ * request list names 1,323 regions and 1,597 are resident once the ladder
+ * converges; both are above the 1,152 this was.
  *
  * A cache under its working set does not degrade, it oscillates, and this one
  * did it where nothing was watching. `#build` added four patches a frame,
@@ -262,16 +279,18 @@ export const FIELD_CACHE = DEFAULT_MAX_PATCHES * 3
  * took a patch the traversal was refining through: `ready` failed, the walk
  * stopped ten nodes in, and the whole disk snapped from 760 patches at level 7
  * to four at level 1 for a frame. On screen that is the ground jumping two to
- * three times a second, and only once the finest level is in play — below the
- * buffer size where the keep set fits, it never happens at all, which is why it
- * follows the display rather than the body. `FIELD_CACHE` above carries the
- * same argument for heightfields; geometry never got it.
+ * three times a second, and only once the finest level is in play. What decides
+ * whether it happens is the *ratio* of keep set to cap, which is why a hover at
+ * 1600×900 never showed it and a moving camera at the old cap would have:
+ * 1,450 against 1,152. `FIELD_CACHE` above carries the same argument for
+ * heightfields; geometry never got it.
  *
  * A patch is 203 KB of vertex buffers, which is the expensive half of terrain's
  * memory and the half attribute packing would halve. This is a *ceiling*, not
  * an allocation — what is resident is the working set, ~700 patches and 142 MB
- * at 1600×900 — so raising it costs nothing at the sizes that already fit and
- * buys 324 MB rather than a strobe at the sizes that do not.
+ * at 1600×900, 1,597 and 324 MB at 3840×2400 — so raising it costs nothing at
+ * the sizes that already fit. Full, it is **416 MB**, which is the number to
+ * weigh against a strobe and against the 208 MB the selection alone quotes.
  */
 export const GEOMETRY_CACHE = DEFAULT_MAX_PATCHES * 2
 
