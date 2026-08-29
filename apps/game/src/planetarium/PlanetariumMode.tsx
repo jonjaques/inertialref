@@ -102,6 +102,7 @@ export function PlanetariumMode({
   // The sheet's own chord, so the hint cannot name a key the editor has moved.
   const keysLabel = useKeyLabel('chrome.keys')
   const chromeHidden = useChromeHidden()
+  const drawLabels = useEngine((snapshot) => snapshot.presentation.labels)
   /*
    * Whether the camera is on the ground, sampled with the rest of the status.
    *
@@ -143,10 +144,11 @@ export function PlanetariumMode({
       showShip: ship,
       showOrbits: orbits,
       orbitScope,
+      labels,
       flareArtifacts: flare,
       observatory: true,
     })
-  }, [engine, ship, orbits, orbitScope, flare])
+  }, [engine, ship, orbits, orbitScope, labels, flare])
 
   const focus = useCallback(
     (address: string, options: { url?: boolean } = {}) => {
@@ -326,7 +328,9 @@ export function PlanetariumMode({
 
       <SkyLabels
         engine={engine}
-        enabled={labels}
+        // The stance, not the preference: a capture pushes `labels: false` over
+        // it, and reading the preference here would draw the names anyway.
+        enabled={drawLabels}
         density={labelDensity}
         minor={labelMinor}
         target={target}

@@ -377,3 +377,30 @@ function keyEvent(
     preventDefault: () => {},
   } as unknown as KeyboardEvent
 }
+
+describe('a chord label, against a real layout map', () => {
+  it('keeps the shifted glyph when the keyboard agrees with the table', () => {
+    /*
+     * Chromium answers `getLayoutMap`, and it answers with what a key types
+     * *unshifted* — so a naive "use the table only when there is no map" rule
+     * prints "Shift + /" on the one browser family that has the information.
+     * The keys sheet is called `?` everywhere, and this is the check that it
+     * still says so.
+     */
+    const us = new Map([
+      ['Slash', '/'],
+      ['KeyH', 'h'],
+    ])
+    expect(chordLabel(chord('Slash', { shift: true }), us)).toBe('?')
+    expect(chordLabel(chord('KeyH', { shift: true }), us)).toBe('Shift + H')
+  })
+
+  it('names both keys when the layout disagrees with the table', () => {
+    // On AZERTY the physical `Slash` types `:`, and `Shift` on it is not a
+    // question mark. Clumsy beats wrong: the sheet says which two keys.
+    const azerty = new Map([['Slash', ':']])
+    expect(chordLabel(chord('Slash', { shift: true }), azerty)).toBe(
+      'Shift + :',
+    )
+  })
+})

@@ -4,6 +4,7 @@ import { Action } from '../hud/Action.tsx'
 import { TransportButton } from '../hud/TransportButton.tsx'
 import { nextWarp } from '../hud/warp.ts'
 import { useEngine, useShallow } from '../state/engineStore.ts'
+import { useActionTitle } from '../input/useKeymap.ts'
 import type { PlanetariumContext } from './context.ts'
 import { localZone, simulationInstant } from './simulationTime.ts'
 
@@ -27,6 +28,11 @@ import { localZone, simulationInstant } from './simulationTime.ts'
  * readout it will replace.
  */
 export function TimePanel({ engine }: PlanetariumContext) {
+  const slower = useActionTitle('time.slower', 'Slower')
+  const faster = useActionTitle('time.faster', 'Faster')
+  const pause = useActionTitle('time.pause', 'Pause')
+  const run = useActionTitle('time.pause', 'Run')
+  const realTime = useActionTitle('time.normal', 'Back to normal time')
   /*
    * Four numbers out of the snapshot, not the snapshot.
    *
@@ -66,19 +72,22 @@ export function TimePanel({ engine }: PlanetariumContext) {
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5">
+        {/* The keys come from the keymap rather than from the string, so a
+            rebind reaches these labels in the same commit that stores it — and
+            a screen reader is told the key that is actually bound. */}
         <TransportButton
-          label="Slower ( [ )"
+          label={slower}
           icon={Rewind}
           onClick={() => warp(engine, -1)}
         />
         <TransportButton
-          label={world.paused ? 'Run (Space)' : 'Pause (Space)'}
+          label={world.paused ? run : pause}
           icon={world.paused ? Play : Pause}
           primary
           onClick={() => engine.world.clock.setPaused(!world.paused)}
         />
         <TransportButton
-          label="Faster ( ] )"
+          label={faster}
           icon={FastForward}
           onClick={() => warp(engine, 1)}
         />
@@ -96,7 +105,9 @@ export function TimePanel({ engine }: PlanetariumContext) {
           label={`${world.timeScale}×`}
           tone={normal ? 'normal' : 'primary'}
           title={
-            normal ? 'Normal time' : `${world.timeScale}× — back to normal time`
+            normal
+              ? realTime
+              : `${world.timeScale}× — ${realTime.toLowerCase()}`
           }
           onClick={() => engine.world.clock.setTimeScale(1)}
         />

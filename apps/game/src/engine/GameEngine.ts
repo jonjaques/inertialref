@@ -398,6 +398,30 @@ export class GameEngine implements PresentationHost {
    */
   chrome = true
 
+  /** Names on the sky. A stance field, so a capture can push it off. */
+  labels = true
+
+  /**
+   * The layer stance a capture holds, while it holds one.
+   *
+   * Names and traces together, because they are one question to the thing that
+   * asks it: a plate shows what the preset does, and both of these are drawn
+   * over whatever it does.
+   */
+  #layerStance: StanceHandle | null = null
+
+  setLayers(visible: boolean): void {
+    if (visible) {
+      this.#layerStance?.release()
+      this.#layerStance = null
+      return
+    }
+    this.#layerStance ??= this.presentation.push({
+      labels: false,
+      showOrbits: false,
+    })
+  }
+
   /*
    * The host's renderer, once it has one. `null` under Node, and for as long as
    * the capability probe is still running.
@@ -525,6 +549,7 @@ export class GameEngine implements PresentationHost {
           this.flightLens = lens
         },
         setChrome: (visible) => this.setChrome(visible),
+        setLayers: (visible) => this.setLayers(visible),
         onWorldReplaced: () => this.#invalidateDerived(),
       },
     })
@@ -544,6 +569,7 @@ export class GameEngine implements PresentationHost {
     this.presentation = createPresentationStack((stance) => {
       this.showShip = stance.showShip
       this.showOrbits = stance.showOrbits
+      this.labels = stance.labels
       this.orbitScope = stance.orbitScope
       this.flareArtifacts = stance.flareArtifacts
       this.chrome = stance.chrome

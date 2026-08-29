@@ -207,15 +207,27 @@ export function chordLabel(
   candidate: Chord,
   layout?: ReadonlyMap<string, string> | null,
 ): string {
-  const shifted = candidate.shift ? US_SHIFTED[candidate.code] : undefined
-  const base =
-    shifted !== undefined && layout?.get(candidate.code) === undefined
-      ? shifted
-      : null
+  /*
+   * The shifted glyph is only right when the attached keyboard agrees with the
+   * table it came from.
+   *
+   * `getLayoutMap` says what a key types *unshifted* and has nothing to say
+   * about the shifted character, so the US table is the only source for `?` —
+   * and on a layout where `Slash` types something else, `Shift+Slash` is not a
+   * question mark. Comparing the unshifted character is the cheap correct test:
+   * a keyboard that types `/` on that key types `?` with Shift on every layout
+   * that has both. A disagreement falls back to naming the two keys, which is
+   * clumsy and is never wrong.
+   */
+  const unshifted = layout?.get(candidate.code)
+  const agrees =
+    unshifted === undefined || unshifted === US_LABELS[candidate.code]
+  const shifted =
+    candidate.shift && agrees ? US_SHIFTED[candidate.code] : undefined
   const parts: string[] = []
   if (candidate.alt) parts.push('Alt')
-  if (base === null && candidate.shift) parts.push('Shift')
-  parts.push(base ?? codeLabel(candidate.code, layout))
+  if (shifted === undefined && candidate.shift) parts.push('Shift')
+  parts.push(shifted ?? codeLabel(candidate.code, layout))
   return parts.join(' + ')
 }
 

@@ -116,6 +116,8 @@ export interface SessionHost {
   readonly setFlightLens?: PresentationHost['setFlightLens']
   /** Put the interface in or out of the frame, for a plate capture. */
   readonly setChrome?: PresentationHost['setChrome']
+  /** Names and traces in or out of the frame, for the same. */
+  readonly setLayers?: PresentationHost['setLayers']
   /**
    * Called after the world is replaced, so a host can drop derived state.
    *
@@ -246,6 +248,9 @@ export function openSession(options: SessionOptions = {}): Session {
     ...(options.host?.setChrome === undefined
       ? {}
       : { setChrome: options.host.setChrome }),
+    ...(options.host?.setLayers === undefined
+      ? {}
+      : { setLayers: options.host.setLayers }),
   }
 
   const harness = new GameHarness(host)

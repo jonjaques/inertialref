@@ -228,6 +228,15 @@ export interface PresentationHost {
    */
   setChrome?(visible: boolean): void
   /**
+   * Put the sky's own layers — names and traces — in or out of the frame.
+   *
+   * Separate from `setChrome` because they are different claims: chrome is the
+   * interface and these are content, so `Shift+H` clears the first and leaves
+   * the second. A plate wants both gone, because a thumbnail of a picture is a
+   * thumbnail of what the camera does and the layers are the viewer's.
+   */
+  setLayers?(visible: boolean): void
+  /**
    * What the terrain streamer is doing this frame.
    *
    * The one number in the terrain rig that cannot be derived: `simulateDescent`
@@ -1280,6 +1289,19 @@ export class GameHarness {
     return visible
   }
 
+  /**
+   * Names and traces in or out of the frame.
+   *
+   * Not part of `chrome`, because they are content rather than interface — the
+   * viewer turned them on and `Shift+H` leaves them alone. A plate is the one
+   * capture that wants them gone: the thumbnail is of what the preset does, and
+   * a trace slashing across it promises a layer the press does not set.
+   */
+  layers(visible: boolean): boolean {
+    this.#host.setLayers?.(visible)
+    return visible
+  }
+
   /** The pictures `preset` can take. */
   presets(): readonly { id: string; label: string; why: string }[] {
     return PICTURES.map(({ id, label, why }) => ({ id, label, why }))
@@ -1548,6 +1570,7 @@ export class GameHarness {
       '  ir.rise()                     stand with the parent over the horizon',
       '  ir.preset(id)                 a named picture: address, framing, lens',
       '  ir.chrome(false)              clear the interface — the plate state',
+      '  ir.layers(false)              names and traces off, for a plate',
       '  ir.observatory                the free camera itself — drag, zoom, setPhase',
       '  ir.sites(address?)            the named places on a body, derived from its own terrain',
       '  ir.visit(address?, {site, height, heading, pitch})',

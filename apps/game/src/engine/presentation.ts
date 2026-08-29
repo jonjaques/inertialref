@@ -71,6 +71,18 @@ export interface Stance {
   /** Orbit traces. */
   readonly showOrbits?: boolean
   /**
+   * Names on the sky.
+   *
+   * A stance rather than a prop threaded from the preference that sets it, and
+   * the rule has no carve-out for the fields that look like preferences —
+   * `orbitScope` is the precedent. What decided it here is the plate rig: a
+   * thumbnail of a picture is a thumbnail of what the *camera* does, and the
+   * layers are the viewer's, drawn over whatever it does. A capture has to be
+   * able to say "not this time" without editing somebody's stored settings, and
+   * a push is what that is.
+   */
+  readonly labels?: boolean
+  /**
    * How many of them: the subject's own context, or every orbit in the system.
    *
    * A stance field rather than a panel's own boolean, because it is a
@@ -110,6 +122,7 @@ export interface Stance {
 export interface Presentation {
   readonly showShip: boolean
   readonly showOrbits: boolean
+  readonly labels: boolean
   readonly orbitScope: OrbitScope
   readonly flareArtifacts: number
   readonly observatory: boolean
@@ -120,6 +133,7 @@ export interface Presentation {
 export const GROUND_STANCE: Presentation = {
   showShip: true,
   showOrbits: false,
+  labels: true,
   orbitScope: 'context',
   flareArtifacts: 1,
   observatory: false,
@@ -156,6 +170,7 @@ export function resolveStances(layers: readonly Stance[]): Presentation {
     resolved = {
       showShip: layer.showShip ?? resolved.showShip,
       showOrbits: layer.showOrbits ?? resolved.showOrbits,
+      labels: layer.labels ?? resolved.labels,
       orbitScope: layer.orbitScope ?? resolved.orbitScope,
       flareArtifacts: layer.flareArtifacts ?? resolved.flareArtifacts,
       observatory: layer.observatory ?? resolved.observatory,
@@ -184,6 +199,7 @@ export function createPresentationStack(
     if (
       next.showShip === last.showShip &&
       next.showOrbits === last.showOrbits &&
+      next.labels === last.labels &&
       next.orbitScope === last.orbitScope &&
       next.flareArtifacts === last.flareArtifacts &&
       next.observatory === last.observatory &&
