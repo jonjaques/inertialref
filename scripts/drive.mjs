@@ -39,10 +39,11 @@
  * Steps run in the order they are written, so one process does a whole
  * verification. `--help` lists them.
  */
-import { spawn } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { mkdir, readFile, writeFile, rm } from 'node:fs/promises'
-import { parseArgs } from 'node:util'
+import { parseArgs, promisify } from 'node:util'
+import { analyseFrames, differenceMap, reportFrames } from './frameDiff.mjs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -52,6 +53,8 @@ const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 /** Where shots land when the path has no directory in it, and where the rig
  *  records what it started. `.data/` is git-ignored; nothing here is source. */
 const RIG = path.join(ROOT, '.data/drive')
+/** Longest edge a cast frame is captured at; see `castFrames`. */
+const CAST_PX = 1280
 
 const OPTIONS = {
   /* Session — these describe the browser, not a step. */
@@ -84,6 +87,9 @@ const OPTIONS = {
   shot: { type: 'string', multiple: true },
   sample: { type: 'string', multiple: true },
   'sample-js': { type: 'string', default: 'ir.terrain()' },
+  /** A burst of *rendered* frames, differenced — the only step that can see a
+   *  strobe. `--shot` cannot: it draws its own frame. */
+  cast: { type: 'string', multiple: true },
   logs: { type: 'boolean', multiple: true },
   reload: { type: 'boolean', multiple: true },
 
@@ -97,6 +103,7 @@ const STEPS = new Set([
   'file',
   'wait',
   'shot',
+  'cast',
   'sample',
   'logs',
   'reload',
@@ -118,6 +125,12 @@ Steps run in the order they are written, in one browser session:
                      a .jpg extension captures JPEG, which is what to read
   --sample <n>       n consecutive rAF frames of --sample-js, with a per-field
                      min..max summary. A still cannot show a strobe
+  --cast <n>         n rendered frames over a screencast, written to
+                     .data/drive/cast/ and differenced: reports the frames that
+                     differ from both neighbours while the neighbours match each
+                     other, their period, and the rate in Hz. That shape is a
+                     strobe; motion produces none. Writes cast.mp4 when ffmpeg
+                     is installed, which is the artifact worth attaching
   --logs             console output and page errors buffered so far
   --reload           hard reload, then wait for the renderer
 
@@ -334,10 +347,24 @@ function connect(ws) {
   let next = 1
   const pending = new Map()
   const events = []
+  /*
+   * Synchronous listeners, and they may swallow the message.
+   *
+   * Screencast is the reason. Chrome sends the next frame only once the
+   * previous one is acknowledged, so an acknowledgement that waits on a poll
+   * loop throttles the stream to whatever the poll interval is — a 16 ms poll
+   * measured 18 fps on a page running at 60, which subsamples the capture and
+   * drops exactly the one-frame artifact a cast is taken to find. Acking from
+   * inside the message handler is what keeps the stream at the page's own rate.
+   */
+  const listeners = new Set()
   ws.addEventListener('message', (event) => {
     const msg = JSON.parse(event.data)
     if (msg.id === undefined) {
-      events.push(msg)
+      let consumed = false
+      for (const listener of listeners)
+        if (listener(msg) === true) consumed = true
+      if (!consumed) events.push(msg)
       return
     }
     const entry = pending.get(msg.id)
@@ -375,7 +402,12 @@ function connect(ws) {
   }
   ws.addEventListener('close', () => abandon('the CDP socket closed'))
   ws.addEventListener('error', () => abandon('the CDP socket errored'))
-  return { send, events }
+  /** Returns its own removal, so a step cannot leak a listener into the next. */
+  const subscribe = (listener) => {
+    listeners.add(listener)
+    return () => listeners.delete(listener)
+  }
+  return { send, events, subscribe }
 }
 
 /**
@@ -495,6 +527,106 @@ async function capture(send, target) {
   return { path: path.relative(ROOT, out), bytes: bytes.length }
 }
 
+/**
+ * A burst of frames as the compositor actually presented them.
+ *
+ * `--shot` cannot see a strobe. `Page.captureScreenshot` draws a frame of its
+ * own on demand, so a one-frame artifact that recurs on a fixed period is
+ * precisely what it never lands on — eight consecutive shots of a strobing
+ * scene came back identical to six pixels while the page was visibly jumping
+ * twice a second. A screencast is the compositor's own output, at the rate the
+ * page is running, which is the only place the bad frame exists.
+ *
+ * Frames are acknowledged as they arrive because Chrome stops sending until
+ * the previous one is, so a collector that batches its acks measures its own
+ * back-pressure instead of the page.
+ */
+async function castFrames(send, subscribe, count, out) {
+  const frames = []
+  const unsubscribe = subscribe((msg) => {
+    if (msg.method !== 'Page.screencastFrame') return false
+    // Acknowledge first. The frame is already in hand and the next one does
+    // not start until this returns; anything done before it is latency the
+    // capture rate pays for.
+    void send('Page.screencastFrameAck', { sessionId: msg.params.sessionId })
+    if (frames.length < count)
+      frames.push({ data: msg.params.data, at: msg.params.metadata.timestamp })
+    // Consumed, so `drainLogs` still sees only console output and exceptions.
+    return true
+  })
+  /*
+   * JPEG, and capped well under the drawing buffer.
+   *
+   * The capture rate is bounded by how fast Chrome can encode a frame, not by
+   * how fast the page draws one: PNG at a 3840x2400 retina buffer measured
+   * 17 fps on a page running at 60, which subsamples the stream and drops the
+   * one-frame artifact this exists to catch. At 1280 px and JPEG it keeps up.
+   * Nothing is lost — the difference runs at 480 px, because that is what
+   * averages away compression ringing and single-pixel star twinkle.
+   */
+  await send('Page.startScreencast', {
+    format: 'jpeg',
+    quality: 85,
+    maxWidth: CAST_PX,
+    maxHeight: CAST_PX,
+    everyNthFrame: 1,
+  })
+  const deadline = Date.now() + Math.max(10_000, count * 200)
+  while (frames.length < count && Date.now() < deadline) await sleep(16)
+  await send('Page.stopScreencast')
+  unsubscribe()
+  frames.sort((a, b) => a.at - b.at)
+
+  await mkdir(out, { recursive: true })
+  const paths = []
+  for (const [i, frame] of frames.entries()) {
+    const file = path.join(out, `${String(i).padStart(4, '0')}.jpg`)
+    await writeFile(file, Buffer.from(frame.data, 'base64'))
+    paths.push(file)
+  }
+  const at = frames.map((f) => f.at)
+  const span = at.length > 1 ? at[at.length - 1] - at[0] : 0
+  return { paths, timestamps: at, span, fps: span > 0 ? at.length / span : 0 }
+}
+
+/**
+ * The cast, as something to attach to a pull request.
+ *
+ * A strobe argued in prose is a paragraph; the same strobe as five seconds of
+ * video is the argument. Written at the rate the frames were captured at, so
+ * the recurrence plays back at the rate it happens. Absent ffmpeg this is
+ * skipped rather than fatal — the frames and the analysis are the finding, and
+ * the clip is how it travels.
+ */
+async function castClip(dir, fps) {
+  const out = path.join(dir, 'cast.mp4')
+  try {
+    await promisify(execFile)(
+      'ffmpeg',
+      [
+        '-y',
+        '-framerate',
+        String(Math.max(1, Math.round(fps || 60))),
+        '-i',
+        path.join(dir, '%04d.jpg'),
+        // yuv420p and an even-dimension pad, because a capture whose width is
+        // odd encodes to a file QuickTime and GitHub both refuse to play.
+        '-vf',
+        'pad=ceil(iw/2)*2:ceil(ih/2)*2',
+        '-pix_fmt',
+        'yuv420p',
+        '-movflags',
+        '+faststart',
+        out,
+      ],
+      { maxBuffer: 1 << 24 },
+    )
+    return out
+  } catch {
+    return null
+  }
+}
+
 async function sampleFrames(send, count, expression) {
   // One reading per rAF from inside the page. A `--js` call per frame would be
   // a round trip per frame, and the round trip is longer than the frame.
@@ -612,7 +744,7 @@ async function main() {
     ws.addEventListener('open', resolve, { once: true })
     ws.addEventListener('error', reject, { once: true })
   })
-  const { send, events } = connect(ws)
+  const { send, events, subscribe } = connect(ws)
   await send('Page.enable')
   await send('Runtime.enable')
   await send('Emulation.setFocusEmulationEnabled', { enabled: true })
@@ -652,6 +784,41 @@ async function main() {
         const shot = await capture(send, String(arg))
         results.push({ step, ...shot })
         say(`shot: ${shot.path} (${(shot.bytes / 1024).toFixed(0)} KB)`)
+        break
+      }
+      case 'cast': {
+        const n = count(arg, 'cast', 2)
+        const dir = path.join(RIG, 'cast')
+        await rm(dir, { recursive: true, force: true })
+        const cast = await castFrames(send, subscribe, n, dir)
+        const analysis = await analyseFrames(cast.paths, cast.timestamps)
+        // The map is the answer to "where", which the counts never give. Only
+        // for the first isolated frame: one picture makes the point and a
+        // hundred is a directory nobody opens.
+        let map = null
+        const first = analysis.isolated[0]
+        if (first !== undefined)
+          map = await differenceMap(
+            cast.paths[first.frame - 1],
+            cast.paths[first.frame],
+            path.join(dir, 'difference.png'),
+          )
+        const clip = await castClip(dir, cast.fps)
+        results.push({
+          step,
+          dir: path.relative(ROOT, dir),
+          ...analysis,
+          map,
+          clip,
+        })
+        say(
+          `cast: ${cast.paths.length} frames in ${cast.span.toFixed(2)}s ` +
+            `(${cast.fps.toFixed(1)} fps) -> ${path.relative(ROOT, dir)}`,
+        )
+        for (const line of reportFrames(analysis, cast.fps).split('\n'))
+          say(`  ${line}`)
+        if (map !== null) say(`  where: ${path.relative(ROOT, map)}`)
+        if (clip !== null) say(`  clip:  ${path.relative(ROOT, clip)}`)
         break
       }
       case 'sample': {

@@ -137,8 +137,16 @@ are off. `react/no-multi-comp` is an error. Both that rule and
 
 **Prettier** formats files written through the edit hooks. Do not run
 `pnpm format` or `pnpm lint` merely to duplicate those hooks. Commands that
-write files outside the hooks, including the shadcn CLI, still need
-`pnpm format`.
+write files outside the hooks still need `pnpm format` — the shadcn CLI, and
+**any edit an agent makes through the shell** rather than through its edit
+tool, which is the case the hooks cannot see and the one that reaches CI as a
+`format:check` failure.
+
+**ImageMagick and ffmpeg** are what the frame tools shell out to. `magick`
+differences a run of rendered frames and is required by `scripts/frameDiff.mjs`,
+`--cast` and `scripts/traceFrames.mjs`; `ffmpeg` turns a cast into the clip worth
+attaching to a pull request and is optional, skipped rather than fatal when absent.
+`brew install imagemagick ffmpeg`.
 
 **Three typefaces**, self-hosted from `@fontsource`: Archivo Variable
 (condensed display), Instrument Sans Variable (structure and prose), Martian
