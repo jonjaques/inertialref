@@ -576,12 +576,12 @@ const RING: readonly (readonly [number, number])[] = [
  * **The bound has to sit above what the streamer actually asks for**, which is
  * the mistake this carried: it was written at twelve on the reasoning that
  * `surfaceDetailFloor` never returned deeper, and the band stack moved the floor
- * to between thirteen and seventeen the day it landed. Every selection at those
- * levels took the string branch — the fallback paying 1.8 ms a pass, in the code
- * whose whole purpose is to avoid paying it. Twenty-two is the deepest level
- * whose `i` and `j` still fit, so the fallback is now unreachable rather than
- * merely unlikely; `MAX_REGION_LEVEL` is 24 and the two levels past it keep the
- * branch honest.
+ * to between twelve and sixteen across the zoo — seventeen on the worst
+ * generated body. Every selection deeper than twelve took the string branch, the
+ * fallback paying 1.8 ms a pass in the code whose whole purpose is to avoid
+ * paying it. Twenty-two is the deepest level whose `i` and `j` still fit, so the
+ * fallback is now unreachable rather than merely unlikely; `MAX_REGION_LEVEL` is
+ * 24 and the two levels past it keep the branch honest.
  *
  * The reason this is not `terrainPatchKey`: the balance pass builds a key for
  * every node's eight neighbors and for every ancestor of every node, which on

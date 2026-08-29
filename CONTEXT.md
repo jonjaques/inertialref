@@ -5289,9 +5289,10 @@ Proxima Centauri II 33.8 → 24.8.
 
 A fourth was in the selection rather than the field. `terrainSelect`'s numeric
 region key was gated at level 12 on the reasoning that `surfaceDetailFloor`
-returned nothing deeper — and the band stack moved the floor to between thirteen
-and seventeen the day it landed, so every whole-disk selection took the string
-fallback the key exists to avoid, 1.8 ms a pass. The span goes to 2²², which is
+returned nothing deeper — and the band stack moved the floor to between twelve
+and sixteen across the zoo, seventeen on the worst generated body, so every
+whole-disk selection deeper than twelve took the string fallback the key exists
+to avoid, 1.8 ms a pass. The span goes to 2²², which is
 the deepest level whose `i` and `j` still fit inside a double's exact integers.
 
 **A crater the walk cannot see arrives as a cliff rather than not at all.** The

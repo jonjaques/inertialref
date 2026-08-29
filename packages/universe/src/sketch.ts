@@ -568,17 +568,18 @@ function derive(seed: Seed, grammar: SurfaceGrammar): TerrainSketch {
  * `SurfaceParameters` object, and that is the whole reason this cache works at
  * all: the heightfield worker rebuilds a fresh `SurfaceParameters` from its
  * payload on every task, so a `WeakMap` alone would derive a new sketch for
- * every patch — a millisecond apiece against a twelve-millisecond patch. Two
- * equal surfaces share an entry however they were constructed.
+ * every patch — a millisecond apiece, against a patch that costs 32 ms on an
+ * airless world. Two equal surfaces share an entry however they were
+ * constructed.
  *
  * The **`WeakMap`** in front of it is keyed by that object, and it exists
  * because `elevationAt` resolves the sketch *per sample*: a 69×69 bordered
  * patch is 4,761 of them, so the string cache's key — nine numbers joined,
  * every one of them a float formatted into text — was built 4,761 times a patch
  * to find a value that could not have changed. Measured at 1.7 ms on an airless
- * world and 2.5 on Earth, which is 7% of the patch spent formatting a cache
- * key. `SurfaceParameters` is immutable, so the object identifying the entry is
- * the object that derived it.
+ * world and 2.5 on Earth, spent formatting a cache key.
+ * `SurfaceParameters` is immutable, so the object identifying the entry is the
+ * object that derived it.
  */
 const BY_SURFACE = new WeakMap<SurfaceParameters, TerrainSketch>()
 const CACHE = new Map<string, TerrainSketch>()

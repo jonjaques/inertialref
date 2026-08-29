@@ -139,7 +139,19 @@ export const ARC_MARGIN = 0.06
  * `across` is folded in for the same reason and computed only where it is read.
  * Both bands that consume it gate on `boundary` first — the belts at
  * `BELT_MARGIN` and the arc cones at the narrower `ARC_MARGIN` — so the wider
- * of the two gates is the one that decides whether anybody wants the number.
+ * of the two gates decides whether anybody wants the number, and it is weighted
+ * at that wider margin for both of them. The arc could ask for its own and
+ * would be asking for strictly less: `ARC_MARGIN` is inside `BELT_MARGIN`, so
+ * the narrower weighting is the same pairs with a sharper falloff and a second
+ * pass to compute it.
+ *
+ * **`across` is defined only where `edge > 0`, and it is zero rather than
+ * continuous outside that.** It steps at `boundary === BELT_MARGIN`, where the
+ * pair weights go to zero but their normalised ratio does not. Nothing sees it:
+ * `beltBand` multiplies by an `edge` that is exactly zero there and returns
+ * before that anyway, and the arc gates at 0.06. A third consumer, or an
+ * `ARC_MARGIN` raised past `BELT_MARGIN`, would see it — which is the kind of
+ * precondition this whole branch exists because nobody wrote down.
  */
 export interface PlateContext {
   readonly sample: PlateSample | null
@@ -464,8 +476,21 @@ function stripeProfile(stripe: StripeAxis, direction: Vec3): number {
  * Voronoi block rafts: plateau interiors, sharp walls, each block at its own
  * height.
  *
- * The same 3×3×3 lattice the crater field walks, for the same reason — a cube
- * lattice in ℝ³ intersected with the sphere has no face seams and no corners.
+ * A cube lattice in ℝ³ intersected with the sphere, for the reason the crater
+ * field picks one — no face seams and no corners. The walk stays at the ±1
+ * Worley window where `craters.ts` derives a wider one, and the reason is the
+ * gate rather than the geometry: a truncated window can only be wrong about
+ * `F1` and `F2` near a *wall*, which is exactly where `smoothstep(0, 0.35,
+ * wall)` has already taken the amplitude to zero. A crater has no such gate —
+ * its apron reaches `EJECTA_REACH` radii past its own cell at full height, and
+ * it is indexed off the sphere besides.
+ *
+ * Measured rather than argued, because the argument is about a candidate set
+ * and those have been wrong here before: the bisection walk over twelve great
+ * circles finds nothing above **9.3e-10 m** on any of the eleven bodies with
+ * chaos, Mimas, Dione and Miranda among them at full chaos and up to 3.4 km of
+ * ice band.
+ *
  * `F2 − F1` is the distance to the nearest wall, and running it through a
  * smoothstep is what makes the interior flat instead of conical.
  */

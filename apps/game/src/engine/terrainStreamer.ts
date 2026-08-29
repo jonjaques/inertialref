@@ -96,9 +96,9 @@ const DEFAULT_LENS_VIEW: LensView = {
 /**
  * How far ahead of the camera the request set is taken, in seconds.
  *
- * Long enough for a worker to answer — a patch is 20 to 37 ms of generation and
- * the pool is a handful of them — and short enough that a turn does not spend
- * the budget on ground nobody looks at. The extrapolation is linear in the eye's
+ * Long enough for a worker to answer — a patch is 9 to 60 ms of generation
+ * across the zoo and the pool is a handful of them — and short enough that a
+ * turn does not spend the budget on ground nobody looks at. The extrapolation is linear in the eye's
  * own motion and ignores the body's rotation over the interval, which at two
  * seconds is meters on anything you could be landing on.
  */
@@ -815,7 +815,7 @@ export class TerrainStreamer {
    * pyramid — rather than the two selections' leaves. `#request` re-asks for
    * every rung of the pyramid every frame, so a keep set without them turns
    * the cap into a treadmill: evict a rung, re-request it next frame,
-   * regenerate it at 20 to 37 ms, evict it again.
+   * regenerate it at 9 to 60 ms, evict it again.
    */
   #evict(requested: readonly RegionAddress[]): void {
     if (
