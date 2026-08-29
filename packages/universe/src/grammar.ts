@@ -158,7 +158,7 @@ export interface SurfaceGrammar {
   /**
    * And what the ground under that air is at, Kelvin.
    *
-   * Equal to `temperature` on an airless body and three times it on Venus. It
+   * Equal to `temperature` on an airless body and 2.4 times it on Venus. It
    * is the one the surface answers to — where the volatiles condense, and
    * eventually how fast the rock creeps. See `surfaceTemperature`.
    */
@@ -276,8 +276,16 @@ export function surfaceTemperature(
 /** Below this column mass an atmosphere warms nothing measurable, kg/m². */
 const GREENHOUSE_FLOOR = 100
 
-/** Fitted against Earth and Venus; see `surfaceTemperature`. */
-const GREENHOUSE_GAIN = 0.0076
+/**
+ * Fitted against Earth and Venus; see `surfaceTemperature`.
+ *
+ * 0.0054 rather than the 0.0076 a two-point fit through Earth and Venus gives
+ * on its own: the higher figure lands Venus at 913 K against a measured 737,
+ * which is 24% high and would have made the docstring above a claim its own
+ * constant falsified. At 0.0054 the three bodies come out at 213, 286 and 739
+ * against measured 210, 288 and 737.
+ */
+const GREENHOUSE_GAIN = 0.0054
 
 /**
  * The three limits on peak relief, whichever bites first.

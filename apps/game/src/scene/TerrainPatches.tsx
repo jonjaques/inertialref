@@ -144,14 +144,20 @@ export function TerrainPatches({ engine }: { engine: GameEngine }) {
        * The selection deliberately measures in display pixels: a two-times
        * display wants twice the patches for the same picture and a two-times
        * supersample does not. Anti-aliasing is the opposite question — what
-       * matters is the grid the samples actually land on — so the lens's own
-       * angle is scaled back up by however much the buffer is supersampled.
+       * matters is the grid the samples actually land on — so the display angle
+       * is divided by the supersampling factor to get the angle one *sample*
+       * covers.
+       *
+       * The ratio below is that factor's **reciprocal**, and it is spelled as a
+       * ratio rather than read from `engine.supersample` for exactly that
+       * reason: the engine's field is the factor itself, and reaching for it
+       * here would be a factor of four the wrong way at 4× AA.
        */
       if (state.lens !== null) {
         const display = pixelAngle(state.lens.lens, state.lens.viewport)
-        const supersample =
+        const perSample =
           state.lens.viewport.height / Math.max(1, gl.domElement.height)
-        terrain.setPixelAngle(display * supersample)
+        terrain.setPixelAngle(display * perSample)
       }
       /*
        * The same texture set `Bodies.tsx` draws the sphere from, looked up by

@@ -94,8 +94,11 @@ _What this forbids:_ any feature whose implementation is easiest as a separate
 scene. Interiors are in the world. Stations are in the world. The galaxy map is a
 HUD overlay drawn over a still-running cockpit, not a screen you go to.
 
-_Already proven:_ frame transitions mid-flight, floating-origin rebasing, landing.
-_Still required:_ LOD cross-fade and terrain geomorphing — see
+_Already proven:_ frame transitions mid-flight, floating-origin rebasing,
+landing, and terrain geomorphing — a patch hands over to its parent with the
+geometry, the normals and the surface material arriving together.
+_Still required:_ LOD hysteresis, cross-fade and sphere-derived impostors, which
+are what a body's own tier switch still lacks — see
 [art](art.md#continuity--the-no-pop-in-specification).
 
 ### Pillar 2 — The Sky Is Real

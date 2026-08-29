@@ -150,6 +150,56 @@ describe('ray craters', () => {
     expect(Math.abs(at(epsilon) - at(2 * Math.PI - epsilon))).toBeLessThan(1e-6)
   })
 
+  /*
+   * The class of defect `craterProfile` records above it, in the other term
+   * that has a gate: a feature whose value does not reach zero at its own
+   * boundary appears there rather than beginning there.
+   *
+   * The filaments start just outside the continuous deposit, and their
+   * threshold is cleared on about a third of azimuths at that radius — so
+   * un-faded they entered at full strength and drew a scalloped bright ring at
+   * 1.2 crater radii, a thirty-kilometre circle around a fifty-kilometre
+   * crater. Measured before the fade: 0.30 on Luna and 0.57 on Mars, against a
+   * p99.9 adjacent-sample step of 3 × 10⁻⁷ just outside.
+   *
+   * The bound is the probe's own epsilon rather than a tolerance: two samples
+   * 2 × 10⁻⁷ radii apart on a C1 field cannot differ by more than that.
+   */
+  it('begins its filaments rather than switching them on', () => {
+    for (const name of ['Luna', 'Mercury', 'Mars', 'Callisto']) {
+      const body = find(name)
+      const sketch = terrainSketch(body.surface)
+      const grammar = body.surface.grammar
+      let worst = 0
+      for (const crater of sketch.rayCraters) {
+        for (let k = 0; k < 180; k += 1) {
+          const azimuth = (k / 180) * 2 * Math.PI
+          const across = Vec.add(
+            Vec.scale(crater.tangent, Math.cos(azimuth)),
+            Vec.scale(crater.bitangent, Math.sin(azimuth)),
+          )
+          // A great-circle rotation, so the sample really is `t` crater radii
+          // out. Offsetting in the tangent plane and normalizing lands at
+          // `atan(span)/angularRadius`, which on a 50 km lunar crater is
+          // 1.19998 — entirely on one side of the gate, reporting no step.
+          const at = (t: number): number => {
+            const angle = t * crater.angularRadius
+            return rayBrightness(
+              [crater],
+              grammar,
+              Vec.add(
+                Vec.scale(crater.axis, Math.cos(angle)),
+                Vec.scale(across, Math.sin(angle)),
+              ),
+            )
+          }
+          worst = Math.max(worst, Math.abs(at(1.2 + 1e-7) - at(1.2 - 1e-7)))
+        }
+      }
+      expect(`${name}: ${worst < 1e-5}`).toBe(`${name}: true`)
+    }
+  })
+
   it('reach further than the ejecta blanket and stop', () => {
     const body = find('Luna')
     const sketch = terrainSketch(body.surface)
@@ -198,7 +248,16 @@ describe('the cover field', () => {
         (z, around) => {
           const ring = Math.sqrt(Math.max(0, 1 - z * z))
           const d = vec3(Math.cos(around) * ring, z, Math.sin(around) * ring)
-          expect(surfaceCoverAt(body.surface, d)).toEqual(
+          /*
+           * The second call goes through a *copy* of the surface, which is the
+           * only way this assertion can fail. `terrainSketch` memoizes on the
+           * object identity first, so twice on the same reference never
+           * re-derives anything and the evaluation below it is stateless
+           * arithmetic — the test would pass whatever the sketch did. A spread
+           * reaches past the `WeakMap` to the string cache and, on a miss, to
+           * a fresh derivation.
+           */
+          expect(surfaceCoverAt({ ...body.surface }, d)).toEqual(
             surfaceCoverAt(body.surface, d),
           )
         },
@@ -296,7 +355,7 @@ describe('the cover field', () => {
     /*
      * And Venus is cold at the pole by the *equilibrium* temperature, which is
      * why the cover reads `groundTemperature` instead. 310 K of equilibrium
-     * against 920 K of ground.
+     * against 739 K of ground.
      */
     expect(capped('Venus').pole).toBeLessThan(0.05)
   })

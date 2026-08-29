@@ -575,7 +575,15 @@ function derive(seed: Seed, grammar: SurfaceGrammar): TerrainSketch {
 
   const craterLevels = craterLadder(grammar)
   const lattice = latticeSeed(seed)
-  const mareAxis = Vec.normalize(new Rng(deriveSeed(seed, 'mare')).unitVector())
+  /*
+   * A label of its own, not `'mare'`. The axis and the noise that roughens its
+   * edge are two draws that meet in one expression, and sharing a seed
+   * correlates them — the kind of thing that never fails a test and shows up
+   * once as "that body's mare boundary looks odd".
+   */
+  const mareAxis = Vec.normalize(
+    new Rng(deriveSeed(seed, 'mare:axis')).unitVector(),
+  )
 
   return {
     plates,

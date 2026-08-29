@@ -16,6 +16,7 @@ import {
   dFdx,
   dFdy,
   dot,
+  exp,
   float,
   Fn,
   length,
@@ -165,6 +166,7 @@ export function createTerrainMaterial(): TerrainMaterial {
   const seaDatum = uniform(0)
   const oceanColour = uniform(new Color(0.012, 0.04, 0.13))
   const skyColour = uniform(new Color(0, 0, 0))
+  const hazeColour = uniform(new Color(0, 0, 0))
   const skyStrength = uniform(0)
   const sunsetTint = uniform(new Color(1, 1, 1))
   /**
@@ -326,6 +328,16 @@ export function createTerrainMaterial(): TerrainMaterial {
       .add(anchorAltitude)
     const relief = saturate(altitude.div(max(maxElevation, float(1))))
 
+    /*
+     * How much of this body the generator gets to invent.
+     *
+     * Zero where the archive has a photograph. Everything below that is a claim
+     * the map already makes — the maria, the ray systems, the compositional
+     * ramp, and where the water is — is multiplied by it, because a second set
+     * on top of the first is two disagreeing planets in one frame.
+     */
+    const invented = oneMinus(mapped)
+
     const normal = normalize(shadedNormal)
     // `1 − cos θ` rather than the angle: it is one dot product, it is the form
     // the angle of repose is expressed in, and it has more resolution near flat
@@ -433,10 +445,20 @@ export function createTerrainMaterial(): TerrainMaterial {
      * evaporite's own definition — so without this gate Earth's entire sea
      * surface came out as salt flat at 2.4 times the reference, and the water
      * underneath it was a white sheet.
+     *
+     * **And it is `invented`, so a mapped body has none of it.** The generated
+     * field and the archive's photograph disagree about where Earth's land is —
+     * the terrain carve-out is exactly that they are two different sources and
+     * only one of them has been ingested — so painting deep ocean wherever the
+     * *generated* sea datum says water goes puts open sea over the map's
+     * continents. Measured either side of the eight-pixel gate it was 48% of
+     * the drawn value, and the picture was a blue planet with the coastlines in
+     * the wrong places. Where a photograph exists it wins, which is the same
+     * rule the maria and the ray systems already follow.
      */
-    const water = seaEnabled.mul(
-      oneMinus(smoothstep(seaDatum.sub(2), seaDatum.add(2), altitude)),
-    )
+    const water = seaEnabled
+      .mul(invented)
+      .mul(oneMinus(smoothstep(seaDatum.sub(2), seaDatum.add(2), altitude)))
     const dry = oneMinus(water)
     /*
      * Low ground, measured from the *shoreline* rather than from the datum.
@@ -495,8 +517,6 @@ export function createTerrainMaterial(): TerrainMaterial {
 
     /* --- what it reflects --------------------------------------------------- */
 
-    // The invented channels, switched off where the archive has a photograph.
-    const invented = oneMinus(mapped)
     // The compositional ramp, as a tint on whatever deposit won.
     const mineral = mix(
       mineralLow,
@@ -580,9 +600,9 @@ export function createTerrainMaterial(): TerrainMaterial {
     /*
      * The ceiling, spent once and here.
      *
-     * On a mapped body the palette holds ratios rather than reflectances, so
-     * bedrock arrives at 1.18 and means it — clamped at the palette's end it
-     * would flatten every contrast the photograph has. What may not exceed one
+     * On a mapped body the palette holds multipliers on a photograph rather
+     * than reflectances, so clamping at the palette's end would clamp the
+     * multiplier and flatten every contrast the photograph has. What may not exceed one
      * is the product: a diffuse surface that reflects more than it receives
      * gains energy at every bounce and blows out to white while its neighbours
      * are correctly exposed.
@@ -592,20 +612,7 @@ export function createTerrainMaterial(): TerrainMaterial {
       float(REFLECTANCE_CEILING),
     )
 
-    /*
-     * Not all the way to the deep-ocean colour where there is a map.
-     *
-     * A photograph's "ocean" is mostly bathymetry wearing water's colour, which
-     * is why the open sea has to be replaced — but the banks and the reefs in it
-     * are real turquoise that no depth test here can reproduce. The same 0.65
-     * `render/planet.ts` keeps them with, for the same reason. On a body with no
-     * map there is nothing to keep, and the replacement is total.
-     */
-    const surfaceAlbedo = mix(
-      ground,
-      oceanColour,
-      water.mul(mix(float(1), float(0.65), mapped)),
-    )
+    const surfaceAlbedo = mix(ground, oceanColour, water)
     // Water is smooth and rock is not; the glint below is what the roughness
     // is actually spent on.
     const surfaceRoughness = mix(roughness, float(0.06), water)
@@ -749,7 +756,36 @@ export function createTerrainMaterial(): TerrainMaterial {
       .mul(water)
       .mul(daylight)
 
-    return direct.add(indirect).add(sunlight.mul(glint))
+    /*
+     * Aerial perspective: the ground seen through its own air.
+     *
+     * The atmosphere shell in front of the terrain is a back-side sphere, so it
+     * only survives the depth test **outside** the planet's silhouette —
+     * everything the air does between the camera and the ground has to happen
+     * here, which is the same reason `render/planet.ts` carries this term for
+     * the disk. Identical arithmetic, because the two are the same body and the
+     * gate between them is one pixel of relief: without it the streamed ground
+     * came out 48% darker and far more saturated than the photograph it
+     * replaces, at 900 km over Earth.
+     *
+     * The airmass is the flat-atmosphere 1/μ from both directions — light in,
+     * view out — clamped where it stops being true and the shell's halo takes
+     * over anyway.
+     */
+    const airmass = float(1)
+      .div(max(mu, float(0.09)))
+      .add(float(1).div(max(incidence, float(0.09))))
+      .mul(0.5)
+    const veil = oneMinus(exp(airmass.mul(-0.15)))
+      .mul(skyStrength)
+      .mul(smoothstep(float(-0.06), float(0.28), incidence))
+    const veilColour = mix(hazeColour, vec3(1), veil.mul(0.55)).mul(sunlight)
+
+    const surface = direct.add(indirect).add(sunlight.mul(glint))
+    // 0.68 for the reason the disk uses it: at 0.8 the whole thing goes milky
+    // and the ocean loses its depth, where the photographs keep a saturated
+    // blue mid-disk under the veil.
+    return mix(surface, veilColour, veil.mul(0.68))
   })()
 
   return {
@@ -795,6 +831,11 @@ export function createTerrainMaterial(): TerrainMaterial {
         palette.skyColour.r,
         palette.skyColour.g,
         palette.skyColour.b,
+      )
+      hazeColour.value.setRGB(
+        palette.hazeColour.r,
+        palette.hazeColour.g,
+        palette.hazeColour.b,
       )
       skyStrength.value = palette.airThickness
       sunsetTint.value.setRGB(

@@ -562,6 +562,16 @@ const RAY_LATTICE_CELLS = 24
 /** Craters older than this have lost their rays to space weathering. */
 const RAY_AGE = 0.22
 
+/**
+ * Where the filaments begin, in crater radii.
+ *
+ * Just outside the continuous deposit, which is what a ray *is* — the part of
+ * the blanket that flew far enough to land as a streak rather than a sheet. It
+ * is also a cheap early-out, and the term it gates is faded in across it for
+ * the reason `radial` gives: a gate a term does not reach zero at is a step.
+ */
+const RAY_ONSET = 1.2
+
 /** The most a body carries. See the loop's own note on why there is a cap. */
 const MAX_RAY_CRATERS = 16
 
@@ -761,7 +771,7 @@ export function rayBrightness(
     let value =
       0.85 * (1 - smoothstep(RIM_INNER, EJECTA_REACH, Math.max(t, RIM_INNER)))
 
-    if (t > 1.2) {
+    if (t > RAY_ONSET) {
       const px =
         direction.x * crater.tangent.x +
         direction.y * crater.tangent.y +
@@ -792,9 +802,25 @@ export function rayBrightness(
       const reach = t / RAY_REACH
       const cut = 0.1 + 0.62 * reach
       const filament = smoothstep(cut, Math.min(1, cut + 0.28), wave)
-      // Ejecta thins as it flies: r^-1.6 over the tangent plane, faded to
-      // nothing at the reach so a ray ends rather than being truncated.
-      const radial = (1 - smoothstep(0.55, 1, reach)) / t ** 1.6
+      /*
+       * Ejecta thins as it flies: r^-1.6 over the tangent plane, faded to
+       * nothing at the reach so a ray ends rather than being truncated — and
+       * faded *in* at the onset, which is the half that is easy to miss.
+       *
+       * `RAY_ONSET` is a cheap early-out, and a term that does not reach zero
+       * at its own gate is a step there rather than an optimization. The
+       * filament clears its threshold on about a third of azimuths at the
+       * onset, so without this it appeared at full strength the instant `t`
+       * crossed: 0.30 of brightness on Luna's ray craters and 0.57 on Mars's,
+       * against a p99.9 adjacent-sample step of 3e-7 just outside. It draws as
+       * a scalloped bright ring at 1.2 crater radii — a thirty-kilometre circle
+       * around a fifty-kilometre crater — and it is the same class as the
+       * ejecta blanket's own entry step, which `craterProfile` above records.
+       */
+      const radial =
+        (smoothstep(RAY_ONSET, RAY_ONSET + 0.4, t) *
+          (1 - smoothstep(0.55, 1, reach))) /
+        t ** 1.6
       value += 5.2 * filament * radial
     }
 

@@ -361,22 +361,31 @@ offscreen target reused across frames. The transition becomes a _resolution_
 change rather than a _representation_ change. **Highest-value item in this list**
 — an authored impostor will never match, and the mismatch is what the eye catches.
 
-**4. Terrain geomorphing.** Vertices lerp toward their parent-level positions:
+**4. Terrain geomorphing.** ✅ A vertex slides onto the position its parent's
+coarser grid holds for it, arriving exactly as the parent takes over, over the
+band `[1.25, 1.8]` of the node's own split range. The normals morph with it over
+two cells — which is one of the parent's — and so does the surface cover, or the
+switch trades a pop for a shimmer that never stops.
+[ADR-0015](../adr/0015-terrain-level-of-detail.md),
+[ADR-0020](../adr/0020-the-face.md).
 
-```
-morph = clamp((d_patch/d_split − 0.72) / 0.28, 0, 1)
-position = lerp(fine, coarse, morph)
-```
+**5. Edge stitching and cube-face wrapping.** ✅ A patch is generated with two
+rings of border outside it, so its normals are central differences _everywhere_,
+including the edge, and two patches agree exactly along the one they share. A
+one-sided difference there is half the gradient over half the span, which draws
+as a lit hairline along every boundary; taking the rows from the neighboring
+patch instead makes a patch's geometry depend on which of its neighbors happen
+to be loaded. The quadtree walks all six cube faces and is restricted to 2:1,
+which is the gap the morph can close.
 
-**5. Edge stitching and cube-face wrapping.** The
-[roadmap](../roadmap.md#terrain) names both: `buildPatch` uses one-sided
-differences at edges and needs its neighbors' rows, and the streamer skips
-patches at face boundaries rather than crossing.
-
-**6. Predictive streaming with a per-frame generation budget.** Also named in the
-roadmap — _"the streamer knows camera velocity; extrapolate the request set."_
-Without it a fast descent outruns generation, which is pop-in caused by
-scheduling, and no amount of blending fixes it.
+**6. Predictive streaming with a per-frame generation budget.** ✅ Twenty-four
+requests a frame, against a set taken from where the eye will be in two seconds
+and asking for the whole pyramid under it, coarsest first. Without it a fast
+descent outruns generation, which is pop-in caused by scheduling, and no amount
+of blending fixes it. The velocity is measured in body-fixed axes: a hovering
+camera co-moves with the body at its orbital velocity, so a universe-frame drift
+pushed two seconds ahead aims the request set along the orbit rather than along
+the camera's track over the ground.
 
 **A burn makes this harder than a cruise did.** Under
 [the new travel model](flight.md#the-burn) the camera can be doing 20 c one

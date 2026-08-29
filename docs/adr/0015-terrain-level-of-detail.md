@@ -167,11 +167,13 @@ runs from 957 at a hover over 1600×900 to 1,824 at a 20 km lead over 5120×2880
 Twice the cap clears everything measured, by about 11%. Anyone retuning either
 number wants that sweep again rather than the arithmetic.
 
-**Phase 3 owes the sphere-tier shell a material.** The plan's unconditional
+**The sphere-tier shell is still owed a material.** The plan's unconditional
 level-0–2 shell wants a per-face normal and albedo bake underneath it; without
 one it is flat tinted ground, and drawn over a mapped body it replaces a
 measured picture with an invented one. The eight-pixel threshold is where that
-bake goes when it arrives.
+bake goes when it arrives. [ADR-0020](0020-the-face.md) gave the ground below
+the threshold a material and left the bake unbuilt, so a mapped body agrees
+across the switch and a generated one does not.
 
 ---
 
@@ -182,4 +184,5 @@ bake goes when it arrives.
 - [ADR-0003](0003-render-coordinates.md) — the compression terrain now rides
 - [ADR-0005](0005-procedural-seeds.md) — the versioning the detail floor answers to
 - [ADR-0017](0017-the-lens.md) — the lens the predicate reads, and every patch count above re-measured through it
+- [ADR-0020](0020-the-face.md) — the material the ground this selects is drawn with
 - [TERRAIN-PLAN](../../TERRAIN-PLAN.md) — the milestone this is Phase 1 of

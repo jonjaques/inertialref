@@ -222,6 +222,9 @@ the stars were rotated out of alignment with the planets in front of them.
 
 ## Terrain meshing
 
+This section is the geometry; [the ground's own material](#the-grounds-own-material)
+is what shades it.
+
 Patches are built from a heightfield into vertex buffers in **body-fixed axes,
 relative to the patch's own anchor** — the datum-sphere point at its middle. The
 pose goes back on at draw time, which is why a rebase costs nothing and why the
@@ -247,11 +250,12 @@ sequenceDiagram
 
     S->>P: generateHeightfield(region, 65×65 + 2 border)
     Note right of P: 4,761 samples ×<br/>six bands and a crater ladder
-    P-->>S: Float32Array (transferred, not copied)
-    S->>B: heightfield + body radius
+    P-->>S: Float32Array + Uint8Array cover<br/>(transferred, not copied)
+    S->>B: heightfield + cover + body radius
     B->>B: positions, anchor-relative
     B->>B: <b>central-difference normals, everywhere</b>
     B->>B: <b>morph target: the parent's grid</b>
+    B->>B: <b>morph cover: the parent's vertex</b>
     B-->>G: BufferAttributes, one shared index buffer
     Note over S,G: built once and never rebuilt —<br/>the vertices do not know where the planet is
 ```
@@ -292,6 +296,16 @@ on its parent's vertices. The normals morph too, over _two_ cells, which is one
 of the parent's: shading has to hand over with the geometry or the switch trades
 a pop for a shimmer.
 
+**The surface cover makes the same journey**, and for the same reason one step
+further out. A fully morphed child sits exactly where its parent sits; if it is
+still wearing its own vertex's cover when it gets there, the frame the parent
+takes over is the frame every crater ray and every mare margin jumps by one
+child cell. That is worse than a pop, because it slides continuously as the
+camera moves rather than happening once. `morphCover` is the parent's vertex's
+four bytes, and it indexes off the patch's own grid rather than the bordered
+one — the cover carries no border, because the border rows exist to be
+differenced against and nothing differences the cover.
+
 A TSL node graph cannot be evaluated in Node, so the arithmetic lives here and
 the shader's whole share of it is one `mix` between two attributes — and the
 endpoint is a claim about two `Float32Array`s that `terrainPatch.test.ts` checks
@@ -320,9 +334,8 @@ is drawn one full relief below the datum, and patches always win.
 
 ## Planetary surfaces
 
-⬜→✅ Bodies used to be a flat color on a `MeshStandardNodeMaterial` picked by
-kind. They are now shaded from their own photometry, from measured maps where a
-map exists. `apps/game/src/render/planet.ts` is the material;
+A body is shaded from its own photometry, and from measured maps where a map
+exists. `apps/game/src/render/planet.ts` is the material;
 [the catalog guide](../guides/catalogue.md#planetary-surface-maps) is where the
 maps come from.
 
@@ -489,6 +502,107 @@ tholins are.
 
 ---
 
+## The ground's own material
+
+`apps/game/src/render/terrain.ts` is a hand-written node graph, not a
+`MeshStandardNodeMaterial`, and it does not see the scene's `ambientLight` — the
+sun reaches it through its own uniform, the way it reaches every planet and
+every atmosphere. The reason is the same one that put the quadtree there:
+**the ground is the picture of the planet**, so a rough dielectric sphere under
+a uniform fill is not what a regolith world looks like at any phase angle.
+
+It shades from the same [lunar-Lambert split](#the-lighting-is-hand-written-and-the-reason-is-not-performance)
+`render/planet.ts` uses, because a descent crosses between the two at the
+eight-pixel gate and that switch has to be invisible. Measured either side of
+it, the streamed ground and the archive's sphere are 3.1% apart in mean value on
+Mars and 1.5% apart on Earth. Anything added to one of the two materials and
+not the other is a step at the switch — the aerial veil is the case that proves
+it, because the atmosphere shell is a back-side sphere and only survives the
+depth test _outside_ the planet's silhouette. Everything the air does in front
+of the ground therefore happens in the surface material, on both sides.
+
+**The lookup is split by who can answer.** Latitude is the direction against the
+spin axis, altitude is the radius, slope is the normal against the radial — a
+fragment has all three for free, and shipping them per vertex would be paying to
+send the renderer something it is standing on. What a shader cannot derive is
+the body's _past_: whether this plain is flood basalt, whether this ground was
+excavated last week or three billion years ago, which way the crust's
+composition varies, where the volatiles have condensed. Those four are the
+cover, four bytes a vertex, generated with the heightfield.
+
+**Deposits are layered rather than splatted** — five `mix`es in the order the
+material is laid down: regolith wherever a slope holds it, basalt in the flooded
+basins, wind-sorted fines on the low flat ground, evaporite on the flattest and
+lowest, volatiles on top. A six-way normalized splat has to invent a rule for
+what happens when three weights all say 0.4; a stack says the ice is on the
+sand, which is true. The angle of repose does most of the visible work, and 33°
+is a fact about friction rather than about a planet.
+
+**The palette is ratios against the body's own published color, never absolute
+values.** `packages/rendering/src/terrainPalette.ts` holds it. Absolute colors
+make every rocky world the same sandstone, and they make the ground disagree
+with the datum sphere, the orbital tier and the dossier swatch, all of which
+read `appearance.colour`. As ratios, Mars stays ochre and Callisto stays grey
+while both get the same internal contrast — lunar mare is 0.07 geometric albedo
+against 0.13 for the highlands, so basalt is 0.54 of the reference.
+
+**A mapped body's ground wears its published map**, sampled by direction in
+`SphereGeometry`'s own layout: the same photograph the sphere in front of it is
+drawn from. On those bodies the cover's _invented_ channels switch off, because
+the maria and the ray systems are in the photograph already and a second set on
+top of them is two disagreeing planets in one frame. **The ocean is an invented
+channel too** — the generated field and the archive's photograph disagree about
+where Earth's land is, and that disagreement _is_ the carve-out, so painting sea
+wherever the generated datum says water goes puts open water over the map's
+continents.
+
+Where a photograph exists it supplies the albedo outright, and the deposits keep
+only what a map at ten kilometers a texel has no opinion on: the roughness, the
+grain, the bump, and which of them the slope under the camera exposes. Halving
+their brightness instead of dropping it was still 9% of the drawn value across
+the gate on Mars, almost all of it evaporite lifting ground the photograph had
+already drawn pale.
+
+Everything in the graph is in body-fixed axes — the normal because the geometry
+is, the eye because the morph already needed it, and the sun because the host
+rotates one vector on the CPU rather than transforming a normal per fragment.
+Skylight comes _out of_ the direct beam rather than beside it: light scattered
+into the sky is light that did not arrive along the sun ray, and added beside it
+the streamed ground came out 15% brighter than the photograph of the same
+planet. [ADR-0020](../adr/0020-the-face.md) has the alternatives.
+
+### Two float32 rules that only a planetary shader needs
+
+Both were reported as one defect — a coastline warping several times a second,
+seen from two kilometers up over an island chain.
+
+**Never subtract two planetary radii from each other in a shader.**
+`length(anchor + local) − datumRadius` puts both terms at 6.4 × 10⁶ on Earth,
+where one float32 step is half a meter, so an altitude computed that way arrives
+quantized to half a meter — inside a water band four meters wide. The shoreline
+becomes a stair, and the morph walks `local` across those steps every frame, so
+the stair crawls. The cancellation is avoided rather than tolerated:
+`|p|² − |a|² = 2(a·l) + l·l` exactly, and `|p| − |a|` is that over `|p| + |a|`,
+so the large numbers never meet.
+
+**Never take a screen-space derivative of a planetary position.** It is worse
+than the value: half a meter of quantization against a pixel covering a few
+meters is a tenth of noise in the derivative and a constant bias per patch, so
+the map's mip level changed at every patch boundary. And `local` is _linear_
+across a triangle, which means `dFdx(local)` is constant over the whole of one —
+a detail fade measured that way steps per polygon. Both are analytic instead:
+the UV gradient from the tangential part of a precise step, the fade from
+distance times the lens's own pixel angle.
+
+One more, which is a WGSL fact rather than a numerical one: **a varying may not
+take an attribute's name.** `varying(vec4(), 'terrainCover')` beside
+`attribute('terrainCover')` is a redeclaration in the generated shader, and it
+surfaces as `[Invalid ShaderModule "vertex"]` with the real message on a channel
+the page console does not carry — so what you see is a planet that draws
+nothing.
+
+---
+
 ## Depth buffer settings
 
 ```
@@ -608,6 +722,7 @@ flowchart TB
 ## Related
 
 - [ADR-0013](../adr/0013-measured-figures.md) — why a body that gravity never rounded off carries a radius grid rather than a sphere
+- [ADR-0020](../adr/0020-the-face.md) — the cover field, the palette and the one terrain material
 - [Coordinates](coordinates.md) — what render space is derived from
 - [Streaming](streaming.md) — how terrain patches are chosen and reconciled
 - [Time](time.md) — where the interpolation alpha comes from

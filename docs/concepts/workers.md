@@ -65,12 +65,12 @@ cannot drift from the handler shape.
 
 Today's tasks:
 
-| Task                           | Work                                                                        |
-| ------------------------------ | --------------------------------------------------------------------------- |
-| `universe.generateHeightfield` | 65×65 samples × six bands and a crater ladder → transferable `Float32Array` |
-| `universe.generateCell`        | every star in one 20 ly generation cell                                     |
-| `universe.surveyRegion`        | a block of cells — tens of thousands of stars                               |
-| `universe.surveySystem`        | a whole system's bodies, for the map                                        |
+| Task                           | Work                                                                                                                            |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| `universe.generateHeightfield` | 65×65 samples × six bands and a crater ladder → a transferable `Float32Array` of elevations and a `Uint8Array` of surface cover |
+| `universe.generateCell`        | every star in one 20 ly generation cell                                                                                         |
+| `universe.surveyRegion`        | a block of cells — tens of thousands of stars                                                                                   |
+| `universe.surveySystem`        | a whole system's bodies, for the map                                                                                            |
 
 ---
 

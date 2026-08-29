@@ -236,7 +236,7 @@ function mineralCover(
  * is why a cap needs a body already close to the frost point rather than merely
  * tilted away from the sun.
  *
- * An ice shell short-circuits all of it. Europa is ice at the equator at noon.
+ * An ice shell short-circuits all of it. Callisto is ice at the equator at noon.
  */
 function iceCover(
   sketch: TerrainSketch,

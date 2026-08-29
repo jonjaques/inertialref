@@ -187,7 +187,9 @@ pnpm sim --help                # all flags
   drag, sphere-of-influence frame transitions, and landing.
 - **Streamed cube-sphere terrain** — a restricted, morphing quadtree covering
   the whole disk, seamless from orbit to standing height, generated in a worker
-  pool.
+  pool, and shaded from the body's own geology: six deposits laid down in order
+  over an ocean, crater rays, and the archive's published photograph on the
+  bodies that have one.
 - **Save and load to IndexedDB in under 800 bytes**, because a save is a reference
   and not a copy.
 - **Genuinely offline** — a service worker caches the app, and with the server
@@ -216,7 +218,7 @@ PASS  6. Frame transitions — entered b:g:milky-way/s:SOL/b:0 after traveling 8
 PASS  7. Precision near the surface — 1 inch resolved to 9.4 µm, 8.18 kpc from the galactic center
 PASS  8. Meter-scale rendering — 1 m separation survives float32 at 8.18 kpc
 PASS  9. Origin rebasing — 500 rebases, 2560 km of origin travel, zero drift
-PASS 10. Worker task — 4761 terrain samples generated in a worker, identical to local generation
+PASS 10. Worker task — 4761 elevations and 16900 cover bytes generated in a worker, identical to local generation
 PASS 11. Save round trip — 744 bytes restored to an identical state hash
 PASS 12. Frame-rate independence — identical state hash f38e988a at tick 513
 ```
@@ -372,7 +374,7 @@ The markdown in this repository is the source; the site has no copy of its own.
 | [Vision and scope](docs/vision.md)                | What this is for, and the principles behind it                           |
 | [Architecture](docs/architecture.md)              | The system in one sitting                                                |
 | [Concepts](docs/README.md#concepts)               | How each mechanism works, and why                                        |
-| [ADRs](docs/adr/README.md)                        | Seventeen decisions that are expensive to reverse                        |
+| [ADRs](docs/adr/README.md)                        | Twenty decisions that are expensive to reverse                           |
 | [Development](docs/guides/development.md)         | Commands, toolchain, conventions                                         |
 | [The harness](docs/guides/harness.md)             | The scriptable API, in full                                              |
 | [Testing](docs/guides/testing.md)                 | Property tests, golden vectors, state hashes                             |
@@ -396,16 +398,20 @@ Stated plainly, because discovering these by surprise is worse than reading them
   the true component count, so the simplification is visible rather than hidden.
 - **Gravity is patched-conic** — no n-body perturbation.
 - **Collision is ground contact only** — no hull, no entity-to-entity.
-- **Terrain has a geology and no face, and the numbers are written down.**
-  The quadtree covers the whole disk — morphed, seamless, measured to the ground
-  rather than the datum — and what it refines is now craters, plates, volcanism
-  and ice from each body's own facts. What it wears is still one flat color per
-  body: no biomes, no materials. Generating a bordered 65×65 patch costs 9 to
-  37 ms across the zoo — 9 on a world with no craters at all, 32 on a rocky
-  airless one, 37 on a rocky atmosphered one — against a documented ≤ 8 ms
-  budget, and a whole-disk selection holds up to 208 MB of float32 vertex
-  buffers at the flight lens. `pnpm sim --terrain-baseline` prints all of it;
-  the [roadmap](docs/roadmap.md#terrain) has the seams.
+- **Terrain costs more than its budget, and only the near half of a generated
+  world's descent has a face.** The quadtree covers the whole disk — morphed,
+  seamless, measured to the ground rather than the datum — and it refines
+  craters, plates, volcanism and ice from each body's own facts and shades them
+  from a palette built out of the same facts. Above the eight-pixel gate a body
+  is drawn as its archive sphere, and a _generated_ world's sphere is a flat
+  tint, so its maria and ray systems stop at the switch until the albedo bake
+  exists; a mapped body has no such gap, because its ground wears the same
+  photograph its sphere does. Generating a bordered 65×65 patch costs 9 to 37 ms
+  across the zoo — 9 on a world with no craters at all, 32 on a rocky airless
+  one, 37 on a rocky atmosphered one — against a documented ≤ 8 ms budget, and a
+  whole-disk selection holds up to 242 MB of vertex buffers at the flight lens.
+  `pnpm sim --terrain-baseline` prints all of it; the
+  [roadmap](docs/roadmap.md#terrain) has the seams.
 - **Almost nothing is measured on the target machine.** The dev dock's perf panel
   (`P`) plots frame time, engine time, draw calls, worker queue and heap, and can
   time GPU frames properly — but every number recorded so far is from an Apple M5

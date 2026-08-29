@@ -134,7 +134,7 @@ flowchart LR
     G --> B["six bands<br/><i>hypsometry, belts, volcanism,<br/>relief, ice, craters</i>"]
     SK --> B
     D["direction on the sphere"] --> B
-    B --> OUT["groundElevation, meters"]
+    B --> OUT["groundElevation, meters<br/><i>and, where a patch asks for it,<br/>four bytes of surface cover</i>"]
 
     B -.- NOTE["each band is a share of one relief budget<br/>and the shares sum to one, so no band<br/>can grow past its allowance"]
     classDef note fill:none,stroke:none,color:#64748b,font-style:italic
@@ -149,8 +149,12 @@ on who asked first is not a function of an address. The look is bought
 analytically instead — each octave damped by how steep the sum already is.
 
 Because it is stateless, the same patch generated on the main thread and in a
-worker are byte-identical — which capability check 10 asserts by comparing all
-4,761 samples of a bordered 65×65 patch.
+worker are byte-identical — which capability check 10 asserts by comparing the
+whole response: all 4,761 elevations of a bordered 65×65 patch and all 16,900
+bytes of surface cover beside them. The cover matters to the claim rather than
+riding along with it, because it is the half that decides what the ground is
+_made of_: a worker whose sketch had diverged would draw a different planet
+through an identical heightfield.
 
 ---
 

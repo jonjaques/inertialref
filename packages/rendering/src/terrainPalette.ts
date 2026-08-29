@@ -129,6 +129,15 @@ export interface TerrainPalette {
    */
   readonly skyColour: LinearRgb
   /**
+   * The haze's own colour, unnormalized — what the air *in front of* the ground
+   * looks like.
+   *
+   * A different job from `skyColour` and therefore a different field. That one
+   * is a tint on the light arriving at the surface and carries no brightness;
+   * this one is the aerial veil, and its value is the veil's own.
+   */
+  readonly hazeColour: LinearRgb
+  /**
    * The archive's texture-set key for this body, or null.
    *
    * A key, not a path, for the reason `BodyAppearance.texture` is one — and it
@@ -198,10 +207,12 @@ function referenceReflectance(body: Body): LinearRgb {
    * The archive's photograph carries both the brightness and the hue, and it
    * carries them at ten kilometres a texel where nothing here has an opinion:
    * Mars is butterscotch, Luna has maria, and neither fact belongs to a
-   * generator. So on those bodies every colour below is a pure *ratio* — bedrock
-   * is 1.18 of the mantle whatever the mantle is — and the material multiplies
-   * the two. That is also what makes the descent hold together, because the
-   * sphere the approach view draws is the same photograph.
+   * generator. So on those bodies every colour below is a *ratio* the material
+   * multiplies the map by — and `depositGain` takes those ratios to one, so
+   * what the deposits contribute there is their roughness, their grain and
+   * their bump rather than any brightness of their own. That is also what makes
+   * the descent hold together, because the sphere the approach view draws is
+   * the same photograph.
    */
   if (appearance.texture !== null) {
     return { r: lift, g: lift, b: lift }
@@ -251,22 +262,30 @@ export function terrainPalette(body: Body): TerrainPalette {
    * Whether a liquid ever stood here to evaporate.
    *
    * Air alone is not the condition — Venus has a hundred times Earth's column
-   * and its ground is at 920 K, where nothing has ever pooled and dried. The
+   * and its ground is at 739 K, where nothing has ever pooled and dried. The
    * window is generous at the top because "ever" covers a body's whole history
    * and the generator carries one temperature.
    */
   /*
    * How far a deposit's own brightness is allowed to move the ground.
    *
-   * Full strength where the palette *is* the albedo. Halved where a photograph
-   * is, because the archive already knows which of a body's plains are bright:
-   * Luna's maria are in its map and Mars's dust is in its. Applied at full
-   * strength on top, the two claims multiply — an evaporite at 1.9 over ground
-   * the map has already drawn pale came out as snow across every lowland on
-   * Earth. What the deposits still carry there is their *hue*, their roughness
-   * and their grain, which no map at ten kilometres a texel has an opinion on.
+   * Full strength where the palette *is* the albedo, and **none at all** where a
+   * photograph is. The archive already knows which of a body's plains are
+   * bright: Luna's maria are in its map and Mars's dust is in its, so a ratio
+   * applied on top is the same claim made twice and the two multiply. Halved it
+   * was still 9% of the drawn value brighter than the sphere across the
+   * eight-pixel gate on Mars, almost all of it evaporite lifting ground the map
+   * had already drawn pale; at zero the gate is 1.7%.
+   *
+   * What the deposits carry on a mapped body is everything a map at ten
+   * kilometres a texel has no opinion on — the roughness, the grain, the bump,
+   * and which of them the slope under the camera exposes.
+   *
+   * `ice` is the exception, and the reason is that it is the one deposit that
+   * *post-dates the photograph*. A cap advances and retreats; a frost lies on
+   * top of whatever was there. The others are what the photograph is **of**.
    */
-  const depositGain = body.appearance.texture === null ? 1 : 0.5
+  const depositGain = body.appearance.texture === null ? 1 : 0
   const deposit = (ratio: number): number => 1 + (ratio - 1) * depositGain
 
   const liquidEver =
@@ -325,7 +344,7 @@ export function terrainPalette(body: Body): TerrainPalette {
      */
     ice: {
       albedo: mixToward(
-        scale(base, deposit(1.6), 0.7),
+        scale(base, 1.6, 0.7),
         { r: 0.74, g: 0.79, b: 0.86 },
         0.78 - 0.2 * air,
       ),
@@ -384,6 +403,7 @@ export function terrainPalette(body: Body): TerrainPalette {
     sunsetTint: body.appearance.haze?.limb ?? { r: 1, g: 1, b: 1 },
     airThickness: body.appearance.haze?.thickness ?? 0,
     skyColour: unitLuminance(body.appearance.haze?.colour),
+    hazeColour: body.appearance.haze?.colour ?? { r: 0, g: 0, b: 0 },
     textureKey: body.appearance.texture,
   }
 }
@@ -418,8 +438,9 @@ function mixToward(from: LinearRgb, to: LinearRgb, t: number): LinearRgb {
  * The ceiling is spent in the material, not here.
  *
  * On a mapped body these numbers are ratios rather than reflectances — bedrock
- * comes out at 1.18 and means it — so a ceiling applied at this end would clamp
- * the ratio and flatten every contrast the map has. What may not exceed one is
- * the *product*, and only the material has both halves of it.
+ * is a multiplier on a photograph rather than a reflectance — so a ceiling
+ * applied at this end would clamp the multiplier and flatten every contrast the
+ * map has. What may not exceed one is the *product*, and only the material has
+ * both halves of it.
  */
 const nonNegative = (value: number): number => Math.max(0, value)

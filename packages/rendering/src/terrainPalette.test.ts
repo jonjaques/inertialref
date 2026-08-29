@@ -51,16 +51,31 @@ describe('the terrain palette', () => {
   })
 
   /*
-   * And half as far where a photograph already knows. The archive's map of Luna
-   * has its maria in it; a full-strength ratio on top is the same claim made
-   * twice, and it multiplied — an evaporite at 1.9 over ground the map had
-   * already drawn pale turned every lowland on Earth to snow.
+   * And not at all where a photograph already knows. The archive's map of Luna
+   * has its maria in it; a ratio applied on top is the same claim made twice,
+   * and the two multiply — halved, it was still 9% of the drawn value brighter
+   * than the sphere across the eight-pixel gate on Mars, almost all of it
+   * evaporite lifting ground the map had already drawn pale.
    */
-  it("halves a deposit's own brightness where a map carries it", () => {
+  it("leaves a deposit's brightness to the map where there is one", () => {
     for (const name of ['Luna', 'Mercury', 'Mars']) {
       const palette = terrainPalette(find(name))
       const ratio = grey(palette.basalt) / grey(palette.regolith)
-      expect(`${name}: ${ratio.toFixed(2)}`).toBe(`${name}: 0.77`)
+      expect(`${name}: ${ratio.toFixed(2)}`).toBe(`${name}: 1.00`)
+    }
+  })
+
+  /*
+   * Ice is the exception, because it is the one deposit that *post-dates* the
+   * photograph. A cap advances and retreats and a frost lies on top of whatever
+   * was underneath; the others are what the photograph is of.
+   */
+  it('keeps the ice bright on a mapped body', () => {
+    for (const name of ['Mars', 'Earth']) {
+      const palette = terrainPalette(find(name))
+      expect(`${name}: ${grey(palette.ice) > grey(palette.regolith)}`).toBe(
+        `${name}: true`,
+      )
     }
   })
 
@@ -69,7 +84,7 @@ describe('the terrain palette', () => {
     // millions of years; a slope steep enough to shed its regolith is
     // resurfaced by mass wasting and stays fresh. Crater walls are the bright
     // streaks on the Moon for this reason.
-    for (const name of ['Luna', 'Mars', 'Enceladus', 'Iapetus']) {
+    for (const name of ['Enceladus', 'Iapetus']) {
       const palette = terrainPalette(find(name))
       expect(`${name}: ${grey(palette.rock) > grey(palette.regolith)}`).toBe(
         `${name}: true`,
@@ -142,10 +157,25 @@ describe('the terrain palette', () => {
 
   it('needs a liquid that once stood to leave an evaporite behind', () => {
     // Air alone is not the condition: Venus has a hundred times Earth's column
-    // and a surface at 920 K, where nothing has ever pooled and dried.
+    // and a surface at 739 K, where nothing has ever pooled and dried.
     expect(terrainPalette(find('Venus')).evaporitic).toBe(0)
     expect(terrainPalette(find('Luna')).evaporitic).toBe(0)
     expect(terrainPalette(find('Earth')).evaporitic).toBeGreaterThan(0.5)
+  })
+
+  it('separates the sky it is lit by from the haze it is seen through', () => {
+    /*
+     * Two fields with two jobs. `skyColour` tints the light arriving at the
+     * surface and carries no brightness of its own; `hazeColour` is the aerial
+     * veil in front of it, and its value is the veil's.
+     */
+    const mars = terrainPalette(find('Mars'))
+    expect(mars.hazeColour).not.toEqual(mars.skyColour)
+    expect(terrainPalette(find('Luna')).hazeColour).toEqual({
+      r: 0,
+      g: 0,
+      b: 0,
+    })
   })
 
   it('carries the sky as a tint rather than as a brightness', () => {

@@ -5510,10 +5510,26 @@ Numbers that settled things.
   Enceladus reflects 1.375 at full phase; clamped deposit by deposit, its
   bedrock, its mantle and its ice all landed on 0.88 together and the moon had
   no contrast anywhere.
-- **Skylight has to come out of the direct beam.** Added beside it, the streamed
-  ground was 15% brighter than the photograph of the same planet either side of
-  the eight-pixel gate on Mars. Conserved, the step is 4.6% with contrast inside
-  5%; on Earth the two paths are 0.02% apart and the frames are the same picture.
+- **Three terms had to be matched before the two halves of a descent agreed**,
+  and each was found by measuring across the eight-pixel gate rather than by
+  reading the code. **Skylight added beside the direct beam** rather than taken
+  out of it: 15% brighter than the photograph of the same planet on Mars.
+  **The aerial veil**, which `render/planet.ts` carries because the atmosphere
+  shell is a back-side sphere and only survives the depth test _outside_ the
+  silhouette — so everything the air does in front of the ground has to happen
+  in the surface material, and the terrain is inside the silhouette too: 48% on
+  Earth, and a blue planet whose coastlines were in the wrong places. And **the
+  deposits' own brightness on a body that has a map**: halved it was still 9% on
+  Mars, almost all of it evaporite lifting ground the photograph had already
+  drawn pale. Where a photograph exists it supplies the albedo outright; the
+  deposits keep the roughness, the grain and the bump, which no map at ten
+  kilometres a texel has an opinion on. With all three, the gate is 3.1% on Mars
+  and 1.5% on Earth and the frames are the same picture.
+- **An ocean is an invented channel too.** The generated field and the archive's
+  photograph disagree about where Earth's land is — that disagreement _is_ the
+  mapped-body carve-out — so painting deep ocean wherever the _generated_ sea
+  datum said water goes put open sea over the map's continents. The override is
+  gated on `invented`, like the maria and the rays.
 - **The soft-limited crater sum carries no information about basins.** `tanh` at
   a raw sum several ceilings deep is within 2% of its asymptote over half of
   Luna, and reading the mare off it flooded 49% of the Moon. Read raw and
@@ -5561,6 +5577,37 @@ outright, because an ocean _is_ the flattest lowest ground on a body and without
 the gate Earth's sea surface came out as playa at 2.4 times the reference with a
 white sheet of water under it. And a deposit's own brightness is halved where a
 photograph already carries it.
+
+### Two more the audit found, and a constant that had drifted from its own fit
+
+**The ray filaments entered at full strength at their own gate.** The same class
+`craterProfile` records above it, and the same shape: a term whose value does
+not reach zero at its boundary appears there rather than beginning there. The
+filament threshold is cleared on about a third of azimuths at 1.2 crater radii,
+so crossing that radius stepped the brightness by 0.30 on Luna's ray craters and
+0.57 on Mars's, against a p99.9 adjacent-sample step of 3 × 10⁻⁷ just outside.
+It drew as a scalloped bright ring — a thirty-kilometre circle around a
+fifty-kilometre crater — on every mapless body, which is nearly all of them.
+Faded in across 0.4 radii, the step is 1 × 10⁻⁷, which is the probe's own
+epsilon. `cover.test.ts` holds it, and it goes red with the fade removed.
+
+The probe has a trap worth writing down: offsetting by `angularRadius · t` in
+the tangent plane and normalizing gives `atan(span)/angularRadius`, which on a
+50 km lunar crater is t = 1.19998. A tight scan either side of 1.2 then lands
+entirely on one side and reports a step of exactly zero. The great-circle
+rotation is the one that sees it.
+
+**`GREENHOUSE_GAIN` was falsified by its own docstring.** The fit claims Mars,
+Earth and Venus at 210, 288 and 737 K; at 0.0076 it produced 213, 296 and 913 —
+Venus 24% high. At 0.0054 it produces 213, 286 and 739. No consumer noticed,
+because every one of them only asks whether the ground is above 170 K or below
+450, but a docstring that says "fitted" is arithmetic and this one was not.
+
+**And capability check 10 was comparing half of what it claimed.** The heightfield
+task transfers a cover beside the elevations and the check looped over the
+elevations alone, so a worker whose sketch had diverged would have passed it and
+drawn a different planet through an identical heightfield. It compares all
+16,900 cover bytes now.
 
 ### What did not land, stated rather than dropped
 

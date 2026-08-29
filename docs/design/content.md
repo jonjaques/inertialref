@@ -113,7 +113,7 @@ flowchart LR
     G --> M["materials + biomes<br/>from latitude,<br/>altitude, slope"]
     M --> SC["scatter<br/>rocks first,<br/>then flora"]
 
-    style M fill:#0369a1,stroke:#0c4a6e,color:#fff
+    style SC fill:#0369a1,stroke:#0c4a6e,color:#fff
 ```
 
 ### Geology

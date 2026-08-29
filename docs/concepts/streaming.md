@@ -90,8 +90,8 @@ flowchart TB
     BALANCE --> DRAW["the draw set"]
     WALK --> AHEAD["the same walk from where<br/>the eye will be in 2 s"]
     AHEAD --> QUEUE["queue the pyramid under it,<br/>coarsest first, 24 a frame"]
-    QUEUE --> JOB["worker: bordered heightfield"]
-    JOB --> CACHE["cache the heightfield"]
+    QUEUE --> JOB["worker: bordered heightfield<br/>+ unbordered surface cover"]
+    JOB --> CACHE["cache both"]
     CACHE --> MESH["build geometry, 4 a frame"]
 
     style JOB fill:#065f46,stroke:#064e3b,color:#fff
@@ -228,6 +228,28 @@ detail floor twelve to sixteen levels down that is most of a landing. More
 would queue rather than work — the requests go to a pool, and a queue is what a
 camera turn has to throw away.
 
+### What the streamer hands the renderer
+
+`TerrainState` is the whole interface, and it carries more than the meshes.
+Beside `patches` it states the body's `palette` — the deposit reflectances,
+roughnesses and grains [ADR-0020](../adr/0020-the-face.md) derives from the
+body's own facts — its `orientation` and `centre` in render space, the
+`datumRadius` the vertices were measured from, and the `lens` the selection was
+made against. `apps/game/src/scene/TerrainPatches.tsx` writes all five into the
+material's uniforms.
+
+Four of those five are on the state rather than read off `patches[0]`, and that
+is deliberate. The frame a body is acquired is a frame with a palette and no
+patches, and the uniforms are written before there is anything to draw with
+them. The reverse also has to hold: all five go back to `null` when the streamer
+clears, because a palette reported beside `patches: 0` describes a body nothing
+is drawing, and the material would go on wearing the last world's ground.
+
+`datumRadius` is `body.radius`, the equatorial one, because that is what
+`buildPatch` measures every vertex from. Not the mean radius: on Earth they are
+7 km apart, which is twenty times the ocean datum, so read against the mean an
+altitude of "at sea level" comes out at 7,356 m and no water is ever detected.
+
 ### Where terrain is not drawn
 
 A body's relief has to cover more than eight pixels before any of this runs.
@@ -283,14 +305,14 @@ gone.
 
 ## Current limits
 
-| Limit                                            | Consequence                                                                 | Roadmap                                      |
-| ------------------------------------------------ | --------------------------------------------------------------------------- | -------------------------------------------- |
-| Interest is a radius scan over generation cells  | Fine at 6 ly; a spatial index is needed for large radii                     | [roadmap](../roadmap.md#streaming-and-scale) |
-| The selection is not frustum-culled              | A whole disk is generated, of which the renderer draws about a third        | [roadmap](../roadmap.md#terrain)             |
-| Vertex attributes are float32                    | 203 KB a patch, so a whole-disk selection is 85–205 MB at the flight lens   | [roadmap](../roadmap.md#terrain)             |
-| The mesh is built on the main thread             | 0.25 ms a patch, budgeted at four a frame; the worker already has the field | [roadmap](../roadmap.md#terrain)             |
-| One flat color per body                          | The ground has a geology and no face — no biomes, no materials              | [roadmap](../roadmap.md#terrain)             |
-| A mapped body's terrain is not its published map | Procedural ground under a photographic albedo, near the surface only        | [roadmap](../roadmap.md#terrain)             |
+| Limit                                            | Consequence                                                                                                                       | Roadmap                                      |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| Interest is a radius scan over generation cells  | Fine at 6 ly; a spatial index is needed for large radii                                                                           | [roadmap](../roadmap.md#streaming-and-scale) |
+| The selection is not frustum-culled              | A whole disk is generated, of which the renderer draws about a third                                                              | [roadmap](../roadmap.md#terrain)             |
+| Vertex attributes are float32                    | 237 KB a patch, so a whole-disk selection is 99–239 MB at the flight lens                                                         | [roadmap](../roadmap.md#terrain)             |
+| The mesh is built on the main thread             | 0.25 ms a patch, budgeted at four a frame; the worker already has the field                                                       | [roadmap](../roadmap.md#terrain)             |
+| A generated body's sphere is a flat tint         | Its ground has maria, rays and caps below the eight-pixel gate, and none above it                                                 | [roadmap](../roadmap.md#terrain)             |
+| Deposits are chosen from the mesh, not the field | Two patches at different levels report different slopes for the same ground, so a deposit weight steps by ~4% at a level boundary | [roadmap](../roadmap.md#terrain)             |
 
 **The morph closes one level, and that is a constraint rather than a setting.**
 A vertex slides toward the position its _parent's_ grid holds for it, so where

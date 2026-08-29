@@ -16,7 +16,7 @@ Two things have to be true at once. The design bible says a biome is derived,
 never authored, from latitude, altitude and slope plus the body's own facts
 ([content § biomes](../design/content.md#biomes)). The art doctrine says a
 published map is not negotiable ([art](../design/art.md)) — Mars really is that
-colour and the generator does not get a vote. About sixty of the bodies a player
+colour and the generator does not get a vote. Fifteen of the bodies a player
 can land on have a map; every generated world has none.
 
 And the descent has to hold together. Terrain streams only once relief covers
@@ -78,12 +78,20 @@ of the reference.
 
 **A mapped body's ground wears its published map**, sampled by direction in
 `SphereGeometry`'s own layout — the same photograph the sphere in front of it is
-drawn from. On those bodies the palette holds pure ratios, the material
-multiplies the two, and the cover's _invented_ channels switch off: the maria
-and the ray systems are in the photograph already, and a second set on top of
-them is two disagreeing planets in one frame. The geometric deposits stay on
-both paths, because a map is ten kilometres a texel and knows nothing about the
-slope under the camera.
+drawn from, and on those bodies the archive supplies the albedo outright. The
+cover's _invented_ channels switch off, the palette's deposit ratios go to one,
+and the **ocean** goes with them: the maria and the ray systems are in the
+photograph already, and the generated field and the photograph disagree about
+where Earth's land is — that disagreement _is_ the mapped-body carve-out — so
+painting deep water wherever the generated sea datum says so puts open sea over
+the map's continents. A second set of claims on top of the first is two
+disagreeing planets in one frame.
+
+What the deposits keep there is everything a map at ten kilometres a texel has
+no opinion on: the roughness, the grain, the bump, and which of them the slope
+under the camera exposes. Ice is the one exception among them, because it is the
+deposit that _post-dates_ the photograph — a cap advances and retreats, and a
+frost lies on top of whatever was underneath.
 
 **Deposits are layered, not splatted.** Bedrock is what a body _is_ and
 everything else lies on it, so the stack is five `mix`es in the order they are
@@ -143,7 +151,7 @@ disk.
 ## Consequences
 
 The two halves of a descent agree. Measured either side of the eight-pixel gate:
-Mars 4.6% apart in mean value with contrast inside 5%, Earth 0.02% apart — and
+Mars 3.1% apart in mean value, Earth 1.5% — and
 the pictures are the same picture. Luna comes out at 0.136 reflectance with its
 mare at 0.073 against a measured 0.07, Enceladus keeps its tiger stripes, Mars
 keeps its cap with bedrock showing on the scarps.

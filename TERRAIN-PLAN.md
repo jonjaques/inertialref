@@ -78,7 +78,7 @@ What stands between today and "rich terrain from orbit to on foot":
 | One LOD level, 3×3 patches, no cross-face wrap (`terrainWindow.ts`, `windowRadius` and `clipped`) | ~~The visible ground is a few patches wide; face edges are holes; the horizon is the datum sphere~~ — closed by Phase 1's whole-disk quadtree; the window is retired                                                                                                                                                                                                                                                                                  |
 | No stitching or morphing (`terrainMesh.ts:174` one-sided edge normals)                            | ~~Hairline seams now; cracks the moment two levels coexist~~ — closed by Phase 1: bordered patches, the CDLOD morph, and the 2:1 restriction                                                                                                                                                                                                                                                                                                          |
 | Three noise bands                                                                                 | ~~No craters, no tectonics, no volcanism — every world is the same rolling fBm at a different amplitude~~ — closed by Phase 2: a `SurfaceGrammar` derived from the body's own facts, a per-body sketch, six bands over it and a crater field on a lattice in ℝ³; terrain algorithm v2. [ADR-0019](docs/adr/0019-the-geology.md)                                                                                                                       |
-| One flat color per body                                                                           | Terrain reads as geometry, never as a place; no biomes, no materials                                                                                                                                                                                                                                                                                                                                                                                  |
+| One flat color per body                                                                           | ~~Terrain reads as geometry, never as a place; no biomes, no materials~~ — closed by Phase 3: four bytes of surface cover a vertex, a palette of ratios against the body's own colour, six deposits layered in the order they are laid down, and a published map on the bodies that have one. [ADR-0020](docs/adr/0020-the-face.md)                                                                                                                   |
 | Procgen bodies are featureless at `sphere` tier                                                   | The world you approach is not the world you land on — relief appears only below the streaming threshold                                                                                                                                                                                                                                                                                                                                               |
 | No scatter                                                                                        | Nothing at human scale; the last octave of noise is the smallest thing that exists                                                                                                                                                                                                                                                                                                                                                                    |
 | Planetarium clamps at 1.5 radii (`observer.ts:98`)                                                | ~~No way to _inspect_ a surface without flying a ship to it~~ — closed by Phase 0's surface arm                                                                                                                                                                                                                                                                                                                                                       |
@@ -277,8 +277,10 @@ on the Moon, ~3 km on Earth — so the grammar computes it from g; above it,
 floors flatten and a hash-gated central peak appears, and the largest few
 carry ring structure. Age drives degradation: rim decay, floor infill,
 profile softening, and whether younger fields overprint. Rays are albedo, not
-height — they belong to Phase 3's material, where a young crater writes a
-brightness field, which is how Tycho actually reads.
+height — they belong to the material, where a young crater writes a brightness
+field, which is how Tycho actually reads. Phase 3 puts them there as
+`rayCraters`, read back from the same two hashes the height walk reads so that a
+ray system is centred on a bowl the field actually digs.
 
 **Per-archetype grammar**, with the published anchors the tuning aims at:
 
@@ -1012,7 +1014,11 @@ rather than directly: the whole frame standing on Miranda's summit is 2.04 ms
 at 63.9 fps, and terrain's own share of it is not broken out. The sphere-tier
 shell also did not survive as written: unconditional, it painted five flat
 tinted patches over Earth's photograph, so terrain is gated on relief covering
-eight pixels until Phase 3's albedo bake gives the shell something to wear.
+eight pixels until an albedo bake gives the shell something to wear. Phase 3 did
+not deliver that bake. What it did instead is make a mapped body's ground wear
+the same photograph its sphere does, so on those bodies the two sides of the
+gate already agree; a generated world's sphere is still a flat tint under ground
+that has maria, rays and caps.
 
 **Phase 1.5 — the lens. Landed 28 Aug 2026.** § 8, in full: `packages/rendering/src/lens.ts` and
 its derivations, `engine.lens` under the pose's own precedence, the three
@@ -1164,7 +1170,7 @@ the ocean. [ADR-0020](docs/adr/0020-the-face.md) is the record and
 [`CONTEXT.md`](CONTEXT.md#the-ground-stops-being-a-colour-and-becomes-a-face-29-aug-2026)
 has the numbers: Luna at 0.136 reflectance with its mare at 0.073 against a
 measured 0.07, the cover at 0.55 to 1.0 ms a patch, and the two halves of a
-descent 4.6% apart on Mars and 0.02% on Earth either side of the eight-pixel
+descent 3.1% apart on Mars and 1.5% on Earth either side of the eight-pixel
 gate — which is the "done means" below, measured rather than looked at.
 
 Four things did not land as written, stated rather than quietly dropped.

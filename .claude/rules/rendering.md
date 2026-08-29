@@ -90,8 +90,13 @@ Reasoning: `AGENTS.md` § "The rules that actually matter",
 - **The ground and the sphere behind it are one body, so they shade alike.**
   `render/terrain.ts` and `render/planet.ts` share the lunar-Lambert split, the
   terminator and the archive's photograph. A descent crosses the eight-pixel gate
-  between them — 4.6% apart on Mars, 0.02% on Earth — so anything added to one side is
-  a step at the switch. Skylight comes _out of_ the direct beam, not beside it.
+  between them — 3.1% apart on Mars, 1.5% on Earth — so anything added to one side is
+  a step at the switch. The aerial veil is the case that proves it and the least
+  obvious: the atmosphere shell is a back-side sphere, so it survives the depth
+  test only _outside_ the silhouette, and everything the air does in front of
+  the ground happens in the surface material. Skylight comes _out of_ the direct
+  beam rather than beside it, and where a photograph exists it supplies the
+  albedo.
 
 - **Look at the perf tab before optimizing anything**, and before believing a performance
   claim in a design document. The first thing it found was that time warp had never worked
