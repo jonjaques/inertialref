@@ -5056,7 +5056,7 @@ Phase 2 of [`TERRAIN-PLAN.md`](TERRAIN-PLAN.md), in full.
 [ADR-0019](docs/adr/0019-the-geology.md) is the record.
 
 Three bands of noise is the smallest number that reads as a planet and the
-largest that can read as anything *in particular*. Mercury and Titan came out of
+largest that can read as anything _in particular_. Mercury and Titan came out of
 it as the same rolling fBm at different amplitudes, because `SurfaceParameters`
 carried a seed, a peak, a frequency and a sea level and nothing downstream could
 know more. It now carries a `SurfaceGrammar` derived from the body's own facts,
@@ -5084,7 +5084,7 @@ number four orders of magnitude of gravity apart.
 
 **The crater lattice is cubes in ℝ³, and the cube-sphere grid is the trap.** A
 crater straddling a face edge has to hash the same from both faces, and at the
-eight points where three faces meet a cell has *seven* neighbors — `regionNeighbor`
+eight points where three faces meet a cell has _seven_ neighbors — `regionNeighbor`
 says so in its own docstring — so a ring walk counts one twice and that crater
 comes out at double depth, on every world, at eight places. A cubic lattice has
 no seams and no corners: a cell is `floor(d · s)` whoever is asking. It costs a
@@ -5095,7 +5095,7 @@ twenty-seven than a bounding-sphere test would.
 all eight of a cell's questions from one `pcg4d` instead of two and saves half a
 millisecond in twenty-one; the lanes stay whole. Writing the crater's jittered
 center out unnormalized and taking `2 − 2 cos θ` straight from the dot product
-*did* pay — one divide where there were three, on the band's inner loop — and so
+_did_ pay — one divide where there were three, on the band's inner loop — and so
 did flattening the gradient table.
 
 **The gradient table was an array of arrays, and `noise3` was four times slower
@@ -5105,15 +5105,15 @@ stack is under three times the documented Phase 0 figure instead of five.
 
 ### The numbers
 
-| Measured                             | Was            | Now                              |
-| ------------------------------------ | -------------- | -------------------------------- |
-| A bordered 65×65 patch                | 12.8 ms        | 20 ms airless, 37 atmosphered    |
-| The same three bands, re-measured     | 12.8 ms        | 3.6–3.8 ms                       |
-| `noise3`                              | 209 ns         | 47 ns                            |
-| `surfaceDetailFloor` across the zoo   | 7–10           | 13–16                            |
-| Whole-disk selection, flight lens     | 410–480        | 420–1,008                        |
-| `DEFAULT_MAX_PATCHES`                 | 768            | 1,024 (208 MB in the corner case) |
-| `REQUESTS_PER_FRAME`                  | 8              | 24                               |
+| Measured                            | Was     | Now                               |
+| ----------------------------------- | ------- | --------------------------------- |
+| A bordered 65×65 patch              | 12.8 ms | 20 ms airless, 37 atmosphered     |
+| The same three bands, re-measured   | 12.8 ms | 3.6–3.8 ms                        |
+| `noise3`                            | 209 ns  | 47 ns                             |
+| `surfaceDetailFloor` across the zoo | 7–10    | 13–16                             |
+| Whole-disk selection, flight lens   | 410–480 | 420–1,008                         |
+| `DEFAULT_MAX_PATCHES`               | 768     | 1,024 (208 MB in the corner case) |
+| `REQUESTS_PER_FRAME`                | 8       | 24                                |
 
 An atmosphered world is half again as expensive as an airless one, and the reason
 is one branch: its erosion damping is the only consumer of the analytic gradient,
@@ -5158,7 +5158,7 @@ Phase 4 synthesizes per pixel rather than meshes.
   derivation reads.
 - **The bimodality of an elevation histogram is not the share of samples in the
   middle third.** Two deep basins stretch Mercury's range and pile everything
-  else into the top third, so that statistic reads the one-plate world as *more*
+  else into the top third, so that statistic reads the one-plate world as _more_
   bimodal than Earth. Sarle's coefficient — `(skew² + 1) / kurtosis`, above 5/9
   for two modes — puts Earth at 0.76 and the four stagnant lids at 0.36–0.40.
 - **An imported one-liner costs thirty-five nanoseconds a call under vitest and
