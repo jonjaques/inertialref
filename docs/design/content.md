@@ -109,11 +109,25 @@ engineering sequence is in
 ```mermaid
 flowchart LR
     Q["quadtree LOD<br/>fine underfoot,<br/>coarse to the horizon"] --> S["edge stitching<br/>across faces<br/>and levels"]
-    Q --> M["materials + biomes<br/>from latitude,<br/>altitude, slope"]
+    Q --> G["geology<br/>craters, plates, volcanism,<br/>from a per-body grammar"]
+    G --> M["materials + biomes<br/>from latitude,<br/>altitude, slope"]
     M --> SC["scatter<br/>rocks first,<br/>then flora"]
 
-    style Q fill:#0369a1,stroke:#0c4a6e,color:#fff
+    style M fill:#0369a1,stroke:#0c4a6e,color:#fff
 ```
+
+### Geology
+
+Derived, never authored, from the same facts the record already carries.
+[ADR-0019](../adr/0019-the-geology.md) is the decision record: a
+`SurfaceGrammar` turns mass, radius, air, temperature and the tide a primary
+raises into which bands a body has and how loud each is, a per-body sketch
+places plate nuclei and hotspots and sets the crater field's lattice ladder, and
+six bands evaluate against them. What that produces is a body that looks like
+itself — Mercury saturated with craters under one unmoving lid, Earth with
+plates and orogens along their margins, Venus the same size and stagnant because
+it has no ocean to weaken its lithosphere, Enceladus with four parallel
+fractures across a shell nothing has had time to hit.
 
 ### Biomes
 

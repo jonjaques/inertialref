@@ -240,7 +240,7 @@ export function terrainBaseline(
           elevation: site.elevation,
           steps: flown.steps.length,
           finalLevel: flown.levels[flown.levels.length - 1] ?? -1,
-          floorLevel: surfaceDetailFloor(body.radius, body.surface),
+          floorLevel: surfaceDetailFloor(body.surface),
           peakDrawn: flown.peakDrawn,
         }
       }),

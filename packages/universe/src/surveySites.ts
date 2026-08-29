@@ -351,9 +351,10 @@ function derive(body: Body): readonly SurveySite[] {
  * Memoized per body, and this is a cache rather than state.
  *
  * The site picker asks on every render, the descent probe asks once per run and
- * the observatory asks on every re-target; a derivation is ~2,100 samples of
- * fourteen-octave noise, which is a few milliseconds and is far too much to
- * spend at panel rate. The key is everything the answer depends on, so a body
+ * the observatory asks on every re-target; a derivation is ~2,100 samples of the
+ * band stack — 15 ms on Luna, 21 on Earth, 23 on Mercury, which is a dropped
+ * frame apiece and far too much to spend at panel rate. The key is everything
+ * the answer depends on, so a body
  * whose seed or figure changes gets a fresh entry rather than a stale one, and
  * nothing here is ever written to a save — it is regenerable content, which the
  * rules say is a cache by definition.
@@ -361,6 +362,18 @@ function derive(body: Body): readonly SurveySite[] {
 const CACHE = new Map<string, readonly SurveySite[]>()
 const CACHE_LIMIT = 64
 
+/*
+ * The grammar goes in whole, and that is deliberate rather than lazy.
+ *
+ * The derivation is ~2,100 `elevationAt` samples, and `elevationAt` reads about
+ * twenty grammar fields — every band's share of the budget, the crater ladder's
+ * three, the erosion damping, the ice set, the plate count. Listing them here is
+ * a list that has to be revisited every time a band reads one more, and the
+ * failure when it is not is silent: two bodies agreeing on seed and radii get
+ * each other's summits. Stringifying the record is complete by construction,
+ * which is the claim the docstring above makes, and it is a few microseconds
+ * against a derivation measured in tens of milliseconds.
+ */
 const cacheKey = (body: Body): string =>
   [
     formatSeed(body.surface.seed),
@@ -370,6 +383,7 @@ const cacheKey = (body: Body): string =>
     body.radius,
     body.polarRadius,
     body.figure?.intermediateRadius ?? body.radius,
+    JSON.stringify(body.surface.grammar),
   ].join('|')
 
 /**

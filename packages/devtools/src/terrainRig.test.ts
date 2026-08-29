@@ -159,7 +159,7 @@ describe('a simulated descent', () => {
     const session = live()
     for (const entry of terrainZoo(session.world)) {
       const body = bodyAt(session, entry.address)
-      const floor = surfaceDetailFloor(body.radius, body.surface)
+      const floor = surfaceDetailFloor(body.surface)
       const report = simulateDescent(body, { site: 'basin', trackDegrees: 0 })
       const levels = report.levels
       expect(`${entry.name}: ${levels.length > 4}`).toBe(`${entry.name}: true`)
@@ -198,7 +198,7 @@ describe('a simulated descent', () => {
       const report = simulateDescent(body, { site, trackDegrees: 0 })
       return report.levels[report.levels.length - 1] ?? -1
     }
-    const floor = surfaceDetailFloor(body.radius, body.surface)
+    const floor = surfaceDetailFloor(body.surface)
     expect(last('basin')).toBe(floor)
     expect(last('summit')).toBe(floor)
   })
@@ -223,7 +223,7 @@ describe('a simulated descent', () => {
       (entry) => entry.archetype === 'icy-active',
     )
     const body = bodyAt(session, active?.address ?? '')
-    const floor = surfaceDetailFloor(body.radius, body.surface)
+    const floor = surfaceDetailFloor(body.surface)
     for (const site of ['summit', 'rough', 'basin']) {
       const report = simulateDescent(body, { site, trackDegrees: 0 })
       expect(`${site}: ${report.levels[report.levels.length - 1]}`).toBe(
@@ -264,9 +264,7 @@ describe('a simulated descent', () => {
       toHeight: 2,
       trackDegrees: 10,
     })
-    expect(report.levels).toEqual([
-      surfaceDetailFloor(body.radius, body.surface),
-    ])
+    expect(report.levels).toEqual([surfaceDetailFloor(body.surface)])
     expect(report.levelChanges).toBe(0)
   })
 
@@ -289,14 +287,27 @@ describe('a simulated descent', () => {
        * The measured ceiling, and the number `DEFAULT_MAX_PATCHES` has to stay
        * clear of. It is set by the *balance* rather than by the error
        * tolerance: a restricted quadtree grading from the level underfoot out
-       * to the level at the horizon costs 410 to 480 patches on a body with
-       * seven or eight levels between the two, and changing the tolerance moves
-       * it by a few percent. The assertion is here so that a change to either
-       * is a change to a number rather than a surprise in a frame.
+       * to the level at the horizon costs about ninety patches per level
+       * between the two, and changing the tolerance moves it by a few percent.
+       *
+       * 380 to 862 across the zoo's twenty-four site descents, where the
+       * three bands this replaced cost 410 to 480 — the band stack put crater
+       * rims in the field, `surfaceDetailFloor` went from 7–10 to 12–16 to
+       * resolve them, and every extra level underfoot is another ring. The
+       * assertion is here so that a change to either is a change to a number
+       * rather than a surprise in a frame.
+       *
+       * **Nine tenths of the cap, taken from the constant rather than typed as
+       * a literal.** A bare `< 1_024` is the cap itself, which can only say
+       * "the selection did not saturate" — it passes at 1,023 with the cap
+       * doing the work it is supposed to be a safety net for, and raising
+       * `DEFAULT_MAX_PATCHES` silently raises the assertion with it. 862 is the
+       * measured worst and 921 is the bound, so what this says is that there is
+       * still headroom, which is the property the constant was raised to have.
        */
-      expect(`${entry.name}: ${report.peakDrawn < 700}`).toBe(
-        `${entry.name}: true`,
-      )
+      expect(
+        `${entry.name}: ${report.peakDrawn < DEFAULT_MAX_PATCHES * 0.9}`,
+      ).toBe(`${entry.name}: true`)
       const wanted = report.steps.reduce((sum, step) => sum + step.wanted, 0)
       expect(report.totalRequests + report.cacheHits).toBe(wanted)
       expect(report.uniqueRegions).toBeLessThanOrEqual(report.totalRequests)

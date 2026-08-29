@@ -1,5 +1,6 @@
 import {
   GRAVITATIONAL_CONSTANT,
+  type Kelvin,
   type Meters,
   type Mu,
   SOLAR_LUMINOSITY,
@@ -17,7 +18,9 @@ import {
   systemAddress,
   systemId,
 } from '../address.ts'
+import { meanRadiusOf, tidalProxyOf } from '../archetype.ts'
 import { blackbodyColour } from '../catalog/photometry.ts'
+import { equilibriumTemperature, surfaceGrammar } from '../grammar.ts'
 import type { SystemStub } from '../galaxy.ts'
 import { systemSeedOf } from '../galaxy.ts'
 import {
@@ -110,18 +113,70 @@ const atmosphereOf = (body: SolarBody): Atmosphere | null =>
  * Terrain parameters for a body that has a real elevation map.
  *
  * `relief` is measured — Olympus Mons really is 29 km above Hellas — so
- * `maxElevation` is a fact here rather than a draw. The *shape* at scales below
- * the map's resolution is still generated, because a global map is a few
- * kilometers per pixel and a ship on final approach is looking at meters.
+ * `maxElevation` is a fact here rather than a draw, and it goes into the
+ * grammar as `publishedRelief` so that the strength limit cannot override it.
+ * The art doctrine is explicit that the data is not negotiable. The *shape* at
+ * scales below the map's resolution is still generated, because a global map is
+ * a few kilometers per pixel and a ship on final approach is looking at meters.
+ *
+ * The grammar itself is derived here exactly as it is for a projected world:
+ * Sol's bodies get the same band stack from the same facts, which is what makes
+ * Mercury the reference the tuning is checked against rather than a special
+ * case beside it.
  */
-function surfaceOf(body: SolarBody, seed: Seed, rng: Rng): SurfaceParameters {
+function surfaceOf(
+  body: SolarBody,
+  seed: Seed,
+  rng: Rng,
+  temperature: Kelvin,
+  tidal: number,
+): SurfaceParameters {
+  const roughness = rng.range(2, 5)
+  // Earth is the only body here with a sea, and its datum is what "sea level"
+  // means in the first place.
+  const seaLevel = body.name === 'Earth' ? 0.55 : null
+  const grammar = surfaceGrammar(seed, {
+    mass: body.mass,
+    meanRadius: meanRadiusOf(
+      body.radius,
+      body.figure?.intermediateRadius ?? null,
+      body.polarRadius,
+    ),
+    atmosphere: atmosphereOf(body),
+    temperature,
+    tidalProxy: tidal,
+    hasOcean: seaLevel !== null,
+    /*
+     * Unused, because `publishedRelief` is never null here — and that is a seam
+     * rather than a tidy default.
+     *
+     * `relief` is zero for the eleven *round* bodies in `smallBodies.ts` that
+     * nobody has mapped — Pluto, Charon, Eris, Ceres, Makemake and the rest —
+     * and `??` does not fall back on zero, so they take the published branch
+     * with a published value of nothing: `maxElevation` 0, `elevationAt`
+     * returning at its `budget <= 0` guard, a perfectly smooth sphere streamed
+     * for each. Unlike Phobos they have `figure: null`, so there is no shape
+     * model underneath carrying the relief instead, and Pluto's
+     * three-kilometer water-ice mountains are cited in `grammar.ts` as the
+     * reason `relaxation` reads temperature.
+     *
+     * Deriving one instead is a content decision rather than a repair, which is
+     * why it is written down rather than done. `reliefLimit` would hand
+     * Makemake the 22 km `MAX_RELIEF` ceiling — a number measured on Vesta's
+     * central peak, not a typical value — and `terrainZoo` picks its
+     * representative per archetype by *most relief*, so an invented figure on an
+     * unmapped dwarf planet displaces Mercury and Iapetus from the zoo the whole
+     * tuning is checked against.
+     */
+    reliefSpent: 1,
+    publishedRelief: body.relief / 2,
+  })
   return {
     seed,
-    maxElevation: body.relief / 2,
-    roughness: rng.range(2, 5),
-    // Earth is the only body here with a sea, and its datum is what "sea level"
-    // means in the first place.
-    seaLevel: body.name === 'Earth' ? 0.55 : null,
+    maxElevation: grammar.reliefLimit,
+    roughness,
+    seaLevel,
+    grammar,
   }
 }
 
@@ -133,6 +188,15 @@ function buildBody(
   system: SystemId,
   path: readonly number[],
   body: SolarBody,
+  starLuminosity: number,
+  /**
+   * How far this body's *primary* is from the star, meters.
+   *
+   * A moon's own semi-major axis is around its planet, so using it would put
+   * Europa 671,000 km from the Sun. What lights a moon is the planet's orbit,
+   * which is why this is passed down rather than read off the body.
+   */
+  starDistance: Meters,
 ): Body {
   /*
    * The address *is* the seed path (ADR-0005), and this has to derive it the
@@ -196,6 +260,8 @@ function buildBody(
         system,
         [...path, m],
         satellite,
+        starLuminosity,
+        starDistance,
       ),
     )
   }
@@ -236,7 +302,39 @@ function buildBody(
     rotationPeriod: body.rotationPeriod,
     axialTilt: body.axialTilt,
     atmosphere: atmosphereOf(body),
-    surface: surfaceOf(body, deriveSeed(seed, 'surface'), rng),
+    surface: surfaceOf(
+      body,
+      deriveSeed(seed, 'surface'),
+      rng,
+      equilibriumTemperature(
+        starLuminosity / (4 * Math.PI * starDistance * starDistance),
+      ),
+      /*
+       * Zero for a planet, whose parent here is the star.
+       *
+       * `parentMass` is `star.mass` at the top of the recursion, and feeding
+       * that to the proxy is the mistake `GrammarFacts.tidalProxy` names in as
+       * many words — "the star is not the primary". It put Mercury at 9.27e-8
+       * and every other planet between 2e-10 and 1e-9, which moved `young`,
+       * `mobility`, `relaxation` and the band shares on the four bodies the
+       * whole grammar is calibrated against. The generated path passes a literal
+       * zero for the same reason; `path.length === 1` is what "orbits the star"
+       * means here.
+       */
+      path.length > 1
+        ? tidalProxyOf(
+            body.mass,
+            meanRadiusOf(
+              body.radius,
+              body.figure?.intermediateRadius ?? null,
+              body.polarRadius,
+            ),
+            body.semiMajorAxis,
+            body.eccentricity,
+            parentMass,
+          )
+        : 0,
+    ),
     sphereOfInfluence: soi,
     moons,
   }
@@ -270,7 +368,17 @@ export function solarSystem(
    */
   const planets = [...SOLAR_PLANETS, ...SOLAR_SMALL_BODIES].map(
     (planet, index) =>
-      buildBody(seed, star.mu, star.mass, galaxy, stub.id, [index], planet),
+      buildBody(
+        seed,
+        star.mu,
+        star.mass,
+        galaxy,
+        stub.id,
+        [index],
+        planet,
+        star.luminosity,
+        planet.semiMajorAxis,
+      ),
   )
   return {
     id: stub.id,

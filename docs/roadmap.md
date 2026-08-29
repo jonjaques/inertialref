@@ -55,7 +55,7 @@ a production build. What follows is depth, not foundations.
 | Offline-first                       | ✅     | Service worker + IndexedDB + migrations                                                                                                                           |
 | Persistence model                   | 🟡     | Proven; [mutations](#persistent-mutations) unbuilt                                                                                                                |
 | Streaming                           | 🟡     | Systems and terrain stream; [policy is naive](#streaming-and-scale)                                                                                               |
-| Level of detail                     | 🟡     | Tiers exist; [terrain](#terrain) is a restricted morphing quadtree; no scatter below a patch cell                                                                 |
+| Level of detail                     | 🟡     | Tiers exist; [terrain](#terrain) is a restricted morphing quadtree over a measured detail floor; no scatter below a patch cell                                    |
 | Units and conventions               | ✅     |                                                                                                                                                                   |
 | Repository structure and layering   | ✅     | Enforced by `pnpm graph`                                                                                                                                          |
 | Protocols and serialization         | 🟡     | Worker + save done; net, replay and binary unbuilt                                                                                                                |
@@ -84,7 +84,7 @@ change** — they are generators plus representations.
 | Planets, moons           | ✅     | Confirmed exoplanets and the Solar System are `observed`; the rest is `projected`                                                                                                                                               |
 | Moons of real planets    | 🟡     | Sol's 62 are `observed` and measured; every exoplanet's moon is a projection, and `PackedPlanet` still has no moon list to change that                                                                                          |
 | Catalog revision diff    | ✅     | `versionDrift` in `packages/protocol` — one verdict, read by the handshake, the save loader and the health panel                                                                                                                |
-| Planetary terrain        | 🟡     | Whole-disk heightfields, seamless; three noise bands and no materials                                                                                                                                                           |
+| Planetary terrain        | 🟡     | Whole-disk heightfields, seamless; craters, plates, volcanism and ice from a per-body grammar, and no materials                                                                                                                 |
 | Ships                    | 🟡     | One modeled hull (a CC-BY Enterprise-D in `data/models/`, debug cone as fallback), no variants or subsystems                                                                                                                    |
 | Rings                    | ✅     | All four giants, with Saturn's shadow on its own and theirs on it; Haumea, Quaoar, Chariklo and Chiron carry theirs; procedural giants get a 1-in-6 chance                                                                      |
 | Asteroids / belts        | 🟡     | 50 real asteroids and comets in Sol, and 6–18 generated per system — but they are `b:` bodies at system scale, not the `o:` region population a _visible_ belt would need (see [belts as a population](#belts-as-a-population)) |
@@ -113,17 +113,16 @@ The most visible shallowness, and the milestone in progress —
 
 ```mermaid
 flowchart TB
-    NOW["<b>today</b><br/>restricted quadtree, whole disk<br/>morphed, seamless, one field<br/>at every distance"]
-    C["<b>the geology</b><br/>craters, plates, volcanism<br/>from a per-body sketch"]
+    NOW["<b>today</b><br/>a grammar, a sketch and six bands<br/>over a restricted quadtree<br/>craters, plates, volcanism, ice"]
     D["<b>the face</b><br/>biomes, splat materials,<br/>the orbital albedo bake"]
     E["<b>the ground</b><br/>meter-scale levels,<br/>rock scatter"]
     F["<b>the GPU producer</b><br/>TSL compute tiles"]
 
-    NOW --> C --> D --> E
-    E -.->|"if generation is<br/>the binding constraint"| F
+    NOW --> D --> E
+    E -.->|"generation is now the<br/>binding constraint"| F
 
     style NOW fill:#334155,stroke:#1e293b,color:#fff
-    style C fill:#0369a1,stroke:#0c4a6e,color:#fff
+    style D fill:#0369a1,stroke:#0c4a6e,color:#fff
 ```
 
 Phase 1 landed 27 Aug 2026: per-patch level selection, whole-disk coverage,
@@ -142,20 +141,27 @@ predicate reads it instead of assuming 60° over 1080 px.
 every patch count in the plan is a function of that one number — the flight lens
 is 848 px/rad against the guess's 935, and the telephoto end of the
 field-of-view slider saturates the patch cap on most of a descent's steps.
-Phase 2's acceptance criterion is a plate review, and the plates are now composed
-through the optics the game is played with.
 
-| Gap                                        | Consequence today                                                                       | Seam                                                                                                                              |
-| ------------------------------------------ | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| Three noise bands                          | No craters, no tectonics — every world is the same rolling fBm at a different amplitude | The band stack and the per-body sketch, [TERRAIN-PLAN § 6](../TERRAIN-PLAN.md); `surfaceDetailFloor` deepens with them on its own |
-| One flat color per body                    | Terrain reads as geometry, never as a place                                             | Elevation, slope and latitude are already available per vertex                                                                    |
-| A mapped body's terrain is not its map     | Procedural ground under a photographic albedo, near the surface only                    | The DEM ingest ends the carve-out; Phase 3's material is what makes the patches wear the published map meanwhile                  |
-| The sphere-tier shell needs an albedo bake | Terrain is switched off past 8 px of relief, so an approach shows the sphere            | A per-face normal + albedo tile, baked in workers like any patch                                                                  |
-| The selection is not frustum-culled        | A whole disk is generated, of which the renderer draws about a third                    | The streamer has the camera; a generous cone would keep a turn from bursting                                                      |
-| Vertex attributes are float32              | 203 KB a patch, so a whole-disk selection is 60–91 MB at the flight lens                | Int8 normals and Int16 morph deltas are worth about half                                                                          |
-| The mesh is built on the main thread       | 0.25 ms a patch, four a frame                                                           | The worker already has the field; the mesh arithmetic has to move to `packages/universe` first, for the layer rule                |
-| Patch generation is over its budget        | 14.5 ms per bordered 65×65 patch against a documented ≤ 8 ms, before any geology        | `pnpm sim --terrain-baseline` is the measurement; amplitude floors and a GPU producer are the levers                              |
-| A coarse patch costs more than a fine one  | 20.7 ms at level 1 against 14.3 at level 12, for the same 4,761 samples                 | Consecutive samples of a coarse patch land in different noise lattice cells; a whole-disk selection pays it on the shell          |
+Phase 2 landed 28 Aug 2026: the three noise bands are a surface grammar derived
+from each body's own facts, a per-body sketch of plate nuclei, hotspots and a
+crater ladder, and six bands over them.
+[ADR-0019](adr/0019-the-geology.md) is the decision record. Mercury comes out
+saturated with craters and one lid; Earth with twenty-two plates and orogens
+along their margins; Venus the same size as Earth and a stagnant lid, because it
+has no ocean; Enceladus with four parallel fractures. `maxElevation` is a
+strength limit rather than a dial, and terrain moved to algorithm version 2.
+
+| Gap                                              | Consequence today                                                                                                                                         | Seam                                                                                                                                                              |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| One flat color per body                          | Terrain reads as geometry, never as a place                                                                                                               | Elevation, slope and latitude are already available per vertex                                                                                                    |
+| A mapped body's terrain is not its map           | Procedural ground under a photographic albedo, near the surface only                                                                                      | The DEM ingest ends the carve-out; Phase 3's material is what makes the patches wear the published map meanwhile                                                  |
+| The sphere-tier shell needs an albedo bake       | Terrain is switched off past 8 px of relief, so an approach shows the sphere                                                                              | A per-face normal + albedo tile, baked in workers like any patch                                                                                                  |
+| The selection is not frustum-culled              | A whole disk is generated, of which the renderer draws about a third                                                                                      | The streamer has the camera; a generous cone would keep a turn from bursting                                                                                      |
+| Vertex attributes are float32                    | 203 KB a patch, so a whole-disk selection is 85–205 MB at the flight lens                                                                                 | Int8 normals and Int16 morph deltas are worth about half                                                                                                          |
+| The mesh is built on the main thread             | 0.25 ms a patch, four a frame                                                                                                                             | The worker already has the field; the mesh arithmetic has to move to `packages/universe` first, for the layer rule                                                |
+| Patch generation is over its budget              | 9 to 37 ms per bordered 65×65 patch across the zoo — 9 with no craters, 32 rocky airless, 36 icy dead, 37 rocky atmosphered — against a documented ≤ 8 ms | `pnpm sim --terrain-baseline` is the measurement; the crater neighborhood is most of it, and its radial bound, `EJECTA_REACH` and the GPU producer are the levers |
+| A coarse patch costs more than a fine one        | Consecutive samples of a coarse patch land in different noise lattice cells                                                                               | A whole-disk selection pays it on the shell; per-level merging would amortize it                                                                                  |
+| No craters below a two-thousandth of the largest | A kilometer on Mercury, a hundred meters on Callisto — the ladder is capped at eleven halvings for cost                                                   | Phase 4's micro relief, synthesized per pixel below the canonical floor rather than meshed                                                                        |
 
 ---
 

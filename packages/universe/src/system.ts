@@ -28,6 +28,12 @@ import {
 import type { Atmosphere, OrbitalElements } from '@inertialref/physics'
 import { orbitalPeriod, sphereOfInfluence } from '@inertialref/physics'
 import type { UniverseVector } from '@inertialref/spatial'
+import { tidalProxyOf } from './archetype.ts'
+import {
+  equilibriumTemperature,
+  type SurfaceGrammar,
+  surfaceGrammar,
+} from './grammar.ts'
 import { parseSpectralType, type SpectralClass } from './catalog/spectral.ts'
 import {
   bodyAddress,
@@ -88,7 +94,23 @@ import { ROUNDING_RADIUS } from './rounding.ts'
  * of the same address space with nothing to notice.
  */
 export const SYSTEM_ALGORITHM = algorithm('system', 3)
-export const TERRAIN_ALGORITHM = algorithm('terrain', 1)
+/*
+ * Bumped to 2 when the three noise bands became a band stack.
+ *
+ * Every solid body's ground moved: elevation is now a grammar, a sketch and six
+ * fields rather than continents, mountains and detail, and the number a save's
+ * landed ship is sitting on is a different number. Doing it once is why the
+ * geology is one phase — the phases after this refine presentation and leave
+ * the canonical field alone, precisely so the ground moves under saves a single
+ * time. The loader already knows how to say "this save was written with terrain
+ * v1" (ADR-0005).
+ *
+ * `SYSTEM_ALGORITHM` deliberately does not move with it. `makeSurface` draws the
+ * same three values in the same order from the same stream — the first has
+ * changed meaning, not position — so every other property of every body in the
+ * galaxy is exactly where it was.
+ */
+export const TERRAIN_ALGORITHM = algorithm('terrain', 2)
 export const GALAXY_ALGORITHM = algorithm('galaxy', 2)
 /**
  * The measured-to-physical conversion in `catalog/photometry.ts`.
@@ -148,12 +170,31 @@ export interface Star {
 /** Terrain generation parameters. The heightfield itself is never stored. */
 export interface SurfaceParameters {
   readonly seed: Seed
-  /** Peak-to-datum elevation, meters. */
+  /** Peak-to-datum elevation, meters. `grammar.reliefLimit`, restated. */
   readonly maxElevation: Meters
-  /** Base spatial frequency of the terrain, cycles per body radius. */
+  /**
+   * Base spatial frequency of the *relief* band, cycles per body radius.
+   *
+   * One band of six rather than the whole field: it sets `reliefBand`'s cycle
+   * count and nothing else reads it. Every other band's scale comes from the
+   * grammar — a crater ladder from the largest crater, an orogen from
+   * `BELT_MARGIN`, a hotspot from the plate count — because those are properties
+   * of the geology rather than a dial on the noise.
+   */
   readonly roughness: number
   /** Ocean datum as a fraction of maxElevation, or null for a dry world. */
   readonly seaLevel: number | null
+  /**
+   * Which bands the terrain has and how loud each is.
+   *
+   * Derived from the body's own facts, never persisted — a save stores an
+   * address and the grammar comes back with the body. It rides on the surface
+   * rather than being looked up from the `Body` because `elevationAt` runs in a
+   * worker, and a worker has no system, no star and no parent planet. That is
+   * also why it is plain data: the heightfield task posts it across a
+   * structured clone.
+   */
+  readonly grammar: SurfaceGrammar
 }
 
 /**
@@ -462,26 +503,61 @@ function makeAtmosphere(
   }
 }
 
+/** What a body has to know about itself before its geology can be derived. */
+interface SurfaceFacts {
+  readonly mass: Kilograms
+  readonly radius: Meters
+  readonly kind: BodyKind
+  readonly atmosphere: Atmosphere | null
+  readonly temperature: Kelvin
+  /** Against the primary, for a moon. Zero for a planet. */
+  readonly tidalProxy: number
+}
+
+/**
+ * Terrain parameters for a generated body.
+ *
+ * The three draws are in the order they have always been in, and the first of
+ * them has changed meaning rather than moving: it was relief as a fraction of
+ * the radius and it is now the fraction of the *strength limit* this world has
+ * spent. One `rng.next()` either way, so the rotation period, the appearance
+ * and every other draw downstream of it are where they were — which is what
+ * keeps this a terrain version bump rather than a system one.
+ *
+ * `radius` stands in for the volumetric mean radius, and on an irregular moon
+ * that overstates it by up to a few percent because the figure is drawn after
+ * this. The grammar reads it for gravity, density and the crater ladder's
+ * angular scales, all of which are ratios that tolerate it; `volumetricMeanRadius`
+ * is what everything downstream of generation uses.
+ */
 function makeSurface(
   rng: Rng,
   seed: Seed,
-  radius: Meters,
-  kind: BodyKind,
-  hasAtmosphere: boolean,
+  facts: SurfaceFacts,
 ): SurfaceParameters {
-  const relief =
-    kind === 'gas-giant' || kind === 'ice-giant' ? 0 : rng.range(0.0005, 0.004)
+  const solid = facts.kind !== 'gas-giant' && facts.kind !== 'ice-giant'
+  const spent = solid ? rng.range(0.45, 1) : 0
+  const roughness = rng.range(1.5, 6)
+  const seaLevel =
+    facts.atmosphere !== null && solid && rng.bool(0.4)
+      ? rng.range(0.15, 0.55)
+      : null
+  const grammar = surfaceGrammar(seed, {
+    mass: facts.mass,
+    meanRadius: facts.radius,
+    atmosphere: facts.atmosphere,
+    temperature: facts.temperature,
+    tidalProxy: facts.tidalProxy,
+    hasOcean: seaLevel !== null,
+    reliefSpent: spent,
+    publishedRelief: null,
+  })
   return {
     seed,
-    maxElevation: radius * relief,
-    roughness: rng.range(1.5, 6),
-    seaLevel:
-      hasAtmosphere &&
-      kind !== 'gas-giant' &&
-      kind !== 'ice-giant' &&
-      rng.bool(0.4)
-        ? rng.range(0.15, 0.55)
-        : null,
+    maxElevation: grammar.reliefLimit,
+    roughness,
+    seaLevel,
+    grammar,
   }
 }
 
@@ -495,6 +571,15 @@ function makeMoon(
   galaxy: GalaxyId,
   system: SystemId,
   parentPath: readonly number[],
+  /*
+   * The *planet's* equilibrium temperature, not the moon's own.
+   *
+   * A moon's semi-major axis is around its planet, so computing insolation
+   * from it would put Europa 671,000 km from the Sun. What lights a moon is
+   * the orbit of the thing it goes round — the dossier's sunlight card learned
+   * the same lesson and says so in the same words.
+   */
+  parentTemperature: Kelvin,
 ): Body {
   const seed = deriveSeed(parentSeed, `b:${index}`)
   const rng = new Rng(seed)
@@ -527,13 +612,20 @@ function makeMoon(
     epoch: 0,
   }
 
-  const surface = makeSurface(
-    rng,
-    deriveSeed(seed, 'surface'),
+  const surface = makeSurface(rng, deriveSeed(seed, 'surface'), {
+    mass,
     radius,
-    'moon',
-    atmosphere !== null,
-  )
+    kind: 'moon',
+    atmosphere,
+    temperature: parentTemperature,
+    tidalProxy: tidalProxyOf(
+      mass,
+      radius,
+      semiMajorAxis,
+      elements.eccentricity,
+      parentMass,
+    ),
+  })
   // Tidally locked more often than not, this close in.
   const rotationPeriod = rng.bool(0.7)
     ? orbitalPeriod(mu(parentMass) + bodyMu, semiMajorAxis)
@@ -673,20 +765,35 @@ function makePlanet(
     : kind === 'gas-giant' || kind === 'ice-giant'
       ? rng.int(0, 6)
       : rng.int(0, radius > EARTH_RADIUS ? 3 : 1)
+  const temperature = equilibriumTemperature(insolation(star, semiMajorAxis))
   const moons: Body[] = []
   for (let m = 0; m < moonCount; m += 1) {
     moons.push(
-      makeMoon(seed, name, mass, radius, soi, m, galaxy, system, [index]),
+      makeMoon(
+        seed,
+        name,
+        mass,
+        radius,
+        soi,
+        m,
+        galaxy,
+        system,
+        [index],
+        temperature,
+      ),
     )
   }
 
-  const surface = makeSurface(
-    rng,
-    deriveSeed(seed, 'surface'),
+  const surface = makeSurface(rng, deriveSeed(seed, 'surface'), {
+    mass,
     radius,
     kind,
-    atmosphere !== null,
-  )
+    atmosphere,
+    temperature,
+    // A planet's tides are raised by its star, which is not what the proxy
+    // measures. Zero is the honest input, and `surfaceArchetype` says so.
+    tidalProxy: 0,
+  })
   // A retrograde spin one time in sixteen. Venus and Uranus are two of eight,
   // which is a small sample and a real phenomenon; giant impacts happen.
   const rotationPeriod =
@@ -1151,13 +1258,23 @@ function makeObservedPlanet(
   }
 
   const period = orbitalPeriod(star.mu + bodyMu, semiMajorAxis)
-  const surface = makeSurface(
-    rng,
-    deriveSeed(seed, 'surface'),
+  /*
+   * Derived, not `planet.equilibriumTemperature`, and the two are different
+   * questions. The published figure is a *record* about this world and belongs
+   * on `measurement`, where a panel can say it came from an archive; this is a
+   * generation input, and taking it from a field that is null for most of the
+   * catalog would give two otherwise identical worlds different geology
+   * depending on whether anybody had written the number down.
+   */
+  const temperature = equilibriumTemperature(insolation(star, semiMajorAxis))
+  const surface = makeSurface(rng, deriveSeed(seed, 'surface'), {
+    mass,
     radius,
     kind,
-    atmosphere !== null,
-  )
+    atmosphere,
+    temperature,
+    tidalProxy: 0,
+  })
   // Nothing is published. Close in, tidal locking is the overwhelmingly likely
   // outcome and it is the single most consequential fact about such a world;
   // further out it is a free draw.
@@ -1175,9 +1292,18 @@ function makeObservedPlanet(
         : rng.int(0, radius > EARTH_RADIUS ? 3 : 1)
     for (let m = 0; m < moonCount; m += 1)
       moons.push(
-        makeMoon(seed, planet.name, mass, radius, soi, m, galaxy, system, [
-          index,
-        ]),
+        makeMoon(
+          seed,
+          planet.name,
+          mass,
+          radius,
+          soi,
+          m,
+          galaxy,
+          system,
+          [index],
+          temperature,
+        ),
       )
   }
 
@@ -1578,6 +1704,16 @@ function makeSmallBody(
   const bodyMu = mu(mass)
   const insolationHere = insolation(star, semiMajorAxis)
   const surfaceSeed = deriveSeed(seed, 'surface')
+  const smallBodyGrammar = surfaceGrammar(surfaceSeed, {
+    mass,
+    meanRadius,
+    atmosphere: null,
+    temperature: equilibriumTemperature(insolationHere),
+    tidalProxy: 0,
+    hasOcean: false,
+    reliefSpent: 0,
+    publishedRelief: null,
+  })
   return {
     address,
     id: entityIdForAddress(address),
@@ -1621,9 +1757,18 @@ function makeSmallBody(
     atmosphere: null,
     surface: {
       seed: surfaceSeed,
-      maxElevation: 0,
+      /*
+       * Zero, and the figure is why. `irregularFigure` has already given this
+       * body a lumpy radial shape, and relief on top of it would sink the drawn
+       * surface by a second helping of the same thing — which is the argument
+       * `solar/smallBodies.ts` makes about Phobos in the same words. The band
+       * stack is still derived so that the record and the panels have one, and
+       * `reliefSpent: 0` is what makes it come out flat.
+       */
+      maxElevation: smallBodyGrammar.reliefLimit,
       roughness: rng.range(2, 6),
       seaLevel: null,
+      grammar: smallBodyGrammar,
     },
     sphereOfInfluence: sphereOfInfluence(semiMajorAxis, mass, star.mass),
     moons: [],

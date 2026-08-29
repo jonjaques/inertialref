@@ -20,6 +20,7 @@ import {
 import { apoapsis, normalizeAngle, periapsis } from '@inertialref/physics'
 import type { World } from '@inertialref/simulation'
 import {
+  archetypeName,
   type Body,
   type BodyKind,
   type BodyProvenance,
@@ -28,16 +29,19 @@ import {
   formatAddress,
   frostLine,
   habitableZone,
+  hasSolidSurface,
   insolation,
   isDebris,
   isHabitable,
   isPlanetKind,
   orbitalOrder,
   parseSpectralType,
+  type ReliefSource,
   type Star,
   type StarSystem,
   type SystemId,
   type UniverseAddress,
+  volumetricMeanRadius,
   walkBodies,
 } from '@inertialref/universe'
 import { currentSystemOf, resolveDestination } from './travel.ts'
@@ -500,6 +504,8 @@ function bodyDossier(world: World, system: StarSystem, body: Body): Dossier {
     atmosphereGroup(body),
     insolationGroup(star, body, primary),
   ]
+  const geology = geologyGroup(body)
+  if (geology !== null) groups.splice(1, 0, geology)
   const rings = ringGroup(body)
   if (rings !== null) groups.push(rings)
   groups.push(discoveryGroup(body))
@@ -801,6 +807,139 @@ function rotationGroup(body: Body, year: Seconds): FactGroup {
       : {}),
     facts,
   }
+}
+
+/**
+ * What the ground is made of and what has happened to it.
+ *
+ * The `SurfaceGrammar` restated as a record. Every row is a claim about the
+ * *place* — how hard a mountain can stand on it, how saturated with craters it
+ * is, whether its lithosphere moves in pieces — and none of them is a claim
+ * about how the terrain is drawn, which is the line ADR-0014 draws through this
+ * whole panel.
+ *
+ * Null for a body with nowhere to stand. A gas giant's grammar exists (the
+ * record is built for every body) and means nothing, so the honest thing is to
+ * have no card rather than a card full of numbers about a surface that is not
+ * there.
+ */
+/**
+ * Why a body carries the relief it does, one phrase per source.
+ *
+ * `reliefSource` rather than the three constants re-compared here, because a
+ * measured world does not go through the comparison at all: `solar/system.ts`
+ * hands every body in Sol its published figure, so re-deriving the answer told
+ * Earth "limited by what the crust can hold up" over a 9,900 m relief the crust
+ * limit puts at 5,910. A row on this panel is a claim about the place
+ * (ADR-0014), and a claim about a mechanism that did not run is the one kind
+ * this panel may not make.
+ */
+const RELIEF_REASON: Readonly<Record<ReliefSource, string>> = {
+  measured: 'measured from orbit; the archive outranks the model',
+  ceiling: 'at the ceiling nothing measured anywhere exceeds',
+  size: 'limited by the size of the body',
+  strength: 'limited by what the crust can hold up',
+}
+
+function geologyGroup(body: Body): FactGroup | null {
+  if (!hasSolidSurface(body)) return null
+  const g = body.surface.grammar
+  const facts: Fact[] = [
+    {
+      label: 'Terrain',
+      value: archetypeName(g.archetype),
+      /*
+       * `gravity(...)` over the body's volumetric mean radius, not
+       * `grammar.gravity`, so this row and the Physical card's agree.
+       *
+       * The grammar's copy is a *generation input*: `makeSurface` derives it
+       * before the body has a figure and therefore from `radius`, the largest
+       * half-extent, which its own docstring says overstates the mean by a few
+       * percent on an irregular moon and by the flattening on an oblate planet.
+       * That is fine for choosing a crater ladder and wrong for a panel — two
+       * rows of one dossier quoting different surface gravities for one world is
+       * the kind of thing ADR-0014 exists to prevent.
+       */
+      note: `${significant(gravity(body.mass, volumetricMeanRadius(body)))} m/s² at the datum`,
+    },
+    {
+      label: 'Relief',
+      value:
+        body.surface.maxElevation > 0
+          ? kilometres(body.surface.maxElevation)
+          : 'None resolved',
+      /*
+       * Which of the three limits bit, named rather than implied. A reader who
+       * wonders why a small moon carries as much relief as a planet is asking a
+       * real question, and the answer is that a planet is limited by what its
+       * crust can hold up and a moon by how big it is.
+       */
+      note:
+        body.surface.maxElevation <= 0
+          ? 'the shape model carries what relief there is'
+          : RELIEF_REASON[g.reliefSource],
+    },
+  ]
+
+  if (g.craterDensity > 0.02 && g.largestCrater > 0) {
+    facts.push({
+      label: 'Cratering',
+      value:
+        g.craterDensity > 0.75
+          ? 'Saturated'
+          : g.craterDensity > 0.35
+            ? 'Heavy'
+            : 'Sparse',
+      note: `largest basin ${kilometres(g.largestCrater)} across; floors flatten past ${kilometres(g.complexDiameter)}`,
+    })
+  } else {
+    facts.push({
+      label: 'Cratering',
+      value: 'Effectively none',
+      note:
+        g.air > 0.5
+          ? 'the air erases them faster than they arrive'
+          : 'the surface is younger than the impacts that would mark it',
+    })
+  }
+
+  facts.push({
+    label: 'Lithosphere',
+    value: g.plateCount > 1 ? `${g.plateCount} plates` : 'One lid',
+    note:
+      g.plateCount > 1
+        ? 'margins that converge, open and slide'
+        : 'a single shell that cracks rather than subducts',
+  })
+
+  if (g.relaxation > 0.1) {
+    facts.push({
+      label: 'Ice',
+      value: `${round(g.relaxation * 100, 0)}% relaxed`,
+      note: `at ${round(g.temperature, 0)} K a large old crater sags toward a palimpsest`,
+    })
+  }
+  if (g.chaos > 0.1 || g.stripes > 0.1) {
+    facts.push({
+      label: 'Tidal working',
+      value: g.stripes > 0.1 ? 'Fractured shell' : 'Broken crust',
+      note: 'the primary flexes it faster than it can anneal',
+    })
+  }
+
+  facts.push(
+    noData(
+      'Surface age',
+      'crater counts date a surface against a cratering rate, and nobody has flown the survey this one would need',
+    ),
+  )
+  facts.push(
+    noData(
+      'Composition',
+      'the rocks have a density and a strength. Which minerals add up to them wants a sample, and no lander has taken one',
+    ),
+  )
+  return { id: 'body.geology', title: 'Geology', facts }
 }
 
 function atmosphereGroup(body: Body): FactGroup {

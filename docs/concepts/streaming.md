@@ -89,7 +89,7 @@ flowchart TB
     REFINE -->|no| BALANCE["restrict to a 2:1 balance<br/><i>the morph closes one level, not two</i>"]
     BALANCE --> DRAW["the draw set"]
     WALK --> AHEAD["the same walk from where<br/>the eye will be in 2 s"]
-    AHEAD --> QUEUE["queue the pyramid under it,<br/>coarsest first, 8 a frame"]
+    AHEAD --> QUEUE["queue the pyramid under it,<br/>coarsest first, 24 a frame"]
     QUEUE --> JOB["worker: bordered heightfield"]
     JOB --> CACHE["cache the heightfield"]
     CACHE --> MESH["build geometry, 4 a frame"]
@@ -127,22 +127,32 @@ square, which is what the arithmetic suggests: refinement runs out of _levels_ a
 `surfaceDetailFloor` before it runs out of budget, and the telephoto end of the
 slider measures 1.9× to 3.2× the flight lens's demand rather than thirteen times
 it. Racking the zoom out on top of that is the one corner where the floor is
-reached and the square bites again — 20° at 8× wants 20,174 patches against a cap
-of 768, so the disk goes a level coarse on every step and says so. The viewport is
+reached and the square bites again — a telephoto held on a subject wants an order
+of magnitude past any cap, so the disk goes a level coarse on every step and says
+so. The viewport is
 in **display** pixels with any supersampling divided back out: 4× AA raises the
 sample count, not the
 detail a viewer can resolve, and feeding the raw buffer in asks for 6.5× the
 patches to draw geometry the resolve filter averages away.
 
-**Stop where the field stops.** Past some level a patch is a bilinear upsample
-of its parent — on Mercury a level-9 patch differs from one by 12 cm, and levels
-10 through 12 by nothing a float can hold. `surfaceDetailFloor` measures that
-per body from the field itself rather than assuming it, and it lands at level 9
-or 10 across the zoo against the 12 the old rule saturated at. A quiet level
-settles the walk only if its stencils touched dry ground: the sea clamp
-manufactures exact zeros over open water, so a submerged probe set is the clamp
-talking rather than the field — an ocean world read that way streams its
-islands, with kilometers of relief, as six patches forever.
+**Stop where the field stops.** Past some level a patch is a bilinear upsample of
+its parent. `surfaceDetailFloor` measures that per body from the field itself
+rather than assuming it, and it lands at level 10 to 16 across the zoo — 10 on
+Iapetus, 16 on the atmosphered rocky world, as `pnpm sim --terrain-baseline`
+prints it against each body's descent. The
+[band stack](rendering.md#terrain-meshing) puts crater rims in the field, a rim
+is about a seventh of its crater wide, and resolving one to half a meter takes
+samples seven times finer again. It moved there from 7–10 the day the geology
+landed, with no constant to raise, which is what measuring it from the field buys.
+
+Two things settle the walk rather than one. A quiet level counts only if its
+stencils touched dry ground — the sea clamp manufactures exact zeros over open
+water, so a submerged probe set is the clamp talking rather than the field, and
+an ocean world read that way streams its islands, with kilometers of relief, as
+six patches forever. And it takes **three consecutive** quiet levels, because a
+crater ladder is discrete: a stencil that straddles nothing at one level lands on
+a rim at the next, so the first quiet level is not a floor and taking it returned
+one whose own residual was twice the tolerance.
 
 **Measure to the ground, not the datum.** A node is a cone of directions crossed
 with the shell `[radius − relief, radius + relief]` that ground can occupy, and
@@ -171,7 +181,27 @@ from the selection's own ceiling now, and eviction keeps everything the frame's
 request list names — the drawn set, the starved children, the whole pyramid —
 because the pyramid is re-asked for every frame: a keep set of the two
 selections' leaves alone turns the cap into a treadmill that evicts a rung,
-re-requests it, and regenerates it at 14.5 ms a patch.
+re-requests it, and regenerates it at 9 to 37 ms a patch.
+
+**The cap has to clear that keep set, and neither selection measures it.** The
+request set is two independently capped selections — the drawn one and the one
+taken at the look-ahead eye — plus the starved rung, so no multiple of the
+selection cap bounds it: geometry is held at twice the cap and heightfields at
+three times, and both numbers are measurements rather than derivations. Under
+the keep set the streamer builds four patches a frame and evicts four it wanted
+a moment earlier, `starved` never falls to zero, and every twenty-sixth frame
+the eviction takes a patch the traversal is refining through: the disk snaps
+from 760 patches at level 7 to four at level 1 and back, two to three times a
+second.
+
+What decides whether that happens is the **ratio of keep set to cap**, and it
+grows with the camera's speed over the ground as much as with the drawing
+buffer — the two selections coincide at a hover and separate as the lead
+lengthens. Measured over Luna, Ganymede and Triton: 957 regions hovering at
+1600×900, 1,824 at a 20 km ground-track lead at 5120×2880. So a hover at a small
+buffer is the case that never shows it, not a buffer size below which it cannot
+happen. Only the geometry count shows it either way, because refinement gates on
+the mesh while the heightfield cache sits at its steady value.
 
 Patch keys are `body|face.level.i.j` — `terrainPatchKey`, one definition and
 three readers — so the same patch is never requested twice concurrently, and the
@@ -190,6 +220,13 @@ behind that extrapolation is measured in body-fixed axes, because a hovering
 camera co-moves with the body at its orbital velocity — 47 km/s at Mercury —
 so a universe-frame drift pushed two seconds ahead aims the request set ~94 km
 along the orbit rather than along the camera's track over the ground.
+
+**Twenty-four requests go out a frame**, because that ladder is strictly serial:
+a level cannot refine until all four children of every node on it have arrived,
+so a frame that under-asks is a frame the next level waits for, and with the
+detail floor twelve to sixteen levels down that is most of a landing. More
+would queue rather than work — the requests go to a pool, and a queue is what a
+camera turn has to throw away.
 
 ### Where terrain is not drawn
 
@@ -250,9 +287,9 @@ gone.
 | ------------------------------------------------ | --------------------------------------------------------------------------- | -------------------------------------------- |
 | Interest is a radius scan over generation cells  | Fine at 6 ly; a spatial index is needed for large radii                     | [roadmap](../roadmap.md#streaming-and-scale) |
 | The selection is not frustum-culled              | A whole disk is generated, of which the renderer draws about a third        | [roadmap](../roadmap.md#terrain)             |
-| Vertex attributes are float32                    | 203 KB a patch, so a whole-disk selection is 60–91 MB at the flight lens    | [roadmap](../roadmap.md#terrain)             |
+| Vertex attributes are float32                    | 203 KB a patch, so a whole-disk selection is 85–205 MB at the flight lens   | [roadmap](../roadmap.md#terrain)             |
 | The mesh is built on the main thread             | 0.25 ms a patch, budgeted at four a frame; the worker already has the field | [roadmap](../roadmap.md#terrain)             |
-| Three noise bands and one flat color per body    | The ground reads as geometry rather than as a place                         | [roadmap](../roadmap.md#terrain)             |
+| One flat color per body                          | The ground has a geology and no face — no biomes, no materials              | [roadmap](../roadmap.md#terrain)             |
 | A mapped body's terrain is not its published map | Procedural ground under a photographic albedo, near the surface only        | [roadmap](../roadmap.md#terrain)             |
 
 **The morph closes one level, and that is a constraint rather than a setting.**

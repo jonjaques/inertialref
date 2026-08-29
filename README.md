@@ -396,14 +396,16 @@ Stated plainly, because discovering these by surprise is worse than reading them
   the true component count, so the simplification is visible rather than hidden.
 - **Gravity is patched-conic** — no n-body perturbation.
 - **Collision is ground contact only** — no hull, no entity-to-entity.
-- **Terrain is geometry without geology, and the numbers are written down.**
+- **Terrain has a geology and no face, and the numbers are written down.**
   The quadtree covers the whole disk — morphed, seamless, measured to the ground
-  rather than the datum — but what it refines is three noise bands and one flat
-  color per body, so every world is the same rolling fBm at a different
-  amplitude. Generating a bordered 65×65 patch costs 14.5 ms against a
-  documented ≤ 8 ms budget, and a whole-disk selection holds 60–91 MB of
-  float32 vertex buffers at the flight lens. `pnpm sim --terrain-baseline`
-  prints all of it; the [roadmap](docs/roadmap.md#terrain) has the seams.
+  rather than the datum — and what it refines is now craters, plates, volcanism
+  and ice from each body's own facts. What it wears is still one flat color per
+  body: no biomes, no materials. Generating a bordered 65×65 patch costs 9 to
+  37 ms across the zoo — 9 on a world with no craters at all, 32 on a rocky
+  airless one, 37 on a rocky atmosphered one — against a documented ≤ 8 ms
+  budget, and a whole-disk selection holds up to 208 MB of float32 vertex
+  buffers at the flight lens. `pnpm sim --terrain-baseline` prints all of it;
+  the [roadmap](docs/roadmap.md#terrain) has the seams.
 - **Almost nothing is measured on the target machine.** The dev dock's perf panel
   (`P`) plots frame time, engine time, draw calls, worker queue and heap, and can
   time GPU frames properly — but every number recorded so far is from an Apple M5

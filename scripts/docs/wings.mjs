@@ -121,6 +121,7 @@ export const WINGS = [
           ['docs/adr/0016-documentation-as-a-mode.md', 'Documentation'],
           ['docs/adr/0017-the-lens.md', 'The Lens'],
           ['docs/adr/0018-the-instrument.md', 'The Instrument'],
+          ['docs/adr/0019-the-geology.md', 'The Geology'],
         ],
       },
     ],

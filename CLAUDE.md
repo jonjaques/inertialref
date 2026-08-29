@@ -59,9 +59,12 @@ Most of `.claude/` runs without being asked.
   most three times per prompt, then reports and lets go. `pnpm build` is not
   in it. The full `pnpm check` gates the push, which is what `/ship` runs, and
   `pnpm sim --self-test` runs in CI. `IR_SKIP_GATE=1` disables it.
-- **Edits are formatted for you.** Prettier runs on every file written. Do
-  not run `pnpm format` or `pnpm lint` by hand — you would re-read output the
-  hooks suppress.
+- **Edits are formatted for you — but only the ones the hook can see.**
+  Prettier runs on `Edit`/`Write`/`MultiEdit`, so do not run `pnpm format` or
+  `pnpm lint` by hand after those; you would re-read output the hooks suppress.
+  A file rewritten **through the shell** — a heredoc, `sed`, a script — fires no
+  hook, and the first thing that notices is `format:check` in CI. Run prettier
+  on those paths yourself, or make the edit through the tool.
 - **A fresh checkout installs itself.** `SessionStart` runs `pnpm install`
   when `node_modules` is absent. This covers worktrees and cloud sessions. It
   does **not** fire for subagents: an agent working in a worktree must run
@@ -98,7 +101,19 @@ import.
 - Prefer a property-based test to an example when the thing under test is
   mathematical.
 - When a test's bound is loose because of a real limit, name the limit in the
-  assertion.
+  assertion. **The limit is the measured one, not the derived one** — a bound
+  written from the arithmetic admitted every cache size that still strobed,
+  because the arithmetic described a floor and the defect lived above it.
+- **A figure measured at one operating point is a figure about that point.**
+  Earthrise is a hover, and a keep set measured there is invariant in a way it
+  is not once the camera moves; the generalisation reached an ADR before an
+  audit caught it. Measure at two points that differ in the variable you are
+  about to claim does not matter, and name the point in the sentence.
+- **Do not perturb the tree while a read-only subagent is auditing it.**
+  Reintroducing a defect to watch a test fail is the right check and the wrong
+  moment: `docs-curator` reported the working tree contradicting the commit,
+  which was true, mine, and thirty seconds of noise for both of us. Land the
+  experiment first, or launch the audit after.
 - Write documentation, comments and commit messages in the voice in
   [`docs/STYLE.md`](docs/STYLE.md), and write all of them in the present tense.
   The code is what the product does now; nothing describes the version it

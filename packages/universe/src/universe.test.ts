@@ -62,6 +62,7 @@ import {
   regionNeighbor,
   regionParent,
   regionSize,
+  seaDatumElevation,
   surfaceDetailFloor,
   surfaceRadius,
 } from './terrain.ts'
@@ -398,12 +399,7 @@ describe('where the field stops having anything to add', () => {
     if (planet === undefined) throw new Error('expected a solid body')
 
     const tolerance = 0.5
-    const floor = surfaceDetailFloor(
-      planet.radius,
-      planet.surface,
-      65,
-      tolerance,
-    )
+    const floor = surfaceDetailFloor(planet.surface, 65, tolerance)
     expect(floor).toBeGreaterThan(0)
     expect(floor).toBeLessThan(MAX_REGION_LEVEL)
 
@@ -456,15 +452,21 @@ describe('where the field stops having anything to add', () => {
       (b) => b.surface.seaLevel !== null && b.surface.maxElevation > 0,
     )
     if (wet === undefined) throw new Error('expected an ocean world')
-    expect(surfaceDetailFloor(wet.radius, wet.surface)).toBeGreaterThan(1)
+    expect(surfaceDetailFloor(wet.surface)).toBeGreaterThan(1)
   })
 
   it('answers the same whatever order it is asked in', () => {
     /*
-     * The memo key folded `resolution` and `tolerance` into a sum, so (65, 0.5)
-     * and (64, 1.5) collided and whichever call ran first won for both — a pure
-     * function of the seed whose answer depended on the order of the questions,
-     * which is the one thing generation may never do.
+     * The memo key folded `resolution` and `tolerance` into a sum, so any two
+     * questions whose two numbers added to the same thing collided, and
+     * whichever ran first won for both — a pure function of the seed whose
+     * answer depended on the order of the questions, which is the one thing
+     * generation may never do.
+     *
+     * `(65, 0.5)` and `(33, 32.5)` both sum to 65.5, so a summed key cannot
+     * tell them apart, and they answer 14 and 11 — the shipped pair, `(65, 0.5)`
+     * against `(64, 1.5)`, sums the same way and now answers 14 to both, so it
+     * could no longer fail.
      */
     const system = generateSystem(ROOT, MILKY_WAY, SOL)
     const planet = [...walkBodies(system)].find(
@@ -473,11 +475,11 @@ describe('where the field stops having anything to add', () => {
     if (planet === undefined) throw new Error('expected a solid body')
     const fresh = { ...planet.surface }
 
-    const a = surfaceDetailFloor(planet.radius, planet.surface, 65, 0.5)
-    const b = surfaceDetailFloor(planet.radius, planet.surface, 64, 1.5)
+    const a = surfaceDetailFloor(planet.surface, 65, 0.5)
+    const b = surfaceDetailFloor(planet.surface, 33, 32.5)
     // The same two questions, asked of an equal surface in the other order.
-    const b2 = surfaceDetailFloor(planet.radius, fresh, 64, 1.5)
-    const a2 = surfaceDetailFloor(planet.radius, fresh, 65, 0.5)
+    const b2 = surfaceDetailFloor(fresh, 33, 32.5)
+    const a2 = surfaceDetailFloor(fresh, 65, 0.5)
     expect([a2, b2]).toEqual([a, b])
     // And they are genuinely different answers, so the pair can fail.
     expect(a).not.toBe(b)
@@ -955,8 +957,11 @@ describe('the ground has one owner', () => {
 
   it('clamps the ocean up to its datum rather than down to the seabed', () => {
     const body = oceanWorld()
-    const sea = body.surface.seaLevel as number
-    const floor = (sea * 2 - 1) * body.surface.maxElevation * 0.55
+    expect(body.surface.seaLevel).not.toBeNull()
+    // Through `seaDatumElevation`, not a copy of its arithmetic: the datum is
+    // scaled by the hypsometry band's share of the budget, and a test that
+    // spelled that out again would be asserting its own copy of the formula.
+    const floor = seaDatumElevation(body.surface) as number
     // Somewhere on this world the bare landform is below the water line; the
     // ground there is the water, not the rock.
     const grid = []

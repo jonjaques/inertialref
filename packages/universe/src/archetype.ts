@@ -61,8 +61,29 @@ export const ACTIVE_TIDAL_PROXY: number = 1e-6
  * small bodies would put half the belt on the wrong side of `ICE_ROCK_DENSITY`.
  */
 export function volumetricMeanRadius(body: Body): Meters {
-  const intermediate = body.figure?.intermediateRadius ?? body.radius
-  return Math.cbrt(body.radius * intermediate * body.polarRadius)
+  return meanRadiusOf(
+    body.radius,
+    body.figure?.intermediateRadius ?? null,
+    body.polarRadius,
+  )
+}
+
+/**
+ * The same radius from loose numbers, for a body that does not exist yet.
+ *
+ * `solar/system.ts` derives a grammar and a tidal proxy from a `SolarBody`,
+ * which is a table row rather than a `Body`, and `surfaceGrammar` runs inside
+ * the generator where the moon being described is half-built. Two spellings of
+ * the formula above is how the dossier's density row shipped Phobos at
+ * 1.08 g/cm³, so there is one — the same reason `tidalProxyOf` and
+ * `classifySurface` exist beside their `Body`-shaped callers.
+ */
+export function meanRadiusOf(
+  radius: Meters,
+  intermediateRadius: Meters | null,
+  polarRadius: Meters,
+): Meters {
+  return Math.cbrt(radius * (intermediateRadius ?? radius) * polarRadius)
 }
 
 /** Bulk density, kg/m³. See `volumetricMeanRadius` for the denominator. */
@@ -88,11 +109,32 @@ export function bulkDensity(body: Body): number {
  * flag for them would be inventing the answer.
  */
 export function tidalProxy(body: Body, parentMass: Kilograms): number {
-  if (!(parentMass > 0) || !(body.mass > 0)) return 0
-  const a = body.elements.semiMajorAxis
-  if (!(a > 0)) return 0
-  const r = volumetricMeanRadius(body)
-  return (parentMass / body.mass) * (r / a) ** 3 * body.elements.eccentricity
+  return tidalProxyOf(
+    body.mass,
+    volumetricMeanRadius(body),
+    body.elements.semiMajorAxis,
+    body.elements.eccentricity,
+    parentMass,
+  )
+}
+
+/**
+ * The same proxy from loose numbers, for a body that does not exist yet.
+ *
+ * `surfaceGrammar` runs inside the generator, where the moon being described is
+ * half-built and there is no `Body` to hand it. Two implementations of the
+ * formula is how the zoo would come to disagree with the geology it is a
+ * fixture for, so there is one.
+ */
+export function tidalProxyOf(
+  mass: Kilograms,
+  meanRadius: Meters,
+  semiMajorAxis: Meters,
+  eccentricity: number,
+  parentMass: Kilograms,
+): number {
+  if (!(parentMass > 0) || !(mass > 0) || !(semiMajorAxis > 0)) return 0
+  return (parentMass / mass) * (meanRadius / semiMajorAxis) ** 3 * eccentricity
 }
 
 /**
@@ -119,6 +161,26 @@ const SOLID: Readonly<Record<BodyKind, boolean>> = {
 export const hasSolidSurface = (body: Body): boolean => SOLID[body.kind]
 
 /**
+ * The classification itself, from the three numbers it reads.
+ *
+ * Separated from `surfaceArchetype` because `surfaceGrammar` needs the same
+ * answer and has no `Body` to ask — it runs where a body is generated, before
+ * there is one. Two implementations of a two-branch rule is how a zoo comes to
+ * disagree with the geology it is a fixture for, so there is one, and both call
+ * it.
+ */
+export function classifySurface(
+  density: number,
+  hasAtmosphere: boolean,
+  tidal: number,
+): SurfaceArchetype {
+  if (density >= ICE_ROCK_DENSITY) {
+    return hasAtmosphere ? 'rocky-atmosphered' : 'rocky-airless'
+  }
+  return tidal >= ACTIVE_TIDAL_PROXY ? 'icy-active' : 'icy-dead'
+}
+
+/**
  * Which archetype a body's surface belongs to.
  *
  * Presumes `hasSolidSurface`; on a giant it returns whatever the density says,
@@ -134,12 +196,11 @@ export function surfaceArchetype(
   body: Body,
   parentMass: Kilograms = 0,
 ): SurfaceArchetype {
-  if (bulkDensity(body) >= ICE_ROCK_DENSITY) {
-    return body.atmosphere === null ? 'rocky-airless' : 'rocky-atmosphered'
-  }
-  return tidalProxy(body, parentMass) >= ACTIVE_TIDAL_PROXY
-    ? 'icy-active'
-    : 'icy-dead'
+  return classifySurface(
+    bulkDensity(body),
+    body.atmosphere !== null,
+    tidalProxy(body, parentMass),
+  )
 }
 
 export const SURFACE_ARCHETYPES: readonly SurfaceArchetype[] = [

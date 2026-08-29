@@ -263,6 +263,7 @@ ir.zoo() // one body per surface archetype, found rather than listed
 ir.descend(address?, { site, steps }) // fly a descent on paper
 ir.terrain() // what the live streamer holds this frame
 ir.terrainBaseline() // the zoo, its descents, and measured patch cost
+ir.dossier(address) // the record, whose Geology card is the surface grammar
 ```
 
 `ir.descend` runs with no world state changed, no worker used and no frame
@@ -274,7 +275,11 @@ browser console, in `pnpm sim --terrain-baseline` and in a Node test. It takes
 `ir.terrain` is the counterpart: what the streamer actually has, which is
 `null` headlessly rather than a zero. Its `patches` counts ground built and
 placed this frame, not the selection's length — a cold arrival reports zero
-patches over zero vertices rather than six regions still in a worker.
+patches over zero vertices rather than six regions still in a worker. It states
+both caches, `cached` for heightfields and `geometry` for meshes, because they
+fail differently: refinement gates on the mesh, so a geometry cache losing what
+the draw set is standing on collapses the selection to the roots while `cached`
+sits at its steady value and reports nothing wrong.
 
 **Every count here is a function of the lens, so every report states one.** The
 demand climbs steeply with the pixels-per-radian — measured, the telephoto end
@@ -284,8 +289,8 @@ yesterday's. `ir.descend` and `ir.terrainBaseline` print the lens and the
 viewport in their headers and carry both in the returned object; `ir.terrain`
 carries the live one. Both probes take a `lens` and a `viewport` to ask the
 question at another setting, and `ir.descend` takes a `maxPatches` — the
-streamer's own 768 is a safety net that degrades the whole disk by a level when
-it bites, so raising it is the only way to see what a selection _wanted_.
+streamer's own 1,024 is a safety net that degrades the whole disk by a level
+when it bites, so raising it is the only way to see what a selection _wanted_.
 
 ---
 

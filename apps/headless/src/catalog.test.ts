@@ -61,17 +61,29 @@ describe('the packed catalog and its manifest', () => {
     /*
      * The gate this was built behind. Measured on the real 7,123-star catalog:
      * the index costs 0.18 ms at decode (the loop already computes the keys for
-     * `find`) and a query over all 16,537 of them takes 0.14–0.30 ms. The bound
-     * here is loose against those numbers on purpose — it is guarding against
-     * somebody turning `search` back into a scan of the star list, not
-     * measuring this machine.
+     * `find`) and these six queries over all 16,537 of them take 1.9 ms.
+     *
+     * Half a second against 1.9 ms, and the margin is not generosity — it is the
+     * whole usable range of a wall-clock assertion here. Under vitest the same
+     * six queries cost an order of magnitude more than they do under bare node,
+     * and the runner puts sixty-four files across every core, so anything close
+     * enough to the real figure to be interesting measures how busy the machine
+     * is: at 50 ms this fails during a full-suite run and passes on its own.
+     *
+     * What it catches at half a second is a collapse — `search` decoding the
+     * catalog per query, or going quadratic. It does **not** catch a scan of the
+     * star list, and no bound can: a naive scan of the same 7,123 stars is
+     * 2.9 ms against the index's 1.9 ms, because 16,537 keys is small enough
+     * that the index buys a factor of one and a half rather than an order of
+     * magnitude. Catching that needs an assertion about the shape of `search`
+     * rather than about the clock.
      */
     const catalog = readCatalog(readFileSync(packed))
     const started = performance.now()
     for (const query of ['sir', 'alpha', 'cen', 'hip', 'proc', 'vega']) {
       catalog.search(query)
     }
-    expect(performance.now() - started).toBeLessThan(50)
+    expect(performance.now() - started).toBeLessThan(500)
   })
 
   it('agree on how many systems there are', () => {

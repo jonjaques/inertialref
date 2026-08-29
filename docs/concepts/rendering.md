@@ -246,7 +246,7 @@ sequenceDiagram
     participant G as GPU
 
     S->>P: generateHeightfield(region, 65×65 + 2 border)
-    Note right of P: 4,761 samples ×<br/>14 octaves of 3D noise
+    Note right of P: 4,761 samples ×<br/>six bands and a crater ladder
     P-->>S: Float32Array (transferred, not copied)
     S->>B: heightfield + body radius
     B->>B: positions, anchor-relative

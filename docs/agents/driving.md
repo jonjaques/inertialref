@@ -15,9 +15,13 @@ the browser exposes as `window.ir`.
 ```bash
 pnpm sim --self-test              # twelve capability checks (~0.4s)
 pnpm sim --targets --goto b:2     # the same navigation from a terminal
-pnpm sim --terrain-baseline       # what terrain costs, measured (~2s)
+pnpm sim --terrain-baseline       # what terrain costs, measured (~14s)
 pnpm sim --help
 ```
+
+The baseline is the slow one because it is the one that generates: sixty patches
+per zoo body, at 9 to 37 ms each. Its request pattern is the deterministic half
+and costs nothing, which is what a caller that passes no clock gets.
 
 Use the browser only for what only a GPU can prove: shading, LOD, framing, a
 cutscene, presentation.
@@ -118,6 +122,36 @@ three; they are here because they explain what it is doing:
 
 Readiness is `window.engine.gl`, not `window.ir` — the harness appears seconds
 earlier, so a probe on it captures an unlit canvas.
+
+---
+
+## When a visual defect is reported
+
+Terrain selection is measured in **display pixels**, so the streamer at a retina
+window asks for four times the patches and behaves like a different subsystem. A
+defect that will not reproduce is usually a window that has not been matched: get
+the reporter's size and device pixel ratio before concluding anything about the code.
+
+A **Chrome performance trace** recorded with Screenshots gives both at once, plus one
+JPEG per composited frame at the page's real rate — a recording of what they actually
+saw, on their machine. It is the strongest evidence a report can carry and the
+cheapest thing to ask for.
+
+```bash
+node scripts/traceFrames.mjs ~/Downloads/Trace-*.json.gz   # frames, period, Hz, url
+node scripts/drive.mjs --dpr 2 --width 1920 --height 1200 … --cast 200
+```
+
+Both difference consecutive frames and report the ones that differ from **both**
+neighbours while those neighbours match each other. That shape is a strobe; motion
+produces none, which is what makes a clean result mean something. A still cannot show
+any of it and neither can `--shot`.
+
+A **Firefox profile** answers what no picture can. Its markers say whether frame
+pacing is even involved — the lunar strobe ran at a clean 60 fps with one long frame
+in 261, which ruled out a hitch immediately — and its JS samples say what the app was
+doing: `buildPatch` present on every frame of a 4.3 s capture is a terrain streamer
+that never converged, and that was the finding.
 
 ---
 

@@ -241,12 +241,33 @@ describe('survey sites', () => {
       const body = find(name)
       for (const site of surveySites(body)) {
         const direction = geodeticDirection(site.latitude, site.longitude)
-        // `groundElevation`, not `elevationAt`: the sea clamp has one owner and
-        // a site that quoted the seabed under an ocean would be a site the
-        // camera cannot stand at.
+        /*
+         * `groundElevation`, not `elevationAt`: the sea clamp has one owner and
+         * a site that quoted the seabed under an ocean would be a site the
+         * camera cannot stand at.
+         *
+         * Four decimal places, and the fifty microns they allow are the geodetic
+         * round trip rather than the arithmetic. The site's elevation is sampled
+         * at `regionDirection`'s answer; this resamples at `geodeticDirection`'s,
+         * having gone through `directionToGeodetic` and back, so the two
+         * directions differ in their last bits.
+         *
+         * What that costs depends entirely on the gradient where it lands, which
+         * is why the figure is not one number. `summit`, `basin`, `corner` and
+         * `pole` agree to all twelve decimals on every body here — a summit and a
+         * basin are extrema, where the first-order term is zero and a last-bit
+         * perturbation buys nothing. `shore` and `rough` sit on a slope and pay
+         * first order for it: measured worst is **19.5 µm at Rhea's shore**,
+         * against 4.8 µm at Titania's and under 0.3 µm everywhere else.
+         *
+         * No sea clamp is involved — all four bodies have `seaLevel: null`, and
+         * `groundElevation` returns `elevationAt` unchanged at every one of these
+         * twenty-four sites. Nineteen microns on a field measured in kilometers
+         * is these two functions agreeing, which is the whole claim.
+         */
         expect(site.elevation).toBeCloseTo(
           groundElevation(body.surface, direction),
-          6,
+          4,
         )
       }
     }
