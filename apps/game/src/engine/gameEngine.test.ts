@@ -312,12 +312,24 @@ describe('the game engine, headless', () => {
        * window would then see the collapse — so the loop cannot hide the defect
        * by failing to finish.
        */
+      /*
+       * "Stopped growing" has to exclude shrinking, or the loop calls the
+       * collapse convergence.
+       *
+       * `placed <= previous` reads as "not growing" and admits a drawn set
+       * falling off a cliff — which is the one thing the windows below exist to
+       * catch, so a settle loop that accepts it can hand them a disk already
+       * collapsed and have them measure it as steady. A frame is converged when
+       * the count is not growing *and* has not dropped more than a twentieth,
+       * which is the same ordinary churn the assertion downstream allows.
+       */
       let previous = -1
       let steady = 0
       for (let i = 0; i < 600 && steady < 20; i += 1) {
         await settle(1)
         const placed = game.terrain()?.patches ?? 0
-        steady = placed <= previous ? steady + 1 : 0
+        steady =
+          placed <= previous && placed >= previous * 0.95 ? steady + 1 : 0
         previous = placed
       }
       const onGround = game.terrain()
