@@ -130,25 +130,37 @@ tree-shaken out of the client bundle.
 /**
  * A `WebGPURenderer` on the real GPU, in Node.
  *
- * `installGpuGlobals` runs from a vitest setup file rather than from here,
- * because `three/webgpu` reads `self` at import time and a function cannot run
+ * The globals live in a vitest setup file rather than here, because
+ * `three/webgpu` reads `self` at import time and a function cannot run
  * before its own module's imports.
  */
 export async function openGpu(width = 64, height = 64) {
-  const { WebGPURenderer } = await import('three/webgpu')
   const renderer = new WebGPURenderer({
     antialias: false,
-    forceWebGPU: true,
     canvas: canvasStub(width, height),
   })
   renderer.setSize(width, height, false)
   await renderer.init()
+  // There is no `forceWebGPU` parameter: the renderer takes WebGPU when
+  // `navigator.gpu` answers and WebGL 2 when it does not, so the fallback is
+  // what the setup file not having run looks like. Name it here rather than
+  // let it fail later on the `document` this process does not have.
+  if (!renderer.backend.isWebGPUBackend) throw new Error('WebGL fallback')
   // Nothing here waits for a frame; every frame is an explicit `render()`.
   // A test that waits for a rAF tick is a test that hangs.
   renderer.setAnimationLoop(null)
   return renderer
 }
 ```
+
+The file adds five verbs over that — `compile`, `shader`, `drawGraph`, `draw`,
+`compute`/`readBuffer` — and owns four traps the sketch above does not show:
+the 256-byte row padding on a pixel readback, the validation scope that turns
+a refused shader module into a rejection, the index guard a compute kernel
+needs against its rounded-up dispatch, and the filter a stand-in texture needs
+to compile the same program as the map it replaces. Each is stated where it
+bites, in [testing](../guides/testing.md) § "Shader behavior runs on the real
+GPU".
 
 ### 3 · The setup file
 
@@ -320,7 +332,9 @@ changing.
   wrong.
 - **`renderer.backend.adapter` is not a public path** and is `undefined` on
   r182. A test that wants to prove it is on hardware should call
-  `navigator.gpu.requestAdapter()` and read `info` from that.
+  `navigator.gpu.requestAdapter()` and read `info` from that — `vendor` and
+  `architecture`, which a software adapter leaves empty. `isFallbackAdapter`
+  is not on `GPUAdapter` in the typings this app carries.
 
 ---
 

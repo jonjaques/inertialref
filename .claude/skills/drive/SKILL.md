@@ -24,6 +24,7 @@ pnpm sim --targets --goto b:2 # the same navigation from a terminal
 pnpm sim --terrain-baseline   # what a descent costs — patch ms, level churn (~2s)
 pnpm sim --help               # every flag
 pnpm vitest run <substring>   # one test file
+pnpm test:gpu                 # every shader compiled and run on the real GPU (~1s)
 ```
 
 A throwaway script against `openSession` is the next rung and still not the browser:

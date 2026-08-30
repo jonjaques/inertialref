@@ -27,6 +27,8 @@ Reasoning: `docs/guides/testing.md`.
   red before you keep it. The terrain-normals test asserted that normals were unit length,
   which a radial normal also is — so it passed both before and after the fix for the bug
   it was written to guard.
-- **Do not write a scalar mirror of a shader and test that.** See
-  `.claude/rules/rendering.md`.
+- **Do not write a scalar mirror of a shader and test that.** A graph runs on the real
+  GPU from a `*.gpu.test.ts` under `pnpm test:gpu` — see `.claude/rules/rendering.md`.
+  Those files are excluded from `pnpm test` and `pnpm check` because they need a
+  physical adapter, and a compute kernel in one must guard its own index.
 - Run one file with `pnpm vitest run <substring>`.

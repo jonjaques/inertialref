@@ -11,8 +11,10 @@ Reasoning and the full card: [`.claude/skills/drive/SKILL.md`](../skills/drive/S
   own profile and port and needs no focus.
 
 - **Ask headlessly first.** `pnpm sim`, `pnpm vitest run <file>`, or a throwaway script
-  against `openSession` in `.scratch/`. The browser is for what only a GPU can prove:
-  shading, LOD, framing, the cutscene, presentation.
+  against `openSession` in `.scratch/`. A shader question is `pnpm test:gpu` — the
+  graph compiled and run on the real GPU from a `*.gpu.test.ts`, in a second. The
+  browser is for what only a compositor can prove: LOD at display pixels, framing,
+  the cutscene, presentation, a strobe.
 
 - **One invocation carries the setup and the measurement.** Steps run in the order
   written — `--js … --wait … --cast …` in one call, not one call each. Boot is paid

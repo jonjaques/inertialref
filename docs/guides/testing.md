@@ -262,16 +262,68 @@ flowchart LR
 The inline worker is **not a mock** — it runs the real host loop through the
 real envelopes, so a value that is not structured-cloneable still fails.
 
-### Shader behavior needs a real GPU
+### Shader behavior runs on the real GPU, from Node
 
-A TSL node graph cannot be evaluated in Node. Do not write a scalar mirror of
-a shader and test that instead: the mirror can pass while the graph it claims
-to describe drifts. Verify shader behavior on a GPU.
+A TSL node graph is compiled and run on the physical GPU by `pnpm test:gpu`,
+without a browser. `webgpu` on npm is Dawn — the WebGPU implementation Chrome
+ships — built as a Node addon; `apps/game/src/render/gpuSetup.ts` installs
+the three globals `three/webgpu` reads at import time, and
+`apps/game/src/render/gpuHarness.ts` hands a test a `WebGPURenderer` and five
+verbs: `compile`, `shader` (the generated WGSL), `drawGraph` and `draw`
+(pixels back from a render target), and `compute` with `readBuffer` (a
+storage buffer back from a kernel). The suite is `*.gpu.test.ts`, its config
+is `apps/game/vitest.gpu.config.ts`, and the whole of it — every production
+material compiled to a Metal pipeline, structural assertions on the WGSL, a
+pixel ramp, two compute kernels checked against their CPU originals — runs in
+about **1.2 s** on an idle M5, most of it Dawn's boot. The reasoning and the
+measurements are [the headless WebGPU plan](../plans/headless-webgpu.md).
 
-A headless GPU is not equivalent to the real browser target. One renderer
-failure reproduced only at `devicePixelRatio` 2, so a headless check could not
-prove that path. Use the browser verification procedure in
-[Driving](../agents/driving.md) for rendering work.
+It is a separate command rather than part of `pnpm test` because it makes a
+different portability claim: the rest of the suite runs on any Node, and this
+needs a Metal, Vulkan or D3D adapter. It is not in `pnpm check` for the same
+reason. Run it during shader work, and before shipping any change under
+`render/`.
+
+**Do not write a scalar mirror of a shader and test that instead.** That rule
+matters more now, not less: the mirror can pass while the graph it claims to
+describe drifts, and the remedy is to test the graph itself.
+`terrainKernels.gpu.test.ts` is the shape — a TSL port of `faceToDirection`
+and of the `pcg3d` lattice hash, each run on the GPU and compared with the CPU
+function, the float one to a named f32 bound and the integer one bit for bit.
+
+Four things the harness owns, because each cost a round trip to learn:
+
+- **A readback is padded.** `readRenderTargetPixelsAsync` returns the mapped
+  staging buffer whole, with every row aligned to 256 bytes — an 8-wide RGBA8
+  target reads back with its second row at element 256. `Pixels` unpacks it,
+  and puts row 0 at the **top**, which is where WebGPU's texture origin is.
+- **A pipeline that will not build does not reject.** A draw builds it inside
+  the backend's own validation scope and reports through three's console
+  sink; `compileAsync` builds it with `createRenderPipelineAsync`, whose
+  rejection carries the failure, and the backend discards that rejection. The
+  harness brackets every verb in a validation scope of its own and listens on
+  the sink, so a shader Tint refuses is a red test with the compiler's
+  message in it.
+- **A compute kernel must guard its own index.** A compute node dispatches
+  whole workgroups of 64, and WGSL clamps an out-of-range write onto the last
+  element, so a 1,547-cell kernel runs 1,600 times and the last cell holds
+  whichever excess invocation ran last. A count that happens to divide by 64
+  never shows it.
+- **A stand-in texture must be filtered like the map it stands in for.**
+  `DataTexture` defaults to nearest, the WGSL builder reads a nearest texture
+  with `textureLoad` and no sampler, and the gradient sample has no such path
+  — so the ground's stand-in referenced a sampler that was never declared, and
+  every mapless body's ground was a black frame.
+  `materials.gpu.test.ts` holds each stand-in and a real map to the same
+  program.
+
+**A headless GPU check is still not a real one.** Nothing here observes
+presentation: one renderer failure reproduced only at `devicePixelRatio` 2,
+terrain selection is measured in display pixels, and a strobe is a property of
+what the compositor presented. Rendering work still ends at the browser
+procedure in [Driving](../agents/driving.md). The two layers are ordered, not
+alternative — the fast one answers whether a graph is valid and correct, the
+browser answers whether a frame is right.
 
 ---
 
@@ -293,19 +345,20 @@ otherwise assert in prose.
 
 ## What is not covered yet
 
-| Gap                                                                                                                            | Roadmap                                            |
-| ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------- |
-| A fixture captured from a released build, for real compatibility testing (the v0 shape is covered, but from an inline literal) | [roadmap](../roadmap.md#persistent-mutations)      |
-| Recorded input replay                                                                                                          | [roadmap](../roadmap.md#replay-and-reconciliation) |
-| Performance regression benchmarks                                                                                              | [roadmap](../roadmap.md#performance-work)          |
-| Shader behavior in the Node suite                                                                                              | verify on a real GPU; do not test a scalar mirror  |
+| Gap                                                                                                                              | Roadmap                                            |
+| -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| A fixture captured from a released build, for real compatibility testing (the v0 shape is covered, but from an inline literal)   | [roadmap](../roadmap.md#persistent-mutations)      |
+| Recorded input replay                                                                                                            | [roadmap](../roadmap.md#replay-and-reconciliation) |
+| Performance regression benchmarks                                                                                                | [roadmap](../roadmap.md#performance-work)          |
+| Shader behavior in CI — `pnpm test:gpu` needs a physical adapter, and whether a hosted macOS runner gives Dawn one is unmeasured | [headless WebGPU](../plans/headless-webgpu.md)     |
 
 ---
 
 ## Running them
 
 ```bash
-pnpm test                       # everything
+pnpm test                       # everything that runs on any Node
+pnpm test:gpu                   # the shader suite, on the real GPU — not in check
 pnpm vitest run world.test      # one file
 pnpm vitest                     # watch
 pnpm check                      # graph, brand, presets, format, lint, typecheck, test, build

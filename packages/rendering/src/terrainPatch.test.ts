@@ -18,11 +18,10 @@ import { buildPatch, patchIndices, type RenderPatch } from './terrainMesh.ts'
 /*
  * What a patch has to be true about, for the quadtree not to crack or pop.
  *
- * Both properties are geometry rather than shader, which is the point: a TSL
- * node graph cannot be evaluated in Node, so the morph is arranged so that the
- * shader's whole share of it is one `mix` between two attributes this file
- * checks. If the endpoints are right, the interpolation between them cannot be
- * wrong.
+ * Both properties are geometry rather than shader, which is the point: the
+ * morph is arranged so that the shader's whole share of it is one `mix`
+ * between two attributes this file checks, on any Node and with no GPU. If
+ * the endpoints are right, the interpolation between them cannot be wrong.
  */
 
 const RESOLUTION = 33

@@ -413,6 +413,13 @@ again in a neighboring system.
   Found by the never-throws property on a fresh seed, months after the branch
   was written — which is the argument for properties over vectors, and for
   pinning the counterexample as a vector once one is found.
+- **A stand-in texture at `DataTexture`'s nearest default.** The WGSL builder
+  binds a nearest texture with no sampler, and the gradient sample names one
+  anyway, so the ground's 1×1 white pixel was a shader module Tint refused —
+  every mapless body's ground was a black frame, and the boot warm-up was
+  compiling it and swallowing the rejection. Found by the first run of
+  `materials.gpu.test.ts`, which now holds each stand-in and a real map to one
+  program. Photographed bodies never showed it because a loaded map is linear.
 
 ## The five spikes, measured (19 Aug 2026)
 
@@ -6115,6 +6122,83 @@ replaced `placeAt` per orbit vertex; its property test shrank to a shift of
 eight micrometres and reported the _reference_ as wrong, because a universe
 offset runs to 2^40 m where a double resolves 0.24 mm, so `UV.translate` rounds
 a fine shift away and adding it after the difference does not.
+
+## The shaders run in the Node suite, and the first thing they found was every mapless body's ground (30 Aug 2026)
+
+[The plan](docs/plans/headless-webgpu.md) is executed as written: `webgpu@0.6.0`
+is Dawn as a Node addon, `render/gpuSetup.ts` installs the three globals
+`three/webgpu` reads at import time, `render/gpuHarness.ts` hands a test a
+`WebGPURenderer` on the physical `apple` / `metal-3` adapter with five verbs
+over it, and `pnpm test:gpu` runs the `*.gpu.test.ts` suite — every production
+material compiled to a Metal pipeline, structural assertions on the WGSL, a
+pixel ramp on both target types, and two compute kernels checked against the
+CPU functions they port. Twenty-four tests in **620 ms** on an idle M5; the
+root suite excludes the suffix and `pnpm check` does not run it, because a
+physical adapter is a claim about the machine rather than the code. The
+91 MB the addon costs in `node_modules` is the price, and it is `allowBuilds:
+false` in the workspace because its postinstall only strips a quarantine
+attribute a registry fetch never sets.
+
+**The ground of every mapless body was a black frame, and nothing said so.**
+The compile smoke test refused `terrain.ts` with `unresolved value
+'nodeUniform17_sampler'`, and standing on Gliese 1061 d in Chrome reproduced
+it: 706 patches and 5.8 million triangles streamed, a pure-black canvas, and
+`[Invalid ShaderModule "fragment"] is invalid due to a previous error` on the
+console with the real message on the channel the page console does not carry.
+The cause is three layers deep. `DataTexture` defaults to `NearestFilter` both
+ways; the WGSL builder classes nearest-both-ways as _unfilterable_ and binds
+such a texture with no sampler, reading it with `textureLoad`; and r182's
+`generateTextureGrad` — the path `sampled()` takes for the albedo map's
+analytic mip gradients — has no unfilterable branch, so it names
+`<texture>_sampler` unconditionally. The 1×1 `BLANK` stand-in was therefore
+a module Tint refused, a published map (loaded linear) was not, and every body
+with a photograph hid it. The boot warm-up compiles the ground against the
+stand-in, so `compiling the ground` was warming a pipeline that could not
+build — and `warmCompile` swallows exactly that rejection. The fix is two
+filter assignments on the stand-in; the same two go on the atmosphere's and
+the planet's stand-ins, where the consequence was quieter: a nearest stand-in
+reads with `textureLoad` and a real map with `textureSample`, which is a
+different program, so those warm-ups compiled variants no real body draws
+with. `materials.gpu.test.ts` now holds each stand-in and a real map to one
+program, and the rule is in `AGENTS.md`.
+
+Four traps the harness owns, each measured rather than read:
+
+- **`readRenderTargetPixelsAsync` returns the mapped staging buffer whole**,
+  rows aligned to 256 bytes and never unmapped. An 8-wide RGBA8 target reads
+  back with row 1 at element 256; the first probe reported the bottom-left
+  pixel as zeros. Row 0 is the _top_. `QuadMesh`'s own geometry puts `v = 0` at
+  the top as well, so `drawGraph` uses a plane in front of an orthographic
+  camera and `uv()` reads the way the production geometries carry it.
+- **A pipeline that will not build does not reject on either path.** A draw
+  reports through three's console sink from the backend's own validation
+  scope; `compileAsync` gets the failure as `createRenderPipelineAsync`'s
+  rejection, which the backend catches and discards, so its scope pops clean.
+  The harness brackets every verb in an outer validation scope, which is where
+  `createShaderModule`'s error lands, and listens on the sink besides.
+- **A compute node dispatches whole workgroups of 64 and WGSL clamps an
+  out-of-range write onto the last element.** `pcg3d` over 1,547 cells
+  disagreed with the CPU in exactly one cell, always the last: the fifty-three
+  excess invocations all wrote it. The direction kernel never showed it because
+  6 × 32² divides by 64. A kernel guards its own index.
+- **`compileAsync` builds against a render context that assumes a depth
+  attachment.** Warmed against a depthless target and drawn into the same one,
+  the star material built two pipelines — `depth24plus` and none. Not a
+  production case, because the canvas always has depth, but it is what the
+  warm-up test measures against, so that test's target carries one.
+
+Two smaller facts. `webgpu`'s `adapter.info` prints as
+`{ subgroupMatrixConfigs: [] }` because the identity fields are accessors;
+read `vendor` and `architecture` by name. And headless Chrome keeps the
+physical GPU on macOS — SwiftShader has no build there — so the reason
+`drive.mjs` launches a window is `--cast`, not the adapter; its header said the
+other thing and now says this.
+
+[Test speed](docs/plans/test-speed.md) records where the root suite's time goes,
+measured on the same idle machine: 102.9 s for `pnpm test`, 10.0 s without
+`gameEngine.test.ts`, whose `beforeAll` streams one landing through the inline
+worker for 101.5 s. Nothing is changed on that page; the four levers it names
+are each a decision about what the gate promises.
 
 ## Known gaps
 

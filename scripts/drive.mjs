@@ -22,8 +22,12 @@
  *    half a canvas dump could never show.
  *  - Readiness is `window.engine.gl`. `window.ir` is the harness and appears
  *    seconds earlier; a probe on it screenshots an unlit canvas.
- *  - A real window, not `--headless`. Headless macOS Chrome falls back to a
- *    software WebGPU adapter, and a software adapter is not the thing under test.
+ *  - A real window, not `--headless`. Not for the adapter — headless Chrome keeps
+ *    the physical GPU on macOS, measured as `apple` / `metal-3` with and without
+ *    a window, because SwiftShader has no macOS build to fall back to — but
+ *    because `--cast` records what a compositor presented, and a headless one
+ *    presents nothing. For a shader question that needs no compositor at all,
+ *    `pnpm test:gpu` answers in milliseconds without this file.
  *
  * The expensive thing here is boot — about five seconds of shader warm and body
  * build, on top of the dev server's own start. So Chrome is left running

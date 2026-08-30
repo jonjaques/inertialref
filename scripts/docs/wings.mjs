@@ -212,6 +212,7 @@ export const WINGS = [
         label: 'Plans',
         pages: [
           ['docs/plans/headless-webgpu.md', 'Headless WebGPU'],
+          ['docs/plans/test-speed.md', 'Test Speed'],
           ['docs/plans/the-timeline.md', 'The Timeline'],
           ['docs/plans/perf.md', 'Performance'],
           ['docs/plans/perf-2.md', 'Performance, Second Pass'],

@@ -24,8 +24,9 @@
  *
  * Pure arrays in, pure arrays out, no GPU and no three.js: the bake runs
  * identically in a worker, a test, or the main thread, and the *physics* is
- * what the tests in `atmosphere.test.ts` hold still — the shader that
- * consumes these tables cannot be evaluated in Node, but the tables can.
+ * what the tests in `atmosphere.test.ts` hold still, on any Node at all — the
+ * shader that consumes these tables needs a GPU, and gets one only from
+ * `pnpm test:gpu`.
  *
  * Coefficients derive from the authored `HazeLayer`, not from a gas mix: the
  * zenith color *is* the scattering spectrum (a sky's color is β, up to

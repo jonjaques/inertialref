@@ -149,12 +149,13 @@ describe('describeOutput', () => {
 })
 
 /*
- * Not covered here, and not coverable here.
+ * Not covered here.
  *
- * The tone curve itself is a TSL node graph. It cannot be evaluated in Node —
- * there is no CPU backend for the node system — and a scalar mirror of the same
- * arithmetic would pass while the graph it claims to describe drifted, which is
- * the failure mode `AGENTS.md` calls out about the terrain-normals test. So the
- * curve is verified on a GPU or not at all, and `docs/design/technical.md`
- * already names the benchmark harness that does it as a prerequisite for M2.
+ * The tone curve itself is a TSL node graph, and this file runs on any Node.
+ * A scalar mirror of the same arithmetic would pass while the graph it claims
+ * to describe drifted, which is the failure mode `AGENTS.md` calls out about
+ * the terrain-normals test — so the curve is not mirrored. The place to assert
+ * on it is a `*.gpu.test.ts` under `pnpm test:gpu`, where `drawGraph` on a
+ * float target returns the curve's own output for comparison against the
+ * published formula; none is written yet.
  */
