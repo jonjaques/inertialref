@@ -6,6 +6,7 @@ import {
   Quaternion as Q,
   rebase,
   REBASE_THRESHOLD,
+  SECTOR_SIZE,
   toRenderSpace,
   type UniverseVector,
   universeVector,
@@ -266,15 +267,33 @@ describe('render placement', () => {
      * two spellings have to agree at every separation and under a rotated
      * origin, which is the case the fast form hoists the conjugate out of.
      *
-     * Agreement is to within a float32 ULP rather than bit-exact, and the
+     * Agreement is to within one float32 step rather than bit-exact, and the
      * reason is the hoist itself: the reference translates in universe
      * coordinates and then differences, while this adds the shift after the
      * rotation, so the two associate the same sum differently and land on
      * adjacent float32 values. Both are far inside the buffer's own precision
      * — a trace vertex 1e11 m out is quantized to kilometers there — and the
-     * bound below is what makes that a claim rather than an assumption.
+     * bound below is whichever of two representable steps is coarser, so it is
+     * a claim about precision rather than a tolerance somebody picked:
+     *
+     *   - one float32 step at the magnitude written, because that is the
+     *     buffer;
+     *   - one double step at *sector* scale, because the reference adds the
+     *     shift in universe coordinates. A universe offset runs to 2^40 m,
+     *     where a double resolves 0.24 mm — so `UV.translate` rounds a shift
+     *     finer than that away entirely and the fast form, which adds it after
+     *     the difference at render-space magnitudes, keeps it. The property
+     *     found that by shrinking to a shift of eight micrometres, and the
+     *     disagreement it reported was the reference being wrong.
      */
-    const ULP = 2e-7
+    const step32 = (value: number): number => {
+      const v = Math.abs(Math.fround(value))
+      if (v === 0 || !Number.isFinite(v)) return Number.MIN_VALUE
+      return 2 ** (Math.floor(Math.log2(v)) - 23)
+    }
+    // Three components, each rounded once on the way in and once on the way
+    // back out of the sector split.
+    const UNIVERSE_STEP = 6 * SECTOR_SIZE * 2 ** -52
     fc.assert(
       fc.property(
         fc.double({ min: 1e3, max: 1e14, noNaN: true }),
@@ -301,13 +320,14 @@ describe('render placement', () => {
               radius,
               eye,
             ).position
-            for (const [got, want] of [
+            const pairs: readonly (readonly [number, number])[] = [
               [out[i * 3] as number, expected.x],
               [out[i * 3 + 1] as number, expected.y],
               [out[i * 3 + 2] as number, expected.z],
-            ]) {
-              expect(Math.abs(got - want)).toBeLessThanOrEqual(
-                ULP * Math.max(1, Math.abs(want)),
+            ]
+            for (const [got, want] of pairs) {
+              expect(Math.abs(got - Math.fround(want))).toBeLessThanOrEqual(
+                step32(want) + UNIVERSE_STEP,
               )
             }
           }

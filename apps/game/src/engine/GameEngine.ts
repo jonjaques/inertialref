@@ -591,6 +591,28 @@ export class GameEngine implements PresentationHost {
   orbits: readonly OrbitPath[] = []
   #orbitsWorld = -1
   #orbitsSystems = ''
+  /*
+   * Every trace the loaded systems have, before the scope filter.
+   *
+   * Cached separately because the two halves of a rebuild are invalidated by
+   * different things and only one of them is expensive. Sampling is Kepler's
+   * equation ~97 times for every body in every loaded system — 18.4 ms on a
+   * Sol retarget, 22.2 ms on a Proxima one, on the exact interaction the mode
+   * exists for — and it depends on nothing but the systems. Filtering is a
+   * predicate over ~130 paths and depends on the focus, which is what a
+   * retarget changes. Keyed together, every focus change re-solved every
+   * orbit.
+   *
+   * The anchor is what makes the split legal: a path carries the instant it
+   * was built against and `OrbitTraces` differences the primary's live pose
+   * against it, so an old path follows a moving primary exactly. The one thing
+   * that does age is the *phase* — the sweep starts at the body's own
+   * eccentric anomaly, so where the closed curve's two ends meet drifts away
+   * from the body. It was already ageing between rebuilds, and a full ellipse
+   * looks the same wherever it is cut.
+   */
+  #orbitsAll: readonly OrbitPath[] = []
+  #orbitsAllKey = ''
 
   /**
    * URL of an audio track the cutscene overlay should sync to the playhead.
@@ -803,6 +825,8 @@ export class GameEngine implements PresentationHost {
     this.#starFieldWorld += 1
     this.orbits = []
     this.#orbitsSystems = ''
+    this.#orbitsAll = []
+    this.#orbitsAllKey = ''
     this.#terrain.clear()
     log.info('world replaced, derived state dropped', {
       tick: this.world.clock.tick,
@@ -1219,11 +1243,23 @@ export class GameEngine implements PresentationHost {
     this.#orbitsSystems = key
     this.#orbitsWorld = this.#starFieldWorld
 
-    const all = systems.flatMap((system) => orbitPaths(this.world, system))
-    this.orbits = visibleOrbits(all, scope)
+    // The sampling half, keyed on what it actually reads. A retarget moves
+    // `scope` and nothing here, so it re-filters instead of re-solving.
+    const systemsKey = `${this.#starFieldWorld}|${systems.map((system) => system.id).join(',')}`
+    if (systemsKey !== this.#orbitsAllKey) {
+      this.#orbitsAllKey = systemsKey
+      this.#orbitsAll = systems.flatMap((system) =>
+        orbitPaths(this.world, system),
+      )
+      log.info('orbit paths sampled', {
+        paths: this.#orbitsAll.length,
+        systems: systems.length,
+      })
+    }
+    this.orbits = visibleOrbits(this.#orbitsAll, scope)
     log.info('orbit traces rebuilt', {
       paths: this.orbits.length,
-      of: all.length,
+      of: this.#orbitsAll.length,
       focus: focus ?? 'everything',
     })
   }

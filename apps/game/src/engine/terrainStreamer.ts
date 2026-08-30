@@ -49,6 +49,7 @@ import {
 import {
   generateHeightfieldTask,
   type JobHandle,
+  surfaceDetailFloorTask,
   type WorkerPool,
 } from '@inertialref/workers'
 import { PhaseClock, TERRAIN_PHASE, TERRAIN_SHORT } from './frameTiming.ts'
@@ -457,6 +458,23 @@ export class TerrainStreamer {
    * through the title cutscene alone.
    */
   readonly #inFlight = new Map<number | string, JobHandle<unknown>>()
+  /*
+   * The level floor per surface, once a worker has measured it.
+   *
+   * Keyed on the `SurfaceParameters` object rather than on an address, because
+   * that identity is exactly the right one: it is immutable, it belongs to the
+   * loaded body, and a reseed under the same address produces a new one — so a
+   * new world cannot inherit the old one's floor and nothing has to clear this.
+   *
+   * It exists because the search is 33-43 ms cold and was paid inside the
+   * frame the streamer first had a body underfoot: 85% of a 40 ms spike on
+   * Earth and of the 114 ms one on Proxima Centauri b. `surfaceDetailFloorTask`
+   * carries the reasoning; what is here is the consequence, which is that a
+   * body with no floor yet streams nothing for the frames it takes to arrive.
+   * That is the same shape as waiting for the heightfields themselves.
+   */
+  readonly #floors = new WeakMap<Body['surface'], number>()
+  readonly #floorsAsked = new WeakSet<Body['surface']>()
   #bodyAddress: string | null = null
   #drawn: readonly SelectedPatch[] = []
   #deepest = 0
@@ -812,11 +830,16 @@ export class TerrainStreamer {
       return
     }
 
-    const options = {
-      maxLevel: surfaceDetailFloor(surface.surface),
-      lens,
-      viewport,
+    const maxLevel = this.#detailFloor(surface)
+    if (maxLevel === null) {
+      // The floor is being measured off-thread. Nothing can be selected
+      // against a ceiling that is not known yet, and guessing one would either
+      // starve the ground or spend worker time on patches that are upsamples
+      // of their parents.
+      this.#forget()
+      return
     }
+    const options = { maxLevel, lens, viewport }
 
     /*
      * Reuse the held selection while nothing it is a function of has moved.
@@ -1150,6 +1173,49 @@ export class TerrainStreamer {
       bodyPose: world.frames.pose(bodyFrameId(body.address), time),
       spinPose: world.frames.pose(bodyFixedFrameId(body.address), time),
     }
+  }
+
+  /**
+   * The subdivision floor for a body, or null while a worker is finding it.
+   *
+   * Synchronous with no pool — the headless runner, the tests and the Node
+   * benchmarks, none of which have frames to drop — and asked for exactly once
+   * per surface otherwise. A failed job leaves the surface unasked, so the next
+   * frame asks again rather than leaving the body permanently groundless.
+   */
+  #detailFloor(body: Body): number | null {
+    const surface = body.surface
+    const held = this.#floors.get(surface)
+    if (held !== undefined) return held
+    if (this.#pool === null) {
+      const level = surfaceDetailFloor(surface)
+      this.#floors.set(surface, level)
+      return level
+    }
+    if (this.#floorsAsked.has(surface)) return null
+    this.#floorsAsked.add(surface)
+    void this.#pool
+      .run(surfaceDetailFloorTask, {
+        surfaceSeed: formatSeed(surface.seed),
+        maxElevation: surface.maxElevation,
+        roughness: surface.roughness,
+        seaLevel: surface.seaLevel,
+        grammar: surface.grammar,
+        resolution: HEIGHTFIELD_RESOLUTION,
+      })
+      .then((result) => {
+        this.#floors.set(surface, result.level)
+        // The held selection was made against no floor at all, so it is not
+        // merely stale — there is none. `#forget` above left nothing to keep;
+        // this is what lets the next frame walk.
+        this.#cacheEpoch += 1
+      })
+      .catch((cause: unknown) => {
+        if (cause instanceof Error && cause.message === 'cancelled') return
+        log.warn('detail floor failed', { cause: String(cause) })
+        this.#floorsAsked.delete(surface)
+      })
+    return null
   }
 
   /** Build geometry for the regions that need it next, under budget. */

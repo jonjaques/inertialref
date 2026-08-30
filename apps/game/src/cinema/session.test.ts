@@ -300,6 +300,48 @@ describe('a cutscene session', () => {
     expect(session.sample()?.frame).toBe(900)
   })
 
+  it('leaves a scene it did not open alone when it ends', () => {
+    /*
+     * THE FROZEN WORLD. `sample()` runs on the engine store's sampler, which
+     * is session-wide and keeps running with no cinema mounted — so a scene
+     * started from the console (`ir.play('tngIntro')`, which every driven
+     * measurement does) ended, the director restored the clock, and this
+     * reopened it two frames short and paused the clock again to hold a
+     * picture nobody had asked for. Every flight and warp figure taken after
+     * that described a world that was not advancing, with nothing on screen to
+     * say so.
+     */
+    const { host, director, calls } = fake()
+    const session = createCutsceneSession(host)
+
+    // Not through `session.open`: the console, the harness, a driver script.
+    director.play('tng-intro')
+    expect(session.sample()?.id).toBe('tng-intro')
+
+    director.finish('ended')
+    expect(session.sample()).toBeNull()
+    expect(calls).not.toContain('pause')
+    expect(director.paused).toBe(false)
+  })
+
+  it('stops reacting to an ending the moment the player leaves', () => {
+    // The window is one sample wide and the sampler is 8 Hz: a scene that runs
+    // out in the same beat the player navigates away used to be reopened and
+    // paused *after* the unmount, because the unmount stopped the director and
+    // left the session still holding the ending.
+    const { host, director, calls } = fake()
+    const session = createCutsceneSession(host)
+    session.open('tng-intro', 0, true)
+
+    director.finish('ended')
+    session.stop()
+    session.sample()
+    session.sample()
+
+    expect(calls).not.toContain(`seek:${DURATION - 2}`)
+    expect(director.paused).toBe(false)
+  })
+
   it('says nothing at all before a scene has ever been opened', () => {
     const { host } = fake()
     expect(createCutsceneSession(host).sample()).toBeNull()

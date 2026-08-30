@@ -36,6 +36,33 @@ interface GroundView {
   readonly body: RenderBody
 }
 
+/**
+ * Drive frames until the first walk happens, and say how many it took.
+ *
+ * With a pool, the subdivision floor is measured off-thread — 33-43 ms cold,
+ * which used to be paid inside the arrival frame — so a pooled streamer
+ * selects nothing at all until the answer lands. Without one it is synchronous
+ * and this returns on the first frame.
+ */
+async function walkOnce(
+  streamer: TerrainStreamer,
+  session: Session,
+  view: GroundView,
+): Promise<number> {
+  for (let frames = 1; frames <= 400; frames += 1) {
+    streamer.update(
+      session.world,
+      view.renderTime,
+      view.camera,
+      view.origin,
+      view.body,
+    )
+    if (streamer.summary().selections > 0) return frames
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+  throw new Error('the streamer never walked')
+}
+
 /** Land the ship and read the frame the engine would hand the streamer. */
 function groundView(session: Session): GroundView {
   session.harness.land(EARTH, 0.7, -1.49)
@@ -118,13 +145,9 @@ describe('the terrain streamer', () => {
     const view = groundView(session)
     const streamer = new TerrainStreamer(session.pool())
 
-    streamer.update(
-      session.world,
-      view.renderTime,
-      view.camera,
-      view.origin,
-      view.body,
-    )
+    // More than one frame, and that is the point: the floor is a worker answer
+    // now, and nothing is selected against a ceiling that is not known.
+    expect(await walkOnce(streamer, session, view)).toBeGreaterThan(1)
     expect(streamer.summary().selections).toBe(1)
 
     // The inline pool generates in-process; wait for the first burst to land.
@@ -175,13 +198,7 @@ describe('the terrain streamer', () => {
     if (pool === null) throw new Error('no pool')
     const streamer = new TerrainStreamer(pool)
 
-    streamer.update(
-      session.world,
-      view.renderTime,
-      view.camera,
-      view.origin,
-      view.body,
-    )
+    await walkOnce(streamer, session, view)
     // A frame's request budget is larger than the pool, so most of what this
     // asked for is still in the queue — which is the whole population the
     // cancellation is for.

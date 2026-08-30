@@ -117,17 +117,22 @@ export function CinemaPlayer({
       // Always stop on the way out. The director restores the ship, the clock
       // and the time warp it borrowed — leaving a scene running under a flight
       // mode would hand the camera to a script nobody asked for.
-      engine.harness.stopCutscene()
+      //
+      // Through the session rather than straight at the harness, because the
+      // session has state of its own to put down: it is what reopens an ended
+      // scene on its final frame and pauses the clock to hold the picture, and
+      // it does that from a sampler that keeps running after this unmounts.
+      session.stop()
     }
-  }, [engine, id, open, params])
+  }, [engine, id, open, params, session])
 
   // Stop for good when the player leaves, whatever the reason.
   useEffect(
     () => () => {
       opened.current = null
-      engine.harness.stopCutscene()
+      session.stop()
     },
-    [engine],
+    [session],
   )
 
   /*
