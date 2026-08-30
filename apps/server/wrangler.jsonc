@@ -58,20 +58,22 @@
   "assets": {
     "directory": "../game/dist",
     "binding": "ASSETS",
-    // The client is a single page; an unmatched path is index.html, not a 404.
-    "not_found_handling": "single-page-application",
+    // The client is a set of documents; an unmatched path is 404.html
+    // (the menu), not the home page wearing that URL.
+    "not_found_handling": "404-page",
+    "html_handling": "drop-trailing-slash",
     /*
      * The only paths that wake the script. Everything else is served straight
      * from the asset store.
      *
-     * `/api` is listed separately because `/api/*` does not match it, and the
-     * SPA fallback above would otherwise answer a bare `/api` with index.html —
-     * a 200 full of HTML is the single most confusing thing an API can return.
-     * `/ws` is listed before it exists for the same reason.
+     * `/api` is listed separately because `/api/*` does not match it, and a
+     * bare `/api` would otherwise 404 from the asset store — a 404 is honest
+     * and still the wrong answer for an API. `/ws` is listed before it exists
+     * for the same reason.
      *
      * `/media/*` is here so the script can fall back to R2 for an object the
-     * bundle does not have, and so an unknown name 404s instead of getting the
-     * SPA fallback — an `<audio>` element handed `index.html` fails as if it
+     * bundle does not have, and so an unknown name 404s instead of getting a
+     * page of markup — an `<audio>` element handed HTML fails as if it
      * could not decode the file. It costs an invocation on a path that is
      * otherwise free; the response is `immutable`, so it is about one
      * invocation per client rather than one per play. `src/media.ts`.

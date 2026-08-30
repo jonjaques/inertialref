@@ -357,9 +357,10 @@ export function checkPublicSurface({ html, sw, publicFiles }) {
 
   /*
    * The second unguarded duplication in the same family. `sw.js` is not
-   * compiled — it cannot import anything — so it names four paths by hand, and
-   * a renamed or deleted public file turns a cold offline launch into a failed
-   * install with no other symptom.
+   * compiled — it cannot import anything — so it names a handful of paths by
+   * hand, and a renamed or deleted public file turns a cold offline launch
+   * into a failed install with no other symptom. Mode documents are Astro
+   * output and are not in `public/`; the rest of the list has to be.
    */
   const precache = /const PRECACHE = \[([\s\S]*?)\]/.exec(sw)?.[1] ?? null
   if (precache === null) {
@@ -368,9 +369,16 @@ export function checkPublicSurface({ html, sw, publicFiles }) {
     const entries = [...precache.matchAll(/'([^']*)'/g)].map(([, path]) => path)
     if (entries.length === 0) say('public/sw.js PRECACHE is empty')
     for (const path of entries) {
-      // `/` is the SPA root and `/index.html` is Vite's entry; neither is a file
-      // in `public/`, and both are what an offline launch starts from.
-      if (path === '/' || path === '/index.html') continue
+      // Mode documents are Astro output, not files in `public/`. They are
+      // what an offline launch starts from; the rest of the list has to
+      // exist as a generated public file.
+      if (
+        path === '/' ||
+        path === '/planetarium' ||
+        path === '/cinema' ||
+        path === '/docs'
+      )
+        continue
       if (!publicFiles.has(path.replace(/^\//, ''))) {
         say(`public/sw.js precaches ${path}, which nothing generates or ships`)
       }

@@ -114,9 +114,9 @@ const ld = JSON.stringify(jsonLd())
       React later writes into these tags is invisible to the card Slack or
       iMessage draws — the values here are the card.
 
-      Unmatched paths still SPA-fallback onto this layout, so a URL with
-      no file of its own carries the home page's card. A page that exists
-      as a file carries its own. The chrome island's `DocumentMeta`
+      Unmatched paths are `404.astro` — the menu, with a 404 status — so a
+      typed URL that is not a page still answers "where am I" rather than
+      wearing the home page's card. The chrome island's `DocumentMeta`
       rewrites `<title>` on an in-app navigation that does not load a new
       document.
 

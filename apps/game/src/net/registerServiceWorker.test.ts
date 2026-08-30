@@ -67,8 +67,9 @@ describe('registering the service worker', () => {
 
   it('defers while the page is still loading, then registers exactly once', () => {
     // Deferring is still right when load has not fired: the worker's install
-    // fetches `/`, `/index.html` and the icons, and doing that while the page is
-    // pulling its own critical path is bandwidth taken from the player.
+    // fetches `/`, `/planetarium`, `/cinema`, `/docs` and the icons, and doing
+    // that while the page is pulling its own critical path is bandwidth taken
+    // from the player.
     const loading = page('loading')
     const { register, urls } = recorder()
     registerServiceWorker({ page: loading, register, buildId: 'abc1234' })

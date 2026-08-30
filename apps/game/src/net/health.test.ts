@@ -69,8 +69,8 @@ describe('probing the server', () => {
   })
 
   it('is incompatible when something answers 200 that is not the server', async () => {
-    // A captive portal, and the SPA fallback answering a mistyped endpoint with
-    // index.html. Both are 200s, and both would look healthy to a status check.
+    // A captive portal, and an HTML document answering a mistyped endpoint.
+    // Both are 200s, and both would look healthy to a status check.
     for (const body of ['<!doctype html><title>Sign in</title>', '']) {
       const outcome = await probe(serving(body))
       expect(outcome.state).toBe('incompatible')

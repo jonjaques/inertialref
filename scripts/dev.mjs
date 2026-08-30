@@ -25,11 +25,11 @@
  *
  * `preview` is the one that answers "as close to production as possible": the
  * same workerd, the same static asset store, the same `run_worker_first` and
- * SPA fallback, and the service worker actually registers because the build is
- * a production build. `dev` is the fast loop and is a *proxy* — the assets come
- * from Astro's Vite, so asset headers and the SPA fallback are the
- * client's, not Cloudflare's. When a bug is about how something is
- * *served*, reach for `preview`.
+ * 404-page handling, and the service worker actually registers because the
+ * build is a production build. `dev` is the fast loop and is a *proxy* — the
+ * assets come from Astro's Vite, so asset headers and unmatched-path
+ * handling are the client's, not Cloudflare's. When a bug is about how
+ * something is *served*, reach for `preview`.
  */
 import { spawn } from 'node:child_process'
 import { createConnection } from 'node:net'

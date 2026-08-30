@@ -250,13 +250,12 @@ class NotFound extends Error {}
 /**
  * One staged file, or a miss.
  *
- * **A miss is detected by content type as well as by status, and that is not a
- * heuristic.** The Worker serves this origin with
- * `not_found_handling: single-page-application`, so the asset store answers a
- * path it does not have with `index.html` and a **200** — there is no status
- * code to test. Nothing under `/doc-content/` is ever HTML, so an HTML answer
- * to a request for a `.json` is unambiguous. `apps/server/src/serveMedia.ts`
- * reached the same conclusion for `/media/` and carries the longer argument.
+ * **A miss is detected by content type as well as by status.** Nothing
+ * under `/doc-content/` is ever HTML, so an HTML answer to a request for a
+ * `.json` is the 404 document (or an SPA document) wearing that URL.
+ * Status 404 is the honest miss; content-type is the 200 that is still the
+ * wrong bytes. `apps/server/src/serveMedia.ts` reached the same conclusion
+ * for `/media/` and carries the longer argument.
  *
  * Trusting the 200 costs both of the things this distinction is for: the
  * manifest's absence would arrive as a JSON parse error rather than as

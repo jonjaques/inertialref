@@ -329,10 +329,10 @@ describe('search', () => {
  * The one thing about the transport that cannot be seen in a browser, because
  * it only happens on the deployment.
  *
- * The Worker serves this origin with `not_found_handling:
- * single-page-application`, so a request for a file the asset store does not
- * have comes back as `index.html` with a **200**. The dev server answers 404,
- * so every local run takes the branch production never takes.
+ * A miss from the asset store is HTML — the 404 document, or an SPA
+ * document wearing that URL. The dev server answers 404, so a local run
+ * takes the status branch; the content-type branch is the 200 that is
+ * still the wrong bytes.
  */
 describe('a staged file that is not there', () => {
   afterEach(() => {
