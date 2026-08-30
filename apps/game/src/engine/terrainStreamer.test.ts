@@ -162,4 +162,55 @@ describe('the terrain streamer', () => {
 
     session.dispose()
   })
+
+  it('cancels the in-flight window when the view leaves the body', async () => {
+    const registry = createTaskRegistry()
+    const session = openSession({
+      seed: 'inertialref',
+      workers: () => createInlineWorker(registry, () => performance.now()),
+      now: () => performance.now(),
+    })
+    const view = groundView(session)
+    const pool = session.pool()
+    if (pool === null) throw new Error('no pool')
+    const streamer = new TerrainStreamer(pool)
+
+    streamer.update(
+      session.world,
+      view.renderTime,
+      view.camera,
+      view.origin,
+      view.body,
+    )
+    // A frame's request budget is larger than the pool, so most of what this
+    // asked for is still in the queue — which is the whole population the
+    // cancellation is for.
+    expect(streamer.summary().pending).toBeGreaterThan(pool.stats().workers)
+
+    const before = pool.stats().cancelled
+    // `null` is what the engine hands a frame with no ground under it: a
+    // retarget, a jump, the cutscene. Nothing this streamer asked for is
+    // wanted any more.
+    streamer.update(
+      session.world,
+      view.renderTime,
+      view.camera,
+      view.origin,
+      null,
+    )
+    expect(streamer.summary().pending).toBe(0)
+    expect(pool.stats().cancelled).toBeGreaterThan(before)
+    // Queued jobs are spliced out synchronously, so the pool is not merely
+    // going to stop — it already has.
+    expect(pool.queued).toBe(0)
+
+    // And the answers that were mid-flight resolve into nothing rather than
+    // into the discarded body's cache.
+    for (let i = 0; i < 40 && pool.stats().active > 0; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 25))
+    }
+    expect(streamer.summary().cached).toBe(0)
+
+    session.dispose()
+  })
 })

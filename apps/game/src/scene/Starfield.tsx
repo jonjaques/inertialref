@@ -1,9 +1,10 @@
 import { useMemo, useRef } from 'react'
 import { Sprite } from 'three/webgpu'
-import { LIGHT_YEAR } from '@inertialref/shared'
+import { LIGHT_YEAR, type Meters } from '@inertialref/shared'
+import type { FrameId, Quat } from '@inertialref/spatial'
 import { UV, type UniverseVector } from '@inertialref/spatial'
 import { placeOnStarShell } from '@inertialref/rendering'
-import type { GameEngine } from '../engine/GameEngine.ts'
+import type { GameEngine, StarField } from '../engine/GameEngine.ts'
 import { createStarfieldMaterial } from '../render/materials.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
 
@@ -23,6 +24,39 @@ const WHITE: readonly [number, number, number] = [1, 1, 1]
  * below the median into the floor.
  */
 const MAGNITUDE_RANGE = 17
+
+/**
+ * How far the origin may travel, as a fraction of the nearest star's distance,
+ * before the shell is rewritten.
+ *
+ * The buffer holds *directions*, and a direction is invariant under
+ * translation — moving `d` swings the nearest star through at most `d/r`
+ * radians and everything behind it through less. So the rebase counter, which
+ * ticks every 4,096 m, is the wrong question: it fired every ninth frame in
+ * Earth orbit and made a component that "does nothing unless the survey
+ * changes" the largest Render span on the home page, 0.48 ms mean and 1.7 ms
+ * max for twenty thousand stars that had not moved a pixel.
+ *
+ * 1e-5 radians is a quarter of a pixel across a 900-line viewport at a ~2°
+ * field, which is past the zoom slider's narrow end — and the star it binds on
+ * is never a distant one. It is the system's own sun, which the survey
+ * includes and which sits ~1 AU away, so the budget in orbit is ~1,500 km:
+ * about a minute of travel at 27.6 km/s instead of nine frames. The tolerance
+ * is recomputed at every rewrite, so approaching the sun tightens it faster
+ * than the approach can spend it.
+ */
+const SHELL_PARALLAX_TOLERANCE = 1e-5
+
+/** What the shell in the buffer was drawn for, and what would invalidate it. */
+interface WrittenShell {
+  /** Identity, not length: a re-survey builds a whole new `StarField`. */
+  readonly field: StarField
+  readonly from: UniverseVector
+  readonly orientation: Quat
+  readonly anchorFrame: FrameId
+  /** `SHELL_PARALLAX_TOLERANCE` times the nearest star's distance. */
+  readonly budget: Meters
+}
 
 /**
  * Distant stars, as one instanced sprite draw.
@@ -48,21 +82,35 @@ export function Starfield({ engine }: { engine: GameEngine }) {
     return object
   }, [field])
 
-  const generation = useRef(-1)
-  const surveyed = useRef(-1)
+  const written = useRef<WrittenShell | null>(null)
 
   useTimedFrame('starfield', () => {
     const scene = engine.scene()
     const stars = engine.starField
     if (scene === null) return
+    const origin = scene.origin
+    const held = written.current
+    /*
+     * Orientation and anchor exactly, position within the parallax budget.
+     *
+     * Rotation is the input that genuinely invalidates a direction — it turns
+     * every one of them at once — and a reanchor changes the axes the shell is
+     * expressed in, so both are compared for equality rather than tolerance.
+     * The quaternion is a fresh object most frames, so its components are what
+     * is compared.
+     */
     if (
-      generation.current === scene.origin.generation &&
-      surveyed.current === stars.positions.length
+      held !== null &&
+      held.field === stars &&
+      held.anchorFrame === origin.anchorFrame &&
+      held.orientation.x === origin.orientation.x &&
+      held.orientation.y === origin.orientation.y &&
+      held.orientation.z === origin.orientation.z &&
+      held.orientation.w === origin.orientation.w &&
+      UV.distance(origin.position, held.from) < held.budget
     )
       return
 
-    generation.current = scene.origin.generation
-    surveyed.current = stars.positions.length
     const array = field.positions.array as Float32Array
     const colours = field.colours.array as Float32Array
     const prominence = field.prominence.array as Float32Array
@@ -75,23 +123,28 @@ export function Starfield({ engine }: { engine: GameEngine }) {
     //
     // Distance is not observable *in the geometry*, which is why how bright each
     // star looks has to be computed here, before it is discarded.
-    let written = 0
+    let count = 0
     let brightest = 0
+    let nearest = Number.POSITIVE_INFINITY
     const flux: number[] = []
     for (let i = 0; i < stars.positions.length; i += 1) {
-      if (written >= MAX_STARS) break
+      if (count >= MAX_STARS) break
       const position = stars.positions[i] as UniverseVector
-      const point = placeOnStarShell(scene.origin, position)
+      const point = placeOnStarShell(origin, position)
       if (point === null) continue
-      array[written * 3] = point.x
-      array[written * 3 + 1] = point.y
-      array[written * 3 + 2] = point.z
+      array[count * 3] = point.x
+      array[count * 3 + 1] = point.y
+      array[count * 3 + 2] = point.z
       const colour = stars.colours[i] ?? WHITE
-      colours[written * 3] = colour[0]
-      colours[written * 3 + 1] = colour[1]
-      colours[written * 3 + 2] = colour[2]
+      colours[count * 3] = colour[0]
+      colours[count * 3 + 1] = colour[1]
+      colours[count * 3 + 2] = colour[2]
 
-      const metres = UV.distance(position, scene.origin.position)
+      const metres = UV.distance(position, origin.position)
+      // The raw distance, before the flux floor below rounds it up: this is
+      // the one that sets how far the origin may drift before this star's
+      // *direction* is wrong, and the nearest star is always the sun.
+      if (metres < nearest) nearest = metres
       // The one-light-year floor keeps a star the camera is inside from
       // dividing by nothing. Nothing is that close except the system's own sun,
       // which is drawn as a body rather than a point.
@@ -99,7 +152,7 @@ export function Starfield({ engine }: { engine: GameEngine }) {
       const value = (stars.luminosities[i] ?? 1) / (light * light)
       flux.push(value)
       if (value > brightest) brightest = value
-      written += 1
+      count += 1
     }
 
     /*
@@ -117,7 +170,7 @@ export function Starfield({ engine }: { engine: GameEngine }) {
      * darken the whole sky on the way out of the neighborhood, when what really
      * happens is that your eyes adjust.
      */
-    for (let i = 0; i < written; i += 1) {
+    for (let i = 0; i < count; i += 1) {
       const magnitude =
         brightest === 0 ? 0 : -2.5 * Math.log10((flux[i] as number) / brightest)
       prominence[i] = Math.max(0, Math.min(1, 1 - magnitude / MAGNITUDE_RANGE))
@@ -126,7 +179,16 @@ export function Starfield({ engine }: { engine: GameEngine }) {
     field.colours.needsUpdate = true
     field.prominence.needsUpdate = true
     field.positions.needsUpdate = true
-    sprite.count = written
+    sprite.count = count
+    written.current = {
+      field: stars,
+      from: origin.position,
+      orientation: origin.orientation,
+      anchorFrame: origin.anchorFrame,
+      // Infinite when nothing was placed, which is right: an empty sky has no
+      // direction that can go stale, and the survey landing replaces `field`.
+      budget: (nearest * SHELL_PARALLAX_TOLERANCE) as Meters,
+    }
   })
 
   return <primitive object={sprite} />

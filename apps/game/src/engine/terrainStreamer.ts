@@ -46,7 +46,11 @@ import {
   terrainPalette,
   terrainPatchKey,
 } from '@inertialref/rendering'
-import { generateHeightfieldTask, type WorkerPool } from '@inertialref/workers'
+import {
+  generateHeightfieldTask,
+  type JobHandle,
+  type WorkerPool,
+} from '@inertialref/workers'
 import { PhaseClock, TERRAIN_PHASE, TERRAIN_SHORT } from './frameTiming.ts'
 import { ScatterField, type ScatterState } from './scatterField.ts'
 
@@ -444,7 +448,15 @@ export class TerrainStreamer {
    */
   readonly #fields = new Map<number | string, CachedField>()
   readonly #patches = new Map<number | string, RenderPatch>()
-  readonly #inFlight = new Set<number | string>()
+  /*
+   * The handle, not just the key, because a job nobody wants any more is worth
+   * cancelling and only the handle can do it. `#epoch` discards an *answer*
+   * that outlives its view; the job behind it ran to completion regardless, so
+   * leaving a landing view with the window full left up to 128 heightfields
+   * queued ahead of everything the next view wanted — measured at 42 arrivals
+   * through the title cutscene alone.
+   */
+  readonly #inFlight = new Map<number | string, JobHandle<unknown>>()
   #bodyAddress: string | null = null
   #drawn: readonly SelectedPatch[] = []
   #deepest = 0
@@ -1210,18 +1222,18 @@ export class TerrainStreamer {
       // rather than cached, because the key alone cannot tell a new seed's
       // s:SOL/b:2 from the old one's.
       const epoch = this.#epoch
-      this.#inFlight.add(key)
-      void this.#pool
-        .run(generateHeightfieldTask, {
-          surfaceSeed: formatSeed(body.surface.seed),
-          maxElevation: body.surface.maxElevation,
-          roughness: body.surface.roughness,
-          seaLevel: body.surface.seaLevel,
-          grammar: body.surface.grammar,
-          region,
-          resolution: HEIGHTFIELD_RESOLUTION,
-          border: HEIGHTFIELD_BORDER,
-        })
+      const handle = this.#pool.submit(generateHeightfieldTask, {
+        surfaceSeed: formatSeed(body.surface.seed),
+        maxElevation: body.surface.maxElevation,
+        roughness: body.surface.roughness,
+        seaLevel: body.surface.seaLevel,
+        grammar: body.surface.grammar,
+        region,
+        resolution: HEIGHTFIELD_RESOLUTION,
+        border: HEIGHTFIELD_BORDER,
+      })
+      this.#inFlight.set(key, handle)
+      void handle.result
         .then((result) => {
           if (epoch !== this.#epoch) return
           // The answer invalidates the held selection: `#build` has ground
@@ -1235,6 +1247,11 @@ export class TerrainStreamer {
           })
         })
         .catch((cause: unknown) => {
+          // A cancellation is this streamer's own decision arriving back at
+          // it, not a failure: `clear()` cancels the whole window on a
+          // retarget, so a warning here would be a hundred and twenty lines of
+          // log for one keystroke.
+          if (cause instanceof Error && cause.message === 'cancelled') return
           log.warn('terrain patch failed', { key, cause: String(cause) })
         })
         .finally(() => {
@@ -1328,17 +1345,26 @@ export class TerrainStreamer {
     this.#fields.clear()
     this.#patches.clear()
     /*
-     * The in-flight set goes with them, which it did not have to when the keys
-     * carried the body.
+     * The in-flight window is cancelled and dropped, which is two fixes.
      *
-     * `#request` filters on `!#inFlight.has(key)`, and a key is now packed
-     * arithmetic over the region alone — so a job still out for the world this
-     * discards named the *same* key the new body's roots do, and filtered the
-     * nearest-first head of the new request list out until it settled. The
-     * ground came in a heightfield's worth of latency late on every retarget,
-     * silently. The stale job's own `finally` is epoch-guarded so it cannot
-     * take a new entry with it when it lands.
+     * Dropped, because `#request` filters on `!#inFlight.has(key)` and a key
+     * is packed arithmetic over the region alone — so a job still out for the
+     * world this discards names the *same* key the new body's roots do, and
+     * filtered the nearest-first head of the new request list out until it
+     * settled. The ground came in a heightfield's worth of latency late on
+     * every retarget, silently. The stale job's own `finally` is epoch-guarded
+     * so it cannot take a new entry with it when it lands.
+     *
+     * Cancelled, because dropping the key only discards the *answer*. At the
+     * 128-job cap all but `poolSize()` of those are still in the pool's queue,
+     * where cancelling is a splice and the work never happens; leaving them
+     * there put up to 50 s of ground nobody will see ahead of everything the
+     * next view wants, and the star survey behind it read 4-8 s of queue on a
+     * jump home. The few actually running finish — `generateHeightfield` polls
+     * nothing and cannot be interrupted mid-field — and their answers are
+     * discarded by the epoch.
      */
+    for (const handle of this.#inFlight.values()) handle.cancel()
     this.#inFlight.clear()
     this.#bodyAddress = null
     this.#previous = null

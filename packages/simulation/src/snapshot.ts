@@ -13,6 +13,7 @@ import {
 import {
   type BodyAppearance,
   type BodyFigure,
+  bodyFixedFrameId,
   bodyFrameId,
   type EntityId,
   formatAddress,
@@ -179,6 +180,10 @@ export function snapshot(
     const collect = (body: (typeof system.planets)[number]): void => {
       const frame = bodyFrameId(body.address)
       const pose = world.frames.pose(frame, renderTime)
+      // The rotating frame, resolved once. It was spelled out twice inside the
+      // ternary below — `has` and then the read — which is two template
+      // strings and two address formats per body per frame for one answer.
+      const spin = bodyFixedFrameId(body.address)
       bodies.push({
         address: formatAddress(body.address),
         name: body.name,
@@ -189,11 +194,9 @@ export function snapshot(
         rotationPeriod: body.rotationPeriod,
         appearance: body.appearance,
         position: pose.position,
+        // The visible orientation is the rotating one, not the orbital frame.
         orientation: world.frames.pose(
-          // The visible orientation is the rotating one, not the orbital frame.
-          world.frames.has(`bf:${formatAddress(body.address)}` as FrameId)
-            ? (`bf:${formatAddress(body.address)}` as FrameId)
-            : frame,
+          world.frames.has(spin) ? spin : frame,
           renderTime,
         ).orientation,
         frame,

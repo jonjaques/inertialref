@@ -7,6 +7,7 @@ import {
   rebase,
   REBASE_THRESHOLD,
   toRenderSpace,
+  type UniverseVector,
   universeVector,
   UV,
   Vec,
@@ -29,6 +30,7 @@ import {
   NEAR_LIMIT,
   placeAt,
   placeOnStarShell,
+  placePathInto,
   STAR_SHELL_RADIUS,
 } from './placement.ts'
 import {
@@ -255,6 +257,79 @@ describe('render placement', () => {
     expect(Vec.length(placement.position)).toBeLessThan(1e10)
     expect(Vec.length(placement.position)).toBeGreaterThan(1e7)
     expect(Math.fround(placement.position.x)).not.toBe(0)
+  })
+
+  it('places a path exactly as it places each of its points (property)', () => {
+    /*
+     * `placePathInto` exists to drop the allocations, not to change the
+     * answer, and the answer is what the orbit traces are drawn from — so the
+     * two spellings have to agree at every separation and under a rotated
+     * origin, which is the case the fast form hoists the conjugate out of.
+     *
+     * Agreement is to within a float32 ULP rather than bit-exact, and the
+     * reason is the hoist itself: the reference translates in universe
+     * coordinates and then differences, while this adds the shift after the
+     * rotation, so the two associate the same sum differently and land on
+     * adjacent float32 values. Both are far inside the buffer's own precision
+     * — a trace vertex 1e11 m out is quantized to kilometers there — and the
+     * bound below is what makes that a claim rather than an assumption.
+     */
+    const ULP = 2e-7
+    fc.assert(
+      fc.property(
+        fc.double({ min: 1e3, max: 1e14, noNaN: true }),
+        fc.double({ min: 1, max: 7e8, noNaN: true }),
+        fc.double({ min: -1e6, max: 1e6, noNaN: true }),
+        (reach, radius, shiftX) => {
+          const origin = {
+            ...ORIGIN,
+            orientation: Q.fromAxisAngle(vec3(0.3, 0.9, 0.2), 0.7),
+          }
+          const eye = vec3(1_200, -400, 900)
+          const shift = vec3(shiftX, shiftX / 3, -shiftX / 2)
+          const points = [
+            UV.translate(origin.position, vec3(reach, 0, 0)),
+            UV.translate(origin.position, vec3(0, reach, reach / 4)),
+            UV.translate(origin.position, vec3(-reach / 2, reach / 8, 0)),
+          ]
+          const out = new Float32Array(points.length * 3)
+          placePathInto(origin, points, shift, radius, eye, out)
+          for (let i = 0; i < points.length; i += 1) {
+            const expected = placeAt(
+              origin,
+              UV.translate(points[i] as UniverseVector, shift),
+              radius,
+              eye,
+            ).position
+            for (const [got, want] of [
+              [out[i * 3] as number, expected.x],
+              [out[i * 3 + 1] as number, expected.y],
+              [out[i * 3 + 2] as number, expected.z],
+            ]) {
+              expect(Math.abs(got - want)).toBeLessThanOrEqual(
+                ULP * Math.max(1, Math.abs(want)),
+              )
+            }
+          }
+        },
+      ),
+      { numRuns: 120 },
+    )
+  })
+
+  it('writes only as many points as the buffer has room for', () => {
+    // The trace buffers are allocated at the path's length and `ORBIT_CAPACITY`
+    // bounds it, but a caller handing a short buffer must not write past it —
+    // a Float32Array write out of range is silently dropped, so the failure
+    // would have been an orbit missing its tail with nothing in the console.
+    const points = [
+      UV.translate(ORIGIN.position, vec3(1e9, 0, 0)),
+      UV.translate(ORIGIN.position, vec3(0, 1e9, 0)),
+    ]
+    const out = new Float32Array(3)
+    placePathInto(ORIGIN, points, Vec.ZERO, 1e6, AT_ORIGIN, out)
+    expect(out[0]).not.toBe(0)
+    expect(out.length).toBe(3)
   })
 })
 

@@ -7,7 +7,7 @@ import {
   LineBasicNodeMaterial,
 } from 'three/webgpu'
 import { UV, Vec } from '@inertialref/spatial'
-import { placeAt } from '@inertialref/rendering'
+import { placePathInto } from '@inertialref/rendering'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
 
@@ -113,20 +113,18 @@ export function OrbitTraces({ engine }: { engine: GameEngine }) {
       const attribute = line.geometry.getAttribute(
         'position',
       ) as BufferAttribute
-      const array = attribute.array as Float32Array
-      for (let i = 0; i < path.points.length; i += 1) {
-        const point = path.points[i]
-        if (point === undefined) continue
-        const placed = placeAt(
-          origin,
-          UV.translate(point, shift),
-          path.radius,
-          eye,
-        ).position
-        array[i * 3] = placed.x
-        array[i * 3 + 1] = placed.y
-        array[i * 3 + 2] = placed.z
-      }
+      // One call for the whole path, writing the buffer directly. Per point
+      // this was a `UV.translate`, a `placeAt` and the placement record it
+      // returns — see `placePathInto`, which is the same arithmetic without
+      // the several thousand objects a frame.
+      placePathInto(
+        origin,
+        path.points,
+        shift,
+        path.radius,
+        eye,
+        attribute.array as Float32Array,
+      )
       attribute.needsUpdate = true
     }
 
