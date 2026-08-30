@@ -415,8 +415,11 @@ Stated plainly, because discovering these by surprise is worse than reading them
   selection peaks at 1,077 patches, which is 255 MB of vertex buffers at the
   flight lens. **Generation is what binds now**: a two-meter stance on Luna
   settles in one to three minutes on a retina window, because 1,562 patches at
-  43 ms is 67 s of single-core work and a pool of six does not divide it far
-  enough. `pnpm sim --terrain-baseline` prints all of it; the
+  43 ms is 67 s of single-core work and a pool of four does not divide it far
+  enough. That figure is measured at the old ceiling of four workers; the pool
+  takes eight now, which moves a Mars landing three drawn levels in the same
+  twenty seconds, and Luna has not been re-measured.
+  `pnpm sim --terrain-baseline` prints all of it; the
   [roadmap](docs/roadmap.md#terrain) has the seams.
 - **Almost nothing is measured on the target machine.** The dev dock's perf panel
   (`P`) plots frame time, engine time, draw calls, worker queue and heap, and can

@@ -162,10 +162,12 @@ Violating one of these is a rewrite later, not a refactor.
   available" and fell back to a sphere would be right by accident and wrong the
   moment the fallback changed.
 - **Never place a compressed body about the render origin.** `placeAt` takes
-  the eye in render space and compresses radially about _that_. The origin is a
-  snapped grid point that lags the camera and jumps; compressing about it gives
-  every far object a parallax error that sawtooths at the rebase cadence, which
-  is small bodies visibly vibrating in their orbits.
+  the eye in render space and compresses radially about _that_, and so does
+  `placePathInto`, which is the same arithmetic written straight into a vertex
+  buffer for a whole path. The origin is a snapped grid point that lags the
+  camera and jumps; compressing about it gives every far object a parallax
+  error that sawtooths at the rebase cadence, which is small bodies visibly
+  vibrating in their orbits.
   [ADR-0003](docs/adr/0003-render-coordinates.md).
 - **Never scale metric geometry by `placement.scale`.** It is the _drawn radius_
   in meters, which is what a unit sphere wants; anything carrying its own

@@ -58,8 +58,9 @@ export function createBrowserWorkerPort(): WorkerPort {
  * during convergence, `Engine/frame` was 16.67 ms mean and 23.3 p95 at four
  * against 16.71 and 19.3 at eight, with fourteen late frames against twelve.
  *
- * `cores - 2` is unchanged, so this only moves machines with eight logical
- * cores or more, and the two figures it is measured against are one machine's.
+ * `cores - 2` is unchanged, so this only moves a machine where `cores - 2`
+ * exceeded the old ceiling of four — seven logical cores or more, where it now
+ * gets five workers rather than four. The figures above are one machine's.
  * The case it is least sure of is SMT: `hardwareConcurrency` counts threads,
  * so sixteen threads on eight physical cores gets eight workers and the main
  * thread shares a core with one of them. `?workers=` is how to re-run the

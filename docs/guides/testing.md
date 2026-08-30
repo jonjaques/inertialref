@@ -182,9 +182,9 @@ as ten parallel `node` invocations under `it.each` and starved everything.
 
 **The other culprit is a browser you started yourself and left running.**
 `scripts/drive.mjs` leaves Chrome up between invocations on purpose — boot is
-ten seconds and attaching is under one — so a session that has been verifying in
-the browser is a session running a GPU process, four worker threads and a Vite
-dev server beside the suite. Measured here across two consecutive full runs with
+about five seconds and attaching is under one — so a session that has been
+verifying in the browser is a session running a GPU process, up to eight worker
+threads and a Vite dev server beside the suite. Measured here across two consecutive full runs with
 that rig up: one file timed out each time, and it was a **different** file each
 time — a terrain descent once, a crater-field property the next — with both
 passing clean the moment `pnpm drive --down` had run. Neither was a regression
@@ -207,7 +207,7 @@ real worker threads in it, not a shorter landing.
 **The figure moves with the field, which is why it is not a budget.** A bordered
 65×65 patch costs 22 to 50 ms across the zoo, and every level the detail floor
 gains is another ring of them paid here at full serial cost; the browser has a
-pool of six and this has one thread.
+pool of up to eight and this has one thread.
 
 ### Check a distribution when the claim is about one
 

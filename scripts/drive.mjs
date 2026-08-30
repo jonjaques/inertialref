@@ -25,11 +25,13 @@
  *  - A real window, not `--headless`. Headless macOS Chrome falls back to a
  *    software WebGPU adapter, and a software adapter is not the thing under test.
  *
- * The expensive thing here is boot — about eleven seconds of shader warm and
- * body build, on top of the dev server's own start. So Chrome is left running
+ * The expensive thing here is boot — about five seconds of shader warm and body
+ * build, on top of the dev server's own start. So Chrome is left running
  * between invocations and a second call attaches to the booted page instead of
- * reloading it: measured, 17 s cold against 70 ms warm. That is what makes a
- * batch of steps worth writing on one command line:
+ * reloading it: measured, 6 s cold against 80 ms warm. Most of that cold figure
+ * is the dev server and Chrome rather than the page — `?presentation=occluded`
+ * below is what keeps the page's own boot to one warm-up census. That is what
+ * makes a batch of steps worth writing on one command line:
  *
  *     node scripts/drive.mjs --js "ir.look('g:milky-way/s:SOL/b:2')" \
  *                            --wait 2000 --shot earth.jpg
@@ -162,7 +164,7 @@ Lifecycle:
   --down             close the Chrome and the dev server this rig started
 
 Chrome stays up between invocations and the next call attaches to the booted
-page: 17 s cold, 70 ms warm. --down when you are finished.`
+page: 6 s cold, 80 ms warm. --down when you are finished.`
 
 const { values, tokens } = parseArgs({
   options: OPTIONS,
@@ -252,7 +254,7 @@ const count = (arg, flag, least) => {
 }
 
 /** Every numeric step argument, checked before the dev server, Chrome and an
- *  eleven-second boot: a typo'd `--wait` should cost a line of output, not the
+ *  six-second boot: a typo'd `--wait` should cost a line of output, not the
  *  whole start-up it sits behind. */
 function checkScript() {
   for (const { step, arg } of script) {
@@ -481,7 +483,7 @@ async function boot(send, { force }) {
   // same keys back as it plays — `CinemaPlayer` replaces `t` on every frame,
   // `PlanetariumMode` replaces `at` on every target — so an exact comparison
   // would miss on a page that is already showing exactly what was asked for,
-  // and turn every warm attach into an eleven-second re-boot.
+  // and turn every warm attach into a six-second re-boot.
   const wanted = new URL(URL_)
   const here = await evaluate(
     send,

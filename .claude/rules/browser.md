@@ -20,20 +20,11 @@ Reasoning and the full card: [`.claude/skills/drive/SKILL.md`](../skills/drive/S
   second call and the driver re-navigates at the defaults, discarding the observatory
   you set up. `--down` at the end.
 
-- **The rig no longer measures itself, and figures from before it did are suspect.**
-  The driver puts `?presentation=occluded` on every URL: focus emulation reports
-  `visibilityState: 'visible'` for a window that never composites, so the presentation
-  watchdog read back transparent black for a healthy renderer and rebuilt the canvas on
-  every boot — a doubled preload census, an uncaught Three dispose, and a 3200×1800
-  drawing buffer for a rig asking for 1600×900 at DPR 1. Terrain selection is measured
-  in display pixels, so terrain numbers taken after a rebuild were retina numbers
-  wearing a default-window label. Boot is ~5 s and one census now.
-
-- **Measure on a quiet machine, one thing at a time.** The same summit arrival reads
-  45 ms worker runs quiet and 285 ms with a build beside it — a test suite in another
-  shell does not add noise to a worker figure, it replaces the subject. Finish the
-  suite, let the machine settle, measure, then `--down` so the suite gets the same
-  courtesy.
+- **The rig used to measure itself.** The driver sets `?presentation=occluded` on every
+  URL, because focus emulation reports `visible` for a window that never composites and
+  the watchdog then rebuilt a healthy canvas on every boot — a doubled preload census and
+  a 3200×1800 buffer for a rig asking for DPR 1. Any figure predating it is suspect, and
+  a terrain one is retina. Measure on a quiet machine; the card has the rest.
 
 - **A still cannot show a strobe and neither can `--shot`** — it draws its own frame.
   `--cast <n>` records what the compositor presented; `scripts/traceFrames.mjs` reads

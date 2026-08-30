@@ -9,6 +9,7 @@ import {
   HOME,
   modeForPath,
   overlayBackground,
+  QUERY,
   overlaySurface,
   PROFILE,
   resolvedLocation,
@@ -252,6 +253,19 @@ describe('the surface a dialog belongs to', () => {
       '/cinema/tng-intro',
     ])
       expect(overlaySurface(path)).toBe('none')
+  })
+
+  it('pins the query keys a script outside the type system spells by hand', () => {
+    /*
+     * `scripts/drive.mjs` cannot import this module — it is `.mjs` against a
+     * TypeScript source — so it writes `presentation=occluded` as a literal.
+     * Renaming the key here would re-arm the presentation watchdog on every
+     * driver boot, which is the defect the flag exists to prevent, and it
+     * fails as a slow boot with a doubled preload census rather than as an
+     * error. This is the pin the twin cannot have.
+     */
+    expect(QUERY.presentation).toBe('presentation')
+    expect(QUERY.workers).toBe('workers')
   })
 
   it('answers for a path it has never heard of without throwing', () => {

@@ -527,3 +527,84 @@ engine field that holds its reciprocal.
   order-independence test was re-armed with `(33, 32.5)`.
 - `craterProfile`'s `if (t > 1)` ejecta step is fixed by `smoothstep(1, RIM_OUTER, t)`.
 - `rayCraters`'s sort is total; `morphCover`'s `evenRow/evenCol` cannot index the border.
+
+## A memoized selection: check the memo key against what the _callee_ reads, not the caller
+
+`perf/the-hud-stops-billing-the-frame` added `TerrainStreamer.#selection`, reused while
+`(body identity, eyeLocal within 5 mm, maxLevel, cacheEpoch, lens.focalLength/gauge/zoom,
+viewport)` hold. It is complete, and the check that settles it is worth reusing: read the
+callee's _parameter type_, not its call site. `TerrainEye` is `{radius, relief, distance,
+direction}` and carries **no camera orientation**, so a look-around cannot change the
+selection and the key is right to omit it. `#eye()` derives all four from `surface` +
+`eyeLocal` alone. `cellPixels`/`resolution`/`maxPatches` are never passed and are module
+constants. The only hidden input is the `ready` closure over `#patches`, and `#cacheEpoch`
+is bumped in `#build`, `#evict` and both worker `.then`s — captured _before_ `#build`
+mutates, which is what lets refinement advance.
+
+The residual worth checking on any future edit: the held branch runs `#request` but not
+`#build`/`#evict`, so a cap can be exceeded for exactly one frame. Fine because an
+arriving field bumps the epoch.
+
+## Verify an "identical answer, fewer allocations" refactor by running both revisions
+
+Two of this branch's riskiest changes were settled in ten minutes each, and the method
+generalizes.
+
+**`balance`'s depth map carried across passes** (`terrainSelect.ts`): `git archive
+origin/main | tar -x` into `.scratch/mainwt`, symlink `node_modules`, import _both_
+`selectTerrain`s by absolute path, and diff the sorted patch-key sets. 8,136 cases —
+12 Sol bodies × 14 altitudes × 17 directions, plus a `ready` predicate at four starve
+densities — came out identical, `starved` sets included. Note the carried map is _more_
+eager than the rebuilt one (children are deepened mid-pass), which converges to the same
+2:1 closure because a split only ever adds +1 to an ancestor's depth.
+
+**A pure function moved to a worker**: reconstruct the payload the task actually posts
+and compare against the main-thread call over every body. `surfaceDetailFloorTask` sends
+five fields; `SurfaceParameters` has exactly five; 129 Sol bodies, 0 mismatches. Check
+the _default arguments_ too — the no-pool path calls `surfaceDetailFloor(surface)` and
+the worker passes `HEIGHTFIELD_RESOLUTION` explicitly, which happens to be the default.
+
+## `WeakMap` keyed on a value object is safe here, and the grep that proves it
+
+`formatAddress`/`bodyFrameId`/`bodyFixedFrameId` memoize on the `UniverseAddress` object.
+Safe: every variant is all-`readonly`, the one array (`body: readonly number[]`) is never
+written, and `regionAddress()` returns a fresh literal. The one-line proof —
+`grep -rnE "\.(galaxy|system|body|region|object)\s*=[^=]" packages/*/src apps/*/src` —
+returns a single hit and it is `World.galaxy`. Run that before accepting any new
+identity-keyed cache on an address.
+
+## The advisory section that turns a path-scoped mirror into an essay
+
+New inverse of the mirror-drift shape. `perf/the-hud…` added 46 lines to
+`.claude/rules/timing.md` ("The shapes the two performance passes kept finding") that
+mirror **nothing in `AGENTS.md`** and are pure narrative with measured figures — against
+`.claude/rules/README.md`'s two explicit clauses, "these files carry only the
+_imperative_" and "Do not paste reasoning into these files. A rule that grows past ~30
+lines…". It took timing.md 62 → 108. And three of the five bullets are about
+`Starfield.tsx`, `terrainSelect.ts` and `browserWorker.ts`, none matched by timing.md's
+own `paths:` — the wrong-path-scope failure again, now for advice rather than an
+invariant. Same branch took `browser.md` 28 → 43 against README's "kept under thirty
+lines" for the three unscoped rules.
+
+**Cheap check on any diff touching `.claude/rules/`:** `wc -l` before and after, and for
+every backticked filename in a new bullet, confirm the rule's own `paths:` matches it.
+
+## A `.mjs` script's query-key twin has nothing holding it to `QUERY`
+
+`scripts/drive.mjs:200` writes `url.searchParams.set('presentation', 'occluded')` and
+names `QUERY.presentation` in the comment above it. A `.mjs` cannot import the TS module,
+so the twin is necessary — but renaming the key in `pages/paths.ts` silently re-arms the
+presentation watchdog on every driver boot, which is the exact defect that commit fixes
+and which fails as a slow boot rather than an error. `apps/game/src/pages/pages.test.ts`
+is where a `QUERY.presentation === 'presentation'` assertion belongs.
+
+## The concurrent docs pass is now reliable enough to plan around
+
+Third branch running. On this one the working tree gained AGENTS.md, `.claude/rules/
+rendering.md`, `README.md`, five `docs/concepts` and `docs/guides` files and
+`packages/universe/src/terrain.ts` _during the audit_ — and it had already fixed the
+`placePathInto` half of the ADR-0003 mirror before I could file it. **Run `git status`
+immediately before writing and drop what the tree already fixes.** What the docs pass
+reliably does _not_ sweep: `.claude/rules/*` and Mermaid diagrams. `streaming.md` gained
+three new paragraphs about the detail-floor gate and the selection memo while its
+flowchart still shows one gate straight into `WALK`.

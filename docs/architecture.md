@@ -264,7 +264,7 @@ flowchart TB
         HARNESS["GameHarness<br/><i>window.ir</i>"]
     end
 
-    subgraph POOL["worker pool (n = cores − 2, max 4)"]
+    subgraph POOL["worker pool (n = cores − 2, max 8)"]
         W1["worker 1"]
         W2["worker 2"]
         W3["worker …"]

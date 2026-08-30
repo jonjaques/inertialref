@@ -84,7 +84,11 @@ The streamer is asked, every frame, what should be visible, and reconciles.
 flowchart TB
     CAM["camera position"] --> BODY{"a solid, unfigured body,<br/>relief over 8 px?"}
     BODY -->|no| CLEAR["clear everything<br/><i>the sphere is the honest picture</i>"]
-    BODY -->|yes| WALK["walk the quadtree from the six cube faces"]
+    BODY -->|yes| FLOOR{"is this body's<br/>detail floor known?"}
+    FLOOR -->|"no — a worker is measuring it"| CLEAR
+    FLOOR -->|yes| HELD{"eye, optics, floor and<br/>cache all unmoved?"}
+    HELD -->|"yes — hold the selection"| DRAW
+    HELD -->|no| WALK["walk the quadtree from the six cube faces"]
     WALK --> REFINE{"one grid cell<br/>over 16 px?"}
     REFINE -->|"yes, and the children are cached"| WALK
     REFINE -->|no| BALANCE["restrict to a 2:1 balance<br/><i>the morph closes one level, not two</i>"]
@@ -97,17 +101,32 @@ flowchart TB
 
     style JOB fill:#065f46,stroke:#064e3b,color:#fff
     style BALANCE fill:#0369a1,stroke:#0c4a6e,color:#fff
+    style HELD fill:#0369a1,stroke:#0c4a6e,color:#fff
 ```
 
 **The selection rule is not in the streamer.** Everything above the queue — the
 traversal, the error predicate, the horizon cull, the balance and the morph
 bands — is `selectTerrain` in `packages/rendering`: a pure function of a body's
 radius and relief, an eye distance and a body-fixed direction. The streamer
-calls it twice a frame and owns only the cache, the worker jobs and the meshes.
+calls it twice per walk and owns only the cache, the worker jobs and the meshes.
 That split is what makes "what would this camera ask for?" answerable without a
 GPU, and it is why the terrain budget has measured numbers in it at all — the
 browser asks the question once a frame, `ir.descend` asks it a few hundred times
 in a millisecond ([harness](../guides/harness.md#measuring-terrain)).
+
+**Per walk, and a converged view does not walk.** Both selections are a pure
+function of the eye in body-fixed axes, the optics, the level floor and the
+geometry cache, so at a stance or a hover none of them move: the camera rides
+the body, and the eye's whole motion is the ~0.15 mm of jitter left by the pose
+round trip through universe coordinates, which a five-millimeter epsilon
+absorbs. The held answer is reused, and the request list is topped up from it so
+a slot freed by a finished job is still spent. Walking anyway cost 2.1 ms a
+frame standing on Earth's summit — the largest single item in the engine step,
+recomputing an answer that could not have changed. A frame that builds geometry
+or evicts any invalidates its own selection, which is what lets refinement
+advance at all. The consequence for anyone reading the counters: `visited`,
+`culled`, `starved` and `level` describe the last frame that walked, and
+`selections` is what says whether this one did.
 
 ### Two fields, and which one each reader gets
 
@@ -173,6 +192,14 @@ samples seven times finer again; the presentational tail below it is worth the
 last two to three levels on its own. Nothing in any of that is a constant to
 raise, which is what measuring it from the field buys.
 
+The measuring is a pool task, `universe.surfaceDetailFloor`, because it is about
+1,500 samples of the same band stack — 33 to 43 ms cold, and cold exactly once
+per body, in the frame the streamer first has that body underfoot. So a body
+whose floor has not come back yet has **no ceiling to select against**, and the
+streamer holds the ground back for those frames rather than guessing one: the
+same shape as waiting for the heightfields themselves. A host with no pool
+measures it inline, which is every host that has no frame to drop.
+
 Two things settle the walk rather than one. A quiet level counts only if its
 stencils touched dry ground — the sea clamp manufactures exact zeros over open
 water, so a submerged probe set is the clamp talking rather than the field, and
@@ -232,8 +259,21 @@ happen. Only the geometry count shows it either way, because refinement gates on
 the mesh while the heightfield cache sits at its steady value.
 
 Patch keys are `body|face.level.i.j` — `terrainPatchKey`, one definition and
-three readers — so the same patch is never requested twice concurrently, and the
-request set is stable while the player hovers.
+three readers — and that spelling belongs to the renderer's mesh cache, the one
+cache that retains across a retarget. The streamer's own caches key by
+`regionKey`, packed arithmetic with no body in it, because the request filter
+names over a thousand regions a frame and building that many template strings
+was most of what the filter cost. Either way the same patch is never requested
+twice concurrently and the request set is stable while the player hovers.
+
+The body-free key has one consequence, and it is why `clear()` does two things
+rather than one: a job still in flight for the world just discarded names the
+_same_ key the new body's roots do, so it filters the nearest-first head of the
+new request list out until it lands, and the ground arrives a heightfield's
+latency late on every retarget. `clear()` drops the whole in-flight set, and
+cancels it — dropping the key discards only the answer, while cancelling reaches
+the majority still sitting in the pool's queue, where the work never happens at
+all ([workers](workers.md#cancellation)).
 
 ### What is drawn while it loads
 

@@ -1,8 +1,8 @@
 # Observability
 
 > **The question:** how do you debug a coordinate system you cannot see, content
-> that does not exist until it is asked for, and work happening on four other
-> threads?
+> that does not exist until it is asked for, and work happening on up to eight
+> other threads?
 > **The answer:** build the tooling first. Every invisible thing is a structured
 > field, and the same structure feeds the on-screen overlay, the console, the
 > tests and an automated driver.
@@ -72,7 +72,7 @@ all. All twelve are:
 | 9   | active LOD            | `Sol I  surface · 2865.046 km`                              |
 | 10  | loaded region         | `g:milky-way/s:SOL/b:0`                                     |
 | 11  | network authority     | `s:SOL` (partition key — no networking yet)                 |
-| 12  | worker queue state    | `4w · 0 active · 0 queued · 25 done · q 9.2ms · run 11.3ms` |
+| 12  | worker queue state    | `8w · 0 active · 0 queued · 25 done · q 9.2ms · run 11.3ms` |
 
 Plus the state hash, dropped ticks, origin rebase count, frame timing and a
 rolling event log.

@@ -57,9 +57,10 @@ Reasoning: `AGENTS.md` § "The rules that actually matter",
   else does — never `filmGauge`/`setFocalLength`, whose angle moves on a resize. The
   terrain predicate takes the lens in **display** pixels, with supersampling divided out.
   ADR-0017.
-- **Render compression is radial about the eye, never about the origin.** `placeAt` takes
-  the eye in render space; `buildScene` computes it once and every caller outside it —
-  `scene/OrbitTraces.tsx` is the only one — has to be given the same one. The origin is
+- **Render compression is radial about the eye, never about the origin.** `placeAt` and
+  `placePathInto` both take the eye in render space; `buildScene` computes it once and
+  every caller outside it — `scene/OrbitTraces.tsx` is the only one — has to be given the
+  same one. The origin is
   mechanism 1's snapped grid point: it lags the camera by up to 4096 m and then jumps, so
   compressing about it leaves a parallax error that sawtooths at the rebase cadence.
   Invisible on a planet filling the frame, and 0.8× its own angular radius on Phobos —

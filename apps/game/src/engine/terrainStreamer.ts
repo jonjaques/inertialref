@@ -1211,9 +1211,14 @@ export class TerrainStreamer {
         this.#cacheEpoch += 1
       })
       .catch((cause: unknown) => {
+        // The surface is released on *every* failure, cancellation included.
+        // Returning early on a cancellation left it in `#floorsAsked` with no
+        // answer and no job, so that body never streamed again for the life of
+        // the session — reachable only at dispose today, and a silent
+        // permanent hole the moment anything else cancels one.
+        this.#floorsAsked.delete(surface)
         if (cause instanceof Error && cause.message === 'cancelled') return
         log.warn('detail floor failed', { cause: String(cause) })
-        this.#floorsAsked.delete(surface)
       })
     return null
   }

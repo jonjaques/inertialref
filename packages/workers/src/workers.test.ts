@@ -12,7 +12,10 @@ import {
   generateCell,
   galaxySeedOf,
   HEIGHTFIELD_BORDER,
+  HEIGHTFIELD_RESOLUTION,
+  MAX_REGION_LEVEL,
   MILKY_WAY,
+  surfaceDetailFloor,
   surfaceGrammar,
   TEST_CATALOG,
 } from '@inertialref/universe'
@@ -24,6 +27,7 @@ import {
   encodeStub,
   generateCellTask,
   generateHeightfieldTask,
+  surfaceDetailFloorTask,
   surveySystemTask,
   surveyRegionTask,
 } from './tasks.ts'
@@ -247,6 +251,100 @@ describe('terrain task', () => {
     const again = await p.run(generateHeightfieldTask, payload)
     expect(Array.from(again.elevations)).toEqual(Array.from(result.elevations))
     expect(Array.from(again.cover)).toEqual(Array.from(result.cover))
+  })
+
+  it('measures the same detail floor in a worker as it does here', async () => {
+    /*
+     * The parity `extending.md` asks of every task, and this one earns it twice
+     * over: the answer is a *ceiling on refinement*, so a worker that disagreed
+     * with the main thread would stream a different depth of ground for the
+     * same body without anything failing. It is on the pool because the search
+     * is 33-43 ms cold and was paid inside the frame a body arrives — see the
+     * task, and `surfaceDetailFloor`'s own docstring.
+     *
+     * The same Luna-shaped rock the heightfield case uses, for the same reason:
+     * a worker gets a payload and nothing else, and an airless body turns the
+     * most bands on.
+     */
+    const grammar = surfaceGrammar(SEED, {
+      mass: 7.35e22,
+      meanRadius: 1.737e6,
+      atmosphere: null,
+      temperature: 270,
+      tidalProxy: 0,
+      hasOcean: false,
+      reliefSpent: 1,
+      publishedRelief: 8_000,
+    })
+    const surface = {
+      seed: SEED,
+      maxElevation: 8_000,
+      roughness: 3,
+      seaLevel: null,
+      grammar,
+    }
+    const payload = {
+      surfaceSeed: formatSeed(SEED),
+      maxElevation: 8_000,
+      roughness: 3,
+      seaLevel: null,
+      grammar,
+      resolution: HEIGHTFIELD_RESOLUTION,
+    }
+
+    const viaPool = await pool().run(surfaceDetailFloorTask, payload)
+    const direct = await runInline(surfaceDetailFloorTask, payload)
+    // Against the generator itself, not only against the other spelling of the
+    // task — two callers of one memo agreeing proves less than either agreeing
+    // with the search.
+    const here = surfaceDetailFloor(surface, HEIGHTFIELD_RESOLUTION)
+
+    expect(viaPool.level).toBe(here)
+    expect(direct.level).toBe(here)
+    // A real floor rather than the clamp at either end: the point of the search
+    // is that the level is measured from the field rather than assumed, so a
+    // task returning 0 or `MAX_REGION_LEVEL` would satisfy the equalities above
+    // and mean nothing.
+    expect(here).toBeGreaterThan(0)
+    expect(here).toBeLessThan(MAX_REGION_LEVEL)
+
+    /*
+     * What this catches, stated because it is narrower than it looks.
+     *
+     * Confirmed by reintroducing each defect: a task that parses the wrong seed
+     * fails here. A task that mangles `maxElevation`, `roughness` or
+     * `resolution` alone does **not** — the floor is set by where the *band
+     * stack* goes quiet, and scaling any of those three moves it by less than a
+     * level on this fixture. The grammar is what moves it, which is what the
+     * second surface below is for.
+     */
+    // Two surfaces that genuinely disagree — Luna's bands go quiet at 15 and an
+    // Earth-sized rock's at 18 — so a task answering from a constant, or from a
+    // grammar it built itself instead of the one it was handed, is caught even
+    // where a scaled scalar is not.
+    const bigGrammar = surfaceGrammar(SEED, {
+      mass: 5.97e24,
+      meanRadius: 6.371e6,
+      atmosphere: null,
+      temperature: 270,
+      tidalProxy: 0,
+      hasOcean: false,
+      reliefSpent: 1,
+      publishedRelief: 8_848,
+    })
+    const bigger = {
+      ...payload,
+      maxElevation: 8_848,
+      grammar: bigGrammar,
+    }
+    const elsewhere = await pool().run(surfaceDetailFloorTask, bigger)
+    expect(elsewhere.level).toBe(
+      surfaceDetailFloor(
+        { ...surface, maxElevation: 8_848, grammar: bigGrammar },
+        HEIGHTFIELD_RESOLUTION,
+      ),
+    )
+    expect(elsewhere.level).not.toBe(here)
   })
 
   it('surveys a system through the same generator the world uses', async () => {
