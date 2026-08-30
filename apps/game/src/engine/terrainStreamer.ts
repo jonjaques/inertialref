@@ -246,6 +246,16 @@ const TERRAIN_RELIEF_PIXELS = 8
 const SELECTION_EYE_EPSILON: Meters = 0.005
 
 /**
+ * The same threshold squared, because the frame test compares against it.
+ *
+ * `Vec.length` is `Math.hypot`, which is careful about overflow at a cost of
+ * roughly an order of magnitude over a multiply — and the quantity here is
+ * millimeters, where there is nothing to overflow. The predicate is identical
+ * on the squared pair.
+ */
+const SELECTION_EYE_EPSILON_SQ = SELECTION_EYE_EPSILON * SELECTION_EYE_EPSILON
+
+/**
  * Heightfields held, as a multiple of the largest selection.
  *
  * **A cache smaller than the working set does not degrade, it oscillates.** At
@@ -819,8 +829,21 @@ export class TerrainStreamer {
       held.lens.zoom === lens.zoom &&
       held.viewport.width === viewport.width &&
       held.viewport.height === viewport.height &&
-      Vec.length(Vec.sub(eyeLocal, held.eye)) < SELECTION_EYE_EPSILON
+      Vec.lengthSquared(Vec.sub(eyeLocal, held.eye)) < SELECTION_EYE_EPSILON_SQ
     ) {
+      /*
+       * The walk that did not happen, billed where the walk is billed.
+       *
+       * `open()` is at the top of `update`, so whichever phase steps first
+       * carries the resolve, the pose, the palette and the eye with it — on
+       * the walking path that is `terrain.select`, and without this boundary
+       * it would be `terrain.request` here, which is the one phase this
+       * branch actually does work in. Emitting it also keeps `terrain.select`
+       * present on every frame: a label that only appears on the frames it
+       * runs reports the same 2.1 ms mean it always did, and the whole point
+       * of the memo is invisible in the one instrument that should show it.
+       */
+      this.#phases.step('terrain.select', TERRAIN_PHASE)
       // The pipeline still gets topped up from the held list: `#request`
       // filters on what is cached and in flight this frame, so a slot freed
       // by a finished job is re-spent without a walk. A job that *answers*
@@ -1156,6 +1179,21 @@ export class TerrainStreamer {
    */
   #request(wanted: readonly RegionAddress[], body: Body): void {
     if (this.#pool === null) return
+    /*
+     * The budget before the filter, and the early exit is the point.
+     *
+     * A queue at its depth buys nothing this frame, and the filter below walks
+     * the whole request list — over a thousand regions on a summit, a key and
+     * two map probes each — only for the slice to throw every one of them
+     * away. It is also the guard that used to be `Math.max(0, …)`: a negative
+     * end index slices from the *back* of the array, so an over-full queue
+     * asked for the tail of the wanted list rather than for nothing.
+     */
+    const budget = Math.min(
+      REQUESTS_PER_FRAME,
+      IN_FLIGHT_CAP - this.#inFlight.size,
+    )
+    if (budget <= 0) return
     const seen = new Set<number | string>()
     const missing = wanted
       .filter((region) => {
@@ -1164,16 +1202,7 @@ export class TerrainStreamer {
         seen.add(key)
         return !this.#fields.has(key) && !this.#inFlight.has(key)
       })
-      // `Math.max(0, …)` because a negative end index slices from the *back* of
-      // the array — an over-full queue would have asked for the tail of the
-      // wanted list rather than for nothing.
-      .slice(
-        0,
-        Math.max(
-          0,
-          Math.min(REQUESTS_PER_FRAME, IN_FLIGHT_CAP - this.#inFlight.size),
-        ),
-      )
+      .slice(0, budget)
 
     for (const region of missing) {
       const key = regionKey(region)
@@ -1209,7 +1238,11 @@ export class TerrainStreamer {
           log.warn('terrain patch failed', { key, cause: String(cause) })
         })
         .finally(() => {
-          this.#inFlight.delete(key)
+          // Epoch-guarded like the result above, and for the same reason the
+          // key is body-free: after a retarget this entry belongs to the new
+          // body, and deleting it here would let the same region be asked for
+          // twice. `clear()` drops the whole set instead.
+          if (epoch === this.#epoch) this.#inFlight.delete(key)
         })
     }
   }
@@ -1294,6 +1327,19 @@ export class TerrainStreamer {
     this.#cacheEpoch += 1
     this.#fields.clear()
     this.#patches.clear()
+    /*
+     * The in-flight set goes with them, which it did not have to when the keys
+     * carried the body.
+     *
+     * `#request` filters on `!#inFlight.has(key)`, and a key is now packed
+     * arithmetic over the region alone — so a job still out for the world this
+     * discards named the *same* key the new body's roots do, and filtered the
+     * nearest-first head of the new request list out until it settled. The
+     * ground came in a heightfield's worth of latency late on every retarget,
+     * silently. The stale job's own `finally` is epoch-guarded so it cannot
+     * take a new entry with it when it lands.
+     */
+    this.#inFlight.clear()
     this.#bodyAddress = null
     this.#previous = null
     this.#scatter.clear()

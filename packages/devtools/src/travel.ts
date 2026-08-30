@@ -57,7 +57,16 @@ export interface TravelTarget {
   readonly depth: number
   /** Kind, size and orbit, already formatted for display. */
   readonly detail: string
-  /** Distance from wherever the listing was taken, right now. */
+  /**
+   * Distance from wherever the listing was taken.
+   *
+   * From the sweep that produced the row, which is not always the last one:
+   * `sameTargets` keeps a listing whose every *text* is unchanged, so a
+   * subscriber holding rows through a hover holds this number from whenever
+   * the text last moved. It is wrong by less than `distanceText`'s own
+   * resolution and by no more; anything that needs the metre wants
+   * `UV.distance` against a fresh pose rather than a row of a listing.
+   */
   readonly distance: Meters
   readonly distanceText: string
   /** Whether `land` will work: solid ground and big enough to be a place. */
@@ -115,6 +124,44 @@ export interface TravelTarget {
   readonly parent: string | null
 }
 
+/** The scalar half of a row: every field `sameTargets` compares with `!==`. */
+type ComparedField = Exclude<keyof TravelTarget, 'distance' | 'colour'>
+
+/**
+ * The comparison's field list, as a table the type checker keeps complete.
+ *
+ * A chain of `x.name !== y.name || …` is the faster spelling and the one that
+ * goes quietly stale: a field added to `TravelTarget` next year is simply
+ * absent from it, the panel stops redrawing when that field alone changes, and
+ * nothing fails. `Record` over the key set makes the omission an error at the
+ * moment the field is declared, which is the only moment anyone is looking.
+ *
+ * Two keys are deliberately not in it. `distance` is the exclusion
+ * `sameTargets` is about. `colour` is a nested value, so `!==` on it is true on
+ * every sweep and would defeat the whole bail-out; it is compared component-wise
+ * below.
+ */
+const COMPARED: Record<ComparedField, true> = {
+  kind: true,
+  address: true,
+  name: true,
+  system: true,
+  depth: true,
+  detail: true,
+  distanceText: true,
+  landable: true,
+  loaded: true,
+  provenance: true,
+  bodyKind: true,
+  spectralType: true,
+  radius: true,
+  semiMajorAxis: true,
+  children: true,
+  parent: true,
+}
+
+const COMPARED_KEYS = Object.keys(COMPARED) as readonly ComparedField[]
+
 /**
  * Whether two listings would draw the same panel.
  *
@@ -137,26 +184,7 @@ export function sameTargets(
   for (let i = 0; i < a.length; i += 1) {
     const x = a[i] as TravelTarget
     const y = b[i] as TravelTarget
-    if (
-      x.kind !== y.kind ||
-      x.address !== y.address ||
-      x.name !== y.name ||
-      x.system !== y.system ||
-      x.depth !== y.depth ||
-      x.detail !== y.detail ||
-      x.distanceText !== y.distanceText ||
-      x.landable !== y.landable ||
-      x.loaded !== y.loaded ||
-      x.provenance !== y.provenance ||
-      x.bodyKind !== y.bodyKind ||
-      x.spectralType !== y.spectralType ||
-      x.radius !== y.radius ||
-      x.semiMajorAxis !== y.semiMajorAxis ||
-      x.children !== y.children ||
-      x.parent !== y.parent
-    ) {
-      return false
-    }
+    for (const key of COMPARED_KEYS) if (x[key] !== y[key]) return false
     const cx = x.colour
     const cy = y.colour
     if (cx === null || cy === null) {

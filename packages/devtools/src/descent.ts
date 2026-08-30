@@ -219,6 +219,20 @@ export interface TerrainReport {
   /** True when the patch budget stopped the refinement a level early. */
   readonly saturated: boolean
   /**
+   * How many times the quadtree walks have actually run, since the streamer
+   * was made.
+   *
+   * A total rather than a rate, and that is what makes it readable: the walks
+   * are a pure function of the eye, the optics, the level floor and the
+   * geometry cache, so a stance or a hover holds all four still and this
+   * number stands while the frame count climbs. Two reads a second apart that
+   * differ by sixty are a selection recomputed every frame; two that agree are
+   * the memo holding. It is also the caveat on every count above: those are
+   * from the last walk rather than from this frame, so `visited` at 446 beside
+   * an unchanged `selections` describes a frame that walked nothing.
+   */
+  readonly selections: number
+  /**
    * The rocks lying on it.
    *
    * Part of the terrain report rather than a verb of its own, because a scatter

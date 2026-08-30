@@ -14,12 +14,14 @@ import type { Playhead } from '../cinema/session.ts'
  *
  * Two things it buys that `useState` in `App` did not:
  *
- *   1. **Panels can subscribe instead of being handed props.** `useStore`
- *      is `useSyncExternalStore` with a selector, so a component that reads the
- *      tick re-renders when the tick changes and not when the frame graph does.
- *      Today every panel re-renders eight times a second because `App` holds
- *      the whole status and passes it down; that is the thing this exists to
- *      let the panels stop doing.
+ *   1. **Panels subscribe instead of being handed props.** `useEngine` is
+ *      `useSyncExternalStore` with a selector, so a component that reads the
+ *      tick re-renders when the tick changes and not when the frame graph
+ *      does. `App` reads no `status` at all, which is the point: it is the
+ *      root of the whole interface, and a fresh object graph selected there
+ *      re-renders the catalog's every row eight times a second — 4–5 ms of
+ *      react-dom work per sample on the shipped build. The four panels that
+ *      display live figures pay that rate alone.
  *   2. **React Compiler stops being a hazard.** The compiler assumes what a
  *      component derives is a pure function of its inputs, which is false for a
  *      component reading mutable engine fields — hence `'use no memo'` in
@@ -28,12 +30,14 @@ import type { Playhead } from '../cinema/session.ts'
  *      needed. Do not read this as license to point panels at live engine
  *      fields; it is the argument for pointing them here instead.
  *
- * zustand rather than a hand-rolled `useSyncExternalStore`: the selector
- * subscription, the equality bail-out and `useShallow` are the whole feature,
- * they are three files of subtle code to get right, and the tearing rules
- * around concurrent React are not a thing to re-derive. The store is created by
- * a factory so a test can have its own; the module singleton below is what the
- * app uses, alongside the engine singleton in `App.tsx`, for the same reason.
+ * zustand's *vanilla* store, and React's own `useSyncExternalStore` over it —
+ * see `useEngine` for why the hook is not `zustand/react`'s. The store carries
+ * the subscription, the snapshot identity and `useShallow`, which are the whole
+ * feature and three files of subtle code to get right; the hook is four lines
+ * because the tearing rules around concurrent React live in React. The store is
+ * created by a factory so a test can have its own; the module singleton below is
+ * what the app uses, alongside the engine singleton in `App.tsx`, for the same
+ * reason.
  */
 
 /** The presentation switches, as a panel reads them. */

@@ -145,6 +145,12 @@ describe('the terrain streamer', () => {
       view.body,
     )
     expect(streamer.summary().selections).toBe(2)
+    // Asserted rather than assumed, because it is the whole reason there is a
+    // third walk: the second one turned arrived fields into meshes and
+    // `#build` bumps the epoch on each. A walk that built nothing would leave
+    // the epoch exactly where the memo compared it, and the count below would
+    // stand at two for a reason the failure could not state.
+    expect(streamer.summary().geometry).toBeGreaterThan(0)
     streamer.update(
       session.world,
       view.renderTime,
