@@ -5,7 +5,9 @@ import {
   CINEMA,
   DOCS,
   HOME,
+  KEYS,
   PLANETARIUM,
+  PLAY_SOLO,
   SETTINGS,
   cinemaScene,
   settingsSection,
@@ -15,6 +17,7 @@ import {
   SITE,
   canonicalUrl,
   documentTitle,
+  indexedPath,
   jsonLd,
   pageMetaFor,
 } from './site.ts'
@@ -133,6 +136,16 @@ describe('what a search result and a tab strip get', () => {
     // Two constants, one fact. They are separate because one is compared
     // against `location.hostname` and the other is concatenated into a URL.
     expect(SITE.origin).toBe(`https://${SITE.host}`)
+  })
+
+  it('lists documentation pages and not dialogs or stubs', () => {
+    expect(indexedPath(HOME)).toBe(true)
+    expect(indexedPath(`${DOCS}/concepts/frames`)).toBe(true)
+    expect(indexedPath(PLANETARIUM)).toBe(true)
+    expect(indexedPath(SETTINGS)).toBe(false)
+    expect(indexedPath(settingsSection('camera'))).toBe(false)
+    expect(indexedPath(KEYS)).toBe(false)
+    expect(indexedPath(PLAY_SOLO)).toBe(false)
   })
 })
 

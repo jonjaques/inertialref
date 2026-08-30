@@ -12,4 +12,4 @@ Disallow: /sign-in
 Disallow: /sign-up
 Allow: /
 
-Sitemap: https://inertialref.jonjaques.com/sitemap.xml
+Sitemap: https://inertialref.jonjaques.com/sitemap-index.xml

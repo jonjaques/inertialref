@@ -15,7 +15,7 @@ paths:
 Reasoning: `AGENTS.md` § "The rules that actually matter", `docs/hosting.md`, ADR-0011.
 
 - **Never edit a file `pnpm brand` writes.** `favicon.svg`, `favicon.ico`, `apple-touch-icon.png`,
-  `icon-*.png`, `og.png`, `manifest.webmanifest`, `robots.txt`, `sitemap.xml` and
+  `icon-*.png`, `og.png`, `manifest.webmanifest`, `robots.txt` and
   `src/icons/brandmark.ts` are all generated from `design/brand/brandmark.svg`,
   `design/brand/og-plate.png` and `src/site.ts`. Edit the source, run `pnpm brand`,
   commit the result. `pnpm brand:check` is in `pnpm check`.

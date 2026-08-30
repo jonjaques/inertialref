@@ -8,6 +8,7 @@ import {
   PLAY_ONLINE,
   PLAY_SOLO,
   SETTINGS,
+  isOverlayPath,
 } from './pages/paths.ts'
 
 /*
@@ -21,7 +22,7 @@ import {
  * `pages/DocumentMeta.tsx`   the same three tags, rewritten on an in-app
  *                            navigation that does not load a new document
  * `analytics.ts`             the one hostname that is allowed to be measured
- * `scripts/brand/build.mjs`  the share card, `robots.txt` and `sitemap.xml`
+ * `scripts/brand/build.mjs`  the share card and `robots.txt`
  *
  * A social scraper does not run JavaScript, so the layout interpolates these
  * helpers into the served HTML. `DocumentMeta` still rewrites `<title>` on a
@@ -217,6 +218,21 @@ const withoutTrailingSlash = (pathname: string): string =>
 export function canonicalUrl(pathname: string): string {
   const path = withoutTrailingSlash(pathname)
   return path === HOME ? SITE.origin : `${SITE.origin}${path}`
+}
+
+/**
+ * Whether a path belongs in the sitemap.
+ *
+ * `pageMetaFor` already knows the addressable surface; this is the other
+ * half of that question. A dialog is not a page a stranger should arrive
+ * at cold, and a stub under `/play/` is not a page at all. Documentation
+ * URLs inherit the section's `index` flag, so `/docs/concepts/frames` is
+ * listed because `/docs` is.
+ */
+export function indexedPath(pathname: string): boolean {
+  const path = withoutTrailingSlash(pathname)
+  if (isOverlayPath(path)) return false
+  return pageMetaFor(path).index
 }
 
 /* ------------------------------------------------------------------------- */
