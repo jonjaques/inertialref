@@ -224,11 +224,24 @@ export function watchPresentation(
 
   const check = (): void => {
     if (cancelled) return
-    if (probe === null) return
-    if (unsampled()) {
-      // Nothing here can be judged, so judge nothing: stand down and release
-      // the cover, the way the exhausted rung does. See `QUERY.presentation`.
-      log.info('presentation probe declared unreadable; standing down')
+    /*
+     * The two ways there is nothing to read, before anything that could read.
+     *
+     * `probe === null` is a document that would not give a 2D context —
+     * memory pressure, a fingerprint-resistant profile — and it used to return
+     * without settling, so the boot cover stayed over a scene that was
+     * rendering perfectly and no rung ever fired again. Every other terminal
+     * rung calls `onPresented`; this one has to as well, for the reason the
+     * exhausted rung does: an overlay hiding a possibly-fine scene forever is
+     * strictly worse than revealing one the log has already warned about.
+     *
+     * `unsampled()` is the driven window saying its own pixels cannot be
+     * sampled. See `QUERY.presentation`.
+     */
+    if (probe === null || unsampled()) {
+      log.info('presentation probe unreadable; standing down', {
+        reason: probe === null ? 'no probe context' : 'declared unreadable',
+      })
       standDown()
       options.onPresented?.()
       return
