@@ -1,4 +1,3 @@
-import { Link } from 'react-router'
 import { Play } from 'lucide-react'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { FOCUS_RING } from '../hud/focus.ts'
@@ -55,8 +54,8 @@ export function CinemaLibrary({ engine }: { engine: GameEngine }) {
         <ul className="flex flex-col gap-2">
           {scenes.map((entry) => (
             <li key={entry.id}>
-              <Link
-                to={cinemaScene(entry.id)}
+              <a
+                href={cinemaScene(entry.id)}
                 className={`group flex items-center gap-4 rounded-lg border border-slate-700/60 bg-slate-950/80 px-4 py-3.5 backdrop-blur transition-colors hover:border-sky-500/60 hover:bg-slate-900/80 ${FOCUS_RING}`}
               >
                 <Play className="size-4 shrink-0 text-sky-400 transition-colors group-hover:text-sky-300" />
@@ -77,7 +76,7 @@ export function CinemaLibrary({ engine }: { engine: GameEngine }) {
                       as `1:60`. */}
                   {secondsText(entry.seconds)}
                 </span>
-              </Link>
+              </a>
             </li>
           ))}
           {scenes.length === 0 && (

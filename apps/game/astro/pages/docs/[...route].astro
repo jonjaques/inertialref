@@ -1,0 +1,47 @@
+---
+import Base from '../../layouts/Base.astro'
+import Islands from '../../components/Islands.astro'
+import { DOCS } from '../../../src/pages/paths.ts'
+import { pageMetaFor } from '../../../src/site.ts'
+import {
+  DOC_PAGE_SCRIPT_ID,
+  DOC_SSR_ID,
+  docCardDescription,
+  encodeJsonScript,
+} from '../../../src/docs/urls.ts'
+import {
+  docsRoute,
+  stagedManifest,
+  stagedPage,
+  staticDocsPaths,
+} from '../../docsContent.ts'
+
+export async function getStaticPaths() {
+  const manifest = await stagedManifest()
+  return staticDocsPaths(manifest)
+}
+
+const manifest = await stagedManifest()
+const route = docsRoute(Astro.params.route)
+const page = await stagedPage(manifest, route)
+const description = docCardDescription(page.lead, pageMetaFor(DOCS).description)
+const { html, ...meta } = page
+const pageJson = encodeJsonScript(meta)
+---
+
+<Base heading={page.title} description={description} pathname={route}>
+  <Islands />
+  <!--
+    The document a scraper, a no-JS reader, and the first paint all see.
+
+    The chrome island hides this once it mounts and copies the markup into
+    the reading room. Until then — and without scripting, for the whole
+    visit — the words are the page. `set:html` is generated from files in
+    this repository by this repository's own build.
+
+    The JSON script is the rest of the page record (headings, counts,
+    source). The body is the article, not a second fetch of it.
+  -->
+  <main id={DOC_SSR_ID} class="doc-ssr doc-prose" set:html={html} />
+  <script type="application/json" id={DOC_PAGE_SCRIPT_ID} set:html={pageJson} />
+</Base>

@@ -1,20 +1,20 @@
 /*
  * The documentation, as the client sees it.
  *
- * `scripts/docs/build.mjs` writes a directory of JSON into
- * `public/doc-content/` and this is the only thing that reads it. Two shapes
- * cross that line and both are declared here rather than generated: a hand
- * written interface is a contract two programs have agreed to, and a generated
- * one is a description of whatever the generator happened to emit last. When
- * they disagree, the build is what is wrong.
+ * `scripts/docs/build.mjs` writes the manifest and the search index into
+ * `public/doc-content/` and this is the only thing that reads them. Page
+ * bodies are HTML in the document; `fromDocument.ts` is the reader. Two
+ * shapes cross the fetch line and both are declared here rather than
+ * generated: a hand-written interface is a contract two programs have
+ * agreed to, and a generated one is a description of whatever the
+ * generator happened to emit last. When they disagree, the build is what
+ * is wrong.
  *
- * **Nothing is bundled.** The manifest, the search index and every page are
- * fetched. That is a decision about ninety per cent of the visitors to this
- * site, who never open the documentation at all and should not be paying for
- * 180 KB of it in the bundle that draws the galaxy — and it costs the reader
- * one round trip on a same-origin file the service worker serves
- * stale-while-revalidate, which is to say approximately nothing on the second
- * visit and nothing at all offline.
+ * **The search index is not bundled.** It is half a megabyte for the
+ * readers who type and nobody else. The manifest is one round trip on a
+ * same-origin file the service worker serves stale-while-revalidate, and
+ * embedding it in every documentation document would pay its size on
+ * every navigation.
  */
 
 /** Where the build stages its output. Mirrors `OUT` in `scripts/docs/build.mjs`. */
@@ -202,69 +202,24 @@ export function loadSearchIndex(): Promise<SearchIndex> {
   return searchIndex
 }
 
-const pages = new Map<string, Promise<DocPage>>()
-
-/**
- * One page's body.
- *
- * Cached by asset name rather than by route, so the cache cannot serve the
- * previous build's copy of a page after a deploy changed it — the name carries
- * a digest of the route and the manifest carries the name, so a manifest from a
- * new build asks for new files.
- *
- * The retry is the one interesting line. `public/sw.js` serves this directory
- * stale-while-revalidate, and the manifest and the pages are not written
- * atomically, so for one request after a deploy a fresh manifest can name a
- * page the cache has never seen and the origin has only just gained. Asking
- * again past the cache turns that into a slower first load instead of an error
- * on a page that exists.
- *
- * **Past a different cache than the one it looks like.** `cache: 'reload'`
- * bypasses the HTTP cache, and the service worker is not one: it answers from
- * Cache Storage, and `Cache.match` keys on the URL alone — it has never heard
- * of a request's cache mode. So the retry asks for a *different* URL, which is
- * the only thing a `caches.match` can miss on. The query is ignored by the
- * asset store and the file that comes back is the same one.
- */
-export function loadPage(entry: DocEntry): Promise<DocPage> {
-  const url = `${CONTENT}/page/${entry.asset}`
-  const existing = pages.get(entry.asset)
-  if (existing !== undefined) return existing
-
-  const promise = fetchJson<DocPage>(url)
-    .catch((cause: unknown) => {
-      if (!(cause instanceof NotFound)) throw cause
-      return fetchJson<DocPage>(`${url}?retry=1`, { cache: 'reload' })
-    })
-    .catch((cause: unknown) => {
-      pages.delete(entry.asset)
-      throw cause
-    })
-  pages.set(entry.asset, promise)
-  return promise
-}
-
 /** A miss, kept apart from every other reason a fetch can fail. */
 class NotFound extends Error {}
 
 /**
  * One staged file, or a miss.
  *
- * **A miss is detected by content type as well as by status, and that is not a
- * heuristic.** The Worker serves this origin with
- * `not_found_handling: single-page-application`, so the asset store answers a
- * path it does not have with `index.html` and a **200** — there is no status
- * code to test. Nothing under `/doc-content/` is ever HTML, so an HTML answer
- * to a request for a `.json` is unambiguous. `apps/server/src/serveMedia.ts`
- * reached the same conclusion for `/media/` and carries the longer argument.
+ * **A miss is detected by content type as well as by status.** Nothing
+ * under `/doc-content/` is ever HTML, so an HTML answer to a request for a
+ * `.json` is the 404 document (or an SPA document) wearing that URL.
+ * Status 404 is the honest miss; content-type is the 200 that is still the
+ * wrong bytes. `apps/server/src/serveMedia.ts` reached the same conclusion
+ * for `/media/` and carries the longer argument.
  *
- * Trusting the 200 costs both of the things this distinction is for: the
- * manifest's absence would arrive as a JSON parse error rather than as
- * `DocsMissingError` and its exact fix, and `loadPage`'s re-fetch past the
- * cache — the one that recovers the window after a deploy where a fresh
- * manifest names a page the cache has not seen — would never fire.
+ * Trusting the 200 costs the thing this distinction is for: the manifest's
+ * absence would arrive as a JSON parse error rather than as
+ * `DocsMissingError` and its exact fix.
  *
- * `404` stays in the test because the dev server does answer with one, and
+ * `404` is in the test because the dev server does answer with one, and
  * because the deployment is not the only thing that ever serves these.
  */
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {

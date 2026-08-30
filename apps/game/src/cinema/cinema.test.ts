@@ -4,9 +4,12 @@ import {
   cinemaLink,
   cinemaScene,
   modeForPath,
+  modeHasBootCover,
   planetariumLink,
   QUERY,
+  stanceForPath,
 } from '../pages/paths.ts'
+import { MENU_FLARE_ARTIFACTS } from '../pages/menuFraming.ts'
 import {
   durationText,
   parseAutoplay,
@@ -228,5 +231,59 @@ describe('the mode a path runs in', () => {
     expect(modeForPath('/planetariums')).toBe('menu')
     expect(modeForPath('/cinemascope')).toBe('menu')
     expect(modeForPath('/playground')).toBe('menu')
+  })
+})
+
+describe('the boot cover', () => {
+  it('covers the interactive modes and not the content pages', () => {
+    // A word of prose is the document; an unlit canvas behind it is a backdrop
+    // arriving late, not a page that is not there. A planetarium or a cockpit
+    // with no scene yet is a black hole in the mode's own box.
+    expect(modeHasBootCover('menu')).toBe(false)
+    expect(modeHasBootCover('docs')).toBe(false)
+    expect(modeHasBootCover('flight')).toBe(true)
+    expect(modeHasBootCover('planetarium')).toBe(true)
+    expect(modeHasBootCover('cinema')).toBe(true)
+  })
+})
+
+describe('the stance a path asks for', () => {
+  it('is the menu on the front door and on a cold overlay', () => {
+    const menu = stanceForPath('/')
+    expect(menu).toEqual({
+      showShip: false,
+      flareArtifacts: MENU_FLARE_ARTIFACTS,
+      observatory: true,
+    })
+    expect(stanceForPath('/settings')).toEqual(menu)
+    expect(stanceForPath('/about')).toEqual(menu)
+  })
+
+  it('holds the ship and the observatory for the reading room', () => {
+    expect(stanceForPath('/docs')).toEqual({
+      showShip: false,
+      showOrbits: false,
+      flareArtifacts: MENU_FLARE_ARTIFACTS,
+      observatory: true,
+    })
+    expect(stanceForPath('/docs/concepts/frames')).toEqual(
+      stanceForPath('/docs'),
+    )
+  })
+
+  it('gives flight the chase camera on a visible ship', () => {
+    expect(stanceForPath('/play/solo')).toEqual({
+      showShip: true,
+      showOrbits: false,
+      observatory: false,
+    })
+  })
+
+  it('claims the observatory for the planetarium and releases it for cinema', () => {
+    expect(stanceForPath('/planetarium')).toEqual({ observatory: true })
+    expect(stanceForPath('/cinema')).toEqual({
+      showShip: false,
+      observatory: false,
+    })
   })
 })

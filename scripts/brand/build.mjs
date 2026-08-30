@@ -20,7 +20,7 @@
  *     apps/game/public/icon-maskable-512.png ...and the one Android crops
  *     apps/game/public/og.png                the share card
  *     apps/game/public/manifest.webmanifest  the install manifest
- *     apps/game/public/robots.txt            + sitemap.xml
+ *     apps/game/public/robots.txt
  *     apps/game/src/icons/brandmark.ts       the paths, for <Logomark>
  *
  * **Why a generator and not ten hand-kept files.** There were three copies of
@@ -41,7 +41,7 @@ import { readFile, readdir, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { relative } from 'node:path'
 import { format, getFileInfo, resolveConfig } from 'prettier'
-import { PAGES, SITE, canonicalUrl } from '../../apps/game/src/site.ts'
+import { SITE } from '../../apps/game/src/site.ts'
 import { checkPublicSurface } from './checkHead.mjs'
 import { readMark, fit, markup, measure } from './mark.mjs'
 import { composeOgCard, OG_HEIGHT, OG_PLATE, OG_WIDTH } from './og.mjs'
@@ -232,26 +232,7 @@ User-agent: *
 ${blocked.map((path) => `Disallow: ${path}`).join('\n')}
 Allow: /
 
-Sitemap: ${SITE.origin}/sitemap.xml
-`
-}
-
-function sitemap() {
-  /*
-   * Deliberately just `<loc>`. `<changefreq>` and `<priority>` are ignored by
-   * every major crawler, and `<lastmod>` would have to come from the wall clock
-   * — a field that changes on every build and means nothing is worse than an
-   * absent one, because a crawler that learns to distrust it distrusts the
-   * whole file.
-   */
-  const urls = PAGES.filter((page) => page.index)
-    .map((page) => `  <url><loc>${canonicalUrl(page.path)}</loc></url>`)
-    .join('\n')
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<!-- ${GENERATED} The list is PAGES in apps/game/src/site.ts. -->
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${urls}
-</urlset>
+Sitemap: ${SITE.origin}/sitemap-index.xml
 `
 }
 
@@ -333,7 +314,6 @@ async function main() {
     [new URL('favicon.svg', PUBLIC), faviconSvg(mark, box)],
     [new URL('manifest.webmanifest', PUBLIC), manifest()],
     [new URL('robots.txt', PUBLIC), robots()],
-    [new URL('sitemap.xml', PUBLIC), sitemap()],
     [
       new URL('icons/brandmark.ts', new URL('apps/game/src/', ROOT)),
       brandmarkModule(mark, box),
@@ -385,7 +365,10 @@ async function main() {
      * anyone to re-run anything.
      */
     const surface = checkPublicSurface({
-      html: await readFile(new URL('apps/game/index.html', ROOT), 'utf8'),
+      html: await readFile(
+        new URL('apps/game/astro/layouts/Base.astro', ROOT),
+        'utf8',
+      ),
       sw: await readFile(new URL('sw.js', PUBLIC), 'utf8'),
       publicFiles: new Set(await readdir(PUBLIC)),
     })
@@ -393,13 +376,13 @@ async function main() {
       console.error('The static head disagrees with apps/game/src/site.ts:')
       for (const problem of surface) console.error(`  - ${problem}`)
       console.error(
-        '\nEdit apps/game/index.html to match, or src/site.ts if the head is right.',
+        '\nEdit apps/game/astro/layouts/Base.astro to match, or src/site.ts if the head is right.',
       )
       process.exitCode = 1
       return
     }
     console.log('brand artifacts match design/brand/brandmark.svg')
-    console.log('index.html and sw.js match apps/game/src/site.ts')
+    console.log('the document head and sw.js match apps/game/src/site.ts')
     return
   }
 

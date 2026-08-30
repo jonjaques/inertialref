@@ -1,12 +1,12 @@
 import { useRef, useState } from 'react'
-import { Link, useLocation } from 'react-router'
 import { ChevronDown, ChevronUp, Rows3, SlidersHorizontal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { ErrorBoundary } from '../hud/ErrorBoundary.tsx'
 import { FOCUS_RING, releaseFocus } from '../hud/focus.ts'
 import { Logomark } from '../icons/Logomark.tsx'
-import { HOME, overlayState, SETTINGS } from '../pages/paths.ts'
+import { OverlayLink } from '../pages/OverlayLink.tsx'
+import { HOME, SETTINGS } from '../pages/paths.ts'
 import { CompactTab } from './CompactTab.tsx'
 import type { DockLayout } from './layout.ts'
 import { openPanels } from './layout.ts'
@@ -73,7 +73,6 @@ export function CompactDock({
   /** The name of the place, beside the mark — as in the IR menu. */
   mode: string
 }) {
-  const location = useLocation()
   const available = openPanels(panels, layout)
 
   /*
@@ -225,14 +224,14 @@ export function CompactDock({
           paddingBottom: 'max(0.375rem, var(--safe-bottom))',
         }}
       >
-        <Link
-          to={HOME}
+        <a
+          href={HOME}
           aria-label="Back to the menu"
           className={`flex min-h-11 shrink-0 items-center gap-2 rounded px-2 text-slate-300 transition-colors active:bg-slate-800/60 ${FOCUS_RING}`}
         >
           <Logomark className="size-4 shrink-0" />
           <span className="type-label truncate">{mode}</span>
-        </Link>
+        </a>
 
         {/*
          * The panel toggle sits in the middle and takes the slack, so the two
@@ -284,14 +283,13 @@ export function CompactDock({
           className="mx-0.5 !h-5 bg-slate-800"
         />
 
-        <Link
+        <OverlayLink
           to={SETTINGS}
-          state={overlayState(location)}
           aria-label="Settings"
           className={`flex size-11 shrink-0 items-center justify-center rounded text-slate-400 transition-colors active:bg-slate-800/60 ${FOCUS_RING}`}
         >
           <SlidersHorizontal className="size-4" />
-        </Link>
+        </OverlayLink>
       </nav>
     </div>
   )

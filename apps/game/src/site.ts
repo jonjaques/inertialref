@@ -8,30 +8,26 @@ import {
   PLAY_ONLINE,
   PLAY_SOLO,
   SETTINGS,
+  isOverlayPath,
 } from './pages/paths.ts'
 
 /*
  * Who this site says it is.
  *
- * One module, read by four things that would otherwise each carry their own
- * copy of the same sentence and drift:
+ * One module, read by everything that would otherwise carry its own copy of
+ * the same sentence and drift:
  *
- *   - `pages/DocumentMeta.tsx`   the title, description and canonical link on
- *                                every navigation
- *   - `analytics.ts`             the one hostname that is allowed to be measured
- *   - `scripts/brand/build.mjs`  the share card, `robots.txt` and `sitemap.xml`
- *   - `index.html`               by hand, and only for the home page — see below
+ * `astro/layouts/Base.astro` the document a scraper reads: title, description,
+ *                            canonical, Open Graph, Twitter, JSON-LD
+ * `pages/DocumentMeta.tsx`   the same three tags, rewritten on an in-app
+ *                            navigation that does not load a new document
+ * `analytics.ts`             the one hostname that is allowed to be measured
+ * `scripts/brand/build.mjs`  the share card and `robots.txt`
  *
- * **`index.html` is the exception and it is deliberate.** A social scraper does
- * not run JavaScript, so whatever this module computes at runtime is invisible
- * to the card Slack or iMessage draws. The static head is what those read, and
- * it is written for the home page because the SPA fallback serves that same
- * document for every path. Keeping it in step is a hand job with a pointer at
- * both ends; the alternative is routing every navigation through the Worker so
- * `HTMLRewriter` can rewrite four tags, which turns a free static asset request
- * into a billed invocation on every page load. `docs/hosting.md` records that
- * trade as the seam to revisit if per-route cards ever matter more than they do
- * for a project with two shareable pages.
+ * A social scraper does not run JavaScript, so the layout interpolates these
+ * helpers into the served HTML. `DocumentMeta` still rewrites `<title>` on a
+ * client-side navigation, because until every mode is its own document the
+ * chrome island changes the path without changing the page.
  *
  * Node runs this file directly (type stripping) so the build scripts can import
  * it. Nothing here may touch the DOM, React or `import.meta.env`.
@@ -164,6 +160,23 @@ export const PAGES: readonly PageMeta[] = [
 const ROOT = PAGES[PAGES.length - 1] as PageMeta
 
 /**
+ * The path a scraper, a sitemap entry and a tab title agree on.
+ *
+ * A trailing slash is the same page. Astro `build.format: 'file'` writes
+ * `planetarium.html`, and for a layout that reads `Astro.url.pathname`
+ * that *is* the pathname — so `/index.html` is `/`, and
+ * `/docs/concepts/frames.html` is `/docs/concepts/frames`. The sitemap
+ * lists the extensionless form. Two canonicals for one page is the split
+ * the tag exists to prevent.
+ */
+export function publicPath(pathname: string): string {
+  let path = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname
+  if (path.endsWith('.html')) path = path.slice(0, -'.html'.length)
+  if (path === '/index' || path === '') return HOME
+  return path
+}
+
+/**
  * The metadata for a path, by longest matching prefix.
  *
  * A prefix rather than an exact match because the addressable surface is
@@ -173,7 +186,7 @@ const ROOT = PAGES[PAGES.length - 1] as PageMeta
  * the top of this file says why that is not free.
  */
 export function pageMetaFor(pathname: string): PageMeta {
-  const path = withoutTrailingSlash(pathname)
+  const path = publicPath(pathname)
   return (
     PAGES.find(
       (page) =>
@@ -190,33 +203,110 @@ export function pageMetaFor(pathname: string): PageMeta {
  * em dash: a tab strip truncates from the right, so the half that survives at
  * 120 px has to be the half that says where you are.
  */
-export function documentTitle(page: PageMeta): string {
-  return page.path === HOME
+export function documentTitle(
+  page: PageMeta,
+  heading: string = page.title,
+): string {
+  return page.path === HOME && heading === page.title
     ? `${SITE.name} — ${SITE.tagline}`
-    : `${page.title} · ${SITE.name}`
+    : `${heading} · ${SITE.name}`
 }
-
-/**
- * `/planetarium/` and `/planetarium` are one page, so they get one spelling.
- *
- * `/` is left alone — it is the only path where the slash is the path rather
- * than a separator with nothing after it.
- */
-const withoutTrailingSlash = (pathname: string): string =>
-  pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname
 
 /**
  * The absolute URL for a path, for a canonical link or a sitemap entry.
  *
  * Normalized, and that is the whole reason this is a function rather than a
  * template literal at each call site. `pageMetaFor` already treats a trailing
- * slash as the same page and `sitemap.xml` lists the slash-less form — so a
- * visitor arriving at a shared `/planetarium/` link used to be served a
- * self-referencing canonical that disagreed with the sitemap. Two canonicals
- * for one page is the exact duplicate-content split the tag exists to prevent,
- * and it split the analytics `page_location` the same way.
+ * slash as the same page and the sitemap lists the slash-less, extensionless
+ * form — so a visitor arriving at a shared `/planetarium/` or
+ * `/planetarium.html` link is served one canonical. Two canonicals for one
+ * page is the exact duplicate-content split the tag exists to prevent, and it
+ * split the analytics `page_location` the same way.
  */
 export function canonicalUrl(pathname: string): string {
-  const path = withoutTrailingSlash(pathname)
+  const path = publicPath(pathname)
   return path === HOME ? SITE.origin : `${SITE.origin}${path}`
+}
+
+/**
+ * Whether a path belongs in the sitemap.
+ *
+ * `pageMetaFor` already knows the addressable surface; this is the other
+ * half of that question. A dialog is not a page a stranger should arrive
+ * at cold, and a stub under `/play/` is not a page at all. Documentation
+ * URLs inherit the section's `index` flag, so `/docs/concepts/frames` is
+ * listed because `/docs` is.
+ */
+export function indexedPath(pathname: string): boolean {
+  const path = publicPath(pathname)
+  if (path === '/404') return false
+  if (isOverlayPath(path)) return false
+  return pageMetaFor(path).index
+}
+
+/* ------------------------------------------------------------------------- */
+/* Structured data                                                            */
+/* ------------------------------------------------------------------------- */
+
+/**
+ * The JSON-LD graph every page carries.
+ *
+ * Two nodes because they answer two different questions: `WebSite` is "what
+ * is at this address", and `SoftwareApplication` is "what is the thing".
+ * `isAccessibleForFree`, `offers` at zero and the license are not decoration
+ * — they are the machine-readable form of the claim the front page makes in
+ * prose, and they are what stops it being classified as a demo for something
+ * purchasable.
+ *
+ * Per-page Open Graph lives beside this. The graph is the product, not the
+ * path, so it is the same on every document.
+ */
+export function jsonLd(): object {
+  const authorId = `${SITE.origin}/#author`
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'WebSite',
+        '@id': `${SITE.origin}/#website`,
+        url: SITE.origin,
+        name: SITE.name,
+        description:
+          'An open-source spaceflight simulator that runs in a browser tab.',
+        inLanguage: 'en',
+        publisher: { '@id': authorId },
+      },
+      {
+        '@type': 'Person',
+        '@id': authorId,
+        name: SITE.author,
+        url: 'https://github.com/jonjaques',
+      },
+      {
+        '@type': ['SoftwareApplication', 'VideoGame'],
+        '@id': `${SITE.origin}/#app`,
+        name: SITE.name,
+        url: SITE.origin,
+        applicationCategory: 'GameApplication',
+        applicationSubCategory: 'Space flight simulator',
+        operatingSystem: 'Any modern web browser with WebGPU',
+        browserRequirements: 'Requires WebGPU',
+        description:
+          'A spaceflight simulator whose universe is a deterministic function of a seed and a real star catalog: 7,123 cataloged systems and 702 known planets within 150 light years, and generated content beyond that. Runs offline, with nothing to install.',
+        image: `${SITE.origin}${SITE.socialImage}`,
+        screenshot: `${SITE.origin}${SITE.socialImage}`,
+        author: { '@id': authorId },
+        codeRepository: SITE.repository,
+        license: 'https://www.apache.org/licenses/LICENSE-2.0',
+        isAccessibleForFree: true,
+        offers: {
+          '@type': 'Offer',
+          price: '0',
+          priceCurrency: 'USD',
+        },
+        genre: ['Simulation', 'Space flight'],
+        gamePlatform: 'Web browser',
+      },
+    ],
+  }
 }

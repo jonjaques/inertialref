@@ -95,11 +95,11 @@ export interface MediaStores {
  * rather than a missing feature. `media.ts` has the whole arrangement.
  *
  * **The miss is detected by content type, and that is not a heuristic.**
- * `not_found_handling: single-page-application` means the asset store answers a
- * path it does not have with `index.html` and a **200**, so there is no status
- * code to test. Nothing under `/media/` is ever HTML, so an HTML answer to a
- * request for an `.mp3` is unambiguous — and the alternative, trusting the 200,
- * hands an `<audio>` element a page of markup.
+ * A path the asset store does not have comes back as HTML — the 404
+ * document, or an SPA document wearing that URL. Nothing under `/media/`
+ * is ever HTML, so an HTML answer to a request for an `.mp3` is
+ * unambiguous — and the alternative, trusting the status, hands an
+ * `<audio>` element a page of markup.
  *
  * **The asset store does not serve ranges**, which is the second reason R2 is
  * here. Measured against the deployed review app: a `Range: bytes=0-1023` for

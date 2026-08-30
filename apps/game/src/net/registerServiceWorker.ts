@@ -23,9 +23,9 @@
  * had ever opened twice.
  *
  * Deferring to `load` at all is still right when it has not fired: the worker's
- * install fetches `/`, `/index.html` and the icons, and doing that while the
- * page is still pulling its own critical path is bandwidth taken from the thing
- * the player is waiting for.
+ * install fetches `/`, `/planetarium`, `/cinema`, `/docs` and the icons, and
+ * doing that while the page is still pulling its own critical path is
+ * bandwidth taken from the thing the player is waiting for.
  */
 
 /**
@@ -52,7 +52,7 @@ export interface RegistrationOptions {
    * compiled, so nothing can be injected into it. Registering a *different* URL
    * is what makes the browser install a new worker, and the worker reads the id
    * back off its own location to name its cache (`sw.js`'s `BUILD`) — which is
-   * how a deploy stops inheriting the last one's precached `index.html`.
+   * how a deploy stops inheriting the last one's precached `/`.
    */
   readonly buildId: string
   readonly warn?: (message: string, cause: unknown) => void

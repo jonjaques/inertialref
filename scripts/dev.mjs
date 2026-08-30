@@ -14,8 +14,8 @@
  * So: one command, two children, one lifetime. Nothing here changes what either
  * process does.
  *
- *     pnpm dev        vite on 5173, wrangler on 8787, /api and /ws proxied
- *     pnpm dev:client just vite — raw stdio, so its `r`/`o`/`q` keys work
+ *     pnpm dev        astro on 5173, wrangler on 8787, /api and /ws proxied
+ *     pnpm dev:client just astro — raw stdio, so its `r`/`o`/`q` keys work
  *     pnpm dev:server just wrangler
  *     pnpm preview    the built bundle served by the real Worker, on 8787
  *     node scripts/dev.mjs --ensure
@@ -25,11 +25,11 @@
  *
  * `preview` is the one that answers "as close to production as possible": the
  * same workerd, the same static asset store, the same `run_worker_first` and
- * SPA fallback, and the service worker actually registers because the build is
- * a production build. `dev` is the fast loop and is a *proxy* — the assets come
- * from Vite, so asset headers and the SPA fallback are Vite's, not
- * Cloudflare's. When a bug is about how something is *served*, reach for
- * `preview`.
+ * 404-page handling, and the service worker actually registers because the
+ * build is a production build. `dev` is the fast loop and is a *proxy* — the
+ * assets come from Astro's Vite, so asset headers and unmatched-path
+ * handling are the client's, not Cloudflare's. When a bug is about how
+ * something is *served*, reach for `preview`.
  */
 import { spawn } from 'node:child_process'
 import { createConnection } from 'node:net'

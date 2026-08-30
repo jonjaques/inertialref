@@ -1,10 +1,9 @@
-import { Link } from 'react-router'
+import { OverlayLink } from './OverlayLink.tsx'
 import { FOCUS_RING } from '../hud/focus.ts'
 import { KeySheet } from '../input/KeySheet.tsx'
 import { LIVE_SETS } from '../input/keymap.ts'
 import { OverlayPage } from './OverlayPage.tsx'
 import { settingsSection } from './paths.ts'
-import { useOverlay } from './useOverlay.ts'
 
 /**
  * Every key, from any mode.
@@ -22,20 +21,18 @@ import { useOverlay } from './useOverlay.ts'
  * each run, so what applies right now is still legible.
  */
 export function KeysPage() {
-  const { keep } = useOverlay()
   return (
     <OverlayPage title="Keys" subtitle="Every binding this build has">
       <KeySheet contexts={ALL_CONTEXTS} columns={2} />
       <p className="mt-3 border-t border-slate-800 pt-2 text-pretty text-slate-400">
         A chord is the physical key, so a binding survives a change of keyboard
         layout.{' '}
-        <Link
+        <OverlayLink
           to={settingsSection('controls')}
-          state={keep}
           className={`text-sky-300/80 transition-colors hover:text-sky-200 ${FOCUS_RING}`}
         >
           Rebind them
-        </Link>{' '}
+        </OverlayLink>{' '}
         in Settings.
       </p>
     </OverlayPage>

@@ -149,10 +149,10 @@ describe('serveMedia', () => {
 
   it('falls through to R2 when the asset store answers the page', async () => {
     /*
-     * `not_found_handling: single-page-application` returns index.html with a
-     * **200**, so there is no status code to test. Handing that to an `<audio>`
-     * element fails as though the file could not be decoded — which is what
-     * makes the content-type test a rule rather than a heuristic.
+     * A miss from the asset store is HTML — the 404 document, or an SPA
+     * document wearing that URL. Handing that to an `<audio>` element fails
+     * as though the file could not be decoded, which is what makes the
+     * content-type test a rule rather than a heuristic.
      */
     const response = await serveMedia(
       get(),

@@ -368,6 +368,34 @@ body,
 }
 
 /*
+ * The island is a wrapper Astro inserts around each React tree. `display:
+ * contents` makes it invisible to layout so `#root` still has the canvas and
+ * the chrome as siblings that fill it — rather than a second box whose height
+ * is auto and whose canvas is zero. Two islands, same trick: both wrappers
+ * vanish and the document sees the canvas, then the HUD, then `#boot`,
+ * then the served documentation article when there is one.
+ */
+astro-island {
+  display: contents;
+}
+
+/*
+ * The documentation document, as served HTML.
+ *
+ * `#root` does not scroll, so this has to — and it sits at z-index 1 so
+ * the first paint is the words, not the unlit canvas. The chrome island
+ * hides `#doc-ssr` when the reading room mounts. Without scripting it
+ * stays, and it is the page.
+ */
+.doc-ssr {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: auto;
+  padding: 3rem 1.5rem 4rem;
+}
+
+/*
  * The installed copy, where `dvh` is short by the status bar.
  *
  * `100dvh` is the right unit in a browser tab and the wrong one on the home

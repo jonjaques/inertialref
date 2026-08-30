@@ -1,0 +1,19 @@
+---
+import Base from '../../layouts/Base.astro'
+import Islands from '../../components/Islands.astro'
+
+export function getStaticPaths() {
+  return [
+    { params: { section: 'display' } },
+    { params: { section: 'camera' } },
+    { params: { section: 'controls' } },
+    { params: { section: 'data' } },
+  ]
+}
+
+const { section } = Astro.params
+---
+
+<Base pathname={`/settings/${section}`} heading="Settings">
+  <Islands />
+</Base>

@@ -1,3 +1,52 @@
+---
+import { ClientRouter } from 'astro:transitions'
+import '../../src/index.css'
+import {
+  SITE,
+  canonicalUrl,
+  documentTitle,
+  jsonLd,
+  pageMetaFor,
+} from '../../src/site.ts'
+
+interface Props {
+  /**
+   * The path this document is served at.
+   *
+   * Defaults to `Astro.url.pathname`, which is the page's own path during
+   * a build. A caller passes it only when the file that owns `<html>` is
+   * not the file that owns the URL — there is no such caller yet.
+   */
+  pathname?: string
+  /**
+   * The page's own title, when it is more specific than `pageMetaFor`.
+   *
+   * A documentation page is "Reference frames", not "Documentation". The
+   * tab strip truncates from the right, so the half that survives has to
+   * be the half that says where you are.
+   */
+  heading?: string
+  /**
+   * The page's own description, when it is more specific than `pageMetaFor`.
+   *
+   * Same reason as `heading`: the card for `/docs/concepts/frames` is
+   * about reference frames, not about the documentation section.
+   */
+  description?: string
+}
+
+const pathname = Astro.props.pathname ?? Astro.url.pathname
+const meta = pageMetaFor(pathname)
+const page =
+  Astro.props.description === undefined
+    ? meta
+    : { ...meta, description: Astro.props.description }
+const title = documentTitle(meta, Astro.props.heading)
+const canonical = canonicalUrl(pathname)
+const image = `${SITE.origin}${SITE.socialImage}`
+const ld = JSON.stringify(jsonLd())
+---
+
 <!doctype html>
 <!--
   `class="dark"` rather than a media query.
@@ -9,7 +58,7 @@
   `src/index.css` redefines the variant to key off it. Without this the whole
   registry renders in its light values on a machine set to light.
 -->
-<html lang="en" class="dark">
+<html lang="en" class="dark" transition:animate="none">
   <head>
     <meta charset="UTF-8" />
     <!--
@@ -59,35 +108,28 @@
     <meta name="color-scheme" content="dark" />
 
     <!--
-      THE STATIC HEAD, AND WHY IT IS HAND-KEPT.
+      THE DOCUMENT HEAD.
 
-      Everything from here to the JSON-LD block is duplicated from
-      `src/site.ts`, on purpose, and the two have to be changed together. The
-      reason is the one thing about a single-page application that no amount of
-      client-side care fixes: **a social scraper does not run JavaScript.**
-      Slack, iMessage, Discord, Bluesky and every other unfurler read the
-      document as it arrives off the wire, so an `og:title` written by React is
-      an `og:title` no card has ever seen.
+      Interpolated from `src/site.ts`, which is the only place the product
+      names itself. A social scraper does not run JavaScript, so whatever
+      React later writes into these tags is invisible to the card Slack or
+      iMessage draws — the values here are the card.
 
-      Because `not_found_handling` is `single-page-application`, this exact
-      document is served for *every* path — so what is written here is the
-      card for the whole site, and it is therefore written for the home page.
-      `pages/DocumentMeta.tsx` updates `<title>`, the description and the
-      canonical link per route, which covers the readers that *do* execute
-      scripts: the browser, Googlebot, an agent driving a headless browser.
+      Unmatched paths are `404.astro` — the menu, with a 404 status — so a
+      typed URL that is not a page still answers "where am I" rather than
+      wearing the home page's card. The chrome island's `DocumentMeta`
+      rewrites `<title>` on an in-app navigation that does not load a new
+      document.
 
-      Making the Open Graph tags per-route means running the Worker on every
-      navigation so `HTMLRewriter` can rewrite four tags — which turns a free
-      static asset request into a billed invocation on every page load.
-      `docs/hosting.md` records that as a deliberate seam, not an oversight.
+      Per-route Open Graph is free at build time. Routing every navigation
+      through the Worker so `HTMLRewriter` can rewrite four tags would turn
+      a free asset request into a billed invocation, which is the trade
+      `docs/hosting.md` § H-7 declines.
     -->
-    <title>InertialRef — A real sky, in a browser tab</title>
-    <meta
-      name="description"
-      content="An open-source spaceflight simulator in a browser tab. The Milky Way is the real one — 7,123 cataloged systems within 150 light years, the rest from a seed."
-    />
-    <link rel="canonical" href="https://inertialref.jonjaques.com" />
-    <meta name="author" content="Jon Jaques" />
+    <title>{title}</title>
+    <meta name="description" content={page.description} />
+    <link rel="canonical" href={canonical} />
+    <meta name="author" content={SITE.author} />
     <!-- `max-image-preview:large` is what lets the share card be the card in a
          search result rather than a thumbnail. The rest is the default, stated
          because a missing robots tag and an explicit one read the same to a
@@ -122,10 +164,10 @@
       black sky while the bundle loads.
     -->
     <link rel="manifest" href="/manifest.webmanifest" />
-    <meta name="theme-color" content="#020617" />
+    <meta name="theme-color" content={SITE.background} />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-title" content="InertialRef" />
+    <meta name="apple-mobile-web-app-title" content={SITE.name} />
     <meta
       name="apple-mobile-web-app-status-bar-style"
       content="black-translucent"
@@ -136,20 +178,11 @@
          absolute URL: a relative one resolves against the scraper, not the
          site, and simply produces a card with no picture. -->
     <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="InertialRef" />
-    <meta
-      property="og:title"
-      content="InertialRef — A real sky, in a browser tab"
-    />
-    <meta
-      property="og:description"
-      content="An open-source spaceflight simulator in a browser tab. The Milky Way is the real one — 7,123 cataloged systems within 150 light years, the rest from a seed."
-    />
-    <meta property="og:url" content="https://inertialref.jonjaques.com" />
-    <meta
-      property="og:image"
-      content="https://inertialref.jonjaques.com/og.png"
-    />
+    <meta property="og:site_name" content={SITE.name} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={page.description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={image} />
     <meta property="og:image:type" content="image/png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
@@ -159,18 +192,9 @@
     />
     <meta property="og:locale" content="en" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta
-      name="twitter:title"
-      content="InertialRef — A real sky, in a browser tab"
-    />
-    <meta
-      name="twitter:description"
-      content="An open-source spaceflight simulator that runs in a browser tab. The Milky Way is the real one, derived rather than downloaded."
-    />
-    <meta
-      name="twitter:image"
-      content="https://inertialref.jonjaques.com/og.png"
-    />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={page.description} />
+    <meta name="twitter:image" content={image} />
 
     <!--
       Structured data, for search engines and for the agents that read a page
@@ -186,76 +210,41 @@
       `/llms.txt` is the long-form version of the same, written for a reader
       that is not a person.
     -->
-    <script type="application/ld+json">
-      {
-        "@context": "https://schema.org",
-        "@graph": [
-          {
-            "@type": "WebSite",
-            "@id": "https://inertialref.jonjaques.com/#website",
-            "url": "https://inertialref.jonjaques.com",
-            "name": "InertialRef",
-            "description": "An open-source spaceflight simulator that runs in a browser tab.",
-            "inLanguage": "en",
-            "publisher": { "@id": "https://inertialref.jonjaques.com/#author" }
-          },
-          {
-            "@type": "Person",
-            "@id": "https://inertialref.jonjaques.com/#author",
-            "name": "Jon Jaques",
-            "url": "https://github.com/jonjaques"
-          },
-          {
-            "@type": ["SoftwareApplication", "VideoGame"],
-            "@id": "https://inertialref.jonjaques.com/#app",
-            "name": "InertialRef",
-            "url": "https://inertialref.jonjaques.com",
-            "applicationCategory": "GameApplication",
-            "applicationSubCategory": "Space flight simulator",
-            "operatingSystem": "Any modern web browser with WebGPU",
-            "browserRequirements": "Requires WebGPU",
-            "description": "A spaceflight simulator whose universe is a deterministic function of a seed and a real star catalog: 7,123 cataloged systems and 702 known planets within 150 light years, and generated content beyond that. Runs offline, with nothing to install.",
-            "image": "https://inertialref.jonjaques.com/og.png",
-            "screenshot": "https://inertialref.jonjaques.com/og.png",
-            "author": { "@id": "https://inertialref.jonjaques.com/#author" },
-            "codeRepository": "https://github.com/jonjaques/inertialref",
-            "license": "https://www.apache.org/licenses/LICENSE-2.0",
-            "isAccessibleForFree": true,
-            "offers": {
-              "@type": "Offer",
-              "price": "0",
-              "priceCurrency": "USD"
-            },
-            "genre": ["Simulation", "Space flight"],
-            "gamePlatform": "Web browser"
-          }
-        ]
-      }
-    </script>
+    <script type="application/ld+json" set:html={ld} />
+    <!--
+      The engine survives a click. ClientRouter swaps the document without
+      a full load; `transition:persist` on the backdrop keeps the canvas,
+      the renderer and the world. `fallback="swap"` skips the default fade
+      so the picture does not blink while the chrome remounts.
+      `transition:animate="none"` on `<html>` is the same decision for
+      browsers that have View Transitions.
+    -->
+    <ClientRouter fallback="swap" />
   </head>
   <body>
     <!--
-      What is on screen before the first React commit.
+      What is on screen before the island mounts.
 
-      `main.tsx` awaits the packed catalog — 460 KB, a generation input rather
+      The island fetches the packed catalog — 460 KB, a generation input rather
       than a decoration, so the world cannot be built without it — and until
-      that resolves there is no canvas, no HUD and nothing in `#root`. On a fast
-      connection that is a flash; on a slow one, or behind a service worker
-      serving a bundle that never parses, it is an indefinitely black page that
-      is indistinguishable from a broken one. The audience that gets sent a link
-      forms its impression in about a minute, and a minute of black is the whole
-      minute.
+      that resolves there is no canvas, no HUD and nothing in the slot. On a
+      fast connection that is a flash; on a slow one, or behind a service
+      worker serving a bundle that never parses, it is an indefinitely black
+      page that is indistinguishable from a broken one. The audience that gets
+      sent a link forms its impression in about a minute, and a minute of
+      black is the whole minute.
 
-      React clears the root container on its first commit, so this needs no
-      teardown: its disappearance *is* the handoff, and the stall timer below
-      uses exactly that to know it has happened.
+      The island hides `#boot` when the application mounts, so this needs no
+      other teardown. The stall timer below uses `#app` to know it has
+      happened.
 
-      Styles are inline literals because no stylesheet exists yet — Tailwind
-      arrives with the module this is waiting for. The values are the design
-      system's own tokens (sky-300, slate-500, amber-400, the monospace stack),
-      written out rather than invented; this is not a second palette.
+      Styles are inline literals because this has to render even if the
+      stylesheet never arrives. The values are the design system's own tokens
+      (sky-300, slate-500, amber-400, the monospace stack), written out rather
+      than invented; this is not a second palette.
     -->
     <div id="root">
+      <slot />
       <div
         id="boot"
         style="
@@ -294,77 +283,24 @@
       </div>
     </div>
 
-    <!--
-      The page for a reader that will not run the application.
+    <slot name="noscript" />
 
-      Two of them, and they want the same thing: a person who has scripting off,
-      and a crawler that indexes the served HTML rather than the rendered DOM.
-      Both currently get a black page and a boot message about a catalog,
-      which describes nothing. This is deliberately prose and links rather than
-      an apology — the repository and the documentation are the whole product
-      for anyone who cannot run it.
-    -->
-    <noscript>
-      <div
-        style="
-          position: absolute;
-          inset: 0;
-          overflow: auto;
-          padding: 3rem 1.5rem;
-          background: #020617;
-          color: #cbd5e1;
-          font-family: ui-sans-serif, system-ui, sans-serif;
-          line-height: 1.6;
-        "
-      >
-        <div style="max-width: 40rem; margin: 0 auto">
-          <h1 style="color: #f8fafc; font-size: 2rem; margin: 0 0 0.5rem">
-            InertialRef
-          </h1>
-          <p style="color: #94a3b8; margin: 0 0 1.5rem">
-            A real sky, in a browser tab.
-          </p>
-          <p>
-            InertialRef is an open-source spaceflight simulator whose universe
-            is a deterministic function of a seed and a real star catalog —
-            7,123 cataloged systems and 702 known planets within 150 light
-            years, and generated content beyond that. There is nothing to
-            download and nothing to ask a server for: every client computes the
-            same galaxy.
-          </p>
-          <p>
-            It needs JavaScript and WebGPU to run, because it is a simulation
-            rather than a page. With scripting turned off there is nothing here
-            to show you — but the source, the architecture decision records and
-            the design bible are all public.
-          </p>
-          <p>
-            <a
-              href="https://github.com/jonjaques/inertialref"
-              style="color: #7dd3fc"
-              >github.com/jonjaques/inertialref</a
-            >
-            · <a href="/llms.txt" style="color: #7dd3fc">/llms.txt</a>
-          </p>
-        </div>
-      </div>
-    </noscript>
-
-    <script>
+    <script is:inline>
       /*
        * The one failure the page cannot report on its own.
        *
        * If the module never executes — a stale service worker holding a bundle
        * that 404s against a redeployed hash, a parse error on an old browser —
-       * nothing in `main.tsx` runs, so nothing in `main.tsx` can say so. This
+       * nothing in the island runs, so nothing in the island can say so. This
        * lives in the document instead. It is not a spinner: it appears only
        * once the wait has stopped being plausible, and it names the recovery
        * rather than the symptom, because the recovery is not "reload" — a
        * reload served by the same worker returns the same broken bundle.
        */
       setTimeout(function () {
+        // The island mounted and hid #boot. Nothing to say.
+        if (document.getElementById('app') !== null) return
         var boot = document.getElementById('boot-stall')
-        // React cleared the root, which means the app is up. Nothing to say.
         if (boot === null) return
         boot.hidden = false
       }, 10000)
@@ -389,6 +325,5 @@
           } else done()
         })
     </script>
-    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

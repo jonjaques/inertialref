@@ -2,15 +2,18 @@
 
 How the browser app is put together: the canvas, the modes, the camera, the
 dock. The design intent of each mode is in the [design bible](../design/README.md).
-The decisions are [ADR-0011](../adr/0011-application-shell-and-modes.md) and
-[ADR-0012](../adr/0012-dockable-panels.md).
+The decisions are [ADR-0011](../adr/0011-application-shell-and-modes.md),
+[ADR-0012](../adr/0012-dockable-panels.md) and
+[ADR-0021](../adr/0021-the-astro-shell.md).
 
 ---
 
 ## One canvas, for the life of the session
 
-`App` owns the `<Canvas>` and `.hud-layer`. Every route renders _inside_ that
-layer as a sibling of the canvas. A router over the whole tree rebuilds a
+`SceneBackdrop` owns the `<Canvas>` and carries `transition:persist="scene"`.
+Chrome renders inside `.hud-layer` as a sibling island. ClientRouter swaps
+the document; the canvas island stays. A second canvas, a page that omits
+the backdrop, or a router over the whole tree rebuilds a
 `WebGPURenderer` on every navigation.
 
 `.hud-layer` is `pointer-events: none` so the scene stays reachable. Mode
@@ -100,26 +103,32 @@ Five modes, each answering "who owns the camera" differently:
 | `cinema`      | `/cinema/:scene?t=&play=` | the cutscene director                  | `cinema/`                                              |
 | `docs`        | `/docs/*`                 | the observatory, on the wing's framing | `docs/`                                                |
 
-The documentation is one route with a splat, not a table of pages. Its
-addresses mirror the repository's directory tree, so enumerating them here
-would be a second copy of `scripts/docs/wings.mjs` that nothing keeps in step;
-the mode reads the path and the manifest decides whether it names anything. The
-masthead pushes a presentation stance once for the whole visit and only re-aims
-the observatory between wings — releasing and re-pushing per wing hands the
-camera back to whatever is underneath for a frame, which reads as a cut to the
-ship's chase view in the middle of a navigation.
+Documentation pages are documents. Astro emits the article as HTML; the
+chrome island hydrates the reading room from `#doc-ssr`. The rail fetches
+a slim manifest — it is every page's navigation, and embedding it would
+pay its size on every click. The persisted backdrop applies
+`stanceForPath` on `astro:page-load` and only re-aims the observatory
+between wings. Releasing and re-pushing a stance per wing hands the
+camera back to whatever is underneath for a frame, which reads as a cut
+to the ship's chase view in the middle of a navigation.
 
-The current mode is `modeForPath(resolvedLocation(location).pathname)` in
-`pages/paths.ts`. It is not React state. A reload, a back button, and a
-pasted link land in the same place by construction. The same rule covers
+The current mode is `modeForPath` of the overlay store's `mode.pathname`
+in `pages/paths.ts`. It is not React state. A reload, a back button, and
+a pasted link land in the same place by construction. The same rule covers
 everything else the URL carries — the planetarium subject (`?at=`) and the
-cinema frame (`?t=`).
+cinema frame (`?t=`). `stanceForPath` is the presentation the backdrop
+holds for that path.
 
-When a dialog is open, it records the mode's location in
-`location.state.background` and `ModeRoutes` renders at _that_.
-`resolvedLocation` is the one function that resolves it. Every link that
-stays inside a dialog, and every control that closes one, has to agree —
-`pages/useOverlay.ts` is that half.
+Dialogs are a store over `history` (`pages/overlay.ts`). A cold load of
+`/settings` is an Astro page — the dialog over the menu, because a fresh
+tab has no session behind it. A warm open from a mode is
+`history.pushState`, so the planetarium stays mounted and the observatory
+keeps its target. Overlay hops replace rather than push. `stancePathOf`
+is the path whose stance the backdrop holds: the address bar on a mode
+document, the mode underneath while a warm overlay is open, the menu on
+a cold overlay. Overlay links go through `OverlayLink`; following
+`/settings` as a document from a mode unmounts that mode.
+`useOverlay().close` is the close control.
 
 Do not give `AnimatePresence` `mode="wait"` over the overlay routes, and key
 it on the dialog's surface (`overlaySurface` in `pages/paths.ts`), not its
@@ -219,3 +228,4 @@ instrumentation.
 - [UX](../design/ux.md)
 - [Planetarium](../design/planetarium.md)
 - [Cinema](../design/cinema.md)
+- [ADR-0021](../adr/0021-the-astro-shell.md)

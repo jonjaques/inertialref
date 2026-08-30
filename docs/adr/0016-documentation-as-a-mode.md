@@ -2,6 +2,9 @@
 
 Status: accepted · 27 Aug 2026
 
+Amended by [ADR-0021](0021-the-astro-shell.md): a documentation page is the
+document a reader is served; the rail still fetches a slim manifest.
+
 ## Context
 
 `docs/` is a hundred and twenty thousand words across seventy markdown files —

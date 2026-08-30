@@ -1,0 +1,18 @@
+---
+import Base from '../../layouts/Base.astro'
+import Islands from '../../components/Islands.astro'
+
+export function getStaticPaths() {
+  return [
+    { params: { mode: 'solo' } },
+    { params: { mode: 'online' } },
+    { params: { mode: 'multiplayer' } },
+  ]
+}
+
+const { mode } = Astro.params
+---
+
+<Base pathname={`/play/${mode}`} heading="Flight">
+  <Islands />
+</Base>

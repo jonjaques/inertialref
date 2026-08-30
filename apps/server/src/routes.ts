@@ -38,12 +38,12 @@ export function routeFor(pathname: string): Route {
   /*
    * Anything else under /api is a 404 from the API, not a page.
    *
-   * This is the branch that matters most today: with the SPA fallback in front
-   * of it, a typo'd endpoint would answer 200 with index.html, and the client
-   * would report a healthy server it cannot talk to. Being strict about the
-   * trailing slash is part of it — `/api/health/` is a different path, and
-   * quietly treating it as the same one means two spellings of every endpoint
-   * forever.
+   * This is the branch that matters most: a typo'd endpoint that reaches the
+   * asset store is a page (the 404 document, or an SPA document wearing that
+   * URL), and the client would report a healthy-looking server it cannot talk
+   * to. Being strict about the trailing slash is part of it — `/api/health/`
+   * is a different path, and quietly treating it as the same one means two
+   * spellings of every endpoint forever.
    */
   if (pathname === API_ROOT || pathname.startsWith(API_PREFIX)) {
     return { kind: 'api-not-found' }
@@ -53,10 +53,10 @@ export function routeFor(pathname: string): Route {
    *
    * `apps/server/src/media.ts` says why that matters — the bucket is the site's
    * general storage, not a public directory. The second branch is the one that
-   * earns its place here: a name that is not served has to 404, because the SPA
-   * fallback would otherwise answer a request for an `.mp3` with `index.html`
-   * and a 200, and an `<audio>` element handed HTML fails in a way that looks
-   * like a decoding bug.
+   * earns its place here: a name that is not served has to 404 from the
+   * script, because the asset store would otherwise answer a request for an
+   * `.mp3` with an HTML document, and an `<audio>` element handed HTML fails
+   * in a way that looks like a decoding bug.
    */
   if (pathname.startsWith(MEDIA_PREFIX)) {
     const object = mediaFor(pathname.slice(MEDIA_PREFIX.length))

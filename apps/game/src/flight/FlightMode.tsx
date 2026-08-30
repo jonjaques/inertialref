@@ -1,5 +1,4 @@
 import { useEffect } from 'react'
-import { useParams } from 'react-router'
 import type { HarnessStatus } from '@inertialref/devtools'
 import { Workspace } from '../dock/Workspace.tsx'
 import type { DevWorkspace } from '../dock/workspace.ts'
@@ -11,6 +10,7 @@ import { useFlightContext } from '../hud/useShipControls.ts'
 import { DeferredMultiplayer } from './DeferredMultiplayer.tsx'
 import { NotConnected } from './NotConnected.tsx'
 import { flightPanels } from './panels.tsx'
+import type { PlayMode } from '../pages/paths.ts'
 
 /*
  * Flying.
@@ -26,36 +26,27 @@ import { flightPanels } from './panels.tsx'
  * connection state, other people's discovery records, and nothing else.
  */
 
-const KNOWN = ['solo', 'online', 'multiplayer'] as const
-type PlayMode = (typeof KNOWN)[number]
-
 /** Flight contributes no panels of its own. Named, so the array is stable. */
 
 export function FlightMode({
   engine,
   status,
+  play,
   dev,
   onNotice,
 }: {
   engine: GameEngine
   status: HarnessStatus | null
+  play: PlayMode
   dev: DevWorkspace
   onNotice: (message: string) => void
 }) {
-  const { mode } = useParams<{ mode?: string }>()
-  const play: PlayMode = (KNOWN as readonly string[]).includes(mode ?? '')
-    ? (mode as PlayMode)
-    : 'solo'
-
   /*
-   * The ship is the camera here, so nothing else may be holding it.
-   *
-   * A stance rather than three assignments, and no longer "belt and braces":
-   * it used to set and never restore, which meant a flight mode entered from
-   * the menu left the ship visible after the menu came back. Pushed and
-   * released, arriving by a pasted URL, a back button, or a redirect from a
-   * mode that threw all end with the chase camera on the ship, and leaving puts
-   * back whatever was underneath rather than a literal.
+   * The ship is the camera here. The persisted backdrop already pushed
+   * flight's stance from the path; this layer is the mode's own claim, so
+   * a panel override over the planetarium still restores to chase-on-ship
+   * when flight is the document, and `release` puts back the backdrop's
+   * floor rather than a literal.
    */
   useEffect(
     () =>

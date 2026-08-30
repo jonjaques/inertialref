@@ -3,8 +3,11 @@ import { isMeasured } from './analytics.ts'
 import {
   ABOUT,
   CINEMA,
+  DOCS,
   HOME,
+  KEYS,
   PLANETARIUM,
+  PLAY_SOLO,
   SETTINGS,
   cinemaScene,
   settingsSection,
@@ -14,6 +17,8 @@ import {
   SITE,
   canonicalUrl,
   documentTitle,
+  indexedPath,
+  jsonLd,
   pageMetaFor,
 } from './site.ts'
 
@@ -26,9 +31,8 @@ import {
  * gate that lets `localhost` through poisons the numbers with the maintainer's
  * own testing and nothing anywhere says so. Neither needs a browser to state.
  *
- * The tags actually written into the document are `pages/DocumentMeta.tsx`'s
- * job and are not tested here — that needs a DOM, and what would be under test
- * is `setAttribute`.
+ * The layout interpolates these helpers into the served HTML; `checkHead.mjs`
+ * is the gate that the layout still calls them. This file is the values.
  */
 
 describe('page metadata', () => {
@@ -78,6 +82,9 @@ describe('what a search result and a tab strip get', () => {
     expect(documentTitle(pageMetaFor(HOME))).toBe(
       `${SITE.name} — ${SITE.tagline}`,
     )
+    expect(documentTitle(pageMetaFor(DOCS), 'Reference frames')).toBe(
+      `Reference frames · ${SITE.name}`,
+    )
   })
 
   it('keeps every description inside what a result actually shows', () => {
@@ -125,10 +132,40 @@ describe('what a search result and a tab strip get', () => {
     expect(canonicalUrl(HOME)).toBe(SITE.origin)
   })
 
+  it('strips the .html Astro file format puts on a pathname', () => {
+    /*
+     * `build.format: 'file'` writes `planetarium.html`. Pages that pass
+     * `pathname` into the layout already name the public URL; pages that
+     * do not — the front door, the 404, every documentation page — see
+     * `Astro.url.pathname` as the file. The sitemap lists the extensionless
+     * form. Two canonicals for one page is the split this function exists
+     * to prevent.
+     */
+    expect(canonicalUrl('/index.html')).toBe(SITE.origin)
+    expect(canonicalUrl(`${PLANETARIUM}.html`)).toBe(
+      `${SITE.origin}${PLANETARIUM}`,
+    )
+    expect(canonicalUrl(`${DOCS}/concepts/frames.html`)).toBe(
+      `${SITE.origin}${DOCS}/concepts/frames`,
+    )
+    expect(pageMetaFor(`${DOCS}/concepts/frames.html`).path).toBe(DOCS)
+    expect(indexedPath('/404.html')).toBe(false)
+  })
+
   it('states an origin that agrees with the host', () => {
     // Two constants, one fact. They are separate because one is compared
     // against `location.hostname` and the other is concatenated into a URL.
     expect(SITE.origin).toBe(`https://${SITE.host}`)
+  })
+
+  it('lists documentation pages and not dialogs or stubs', () => {
+    expect(indexedPath(HOME)).toBe(true)
+    expect(indexedPath(`${DOCS}/concepts/frames`)).toBe(true)
+    expect(indexedPath(PLANETARIUM)).toBe(true)
+    expect(indexedPath(SETTINGS)).toBe(false)
+    expect(indexedPath(settingsSection('camera'))).toBe(false)
+    expect(indexedPath(KEYS)).toBe(false)
+    expect(indexedPath(PLAY_SOLO)).toBe(false)
   })
 })
 
@@ -174,5 +211,56 @@ describe('who is measured', () => {
 
   it('honors an explicit opt-out', () => {
     expect(isMeasured({ ...canonical, optedOut: true })).toBe(false)
+  })
+})
+
+describe('the JSON-LD graph', () => {
+  const graph = jsonLd() as {
+    '@context': string
+    '@graph': readonly Record<string, unknown>[]
+  }
+
+  it('is a schema.org graph of the site, the author, and the application', () => {
+    expect(graph['@context']).toBe('https://schema.org')
+    const types = graph['@graph'].map((node) => node['@type'])
+    expect(types).toContain('WebSite')
+    expect(types).toContain('Person')
+    expect(types).toEqual(
+      expect.arrayContaining([['SoftwareApplication', 'VideoGame']]),
+    )
+  })
+
+  it('names this origin, never a preview host', () => {
+    const blob = JSON.stringify(graph)
+    expect(blob).toContain(SITE.origin)
+    expect(blob).not.toContain('workers.dev')
+    expect(blob).not.toContain('http://')
+  })
+
+  it('holds every structured description inside a paragraph, not a page', () => {
+    for (const node of graph['@graph']) {
+      if (typeof node.description !== 'string') continue
+      expect(
+        node.description.length,
+        `${String(node['@type'])} is ${node.description.length} characters`,
+      ).toBeGreaterThanOrEqual(60)
+      expect(
+        node.description.length,
+        `${String(node['@type'])} is ${node.description.length} characters`,
+      ).toBeLessThanOrEqual(300)
+    }
+  })
+
+  it('states the application is free', () => {
+    const app = graph['@graph'].find(
+      (node) =>
+        Array.isArray(node['@type']) && node['@type'].includes('VideoGame'),
+    )
+    expect(app?.isAccessibleForFree).toBe(true)
+    expect(app?.offers).toEqual({
+      '@type': 'Offer',
+      price: '0',
+      priceCurrency: 'USD',
+    })
   })
 })

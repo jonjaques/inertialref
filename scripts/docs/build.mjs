@@ -17,34 +17,33 @@ import { allWings, documentsUnderDocs, listedPages } from './wings.mjs'
 /*
  * The documentation build.
  *
- * Seventy markdown files and the whole of `packages/*` go in; a directory of
- * JSON the client fetches at runtime comes out. It runs once, by hand
- * (`pnpm docs:build`) or as the first step of `pnpm build`, and it is deliberately
- * not a watcher: the corpus changes when somebody edits a document, which is
- * not something a dev server needs to notice within a frame.
+ * Seventy markdown files and the whole of `packages/*` go in; JSON comes out.
+ * It runs once, by hand (`pnpm docs:build`) or as the first step of
+ * `pnpm build`, and it is deliberately not a watcher: the corpus changes when
+ * somebody edits a document, which is not something a dev server needs to
+ * notice within a frame.
  *
- * ## Where the output goes, and why it is not in the bundle
+ * ## Two directories, because they are two kinds of input
  *
- * `apps/game/public/doc-content/`, which Vite copies verbatim into `dist`.
+ * `apps/game/.doc-content/` is a **build input**. Astro's `getStaticPaths`
+ * reads the manifest and the page bodies at build time and emits a real
+ * HTML document per route. It is gitignored because it is derived:
+ * committing it would be a second copy of the documentation that drifts
+ * from the first.
  *
- * The obvious alternative is to import the pages into the bundle, so that Vite
- * content-hashes them and the service worker's cache-first branch covers them
- * for free. It is the wrong trade at this size: there are nine hundred and five
- * pages, and a module graph with nine hundred and five dynamic imports in it is
- * a chunk manifest larger than most of the pages. Under `public/` they are
- * ordinary same-origin GETs, which `public/sw.js` serves
- * stale-while-revalidate: instant from the cache, corrected in the background,
- * and available with the network off, which is this project's base case rather
- * than its degraded one.
- *
- * The cost is that a page and the manifest can disagree for one request after a
- * deploy, because the two writes are not atomic. That is a 404, and
- * `apps/game/src/docs/content.ts` answers it by re-fetching past the cache
- * rather than by drawing an error.
+ * `apps/game/public/doc-content/` is a **runtime fetch**. The search index
+ * lives only here — half a megabyte for the readers who type and nobody
+ * else. The manifest lives here too, because the rail is every page's
+ * navigation and embedding it in each document would pay its size on
+ * every click. Page bodies are not fetched: they are HTML in the
+ * document Astro emits from the staged copy.
  */
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url))
-const OUT = join(ROOT, 'apps/game/public/doc-content')
+/** Build input for Astro. Page bodies and the manifest. */
+const STAGED = join(ROOT, 'apps/game/.doc-content')
+/** Runtime fetch. Search, and the rail's manifest. */
+const PUBLIC = join(ROOT, 'apps/game/public/doc-content')
 
 const quiet = process.argv.includes('--quiet')
 const skipApi = process.argv.includes('--no-api')
@@ -64,8 +63,10 @@ async function main() {
   const pages = [...prose, ...reference.pages]
   const wings = allWings(reference.groups)
 
-  await rm(OUT, { recursive: true, force: true })
-  await mkdir(join(OUT, 'page'), { recursive: true })
+  await rm(STAGED, { recursive: true, force: true })
+  await rm(PUBLIC, { recursive: true, force: true })
+  await mkdir(join(STAGED, 'page'), { recursive: true })
+  await mkdir(PUBLIC, { recursive: true })
 
   /*
    * The body of every page, one file each, written before the manifest that
@@ -77,8 +78,8 @@ async function main() {
    * recovers on its own.
    */
   await Promise.all(
-    pages.map((page) =>
-      writeJson(join(OUT, 'page', assetName(page.route)), {
+    pages.map((page) => {
+      const body = {
         route: page.route,
         title: page.title,
         lead: page.lead,
@@ -90,8 +91,10 @@ async function main() {
         source: page.source ?? null,
         packageName: page.packageName ?? null,
         memberKind: page.memberKind ?? null,
-      }),
-    ),
+      }
+      const name = assetName(page.route)
+      return writeJson(join(STAGED, 'page', name), body)
+    }),
   )
 
   const manifest = {
@@ -133,11 +136,11 @@ async function main() {
      * What the navigation, the breadcrumb and the document title need, and
      * nothing else.
      *
-     * This object is fetched before anything can be drawn, so every field in it
+     * This object is fetched before the rail can be drawn, so every field in it
      * is paid for on the way in. The lead, the word count and the diagram count
      * were here and are not: each is read on exactly one screen, and that screen
-     * has already fetched the page that carries them. Dropping the three took
-     * the manifest from 286 KB to 181 KB.
+     * has already been served the page that carries them. Dropping the three
+     * took the manifest from 286 KB to 181 KB.
      */
     pages: Object.fromEntries(
       pages.map((page) => [
@@ -162,8 +165,9 @@ async function main() {
     },
   }
 
-  await writeJson(join(OUT, 'manifest.json'), manifest)
-  await writeJson(join(OUT, 'search.json'), searchIndex(pages, manifest))
+  await writeJson(join(STAGED, 'manifest.json'), manifest)
+  await writeJson(join(PUBLIC, 'manifest.json'), manifest)
+  await writeJson(join(PUBLIC, 'search.json'), searchIndex(pages, manifest))
 
   if (dumpAt !== null && serialized !== null)
     await writeJson(join(ROOT, dumpAt), serialized)

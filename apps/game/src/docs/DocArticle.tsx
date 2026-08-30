@@ -1,10 +1,9 @@
 import { useEffect, useRef, type MouseEvent } from 'react'
-import { useNavigate } from 'react-router'
 import type { DocManifest, DocPage } from './content.ts'
 import { DocsMissingError } from './content.ts'
 import { DocFooter } from './DocFooter.tsx'
 import { drawDiagrams } from './mermaid.ts'
-import type { Loaded } from './useDocs.ts'
+import { useOverlayStore } from '../pages/overlay.ts'
 
 /**
  * The document itself.
@@ -27,10 +26,8 @@ import type { Loaded } from './useDocs.ts'
  * A tree with no components in it cannot carry `onClick` props, so both live on
  * the container:
  *
- *   - **links**, so a cross-reference goes through the router. Nine hundred
- *     pages of these, and a full page load on any of them rebuilds the WebGPU
- *     renderer and drops the scene behind the masthead — a documentation link
- *     costing a second of black canvas.
+ *   - **links**, so a same-page heading hash scrolls the inner scroller.
+ *     Cross-page links are documents and load the next HTML file.
  *   - **copy**, on the button `highlight.mjs` emits into every listing.
  */
 export function DocArticle({
@@ -41,12 +38,13 @@ export function DocArticle({
 }: {
   manifest: DocManifest | null
   route: string
-  page: Loaded<DocPage>
+  page: DocPage | null
   error: Error | null
 }) {
-  const navigate = useNavigate()
+  const setModeHash = useOverlayStore((state) => state.setModeHash)
+  const modePath = useOverlayStore((state) => state.mode.pathname)
   const body = useRef<HTMLDivElement | null>(null)
-  const html = page.value?.html ?? null
+  const html = page?.html ?? null
 
   /*
    * Diagrams, after the markup is in the DOM.
@@ -108,15 +106,10 @@ export function DocArticle({
     const link = target.closest('a')
     if (link === null) return
     /*
-     * Everything same-origin goes through the router, including a bare
-     * `#section` — which is the same page at a different hash and is what a
-     * heading's own anchor is. Left unhandled, a fragment click updates
-     * `window.location` without telling the router, so `useLocation().hash`
-     * goes stale and the next real navigation scrolls to the wrong place.
-     *
-     * A modified click is the browser's: a new tab, a new window, a download,
-     * a saved link. Intercepting those is how a single-page application breaks
-     * middle-click, and there is no reason to.
+     * Same-document hash links scroll the inner scroller, which the browser
+     * cannot: html and body do not scroll. A heading's own `#section` is
+     * that case. Cross-page links are documents — they load the next HTML
+     * file — and a modified click is the browser's.
      */
     if (
       event.metaKey ||
@@ -128,47 +121,36 @@ export function DocArticle({
       return
     const url = new URL(link.href, window.location.href)
     if (url.origin !== window.location.origin) return
+    if (url.pathname !== modePath) return
     event.preventDefault()
-    void navigate(`${url.pathname}${url.search}${url.hash}`)
+    setModeHash(url.hash)
   }
 
-  if (error instanceof DocsMissingError)
-    return (
-      <article className="doc-article">
-        <div className="doc-notice">
-          <h2 className="type-title text-slate-100">
-            No documentation in this build
-          </h2>
-          <p className="type-body mt-2 text-slate-400">{error.message}</p>
-        </div>
-      </article>
-    )
+  if (page === null) {
+    if (error instanceof DocsMissingError)
+      return (
+        <article className="doc-article">
+          <div className="doc-notice">
+            <h2 className="type-title text-slate-100">
+              No documentation in this build
+            </h2>
+            <p className="type-body mt-2 text-slate-400">{error.message}</p>
+          </div>
+        </article>
+      )
 
-  if (error !== null)
-    return (
-      <article className="doc-article">
-        <div className="doc-notice">
-          <h2 className="type-title text-slate-100">
-            The contents could not be loaded
-          </h2>
-          <p className="type-body mt-2 text-slate-400">{error.message}</p>
-        </div>
-      </article>
-    )
+    if (error !== null)
+      return (
+        <article className="doc-article">
+          <div className="doc-notice">
+            <h2 className="type-title text-slate-100">
+              The contents could not be loaded
+            </h2>
+            <p className="type-body mt-2 text-slate-400">{error.message}</p>
+          </div>
+        </article>
+      )
 
-  if (page.pending || manifest === null)
-    return (
-      <article className="doc-article" aria-busy="true">
-        {/* Three lines of nothing, at the measure the prose will have.
-            A spinner would be a second thing to look at; this is the shape of
-            the answer, arriving. */}
-        <div className="doc-skeleton" />
-        <div className="doc-skeleton w-[88%]" />
-        <div className="doc-skeleton w-[64%]" />
-      </article>
-    )
-
-  if (page.value === null)
     return (
       <article className="doc-article">
         <div className="doc-notice">
@@ -181,6 +163,7 @@ export function DocArticle({
         </div>
       </article>
     )
+  }
 
   return (
     <article className="doc-article">
@@ -193,20 +176,22 @@ export function DocArticle({
        * thousand — and it is the honest version of a reading-time estimate,
        * which is the same number with an invented rate applied to it.
        */}
-      {page.value.words > 0 && (
+      {page.words > 0 && (
         <p className="type-micro mb-6 text-slate-400">
-          {page.value.words.toLocaleString('en-US')} words
-          {page.value.diagrams > 0 &&
-            ` · ${page.value.diagrams} diagram${page.value.diagrams === 1 ? '' : 's'}`}
+          {page.words.toLocaleString('en-US')} words
+          {page.diagrams > 0 &&
+            ` · ${page.diagrams} diagram${page.diagrams === 1 ? '' : 's'}`}
         </p>
       )}
       <div
         ref={body}
         className="doc-prose"
         onClick={onClick}
-        dangerouslySetInnerHTML={{ __html: page.value.html }}
+        dangerouslySetInnerHTML={{ __html: page.html }}
       />
-      <DocFooter manifest={manifest} route={route} page={page.value} />
+      {manifest !== null && (
+        <DocFooter manifest={manifest} route={route} page={page} />
+      )}
     </article>
   )
 }

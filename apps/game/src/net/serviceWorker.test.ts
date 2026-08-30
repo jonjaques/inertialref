@@ -220,25 +220,23 @@ describe('the service worker', () => {
   /*
    * The 200 that is not an answer.
    *
-   * The origin is served with `not_found_handling: single-page-application`, so
-   * a request for a staged file the asset store does not have yet comes back as
-   * `index.html` with a 200 — which is how a page of `/doc-content/` looks in
-   * the window after a deploy, before its file has landed. Stored, that shell
-   * is served out of Cache Storage in place of the file for the life of the
+   * Navigations are their own branch, so nothing that reaches stale-while-
+   * revalidate is legitimately HTML. An HTML 200 stored under a JSON path is
+   * served out of Cache Storage in place of the file for the life of the
    * cache: `docs/content.ts` asks for JSON, gets markup, and the reader is told
    * a page that exists does not, on every visit, until the next build rotates
    * the cache name.
    */
   it('does not store the application shell under a data file’s name', async () => {
     const sw = loadServiceWorker(() => okResponse('text/html; charset=utf-8'))
-    await settle(sw, request('/doc-content/page/vision-1a2b3.json'))
+    await settle(sw, request('/doc-content/search.json'))
     expect(sw.put).toEqual([])
   })
 
   it('does store the file when the file is what came back', async () => {
     const sw = loadServiceWorker(() => okResponse('application/json'))
-    await settle(sw, request('/doc-content/page/vision-1a2b3.json'))
-    expect(sw.put).toEqual([`${ORIGIN}/doc-content/page/vision-1a2b3.json`])
+    await settle(sw, request('/doc-content/search.json'))
+    expect(sw.put).toEqual([`${ORIGIN}/doc-content/search.json`])
   })
 
   it('names its cache after the build that installed it', async () => {

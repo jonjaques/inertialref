@@ -6,7 +6,7 @@ import { useAction, useKeyContext } from '../input/useKeymap.ts'
 import { useOverlay } from './useOverlay.ts'
 
 /*
- * The frame every routed page is drawn in.
+ * The frame every dialog is drawn in.
  *
  * `docs/design/ux.md` is explicit that there is no pause menu and that
  * "settings open as an overlay while the simulation runs" — so this is a
@@ -14,7 +14,7 @@ import { useOverlay } from './useOverlay.ts'
  * touches the clock, and flight keys deliberately keep working underneath:
  * the world is still there and the ship is still where you left it.
  *
- * A route rather than a piece of `App` state because these are pages — a menu
+ * A dialog rather than a piece of `App` state because these are pages — a menu
  * with sections, an almanac, a settings tree — and the back button is the one
  * affordance every player already knows for leaving one. `App` keeps its own
  * dock state; nothing about the dock is addressable and nothing about a page

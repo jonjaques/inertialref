@@ -1,4 +1,3 @@
-import { Link } from 'react-router'
 import { ArrowLeft, ArrowRight } from 'lucide-react'
 import { FOCUS_RING } from '../hud/focus.ts'
 import type { DocManifest, DocPage } from './content.ts'
@@ -36,8 +35,8 @@ export function DocFooter({
         {previous === null ? (
           <span />
         ) : (
-          <Link
-            to={previous}
+          <a
+            href={previous}
             rel="prev"
             className={`group flex max-w-[18rem] min-w-0 items-baseline gap-2 rounded text-slate-400 transition-colors hover:text-sky-200 ${FOCUS_RING}`}
           >
@@ -49,11 +48,11 @@ export function DocFooter({
               <span className="type-label block text-slate-400">Previous</span>
               <span className="type-ui block truncate">{label(previous)}</span>
             </span>
-          </Link>
+          </a>
         )}
         {next !== null && (
-          <Link
-            to={next}
+          <a
+            href={next}
             rel="next"
             className={`group flex max-w-[18rem] min-w-0 items-baseline gap-2 rounded text-right text-slate-400 transition-colors hover:text-sky-200 ${FOCUS_RING}`}
           >
@@ -65,7 +64,7 @@ export function DocFooter({
               aria-hidden
               className="size-3.5 shrink-0 translate-y-0.5 text-slate-600 transition-colors group-hover:text-sky-300"
             />
-          </Link>
+          </a>
         )}
       </div>
 

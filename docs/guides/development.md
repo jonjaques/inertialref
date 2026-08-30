@@ -24,7 +24,7 @@ pnpm brand            # regenerate brand artifacts from design/brand/brandmark.s
 pnpm presets:plates   # recapture the seven preset thumbnails through the renderer
 pnpm presets:check    # every picture has a plate, every composition it names resolves
 pnpm docs:build       # render docs/ and packages/* into the documentation site
-pnpm build            # optional media pull, docs, typecheck, then Vite build
+pnpm build            # optional media pull, docs, typecheck, then Astro
 pnpm check            # graph, brand, presets, format, lint, typecheck, test, build
 
 pnpm sim --self-test           # headless run plus the twelve capability checks
@@ -126,9 +126,11 @@ by an in-process fake in Node tests.
 
 ## Toolchain
 
-**Vite 8** with `@vitejs/plugin-react` (Oxc transform) and
-`@rolldown/plugin-babel` running `reactCompilerPreset()`. React Compiler is
-on: do not hand-write `useMemo` / `useCallback` memoization. `useMemo` for a
+**Vite 8**, nested under Astro 7. `@astrojs/react` supplies the JSX
+transform; `gameVite()` must not also add `@vitejs/plugin-react`, or JSX is
+transformed twice. The React Compiler pass still runs: `@rolldown/plugin-babel`
+with `reactCompilerPreset()`, which is why that package stays a dependency.
+Do not hand-write `useMemo` / `useCallback` memoization. `useMemo` for a
 stable Three.js object is a different thing and is fine.
 
 **oxlint** runs the `react`, `typescript`, and `oxc` plugins. Type-aware rules
@@ -173,8 +175,9 @@ its `display: table` viewport breaks `truncate`. Add a component with
 
 **Brand** is generated from `design/brand/brandmark.svg` via `pnpm brand`.
 Never hand-edit `favicon.svg`, the `.ico`, the apple-touch and PWA icons, the
-share card, the web manifest, `robots.txt`, `sitemap.xml`, or
-`src/icons/brandmark.ts`. `pnpm brand:check` is in `pnpm check`. The share
+share card, the web manifest, `robots.txt`, or
+`src/icons/brandmark.ts`. Brand does not write `sitemap.xml` — Astro
+emits every page the build produced. `pnpm brand:check` is in `pnpm check`. The share
 card has a second source, `design/brand/og-plate.png` — a captured frame of the
 renderer that its type is composited over. `scripts/brand/og.mjs` carries the
 framing it was shot at, so it can be shot again.
@@ -193,21 +196,23 @@ signal.
 
 **The documentation site** at `/docs` is generated. `pnpm docs:build` renders
 every markdown file under `docs/`, plus `AGENTS.md`, and every export of
-`packages/*` through TypeDoc, into `apps/game/public/doc-content/` — which is
-gitignored, staged by `pnpm build` before the client build, and fetched at
-runtime. Editing a page means editing the markdown; the site has no copy of
-its own. Two things it will refuse to do: a markdown file under `docs/` that
-no wing in `scripts/docs/wings.mjs` lists fails the build rather than
-publishing nowhere, and a `{@link}` pointing at a renamed symbol fails it
-rather than rendering as words that link to nothing. `scripts/docs/build.mjs`
-carries the rest.
+`packages/*` through TypeDoc. Page bodies go to `apps/game/.doc-content/` —
+Astro's build input, one HTML document per route. The rail's manifest and
+the search index go to `apps/game/public/doc-content/` and are fetched at
+runtime. Both directories are gitignored. Editing a page means editing the
+markdown; the site has no copy of its own. Two things it will refuse to do:
+a markdown file under `docs/` that no wing in `scripts/docs/wings.mjs` lists
+fails the build rather than publishing nowhere, and a `{@link}` pointing at
+a renamed symbol fails it rather than rendering as words that link to
+nothing. `scripts/docs/build.mjs` carries the rest.
 
-**Site metadata** is duplicated on purpose: `src/site.ts` for the running
-client, `index.html` for scrapers that do not run JavaScript, and
-`pages/DocumentMeta.tsx` for per-route title, description, and canonical URL.
-Change all affected copies together.
-[`docs/hosting.md`](../hosting.md) records why they are not a single Worker
-render.
+**Site metadata** comes from `src/site.ts`. `astro/layouts/Base.astro`
+interpolates it at build, which is the card a scraper reads.
+`pages/DocumentMeta.tsx` rewrites `<title>` on an overlay `pushState`, which
+does not load a new document. Change the source; the layout and the
+component follow it.
+[`docs/hosting.md`](../hosting.md) records why the Worker does not rewrite
+the head.
 
 **Analytics** loads from `src/analytics.ts`, only in a production build, only
 on the canonical host, and only without Global Privacy Control. The

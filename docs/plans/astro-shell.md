@@ -165,7 +165,11 @@ planetarium's observatory. The first two are declarations, not behavior, and an
 Astro page knows its own at build time:
 
 ```astro
-<SceneBackdrop client:only="react" stance={wing.framing} transition:persist="scene" />
+<SceneBackdrop
+  client:only="react"
+  stance={wing.framing}
+  transition:persist="scene"
+/>
 ```
 
 The invariant holds and gets narrower: the island is still the sole caller of

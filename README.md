@@ -327,9 +327,10 @@ that command, so there is no separate list of CI stages to drift out of step.
   `verbatimModuleSyntax` are all on.** So: no `enum`, no parameter properties,
   `import type` for type-only imports, and **local imports carry their `.ts`
   extension** — Node runs the sources directly.
-- **Vite 8 with the Oxc transform, and React Compiler is on.** Do not hand-write
-  `useMemo`/`useCallback` memoization. (`useMemo` for a stable Three.js object is
-  a different thing and is fine.)
+- **Astro 7 over Vite 8, and React Compiler is on.** `@astrojs/react` is the
+  JSX transform; `gameVite()` must not also add `@vitejs/plugin-react`. Do not
+  hand-write `useMemo`/`useCallback` memoization. (`useMemo` for a stable
+  Three.js object is a different thing and is fine.)
 - **Tests live beside the code and run in plain Node.** That is the check that the
   core stays free of DOM, React and WebGL. Reach for
   [`fast-check`](https://fast-check.dev) property tests for anything mathematical —

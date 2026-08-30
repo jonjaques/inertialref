@@ -174,11 +174,14 @@ This is what is deployed, minus the comments:
   "assets": {
     "directory": "../game/dist",
     "binding": "ASSETS",
-    // The client is a single page; every unmatched path is index.html, not a 404.
-    "not_found_handling": "single-page-application",
-    // `/api` is listed as well as `/api/*` because the glob does not match the
-    // bare path, and the SPA fallback would answer it with index.html.
-    "run_worker_first": ["/api", "/api/*", "/ws"],
+    // The client is a set of documents; an unmatched path is 404.html
+    // (the menu), not the home page wearing that URL.
+    "not_found_handling": "404-page",
+    "html_handling": "drop-trailing-slash",
+    // `/api` is listed as well as `/api/*` because the glob does not match
+    // the bare path. `/media/*` wakes the script so a miss 404s as text
+    // rather than as a page of markup an `<audio>` element cannot decode.
+    "run_worker_first": ["/api", "/api/*", "/ws", "/media/*"],
   },
   "version_metadata": { "binding": "CF_VERSION_METADATA" },
   "observability": { "enabled": true },
@@ -401,31 +404,30 @@ does: the share card, the install manifest, the crawler files, the analytics
 gate, and the one asset the repository will not carry.
 
 **One canonical hostname.** `inertialref.jonjaques.com` is what
-`<link rel="canonical">` names, what `sitemap.xml` lists, and the only host
+`<link rel="canonical">` names, what the sitemap lists, and the only host
 `src/analytics.ts` will load a tag on. Every Wrangler preview URL is the same
 deployment under a different name — useful for checking a build, and wrong to
 count as visits or to let a crawler index as a duplicate site. The Worker's own
 `workers.dev` route is off (`workers_dev: false` in `wrangler.jsonc`), so there
 is no second address that tracks the tip; a preview URL names one version.
 
-**The static head is the card, and it is hand-kept.** `not_found_handling` is
-`single-page-application`, so one document is served for every path — and no
-social scraper runs JavaScript. Whatever React writes into `og:title` is
-therefore invisible to Slack, iMessage, Discord and every other unfurler. So
-`index.html` carries a complete Open Graph and Twitter set plus a JSON-LD
-`@graph` (`WebSite`, `Person`, `SoftwareApplication`/`VideoGame`), written for
-the home page, and `pages/DocumentMeta.tsx` updates `<title>`, the description
-and the canonical link per route for the readers that _do_ execute scripts — the
-browser, Googlebot, an agent driving a headless browser. `src/site.ts` is the
-single source both are written from; the duplication into the head is
-deliberate and is called out at both ends.
+**The static head is the card, and it is HTML on disk.** Every mode and
+every documentation page is a document Astro emitted. A scraper does not
+run JavaScript, so `astro/layouts/Base.astro` interpolating `src/site.ts`
+is the only card the site has. Per-route Open Graph is free because it is
+a file; the Worker does not run on a navigation. `pages/DocumentMeta.tsx`
+rewrites `<title>` only for overlay `pushState`, which does not load a
+new document.
 
-> **The seam.** Per-route Open Graph tags need `HTMLRewriter`, which needs the
-> Worker to run on navigations — `run_worker_first` on `/*` — which turns a
-> free, unbilled static asset request into a billed invocation on every page
-> load of the site. That is a real trade and not obviously the right one for a
-> project whose shareable pages number three. Revisit it when a _scene_ deserves
-> its own card, which is the first case where the generic one is actually wrong.
+`not_found_handling` is `404-page`. An unmatched path is `404.html` — the
+menu, wearing that status — not the home page wearing that URL.
+`html_handling` is `drop-trailing-slash`, pairing with Astro
+`build.format: 'file'` so `/planetarium` maps to `planetarium.html`.
+
+> **The seam that remains.** Overlay dialogs change the address bar
+> without loading a document, so the tab title needs a client rewrite.
+> That is `DocumentMeta`. A _scene_ with its own share image is more HTML
+> on disk, not `HTMLRewriter` on `/*`.
 
 **Installable, because offline was already true.** The service worker predates
 this; what was missing was the manifest that lets a browser act on it. The game
@@ -435,9 +437,9 @@ application rather than a shortcut with a dinosaur behind it.
 
 **The brand is generated.** `design/brand/brandmark.svg` is the mark, and
 `pnpm brand` renders the favicon, the `.ico`, the apple-touch and PWA icons, the
-maskable variant, the 1200×630 share card, the manifest, `robots.txt`,
-`sitemap.xml` and the `<Logomark>` module from it. `pnpm brand:check` is in
-`pnpm check`.
+maskable variant, the 1200×630 share card, the manifest, `robots.txt` and the
+`<Logomark>` module from it. `pnpm brand:check` is in `pnpm check`. The sitemap
+is every page Astro emitted (`@astrojs/sitemap`); brand does not write it.
 
 The card's background is the one artifact with a second source:
 `design/brand/og-plate.png`, a frame of the real renderer — Earth's limb at
@@ -477,15 +479,14 @@ first byte rather than a missing feature.
 **`run_worker_first` covers `/media/*`, and that is the cost.** The path is no
 longer free: the script runs, asks `env.ASSETS` first, and only reaches R2 on a
 miss. Two things buy it back. The response is `immutable`, so it is about one
-invocation per client rather than one per play. And a name that is _not_ served
-now 404s — where before, the SPA fallback answered a request for an `.mp3` with
-`index.html` and a 200, and an `<audio>` element handed a page of markup fails
-as though it could not decode the file.
+invocation per client rather than one per play. And a name that is _not_
+served answers as HTML — the 404 document — so an `<audio>` element handed a
+page of markup fails as though it could not decode the file.
 
-**The miss is detected by content type**, because there is no status code to
-test: `not_found_handling: single-page-application` means the asset store
-answers what it does not have with a 200. Nothing under `/media/` is ever HTML,
-so an HTML answer to a request for an `.mp3` is unambiguous.
+**The miss is detected by content type**, because a 404 page is still HTML.
+Nothing under `/media/` is ever HTML, so an HTML answer to a request for an
+`.mp3` is unambiguous. Trusting the status and forwarding it would hand the
+element markup.
 
 **`env.ASSETS` does not serve ranges**, which is the second reason the binding
 is here rather than only the fallback one. Measured against a deployed review
@@ -798,9 +799,9 @@ and revisit it as a _separate_ change so a build regression has one suspect.
 **`pnpm preview` is the production emulation**, and it is what to reach for when
 a bug is about how something is _served_ rather than what it does: it builds and
 then runs `wrangler dev` alone, so the assets come out of the real static asset
-store through the real `run_worker_first` and the real SPA fallback, and the
-service worker registers because it is a production build. Under `pnpm dev` all
-of that is Vite's.
+store through the real `run_worker_first` and the real `404-page` handling, and
+the service worker registers because it is a production build. Under `pnpm dev`
+all of that is Vite's.
 
 A property worth keeping rather than fixing: with the Worker **not** running,
 the proxy fails and the client reports `no server`. The offline path is
@@ -839,7 +840,7 @@ H4 is the milestone the request actually asks for: everything stood up, nothing
 load-bearing.
 
 **Where this actually stands.** H0 and H3 are done. H1 is done apart from the
-custom domain — the client is live, the SPA fallback works, and the
+custom domain — the client is live, unmatched paths are a 404 page, and the
 service worker excludes both live paths. H2 is half done from the other end than
 planned: `wrangler types` output is committed and the fourth tsconfig project is
 green, but the endpoint that exists is `/api/health` rather than `/api/version`,
@@ -894,20 +895,20 @@ regression is reproducible in CI without a browser.
 version at its own URL. That removes the API token from GitHub entirely, which
 is why it won out over a deploy workflow in Actions.
 
-| Concern         | Approach                                                                                                                                                                                                                                                                                                                                                                                                            |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Production      | Push to `main` → `wrangler deploy`. One Worker, `inertialrefd`, on the `inertialref.jonjaques.com` custom domain and nowhere else — `workers_dev` is `false`, so there is no second address tracking the tip.                                                                                                                                                                                                       |
-| Review apps     | Any other branch → `wrangler versions upload`, which uploads a version and its assets without promoting it. `preview_urls` is `true`, so each version answers on its own generated `<version>-inertialrefd.<subdomain>.workers.dev` — its own URL, its own origin, naming one build rather than the latest. No `--preview-alias`: a readable alias outlives the reason it was minted.                               |
-| The gate        | `pnpm check` stays in `.github/workflows/check.yml`. **Cloudflare cannot see a GitHub status check**, so branch protection on `main` is what actually prevents a red merge from deploying.                                                                                                                                                                                                                          |
-| Build command   | `pnpm build` — an optional R2 media pull, the documentation build, typecheck across five projects, then `vite build` into `apps/game/dist`, which is what `assets.directory` points at. `pnpm docs:build` stages `apps/game/public/doc-content/`, which is gitignored, so the deploy carries the documentation only because the build regenerates it. See [H-8](#h-8--r2-holds-what-the-repository-will-not-carry). |
-| Node version    | `.node-version`, read by Cloudflare's build image _and_ by the Actions workflow, so the two cannot disagree about the runtime.                                                                                                                                                                                                                                                                                      |
-| Build identity  | `WORKERS_CI_COMMIT_SHA` and `WORKERS_CI_BRANCH` become `__BUILD_ID__`, so a review app's HUD names the branch it was built from.                                                                                                                                                                                                                                                                                    |
-| Migrations      | D1 migrations run from the build command, before the deploy step, so the schema is never behind the code. Not needed until H2.                                                                                                                                                                                                                                                                                      |
-| Secrets         | `wrangler secret put`, never `vars`, and **not** Workers Builds' build variables — those exist only during the build. Nothing in `wrangler.jsonc` may be a credential; it is committed.                                                                                                                                                                                                                             |
-| Build variables | `VITE_GA_MEASUREMENT_ID`, set in Workers Builds. Not a secret — it ships in the bundle — but this repository is public, and an id committed in it is an id every fork measures into. A build run from a developer's machine reads the same name out of the gitignored `apps/game/.env.production`; a real environment variable wins over the file. `apps/game/.env.example` is the committed documentation.         |
-| Rollback        | `wrangler rollback`, or promote a previous version from the dashboard. DO SQLite migrations are not rolled back by it; write them additively.                                                                                                                                                                                                                                                                       |
-| Manual deploy   | `pnpm run deploy:worker` still works and is the escape hatch when CI is the thing that is broken.                                                                                                                                                                                                                                                                                                                   |
-| Observability   | `observability.enabled` for Workers Logs. The client already has structured logging in `packages/shared` — use the same shape.                                                                                                                                                                                                                                                                                      |
+| Concern         | Approach                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Production      | Push to `main` → `wrangler deploy`. One Worker, `inertialrefd`, on the `inertialref.jonjaques.com` custom domain and nowhere else — `workers_dev` is `false`, so there is no second address tracking the tip.                                                                                                                                                                                                                                                                                                                         |
+| Review apps     | Any other branch → `wrangler versions upload`, which uploads a version and its assets without promoting it. `preview_urls` is `true`, so each version answers on its own generated `<version>-inertialrefd.<subdomain>.workers.dev` — its own URL, its own origin, naming one build rather than the latest. No `--preview-alias`: a readable alias outlives the reason it was minted.                                                                                                                                                 |
+| The gate        | `pnpm check` stays in `.github/workflows/check.yml`. **Cloudflare cannot see a GitHub status check**, so branch protection on `main` is what actually prevents a red merge from deploying.                                                                                                                                                                                                                                                                                                                                            |
+| Build command   | `pnpm build` — an optional R2 media pull, the documentation build, typecheck across five projects, then Astro into `apps/game/dist`, which is what `assets.directory` points at. `pnpm docs:build` stages page bodies in `apps/game/.doc-content/` (Astro's input) and the rail's manifest plus the search index in `apps/game/public/doc-content/` (runtime fetches). Both are gitignored; the deploy carries the documentation only because the build regenerates it. See [H-8](#h-8--r2-holds-what-the-repository-will-not-carry). |
+| Node version    | `.node-version`, read by Cloudflare's build image _and_ by the Actions workflow, so the two cannot disagree about the runtime.                                                                                                                                                                                                                                                                                                                                                                                                        |
+| Build identity  | `WORKERS_CI_COMMIT_SHA` and `WORKERS_CI_BRANCH` become `__BUILD_ID__`, so a review app's HUD names the branch it was built from.                                                                                                                                                                                                                                                                                                                                                                                                      |
+| Migrations      | D1 migrations run from the build command, before the deploy step, so the schema is never behind the code. Not needed until H2.                                                                                                                                                                                                                                                                                                                                                                                                        |
+| Secrets         | `wrangler secret put`, never `vars`, and **not** Workers Builds' build variables — those exist only during the build. Nothing in `wrangler.jsonc` may be a credential; it is committed.                                                                                                                                                                                                                                                                                                                                               |
+| Build variables | `VITE_GA_MEASUREMENT_ID`, set in Workers Builds. Not a secret — it ships in the bundle — but this repository is public, and an id committed in it is an id every fork measures into. A build run from a developer's machine reads the same name out of the gitignored `apps/game/.env.production`; a real environment variable wins over the file. `apps/game/.env.example` is the committed documentation.                                                                                                                           |
+| Rollback        | `wrangler rollback`, or promote a previous version from the dashboard. DO SQLite migrations are not rolled back by it; write them additively.                                                                                                                                                                                                                                                                                                                                                                                         |
+| Manual deploy   | `pnpm run deploy:worker` still works and is the escape hatch when CI is the thing that is broken.                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Observability   | `observability.enabled` for Workers Logs. The client already has structured logging in `packages/shared` — use the same shape.                                                                                                                                                                                                                                                                                                                                                                                                        |
 
 ### Review apps stop at H4, and that is worth knowing now
 

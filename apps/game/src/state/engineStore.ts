@@ -2,6 +2,7 @@ import { useStore } from 'zustand'
 import { createStore, type StoreApi } from 'zustand/vanilla'
 import type { HarnessStatus, ObserverStatus } from '@inertialref/devtools'
 import type { Playhead } from '../cinema/session.ts'
+import type { RendererDescription } from '../render/output.ts'
 
 /*
  * The seam between the engine and React.
@@ -33,7 +34,8 @@ import type { Playhead } from '../cinema/session.ts'
  * they are three files of subtle code to get right, and the tearing rules
  * around concurrent React are not a thing to re-derive. The store is created by
  * a factory so a test can have its own; the module singleton below is what the
- * app uses, alongside the engine singleton in `App.tsx`, for the same reason.
+ * app uses, alongside the engine singleton in `engine/instance.ts`, for the
+ * same reason.
  */
 
 /** The presentation switches, as a panel reads them. */
@@ -80,6 +82,12 @@ export interface EngineSnapshot {
   readonly presentation: PresentationSnapshot
   /** The cutscene playhead. `null` when no scene is open. */
   readonly playhead: Playhead | null
+  /**
+   * What the live renderer was built to do. `null` until the backdrop has
+   * constructed one. Published here so the chrome island can show it without
+   * importing the canvas.
+   */
+  readonly output: RendererDescription | null
 }
 
 /**
@@ -109,6 +117,11 @@ export interface EngineSource {
    * poll the director at three rates to answer the same question.
    */
   readonly cutscene: { sample(): Playhead | null }
+  /**
+   * The live renderer, if the backdrop has built one. Optional on the port
+   * so a Node test does not have to invent a canvas.
+   */
+  readonly gl?: { readonly description: RendererDescription } | null
 }
 
 const NOTHING_DRAWN: PresentationSnapshot = {
@@ -128,6 +141,7 @@ const IDLE: EngineSnapshot = {
   observer: null,
   presentation: NOTHING_DRAWN,
   playhead: null,
+  output: null,
 }
 
 export type EngineStore = StoreApi<EngineSnapshot>
@@ -150,6 +164,7 @@ export function sampleOnce(store: EngineStore, source: EngineSource): void {
       chrome: source.chrome,
     },
     playhead: source.cutscene.sample(),
+    output: source.gl?.description ?? null,
   })
 }
 

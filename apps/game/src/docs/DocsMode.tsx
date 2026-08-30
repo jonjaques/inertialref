@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { useLocation } from 'react-router'
 import { Workspace } from '../dock/Workspace.tsx'
 import type { DevWorkspace } from '../dock/workspace.ts'
 import type { GameEngine } from '../engine/GameEngine.ts'
-import { resolvedLocation } from '../pages/paths.ts'
+import { useOverlayStore } from '../pages/overlay.ts'
 import { DocsBar } from './DocsBar.tsx'
 import { DocsHorizon } from './DocsHorizon.tsx'
 import { DocsMasthead } from './DocsMasthead.tsx'
@@ -11,8 +10,9 @@ import { DocsRail } from './DocsRail.tsx'
 import { DocArticle } from './DocArticle.tsx'
 import { DocContents } from './DocContents.tsx'
 import { wingFor } from './docsNav.ts'
+import { readDocPage } from './fromDocument.ts'
 import { useDocsFraming } from './useDocsFraming.ts'
-import { useManifest, usePage } from './useDocs.ts'
+import { useManifest } from './useDocs.ts'
 
 /*
  * The reading room.
@@ -65,25 +65,24 @@ export function DocsMode({
   dev: DevWorkspace
 }) {
   /*
-   * The mode's own location, not the address bar's. With a dialog open over the
-   * reading room the two differ, and this component is drawn at the background
-   * — reading `location.pathname` here would refetch the page for `/settings`
-   * and find nothing. `pages/paths.ts` carries the argument at length.
+   * The mode's own location, not the address bar's. With a dialog open over
+   * the reading room the two differ, and this component reads the overlay
+   * store's `mode` — reading the address bar here would refetch the page
+   * for `/settings` and find nothing.
    *
-   * The **hash** comes from the same place, and that is not symmetry for its
-   * own sake: a dialog's location carries no fragment, so reading it raw turns
-   * opening Settings from `/docs/concepts/frames#the-chain` into a `hash` that
-   * changed to `''`, which re-runs the scroll below and throws the reading room
-   * back to the top behind the scrim.
+   * The **hash** comes from the same place: a dialog's URL carries no
+   * fragment, so reading it raw turns opening Settings from
+   * `/docs/concepts/frames#the-chain` into a `hash` that changed to `''`,
+   * which re-runs the scroll below and throws the reading room back to the
+   * top behind the scrim.
    */
-  const here = resolvedLocation(useLocation())
-  const route = normalize(here.pathname)
-  const hash = here.hash
+  const route = normalize(useOverlayStore((state) => state.mode.pathname))
+  const hash = useOverlayStore((state) => state.mode.hash)
 
   const manifest = useManifest()
   const wing =
     manifest.value === null ? undefined : wingFor(manifest.value, route)
-  const page = usePage(manifest.value, route)
+  const [page] = useState(readDocPage)
   const framed = useDocsFraming(engine, wing?.framing)
 
   const room = useRef<HTMLDivElement | null>(null)
@@ -146,13 +145,13 @@ export function DocsMode({
    * scrolls, and a fragment link into a container the browser did not scroll to
    * is a click that appears to do nothing.
    *
-   * On `page.value` rather than on `route`, so the scroll happens after the
-   * body it is scrolling through exists. Anchored a beat under the sticky bar
-   * by `scroll-margin-top` in `index.css`, so a heading never lands beneath it.
+   * On `page` rather than on `route`, so the scroll happens after the body
+   * it is scrolling through exists. Anchored a beat under the sticky bar by
+   * `scroll-margin-top` in `index.css`, so a heading never lands beneath it.
    */
   useEffect(() => {
     const box = scroller.current
-    if (box === null || page.value === null) return
+    if (box === null || page === null) return
     if (hash.length > 1) {
       const target = box.querySelector(`#${CSS.escape(hash.slice(1))}`)
       if (target !== null) {
@@ -161,7 +160,7 @@ export function DocsMode({
       }
     }
     box.scrollTop = 0
-  }, [page.value, hash])
+  }, [page, hash])
 
   // A route change closes the rail's sheet: on a phone the rail *is* the way
   // to a page, so leaving it up over the page it just opened hides the answer.
@@ -180,15 +179,15 @@ export function DocsMode({
         >
           <DocsMasthead
             wing={wing}
-            page={page.value}
+            page={page}
             route={route}
             counts={manifest.value?.counts ?? null}
-            pending={manifest.pending || page.pending}
+            pending={manifest.pending}
           />
           <DocsBar
             manifest={manifest.value}
             route={route}
-            page={page.value}
+            page={page}
             railOpen={railOpen}
             onRail={toggleRail}
           />
@@ -206,7 +205,7 @@ export function DocsMode({
                 page={page}
                 error={manifest.error}
               />
-              <DocContents page={page.value} />
+              <DocContents page={page} />
             </div>
           </div>
         </div>

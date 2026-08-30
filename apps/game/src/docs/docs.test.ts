@@ -10,6 +10,7 @@ import {
   wingFor,
 } from './docsNav.ts'
 import { searchDocs, tokenize } from './search.ts'
+import { docsParam, docsRoute, docCardDescription } from './urls.ts'
 
 /*
  * The two pure halves of the reading room: where a route sits, and what a query
@@ -90,6 +91,48 @@ const MANIFEST: DocManifest = {
     exports: 1,
   },
 }
+
+describe('the URL a documentation page is served at', () => {
+  it('round-trips the index and a nested page', () => {
+    for (const route of [
+      '/docs',
+      '/docs/vision',
+      '/docs/concepts/frames',
+      '/docs/api/spatial/Sector',
+    ]) {
+      expect(docsRoute(docsParam(route))).toBe(route)
+    }
+  })
+
+  it('gives the index no rest param, so Astro can emit /docs not /docs/index', () => {
+    expect(docsParam('/docs')).toBeUndefined()
+    expect(docsRoute(undefined)).toBe('/docs')
+    expect(docsRoute('')).toBe('/docs')
+  })
+
+  it('keeps slashes inside the rest param, because [...route] is one string', () => {
+    expect(docsParam('/docs/api/spatial/Sector')).toBe('api/spatial/Sector')
+  })
+
+  it('refuses a path that is not a documentation route', () => {
+    expect(() => docsParam('/planetarium')).toThrow(/documentation route/)
+    expect(() => docsParam('/docsish')).toThrow(/documentation route/)
+  })
+
+  it('uses the lead as the card when it is a description, not a sentence fragment', () => {
+    const fallback =
+      'How InertialRef works and why: ten mechanisms, sixteen decision records, the design bible, and a generated reference for every export of the engine.'
+    expect(docCardDescription('Frames are not coordinates.', fallback)).toBe(
+      fallback,
+    )
+    expect(
+      docCardDescription(
+        'How a body-fixed frame relates to an inertial one, and why the distinction is the whole of orbital mechanics.',
+        fallback,
+      ),
+    ).toMatch(/^How a body-fixed frame/)
+  })
+})
 
 describe('where a route sits', () => {
   it('finds the wing that lists it', () => {
@@ -286,10 +329,10 @@ describe('search', () => {
  * The one thing about the transport that cannot be seen in a browser, because
  * it only happens on the deployment.
  *
- * The Worker serves this origin with `not_found_handling:
- * single-page-application`, so a request for a file the asset store does not
- * have comes back as `index.html` with a **200**. The dev server answers 404,
- * so every local run takes the branch production never takes.
+ * A miss from the asset store is HTML — the 404 document, or an SPA
+ * document wearing that URL. The dev server answers 404, so a local run
+ * takes the status branch; the content-type branch is the 200 that is
+ * still the wrong bytes.
  */
 describe('a staged file that is not there', () => {
   afterEach(() => {

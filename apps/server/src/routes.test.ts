@@ -10,10 +10,10 @@ describe('worker routing', () => {
   })
 
   it('answers anything else under /api from the API, not the page', () => {
-    // Each of these is served by the SPA fallback if it reaches the asset
-    // store, so the client would receive 200 and a document — a healthy-looking
-    // server it cannot actually talk to. The bare `/api` case is why
-    // run_worker_first lists `/api` as well as `/api/*`.
+    // Each of these is a page if it reaches the asset store, so the client
+    // would receive a document — a healthy-looking server it cannot actually
+    // talk to. The bare `/api` case is why run_worker_first lists `/api` as
+    // well as `/api/*`.
     for (const path of [
       '/api',
       '/api/',
@@ -52,9 +52,9 @@ describe('worker routing', () => {
   it('404s an unlisted media name rather than handing it the page', () => {
     /*
      * The allow-list is a bucket-read boundary and an honesty boundary at once.
-     * Without the second branch each of these gets `index.html` and a 200 from
-     * the SPA fallback, and an `<audio>` element handed a page of markup fails
-     * as though it could not decode the file.
+     * Without the second branch each of these gets an HTML document from the
+     * asset store, and an `<audio>` element handed a page of markup fails as
+     * though it could not decode the file.
      *
      * The traversal cases matter because the alternative design — map
      * `/media/*` onto a key prefix — would have turned them into reads of

@@ -1,4 +1,3 @@
-import { Link } from 'react-router'
 import { ArrowRight } from 'lucide-react'
 import { FOCUS_RING } from '../hud/focus.ts'
 import type { ModeCard } from './modes.ts'
@@ -16,8 +15,8 @@ import { StatusBadge } from './StatusBadge.tsx'
 export function ModeLink({ mode }: { mode: ModeCard }) {
   const Icon = mode.icon
   return (
-    <Link
-      to={mode.to}
+    <a
+      href={mode.to}
       // The surfaces are near-opaque rather than a wash. They sit over a sunlit
       // planet at the brightest end of the frame, and a 50% slate over that is
       // a lighter grey than the type on it.
@@ -60,6 +59,6 @@ export function ModeLink({ mode }: { mode: ModeCard }) {
         // animate anything a future class touches — including layout.
         className="size-4 shrink-0 -translate-x-1 text-slate-700 opacity-0 transition-[translate,color,opacity] group-hover:translate-x-0 group-hover:text-sky-300 group-hover:opacity-100"
       />
-    </Link>
+    </a>
   )
 }

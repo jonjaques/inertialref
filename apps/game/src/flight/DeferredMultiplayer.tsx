@@ -1,4 +1,3 @@
-import { Link } from 'react-router'
 import { Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { FOCUS_RING } from '../hud/focus.ts'
@@ -36,21 +35,21 @@ export function DeferredMultiplayer() {
             variant="outline"
             className={`h-auto rounded border-sky-500/50 bg-sky-500/15 px-3 py-1.5 font-normal text-sky-200 shadow-none hover:bg-sky-500/25 hover:text-sky-100 ${FOCUS_RING}`}
           >
-            <Link to={PLAY_SOLO}>play solo instead</Link>
+            <a href={PLAY_SOLO}>play solo instead</a>
           </Button>
           <Button
             asChild
             variant="outline"
             className={`h-auto rounded border-slate-700 bg-transparent px-3 py-1.5 font-normal text-slate-300 shadow-none hover:border-sky-500/60 hover:bg-transparent hover:text-sky-200 ${FOCUS_RING}`}
           >
-            <Link to={PLANETARIUM}>open the planetarium</Link>
+            <a href={PLANETARIUM}>open the planetarium</a>
           </Button>
           <Button
             asChild
             variant="outline"
             className={`h-auto rounded border-slate-700 bg-transparent px-3 py-1.5 font-normal text-slate-400 shadow-none hover:border-slate-500 hover:bg-transparent hover:text-slate-300 ${FOCUS_RING}`}
           >
-            <Link to={HOME}>back</Link>
+            <a href={HOME}>back</a>
           </Button>
         </div>
       </div>

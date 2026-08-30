@@ -2,6 +2,10 @@
 
 Status: accepted · 2026-08-22
 
+Amended by [ADR-0021](0021-the-astro-shell.md): the canvas still lives outside
+every navigation that would rebuild it; the document is the shell that holds
+it.
+
 ## Context
 
 Until this decision the client was one screen: a `<Canvas>`, a HUD layer over

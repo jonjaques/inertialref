@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router'
 import {
   ChevronFirst,
   ChevronLast,
@@ -18,7 +17,8 @@ import { useAction, useActions, useKeyContext } from '../input/useKeymap.ts'
 import { TransportButton } from '../hud/TransportButton.tsx'
 import { useScrubber } from '../hud/useScrubber.ts'
 import { useEngine } from '../state/engineStore.ts'
-import { CINEMA, cinemaLink, QUERY } from '../pages/paths.ts'
+import { CINEMA, cinemaLink, QUERY, searchParam } from '../pages/paths.ts'
+import { useOverlayStore } from '../pages/overlay.ts'
 import { EndCard } from './EndCard.tsx'
 import {
   durationText,
@@ -56,8 +56,9 @@ export function CinemaPlayer({
   /** Whether the mode's chrome is out of the picture. See `useTransportIdle`. */
   idle: boolean
 }) {
-  const navigate = useNavigate()
-  const [params, setParams] = useSearchParams()
+  const search = useOverlayStore((state) => state.mode.search)
+  const setModeSearch = useOverlayStore((state) => state.setModeSearch)
+  const replaceMode = useOverlayStore((state) => state.replaceMode)
   /*
    * One published playhead, and it carries `ended` with it.
    *
@@ -108,8 +109,8 @@ export function CinemaPlayer({
     if (opened.current !== id) {
       opened.current = id
       open(
-        parseFrame(params.get(QUERY.frame), Number.MAX_SAFE_INTEGER),
-        parseAutoplay(params.get(QUERY.autoplay)),
+        parseFrame(searchParam(search, QUERY.frame), Number.MAX_SAFE_INTEGER),
+        parseAutoplay(searchParam(search, QUERY.autoplay)),
       )
     }
     return () => {
@@ -119,7 +120,7 @@ export function CinemaPlayer({
       // mode would hand the camera to a script nobody asked for.
       engine.harness.stopCutscene()
     }
-  }, [engine, id, open, params])
+  }, [engine, id, open, search])
 
   // Stop for good when the player leaves, whatever the reason.
   useEffect(
@@ -135,7 +136,7 @@ export function CinemaPlayer({
    *
    * Only while paused, and that is the whole rule: during playback this would
    * rewrite the address bar twenty-four times a second, and every one of those
-   * is a router update. Paused, it means the address bar always describes the
+   * is a history update. Paused, it means the address bar always describes the
    * still on screen — which is what makes "send me that frame" a copy of the
    * URL rather than a feature.
    */
@@ -146,18 +147,16 @@ export function CinemaPlayer({
     // scene rather than a link to a position in it — the same rule
     // `cinemaLink` follows, applied to the address bar it writes into.
     const frame = at > 0 ? String(at) : null
-    if ((params.get(QUERY.frame) ?? null) === frame) return
-    setParams(
-      (current) => {
-        const next = new URLSearchParams(current)
-        if (frame === null) next.delete(QUERY.frame)
-        else next.set(QUERY.frame, frame)
-        next.delete(QUERY.autoplay)
-        return next
-      },
-      { replace: true },
+    if ((searchParam(search, QUERY.frame) ?? null) === frame) return
+    const next = new URLSearchParams(
+      search.startsWith('?') ? search.slice(1) : search,
     )
-  }, [playhead, params, setParams])
+    if (frame === null) next.delete(QUERY.frame)
+    else next.set(QUERY.frame, frame)
+    next.delete(QUERY.autoplay)
+    const qs = next.toString()
+    setModeSearch(qs.length === 0 ? '' : `?${qs}`)
+  }, [playhead, search, setModeSearch])
 
   /*
    * The verbs, which are the session's.
@@ -181,9 +180,9 @@ export function CinemaPlayer({
     // Play it again through the same verb the URL used, and clear the frame the
     // ended playhead left in the address bar — a replay that opened on the last
     // frame would end immediately.
-    void navigate(cinemaLink(id, { autoplay: true }), { replace: true })
+    replaceMode(cinemaLink(id, { autoplay: true }))
     open(0, true)
-  }, [id, navigate, open])
+  }, [id, replaceMode, open])
 
   /*
    * Space plays and pauses, the arrows step. What a player's keys always are.
@@ -210,7 +209,9 @@ export function CinemaPlayer({
    * binding is advertised in three places and claimed by nobody, and the
    * dispatcher declines a key the sheet says works.
    */
-  useAction('cinema.library', () => void navigate(CINEMA))
+  useAction('cinema.library', () => {
+    window.location.assign(CINEMA)
+  })
   useActions(['cinema.back', 'cinema.forward'], (action, event) => {
     const status = engine.cutscene.sample()
     if (status === null) return
@@ -228,7 +229,7 @@ export function CinemaPlayer({
           variant="outline"
           className={`type-ui h-auto rounded border-slate-700 bg-transparent px-3 py-1.5 font-normal text-slate-300 shadow-none hover:border-sky-500/60 hover:bg-transparent hover:text-sky-200 ${FOCUS_RING}`}
         >
-          <Link to={CINEMA}>back to the library</Link>
+          <a href={CINEMA}>back to the library</a>
         </Button>
       </div>
     )
@@ -356,9 +357,9 @@ export function CinemaPlayer({
                 title="Back to the library"
                 className={`size-7 rounded border-slate-700 bg-transparent text-slate-400 shadow-none hover:border-sky-500/60 hover:bg-transparent hover:text-sky-200 ${FOCUS_RING}`}
               >
-                <Link to={CINEMA}>
+                <a href={CINEMA}>
                   <X />
-                </Link>
+                </a>
               </Button>
             </span>
           </div>
