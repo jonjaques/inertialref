@@ -160,6 +160,23 @@ export const PAGES: readonly PageMeta[] = [
 const ROOT = PAGES[PAGES.length - 1] as PageMeta
 
 /**
+ * The path a scraper, a sitemap entry and a tab title agree on.
+ *
+ * A trailing slash is the same page. Astro `build.format: 'file'` writes
+ * `planetarium.html`, and for a layout that reads `Astro.url.pathname`
+ * that *is* the pathname — so `/index.html` is `/`, and
+ * `/docs/concepts/frames.html` is `/docs/concepts/frames`. The sitemap
+ * lists the extensionless form. Two canonicals for one page is the split
+ * the tag exists to prevent.
+ */
+export function publicPath(pathname: string): string {
+  let path = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname
+  if (path.endsWith('.html')) path = path.slice(0, -'.html'.length)
+  if (path === '/index' || path === '') return HOME
+  return path
+}
+
+/**
  * The metadata for a path, by longest matching prefix.
  *
  * A prefix rather than an exact match because the addressable surface is
@@ -169,7 +186,7 @@ const ROOT = PAGES[PAGES.length - 1] as PageMeta
  * the top of this file says why that is not free.
  */
 export function pageMetaFor(pathname: string): PageMeta {
-  const path = withoutTrailingSlash(pathname)
+  const path = publicPath(pathname)
   return (
     PAGES.find(
       (page) =>
@@ -196,27 +213,18 @@ export function documentTitle(
 }
 
 /**
- * `/planetarium/` and `/planetarium` are one page, so they get one spelling.
- *
- * `/` is left alone — it is the only path where the slash is the path rather
- * than a separator with nothing after it.
- */
-const withoutTrailingSlash = (pathname: string): string =>
-  pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname
-
-/**
  * The absolute URL for a path, for a canonical link or a sitemap entry.
  *
  * Normalized, and that is the whole reason this is a function rather than a
  * template literal at each call site. `pageMetaFor` already treats a trailing
- * slash as the same page and `sitemap.xml` lists the slash-less form — so a
- * visitor arriving at a shared `/planetarium/` link used to be served a
- * self-referencing canonical that disagreed with the sitemap. Two canonicals
- * for one page is the exact duplicate-content split the tag exists to prevent,
- * and it split the analytics `page_location` the same way.
+ * slash as the same page and the sitemap lists the slash-less, extensionless
+ * form — so a visitor arriving at a shared `/planetarium/` or
+ * `/planetarium.html` link is served one canonical. Two canonicals for one
+ * page is the exact duplicate-content split the tag exists to prevent, and it
+ * split the analytics `page_location` the same way.
  */
 export function canonicalUrl(pathname: string): string {
-  const path = withoutTrailingSlash(pathname)
+  const path = publicPath(pathname)
   return path === HOME ? SITE.origin : `${SITE.origin}${path}`
 }
 
@@ -230,7 +238,8 @@ export function canonicalUrl(pathname: string): string {
  * listed because `/docs` is.
  */
 export function indexedPath(pathname: string): boolean {
-  const path = withoutTrailingSlash(pathname)
+  const path = publicPath(pathname)
+  if (path === '/404') return false
   if (isOverlayPath(path)) return false
   return pageMetaFor(path).index
 }

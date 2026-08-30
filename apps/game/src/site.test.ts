@@ -132,6 +132,26 @@ describe('what a search result and a tab strip get', () => {
     expect(canonicalUrl(HOME)).toBe(SITE.origin)
   })
 
+  it('strips the .html Astro file format puts on a pathname', () => {
+    /*
+     * `build.format: 'file'` writes `planetarium.html`. Pages that pass
+     * `pathname` into the layout already name the public URL; pages that
+     * do not — the front door, the 404, every documentation page — see
+     * `Astro.url.pathname` as the file. The sitemap lists the extensionless
+     * form. Two canonicals for one page is the split this function exists
+     * to prevent.
+     */
+    expect(canonicalUrl('/index.html')).toBe(SITE.origin)
+    expect(canonicalUrl(`${PLANETARIUM}.html`)).toBe(
+      `${SITE.origin}${PLANETARIUM}`,
+    )
+    expect(canonicalUrl(`${DOCS}/concepts/frames.html`)).toBe(
+      `${SITE.origin}${DOCS}/concepts/frames`,
+    )
+    expect(pageMetaFor(`${DOCS}/concepts/frames.html`).path).toBe(DOCS)
+    expect(indexedPath('/404.html')).toBe(false)
+  })
+
   it('states an origin that agrees with the host', () => {
     // Two constants, one fact. They are separate because one is compared
     // against `location.hostname` and the other is concatenated into a URL.

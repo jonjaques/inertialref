@@ -29,7 +29,7 @@ const { html, ...meta } = page
 const pageJson = encodeJsonScript(meta)
 ---
 
-<Base heading={page.title} description={description}>
+<Base heading={page.title} description={description} pathname={route}>
   <Islands />
   <!--
     The document a scraper, a no-JS reader, and the first paint all see.
