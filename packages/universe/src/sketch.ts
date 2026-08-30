@@ -110,6 +110,10 @@ export interface BandSeeds {
   readonly mineral: Seed
   /** The ragged edge of a polar cap. */
   readonly frost: Seed
+  /** Regolith roughness below the canonical floor. See `micro.ts`. */
+  readonly grit: Seed
+  /** Which rocks are lying where. See `scatter.ts`. */
+  readonly scatter: Seed
 }
 
 export interface TerrainSketch {
@@ -117,6 +121,16 @@ export interface TerrainSketch {
   readonly hotspots: readonly Hotspot[]
   /** Coarsest first. Empty on a world the grammar gives no craters. */
   readonly craterLevels: readonly CraterLevel[]
+  /**
+   * The rungs below the canonical wavelength floor — the presentational tail.
+   *
+   * Same construction and the same hashes; what makes them a different list is
+   * that the contact test never evaluates them. `micro.ts` carries the argument
+   * and `microLadder` builds them.
+   */
+  readonly microLevels: readonly CraterLevel[]
+  /** The rung number the tail's hashes are drawn against. See `microLadder`. */
+  readonly microFirstRung: number
   /**
    * The young large craters, youngest first, for the albedo their rays write.
    *
@@ -132,7 +146,7 @@ export interface TerrainSketch {
    *
    * A degree-one asymmetry, because that is what the measurement is. Lunar
    * mare covers 31% of the near side and 2% of the far side, and the
-   * explanation is a crust tens of kilometres thinner on one side of the body
+   * explanation is a crust tens of kilometers thinner on one side of the body
    * — one lobe, not a patchwork. A noise field alone cannot produce that
    * however it is tuned: its power is spread over several degrees, so it makes
    * a body with basalt everywhere in patches rather than a body with a near
@@ -457,6 +471,110 @@ export function craterLadder(
 }
 
 /**
+ * The rungs the ladder has below the canonical wavelength floor.
+ *
+ * Coarsest first, from `CANONICAL_DETAIL_FLOOR` down to `floor`, and the same
+ * construction as `craterLadder`: a cell holds one crater of its own size at
+ * most, so halving the diameter and doubling the cells per axis reproduces the
+ * −2 cumulative slope for free.
+ *
+ * **These are presentational and the contact test never sees them**, which is
+ * the whole of `micro.ts`. A ship's hull spans tens of meters and the deepest
+ * thing in this list is a fifth of eight, so what the ship stands on and what
+ * the eye sees differ by less than the landing gear — bounded by
+ * `microReliefBound` and measured by `micro.test.ts`.
+ *
+ * **The rungs are numbered from `MICRO_RUNG_BASE` rather than continued from
+ * the canonical ladder, and that is what lets a body with no canonical craters
+ * have any.** Numbering them by position in the body's own ladder needs a
+ * largest crater to count down from, and `largestCrater` is zero on every
+ * surface `young` deletes — Miranda, Enceladus, Europa. Anchored at a fixed rung
+ * instead, the tail is a property of the body's *size and air* alone, its hashes
+ * cannot collide with a canonical rung (the canonical ladder reaches nineteen at
+ * its widest and is capped at eleven), and a rung is the same rung on every body
+ * of the same radius, which is what an eight-meter crater ought to be.
+ *
+ * **`young` does not enter and `air` enters harder**, and both follow from the
+ * timescale. A resurfacing event deletes a crater population, which is why
+ * `craterDensity` multiplies by `1 - young` — but retention at a meter is
+ * geologically instantaneous, so the surface that has no kilometer craters
+ * because it was paved last week is saturated at a meter by the following
+ * afternoon. Europa is smooth at kilometers and rough at centimeters, and this
+ * is the term that says so. Air is the opposite: an atmosphere screens the small
+ * impactor and then fills the hole in, so it takes the small population out
+ * first — Venus has nothing under three kilometers. `(1 - air)⁴` is an ordering
+ * fit rather than a measurement, and the order it reproduces is Luna 1, Mars
+ * 0.14, Earth 0.012, Venus 0.
+ *
+ * **There is a gap above this list on a body with large craters, and it is
+ * `MAX_CRATER_LEVELS` rather than this.** The canonical ladder stops at eleven
+ * halvings whether or not it has reached the floor, so a world whose largest
+ * basin is 2,170 km has canonical craters down to 2.1 km and then nothing until
+ * eight meters. Closing it is a deeper canonical ladder, which moves the field
+ * the contact test integrates and is therefore a version bump —
+ * [ADR-0021](../../../docs/adr/0021-the-ground.md) names it rather than
+ * smuggling it in here.
+ */
+export function microLadder(
+  grammar: SurfaceGrammar,
+  floor: Meters = MICRO_DETAIL_FLOOR,
+): { readonly levels: readonly CraterLevel[]; readonly firstRung: number } {
+  const density = microCraterDensity(grammar)
+  if (density <= 0 || floor <= 0 || floor >= CANONICAL_DETAIL_FLOOR) {
+    return { levels: [], firstRung: MICRO_RUNG_BASE }
+  }
+  const levels: CraterLevel[] = []
+  for (let rung = 0; ; rung += 1) {
+    const diameter = CANONICAL_DETAIL_FLOOR / 2 ** rung
+    if (diameter < floor) break
+    levels.push({
+      cells: grammar.meanRadius / diameter,
+      diameter,
+      density,
+    })
+  }
+  return { levels, firstRung: MICRO_RUNG_BASE }
+}
+
+/**
+ * How much of the sub-floor crater population survives on this body.
+ *
+ * One number for the whole tail rather than a climb per rung: `craterDensity`
+ * climbs 1.35 a rung precisely because a young surface is unsaturated at the
+ * large end, and by the time the ladder has fallen from a basin to eight meters
+ * that climb has passed one on every body with any craters at all. Continuing it
+ * here would be arithmetic that always returns the same answer.
+ */
+export const microCraterDensity = (grammar: SurfaceGrammar): number =>
+  clamp01((1 - grammar.air) ** 4)
+
+/**
+ * The rung number the sub-floor ladder starts at.
+ *
+ * Thirty-two, which is past any canonical rung a ladder can reach — an
+ * uncapped one bottoms out at nineteen on the largest body in scope and
+ * `MAX_CRATER_LEVELS` cuts it at eleven — so a sub-floor crater can never draw
+ * a basin's hashes however the canonical ladder is later extended. The rung
+ * number is the fourth lane of the lattice hash and nothing else.
+ */
+export const MICRO_RUNG_BASE = 32
+
+/**
+ * The shortest ground wavelength the *presentational* field carries, meters.
+ *
+ * A meter, because that is the spacing the mesh is asked to reach and a feature
+ * needs two samples to exist. It is what `surfaceDetailFloor` walks down to and
+ * therefore what sets how many patches a landing generates: measured, dropping
+ * it from the canonical eight to one moves the floor by **one to four levels**
+ * across the zoo — and by ten on Europa, which is the shape of the answer
+ * rather than an outlier, because a body `young` deleted the canonical crater
+ * population from had nothing at any scale below its ice bands.
+ *
+ * Below it the ground is per-pixel in the material and nothing meshes it.
+ */
+export const MICRO_DETAIL_FLOOR: Meters = 1
+
+/**
  * The shortest ground wavelength the canonical field carries, meters.
  *
  * `TERRAIN-PLAN.md` § 5 names the canonical floor as roughly 0.5 m of amplitude
@@ -574,6 +692,7 @@ function derive(seed: Seed, grammar: SurfaceGrammar): TerrainSketch {
   }
 
   const craterLevels = craterLadder(grammar)
+  const micro = microLadder(grammar)
   const lattice = latticeSeed(seed)
   /*
    * A label of its own, not `'mare'`. The axis and the noise that roughens its
@@ -589,6 +708,8 @@ function derive(seed: Seed, grammar: SurfaceGrammar): TerrainSketch {
     plates,
     hotspots,
     craterLevels,
+    microLevels: micro.levels,
+    microFirstRung: micro.firstRung,
     rayCraters: rayCraters(lattice, craterLevels, grammar),
     mareAxis,
     stripes,
@@ -605,6 +726,8 @@ function derive(seed: Seed, grammar: SurfaceGrammar): TerrainSketch {
       mare: deriveSeed(seed, 'mare'),
       mineral: deriveSeed(seed, 'mineral'),
       frost: deriveSeed(seed, 'frost'),
+      grit: deriveSeed(seed, 'grit'),
+      scatter: deriveSeed(seed, 'scatter'),
     },
     latticeSeed: lattice,
   }
@@ -654,6 +777,15 @@ const cacheKey = (seed: Seed, grammar: SurfaceGrammar): string =>
     grammar.largestCrater,
     grammar.meanRadius,
     grammar.stripes,
+    /*
+     * `air`, because `microLadder` reads it and nothing else in this list does.
+     * The key is what the derivation reads, and the sub-floor ladder's density
+     * is `(1 − air)⁴` — so without it two grammars alike in the nine fields
+     * above and different in the tenth share a sketch, and whichever was asked
+     * first decides whether the other has a meter scale at all. Production is
+     * protected by the seed alone, which is protection by coincidence.
+     */
+    grammar.air,
   ].join('|')
 
 /** The sketch for a surface, derived once and kept. */

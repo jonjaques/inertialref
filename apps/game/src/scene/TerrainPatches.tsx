@@ -16,7 +16,7 @@ import { patchIndices, pixelAngle } from '@inertialref/rendering'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { GEOMETRY_CACHE } from '../engine/terrainStreamer.ts'
 import { texturesFor } from '../render/planetTextures.ts'
-import { createTerrainMaterial } from '../render/terrain.ts'
+import { grainWrap, type TerrainMaterial } from '../render/terrain.ts'
 import { warmAtMount, warmCompile, warmRenderer } from '../render/warmup.ts'
 
 /**
@@ -38,10 +38,15 @@ import { warmAtMount, warmCompile, warmRenderer } from '../render/warmup.ts'
  * streamer keeps the geometry, and a camera that turns around should not pay to
  * rebuild the ground it just left.
  */
-export function TerrainPatches({ engine }: { engine: GameEngine }) {
+export function TerrainPatches({
+  engine,
+  terrain,
+}: {
+  engine: GameEngine
+  terrain: TerrainMaterial
+}) {
   const group = useRef<Group>(null)
   const meshes = useMemo(() => new Map<string, Mesh>(), [])
-  const terrain = useMemo(() => createTerrainMaterial(), [])
   const material = terrain.material
   /*
    * One index attribute for the session. It is a function of the resolution
@@ -262,7 +267,7 @@ export function TerrainPatches({ engine }: { engine: GameEngine }) {
          * `Math.fround` is not decoration: the uniform is float32, and the
          * material's altitude arithmetic is exact only if the offset beside it
          * describes the vector the shader actually gets rather than the float64
-         * one this array was built from. Half a metre at Earth's radius, which
+         * one this array was built from. Half a meter at Earth's radius, which
          * is a quarter of the water band.
          */
         const ax = Math.fround(patch.anchor.x)
@@ -270,6 +275,21 @@ export function TerrainPatches({ engine }: { engine: GameEngine }) {
         const az = Math.fround(patch.anchor.z)
         mesh.userData.anchor = new Vector3(ax, ay, az)
         mesh.userData.anchorAltitude = Math.hypot(ax, ay, az) - datumRadius
+        /*
+         * The anchor in grain wavelengths, wrapped into one period.
+         *
+         * Reduced here, in float64, from the *unrounded* anchor — which is the
+         * whole trick and the reason it is not `anchor / GRAIN_METRES` in the
+         * shader. That quotient is 2.5 × 10⁶ on Luna, where float32 resolves 0.25
+         * of a wavelength; wrapped first it is under 64, where it resolves four
+         * microns. `mod` rather than `%`, so a negative anchor lands in [0, 64)
+         * rather than in (−64, 0] and the two sides of the body agree.
+         */
+        mesh.userData.grainOrigin = new Vector3(
+          grainWrap(patch.anchor.x),
+          grainWrap(patch.anchor.y),
+          grainWrap(patch.anchor.z),
+        )
         mesh.userData.patch = patch
         meshes.set(key, mesh)
       }

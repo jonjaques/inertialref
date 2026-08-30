@@ -115,12 +115,16 @@ export const DEFAULT_CELL_PIXELS = 16
  * The deepest level to ask for when the caller does not say.
  *
  * Callers with a body should pass `surfaceDetailFloor` instead, which measures
- * where *that* field stops having anything to add — level 12 to 16 across the
- * zoo now that the field carries crater rims, against 7 to 10 for the three
- * bands it replaced. This is the fallback for a caller holding numbers rather
- * than a body, and it is deliberately no deeper than any of them — it *is* the
- * shallowest the zoo measures — so forgetting to pass one is visible as coarse
- * ground rather than as a budget that will not close.
+ * where *that* field stops having anything to add — level 12 to 19 across the
+ * zoo now that the presentational tail carries sub-floor craters, against 10 to
+ * 16 for the canonical field alone and 7 to 10 for the three bands before it.
+ * This is the fallback for a caller holding numbers rather than a body, and it
+ * is deliberately no deeper than any of them — it *is* the shallowest the zoo
+ * measures — so forgetting to pass one is visible as coarse ground rather than
+ * as a budget that will not close. Twelve rather than thirteen because Miranda
+ * is the shallowest and it is twelve; a fallback one level past a body's own
+ * floor is the failure this constant exists to prevent, arriving through the
+ * constant.
  */
 export const DEFAULT_MAX_LEVEL = 12
 
@@ -129,24 +133,30 @@ export const DEFAULT_MAX_LEVEL = 12
  *
  * A safety net rather than a working limit, and the lens is what says how much
  * of a net it is. At the flight lens an uncapped whole-disk selection wants
- * between 420 and 1,008 patches across the zoo's twenty-four site descents, so
+ * between 476 and 1,077 patches across the zoo's twenty-four site descents, so
  * this never binds on a lens a player flies with; at the wide end of the
  * slider it is lower still.
  *
- * **It was 768, and the geology is what moved it.** A whole-disk selection
- * costs about ninety patches per level between the horizon and the ground, and
- * the band stack pushed `surfaceDetailFloor` from 7–10 to 12–16 — crater rims
- * are sharp, and resolving one to half a meter takes samples about seven times
- * finer than the rim is wide. Every extra level underfoot is another ring of
- * patches. Holding the old cap would have spent the phase's whole point: the
- * disk would degrade by a level on three of the four zoo bodies, on the ground,
- * which is exactly where the new detail is.
+ * **It was 768, then 1,024, and each time it was the field getting deeper.** A
+ * whole-disk selection costs about ninety patches per level between the horizon
+ * and the ground. The band stack pushed `surfaceDetailFloor` from 7–10 to 10–16
+ * because crater rims are sharp; the presentational tail pushed it to 12–19,
+ * because the sub-floor crater band cuts up to 0.8 m and that is over the
+ * tolerance a cell is refined against. Every extra level underfoot is another ring of
+ * patches. Holding the old cap would have spent this phase's whole point: the
+ * worst of the twenty-four descents wants 1,077 and would degrade by a level on
+ * the ground, which is exactly where the new detail is.
  *
- * **What that buys costs 208 MB in the corner case.** A patch carries
+ * **What that buys costs 303 MB in the corner case.** A patch carries
  * positions, normals and both morph targets — 65² vertices, twelve floats
- * apiece, 203 KB — so 1,024 of them is 4.3 M vertices and 208 MB of buffers,
- * against 156 MB at the old cap. The number is here so that the next person to
- * want it raised knows what they are buying.
+ * apiece, 203 KB — plus **two** four-byte cover attributes, the vertex's own and
+ * its morph target's, which is 33.8 KB rather than the 17 one of them is. So a
+ * patch is 237 KB, 1,280 of them is 5.4 M vertices and 303 MB of buffers, and
+ * the old cap was 243 MB. The number is here so that the next person to want it
+ * raised knows what they are buying, and `GEOMETRY_CACHE` is twice this, which
+ * is the number that actually sizes the resident set. Packing the four vertex
+ * attributes below float32 halves both and is the outstanding lever; it is
+ * measured-before-optimized rather than done here.
  *
  * **It binds at the telephoto end, and by how much is measured rather than
  * adjectival.** At 20° the same descents want two to three times the flight
@@ -163,7 +173,7 @@ export const DEFAULT_MAX_LEVEL = 12
  * the honest answer is the one the cap already gives: the disk goes coarse, by
  * a stated amount, rather than the frame going away.
  */
-export const DEFAULT_MAX_PATCHES = 1_024
+export const DEFAULT_MAX_PATCHES = 1_280
 
 /**
  * Where a patch starts and finishes sliding onto its parent's grid, as

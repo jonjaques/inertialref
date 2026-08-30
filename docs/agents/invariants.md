@@ -28,6 +28,8 @@ table is one of those three, not drift.
 | No planetary radius subtracted in a shader                | [ADR-0020](../adr/0020-the-face.md) · [Rendering](../concepts/rendering.md)                                |
 | The ground and the sphere behind it shade alike           | [ADR-0020](../adr/0020-the-face.md) · [Rendering](../concepts/rendering.md)                                |
 | No varying named after an attribute                       | [ADR-0020](../adr/0020-the-face.md) · [Rendering](../concepts/rendering.md)                                |
+| No attribute object under two names                       | [ADR-0021](../adr/0021-the-ground.md) · [Rendering](../concepts/rendering.md)                              |
+| No canonical reader of the drawn ground, or the reverse   | [ADR-0021](../adr/0021-the-ground.md) · [Terrain](../concepts/streaming.md)                                |
 | Entity writes go through `World`                          | [Extending](../guides/extending.md)                                                                        |
 | Landedness is a consequence, never asserted               | [Extending](../guides/extending.md)                                                                        |
 | Saves store references, not regenerable content           | [Persistence](../concepts/persistence.md) · [ADR-0007](../adr/0007-persistence.md)                         |

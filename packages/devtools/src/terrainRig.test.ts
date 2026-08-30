@@ -8,6 +8,8 @@ import {
   parseAddress,
   SURFACE_ARCHETYPES,
   surfaceDetailFloor,
+  drawnDivergence,
+  drawnSurfaceRadius,
   surfaceRadius,
   systemId,
   systemsWithin,
@@ -290,20 +292,23 @@ describe('a simulated descent', () => {
        * to the level at the horizon costs about ninety patches per level
        * between the two, and changing the tolerance moves it by a few percent.
        *
-       * 380 to 862 across the zoo's twenty-four site descents, where the
-       * three bands this replaced cost 410 to 480 — the band stack put crater
-       * rims in the field, `surfaceDetailFloor` went from 7–10 to 12–16 to
-       * resolve them, and every extra level underfoot is another ring. The
-       * assertion is here so that a change to either is a change to a number
-       * rather than a surprise in a frame.
+       * 476 to 1,077 across the zoo's twenty-four site descents, where the
+       * canonical field alone costs 380 to 862 and the three bands before it
+       * cost 410 to 480 — the band stack put crater rims in the field and the
+       * presentational tail put sub-floor craters under them,
+       * `surfaceDetailFloor` went from 7–10 to 10–16 to 12–19 to resolve them,
+       * and every extra level underfoot is another ring. The assertion is here
+       * so that a change to either is a change to a number rather than a
+       * surprise in a frame.
        *
        * **Nine tenths of the cap, taken from the constant rather than typed as
        * a literal.** A bare `< 1_024` is the cap itself, which can only say
        * "the selection did not saturate" — it passes at 1,023 with the cap
        * doing the work it is supposed to be a safety net for, and raising
-       * `DEFAULT_MAX_PATCHES` silently raises the assertion with it. 862 is the
-       * measured worst and 921 is the bound, so what this says is that there is
-       * still headroom, which is the property the constant was raised to have.
+       * `DEFAULT_MAX_PATCHES` silently raises the assertion with it. 1,077 is
+       * the measured worst and 1,152 is the bound, so what this says is that
+       * there is still headroom, which is the property the constant was raised
+       * to have — 7%, against 7% at the previous cap.
        */
       expect(
         `${entry.name}: ${report.peakDrawn < DEFAULT_MAX_PATCHES * 0.9}`,
@@ -366,7 +371,7 @@ describe('the observatory on the ground', () => {
   it('puts the eye exactly the stance height above the ground', () => {
     /*
      * The one assertion that ties the arithmetic to the terrain: the distance
-     * from the body's *center* to the camera has to be `surfaceRadius` at the
+     * from the body's *center* to the camera has to be `drawnSurfaceRadius` at the
      * stance plus the height. If the pose were composed against the orbital
      * `b:` frame instead of the rotating `bf:` one it would still be the right
      * distance — the frames share an origin — so the second half of the test is
@@ -393,11 +398,30 @@ describe('the observatory on the ground', () => {
     expect(stance).toBeDefined()
 
     const up = geodeticDirection(stance?.latitude ?? 0, stance?.longitude ?? 0)
-    const ground = surfaceRadius(body, up)
+    /*
+     * The **drawn** radius, because a stance is a height above the ground the
+     * viewer can see. The two differ by the presentational tail — up to
+     * `drawnDivergence`, 1.25 m — and standing against the contact
+     * test's radius instead would put the eye inside a crater rim at a
+     * two-meter stance. The ship still lands on `surfaceRadius`.
+     */
+    const ground = drawnSurfaceRadius(body, up)
     // A millimeter in a radius of hundreds of kilometers: the float64 offset
     // arithmetic resolves far better than that, so a looser bound would let a
     // datum error through.
     expect(Vec.length(offset)).toBeCloseTo(ground + 120, 3)
+    /*
+     * And the two are not the same number, which is what makes the line above a
+     * choice rather than a coincidence. Both halves, because only the pair can
+     * fail: a `<=` on its own is satisfied by zero, so deleting the tail from
+     * `drawnElevation` would leave this whole test green with the feature gone.
+     * The lower bound is a millimeter rather than zero — the tail is a sum of a
+     * `tanh`-limited crater band and an fBm, and one direction in the zoo
+     * landing on an exact zero is a flake nobody could reproduce.
+     */
+    const apart = Math.abs(ground - surfaceRadius(body, up))
+    expect(apart).toBeLessThanOrEqual(drawnDivergence(body.surface))
+    expect(apart).toBeGreaterThan(1e-3)
 
     /*
      * And it is standing on *that* point, not merely at that distance.

@@ -26,9 +26,9 @@ import {
   hasSolidSurface,
   parseAddress,
   findBody,
-  groundElevation,
+  drawnElevation,
+  drawnSurfaceRadius,
   type StarSystem,
-  surfaceRadius,
   type SurveySite,
   surveySites,
   systemFrameId,
@@ -1205,9 +1205,21 @@ export class Observatory {
       return null
     }
     const up = geodeticDirection(stance.latitude, stance.longitude)
+    /*
+     * The **drawn** radius, not the contact test's.
+     *
+     * A stance is a height above the ground the viewer can see, and since Phase
+     * 4 the ground the viewer can see carries a presentational tail the contact
+     * test does not — up to `drawnDivergence`, which is 1.25 m. Stood
+     * against `surfaceRadius` at a two-meter stance, the eye sits 0.4 m over the
+     * plain in one place and inside a crater rim in the next, which is the
+     * divergence made visible in exactly the picture the phase is judged from.
+     * The ship still lands on `surfaceRadius`: physics may not read a term the
+     * renderer is free to change.
+     */
     const { offset, orientation } = surfaceStancePose(
       up,
-      surfaceRadius(body, up),
+      drawnSurfaceRadius(body, up),
       stance,
     )
     return {
@@ -1221,10 +1233,12 @@ export class Observatory {
     const body = this.#body()
     if (stance === null || body === null) return null
     const up = geodeticDirection(stance.latitude, stance.longitude)
-    // One elevation sample, not two. `surfaceRadius` is `datumRadius +
-    // groundElevation`, so asking for both the radius and the elevation the way
+    // One elevation sample, not two. `drawnSurfaceRadius` is `datumRadius +
+    // drawnElevation`, so asking for both the radius and the elevation the way
     // they read is fourteen octaves of noise run twice, eight times a second.
-    const elevation = groundElevation(body.surface, up)
+    // The drawn one, because this is the number under the altitude readout and
+    // the stance above stands on it.
+    const elevation = drawnElevation(body.surface, up)
     return {
       stance,
       scrub: scrubForHeight(body.radius, stance.height),
@@ -1237,8 +1251,14 @@ export class Observatory {
        * a terrain elevation. On Phobos that is about −3.5 km of "elevation" on a
        * body with a kilometer of relief; on Haumea it reaches −513 km. Worse, the
        * Surface panel prints it directly under site buttons showing
-       * `SurveySite.elevation`, which is this exact function — the same place,
+       * `SurveySite.elevation`, which is the same quantity — the same place,
        * two numbers, kilometers apart.
+       *
+       * It is the **drawn** field and the site's is canonical, so the two are
+       * still not the same number: up to `drawnDivergence`, 1.25 m on Luna.
+       * That is the right side to be on — the readout is under an altitude the
+       * stance above stands on, and the stance is drawn — and it is the site
+       * that has the wrong field, which is `surveySites` to fix and not this.
        */
       groundElevation: elevation,
       radius: datumRadius(body, up) + elevation + stance.height,

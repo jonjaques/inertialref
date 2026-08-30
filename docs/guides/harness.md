@@ -261,7 +261,7 @@ for (const height of [40000, 2000, 120, 2]) {
 ```js
 ir.zoo() // one body per surface archetype, found rather than listed
 ir.descend(address?, { site, steps }) // fly a descent on paper
-ir.terrain() // what the live streamer holds this frame
+ir.terrain() // what the live streamer holds this frame, rocks included
 ir.terrainBaseline() // the zoo, its descents, and measured patch cost
 ir.dossier(address) // the record, whose Geology card is the surface grammar
 ```
@@ -281,6 +281,14 @@ fail differently: refinement gates on the mesh, so a geometry cache losing what
 the draw set is standing on collapses the selection to the roots while `cached`
 sits at its steady value and reports nothing wrong.
 
+`ir.terrain().scatter` is the rocks on it, and it is part of the terrain report
+rather than a verb of its own because a rock count without the ground under it
+is not a number anyone can act on: `resolving` above zero beside `rocks` at zero
+is a field filling in, and the same pair beside `starved` is a descent
+outrunning both budgets at once. `range` is how far rocks are drawn this frame —
+212 m at the flight lens over the baseline viewport, and a function of the lens
+like everything else here.
+
 **Every count here is a function of the lens, so every report states one.** The
 demand climbs steeply with the pixels-per-radian — measured, the telephoto end
 of the slider wants 1.9× to 3.2× what the flight lens does — so a figure taken
@@ -289,7 +297,7 @@ yesterday's. `ir.descend` and `ir.terrainBaseline` print the lens and the
 viewport in their headers and carry both in the returned object; `ir.terrain`
 carries the live one. Both probes take a `lens` and a `viewport` to ask the
 question at another setting, and `ir.descend` takes a `maxPatches` — the
-streamer's own 1,024 is a safety net that degrades the whole disk by a level
+streamer's own 1,280 is a safety net that degrades the whole disk by a level
 when it bites, so raising it is the only way to see what a selection _wanted_.
 
 ---

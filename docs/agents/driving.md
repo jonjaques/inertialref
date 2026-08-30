@@ -19,9 +19,10 @@ pnpm sim --terrain-baseline       # what terrain costs, measured (~14s)
 pnpm sim --help
 ```
 
-The baseline is the slow one because it is the one that generates: sixty patches
-per zoo body, at 9 to 37 ms each. Its request pattern is the deterministic half
-and costs nothing, which is what a caller that passes no clock gets.
+The baseline is the slow one because it is the one that generates: forty-eight
+patches per zoo body, at 22 to 50 ms each. Its request pattern is the
+deterministic half and costs nothing, which is what a caller that passes no clock
+gets.
 
 Use the browser only for what only a GPU can prove: shading, LOD, framing, a
 cutscene, presentation.
@@ -66,7 +67,7 @@ ir.visit('g:milky-way/s:SOL/b:5.6', { site: 'summit', height: 2 })
 ir.preset('earthrise') // a named picture: address, framing and lens, in one call
 ir.chrome(false) // the interface out of the frame — the state a plate is taken in
 ir.layers(false) // names and traces off, which is a different claim from the chrome
-ir.terrain() // what the live streamer holds this frame — null headlessly
+ir.terrain() // the live streamer and the rocks on it — null headlessly
 ir.ascend() // back to the framing the camera left
 ```
 
@@ -80,7 +81,10 @@ is being taken with, and `ir.descend` takes a `lens` and a `viewport` to ask at
 another one.
 
 `ir.visit` stands a camera on the ground; `ir.land` teleports the ship onto it.
-The same distinction as `look` and `goTo`, one clamp lower. Sites are `summit`,
+The same distinction as `look` and `goTo`, one clamp lower — and they are not the
+same ground: the camera stands on `drawnSurfaceRadius` and the ship lands on
+`surfaceRadius`, up to 1.25 m apart
+([ADR-0021](../adr/0021-the-ground.md)). Sites are `summit`,
 `basin`, `shore`, `rough`, `corner` and `pole`, derived from the body's own field
 rather than authored, so they survive regeneration.
 

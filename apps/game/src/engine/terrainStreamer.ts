@@ -46,6 +46,7 @@ import {
   terrainPatchKey,
 } from '@inertialref/rendering'
 import { generateHeightfieldTask, type WorkerPool } from '@inertialref/workers'
+import { ScatterField, type ScatterState } from './scatterField.ts'
 
 /*
  * Terrain streaming.
@@ -389,10 +390,21 @@ export interface TerrainState {
    * of leaving one behind.
    */
   readonly lens: LensView | null
+  /**
+   * The rocks lying on it, or an empty field when nothing is close enough.
+   *
+   * On the terrain state rather than beside it because the two are one answer
+   * about one body: the scatter's anchor, its placement and its lens all come
+   * from the pose this streamer resolved, and a second producer of "which body
+   * is being looked at" would disagree with this one for a frame every time the
+   * target changed. `ScatterField` carries the argument.
+   */
+  readonly scatter: ScatterState
 }
 
 export class TerrainStreamer {
   readonly #pool: WorkerPool | null
+  readonly #scatter = new ScatterField()
   readonly #fields = new Map<string, CachedField>()
   readonly #patches = new Map<string, RenderPatch>()
   readonly #inFlight = new Set<string>()
@@ -506,6 +518,12 @@ export class TerrainStreamer {
     readonly starved: number
     readonly saturated: boolean
     readonly lens: LensView | null
+    readonly scatter: {
+      readonly regions: number
+      readonly resolving: number
+      readonly rocks: number
+      readonly range: Meters
+    }
   } {
     let placed = 0
     let vertices = 0
@@ -536,6 +554,7 @@ export class TerrainStreamer {
       starved: this.#starved,
       saturated: this.#saturated,
       lens: this.#lensView,
+      scatter: this.#scatter.summary(),
     }
   }
 
@@ -573,6 +592,7 @@ export class TerrainStreamer {
       centre: pose?.position ?? null,
       datumRadius: this.#datumRadius,
       lens: this.#lensView,
+      scatter: this.#scatter.state(),
     }
   }
 
@@ -606,7 +626,14 @@ export class TerrainStreamer {
     const previous = this.#previous
 
     const resolved = this.#resolve(world, renderTime, body.address)
-    if (resolved === null) return
+    // Through `#forget`, like every other exit. A bare return leaves the pose,
+    // the palette, the drawn set and the rocks describing a body this world
+    // cannot resolve any more — a system unloaded under a target it still
+    // names — and the frame draws last frame's ground at last frame's place.
+    if (resolved === null) {
+      this.#forget()
+      return
+    }
     const { surface, bodyPose, spinPose } = resolved
     /*
      * Solid bodies only. A gas giant has no surface to stream and the tier must
@@ -754,6 +781,26 @@ export class TerrainStreamer {
     ]
     this.#request(requested, surface)
     this.#evict(requested)
+
+    /*
+     * The rocks, last, because they stand on ground this frame has just decided
+     * how to draw — and driven from here rather than from the engine because
+     * everything they need is already resolved: the body, the eye in body-fixed
+     * axes, the pose the patches are placed with, and the lens the whole picture
+     * was selected against.
+     */
+    this.#scatter.update(
+      surface,
+      body.address,
+      eyeLocal,
+      // The branded direction this frame's own selection was made against,
+      // rather than a second normalization of `eyeLocal` in the app layer —
+      // `bodyFixedDirection` is one of the three producers and this keeps it
+      // that way.
+      eye.direction,
+      this.#pose,
+      this.#lensView,
+    )
   }
 
   #key(region: RegionAddress): string {
@@ -1001,6 +1048,10 @@ export class TerrainStreamer {
     // The lens is a selection mirror like the rest: reporting one beside
     // `patches: 0` claims a selection was made against it, and none was.
     this.#lensView = null
+    // The rocks go with the ground they lie on. Their cache stays: the eight-
+    // pixel gate is thousands of kilometers above the range they draw in, so a
+    // frame that reaches this line has left the surface entirely.
+    this.#scatter.forget()
   }
 
   /** Drop everything. The world was replaced; none of this describes it. */
@@ -1011,6 +1062,7 @@ export class TerrainStreamer {
     this.#patches.clear()
     this.#bodyAddress = null
     this.#previous = null
+    this.#scatter.clear()
     this.#forget()
   }
 }
