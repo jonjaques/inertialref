@@ -66,8 +66,9 @@ export function PerfPanel({ engine }: { engine: GameEngine }) {
   /*
    * The store subscription is the panel's clock as well as its data. `status`
    * is a fresh graph every sample, so this line re-renders the panel at 8 Hz —
-   * which is what refreshes the ring-buffer plots above, now that the
-   * workspace around it no longer re-renders on the sampler's behalf.
+   * which is what refreshes the ring-buffer plots above. It is the panel's own
+   * subscription that does it; the workspace around it does not re-render on
+   * the sampler's behalf, which is the whole point of `state/engineStore.ts`.
    */
   const status = useEngine((snapshot) => snapshot.status)
   const world = status?.world ?? null

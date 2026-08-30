@@ -202,8 +202,8 @@ export function placeAt(
  * an LOD selection on an angular radius and a tier that a line has no use for.
  *
  * What survives per point is the one call this must not inline: `difference`
- * is the sector arithmetic, `spatial` owns it, and the copy of it that used to
- * live in the R3F layer is why `placeOnStarShell` exists.
+ * is the sector arithmetic and `spatial` owns it. A copy of it in the R3F layer
+ * is the defect `placeOnStarShell` exists to keep out of that layer.
  *
  * @param shift - a universe-axes displacement added to every point first. The
  * caller's `UV.translate` per point was four allocations to express something

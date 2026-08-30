@@ -283,7 +283,7 @@ describe('render placement', () => {
      *     where a double resolves 0.24 mm — so `UV.translate` rounds a shift
      *     finer than that away entirely and the fast form, which adds it after
      *     the difference at render-space magnitudes, keeps it. The property
-     *     found that by shrinking to a shift of eight micrometres, and the
+     *     found that by shrinking to a shift of eight micrometers, and the
      *     disagreement it reported was the reference being wrong.
      */
     const step32 = (value: number): number => {

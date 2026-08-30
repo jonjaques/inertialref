@@ -683,6 +683,14 @@ function balance(
    * it exact. The one case that breaks monotonicity is a split whose children
    * are *all* culled: the region empties and its entry is left too deep, so
    * that pass asks for a rebuild instead.
+   *
+   * **The rebuild lands at the top of the next pass, not at the moment the
+   * guard fires**, and that is the same one-pass window a per-pass snapshot
+   * has: a map built from `current` also names a node that empties later in
+   * the pass. Nodes considered after it in that pass can therefore split on an
+   * entry one level too deep, which costs extra refinement and never a seam.
+   * Rebuilding in place would close it; nothing has measured a selection where
+   * it changes, and the eyes that reach it are recorded on the guard below.
    */
   let depth = new Map<number | string, number>()
   let rebuild = true
@@ -763,15 +771,15 @@ function balance(
        * can lie: nothing is selected under this region any more, so the entry
        * left by the *parent's* own `deepen` — one level too deep, and read by
        * every ancestor — describes a subtree that no longer exists. A
-       * neighbour two levels coarser would take it for a mismatch it is not.
+       * neighbor two levels coarser would take it for a mismatch it is not.
        *
        * Defensive rather than demonstrated. It happens: ten of the hundred and
        * five eyes in the altitude sweep the 2:1 property walks reach it, at
        * radius/2^9 and radius/2^10 on every body size tried. What could not be
        * built is an eye where it *changes* the selection — patch counts and
        * visit counts came out identical with and without this line, because a
-       * node only splits when its neighbourhood is already deep and a
-       * two-levels-coarser neighbour is not there to be misled. "Not
+       * node only splits when its neighborhood is already deep and a
+       * two-levels-coarser neighbor is not there to be misled. "Not
        * observable in the eyes tried" is not "cannot be", and the map is
        * carried on a claim of exactness, so the claim is kept exact.
        */

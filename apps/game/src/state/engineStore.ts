@@ -201,15 +201,23 @@ export const engineStore = createEngineStore()
  * renderer without a DOM is the test suite's `renderToStaticMarkup` — which
  * samples the store first and then asserts the panel shows it, so handing it
  * the empty boot snapshot would make every such assertion fail against
- * "waiting for the first frame…". The selector contract is unchanged: a
- * selector returning a fresh object every call still needs `useShallow`.
+ * "waiting for the first frame…".
+ *
+ * **`useShallow` is not optional here the way it was under `useStore`.** That
+ * hook went through `useSyncExternalStoreWithSelector`, which memoized the
+ * selection against the snapshot, so a selector that allocated cost one extra
+ * render a sample. React's own hook compares what `getSnapshot` returns with
+ * `Object.is` and nothing caches it, so a selector returning a fresh object
+ * never compares equal and re-renders forever — "The result of getSnapshot
+ * should be cached to avoid an infinite loop", then a pegged tab. A selector
+ * that builds anything wraps in `useShallow`; one that returns a scalar or a
+ * field off the snapshot does not need to.
  */
 export function useEngine<T>(select: (snapshot: EngineSnapshot) => T): T {
-  return useSyncExternalStore(
-    engineStore.subscribe,
-    () => select(engineStore.getState()),
-    () => select(engineStore.getState()),
-  )
+  // One closure, read for both the client and the server snapshot — see above
+  // for why the server one is the live store rather than the boot state.
+  const read = (): T => select(engineStore.getState())
+  return useSyncExternalStore(engineStore.subscribe, read, read)
 }
 
 export { useShallow } from 'zustand/react/shallow'
