@@ -36,6 +36,10 @@ dist-ssr
 *.sln
 *.sw?
 
+# Astro's generated types. `astro sync` writes them; they describe this
+# checkout's pages rather than the source that produces them.
+apps/game/.astro/
+
 # InertialRef
 .tsbuildinfo
 *.tsbuildinfo
