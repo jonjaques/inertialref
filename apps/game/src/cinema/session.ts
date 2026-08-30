@@ -128,7 +128,7 @@ export function createCutsceneSession(host: CutsceneHost): CutsceneSession {
   /** A pointer owns a scrubber; the published frame stands still. */
   let held = false
   /*
-   * Whether the scene that is playing was opened *through this session*.
+   * The scene this session opened, or null.
    *
    * `sample()` runs on the engine store's sampler, which is session-wide and
    * does not stop when the cinema does — so an ending is visible here whether
@@ -139,8 +139,16 @@ export function createCutsceneSession(host: CutsceneHost): CutsceneSession {
    * restores the clock when the scene ends, this reopened it and paused it
    * again, and everything measured afterwards described a frozen world with
    * nothing on screen to say so.
+   *
+   * The *id* rather than a boolean, because "did I open something" and "did I
+   * open **this**" are different questions and only the second one is safe.
+   * A scene can be replaced under an open session without going through it —
+   * `ir.play` from the console, `cutscene.skip` calling `stopCutscene`
+   * directly — and a flag left standing from the last `open` claims whatever
+   * ends next. Cleared before `host.play` for the same reason: an `open` that
+   * throws must not leave the previous scene's claim behind it.
    */
-  let mine = false
+  let mine: string | null = null
   /** The last playhead published, which is what a hold freezes. */
   let last: Playhead | null = null
 
@@ -149,6 +157,9 @@ export function createCutsceneSession(host: CutsceneHost): CutsceneSession {
     frame: number,
     autoplay: boolean,
   ): string | null => {
+    // Dropped before the attempt, not after it: a throw below leaves no scene
+    // open, and a claim on the one that was is a claim on somebody else's.
+    mine = null
     try {
       const status = host.play(id)
       const at = Math.min(frame, Math.max(0, status.durationFrames - 1))
@@ -158,7 +169,7 @@ export function createCutsceneSession(host: CutsceneHost): CutsceneSession {
       if (!autoplay) host.pause()
       carded = false
       handled = false
-      mine = true
+      mine = id
       return null
     } catch (cause) {
       return cause instanceof Error ? cause.message : String(cause)
@@ -221,7 +232,7 @@ export function createCutsceneSession(host: CutsceneHost): CutsceneSession {
       // window around the final frame, no remembered playhead to compare
       // against — and, for the last of those, no clock to pause on behalf of a
       // reader who does not exist.
-      if (!ended || outcome === null || !mine) {
+      if (!ended || outcome === null || outcome.id !== mine) {
         last = null
         carded = false
         return null
@@ -277,7 +288,7 @@ export function createCutsceneSession(host: CutsceneHost): CutsceneSession {
       // Before `host.stop()`, so a director that has already ended — the
       // ending arriving in the same sample the player unmounts in — cannot be
       // reacted to on the way out.
-      mine = false
+      mine = null
       host.stop()
     },
   }

@@ -325,10 +325,11 @@ describe('a cutscene session', () => {
   })
 
   it('stops reacting to an ending the moment the player leaves', () => {
-    // The window is one sample wide and the sampler is 8 Hz: a scene that runs
-    // out in the same beat the player navigates away used to be reopened and
-    // paused *after* the unmount, because the unmount stopped the director and
-    // left the session still holding the ending.
+    // The window is one sample wide and the sampler is 8 Hz. `stop()` drops the
+    // claim *before* it stops the director, so an ending that arrives in the
+    // same beat the player navigates away has nothing left to react to it: the
+    // unmount stops the director, and a session still holding the ending would
+    // reopen and pause after there is nobody to read the card.
     const { host, director, calls } = fake()
     const session = createCutsceneSession(host)
     session.open('tng-intro', 0, true)
@@ -339,6 +340,29 @@ describe('a cutscene session', () => {
     session.sample()
 
     expect(calls).not.toContain(`seek:${DURATION - 2}`)
+    expect(director.paused).toBe(false)
+  })
+
+  it('drops its claim when an open fails, rather than keeping the last one', () => {
+    /*
+     * The claim is the *id*, and it is cleared before `host.play` rather than
+     * after. A session that opened A and then fails to open B has no scene of
+     * its own — but a flag set by the last successful open still reads as one,
+     * so whatever ends next gets reopened and the clock paused for a reader
+     * who is looking at an error message.
+     */
+    const { host, director, calls } = fake()
+    const session = createCutsceneSession(host)
+    session.open('tng-intro', 0, true)
+    expect(session.open('nothing', 0, true)).toContain('Unknown cutscene')
+
+    // Something else entirely, from the console.
+    director.play('tng-intro')
+    calls.length = 0
+    director.finish('ended')
+
+    expect(session.sample()).toBeNull()
+    expect(calls).not.toContain('pause')
     expect(director.paused).toBe(false)
   })
 
