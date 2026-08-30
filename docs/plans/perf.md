@@ -208,13 +208,24 @@ the atmospheres of the systems loaded _at boot_. A jump to a generated system
 therefore lands a `Boot/bake atmosphere` entry mid-session: **39.7 ms inside a
 43.3 ms frame**, which is the largest single thing left in an arrival.
 
-It is pure arithmetic on an `AtmosphereRecipe` and `packages/rendering` owns
-it, so the task shape is the same one `universe.surfaceDetailFloor` took —
-two `Float32Array`s back, `toTexture`'s half-float conversion staying on the
-main thread. The open question is not where to run it but what the shell draws
-while it waits: `Bodies` calls `air.setScattering(...)` every frame the shell
-is drawn and simply skips it when there is no haze, so the deferred state is
-reachable, and nobody has looked at what it looks like.
+**Deferring it is safe, and that was the open question.** `createAtmosphereMaterial`
+already binds 1×1 stand-ins "so a shell whose tables have not arrived runs the
+identical graph: full transmittance and no multiple scattering, with the
+scattering coefficients defaulting to zero — a vacuum that draws nothing". So a
+body that arrives before its tables draws without haze rather than wrongly, and
+`Bodies` calls `air.setScattering(...)` every frame the shell is drawn, so it
+picks them up on whichever frame they land.
+
+**What blocks the obvious fix is the layer graph, not the risk.** The task
+shape is the one `universe.surfaceDetailFloor` took — two `Float32Array`s back,
+`toTexture`'s half-float conversion staying on the main thread — but the bake
+lives in `packages/rendering` and so does `packages/workers`, both layer 5, and
+`pnpm graph` allows dependencies on strictly lower layers only. Moving the
+scattering model down is an architectural question rather than a plumbing one:
+a scattering LUT is arguably optics rather than rendering, `packages/universe`
+already owns the `HazeAuthoring` it is derived from, and the answer wants an
+ADR rather than an import. Until then this is one dropped frame per distinct
+atmosphere per session, on an arrival that has other work in it anyway.
 
 ## Caveats that shaped these numbers, kept so they keep shaping them
 
