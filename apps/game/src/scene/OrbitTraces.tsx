@@ -1,4 +1,3 @@
-import { useFrame } from '@react-three/fiber'
 import { useMemo, useRef } from 'react'
 import {
   BufferAttribute,
@@ -10,6 +9,7 @@ import {
 import { UV, Vec } from '@inertialref/spatial'
 import { placeAt } from '@inertialref/rendering'
 import type { GameEngine } from '../engine/GameEngine.ts'
+import { useTimedFrame } from './useTimedFrame.ts'
 
 /*
  * Orbit traces, when the planetarium asks for them.
@@ -42,7 +42,7 @@ export function OrbitTraces({ engine }: { engine: GameEngine }) {
     return line
   }, [])
 
-  useFrame(() => {
+  useTimedFrame('orbitTraces', () => {
     const parent = group.current
     /*
      * The origin *and* the eye off the same scene, never one of each.

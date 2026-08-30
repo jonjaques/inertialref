@@ -38,6 +38,7 @@ import {
   type OutputPreference,
   OUTPUT_PREFERENCES,
 } from '../render/output.ts'
+import { type TimingLevel, TIMING_LEVELS } from '../engine/browserTiming.ts'
 import type { OrbitScope } from '../engine/presentation.ts'
 import type { LabelDensity } from '../planetarium/layers.ts'
 
@@ -409,6 +410,26 @@ export const DEBUG_ON = define({
   accept: isBoolean,
 })
 
+/**
+ * How much of itself the session puts on the browser's performance timeline.
+ *
+ * Persisted because somebody who turned it on is profiling, and profiling
+ * involves reloads — the same argument `DEBUG_ON` makes. It is deliberately
+ * *not* mirrored onto the switch by an effect: `main.tsx` reads it once at
+ * module scope, before React exists, because boot is what this most wants to
+ * measure and an effect would miss the atmosphere bake, every texture upload
+ * and the whole pipeline warm. After that the live level is
+ * `engine/browserTiming.ts`'s, so `ir.timing('full')` mid-session is not
+ * fighting a re-assertion from a render.
+ */
+export const TIMING_LEVEL = define<TimingLevel>({
+  key: 'timing.level',
+  group: 'workspace',
+  what: 'how much of itself the session puts on the performance timeline',
+  initial: 'off',
+  accept: oneOf(TIMING_LEVELS),
+})
+
 export const SECTION_OPEN = family({
   prefix: 'section.',
   group: 'workspace',
@@ -475,6 +496,7 @@ export const REGISTRY: readonly AnyPreference[] = [
   CATALOGUE_CLASSES,
   CATALOGUE_FILTERING,
   DEBUG_ON,
+  TIMING_LEVEL,
 ]
 
 export const FAMILIES: readonly AnyFamily[] = [

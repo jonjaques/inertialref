@@ -10,6 +10,7 @@
     "dev:server": "pnpm --filter @inertialref/server run dev",
     "drive": "node scripts/drive.mjs",
     "trace": "node scripts/traceFrames.mjs",
+    "timing": "node --max-old-space-size=8192 scripts/timing.mjs",
     "docs:build": "node scripts/docs/build.mjs",
     "format": "prettier -w .",
     "format:check": "prettier -c .",

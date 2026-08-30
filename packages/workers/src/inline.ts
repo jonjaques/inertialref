@@ -1,5 +1,5 @@
 import type { WorkerInbound, WorkerOutbound } from '@inertialref/protocol'
-import { serveTasks } from './host.ts'
+import { serveTasks, type ServeOptions } from './host.ts'
 import type { TaskRegistry } from './task.ts'
 import type { HostPort, WorkerPort } from './transport.ts'
 
@@ -41,9 +41,20 @@ const defer = (run: () => void): void => {
   void Promise.resolve().then(run)
 }
 
+/**
+ * @param serve - the rest of the loop's options. Only the level hook is worth
+ * passing: an inline worker shares the process's timing hub, so the host's sink
+ * is already attached and `getTimer` in `host.ts` is already live — but the
+ * pool still broadcasts the level, and something has to be there to hear it or
+ * the message is a silent no-op that looks exactly like a working one.
+ */
 export function createInlineWorker(
   registry: TaskRegistry,
-  now: () => number = () => 0,
+  // Optional rather than defaulted here, so `serveTasks` can tell a caller that
+  // omitted a clock from one that asked for the zero clock. It emits nothing on
+  // a timeline without one; see the `timed` flag there.
+  now?: () => number,
+  serve: Omit<ServeOptions, 'now'> = {},
 ): WorkerPort {
   const toWorker = new Set<(message: WorkerInbound) => void>()
   const toHost = new Set<(message: WorkerOutbound) => void>()
@@ -63,7 +74,10 @@ export function createInlineWorker(
     },
   }
 
-  serveTasks(registry, hostSide, { now })
+  serveTasks(registry, hostSide, {
+    ...serve,
+    ...(now === undefined ? {} : { now }),
+  })
 
   return {
     post(message, transfer = []) {

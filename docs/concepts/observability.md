@@ -11,7 +11,7 @@
 
 ---
 
-## One structure, four consumers
+## One structure, five consumers
 
 ```mermaid
 flowchart TB
@@ -20,13 +20,36 @@ flowchart TB
     INSPECT --> CONSOLE["ir.status()<br/><i>a developer queries it</i>"]
     INSPECT --> TEST["assertions<br/><i>a test checks it</i>"]
     INSPECT --> AGENT["an automated driver<br/><i>reads it over CDP</i>"]
+    WORLD --> TIMER["Timer<br/><i>write-only spans</i>"]
+    TIMER --> TIMELINE["the browser's timeline<br/><i>a profile, afterwards</i>"]
 
     style INSPECT fill:#0369a1,stroke:#0c4a6e,color:#fff
+    style TIMER fill:#14532d,stroke:#052e16,color:#fff
 ```
 
 Because the overlay and the tests read the _same_ structure, what a human sees
 and what a check asserts cannot drift apart. Adding a field to the inspection
-makes it visible in all four places at once.
+makes it visible in all four of those at once.
+
+**The fifth consumer is the timeline, and it is a different shape on purpose.**
+`inspect()` answers "what is true now" and hands the answer back; a `Timer`
+answers "when did that happen" and hands nothing back at all — `Span.end()`
+returns `void`, which is what lets canonical code emit to it without any
+canonical value becoming a function of wall time. Everything else here is a
+structure something reads; this is a structure something writes.
+
+It exists because the instruments above share no time axis. A worker job's
+9–37 ms lives in a mean over the last 64 jobs and the frame it starved lives in
+a p95 over the last 240 frames, so "the frame at _t_ was slow" and "a heightfield
+landed at _t_" cannot be put beside each other. The timeline is not a seventh
+instrument; it is the shared axis the other six are missing.
+
+The split to hold on to: the performance panel answers _"is it fast right now"_
+while you fly, and the timeline answers _"why was that frame slow"_ afterwards.
+The panel is better at p95 against a drawn budget and at stating an absence
+honestly; a timeline reproduces both badly. `ir.profile(ms)` is the terminal's
+door onto it, and `pnpm timing` reads a recorded trace.
+[ADR-0022](../adr/0022-the-timeline.md) has the reasoning.
 
 ---
 
@@ -115,6 +138,8 @@ ir.status() // everything, structured
 ir.orbit('g:milky-way/s:SOL/b:2', 400)
 ir.step(20000)
 await ir.selfTest() // the twelve capability checks
+ir.timing('trace') // off | trace | full — what reaches the timeline
+await ir.profile(2000) // arm, record, disarm; `.text` is the answer
 ```
 
 Full reference: [guides/harness.md](../guides/harness.md).

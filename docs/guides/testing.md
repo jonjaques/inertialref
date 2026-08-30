@@ -180,6 +180,17 @@ timeout has stopped measuring the code and started measuring how busy the
 machine is. A test that spawns processes is the usual culprit — one here began
 as ten parallel `node` invocations under `it.each` and starved everything.
 
+**The other culprit is a browser you started yourself and left running.**
+`scripts/drive.mjs` leaves Chrome up between invocations on purpose — boot is
+ten seconds and attaching is under one — so a session that has been verifying in
+the browser is a session running a GPU process, four worker threads and a Vite
+dev server beside the suite. Measured here across two consecutive full runs with
+that rig up: one file timed out each time, and it was a **different** file each
+time — a terrain descent once, a crater-field property the next — with both
+passing clean the moment `pnpm drive --down` had run. Neither was a regression
+and both looked exactly like one. `--down` before the gate, and treat a single
+timeout that moves between runs as a machine reading rather than a code one.
+
 **A test that needs more says so at the call site, with the same reasoning one
 order of magnitude up.** `gameEngine.test.ts` streams a landing — a whole-disk
 selection's worth of heightfields through an _inline_ worker, which is to say

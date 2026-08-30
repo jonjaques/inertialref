@@ -51,6 +51,20 @@ Violating one of these is a rewrite later, not a refactor.
 - **Never use `Math.random()`, `Date.now()`, or `performance.now()` in
   canonical code.** Generation derives from seeds. Simulation depends on the
   integer tick. Wall clock enters at exactly one call, `clock.advance`.
+- **Never call `console.timeStamp`, `performance.mark` or `performance.measure`
+  outside `engine/browserTiming.ts`,** and never name `performance.` in
+  `packages/*` at all. Emit through a `Timer` from
+  `packages/shared/src/timing.ts`; the sink is the one place that knows a
+  platform API. Two reasons, and the first is the rule above wearing a different
+  hat: **canonical code may write to the wall clock and may not read one**, and
+  `Span.end()` returning `void` is what makes that true by construction rather
+  than by discipline — there is no expression a caller can write that observes a
+  duration, so no canonical value can be a function of wall time. The second is
+  that the level, the drain and the clear are each impossible unless the set of
+  emitters is known in one place, which is the same argument the `localStorage`
+  rule makes. `apps/headless/src/coreHostApis.test.ts` greps for it, because
+  `performance` is a global rather than an import and `pnpm graph` structurally
+  cannot see it. [ADR-0022](docs/adr/0022-the-timeline.md).
 - **Never make generation depend on order.** Derive a seed from the address.
   Do not draw from a shared stream.
 - **Never put canonical state in a React component,** and never put gameplay

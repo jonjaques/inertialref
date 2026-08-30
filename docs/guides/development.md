@@ -31,6 +31,10 @@ pnpm sim --self-test           # headless run plus the twelve capability checks
 pnpm vitest run <substring>    # a single test file
 
 pnpm drive --help              # drive Chrome over CDP: --js, --shot, --sample, --down
+pnpm drive --trace 3000        # record a Chrome trace. Needs ?timing=trace on --url,
+                               # or the recording carries none of our tracks
+pnpm timing --help             # read one back: per-track p50/p95 and which span was slow
+pnpm sim --profile             # the same report headlessly, over the worker pool
 
 # Vendored data. Everything under data/ is committed; these rebuild it.
 pnpm catalog:fetch             # download the star catalog sources into .data/raw
@@ -47,6 +51,28 @@ pnpm run deploy:worker         # build, then wrangler deploy
 pnpm media:pull                # reference audio from R2; not in git
 pnpm media:push
 ```
+
+**`pnpm dev` needs a `dist/` to exist, which a fresh worktree does not have.**
+`apps/server/wrangler.jsonc` binds its assets to `../game/dist`, and `wrangler
+dev` refuses to start when that directory is absent — so in a worktree created
+by [`/parallel`](../../.claude/skills/parallel/SKILL.md), or in any clone that
+has never built, the Worker half exits immediately and `scripts/dev.mjs` stops
+the Vite half with it. The failure names the directory and nothing else, and it
+is easy to read as a broken checkout.
+
+Two ways out, and which one you want depends on why you are serving:
+
+```bash
+pnpm dev:client   # Vite alone on 5173 — everything except the Worker's routes
+pnpm build        # once, then `pnpm dev` works for the life of the worktree
+```
+
+`pnpm check` runs `pnpm build`, so a worktree that has been through the gate
+once is already fixed. **`pnpm drive` walks into this**: `--serve` is on by
+default and starts `scripts/dev.mjs`, so on a fresh worktree it waits its full
+sixty seconds for a server that died in the first two and then reports that
+nothing is answering. Serve with `pnpm dev:client` yourself and pass
+`--no-serve`, or build once.
 
 `pnpm run deploy:worker`, not `pnpm deploy:worker` — `deploy` is a pnpm
 built-in. After any change to `wrangler.jsonc`, regenerate

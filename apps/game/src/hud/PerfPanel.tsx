@@ -1,8 +1,21 @@
 import { useState } from 'react'
 import type { HarnessStatus } from '@inertialref/devtools'
 import type { GameEngine } from '../engine/GameEngine.ts'
+import {
+  setTimingLevel,
+  TIMING_LEVELS,
+  timingLevel,
+} from '../engine/browserTiming.ts'
+import {
+  DRAW_CALL_BUDGET,
+  DROPPED_FRAME_MS,
+  ENGINE_BUDGET_MS,
+  FRAME_BUDGET_MS,
+} from '../engine/perfBudgets.ts'
 import { measureGpuFrameMs } from '../render/measure.ts'
+import { TIMING_LEVEL, write } from '../state/preferences.ts'
 import { GpuMeasureButton } from './GpuMeasureButton.tsx'
+import { OptionGroup } from './OptionGroup.tsx'
 import { describeGl, format, fps, gpuLabel } from './perfFormat.ts'
 import { Row } from './Row.tsx'
 import { Section } from './Section.tsx'
@@ -22,35 +35,13 @@ import { SeriesStatsRow } from './SeriesStatsRow.tsx'
  * lasting one frame is still in the window when a human looks — that asymmetry
  * is why the ring buffer exists instead of a smoothed scalar.
  *
- * Budgets come from `docs/design/technical.md` § Performance budgets, and are
- * drawn on the plots rather than written next to them, because the useful
- * question is never "what is the budget" but "how close is this to it".
+ * The budgets are in `engine/perfBudgets.ts` rather than here, and the move is
+ * not tidying. They were module constants in this file, which meant the only
+ * thing that could act on them was the plot — so "over budget" existed in
+ * exactly one place and was available to nothing else. A trace entry wants the
+ * same definition, `hud/` sits above `engine/`, and the sink must not import a
+ * panel. One definition now colors the plot *and* colors the trace entry.
  */
-
-/** The frame budget, ms. 60 fps at 1920×1080 is the target machine's job. */
-const FRAME_BUDGET_MS = 16.6
-
-/**
- * Where a frame period stops being jitter and starts being a dropped frame.
- *
- * The budget and the measurement are not the same quantity, and coloring the
- * plot on the budget alone gets this wrong in the most misleading direction.
- * The budget is 16.6 ms of *work*; what the plot samples is the interval between
- * animation frames, and on a vsynced display that interval is pinned at 16.67 ms
- * by the display whether the frame took 2 ms or 16. Measured here at a
- * comfortable 60 fps, the period's p95 is 17.8 ms — over budget, permanently,
- * while nothing at all is wrong.
- *
- * A frame that is genuinely late misses a vsync interval and lands near 33 ms.
- * 25 ms is between the two and cannot be reached by jitter.
- */
-const DROPPED_FRAME_MS = 25
-
-/** `docs/design/technical.md`: simulation ticks 0.5 ms, snapshot + scene build 1.5 ms. */
-const ENGINE_BUDGET_MS = 2.0
-
-/** The draw-call budget from the same table. */
-const DRAW_CALL_BUDGET = 1_200
 
 export function PerfPanel({
   engine,
@@ -251,6 +242,47 @@ export function PerfPanel({
             <SeriesStatsRow stats={heap} unit="MB" />
           </>
         )}
+      </Section>
+
+      <Section id="perf.timing" title="Timing" trailing={timingLevel()}>
+        {/*
+         * The fourth door onto one switch — the URL, the preference and
+         * `ir.timing()` are the other three — and it is here because somebody
+         * watching a p95 climb is already looking at this panel.
+         *
+         * `OptionGroup`, not `SwitchRow`: the setting has three values, and the
+         * registry rule is that a countable set gets a radio group rather than
+         * a control that cycles. Off is the default and has to be — there is no
+         * capability query for the `console.timeStamp` track arguments, so a
+         * level that turned itself on would make browsers that cannot draw
+         * these entries pay for them anyway.
+         *
+         * The displayed value is the *live* level rather than the stored
+         * preference, because `ir.timing('full')` from a script is not a
+         * gesture anybody made and must not be written to disk — but it is what
+         * the session is doing, and a row that disagreed with it would be
+         * describing something else. The panel re-renders at the dock's 8 Hz,
+         * so a change made elsewhere shows up within 125 ms.
+         */}
+        <div className="rounded border border-slate-800/80 bg-slate-900/40 p-1.5">
+          <OptionGroup
+            label="Timing detail"
+            className="w-full [&>*]:flex-1"
+            value={timingLevel()}
+            values={TIMING_LEVELS}
+            onChange={(next) => {
+              setTimingLevel(next)
+              write(TIMING_LEVEL, next)
+            }}
+          />
+          <p className="type-ui mt-1.5 text-pretty text-slate-400">
+            {timingLevel() === 'off'
+              ? 'nothing is emitted; record a profile with trace'
+              : timingLevel() === 'trace'
+                ? 'custom tracks in a DevTools recording, nothing retained'
+                : 'User Timing as well — readable back through ir.timing.drain()'}
+          </p>
+        </div>
       </Section>
     </div>
   )

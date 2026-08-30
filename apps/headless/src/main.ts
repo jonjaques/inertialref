@@ -18,8 +18,17 @@
  *   pnpm sim --terrain-baseline    # what terrain costs, measured
  */
 import { parseArgs } from 'node:util'
-import { createConsoleSink, logHub } from '@inertialref/shared'
-import { openSession } from '@inertialref/devtools'
+import {
+  createConsoleSink,
+  logHub,
+  timingHub,
+  type TimingRecord,
+} from '@inertialref/shared'
+import {
+  DEFAULT_DROPPED_FRAME_MS,
+  openSession,
+  summarizeProfile,
+} from '@inertialref/devtools'
 import { createInlineWorker, createTaskRegistry } from '@inertialref/workers'
 import { loadStarCatalog } from './catalog.ts'
 import { captureSave, serializeSave } from '@inertialref/persistence'
@@ -42,6 +51,18 @@ const OPTIONS = {
    * takes — and every other flag here is cheap enough to leave on.
    */
   'terrain-baseline': { type: 'boolean', default: false },
+  /**
+   * Report what this run put on the timeline, with no browser anywhere.
+   *
+   * The span names are the browser's, because they are emitted from
+   * `packages/*` rather than from anything browser-shaped — so a worker job
+   * profiled in Chrome is the same entry here. What it is *not* is the frame
+   * decomposition: those spans live in `GameEngine`, which the runner has no
+   * instance of, and there are deliberately none in `packages/simulation`. The
+   * block above the collector says which invocations therefore have anything to
+   * report.
+   */
+  profile: { type: 'boolean', default: false },
   quiet: { type: 'boolean', default: false },
   help: { type: 'boolean', default: false },
 } as const
@@ -65,6 +86,34 @@ if (values.help === true) {
 if (!values.quiet) {
   logHub.addSink(createConsoleSink(console, 'info'))
 }
+
+/*
+ * The Node collector, attached before anything runs.
+ *
+ * `packages/*` emits through the hub whatever the host is, so this is one
+ * recording sink and a clock — not `console.timeStamp`, which Node has and
+ * which is not Chrome's, and which would put these entries nowhere.
+ *
+ * It covers the *whole run* rather than the tick loop, and that is not
+ * generosity: **there is no span inside `packages/simulation`, deliberately**,
+ * because the simulation depends on the integer tick and wall clock enters at
+ * exactly one call. So a bare `--ticks` loop has nothing to decompose, and what
+ * this reports is the worker pool, on a run that actually dispatches jobs —
+ * which in practice means `--self-test`, whose worker-task check is the only
+ * thing here that goes through the pool. `--scenario descent` simulates a
+ * descent on paper (`descent.ts`: "it does not run the worker pool") and
+ * `--terrain-baseline` generates inline and says "not measured here: … worker
+ * queue depth". Both print "nothing was recorded", which is the honest answer
+ * and not an empty table pretending to be a fast run.
+ */
+const collected: TimingRecord[] = []
+const releaseTiming =
+  values.profile === true
+    ? timingHub.attach(
+        { write: (record) => collected.push(record) },
+        { now: () => performance.now() },
+      )
+    : null
 
 const registry = createTaskRegistry()
 const session = openSession({
@@ -134,6 +183,34 @@ if (values['self-test'] === true) {
   const report = await harness.selfTest()
   console.log(report.report)
   if (report.passed !== report.total) process.exitCode = 1
+}
+
+/*
+ * Last, so it covers the scenario, the tick loop, the baseline and the
+ * self-test — all of which dispatch worker jobs, and none of which would be in
+ * a window closed at the tick loop.
+ *
+ * There is no `frame` span headlessly and the report says "no frames in the
+ * window" rather than inventing one. That is the honest shape: a frame is a
+ * browser fact, and this is the simulation's half.
+ */
+if (values.profile === true) {
+  releaseTiming?.()
+  console.log(
+    summarizeProfile(
+      collected.map((record) => ({
+        name: record.name,
+        kind: record.kind,
+        track: record.detail?.track ?? 'Simulation',
+        startMs: record.startMs,
+        durationMs: record.endMs - record.startMs,
+        properties: Object.fromEntries(record.detail?.properties ?? []),
+      })),
+      // Passed rather than defaulted, so the headless report and the browser's
+      // judge lateness against the same number and a grep finds both.
+      { droppedFrameMs: DEFAULT_DROPPED_FRAME_MS },
+    ).text,
+  )
 }
 
 session.dispose()

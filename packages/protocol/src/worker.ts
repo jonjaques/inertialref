@@ -51,12 +51,40 @@ export interface WorkerCancel {
   readonly job: JobId
 }
 
+/**
+ * How much of itself the worker should describe on its own timeline.
+ *
+ * A message rather than a query on the worker's URL, and the four reasons are
+ * worth keeping because the URL idea comes back:
+ *
+ *   - `browserWorker.ts` uses the statically analyzed
+ *     `new Worker(new URL('…', import.meta.url))` form. Interpolating a runtime
+ *     value defeats Vite's detection and the worker chunk stops being emitted.
+ *   - `apps/game/public/sw.js` treats `/assets/` as cache-first with a bare
+ *     `caches.match(request)` and no `ignoreSearch`, so a query-suffixed worker
+ *     misses the cache on an offline launch.
+ *   - Inside a module worker the query is on `self.location.search`, not on
+ *     `new URL(import.meta.url).searchParams`.
+ *   - And the premise is false anyway. A URL is read once at spawn, while the
+ *     level changes mid-session from `ir.timing()` and from the performance
+ *     panel — which would leave the worker tracks silently empty for the rest
+ *     of the session.
+ *
+ * `level` is a bare string here on purpose. Which levels exist is the host's
+ * vocabulary, not the protocol's; this validates that a string arrived and the
+ * worker entry decides whether it names anything.
+ */
+export interface WorkerTiming {
+  readonly kind: 'timing'
+  readonly level: string
+}
+
 export interface WorkerReady {
   readonly kind: 'ready'
   readonly tasks: readonly string[]
 }
 
-export type WorkerInbound = WorkerRequest | WorkerCancel
+export type WorkerInbound = WorkerRequest | WorkerCancel | WorkerTiming
 export type WorkerOutbound = WorkerSuccess | WorkerFailure | WorkerReady
 
 /**
@@ -80,3 +108,9 @@ export const isWorkerCancel = (message: unknown): message is WorkerCancel =>
   typeof message === 'object' &&
   message !== null &&
   (message as { kind?: unknown }).kind === 'cancel'
+
+export const isWorkerTiming = (message: unknown): message is WorkerTiming =>
+  typeof message === 'object' &&
+  message !== null &&
+  (message as { kind?: unknown }).kind === 'timing' &&
+  typeof (message as { level?: unknown }).level === 'string'

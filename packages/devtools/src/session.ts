@@ -120,6 +120,8 @@ export interface SessionHost {
   readonly setChrome?: PresentationHost['setChrome']
   /** Names and traces in or out of the frame, for the same. */
   readonly setLayers?: PresentationHost['setLayers']
+  /** The performance timeline, for `ir.timing` and `ir.profile`. */
+  readonly timing?: PresentationHost['timing']
   /**
    * Called after the world is replaced, so a host can drop derived state.
    *
@@ -256,6 +258,9 @@ export function openSession(options: SessionOptions = {}): Session {
     ...(options.host?.setLayers === undefined
       ? {}
       : { setLayers: options.host.setLayers }),
+    ...(options.host?.timing === undefined
+      ? {}
+      : { timing: options.host.timing }),
   }
 
   const harness = new GameHarness(host)

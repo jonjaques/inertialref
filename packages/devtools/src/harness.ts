@@ -108,6 +108,13 @@ import {
   type TerrainBaseline,
   terrainBaseline,
 } from './terrainBaseline.ts'
+import {
+  makeTimingVerb,
+  type ProfileReport,
+  summarizeProfile,
+  type TimingPort,
+  type TimingVerb,
+} from './profile.ts'
 import { terrainZoo, type ZooEntry } from './terrainZoo.ts'
 import { TNG_INTRO } from './cutscenes/tngIntro.ts'
 import type { CinematicSample } from '@inertialref/rendering'
@@ -262,6 +269,14 @@ export interface PresentationHost {
    * and there was no way to see it.
    */
   terrain(): TerrainReport | null
+  /**
+   * The performance timeline, when the host has one.
+   *
+   * Optional rather than stubbed, because a host without one has a real answer
+   * — "this runtime does not put entries anywhere" — and `ir.profile()` says so
+   * instead of returning an empty report that reads like a fast session.
+   */
+  timing?(): TimingPort
 }
 
 export type HarnessHost = SimulationHost & Partial<PresentationHost>
@@ -1573,6 +1588,70 @@ export class GameHarness {
     return { ...baseline, text: summarizeBaseline(baseline) }
   }
 
+  /**
+   * The performance timeline: the level, the tracks, a marker, and the entries.
+   *
+   * A callable object, so the verb everybody wants — `ir.timing('trace')` — is
+   * the short one and the rest hang off it. That is the shape `ir.terrain()`
+   * and `ir.terrainBaseline()` already argue for: the console is discoverable
+   * by tab-completion, and a verb that reads like a sentence is the one an
+   * agent writes into a `--js` without checking.
+   *
+   * Built once and cached, because a fresh closure per read would make
+   * `ir.timing.drain !== ir.timing.drain` and break any script that held onto
+   * one.
+   */
+  get timing(): TimingVerb {
+    this.#timingVerb ??= makeTimingVerb(() => this.#host.timing?.())
+    return this.#timingVerb
+  }
+
+  #timingVerb: TimingVerb | null = null
+
+  /**
+   * Arm, record, disarm, report.
+   *
+   * The verb that matters, and the reason phase 5 exists: one `--js` call gives
+   * a terminal a *sentence* about why the last two seconds were slow, rather
+   * than a screenshot and a p95. It returns structured data and a `.text`
+   * block, the shape `terrainBaseline` already established.
+   *
+   * The level is restored afterwards rather than left at `full`, so a profile
+   * taken mid-session does not silently leave the retained timeline growing for
+   * the rest of it.
+   */
+  async profile(ms = 2000): Promise<ProfileReport> {
+    const port = this.#host.timing?.()
+    if (port === undefined) {
+      return {
+        ...summarizeProfile([]),
+        verdict: 'this host has no performance timeline',
+        text: 'this host has no performance timeline — nothing was recorded',
+      }
+    }
+    const was = port.level()
+    try {
+      // Inside the `try` with the wait, not above it. Raising the level fans
+      // out synchronously — the browser port attaches a sink, logs, and calls
+      // every level listener, one of which reaches into the worker pool — so a
+      // throw on that path escaped with the level pinned at `full` and no
+      // restore, which is the state the `finally` exists to make unreachable.
+      port.setLevel('full')
+      // The drain before the wait discards whatever was already held: a profile
+      // is a window, and boot's entries are not in it.
+      port.drain()
+      await port.wait(ms)
+      return summarizeProfile(port.drain(), {
+        droppedFrameMs: port.droppedFrameMs,
+      })
+    } finally {
+      // In a `finally`, because a profile that threw and left the level at
+      // `full` would keep retaining entries for the rest of the session — the
+      // one failure mode a performance tool must not have.
+      port.setLevel(was)
+    }
+  }
+
   /** The observatory's camera, or null when it has no target. */
   observerStatus(): ObserverStatus | null {
     return this.#observatory.target === null ? null : this.#observatory.status()
@@ -1637,6 +1716,9 @@ export class GameHarness {
       '  ir.lens()                     the camera as an instrument: mm, f-stop, depth of field',
       '  ir.zoo()                      one body per surface archetype',
       '  ir.terrainBaseline()          the zoo, its descents, and measured patch cost',
+      '  ir.timing(level?)             off | trace | full — what reaches the timeline',
+      '  ir.timing.tracks() / .mark(name) / .drain()',
+      '  await ir.profile(ms)          arm, record, disarm; .text is the answer',
       '  ir.logs(n)',
     ].join('\n')
   }

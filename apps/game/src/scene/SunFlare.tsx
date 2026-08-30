@@ -1,9 +1,10 @@
-import { useFrame, useThree } from '@react-three/fiber'
+import { useThree } from '@react-three/fiber'
 import { useMemo } from 'react'
 import type { PerspectiveCamera } from 'three/webgpu'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { createLensFlare } from '../render/flare.ts'
 import { type FlareOccluder, sunVisibility } from '../render/flareMath.ts'
+import { useTimedFrame } from './useTimedFrame.ts'
 
 /**
  * The key light's lens flare, driven from the same scene description as the
@@ -21,7 +22,7 @@ export function SunFlare({ engine }: { engine: GameEngine }) {
   // long as the renderer, like the starfield's do.
   const flare = useMemo(createLensFlare, [])
 
-  useFrame(() => {
+  useTimedFrame('sunFlare', () => {
     const scene = engine.scene()
     const star = scene?.stars[0]
     if (!engine.lensFlare || scene == null || star === undefined) {

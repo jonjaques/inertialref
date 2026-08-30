@@ -19,6 +19,7 @@ table is one of those three, not drift.
 | No absolute position in a `Vec3`                          | [Coordinates](../concepts/coordinates.md) · [ADR-0001](../adr/0001-universe-coordinates.md)                |
 | No wall-clock or `Math.random` in canonical code          | [Determinism](../concepts/determinism.md) · [ADR-0005](../adr/0005-procedural-seeds.md)                    |
 | Generation does not depend on order                       | [Determinism](../concepts/determinism.md) · [Identity](../concepts/identity.md)                            |
+| The three emit APIs live only in the sink                 | [ADR-0022](../adr/0022-the-timeline.md) · [Observability](../concepts/observability.md)                    |
 | Canonical state is not in React                           | [Architecture](../architecture.md) · [ADR-0011](../adr/0011-application-shell-and-modes.md)                |
 | Presentation switches go through the stance stack         | [Client](../guides/client.md)                                                                              |
 | One `Worker` constructor                                  | [Workers](../concepts/workers.md) · [Development](../guides/development.md)                                |
