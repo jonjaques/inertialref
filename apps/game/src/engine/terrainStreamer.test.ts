@@ -40,9 +40,9 @@ interface GroundView {
  * Drive frames until the first walk happens, and say how many it took.
  *
  * With a pool, the subdivision floor is measured off-thread — 33-43 ms cold,
- * which used to be paid inside the arrival frame — so a pooled streamer
- * selects nothing at all until the answer lands. Without one it is synchronous
- * and this returns on the first frame.
+ * which is the arrival frame's whole spike if it is paid there — so a pooled
+ * streamer selects nothing at all until the answer lands. Without one it is
+ * synchronous and this returns on the first frame.
  */
 async function walkOnce(
   streamer: TerrainStreamer,
