@@ -5679,6 +5679,23 @@ fBm. Nothing is versioned, because nothing canonical moved.
   _saturated_ population is in equilibrium and its members destroy each other,
   so the net relief is not the depth of one fresh crater.
 
+### What the browser says
+
+A two-metre stance on Luna, at the flight lens over 1600×900: **level 17, 895
+patches, 7.33 M triangles**, and every counter a fixed point over 240 consecutive
+frames — `cached` and `geometry` both 1,274 against caps of 3,840 and 2,560,
+`starved` zero, `saturated` false. At 1920×1200 over a device pixel ratio of 2 —
+the window that found the Phase 3 strobe — it reaches **level 17, 1,106 patches
+and 9.06 M triangles**, and 120 consecutive frames are again identical. The
+geometry cache is not the binding constraint at either size, which is what
+`DEFAULT_MAX_PATCHES` at 1,280 was raised to buy.
+
+**What is binding is generation.** The retina stance had not converged after
+sixty seconds — level 15, 128 in flight, 17 starved — and had after a hundred
+and eighty. 1,562 patches at 43 ms is 67 s of single-core work and the pool does
+not turn that into 17, which is the Phase 5 argument arriving as a wall-clock
+number rather than as a projection.
+
 ### The rungs are numbered from a fixed base, and `young` does not enter them
 
 Continuing the canonical ladder needs a largest crater to count down from, and

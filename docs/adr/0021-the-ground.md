@@ -108,6 +108,15 @@ buffers. Generation was already the binding constraint before this phase and is
 more so now, which is [TERRAIN-PLAN](../../TERRAIN-PLAN.md) § 11's Phase 5
 stated as a measurement rather than a plan.
 
+**A stance holds still and a landing takes minutes.** Measured in the browser: a
+two-metre stance on Luna is level 17 with 895 patches and 7.33 M triangles at
+1600×900, and 1,106 patches and 9.06 M at 1920×1200 over a device pixel ratio of
+2 — with every streamer counter a fixed point over 240 and 120 consecutive
+frames, `starved` zero and both caches well under their caps, which is what
+raising `DEFAULT_MAX_PATCHES` was for. Reaching that state at retina takes
+between one and three minutes, because 1,562 patches at 43 ms is 67 s of
+single-core generation and the pool does not divide it far enough.
+
 **The contact test and the drawn ground are 1.25 m apart at worst.** A landing
 ship spans tens of metres, so it is invisible to flight; a person will notice,
 and [on foot](../design/onfoot.md) is where the floor drops and the number is
