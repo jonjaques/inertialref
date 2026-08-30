@@ -4,6 +4,40 @@ A plan to make every phase of a frame, a boot and a worker job visible on the
 browser's own performance timeline — through one port, off by default, and
 without a single wall-clock read reaching canonical code.
 
+> **Landed, and superseded by [ADR-0022](../adr/0022-the-timeline.md).** All six
+> phases are implemented. The ADR carries the decisions, the measurements and
+> the consequences; this page is kept for the reasoning that produced them, and
+> the sections below still describe intent rather than what shipped.
+>
+> **Five things here are wrong, and the implementation is what proved them so.**
+> Each is corrected at its own site as well, but they are collected once because
+> a plan is read straight through and a reader should not have to find them:
+>
+> - **Terrain selection is not 40–90 µs where it matters.** That figure is a
+>   whole disk from orbit. On a summit it is **2.733 ms of a 4.461 ms frame**,
+>   61% of everything the engine does. The plan reasons from the small figure
+>   throughout, including in the worry that `select` would quantize away.
+> - **`select` did not need folding into `update`, and `request`/`evict` did not
+>   need folding into each other.** Both were proposed as concessions to the
+>   clock. `select` is 27× the 100 µs step at the operating point that matters,
+>   and `request`/`evict` are 0.916 ms together.
+> - **The region must not be folded into a worker entry's label.** A label is
+>   `ir.profile`'s aggregation key and `clearMeasures`'s argument, and a
+>   nine-level selection names thousands of regions — one bucket per patch, an
+>   unbounded retained-name set, and a chart in which no two bars share a name.
+>   It is a property.
+> - **`PoolOptions.timing?: Timer` is not needed.** `getTimer` is a workspace
+>   import at layer 0, called exactly as `getLogger` already is in the same file.
+>   What genuinely needs a port is the clock, and `PoolOptions.now` already is
+>   one.
+> - **There are ten `useFrame` consumers, not nine**, and the panel row is an
+>   `OptionGroup` rather than a `SwitchRow`, because the setting has three
+>   values.
+>
+> Two figures in the "budgeted" table came out close: **~22 entries a frame**
+> (measured 21.5) and the frame decomposition tiling (measured 99.7%). The
+> `ir.profile` sample output was invented and the real shape differs.
+
 > **The premise:** this project already measures itself well and can only show
 > the answers as scalars. `engineMs` is one number covering ticks, snapshot,
 > scene build and terrain reconciliation; the frame budget in
@@ -888,7 +922,7 @@ ir.profile(2000) // arm · record · disarm · report
 point is a terminal-readable answer from one `--js` call:
 
 ```
-node scripts/drive.mjs --js "ir.land('s:SOL/b:2', 27.98, 86.92)" --wait 3000 \
+node scripts/drive.mjs --js "ir.land('g:milky-way/s:SOL/b:2', 0.488, 1.517)" --wait 3000 \
                        --js "ir.profile(2000)" --down
 ```
 

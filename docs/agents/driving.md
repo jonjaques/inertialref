@@ -123,9 +123,47 @@ three; they are here because they explain what it is doing:
    `engine.gl` null, which looks like a rendering bug and is not one.
 4. **A wedged Chrome needs `--down` and a fresh start.** Reloading is not always
    enough to recover its GPU state.
+5. **Chrome left running is contention the test suite feels.** The driver keeps
+   it up on purpose, and a full `pnpm test` beside it has timed out on a
+   different unrelated file each run and passed clean once `--down` had run.
+   A single timeout that moves between runs is a reading about the machine.
+6. **`--serve` cannot start a dev server in a worktree that has never built** —
+   `wrangler dev` needs `apps/game/dist`. Use `pnpm dev:client` and `--no-serve`,
+   or build once. [development](../guides/development.md) § Commands.
 
 Readiness is `window.engine.gl`, not `window.ir` — the harness appears seconds
 earlier, so a probe on it captures an unlit canvas.
+
+**Terrain streams only below the eight-pixel relief gate, and above it
+`ir.terrain()` reports zeros that read exactly like a broken streamer.** From
+the root URL, neither `ir.land` nor `ir.orbit(address, 8)` was close enough:
+both left `visited: 0` and `lens: null`. `ir.visit(address, { site: 'summit',
+height: 2 })` **in the planetarium** is what makes the streamer run. Check
+`visited` before concluding anything about ground.
+
+---
+
+## Why was that frame slow
+
+The panel answers "is it fast right now" while you fly; the timeline answers
+"why was that frame slow" afterwards, and it is the only instrument here with a
+time axis the others can be laid against.
+
+```bash
+node scripts/drive.mjs --js "(await ir.profile(2000)).text"   # a table and a verdict
+node scripts/drive.mjs --url "http://localhost:5173/?timing=trace" --trace 3000
+pnpm timing --threads                                         # read the trace back
+```
+
+`ir.profile` arms the level, records, disarms and reports, so nothing is left
+retaining. It ends on the line worth having — _"9 of 61 frames over 25 ms;
+terrain.select dominated 7 of them at 8.4 ms mean"_ — which names the span that
+dominated the **late** frames rather than the busiest one overall.
+
+Off is the default everywhere and a recording without `?timing=trace` carries
+none of these tracks. The worker tracks are in a trace and never in a drain,
+because each side of the boundary times against its own `timeOrigin`.
+[ADR-0022](../adr/0022-the-timeline.md).
 
 ---
 

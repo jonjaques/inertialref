@@ -5983,6 +5983,33 @@ not about a player.
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).
 
+- **The timeline has no span inside `packages/simulation`, so `pnpm sim
+--profile` reports only the worker pool.** That is deliberate rather than
+  unfinished — the simulation depends on the integer tick and wall clock enters
+  at one call — but it means a bare `--ticks` loop has nothing to decompose and
+  the headless half of the profile story is thinner than
+  [the plan](docs/plans/the-timeline.md) hoped. The seam for changing that is
+  ADR-0022's `void` return, which is what would keep a tick span from becoming a
+  canonical read.
+- **A worker's entries are invisible to `ir.timing.drain()`.** They live on the
+  worker's own performance timeline because each side times against its own
+  `timeOrigin`, so a `full`-level drain on the main thread covers Engine,
+  Terrain, Render and Boot and stops there. The worker tracks are in a _trace_ —
+  `pnpm drive --trace`, then `pnpm timing --threads` — and closing the gap means
+  collecting from both sides over `postMessage`, which is a protocol change
+  nobody has needed yet.
+- **The entry-cost figures were taken with no DevTools recording active.**
+  46.5 ns for `console.timeStamp` and 988.5 ns for `performance.measure` are the
+  numbers that decide whether _turning the level on_ costs anything, which is the
+  question that matters for shipping. What they do not answer is the cost under a
+  live recording, where the category is enabled and the entry is actually written
+  somewhere. `--trace` now exists to measure that and it has not been done.
+- **A 3-second trace is 41 MB and 204,000 events.** `pnpm timing` carries
+  `--max-old-space-size=8192` for that reason. The categories are already the
+  narrow set — the V8 CPU profiler is deliberately excluded — and most of the
+  volume is `disabled-by-default-v8.gc`, which comes along with
+  `devtools.timeline`. A longer recording wants streaming rather than one
+  `JSON.parse`, and `traceFrames.mjs` has the same shape of limit.
 - **The planetarium has no bookmarks, filters or measure tool.** The address is
   already the whole record for a bookmark, so what is missing is a store; the
   filter fields are the ones `docs/design/galaxy.md` lists for the galaxy map.
