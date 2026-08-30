@@ -1,5 +1,5 @@
 ---
-globs: apps/game/index.html,apps/game/public/**,apps/game/src/site.ts,apps/game/src/analytics.ts,apps/game/src/pages/DocumentMeta.tsx,design/brand/**,scripts/brand/**,scripts/media.mjs
+globs: apps/game/astro/**,apps/game/public/**,apps/game/src/site.ts,apps/game/src/analytics.ts,apps/game/src/pages/DocumentMeta.tsx,design/brand/**,scripts/brand/**,scripts/media.mjs
 alwaysApply: false
 ---
 

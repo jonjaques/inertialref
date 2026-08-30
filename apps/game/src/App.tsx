@@ -595,10 +595,13 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
      * document's own size, which `index.css` sets to `100dvh` and locks against
      * scrolling in one place.
      */
-    <div className="relative h-full w-full overflow-hidden bg-black text-slate-200">
+    <div
+      className="relative h-full w-full overflow-hidden bg-black text-slate-200"
+      id="app"
+    >
       {/* Renders nothing; keeps the tab, the canonical link and the analytics
           page view in step with the address bar. Inside the shell rather than
-          in `main.tsx` because it needs the router's location. */}
+          in `Root.tsx` because it needs the router's location. */}
       <DocumentMeta />
       <Canvas
         key={canvasKey}
@@ -840,7 +843,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
           )}
 
           {/* The loading screen. Mounted from the first commit — it is what
-            keeps React's clearing of the index.html placeholder from flashing
+            keeps React's clearing of the document placeholder from flashing
             an unlit canvas — and gone for good once its fade completes. A
             boundary of its own: a throw in here must cost the cover, never
             the session under it. */}

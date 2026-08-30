@@ -8,8 +8,8 @@ import {
   readSync,
 } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { defineConfig, loadEnv } from 'vite'
-import react, { reactCompilerPreset } from '@vitejs/plugin-react'
+import { defineConfig, loadEnv, type UserConfig } from 'vite'
+import { reactCompilerPreset } from '@vitejs/plugin-react'
 import babel from '@rolldown/plugin-babel'
 import tailwindcss from '@tailwindcss/vite'
 
@@ -228,8 +228,15 @@ function requireRealModels() {
   }
 }
 
-export default defineConfig(({ mode }) => {
-  reportAnalytics(mode)
+/**
+ * The Vite config Astro nests, and the sourcemap test reads.
+ *
+ * `@astrojs/react` supplies the JSX transform, so `@vitejs/plugin-react` must
+ * not also appear here — a second transform is a second React runtime. The
+ * package stays a dependency because `reactCompilerPreset` is its export; the
+ * Babel pass below is the compiler, not the JSX plugin.
+ */
+export function gameVite(): UserConfig {
   return {
     /*
      * `@/` is the one non-relative import specifier in this repository.
@@ -247,9 +254,14 @@ export default defineConfig(({ mode }) => {
       alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
     },
     plugins: [
+      {
+        name: 'inertialref:report-analytics',
+        config(_cfg, { mode }) {
+          reportAnalytics(mode)
+        },
+      },
       requireRealModels(),
       requireSourceMaps(),
-      react(),
       // React Compiler handles memoisation, so components here do not hand-write
       // useMemo/useCallback around render work.
       babel({ presets: [reactCompilerPreset()] }),
@@ -297,4 +309,6 @@ export default defineConfig(({ mode }) => {
       sourcemap: true,
     },
   }
-})
+}
+
+export default defineConfig(() => gameVite())

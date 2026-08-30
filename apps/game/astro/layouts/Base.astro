@@ -1,3 +1,7 @@
+---
+import '../../src/index.css'
+---
+
 <!doctype html>
 <!--
   `class="dark"` rather than a media query.
@@ -235,27 +239,28 @@
   </head>
   <body>
     <!--
-      What is on screen before the first React commit.
+      What is on screen before the island mounts.
 
-      `main.tsx` awaits the packed catalog — 460 KB, a generation input rather
+      The island fetches the packed catalog — 460 KB, a generation input rather
       than a decoration, so the world cannot be built without it — and until
-      that resolves there is no canvas, no HUD and nothing in `#root`. On a fast
-      connection that is a flash; on a slow one, or behind a service worker
-      serving a bundle that never parses, it is an indefinitely black page that
-      is indistinguishable from a broken one. The audience that gets sent a link
-      forms its impression in about a minute, and a minute of black is the whole
-      minute.
+      that resolves there is no canvas, no HUD and nothing in the slot. On a
+      fast connection that is a flash; on a slow one, or behind a service
+      worker serving a bundle that never parses, it is an indefinitely black
+      page that is indistinguishable from a broken one. The audience that gets
+      sent a link forms its impression in about a minute, and a minute of
+      black is the whole minute.
 
-      React clears the root container on its first commit, so this needs no
-      teardown: its disappearance *is* the handoff, and the stall timer below
-      uses exactly that to know it has happened.
+      The island hides `#boot` when the application mounts, so this needs no
+      other teardown. The stall timer below uses `#app` to know it has
+      happened.
 
-      Styles are inline literals because no stylesheet exists yet — Tailwind
-      arrives with the module this is waiting for. The values are the design
-      system's own tokens (sky-300, slate-500, amber-400, the monospace stack),
-      written out rather than invented; this is not a second palette.
+      Styles are inline literals because this has to render even if the
+      stylesheet never arrives. The values are the design system's own tokens
+      (sky-300, slate-500, amber-400, the monospace stack), written out rather
+      than invented; this is not a second palette.
     -->
     <div id="root">
+      <slot />
       <div
         id="boot"
         style="
@@ -341,8 +346,7 @@
           <p>
             <a
               href="https://github.com/jonjaques/inertialref"
-              style="color: #7dd3fc"
-              >github.com/jonjaques/inertialref</a
+              style="color: #7dd3fc">github.com/jonjaques/inertialref</a
             >
             · <a href="/llms.txt" style="color: #7dd3fc">/llms.txt</a>
           </p>
@@ -350,21 +354,22 @@
       </div>
     </noscript>
 
-    <script>
+    <script is:inline>
       /*
        * The one failure the page cannot report on its own.
        *
        * If the module never executes — a stale service worker holding a bundle
        * that 404s against a redeployed hash, a parse error on an old browser —
-       * nothing in `main.tsx` runs, so nothing in `main.tsx` can say so. This
+       * nothing in the island runs, so nothing in the island can say so. This
        * lives in the document instead. It is not a spinner: it appears only
        * once the wait has stopped being plausible, and it names the recovery
        * rather than the symptom, because the recovery is not "reload" — a
        * reload served by the same worker returns the same broken bundle.
        */
       setTimeout(function () {
+        // The island mounted and hid #boot. Nothing to say.
+        if (document.getElementById('app') !== null) return
         var boot = document.getElementById('boot-stall')
-        // React cleared the root, which means the app is up. Nothing to say.
         if (boot === null) return
         boot.hidden = false
       }, 10000)
@@ -389,6 +394,5 @@
           } else done()
         })
     </script>
-    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -1,42 +1,41 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
+import { StrictMode, useEffect, useState } from 'react'
 import { MotionConfig } from 'motion/react'
 import { BrowserRouter } from 'react-router'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { createConsoleSink, logHub } from '@inertialref/shared'
+import type { StarCatalog } from '@inertialref/universe'
 import { startAnalytics } from './analytics.ts'
 import App from './App.tsx'
-import { KeymapProvider } from './input/KeymapProvider.tsx'
-import { registerServiceWorker } from './net/registerServiceWorker.ts'
 import { BUILD_ID } from './build.ts'
 import { loadStarCatalog } from './engine/catalogAsset.ts'
-import './index.css'
+import { KeymapProvider } from './input/KeymapProvider.tsx'
+import { registerServiceWorker } from './net/registerServiceWorker.ts'
 
 /*
- * Logging is wired here rather than in the engine's constructor.
+ * The client's island.
  *
- * `logHub` is module-global, so attaching a sink is a process-wide side effect
- * and belongs to the process's entry point — the headless runner does the same
- * thing in its own `main`. Constructing an engine used to attach one, which
- * meant every engine built in a test added another console sink to the same
- * hub.
+ * Astro owns the document. This module is what `client:only="react"` mounts
+ * into `#root`, and the side effects that used to live in a Vite entry live
+ * here because they are still process-wide: a log sink, a third-party tag, a
+ * service worker. The layout does not re-run them; the island's module
+ * evaluates once.
  */
+
 logHub.addSink(createConsoleSink(console, 'info'))
-
-/*
- * Analytics, wired here for the same reason the log sink is: loading a third
- * party tag is a process-wide side effect and belongs to the process's entry
- * point, not to a component that might mount twice.
- *
- * It is a no-op unless this is a production build on the canonical host with no
- * Global Privacy Control set, so a dev server, `pnpm preview`, a Wrangler
- * preview URL and a fork all measure nothing. `analytics.ts` has the argument.
- * Individual page views come from `pages/DocumentMeta.tsx`, which is inside the
- * router and therefore knows when the address changed.
- */
 startAnalytics()
 
-/*
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  registerServiceWorker({
+    page: {
+      readyState: () => document.readyState,
+      onLoad: (run) => window.addEventListener('load', run, { once: true }),
+    },
+    register: (url) => navigator.serviceWorker.register(url),
+    buildId: BUILD_ID,
+  })
+}
+
+/**
  * The last resort, when there is no React left to draw one.
  *
  * A throw at module scope, or a render that fails before any boundary is
@@ -46,8 +45,8 @@ startAnalytics()
  * uncaught error React has unmounted the tree and still owns that container,
  * and writing into a container React owns is how a fatal error becomes two.
  *
- * Same reason as `index.html` for the inline literals — they are the design
- * system's tokens, and by this point a stylesheet is not a thing to count on.
+ * Inline literals because a stylesheet is not a thing to count on at this
+ * point. They are the design system's own tokens, written out.
  */
 function reportFatal(cause: unknown): void {
   const existing = document.getElementById('fatal')
@@ -96,36 +95,29 @@ function reportFatal(cause: unknown): void {
   document.body.append(panel)
 }
 
-const root = document.getElementById('root')
-if (root === null) {
-  reportFatal(new Error('#root is missing from index.html'))
-  throw new Error('#root is missing from index.html')
-}
+window.addEventListener('error', (event) => {
+  if (event.error !== undefined && event.error !== null)
+    reportFatal(event.error)
+})
+window.addEventListener('unhandledrejection', (event) => {
+  reportFatal(event.reason)
+})
 
-/*
- * The catalog is awaited before the first render.
- *
- * It is a *generation input*, not a decoration: the world is built from a seed
- * and a catalog together, so a world constructed before it arrives is a
- * different world and would have to be thrown away and rebuilt — replacing the
- * ship, the frames and the starfield a second or two after the player is already
- * flying. One fetch of a precached 460 KB asset is the cheaper trade, and a
- * failed fetch falls back rather than blocking.
- */
-try {
-  const catalog = await loadStarCatalog()
-  createRoot(root, {
-    /*
-     * Errors that reached the top of the tree without a boundary catching them.
-     *
-     * The overlay's boundaries cover the panels, the strip and the cutscene
-     * layer; what they cannot cover is `App` itself, the `<Canvas>` mount, or
-     * anything that throws before they exist. React unmounts the whole tree for
-     * those, which in this app means the canvas goes with it — the same black
-     * screen, arriving before there is any chrome left to explain it.
-     */
-    onUncaughtError: (cause: unknown) => reportFatal(cause),
-  }).render(
+export default function Root() {
+  const [catalog, setCatalog] = useState<StarCatalog | null>(null)
+
+  useEffect(() => {
+    void loadStarCatalog().then(setCatalog, reportFatal)
+  }, [])
+
+  useEffect(() => {
+    if (catalog === null) return
+    document.getElementById('boot')?.setAttribute('hidden', '')
+  }, [catalog])
+
+  if (catalog === null) return null
+
+  return (
     <StrictMode>
       {/*
        * The router wraps the whole tree, but it does not *own* the view: the
@@ -182,37 +174,6 @@ try {
           </TooltipProvider>
         </MotionConfig>
       </BrowserRouter>
-    </StrictMode>,
+    </StrictMode>
   )
-} catch (cause) {
-  // The synchronous half: a module that failed to evaluate, a catalog decode
-  // that got past its own fallback, a `createRoot` that refused the container.
-  reportFatal(cause)
-}
-
-/*
- * Offline-first (spec §9).
- *
- * Registered only in production builds: a service worker in front of Vite's dev
- * server intercepts HMR and module requests and turns every edit into a
- * debugging session about caching.
- *
- * Once installed there is nothing else to fetch — the universe is generated
- * from a seed and saves live in IndexedDB — so the game is fully playable with
- * no server.
- *
- * The thirty-six lines that used to be here are `net/registerServiceWorker.ts`
- * now, with the page-readiness and registration dependencies injected. What
- * they hid was a seam: "the page is ready" and "install the worker" were
- * related only by module evaluation order, which is the thing that broke.
- */
-if (import.meta.env.PROD && 'serviceWorker' in navigator) {
-  registerServiceWorker({
-    page: {
-      readyState: () => document.readyState,
-      onLoad: (run) => window.addEventListener('load', run, { once: true }),
-    },
-    register: (url) => navigator.serviceWorker.register(url),
-    buildId: BUILD_ID,
-  })
 }

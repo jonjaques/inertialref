@@ -16,22 +16,22 @@ import {
  * One module, read by four things that would otherwise each carry their own
  * copy of the same sentence and drift:
  *
- *   - `pages/DocumentMeta.tsx`   the title, description and canonical link on
- *                                every navigation
- *   - `analytics.ts`             the one hostname that is allowed to be measured
- *   - `scripts/brand/build.mjs`  the share card, `robots.txt` and `sitemap.xml`
- *   - `index.html`               by hand, and only for the home page — see below
+ * `pages/DocumentMeta.tsx`   the title, description and canonical link on
+ *                            every navigation
+ * `analytics.ts`             the one hostname that is allowed to be measured
+ * `scripts/brand/build.mjs`  the share card, `robots.txt` and `sitemap.xml`
+ * `astro/layouts/Base.astro` by hand, and only for the home page — see below
  *
- * **`index.html` is the exception and it is deliberate.** A social scraper does
+ * **The layout is the exception and it is deliberate.** A social scraper does
  * not run JavaScript, so whatever this module computes at runtime is invisible
  * to the card Slack or iMessage draws. The static head is what those read, and
- * it is written for the home page because the SPA fallback serves that same
- * document for every path. Keeping it in step is a hand job with a pointer at
- * both ends; the alternative is routing every navigation through the Worker so
- * `HTMLRewriter` can rewrite four tags, which turns a free static asset request
- * into a billed invocation on every page load. `docs/hosting.md` records that
- * trade as the seam to revisit if per-route cards ever matter more than they do
- * for a project with two shareable pages.
+ * it is written for the home page because the SPA fallback still serves that
+ * same document for every path. Keeping it in step is a hand job with a pointer
+ * at both ends; the alternative is routing every navigation through the Worker
+ * so `HTMLRewriter` can rewrite four tags, which turns a free static asset
+ * request into a billed invocation on every page load. `docs/hosting.md`
+ * records that trade as the seam to revisit if per-route cards ever matter
+ * more than they do for a project with two shareable pages.
  *
  * Node runs this file directly (type stripping) so the build scripts can import
  * it. Nothing here may touch the DOM, React or `import.meta.env`.

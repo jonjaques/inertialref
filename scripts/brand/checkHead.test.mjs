@@ -13,7 +13,10 @@ import { checkPublicSurface, headOf, metaTags } from './checkHead.mjs'
  */
 
 const ROOT = new URL('../../', import.meta.url)
-const HTML = readFileSync(new URL('apps/game/index.html', ROOT), 'utf8')
+const HTML = readFileSync(
+  new URL('apps/game/astro/layouts/Base.astro', ROOT),
+  'utf8',
+)
 const SW = readFileSync(new URL('apps/game/public/sw.js', ROOT), 'utf8')
 const PUBLIC_FILES = new Set(readdirSync(new URL('apps/game/public/', ROOT)))
 

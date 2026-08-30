@@ -385,7 +385,10 @@ async function main() {
      * anyone to re-run anything.
      */
     const surface = checkPublicSurface({
-      html: await readFile(new URL('apps/game/index.html', ROOT), 'utf8'),
+      html: await readFile(
+        new URL('apps/game/astro/layouts/Base.astro', ROOT),
+        'utf8',
+      ),
       sw: await readFile(new URL('sw.js', PUBLIC), 'utf8'),
       publicFiles: new Set(await readdir(PUBLIC)),
     })
@@ -393,13 +396,13 @@ async function main() {
       console.error('The static head disagrees with apps/game/src/site.ts:')
       for (const problem of surface) console.error(`  - ${problem}`)
       console.error(
-        '\nEdit apps/game/index.html to match, or src/site.ts if the head is right.',
+        '\nEdit apps/game/astro/layouts/Base.astro to match, or src/site.ts if the head is right.',
       )
       process.exitCode = 1
       return
     }
     console.log('brand artifacts match design/brand/brandmark.svg')
-    console.log('index.html and sw.js match apps/game/src/site.ts')
+    console.log('the document head and sw.js match apps/game/src/site.ts')
     return
   }
 

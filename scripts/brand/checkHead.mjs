@@ -3,8 +3,8 @@
  *
  * `pnpm brand --check` re-derives every generated public-surface artifact —
  * `manifest.webmanifest`, `robots.txt`, `sitemap.xml`, `favicon.svg` — and
- * diffs it against what is committed. It never opened `index.html`, which is
- * the file Slack, iMessage, Bluesky and Googlebot parse, and the only one whose
+ * diffs it against what is committed. It never opened the document that a
+ * scraper actually reads, which is now the Astro layout: the only file whose
  * contents nothing derives.
  *
  * **A check, not a generator.** Generating the head was argued and declined:
@@ -15,7 +15,7 @@
  *
  * It is guarding a real near miss. `d4f4065` fixed `canonicalUrl` to drop a
  * trailing slash; the generated sitemap fixed itself and the hand-typed
- * canonical at `index.html` was already right — by luck, that time. The head
+ * canonical in the document was already right — by luck, that time. The head
  * also carries five description strings, and the 60–160 bound `site.test.ts`
  * holds every `PageMeta` to has never applied to any of them.
  *
@@ -156,7 +156,7 @@ function structuredDescriptions(head) {
  * hand it a deliberately drifted head — a gate that cannot fail is not a gate.
  *
  * @param {object} sources
- * @param {string} sources.html      `apps/game/index.html`
+ * @param {string} sources.html      `apps/game/astro/layouts/Base.astro`
  * @param {string} sources.sw        `apps/game/public/sw.js`
  * @param {Set<string>} sources.publicFiles  names in `apps/game/public/`
  */

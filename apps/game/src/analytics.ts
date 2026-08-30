@@ -3,7 +3,7 @@ import { SITE } from './site.ts'
 /*
  * Google Analytics, on exactly one hostname.
  *
- * The tag is not in `index.html`, which is where Google's own snippet goes,
+ * The tag is not in the document, which is where Google's own snippet goes,
  * because the snippet has no condition in it and this needs three:
  *
  *   1. **Production builds only.** A dev server reload every time a file is

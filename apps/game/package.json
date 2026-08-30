@@ -3,11 +3,11 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "InertialRef browser client: React UI over a React Three Fiber view of the simulation.",
+  "description": "InertialRef browser client: Astro document, React islands over a React Three Fiber view of the simulation.",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview --port 4173"
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview --port 4173"
   },
   "dependencies": {
     "@astrojs/react": "^6.0.4",
