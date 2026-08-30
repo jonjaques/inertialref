@@ -17,11 +17,30 @@ interface Props {
    * not the file that owns the URL — there is no such caller yet.
    */
   pathname?: string
+  /**
+   * The page's own title, when it is more specific than `pageMetaFor`.
+   *
+   * A documentation page is "Reference frames", not "Documentation". The
+   * tab strip truncates from the right, so the half that survives has to
+   * be the half that says where you are.
+   */
+  heading?: string
+  /**
+   * The page's own description, when it is more specific than `pageMetaFor`.
+   *
+   * Same reason as `heading`: the card for `/docs/concepts/frames` is
+   * about reference frames, not about the documentation section.
+   */
+  description?: string
 }
 
 const pathname = Astro.props.pathname ?? Astro.url.pathname
-const page = pageMetaFor(pathname)
-const title = documentTitle(page)
+const meta = pageMetaFor(pathname)
+const page =
+  Astro.props.description === undefined
+    ? meta
+    : { ...meta, description: Astro.props.description }
+const title = documentTitle(meta, Astro.props.heading)
 const canonical = canonicalUrl(pathname)
 const image = `${SITE.origin}${SITE.socialImage}`
 const ld = JSON.stringify(jsonLd())

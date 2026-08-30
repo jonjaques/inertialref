@@ -29,3 +29,15 @@ export function docsParam(route: string): string | undefined {
 export function docsRoute(param: string | undefined): string {
   return param === undefined || param.length === 0 ? DOCS : `${DOCS}/${param}`
 }
+
+/**
+ * The sentence a documentation card carries.
+ *
+ * The page's own lead when it is a description, and the section's when it
+ * is not. A lead of three words is a placeholder; a lead of four hundred
+ * is the first paragraph of the page, which is what the article is for.
+ * The 60–160 bound is the same one `site.test.ts` holds every PageMeta to.
+ */
+export function docCardDescription(lead: string, fallback: string): string {
+  return lead.length >= 60 && lead.length <= 160 ? lead : fallback
+}

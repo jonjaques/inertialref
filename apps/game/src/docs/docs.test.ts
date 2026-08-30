@@ -10,7 +10,7 @@ import {
   wingFor,
 } from './docsNav.ts'
 import { searchDocs, tokenize } from './search.ts'
-import { docsParam, docsRoute } from './urls.ts'
+import { docsParam, docsRoute, docCardDescription } from './urls.ts'
 
 /*
  * The two pure halves of the reading room: where a route sits, and what a query
@@ -117,6 +117,20 @@ describe('the URL a documentation page is served at', () => {
   it('refuses a path that is not a documentation route', () => {
     expect(() => docsParam('/planetarium')).toThrow(/documentation route/)
     expect(() => docsParam('/docsish')).toThrow(/documentation route/)
+  })
+
+  it('uses the lead as the card when it is a description, not a sentence fragment', () => {
+    const fallback =
+      'How InertialRef works and why: ten mechanisms, sixteen decision records, the design bible, and a generated reference for every export of the engine.'
+    expect(docCardDescription('Frames are not coordinates.', fallback)).toBe(
+      fallback,
+    )
+    expect(
+      docCardDescription(
+        'How a body-fixed frame relates to an inertial one, and why the distinction is the whole of orbital mechanics.',
+        fallback,
+      ),
+    ).toMatch(/^How a body-fixed frame/)
   })
 })
 

@@ -102,6 +102,7 @@ window.addEventListener('unhandledrejection', (event) => {
 export default function Root() {
   useEffect(() => {
     document.getElementById('boot')?.setAttribute('hidden', '')
+    document.getElementById('doc-ssr')?.setAttribute('hidden', '')
   }, [])
 
   return (
