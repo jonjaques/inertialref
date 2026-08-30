@@ -1,4 +1,3 @@
-import { useFrame } from '@react-three/fiber'
 import { useThree } from '@react-three/fiber'
 import { useEffect, useMemo, useRef } from 'react'
 import {
@@ -22,6 +21,7 @@ import type { GameEngine } from '../engine/GameEngine.ts'
 import { MAX_ROCKS, type ScatterBatch } from '../engine/scatterField.ts'
 import { grainWrap, type TerrainMaterial } from '../render/terrain.ts'
 import { warmAtMount, warmCompile, warmRenderer } from '../render/warmup.ts'
+import { useTimedFrame } from './useTimedFrame.ts'
 
 /**
  * The rocks lying on the streamed ground.
@@ -216,7 +216,7 @@ export function ScatterRocks({
     })
   }, [gl, camera, scene, material])
 
-  useFrame(() => {
+  useTimedFrame('scatterRocks', () => {
     const container = group.current
     if (container === null) return
     const scatter = engine.terrainState().scatter

@@ -46,6 +46,7 @@ import {
   terrainPatchKey,
 } from '@inertialref/rendering'
 import { generateHeightfieldTask, type WorkerPool } from '@inertialref/workers'
+import { PhaseClock, TERRAIN_PHASE, TERRAIN_SHORT } from './frameTiming.ts'
 import { ScatterField, type ScatterState } from './scatterField.ts'
 
 /*
@@ -416,6 +417,35 @@ export class TerrainStreamer {
   #culled = 0
   #starved = 0
   #saturated = false
+  /**
+   * The streamer's own four phases, inside the Engine track's one `terrain`.
+   *
+   * See `frameTiming.ts`: the clock steps in 100 µs here, so `select` at
+   * 40–90 µs for a whole disk cannot be read one frame at a time. It is still
+   * worth a phase — over a 240-frame window the rounding is unbiased and the
+   * mean is good to well under a microsecond — and the tiling means the four
+   * sum to the `terrain` phase exactly rather than drifting from it.
+   */
+  readonly #phases = new PhaseClock('game.terrain')
+
+  /**
+   * How much of the drawn selection is waiting on geometry, and whether the
+   * walk hit its patch ceiling.
+   *
+   * Beside `summary()` for the reason `pool.queued` sits beside `stats()`: the
+   * frame loop reads these every frame to colour a trace entry, and `summary()`
+   * allocates an object and a nested one for the scatter field. An entry that
+   * turns red when the ground is going coarse is the one thing a screenshot of
+   * a profile can say at a glance, and it must not cost a per-frame allocation
+   * to say it.
+   */
+  get starved(): number {
+    return this.#starved
+  }
+
+  get saturated(): boolean {
+    return this.#saturated
+  }
   /*
    * The transform the patches are drawn with, refreshed by `update` every frame.
    *
@@ -600,9 +630,17 @@ export class TerrainStreamer {
    * Reconcile the loaded set against where the camera is.
    *
    * Called every frame; cheap when nothing has changed, because the work is
-   * keyed by (body, region) and both are stable while the player hovers. The
-   * selection itself is 40–90 µs for a whole disk, which is what lets it run
-   * unconditionally rather than behind an altitude gate.
+   * keyed by (body, region) and both are stable while the player hovers.
+   *
+   * **The selection is 40–90 µs for a whole disk seen from orbit, and 2.7 ms
+   * standing on a summit.** Both are real; the first is the one that lets this
+   * run unconditionally rather than behind an altitude gate, and the second is
+   * what it costs where somebody is actually looking at ground. Measured on the
+   * Terrain track on Earth's summit site, where a nine-level selection visits
+   * 446 nodes: `terrain.select` was 2.733 ms of a 4.461 ms frame — 61% of
+   * everything the engine did — with `terrain.request` at 0.916 ms,
+   * `terrain.build` at 0.225 ms and `terrain.scatter` at 0.046 ms behind it.
+   * A figure measured at one operating point is a figure about that point.
    */
   update(
     world: World,
@@ -611,6 +649,10 @@ export class TerrainStreamer {
     origin: RenderOrigin,
     body: RenderBody | null,
   ): void {
+    // Opened before the early exits so a frame that clears or forgets emits
+    // nothing at all, which is the truthful picture — there was no terrain work
+    // to decompose.
+    this.#phases.open()
     if (body === null) {
       this.clear()
       return
@@ -750,10 +792,28 @@ export class TerrainStreamer {
     const starvedChildren = drawn.starved.flatMap((region) =>
       regionChildren(region),
     )
+    /*
+     * Both quadtree walks under one entry, and red when the ground is short.
+     *
+     * One phase rather than two because a single walk is 40–90 µs against a
+     * 100 µs clock — the pair is the smallest thing here that resolves at all,
+     * and splitting it would produce two bars whose difference is quantization.
+     * `starved` and `saturated` are the streamer's own words for "the picture
+     * is coarser than the selection asked for", and they are exactly what a
+     * reader wants to see without reading a number.
+     */
+    this.#phases.step(
+      'terrain.select',
+      this.#starved > 0 || this.#saturated ? TERRAIN_SHORT : TERRAIN_PHASE,
+    )
+
     this.#build(
       [...drawn.patches.map((patch) => patch.region), ...starvedChildren],
       surface,
     )
+    // Main-thread vertex work: 0.25 ms a patch, four a frame by budget. The one
+    // phase here that clears the clock's resolution comfortably.
+    this.#phases.step('terrain.build', TERRAIN_PHASE)
     /*
      * The draw set first, then the ideal one.
      *
@@ -780,7 +840,13 @@ export class TerrainStreamer {
       ...pyramid(wanted.patches),
     ]
     this.#request(requested, surface)
+    // Together 0.916 ms on a summit, against a request list naming over a
+    // thousand regions — so they clear the 100 µs step easily where it matters
+    // and quantize together from orbit, where there is nothing to see anyway.
+    this.#phases.step('terrain.request', TERRAIN_PHASE)
+
     this.#evict(requested)
+    this.#phases.step('terrain.evict', TERRAIN_PHASE)
 
     /*
      * The rocks, last, because they stand on ground this frame has just decided
@@ -801,6 +867,16 @@ export class TerrainStreamer {
       this.#pose,
       this.#lensView,
     )
+    /*
+     * The one phase that most wants a timeline rather than a mean.
+     *
+     * `scatterField.ts` resolves a fixed budget of 128 candidate slots per
+     * frame against a whole region that costs 2.6–5.8 ms, so the work is
+     * deliberately smeared across frames — and a budget spread thin is
+     * invisible to a scalar by construction, while on a track it is the obvious
+     * repeating band.
+     */
+    this.#phases.step('terrain.scatter', TERRAIN_PHASE)
   }
 
   #key(region: RegionAddress): string {

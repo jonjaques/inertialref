@@ -221,6 +221,17 @@ function clearEmitted(): void {
 export const timingLevel = (): TimingLevel => level
 
 /**
+ * Whether an entry's properties table is worth building.
+ *
+ * A `TimingDetail`'s `properties` reach DevTools only through a User Timing
+ * detail payload, so at `trace` they are formatted, allocated and dropped.
+ * Formatting two integers into strings sixty times a second to fill a table
+ * nothing renders is exactly the allocation `trace` exists to avoid, and a call
+ * site that emits per frame checks this before building one.
+ */
+export const timingDetailed = (): boolean => level === 'full'
+
+/**
  * The one switch. The URL, the preference, the panel and `ir.timing()` are four
  * doors onto it.
  *

@@ -1,9 +1,10 @@
-import { useFrame, useThree } from '@react-three/fiber'
+import { useThree } from '@react-three/fiber'
 import { useEffect, useMemo } from 'react'
 import type { PerspectiveCamera, Scene } from 'three/webgpu'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { createWarpEffects } from '../render/warpEffects.ts'
 import { warmAtMount, warmCompile, warmRenderer } from '../render/warmup.ts'
+import { useTimedFrame } from './useTimedFrame.ts'
 
 /**
  * The cutscene's warp streaks, nacelle glow, flash wash and motion smear —
@@ -48,7 +49,7 @@ export function WarpFx({ engine }: { engine: GameEngine }) {
     })
   }, [fx, gl, camera, scene])
 
-  useFrame(() => {
+  useTimedFrame('warpFx', () => {
     fx.update(camera as PerspectiveCamera, engine.cinematic)
   })
 

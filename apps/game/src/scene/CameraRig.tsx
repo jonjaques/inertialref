@@ -1,4 +1,4 @@
-import { useFrame, useThree } from '@react-three/fiber'
+import { useThree } from '@react-three/fiber'
 import { useRef } from 'react'
 import type {
   DirectionalLight,
@@ -12,6 +12,7 @@ import {
   verticalFovDegrees,
 } from '@inertialref/rendering'
 import type { GameEngine } from '../engine/GameEngine.ts'
+import { useTimedFrame } from './useTimedFrame.ts'
 
 /** Reused per frame; a light direction is not worth an allocation at 144 Hz. */
 const VIEW = /*@__PURE__*/ new Vector3()
@@ -105,7 +106,7 @@ export function CameraRig({ engine }: { engine: GameEngine }) {
   const light = useRef<PointLight>(null)
   const fill = useRef<DirectionalLight>(null)
 
-  useFrame(() => {
+  useTimedFrame('cameraRig', () => {
     const scene = engine.scene()
     /*
      * Whoever owns the pose this frame owns all of it.

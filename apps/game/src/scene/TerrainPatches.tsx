@@ -1,4 +1,4 @@
-import { useFrame, useThree } from '@react-three/fiber'
+import { useThree } from '@react-three/fiber'
 import { useEffect, useMemo, useRef } from 'react'
 import {
   BufferAttribute,
@@ -18,6 +18,7 @@ import { GEOMETRY_CACHE } from '../engine/terrainStreamer.ts'
 import { texturesFor } from '../render/planetTextures.ts'
 import { grainWrap, type TerrainMaterial } from '../render/terrain.ts'
 import { warmAtMount, warmCompile, warmRenderer } from '../render/warmup.ts'
+import { useTimedFrame } from './useTimedFrame.ts'
 
 /**
  * Streamed terrain patches: geometry uploaded once, moved every frame.
@@ -115,7 +116,7 @@ export function TerrainPatches({
     })
   }, [gl, camera, scene, material])
 
-  useFrame(() => {
+  useTimedFrame('terrainPatches', () => {
     const container = group.current
     if (container === null) return
     /*

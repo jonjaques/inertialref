@@ -3,7 +3,6 @@ import {
   getTimer,
   LIGHT_YEAR,
   type Seconds,
-  type TimingDetail,
 } from '@inertialref/shared'
 import { formatSeed } from '@inertialref/procedural'
 import {
@@ -66,6 +65,13 @@ import type { LoadedShip } from '../render/shipModels.ts'
 import { createBrowserWorkerPort, poolSize } from './browserWorker.ts'
 import type { Camera, Object3D } from 'three/webgpu'
 import { FrameMetrics, usedHeapMb } from './frameMetrics.ts'
+import { timingDetailed } from './browserTiming.ts'
+import {
+  ENGINE_LATE,
+  ENGINE_PHASE,
+  PhaseClock,
+  TRACK_GROUP,
+} from './frameTiming.ts'
 import { DROPPED_FRAME_MS } from './perfBudgets.ts'
 import { IndexedDbSaveStore } from './indexedDbStore.ts'
 import {
@@ -97,39 +103,22 @@ import type { TerrainReport } from '@inertialref/devtools'
 const log = getLogger('game.engine')
 
 /*
- * The frame's own entry, and the two frozen details it can wear.
+ * The frame's own entry, and the seven phases inside it.
  *
  * `timer` is constructed at module scope and `main.tsx` attaches the sink in
  * its own body — after every static import has been evaluated to completion —
  * so `on` has to be a getter over the live hub rather than a boolean captured
  * here. It is; see `packages/shared/src/timing.ts`.
  *
- * Two constants and a comparison rather than one detail built per frame: a
- * track, a group and a colour are the same on every frame, and the only thing
- * that varies is whether this frame was late. That keeps the cheap level
- * allocation-free at the one call site that runs sixty times a second, which is
- * the claim the whole flag rests on.
- *
- * `DROPPED_FRAME_MS` rather than `FRAME_BUDGET_MS`, and it is the same number
- * the panel draws its warning line at — one definition of over-budget now
- * colours the plot *and* the trace entry.
+ * `ENGINE_PHASE` and `ENGINE_LATE` are frozen module constants chosen by one
+ * comparison, rather than a detail built per frame: a track, a group and a
+ * colour are the same on every frame and only lateness varies. That keeps the
+ * cheap level allocation-free at the sites that run sixty times a second, which
+ * is the claim the whole flag rests on. `DROPPED_FRAME_MS` is the same number
+ * the panel draws its warning line at — one definition of over-budget colours
+ * the plot *and* the trace entry.
  */
 const timer = getTimer('game.engine')
-
-const ENGINE_TRACK = 'Engine'
-const ENGINE_GROUP = 'InertialRef'
-
-const FRAME_DETAIL: TimingDetail = Object.freeze({
-  track: ENGINE_TRACK,
-  group: ENGINE_GROUP,
-  color: 'primary',
-})
-
-const FRAME_LATE: TimingDetail = Object.freeze({
-  track: ENGINE_TRACK,
-  group: ENGINE_GROUP,
-  color: 'error',
-})
 
 /**
  * The lens the game is flown behind — 18.84 mm on a 24 mm gauge, which is 65°.
@@ -611,6 +600,15 @@ export class GameEngine implements PresentationHost {
    */
   cutsceneAudio: string | null = null
 
+  /**
+   * The frame's phase sequence, one instance for the life of the engine.
+   *
+   * A field rather than a local, so the boundary survives from `open` to the
+   * last `step` without being threaded through nine call sites — and so the
+   * allocation happens once rather than sixty times a second.
+   */
+  readonly #phases = new PhaseClock('game.engine')
+
   #scene: RenderScene | null = null
   #frameMs = 16
   #fps = 60
@@ -809,23 +807,8 @@ export class GameEngine implements PresentationHost {
    */
   frame(delta: Seconds): void {
     const started = performance.now()
-    this.#step(delta)
+    this.#step(delta, started)
     const elapsed = performance.now() - started
-
-    /*
-     * The frame, on the timeline, from numbers this method already has.
-     *
-     * No new clock read at all, which is the pattern to reach for everywhere
-     * both ends of an interval already exist — and the reason the overhead
-     * question here is about the emit rather than about the measurement.
-     */
-    if (timer.on)
-      timer.measure(
-        'frame',
-        started,
-        started + elapsed,
-        elapsed > DROPPED_FRAME_MS ? FRAME_LATE : FRAME_DETAIL,
-      )
 
     this.#frameMs = this.#frameMs * 0.9 + elapsed * 0.1
     this.#fps = delta > 0 ? this.#fps * 0.9 + (1 / delta) * 0.1 : this.#fps
@@ -857,17 +840,93 @@ export class GameEngine implements PresentationHost {
       heapMb: usedHeapMb(),
     })
 
+    /*
+     * The frame's own entry, from numbers this method already has.
+     *
+     * No new clock read at all, which is the pattern to reach for everywhere
+     * both ends of an interval already exist — and it is why the overhead
+     * question here is about the emit rather than about the measurement.
+     *
+     * Emitted *after* `renderer.info` has been read rather than before
+     * `#step`, because at `full` the counts ride on the entry as properties.
+     * They are last frame's, which is the correct pairing for the same reason
+     * the plot uses them: a draw call count belongs to the scene that produced
+     * it. Built only at `full` — `trace` has no properties channel at all, so
+     * formatting two integers into strings sixty times a second would fill a
+     * table nothing renders.
+     */
+    if (timer.on) {
+      const late = elapsed > DROPPED_FRAME_MS
+      timer.measure(
+        'frame',
+        started,
+        started + elapsed,
+        timingDetailed()
+          ? {
+              track: 'Engine',
+              group: TRACK_GROUP,
+              color: late ? 'error' : 'primary',
+              properties: [
+                ['drawCalls', String(render?.drawCalls ?? 0)],
+                ['triangles', String(render?.triangles ?? 0)],
+                ['ticks', String(this.#ticksLastFrame)],
+                ['queued', String(this.pool()?.queued ?? 0)],
+              ],
+            }
+          : late
+            ? ENGINE_LATE
+            : ENGINE_PHASE,
+      )
+    }
+
     // Now that the previous frame's counters have been recorded, clear them for
     // the draw that follows. `autoReset` is off for the reason given where it is
     // turned off; this is the other half of that decision.
     this.gl?.renderer.info.reset()
   }
 
-  #step(delta: Seconds): void {
+  /**
+   * The seven distinguishable things a frame does, which `engineMs` reports as
+   * one number.
+   *
+   * `started` comes from `frame` rather than being read again here, so the
+   * phases begin exactly where the frame does and the tiling has no gap at its
+   * head. Every `#phases.step` closes the phase since the previous boundary and
+   * opens the next one there — see `frameTiming.ts` for why one read per
+   * boundary rather than a pair per span, which is a fact about the clock's
+   * 100 µs resolution rather than a micro-optimization.
+   *
+   * The early returns below emit nothing further, and that is the honest
+   * picture: a frame with no camera or no player did not do the work, and a gap
+   * in the trace during a load is information.
+   */
+  #step(delta: Seconds, started: number): void {
+    this.#phases.open(started)
     this.#ticksLastFrame = this.world.advance(delta)
+    /*
+     * The tick batch, never one entry per tick: 64 marks a second is the
+     * instrumentation becoming the load.
+     *
+     * The name stays `advance` on an ordinary frame and folds the counts in
+     * only when there is something to say — a batch that is not one tick, or a
+     * clock that did not achieve the warp it was asked for. `trace` has no
+     * properties channel, so the label is the only place those two numbers can
+     * go; decorating *every* frame with them would fragment the aggregation in
+     * `ir.profile` and bury the anomaly in a wall of identical strings. This
+     * way the flame chart reads `advance` until the moment it reads
+     * `advance ×12 @0.6×`, which is the moment worth looking at.
+     */
+    const warp = this.world.clock.achievedTimeScale
+    this.#phases.step(
+      this.#ticksLastFrame === 1 && warp === 1
+        ? 'advance'
+        : `advance ×${this.#ticksLastFrame} @${warp.toFixed(2)}×`,
+      ENGINE_PHASE,
+    )
 
     const shot = snapshot(this.world)
     this.snapshot = shot
+    this.#phases.step('snapshot', ENGINE_PHASE)
 
     /*
      * The cutscene director's per-frame ask, against `renderTime` so a paused
@@ -888,6 +947,7 @@ export class GameEngine implements PresentationHost {
      * including the control that stops it.
      */
     const cinematic = this.harness.cutsceneSample(shot.renderTime)
+    this.#phases.step('cutscene', ENGINE_PHASE)
     /*
      * The observatory's eye, when a cutscene is not already holding the camera.
      *
@@ -899,6 +959,7 @@ export class GameEngine implements PresentationHost {
      */
     const observed =
       cinematic === null ? this.harness.observerSample(delta) : null
+    this.#phases.step('observatory', ENGINE_PHASE)
 
     // The one precedence order, unchanged: cutscene, then observatory, then
     // the ship. Only the *last* of the three needs a player.
@@ -968,6 +1029,11 @@ export class GameEngine implements PresentationHost {
      */
     if (player === null || camera === undefined) return
 
+    // The render-space transforms above belong to no phase — a handful of
+    // quaternion multiplies — and charging them to whichever phase happens to
+    // follow is a lie the tiling would make invisible.
+    this.#phases.skip()
+
     /*
      * The lens reaches the scene as thresholds, so the tier a body draws at
      * follows the optics it is being looked at through — a telephoto resolves a
@@ -983,6 +1049,7 @@ export class GameEngine implements PresentationHost {
       cinematic !== null ? cinematic.camera : (observed ?? undefined),
       view === null ? undefined : lodThresholds(view.lens, view.viewport),
     )
+    this.#phases.step('scene', ENGINE_PHASE)
 
     /*
      * `shot.renderTime`, not the clock: the snapshot presents the world one tick
@@ -1007,9 +1074,21 @@ export class GameEngine implements PresentationHost {
       this.origin,
       this.#scene.terrainCandidates[0] ?? null,
     )
+    /*
+     * One phase on the Engine track; the streamer's own four are on the Terrain
+     * track inside it. Two tracks at two granularities is what tracks are for —
+     * these tile the frame and those tile this — and it is why a share-of-frame
+     * sum is taken per track rather than across all of them.
+     */
+    this.#phases.step('terrain', ENGINE_PHASE)
 
     this.#maybeSurveyStars(eye)
+    // A star sweep fires once per 8 ly of hysteresis, so it is rare and large —
+    // exactly the shape a mean over 240 frames cannot show and a track can.
+    this.#phases.step('survey', ENGINE_PHASE)
+
     this.#maybeTraceOrbits()
+    this.#phases.step('orbits', ENGINE_PHASE)
   }
 
   /**
