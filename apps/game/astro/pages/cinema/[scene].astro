@@ -1,0 +1,14 @@
+---
+import Base from '../../layouts/Base.astro'
+import Islands from '../../components/Islands.astro'
+
+export function getStaticPaths() {
+  return [{ params: { scene: 'tng-intro' } }]
+}
+
+const { scene } = Astro.params
+---
+
+<Base pathname={`/cinema/${scene}`} heading="Cinema">
+  <Islands />
+</Base>

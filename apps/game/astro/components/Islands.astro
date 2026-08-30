@@ -1,0 +1,15 @@
+---
+import SceneBackdrop from '../../src/scene/SceneBackdrop.tsx'
+import Root from '../../src/Root.tsx'
+---
+
+<!--
+  The two islands every page mounts.
+
+  The canvas is one and the chrome is another, so a word of prose does not
+  wait for three/webgpu. Every page renders the same pair in the same
+  layout: a page that omitted the backdrop would tear the engine down on
+  the next navigation, once ClientRouter persists it.
+-->
+<SceneBackdrop client:only="react" />
+<Root client:only="react" />

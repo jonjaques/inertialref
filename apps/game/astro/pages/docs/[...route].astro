@@ -1,7 +1,6 @@
 ---
 import Base from '../../layouts/Base.astro'
-import SceneBackdrop from '../../../src/scene/SceneBackdrop.tsx'
-import Root from '../../../src/Root.tsx'
+import Islands from '../../components/Islands.astro'
 import { DOCS } from '../../../src/pages/paths.ts'
 import { pageMetaFor } from '../../../src/site.ts'
 import { docCardDescription } from '../../../src/docs/urls.ts'
@@ -24,8 +23,7 @@ const description = docCardDescription(page.lead, pageMetaFor(DOCS).description)
 ---
 
 <Base heading={page.title} description={description}>
-  <SceneBackdrop client:only="react" />
-  <Root client:only="react" />
+  <Islands />
   <!--
     The document a scraper, a no-JS reader, and the first paint all see.
 
