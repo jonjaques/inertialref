@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
+import { openSession } from './session.ts'
+import type { GameHarness } from './harness.ts'
 import {
   makeTimingVerb,
   summarizeProfile,
   type TimingEntry,
+  type TimingPort,
 } from './profile.ts'
 
 /*
@@ -242,5 +245,84 @@ describe('the ir.timing verb', () => {
     const absent = makeTimingVerb(() => undefined)
     expect(absent('full')).toBe('off')
     expect(absent.drain()).toEqual([])
+  })
+})
+
+describe('ir.profile, against a fake port', () => {
+  /*
+   * `summarizeProfile` and `makeTimingVerb` are pure and were the only things
+   * covered; `GameHarness.profile` — which arms, records, disarms and reports —
+   * had no test at all. What that leaves unchecked is the `finally`, whose own
+   * comment calls leaving the level at `full` "the one failure mode a
+   * performance tool must not have", and the deliberate placement of
+   * `setLevel('full')` *inside* the try so a throw there cannot escape it.
+   *
+   * The reason it was untested is the recurring one: `openSession()` with no
+   * `host` leaves `timing` undefined, so every session in the suite takes the
+   * "this host has no performance timeline" branch and never reaches the body.
+   */
+  const fakePort = (
+    overrides: Partial<TimingPort> = {},
+  ): TimingPort & { drains: number } => {
+    let level = 'off'
+    const port = {
+      droppedFrameMs: 25,
+      drains: 0,
+      level: () => level,
+      setLevel: (next: string) => {
+        level = next
+      },
+      tracks: () => [],
+      mark: () => {},
+      drain(): readonly TimingEntry[] {
+        port.drains += 1
+        // The priming drain returns nothing; the closing one returns a window.
+        return port.drains === 1
+          ? []
+          : [
+              measure('frame', 'Engine', 0, 40),
+              measure('scene', 'Engine', 1, 30),
+            ]
+      },
+      wait: () => Promise.resolve(),
+      ...overrides,
+    }
+    return port
+  }
+
+  const harnessOver = (port: TimingPort): GameHarness =>
+    openSession({ workers: null, host: { timing: () => port } }).harness
+
+  it('arms, records, disarms, and reports', async () => {
+    const port = fakePort()
+    const report = await harnessOver(port).profile(1)
+    // Back where it started, not left at `full`.
+    expect(port.level()).toBe('off')
+    // Twice: once to discard what was already retained, once for the window.
+    expect(port.drains).toBe(2)
+    expect(report.frames).toBe(1)
+    expect(report.verdict).toMatch(/scene was the largest measured span/)
+  })
+
+  it('restores the level even when the recording throws', async () => {
+    // `setLevel` fans out synchronously in the real port — it attaches a sink,
+    // logs, and broadcasts to every worker through `onTimingLevel`. A throw
+    // anywhere on that path, or in the wait, must not leave retention on for
+    // the rest of the session.
+    const port = fakePort({
+      wait: () => Promise.reject(new Error('recording interrupted')),
+    })
+    await expect(harnessOver(port).profile(1)).rejects.toThrow(
+      'recording interrupted',
+    )
+    expect(port.level()).toBe('off')
+  })
+
+  it('says a host has no timeline rather than reporting a fast session', async () => {
+    // `openSession` with no host leaves `timing` undefined. An empty report
+    // reading "0 frames, none over 25 ms" would be the tool answering "it is
+    // fine" when it was never able to look.
+    const report = await openSession({ workers: null }).harness.profile(1)
+    expect(report.verdict).toBe('this host has no performance timeline')
   })
 })

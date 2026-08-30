@@ -102,10 +102,14 @@ export interface SpanSummary {
    * This span's total as a fraction of the frame track's total, or `null` where
    * that fraction is not a share of anything.
    *
-   * Read per track, never summed across them. The Engine phases tile the frame
-   * and the Terrain phases tile the Engine's `terrain` phase, so one sum over
-   * everything counts the streamer twice — which is exactly the arithmetic that
-   * makes a flame chart lie.
+   * Read per track, never summed across them. The Engine phases tile the
+   * `engine` step and the Terrain phases tile the Engine's `terrain` phase, so
+   * one sum over everything counts the streamer twice — which is exactly the
+   * arithmetic that makes a flame chart lie. `frame` is the denominator and not
+   * a member of either set: it is the wall-clock period the whole tiling sits
+   * inside, and it is much the larger of the two — 17.9 ms against a 4.4 ms
+   * `engine` on the summit recording, so the phases account for a quarter of it
+   * and the rest is the GPU and the compositor, which nothing here measures.
    *
    * **Null when the span's own occurrences overlap each other.** A worker job's
    * queue wait runs concurrently with every other job's and with the frames it
@@ -160,6 +164,19 @@ export interface ProfileOptions {
   /** How many rows the text block carries. The rest are still in `spans`. */
   readonly top?: number
 }
+
+/**
+ * Where a frame stops being jitter, for a caller that supplies no budget.
+ *
+ * A named mirror of `DROPPED_FRAME_MS` in `apps/game/src/engine/perfBudgets.ts`,
+ * which layer order forbids importing — `packages/devtools` is layer 6 and
+ * `apps/` is above it. A bare `?? 25` four lines under a docstring saying the
+ * number is *not* defaulted here is the "one constant instead of two that must
+ * agree" shape, leaving the smaller twin unnamed and unfindable. Every browser
+ * caller passes `TimingPort.droppedFrameMs`; the headless runner passes this,
+ * by name, so a grep for one finds the other.
+ */
+export const DEFAULT_DROPPED_FRAME_MS = 25
 
 const EMPTY: ProfileReport = {
   entries: 0,
@@ -222,7 +239,7 @@ export function summarizeProfile(
   options: ProfileOptions = {},
 ): ProfileReport {
   const frameSpan = options.frameSpan ?? 'frame'
-  const droppedFrameMs = options.droppedFrameMs ?? 25
+  const droppedFrameMs = options.droppedFrameMs ?? DEFAULT_DROPPED_FRAME_MS
   const top = options.top ?? 16
   const measures = entries.filter((entry) => entry.kind === 'measure')
   if (measures.length === 0) return EMPTY
@@ -310,9 +327,10 @@ export function summarizeProfile(
   /*
    * Which span dominated each late frame.
    *
-   * "Inside" is containment of the start, which is enough because the phases
-   * tile the frame and none of them straddles its edge. The frame's own entry
-   * is skipped, or every late frame would be dominated by itself.
+   * "Inside" is containment of *both* ends, for the reason written at the
+   * `continue` that enforces it: a start-only test names work that ran on
+   * another thread. The frame's own entry is skipped, or every late frame would
+   * be dominated by itself.
    *
    * **A cursor, not a rescan.** The `break` bounds the tail and nothing bounded
    * the head: starting each frame at `sorted[0]` and `continue`-ing past every

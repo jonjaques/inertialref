@@ -1,5 +1,5 @@
 ---
-globs: apps/game/src/engine/browserTiming.ts,apps/game/src/engine/frameTiming.ts,apps/game/src/engine/perfBudgets.ts,packages/shared/src/timing.ts,packages/devtools/src/profile.ts,scripts/timing.mjs
+globs: apps/game/src/engine/browserTiming.ts,apps/game/src/engine/frameTiming.ts,apps/game/src/engine/perfBudgets.ts,apps/game/src/engine/GameEngine.ts,apps/game/src/engine/terrainStreamer.ts,apps/game/src/scene/useTimedFrame.ts,apps/game/src/render/*.ts,packages/shared/src/timing.ts,packages/devtools/src/profile.ts,packages/workers/src/pool.ts,packages/workers/src/host.ts,scripts/timing.mjs
 alwaysApply: false
 ---
 

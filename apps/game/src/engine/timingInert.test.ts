@@ -127,7 +127,7 @@ describe('the timing port, with nothing listening', () => {
     /*
      * The two are different quantities against different budgets, and folding
      * them into one entry hid a real class of defect: while `frame` covered the
-     * engine step and was coloured against `DROPPED_FRAME_MS` — which
+     * engine step and was colored against `DROPPED_FRAME_MS` — which
      * `perfBudgets.ts` defines for the *interval between frames*, and whose own
      * comment warns that judging on the wrong one "gets this wrong in the most
      * misleading direction" — a session whose engine ran at 2 ms while the

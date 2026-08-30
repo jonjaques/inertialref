@@ -29,7 +29,7 @@ flowchart TB
 
 Because the overlay and the tests read the _same_ structure, what a human sees
 and what a check asserts cannot drift apart. Adding a field to the inspection
-makes it visible in all four places at once.
+makes it visible in all four of those at once.
 
 **The fifth consumer is the timeline, and it is a different shape on purpose.**
 `inspect()` answers "what is true now" and hands the answer back; a `Timer`

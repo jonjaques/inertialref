@@ -296,9 +296,17 @@ frame time, engine time, draw calls, triangles, JS heap, and GPU milliseconds pe
 frame — the last measured across a drained queue rather than from
 `renderer.info.render.timestamp`, which
 [lies](spikes.md#2--tsl-and-the-atmosphere-integral). All of it is live in the
-dev dock's **perf** panel. **What is not:** allocation rate, GC pressure, cold load
-to interactive, anything at all on the target machine, and any stored baseline —
-so there is still nothing that can fail a pull request for getting slower.
+dev dock's **perf** panel, and all of it is a scalar — which is why
+[ADR-0022](adr/0022-the-timeline.md) adds the shared time axis those scalars
+never had: the engine step decomposed into eight phases, the streamer into five,
+ten `useFrame` consumers, both sides of the worker boundary, and boot from
+navigation to first light. `ir.profile(ms)` and `pnpm timing` read it back from
+a terminal. **What is not:** allocation rate, GC pressure, anything at all on the
+target machine, and any stored baseline — so there is still nothing that can fail
+a pull request for getting slower. Cold load to interactive now has an
+instrument rather than a figure: the one reading taken is a driver's occluded
+Chrome against a Vite dev server, which is a number about that window and not
+about a player.
 
 The overlay earned itself on the first day: it found that the simulation clock
 capped time warp at 7.5× while the UI offered 100,000×.

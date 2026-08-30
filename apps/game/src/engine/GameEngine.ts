@@ -107,7 +107,8 @@ import type { TerrainReport } from '@inertialref/devtools'
 const log = getLogger('game.engine')
 
 /*
- * The frame's own entry, and the seven phases inside it.
+ * The frame's two entries — `engine` and `frame` — and the eight phases that
+ * tile the first of them.
  *
  * `timer` is constructed at module scope and `main.tsx` attaches the sink in
  * its own body — after every static import has been evaluated to completion —
@@ -941,7 +942,7 @@ export class GameEngine implements PresentationHost {
   }
 
   /**
-   * The seven distinguishable things a frame does, which `engineMs` reports as
+   * The eight distinguishable things a frame does, which `engineMs` reports as
    * one number.
    *
    * `started` comes from `frame` rather than being read again here, so the
@@ -1143,10 +1144,10 @@ export class GameEngine implements PresentationHost {
       this.#scene.terrainCandidates[0] ?? null,
     )
     /*
-     * One phase on the Engine track; the streamer's own four are on the Terrain
+     * One phase on the Engine track; the streamer's own five are on the Terrain
      * track inside it. Two tracks at two granularities is what tracks are for —
-     * these tile the frame and those tile this — and it is why a share-of-frame
-     * sum is taken per track rather than across all of them.
+     * these tile the engine step and those tile this — and it is why a
+     * share-of-frame sum is taken per track rather than across all of them.
      */
     this.#phases.step('terrain', ENGINE_PHASE)
 

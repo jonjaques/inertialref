@@ -31,7 +31,7 @@ including frame resolution.
 
 | Package         | Layer | State                                                                                                                         |
 | --------------- | ----- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `shared`        | 0     | done — units, brands, invariants, structured logging                                                                          |
+| `shared`        | 0     | done — units, brands, invariants, structured logging, the timing port (ADR-0022)                                              |
 | `spatial`       | 1     | done — UniverseVector, frame graph, floating origin                                                                           |
 | `procedural`    | 1     | done — PRNG, hierarchical seeds, noise, algorithm versions                                                                    |
 | `physics`       | 2     | done — Kepler, rigid body, atmosphere, thrusters                                                                              |
@@ -5872,13 +5872,14 @@ at 40–90 µs, so a span over it would have quantized to a single tick and lied
 up to 2.5×.
 
 The answer was not to drop the span. It was **one clock read per boundary rather
-than a pair per span**, so the phases _tile_ the frame and the quantization
-error redistributes between neighbors instead of accumulating. Measured: the
-Engine phases sum to 271.4 ms against an `engine` total of 272.1 ms — 99.7% — and
-the four Terrain phases to 3.920 ms against `Engine/terrain` at 3.921 ms. The
-consequence to keep is that a short phase is honest **in the mean and not in the
-instant**: over a 240-frame window the rounding is unbiased and the mean is good
-to well under a microsecond, but one bar is not a reading.
+than a pair per span**, so the phases _tile_ the engine step and the
+quantization error redistributes between neighbors instead of accumulating.
+Measured: the eight Engine phases sum to 271.4 ms against an `engine` total of
+272.1 ms — 99.7% — and the five Terrain phases to 3.920 ms against
+`Engine/terrain` at 3.921 ms. The consequence to keep is that a short phase is
+honest **in the mean and not in the instant**: over a 240-frame window the
+rounding is unbiased and the mean is good to well under a microsecond, but one
+bar is not a reading.
 
 **Terrain selection is 40–90 µs from orbit and 2.7 ms on a summit.** Standing on
 Earth's summit site with a nine-level selection visiting 446 nodes,
@@ -6004,6 +6005,15 @@ Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md
   question that matters for shipping. What they do not answer is the cost under a
   live recording, where the category is enabled and the entry is actually written
   somewhere. `--trace` now exists to measure that and it has not been done.
+- **Nothing checks the timeline against a real browser, including the one claim
+  ADR-0022 calls out as failing silently.** The inertness check is
+  `apps/game/src/engine/timingInert.test.ts` — a Node unit test with a stubbed
+  clock counting `performance.now` calls — and `pnpm sim --self-test` exercises
+  none of it. The figures the whole three-level design rests on (46.5 ns and
+  988.5 ns an entry, 0.87 µs a frame at `trace`) came from one manual browser
+  session, and no automated check reproduces them. The seam for closing it is
+  the same one the twelve capability checks use; the reason it is not a
+  thirteenth is in the ADR.
 - **A 3-second trace is 41 MB and 204,000 events.** `pnpm timing` carries
   `--max-old-space-size=8192` for that reason. The categories are already the
   narrow set — the V8 CPU profiler is deliberately excluded — and most of the

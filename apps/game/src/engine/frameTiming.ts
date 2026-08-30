@@ -1,7 +1,9 @@
 import { getTimer, type Timer, type TimingDetail } from '@inertialref/shared'
 
 /*
- * The tracks a frame is drawn on, and the clock that tiles it into phases.
+ * The tracks a frame is drawn on, and the clock that tiles an interval into
+ * phases — the engine step on the Engine track, the `terrain` phase inside it
+ * on the Terrain track.
  *
  * ## `performance.now()` here steps in 100 µs, and that shapes everything below
  *
@@ -18,11 +20,11 @@ import { getTimer, type Timer, type TimingDetail } from '@inertialref/shared'
  * spread across the frame:
  *
  * **One clock read per boundary, not a pair per span.** The phases then *tile*
- * the frame — each one ends exactly where the next begins — so the quantization
- * error redistributes between neighbors instead of accumulating, and the sum
- * of the phases equals the whole. Fourteen independent reads would give seven
- * independent roundings whose total drifts from the frame they are meant to
- * decompose. It is also half the clock reads.
+ * the engine step — each one ends exactly where the next begins — so the
+ * quantization error redistributes between neighbors instead of accumulating,
+ * and the sum of the phases equals the whole. Sixteen independent reads would
+ * give eight independent roundings whose total drifts from the step they are
+ * meant to decompose. It is also half the clock reads.
  *
  * **A short phase is honest in the mean and not in the instant.** Over the 240
  * frames a `Series` window holds, a phase quantized to 100 µs has a mean
@@ -37,7 +39,13 @@ export const TRACK_GROUP = 'InertialRef'
 const on = (track: string, color: TimingDetail['color']): TimingDetail =>
   Object.freeze({ track, group: TRACK_GROUP, color })
 
-/** The frame, and its phases. `error` when the frame ran past its budget. */
+/**
+ * The engine step, the frame period, and the phases between them. `error` when
+ * an entry ran past *its own* budget — `ENGINE_BUDGET_MS` for the step and
+ * `DROPPED_FRAME_MS` for the period, which are different numbers about
+ * different quantities. `perfBudgets.ts` says why judging one on the other is
+ * wrong in the most misleading direction.
+ */
 export const ENGINE_PHASE = on('Engine', 'primary')
 export const ENGINE_LATE = on('Engine', 'error')
 
@@ -46,8 +54,9 @@ export const ENGINE_LATE = on('Engine', 'error')
  * single `terrain` phase.
  *
  * Two tracks at two granularities is what tracks are for: the Engine phases
- * tile the frame, and these tile the `terrain` phase inside it. Summing across
- * both would double-count, which is why `ir.profile` sums shares per track.
+ * tile the engine step, and these five tile the `terrain` phase inside it.
+ * Summing across both would double-count, which is why `ir.profile` sums shares
+ * per track.
  */
 export const TERRAIN_PHASE = on('Terrain', 'secondary')
 

@@ -3,8 +3,14 @@ paths:
   - 'apps/game/src/engine/browserTiming.ts'
   - 'apps/game/src/engine/frameTiming.ts'
   - 'apps/game/src/engine/perfBudgets.ts'
+  - 'apps/game/src/engine/GameEngine.ts'
+  - 'apps/game/src/engine/terrainStreamer.ts'
+  - 'apps/game/src/scene/useTimedFrame.ts'
+  - 'apps/game/src/render/*.ts'
   - 'packages/shared/src/timing.ts'
   - 'packages/devtools/src/profile.ts'
+  - 'packages/workers/src/pool.ts'
+  - 'packages/workers/src/host.ts'
   - 'scripts/timing.mjs'
 ---
 
@@ -12,12 +18,14 @@ paths:
 
 Reasoning: [ADR-0022](../../docs/adr/0022-the-timeline.md).
 
-- **Emit through a `Timer`; never name a platform timing API outside
-  `engine/browserTiming.ts`.** `console.timeStamp`, `performance.mark` and
-  `performance.measure` live there and nowhere else, and `packages/*` may not write
-  `performance.` at all — `apps/headless/src/coreHostApis.test.ts` greps for it, because
-  a global is not an import and `pnpm graph` cannot see one. The level, the drain and the
-  clear each need the set of emitters known in one place.
+- **Emit through a `Timer`; `console.timeStamp`, `performance.mark` and
+  `performance.measure` live in `engine/browserTiming.ts` and nowhere else.** The level,
+  the drain and the clear each need the set of emitters known in one place.
+  **`performance.now()` is not one of those three** — it is the host's clock, it is legal
+  anywhere under `apps/`, and `GameEngine.frame`, `PhaseClock` and `useTimedFrame` all
+  read it. Under `packages/` nothing may name `performance.` at all;
+  `apps/headless/src/coreHostApis.test.ts` greps for that, because a global is not an
+  import and `pnpm graph` cannot see one.
 
 - **`Span.end()` returns `void`, and that is the invariant.** Canonical code may write to
   the wall clock and may not read one. No expression a caller can write observes a

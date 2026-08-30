@@ -106,8 +106,8 @@ run after `frame` returns — falls inside a bar rather than beside one.
 
 **Each side of the worker boundary emits only its own numbers**, because
 `console.timeStamp`'s arguments are milliseconds against `performance.timeOrigin`
-and a worker's origin is not the page's. The level crosses as a versioned
-protocol message rather than as a query on the worker's URL.
+and a worker's origin is not the page's. The level crosses as a protocol
+message rather than as a query on the worker's URL.
 
 ## Alternatives considered
 

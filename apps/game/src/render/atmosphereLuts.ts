@@ -8,6 +8,7 @@ import {
   type Texture,
 } from 'three/webgpu'
 import { getLogger, getTimer } from '@inertialref/shared'
+import { timingDetailed } from '../engine/browserTiming.ts'
 import { BOOT_PHASE } from '../engine/frameTiming.ts'
 import {
   type AtmosphereRecipe,
@@ -90,16 +91,32 @@ export function scatteringFor(
   cache.set(key, set)
   const finished = performance.now()
   /*
-   * A ~50 ms synchronous bake, on the main thread, named for the atmosphere it
-   * is for.
+   * A ~50 ms synchronous bake, on the main thread. One label, and the
+   * atmosphere it was for rides as a property.
    *
-   * The cache is what makes the label bounded: one entry per distinct
-   * `scatteringKey`, and the boot prebake and this share that key by
-   * construction — so the set of names is the set of atmospheres the session
-   * has met, which is a handful. A cache *hit* returns above without an entry,
-   * which is the honest picture: nothing was baked.
+   * The label was `bake ${key}`, on the argument that the cache bounds the set.
+   * It does not bound it usefully: `scatteringKey` is a colon-joined composite
+   * of six floats, a thickness and `topRatio.toFixed(6)`, the cache is a module
+   * `Map` with no eviction, and Sol alone produces **nine** distinct keys — so
+   * the set is every atmosphere the session has ever met, growing as it travels,
+   * with each name retained for the life of the page. That is one aggregation
+   * bucket per atmosphere in `ir.profile`, a `clearEmitted` loop that only
+   * grows, and 44 characters of float in a flame chart.
+   *
+   * `regionDetail` in `packages/workers/src/host.ts` makes exactly this trade
+   * for exactly this reason, and this file made the opposite one four files
+   * away. A cache *hit* returns above without an entry, which stays the honest
+   * picture: nothing was baked.
    */
-  if (timer.on) timer.measure(`bake ${key}`, started, finished, BOOT_PHASE)
+  if (timer.on)
+    timer.measure(
+      'bake atmosphere',
+      started,
+      finished,
+      timingDetailed()
+        ? { ...BOOT_PHASE, properties: [['key', key]] }
+        : BOOT_PHASE,
+    )
   log.info('scattering tables baked', {
     ms: Math.round(finished - started),
     topRatio: Number(topRatio.toFixed(4)),

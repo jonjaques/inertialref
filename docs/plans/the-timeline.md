@@ -4,10 +4,11 @@ A plan to make every phase of a frame, a boot and a worker job visible on the
 browser's own performance timeline — through one port, off by default, and
 without a single wall-clock read reaching canonical code.
 
-> **Landed, and superseded by [ADR-0022](../adr/0022-the-timeline.md).** All six
-> phases are implemented. The ADR carries the decisions, the measurements and
-> the consequences; this page is kept for the reasoning that produced them, and
-> the sections below still describe intent rather than what shipped.
+> **Landed, and superseded by [ADR-0022](../adr/0022-the-timeline.md).** All
+> seven phases, 0 through 6, are implemented. The ADR carries the decisions, the
+> measurements and the consequences; this page is kept for the reasoning that
+> produced them, and the sections below still describe intent rather than what
+> shipped.
 >
 > **Five things here are wrong, and the implementation is what proved them so.**
 > Each is corrected at its own site as well, but they are collected once because
@@ -33,6 +34,12 @@ without a single wall-clock read reaching canonical code.
 > - **There are ten `useFrame` consumers, not nine**, and the panel row is an
 >   `OptionGroup` rather than a `SwitchRow`, because the setting has three
 >   values.
+> - **The Engine track carries eight phases, not seven.** Phase 2's table omits
+>   `terrain`, which is the one that contains the whole Terrain track — so the
+>   `~22 entries a frame` budget is derived from `7 + 5 + 9 + 1` where the real
+>   shape is `8 + 5 + 10 + 2`. The total was close by luck; the parts were not.
+>   There is also no `frame` entry in the plan at all, because the plan believed
+>   the engine step was one.
 >
 > Two figures in the "budgeted" table came out close: **~22 entries a frame**
 > (measured 21.5) and the frame decomposition tiling (measured 99.7%). The
@@ -272,7 +279,7 @@ A host that does not understand it ignores it.
 **`properties` is a User-Timing-only field and the type cannot say so.** It
 reaches DevTools through the `measure` detail payload and has no channel on
 `console.timeStamp`, so a detail carrying properties is silently reduced to
-label, track, group and colour at `trace`. The sink drops them rather than
+label, track, group and color at `trace`. The sink drops them rather than
 failing, because the alternative is a call site that has to know the level.
 
 The pairs are `[string, string]` because that is what the panel renders, and a
@@ -351,7 +358,7 @@ sink logs one line at attach naming what it can actually emit. The `typeof`
 guard stays for `performance.mark`/`measure`, where it does mean something.
 
 Where the extension is missing, `trace` degrades to bare
-`console.timeStamp(label)` — an instant, no track, no colour, still visible in a
+`console.timeStamp(label)` — an instant, no track, no color, still visible in a
 recording — and `full` carries the real information, because User Timing is
 standard everywhere. The port is what makes an unsupported host safe; the level
 is what makes an under-supported one honest.
@@ -400,10 +407,10 @@ which is the pattern to reach for everywhere the numbers already exist:
 if (timer.on) timer.measure('frame', started, started + elapsed, FRAME_DETAIL)
 ```
 
-`FRAME_DETAIL` is a frozen module constant — a track, a group and a colour, all
+`FRAME_DETAIL` is a frozen module constant — a track, a group and a color, all
 of which are the same on every frame — so `trace` allocates nothing here.
 
-**The colour and the counts cannot live on it, and the plan does not pretend
+**The color and the counts cannot live on it, and the plan does not pretend
 otherwise.** A frame over `DROPPED_FRAME_MS` wants `error` rather than
 `primary`, and the addendum wants `drawCalls` and `triangles` on the entry;
 both vary per frame. So there are exactly two constants — `FRAME_DETAIL` and
@@ -710,7 +717,7 @@ Not optional here, and two of them are mechanical:
 
 ```mermaid
 flowchart TB
-    P0["0 · the seam<br/><i>packages/shared/timing.ts + tests</i>"]
+    P0["0 · the seam<br/><i>packages/shared/src/timing.ts + tests</i>"]
     P1["1 · sink, flag, one call site<br/><i>+ measure the overhead</i>"]
     P2["2 · the frame decomposed"]
     P3["3 · the workers, both sides"]

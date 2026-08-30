@@ -24,7 +24,11 @@ import {
   timingHub,
   type TimingRecord,
 } from '@inertialref/shared'
-import { openSession, summarizeProfile } from '@inertialref/devtools'
+import {
+  DEFAULT_DROPPED_FRAME_MS,
+  openSession,
+  summarizeProfile,
+} from '@inertialref/devtools'
 import { createInlineWorker, createTaskRegistry } from '@inertialref/workers'
 import { loadStarCatalog } from './catalog.ts'
 import { captureSave, serializeSave } from '@inertialref/persistence'
@@ -202,6 +206,9 @@ if (values.profile === true) {
         durationMs: record.endMs - record.startMs,
         properties: Object.fromEntries(record.detail?.properties ?? []),
       })),
+      // Passed rather than defaulted, so the headless report and the browser's
+      // judge lateness against the same number and a grep finds both.
+      { droppedFrameMs: DEFAULT_DROPPED_FRAME_MS },
     ).text,
   )
 }
