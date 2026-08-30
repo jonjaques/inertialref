@@ -1,12 +1,15 @@
 import {
   getLogger,
+  getTimer,
   type TimingDetail,
   type TimingKind,
   type TimingRecord,
   type TimingSink,
   timingHub,
 } from '@inertialref/shared'
-import { TRACK_GROUP } from './frameTiming.ts'
+import type { TimingEntry, TimingPort } from '@inertialref/devtools'
+import { BOOT_MARKER, TRACK_GROUP } from './frameTiming.ts'
+import { DROPPED_FRAME_MS } from './perfBudgets.ts'
 
 /*
  * The only file in this application that names `console.timeStamp`,
@@ -109,13 +112,19 @@ const emitted = new Map<string, TimingKind>()
  * Retained entries since the last drain, and the ceiling that stops `full`
  * from being a memory leak with a switch on it.
  *
- * At `full` the frame decomposition is on the order of twenty entries a frame,
- * which is a million retained entries over ten minutes — and User Timing has no
- * buffer-size API to cap it with. Past the ceiling the sink clears what it has
- * emitted, by name, and says so once. Losing the oldest entries is the right
- * failure: `full` is for a bug report and a session left running is not one.
+ * User Timing has no buffer-size API, so the only cap is one kept here. The
+ * number is chosen against a measurement rather than guessed: in the
+ * planetarium standing on a summit, `full` retains about 2,800 entries a
+ * second, so this is roughly **ninety seconds** — comfortably longer than any
+ * `ir.profile` window and far short of a session somebody walked away from.
+ *
+ * That it is needed at all is not hypothetical. React DevTools writes into the
+ * same timeline, and a three-second reading of it found **338,065** retained
+ * entries of its own. Past the ceiling this clears what *this sink* emitted, by
+ * name, and says so once; losing the oldest of our entries is the right failure,
+ * and taking another tool's with them would not be.
  */
-const RETENTION_CEILING = 100_000
+const RETENTION_CEILING = 250_000
 let retained = 0
 let warnedAboutRetention = false
 
@@ -137,6 +146,27 @@ const canUserTiming =
   typeof performance.measure === 'function'
 
 /**
+ * `console.timeStamp`, if this runtime has one at all.
+ *
+ * **Two different questions look like one here, and only this one has an
+ * answer.** Whether the method *exists* is a `typeof` — and it does not always:
+ * a Node test runner reached this sink through a `GameEngine` and threw
+ * `console.timeStamp is not a function`, which is a crash in a debugging aid,
+ * which is worse than the aid being absent. Whether it accepts the four *track*
+ * arguments is the Chromium extension, and there is no query for that at all —
+ * which is why the level is the gate and why the extra arguments are simply
+ * ignored where they are not understood.
+ *
+ * Bound once rather than read per entry: this is on the hot path at `trace`,
+ * and a property lookup on `console` sixty times a frame is a lookup that buys
+ * nothing.
+ */
+const timeStamp: ExtendedTimeStamp | null =
+  typeof console.timeStamp === 'function'
+    ? (console.timeStamp.bind(console) as ExtendedTimeStamp)
+    : null
+
+/**
  * `console.timeStamp`, always; User Timing as well at `full`.
  *
  * The record's `name` is the label, not `scope.name`: the track already says
@@ -147,7 +177,7 @@ const sink: TimingSink = {
   write(record: TimingRecord): void {
     const detail = record.detail
     if (detail?.track !== undefined) tracks.add(detail.track)
-    ;(console.timeStamp as ExtendedTimeStamp)(
+    timeStamp?.(
       record.name,
       record.startMs,
       record.endMs,
@@ -264,6 +294,7 @@ export function setTimingLevel(next: TimingLevel): void {
     // capability query for the `console.timeStamp` track arguments and a level
     // that silently lands nowhere is the failure this line exists to name.
     userTiming: canUserTiming,
+    timeStamp: timeStamp !== null,
   })
   for (const listener of listeners) listener(next)
 }
@@ -288,16 +319,6 @@ export function onTimingLevel(
   listeners.add(listener)
   listener(level)
   return () => listeners.delete(listener)
-}
-
-/** One entry, as something a terminal or an issue can carry. */
-export interface TimingEntry {
-  readonly name: string
-  readonly kind: TimingKind
-  readonly track: string
-  readonly startMs: number
-  readonly durationMs: number
-  readonly properties: Readonly<Record<string, string>>
 }
 
 /**
@@ -331,3 +352,35 @@ export function drainTiming(): readonly TimingEntry[] {
   entries.sort((a, b) => a.startMs - b.startMs)
   return entries
 }
+
+/**
+ * The browser's half of `ir.timing` and `ir.profile`.
+ *
+ * A module constant rather than a factory: everything it closes over is module
+ * state, and a fresh object per call would make `ir.timing.drain` a different
+ * function every read.
+ *
+ * `mark` is the agent's own marker — `ir.timing.mark('after the seek')` — and it
+ * goes through the same hub as everything else, so it lands on the Boot track's
+ * colour and draws as a line across every track. That is exactly what a script
+ * wants to bracket its own steps with.
+ */
+export const browserTimingPort: TimingPort = {
+  droppedFrameMs: DROPPED_FRAME_MS,
+  level: () => level,
+  setLevel: (next) => {
+    if (isTimingLevel(next)) setTimingLevel(next)
+  },
+  tracks: timingTracks,
+  mark: (name) => marker.mark(name, BOOT_MARKER),
+  drain: drainTiming,
+  // `setTimeout` rather than a chain of animation frames: a profile has to keep
+  // its window even when the tab is occluded, and rAF does not fire there at
+  // all — which is precisely the condition an automated driver runs in.
+  wait: (ms) =>
+    new Promise((resolve) => {
+      setTimeout(resolve, ms)
+    }),
+}
+
+const marker = getTimer('game.script')

@@ -65,7 +65,11 @@ import type { LoadedShip } from '../render/shipModels.ts'
 import { createBrowserWorkerPort, poolSize } from './browserWorker.ts'
 import type { Camera, Object3D } from 'three/webgpu'
 import { FrameMetrics, usedHeapMb } from './frameMetrics.ts'
-import { onTimingLevel, timingDetailed } from './browserTiming.ts'
+import {
+  browserTimingPort,
+  onTimingLevel,
+  timingDetailed,
+} from './browserTiming.ts'
 import {
   ENGINE_LATE,
   ENGINE_PHASE,
@@ -646,6 +650,7 @@ export class GameEngine implements PresentationHost {
         framingLens: () => this.framingLens(),
         pixelRatio: () => this.displayRatio,
         setFlightLens: (lens) => this.requestLens(lens),
+        timing: () => browserTimingPort,
         setChrome: (visible) => this.setChrome(visible),
         setLayers: (visible) => this.setLayers(visible),
         onWorldReplaced: () => this.#invalidateDerived(),

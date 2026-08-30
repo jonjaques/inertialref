@@ -41,7 +41,7 @@
  */
 import { execFile, spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { mkdir, readFile, writeFile, rm } from 'node:fs/promises'
+import { mkdir, readFile, stat, writeFile, rm } from 'node:fs/promises'
 import { parseArgs, promisify } from 'node:util'
 import { analyseFrames, differenceMap, reportFrames } from './frameDiff.mjs'
 import path from 'node:path'
@@ -90,6 +90,9 @@ const OPTIONS = {
   /** A burst of *rendered* frames, differenced — the only step that can see a
    *  strobe. `--shot` cannot: it draws its own frame. */
   cast: { type: 'string', multiple: true },
+  /** Record a Chrome trace for <ms>, written beside the shots for
+   *  `scripts/timing.mjs`. The only step that captures the custom tracks. */
+  trace: { type: 'string', multiple: true },
   logs: { type: 'boolean', multiple: true },
   reload: { type: 'boolean', multiple: true },
 
@@ -104,6 +107,7 @@ const STEPS = new Set([
   'wait',
   'shot',
   'cast',
+  'trace',
   'sample',
   'logs',
   'reload',
@@ -131,6 +135,10 @@ Steps run in the order they are written, in one browser session:
                      other, their period, and the rate in Hz. That shape is a
                      strobe; motion produces none. Writes cast.mp4 when ffmpeg
                      is installed, which is the artifact worth attaching
+  --trace <ms>       record a Chrome trace for <ms> and write it to
+                     .data/drive/trace.json. Pair it with ?timing=trace on the
+                     --url, or ir.timing('trace'), or the tracks are empty.
+                     Read it back with: node scripts/timing.mjs
   --logs             console output and page errors buffered so far
   --reload           hard reload, then wait for the renderer
 
@@ -227,6 +235,7 @@ function checkScript() {
   for (const { step, arg } of script) {
     if (step === 'wait') count(arg, 'wait', 0)
     if (step === 'sample') count(arg, 'sample', 1)
+    if (step === 'trace') count(arg, 'trace', 100)
   }
 }
 
@@ -627,6 +636,63 @@ async function castClip(dir, fps) {
   }
 }
 
+/**
+ * A Chrome trace over a window, written where `scripts/timing.mjs` can read it.
+ *
+ * The categories are the narrow set that carries what this project emits.
+ * `blink.user_timing` is where `performance.measure` lands and
+ * `disabled-by-default-devtools.timeline` is where the extended
+ * `console.timeStamp` does; `devtools.timeline` brings the frame and raster
+ * events that put them in context. The V8 CPU profiler is deliberately absent —
+ * it multiplies the file size and answers a different question, and a trace
+ * nobody can open is a trace nobody reads.
+ *
+ * `Tracing.dataCollected` arrives in chunks and `Tracing.tracingComplete` is the
+ * end. Collecting into an array and writing once is fine at these sizes; a
+ * stream would be the right shape only for a recording long enough that the
+ * frames in it are no longer the question.
+ */
+async function traceFor(send, subscribe, ms, out) {
+  const events = []
+  let complete = false
+  const unsubscribe = subscribe((msg) => {
+    if (msg.method === 'Tracing.dataCollected') {
+      events.push(...msg.params.value)
+      return true
+    }
+    if (msg.method === 'Tracing.tracingComplete') {
+      complete = true
+      return true
+    }
+    return false
+  })
+
+  await send('Tracing.start', {
+    transferMode: 'ReportEvents',
+    traceConfig: {
+      recordMode: 'recordAsMuchAsPossible',
+      includedCategories: [
+        'blink.user_timing',
+        'devtools.timeline',
+        'disabled-by-default-devtools.timeline',
+        'disabled-by-default-devtools.timeline.frame',
+        'v8.execute',
+      ],
+    },
+  })
+  await sleep(ms)
+  await send('Tracing.end')
+  // Chrome flushes after `end`, so the events are still arriving here.
+  const deadline = Date.now() + 30_000
+  while (!complete && Date.now() < deadline) await sleep(50)
+  unsubscribe()
+
+  await mkdir(path.dirname(out), { recursive: true })
+  await writeFile(out, JSON.stringify({ traceEvents: events }))
+  const { size } = await stat(out)
+  return { path: out, events: events.length, bytes: size }
+}
+
 async function sampleFrames(send, count, expression) {
   // One reading per rAF from inside the page. A `--js` call per frame would be
   // a round trip per frame, and the round trip is longer than the frame.
@@ -819,6 +885,17 @@ async function main() {
           say(`  ${line}`)
         if (map !== null) say(`  where: ${path.relative(ROOT, map)}`)
         if (clip !== null) say(`  clip:  ${path.relative(ROOT, clip)}`)
+        break
+      }
+      case 'trace': {
+        const ms = count(arg, 'trace', 100)
+        const out = path.join(RIG, 'trace.json')
+        const trace = await traceFor(send, subscribe, ms, out)
+        results.push({ step, ...trace, path: path.relative(ROOT, out) })
+        say(
+          `trace: ${trace.events} events, ${(trace.bytes / 1024 / 1024).toFixed(1)} MB -> ${path.relative(ROOT, out)}`,
+        )
+        say(`  read it: node scripts/timing.mjs`)
         break
       }
       case 'sample': {

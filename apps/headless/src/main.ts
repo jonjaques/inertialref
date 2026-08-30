@@ -18,8 +18,13 @@
  *   pnpm sim --terrain-baseline    # what terrain costs, measured
  */
 import { parseArgs } from 'node:util'
-import { createConsoleSink, logHub } from '@inertialref/shared'
-import { openSession } from '@inertialref/devtools'
+import {
+  createConsoleSink,
+  logHub,
+  timingHub,
+  type TimingRecord,
+} from '@inertialref/shared'
+import { openSession, summarizeProfile } from '@inertialref/devtools'
 import { createInlineWorker, createTaskRegistry } from '@inertialref/workers'
 import { loadStarCatalog } from './catalog.ts'
 import { captureSave, serializeSave } from '@inertialref/persistence'
@@ -42,6 +47,17 @@ const OPTIONS = {
    * takes — and every other flag here is cheap enough to leave on.
    */
   'terrain-baseline': { type: 'boolean', default: false },
+  /**
+   * Decompose the tick loop the way the browser decomposes a frame.
+   *
+   * The same span names, because they are emitted from `packages/*` and from
+   * the engine's own step rather than from anything browser-shaped — so a
+   * scenario that profiles in Chrome profiles here, which is the "same harness,
+   * both hosts" property this project already has for scenarios. It is also the
+   * half `terrainBaseline` explicitly says it cannot measure: this is CPU time
+   * in the simulation, with no renderer and no GPU anywhere near it.
+   */
+  profile: { type: 'boolean', default: false },
   quiet: { type: 'boolean', default: false },
   help: { type: 'boolean', default: false },
 } as const
@@ -65,6 +81,30 @@ if (values.help === true) {
 if (!values.quiet) {
   logHub.addSink(createConsoleSink(console, 'info'))
 }
+
+/*
+ * The Node collector, attached before anything runs.
+ *
+ * `packages/*` emits through the hub whatever the host is, so this is one
+ * recording sink and a clock — not `console.timeStamp`, which Node has and
+ * which is not Chrome's, and which would put these entries nowhere.
+ *
+ * It covers the *whole run* rather than the tick loop, and that is not
+ * generosity: **there is no span inside `packages/simulation`, deliberately**,
+ * because the simulation depends on the integer tick and wall clock enters at
+ * exactly one call. So a bare `--ticks` loop has nothing to decompose, and what
+ * this reports is the worker pool — `--scenario descent`, `--terrain-baseline`
+ * and anything else that dispatches jobs. The report says so rather than
+ * printing an empty table that reads like a fast run.
+ */
+const collected: TimingRecord[] = []
+const releaseTiming =
+  values.profile === true
+    ? timingHub.attach(
+        { write: (record) => collected.push(record) },
+        { now: () => performance.now() },
+      )
+    : null
 
 const registry = createTaskRegistry()
 const session = openSession({
@@ -134,6 +174,31 @@ if (values['self-test'] === true) {
   const report = await harness.selfTest()
   console.log(report.report)
   if (report.passed !== report.total) process.exitCode = 1
+}
+
+/*
+ * Last, so it covers the scenario, the tick loop, the baseline and the
+ * self-test — all of which dispatch worker jobs, and none of which would be in
+ * a window closed at the tick loop.
+ *
+ * There is no `frame` span headlessly and the report says "no frames in the
+ * window" rather than inventing one. That is the honest shape: a frame is a
+ * browser fact, and this is the simulation's half.
+ */
+if (values.profile === true) {
+  releaseTiming?.()
+  console.log(
+    summarizeProfile(
+      collected.map((record) => ({
+        name: record.name,
+        kind: record.kind,
+        track: record.detail?.track ?? 'Simulation',
+        startMs: record.startMs,
+        durationMs: record.endMs - record.startMs,
+        properties: Object.fromEntries(record.detail?.properties ?? []),
+      })),
+    ).text,
+  )
 }
 
 session.dispose()
