@@ -35,6 +35,7 @@ import {
   type LensView,
   type PatchPlacement,
   patchPlacement,
+  regionKey,
   type RenderBody,
   type RenderPatch,
   pixelsPerRadian,
@@ -229,6 +230,22 @@ const BUILDS_PER_FRAME = 4
 const TERRAIN_RELIEF_PIXELS = 8
 
 /**
+ * How far the eye may move, in body-fixed meters, before a held selection is
+ * re-walked.
+ *
+ * The refinement predicate compares eye distance against cell spacings of
+ * meters and up, so millimeters cannot change a selection except by landing
+ * exactly on a refinement threshold — where being one frame late is the cost
+ * of a patch that was already deep inside its morph band. What the epsilon
+ * actually absorbs is the pose round-trip: a stance is fixed in body-fixed
+ * axes, but the camera comes back through universe coordinates, and the
+ * reconversion jitters by ~0.15 mm frame to frame — measured standing on
+ * Earth's summit over 120 frames. Five millimeters is 30× that jitter and
+ * two orders under the finest cell the zoo refines to.
+ */
+const SELECTION_EYE_EPSILON: Meters = 0.005
+
+/**
  * Heightfields held, as a multiple of the largest selection.
  *
  * **A cache smaller than the working set does not degrade, it oscillates.** At
@@ -406,9 +423,18 @@ export interface TerrainState {
 export class TerrainStreamer {
   readonly #pool: WorkerPool | null
   readonly #scatter = new ScatterField()
-  readonly #fields = new Map<string, CachedField>()
-  readonly #patches = new Map<string, RenderPatch>()
-  readonly #inFlight = new Set<string>()
+  /*
+   * Keyed by `regionKey` — packed arithmetic, no body in it — because the
+   * request filter names over a thousand regions a frame and building that
+   * many template strings was most of `terrain.request`'s 0.7 ms. A body
+   * change clears these caches and `#epoch` drops the answers that outlive
+   * one, which is what lets the key stay body-free; `terrainPatchKey` remains
+   * the spelling for the renderer's mesh cache, the one consumer that retains
+   * across a retarget.
+   */
+  readonly #fields = new Map<number | string, CachedField>()
+  readonly #patches = new Map<number | string, RenderPatch>()
+  readonly #inFlight = new Set<number | string>()
   #bodyAddress: string | null = null
   #drawn: readonly SelectedPatch[] = []
   #deepest = 0
@@ -499,6 +525,33 @@ export class TerrainStreamer {
    * would be a different claim from the one the numbers beside it describe.
    */
   #lensView: LensView | null = null
+  /**
+   * The last selection's inputs, and the request list it assembled.
+   *
+   * The walks are a pure function of the eye in body-fixed axes, the optics,
+   * the level floor and the geometry cache — and at a stance or a hover none
+   * of them move: the camera rides the body, so `eyeLocal` is constant to the
+   * pose round-trip's ~0.15 mm of jitter, and a converged cache stops
+   * changing. Re-selecting anyway cost 2.1 ms a frame standing on Earth's
+   * summit in the shipped build — the largest single item in the engine step,
+   * spent recomputing an answer that could not have changed. `#cacheEpoch` is
+   * the cache half of the key; it is recorded at walk time, so a frame that
+   * goes on to build or evict invalidates its own selection and re-walks into
+   * the new geometry.
+   */
+  #selection: {
+    readonly body: Body
+    readonly eye: Vec3
+    readonly maxLevel: number
+    readonly cacheEpoch: number
+    readonly lens: LensView['lens']
+    readonly viewport: LensView['viewport']
+    readonly requested: readonly RegionAddress[]
+  } | null = null
+  /** Bumped whenever `#fields` or `#patches` gain or lose an entry. */
+  #cacheEpoch = 0
+  /** How many times the walks have actually run. `summary()` reports it. */
+  #selections = 0
 
   /**
    * The optics the selection is measured against.
@@ -547,6 +600,7 @@ export class TerrainStreamer {
     readonly culled: number
     readonly starved: number
     readonly saturated: boolean
+    readonly selections: number
     readonly lens: LensView | null
     readonly scatter: {
       readonly regions: number
@@ -559,7 +613,7 @@ export class TerrainStreamer {
     let vertices = 0
     let triangles = 0
     for (const selected of this.#drawn) {
-      const patch = this.#patches.get(this.#key(selected.region))
+      const patch = this.#patches.get(regionKey(selected.region))
       if (patch === undefined) continue
       placed += 1
       vertices += patch.positions.length / 3
@@ -583,6 +637,9 @@ export class TerrainStreamer {
       culled: this.#culled,
       starved: this.#starved,
       saturated: this.#saturated,
+      // Total walks, not walks a second: a hover that stops re-selecting is
+      // visible as this number standing still while the frame count climbs.
+      selections: this.#selections,
       lens: this.#lensView,
       scatter: this.#scatter.summary(),
     }
@@ -593,12 +650,13 @@ export class TerrainStreamer {
     const patches: PlacedPatch[] = []
     if (pose !== null) {
       for (const selected of this.#drawn) {
-        const key = this.#key(selected.region)
-        const patch = this.#patches.get(key)
+        const patch = this.#patches.get(regionKey(selected.region))
         if (patch === undefined) continue
         patches.push({
           patch,
-          key,
+          // The one string key a frame still builds — the renderer's mesh
+          // cache retains across a retarget, so its identity carries the body.
+          key: this.#key(selected.region),
           placement: patchPlacement(
             patch,
             pose.position,
@@ -738,6 +796,106 @@ export class TerrainStreamer {
       viewport,
     }
 
+    /*
+     * Reuse the held selection while nothing it is a function of has moved.
+     *
+     * At a stance or a hover this is every frame: the eye rides the body, the
+     * optics hold, and once the cache converges nothing bumps the epoch — so
+     * the 2.1 ms the walks cost standing on Earth's summit drops to the
+     * request top-up below. The comparison is against what the walks actually
+     * read: the eye in body-fixed axes, the level floor, the selection's
+     * optics by value (the engine allocates a fresh `LensView` every frame),
+     * the resolved body by identity (a reseed under the same address is a
+     * different `Body`), and the cache epoch recorded at walk time.
+     */
+    const held = this.#selection
+    if (
+      held !== null &&
+      held.body === surface &&
+      held.maxLevel === options.maxLevel &&
+      held.cacheEpoch === this.#cacheEpoch &&
+      held.lens.focalLength === lens.focalLength &&
+      held.lens.gauge === lens.gauge &&
+      held.lens.zoom === lens.zoom &&
+      held.viewport.width === viewport.width &&
+      held.viewport.height === viewport.height &&
+      Vec.length(Vec.sub(eyeLocal, held.eye)) < SELECTION_EYE_EPSILON
+    ) {
+      // The pipeline still gets topped up from the held list: `#request`
+      // filters on what is cached and in flight this frame, so a slot freed
+      // by a finished job is re-spent without a walk. A job that *answers*
+      // bumps the epoch and the next frame re-walks into the new ground.
+      this.#request(held.requested, surface)
+      this.#phases.step('terrain.request', TERRAIN_PHASE)
+    } else {
+      this.#reselect(
+        surface,
+        spinPose,
+        bodyPose.position,
+        eyeLocal,
+        renderTime,
+        previous,
+        eye,
+        options,
+      )
+    }
+
+    /*
+     * The rocks, last, because they stand on ground this frame has just decided
+     * how to draw — and driven from here rather than from the engine because
+     * everything they need is already resolved: the body, the eye in body-fixed
+     * axes, the pose the patches are placed with, and the lens the whole picture
+     * was selected against.
+     */
+    this.#scatter.update(
+      surface,
+      body.address,
+      eyeLocal,
+      // The branded direction this frame's own selection was made against,
+      // rather than a second normalization of `eyeLocal` in the app layer —
+      // `bodyFixedDirection` is one of the three producers and this keeps it
+      // that way.
+      eye.direction,
+      this.#pose,
+      this.#lensView,
+    )
+    /*
+     * The one phase that most wants a timeline rather than a mean.
+     *
+     * `scatterField.ts` resolves a fixed budget of 128 candidate slots per
+     * frame against a whole region that costs 2.6–5.8 ms, so the work is
+     * deliberately smeared across frames — and a budget spread thin is
+     * invisible to a scalar by construction, while on a track it is the obvious
+     * repeating band.
+     */
+    this.#phases.step('terrain.scatter', TERRAIN_PHASE)
+  }
+
+  /**
+   * The two walks, the geometry build, the request list and the evictor — a
+   * frame's full reconciliation, held so `update` can reuse it.
+   *
+   * `cacheEpoch` is captured *before* `#build` and `#evict` mutate the
+   * caches, deliberately: a frame that builds geometry has changed the answer
+   * `ready` would give, so its own selection is already stale and the next
+   * frame walks again — which is what lets refinement advance. At
+   * convergence nothing mutates, the epoch captured equals the epoch
+   * compared, and the walks stop until something real changes.
+   */
+  #reselect(
+    surface: Body,
+    spinPose: FramePose,
+    centre: UniverseVector,
+    eyeLocal: Vec3,
+    renderTime: Seconds,
+    previous: { eye: Vec3; time: Seconds } | null,
+    eye: TerrainEye,
+    options: {
+      readonly maxLevel: number
+      readonly lens: LensView['lens']
+      readonly viewport: LensView['viewport']
+    },
+  ): void {
     // What to draw: refine only into ground already in the cache, so a patch
     // that has not arrived costs detail rather than leaving a hole.
     const drawn = selectTerrain(eye, {
@@ -756,7 +914,7 @@ export class TerrainStreamer {
        * `#build` can feed it, which is the honest rate, and the picture is
        * never short of ground.
        */
-      ready: (region) => this.#patches.has(this.#key(region)),
+      ready: (region) => this.#patches.has(regionKey(region)),
     })
     this.#drawn = drawn.patches
     this.#deepest = drawn.deepestLevel
@@ -772,7 +930,7 @@ export class TerrainStreamer {
       this.#lookAhead(
         surface,
         spinPose,
-        bodyPose.position,
+        centre,
         eyeLocal,
         renderTime,
         previous,
@@ -780,6 +938,9 @@ export class TerrainStreamer {
       ),
       options,
     )
+    // What the walks were made against, captured before `#build` and `#evict`
+    // change it — see the method's own doc for why that ordering is the memo.
+    const cacheEpoch = this.#cacheEpoch
 
     /*
      * The rung below the drawn set — what makes the ladder climb: with
@@ -848,35 +1009,16 @@ export class TerrainStreamer {
     this.#evict(requested)
     this.#phases.step('terrain.evict', TERRAIN_PHASE)
 
-    /*
-     * The rocks, last, because they stand on ground this frame has just decided
-     * how to draw — and driven from here rather than from the engine because
-     * everything they need is already resolved: the body, the eye in body-fixed
-     * axes, the pose the patches are placed with, and the lens the whole picture
-     * was selected against.
-     */
-    this.#scatter.update(
-      surface,
-      body.address,
-      eyeLocal,
-      // The branded direction this frame's own selection was made against,
-      // rather than a second normalization of `eyeLocal` in the app layer —
-      // `bodyFixedDirection` is one of the three producers and this keeps it
-      // that way.
-      eye.direction,
-      this.#pose,
-      this.#lensView,
-    )
-    /*
-     * The one phase that most wants a timeline rather than a mean.
-     *
-     * `scatterField.ts` resolves a fixed budget of 128 candidate slots per
-     * frame against a whole region that costs 2.6–5.8 ms, so the work is
-     * deliberately smeared across frames — and a budget spread thin is
-     * invisible to a scalar by construction, while on a track it is the obvious
-     * repeating band.
-     */
-    this.#phases.step('terrain.scatter', TERRAIN_PHASE)
+    this.#selection = {
+      body: surface,
+      eye: eyeLocal,
+      maxLevel: options.maxLevel,
+      cacheEpoch,
+      lens: options.lens,
+      viewport: options.viewport,
+      requested,
+    }
+    this.#selections += 1
   }
 
   #key(region: RegionAddress): string {
@@ -980,10 +1122,13 @@ export class TerrainStreamer {
     let built = 0
     for (const region of wanted) {
       if (built >= BUILDS_PER_FRAME) return
-      const key = this.#key(region)
+      const key = regionKey(region)
       if (this.#patches.has(key)) continue
       const field = this.#fields.get(key)
       if (field === undefined) continue
+      // A new mesh changes what `ready` answers, so the held selection is
+      // stale the moment this lands.
+      this.#cacheEpoch += 1
       // Built once. The geometry is body-fixed, so nothing that happens to the
       // planet or to the render origin can invalidate it.
       this.#patches.set(
@@ -1011,10 +1156,10 @@ export class TerrainStreamer {
    */
   #request(wanted: readonly RegionAddress[], body: Body): void {
     if (this.#pool === null) return
-    const seen = new Set<string>()
+    const seen = new Set<number | string>()
     const missing = wanted
       .filter((region) => {
-        const key = this.#key(region)
+        const key = regionKey(region)
         if (seen.has(key)) return false
         seen.add(key)
         return !this.#fields.has(key) && !this.#inFlight.has(key)
@@ -1031,7 +1176,7 @@ export class TerrainStreamer {
       )
 
     for (const region of missing) {
-      const key = this.#key(region)
+      const key = regionKey(region)
       // Captured beside the key: a result that outlives its world is dropped
       // rather than cached, because the key alone cannot tell a new seed's
       // s:SOL/b:2 from the old one's.
@@ -1050,6 +1195,9 @@ export class TerrainStreamer {
         })
         .then((result) => {
           if (epoch !== this.#epoch) return
+          // The answer invalidates the held selection: `#build` has ground
+          // it can now turn into geometry, so the next frame walks.
+          this.#cacheEpoch += 1
           this.#fields.set(key, {
             elevations: result.elevations,
             cover: result.cover,
@@ -1087,16 +1235,22 @@ export class TerrainStreamer {
     ) {
       return
     }
-    const keep = new Set<string>()
-    for (const region of requested) keep.add(this.#key(region))
+    const keep = new Set<number | string>()
+    for (const region of requested) keep.add(regionKey(region))
 
     for (const key of this.#fields.keys()) {
       if (this.#fields.size <= FIELD_CACHE) break
-      if (!keep.has(key)) this.#fields.delete(key)
+      if (!keep.has(key)) {
+        this.#cacheEpoch += 1
+        this.#fields.delete(key)
+      }
     }
     for (const key of this.#patches.keys()) {
       if (this.#patches.size <= GEOMETRY_CACHE) break
-      if (!keep.has(key)) this.#patches.delete(key)
+      if (!keep.has(key)) {
+        this.#cacheEpoch += 1
+        this.#patches.delete(key)
+      }
     }
   }
 
@@ -1116,6 +1270,9 @@ export class TerrainStreamer {
     this.#culled = 0
     this.#starved = 0
     this.#saturated = false
+    // The selection mirrors it summarized are gone with it; a held one would
+    // otherwise revive them wholesale on the frame the gate reopens.
+    this.#selection = null
     this.#pose = null
     // Same argument as the lens below: a palette beside `patches: 0` describes
     // a body this streamer is no longer drawing, and the material would keep
@@ -1134,6 +1291,7 @@ export class TerrainStreamer {
   clear(): void {
     // In-flight answers are for the world this discards; see `#epoch`.
     this.#epoch += 1
+    this.#cacheEpoch += 1
     this.#fields.clear()
     this.#patches.clear()
     this.#bodyAddress = null

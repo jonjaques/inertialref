@@ -600,8 +600,14 @@ const RING: readonly (readonly [number, number])[] = [
  * a whole-disk selection is nine thousand of them per pass. Built as template
  * strings that was 1.8 ms — sixteen times the cost of the traversal it is
  * correcting, and over the frame budget by itself.
+ *
+ * Exported for the streamer's own caches, which key by region for the same
+ * arithmetic-over-strings reason — its request filter names over a thousand
+ * regions a frame. The body is deliberately absent from the key: a cache that
+ * outlives its body is cleared, not disambiguated, and `terrainPatchKey` below
+ * is the spelling for the one consumer that does retain across bodies.
  */
-const regionKey = (region: RegionAddress): number | string =>
+export const regionKey = (region: RegionAddress): number | string =>
   packed(region.face, region.level, region.i, region.j)
 
 /** The span `packed` reserves for `i` and `j`, and the deepest level it fits. */
