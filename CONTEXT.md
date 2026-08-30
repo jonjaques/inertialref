@@ -29,22 +29,22 @@ server **stopped**, the page still loads from the service worker and passes
 ~1.25M simulation ticks/s for one entity; the headless runner does ~100–105k ticks/s
 including frame resolution.
 
-| Package         | Layer | State                                                                                                                         |
-| --------------- | ----- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `shared`        | 0     | done — units, brands, invariants, structured logging                                                                          |
-| `spatial`       | 1     | done — UniverseVector, frame graph, floating origin                                                                           |
-| `procedural`    | 1     | done — PRNG, hierarchical seeds, noise, algorithm versions                                                                    |
-| `physics`       | 2     | done — Kepler, rigid body, atmosphere, thrusters                                                                              |
-| `universe`      | 3     | done — addressing, star catalog, generation, terrain, frames                                                                  |
-| `simulation`    | 4     | done — clock, entities, flight, streaming, snapshots                                                                          |
-| `protocol`      | 4     | done — validation combinators, wire and save schemas                                                                          |
-| `workers`       | 5     | done — typed tasks, ports, pool, four tasks                                                                                   |
-| `persistence`   | 5     | done — save/restore, migration chain, store port                                                                              |
-| `net`           | 5     | done — authority port, local authority; remote + channel are H4                                                               |
-| `rendering`     | 5     | done — LOD, depth compression, terrain meshing                                                                                |
-| `devtools`      | 6     | done — inspection, twelve capability checks, harness, `openSession`                                                           |
-| `apps/game`     | —     | done — React + R3F client on `WebGPURenderer`/TSL, worker pool, IndexedDB saves; `/docs` is the documentation site (ADR-0016) |
-| `apps/headless` | —     | done — Node runner, ~100–105k ticks/s, `pnpm sim --self-test`                                                                 |
+| Package         | Layer | State                                                                                                                                                        |
+| --------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `shared`        | 0     | done — units, brands, invariants, structured logging                                                                                                         |
+| `spatial`       | 1     | done — UniverseVector, frame graph, floating origin                                                                                                          |
+| `procedural`    | 1     | done — PRNG, hierarchical seeds, noise, algorithm versions                                                                                                   |
+| `physics`       | 2     | done — Kepler, rigid body, atmosphere, thrusters                                                                                                             |
+| `universe`      | 3     | done — addressing, star catalog, generation, terrain, frames                                                                                                 |
+| `simulation`    | 4     | done — clock, entities, flight, streaming, snapshots                                                                                                         |
+| `protocol`      | 4     | done — validation combinators, wire and save schemas                                                                                                         |
+| `workers`       | 5     | done — typed tasks, ports, pool, four tasks                                                                                                                  |
+| `persistence`   | 5     | done — save/restore, migration chain, store port                                                                                                             |
+| `net`           | 5     | done — authority port, local authority; remote + channel are H4                                                                                              |
+| `rendering`     | 5     | done — LOD, depth compression, terrain meshing                                                                                                               |
+| `devtools`      | 6     | done — inspection, twelve capability checks, harness, `openSession`                                                                                          |
+| `apps/game`     | —     | done — Astro documents + React islands on `WebGPURenderer`/TSL, worker pool, IndexedDB saves; `/docs` is HTML the reading room hydrates (ADR-0016, ADR-0021) |
+| `apps/headless` | —     | done — Node runner, ~100–105k ticks/s, `pnpm sim --self-test`                                                                                                |
 
 ## Decisions that are expensive to reverse
 
@@ -104,7 +104,7 @@ pnpm typecheck   # five tsconfig projects
 pnpm lint        # oxlint
 pnpm graph       # dependency layering + cycle check
 pnpm brand       # re-render every brand artifact from design/brand/brandmark.svg
-pnpm build       # optional media pull, typecheck, vite build
+pnpm build       # optional media pull, docs, typecheck, astro build
 pnpm check       # all of the above
 pnpm vitest run <substring>   # single test file
 pnpm run deploy:worker        # pnpm build, then wrangler deploy
@@ -5635,6 +5635,60 @@ drawn a different planet through an identical heightfield. It compares all
   saturated ground aliases where a flat ambient fill could not show it. At
   device pixel ratio 2 the same frame is clean.
 
+## The document is the shell, and the renderer is an island (30 Aug 2026)
+
+[ADR-0021](docs/adr/0021-the-astro-shell.md) inverts the shell: Astro owns
+`<html>`, the renderer is a `client:only` island that persists, the chrome
+is another, every mode is a document, and dialogs are a store over
+`history`. `packages/*` and the engine do not know Astro exists.
+
+The first word of a documentation page is HTML in `#doc-ssr`. Fetching the
+same bytes as `/doc-content/page/*.json` would be a second copy of a file
+the reader is already looking at. The rail still fetches a slim
+`manifest.json` — embedding the whole navigation in every document would
+pay its size on every ClientRouter swap. The search index stays a fetch
+for the same reason: half a megabyte for the readers who type.
+
+Three things looked tidy and were not.
+
+- **A generated service-worker precache of every emitted URL.** Nine
+  hundred documentation pages in the install cache, for a player of the
+  game who never opens them. The precache is the four mode documents, by
+  hand. A documentation page nobody has visited, offline, is the
+  browser's offline page.
+- **Treat overlays as document navigations.** Then there is no background
+  location, because the background is the document. Following `/settings`
+  as a document from the planetarium unmounts the planetarium, drops the
+  observatory's target, and rebuilds the renderer. `OverlayLink` intercepts
+  the unmodified click and `pushState`s. `DocumentMeta` stays because that
+  rewrite does not load a new document, so the tab title would keep naming
+  the mode underneath.
+- **Rely on props re-flowing to a persisted `client:only` island.** Astro
+  documents `transition:persist` as retaining state while allowing a
+  re-render with new props. Whether that holds for an island that never
+  rendered on the server is not a property this codebase relies on. The
+  island that owns the camera reads `stanceForPath` on `astro:page-load`.
+  A warm overlay does not rename that path: `stancePathOf` keeps the mode
+  underneath, because the address bar is the dialog.
+
+The front door holds a phase. A `requestAnimationFrame` loop that ramps
+`observatory.setPhase` is a second clock next to the simulation's.
+
+`import.meta.url` cannot find `.doc-content/`. Astro bundles
+`astro/docsContent.ts` into `dist/.prerender/chunks/` before
+`getStaticPaths` runs, so a path relative to the module looks for the
+manifest next to the chunk. `process.cwd()` with two candidates —
+`./.doc-content` from `apps/game`, `./apps/game/.doc-content` from the
+workspace root — is the one that resolves.
+
+`not_found_handling` is `404-page`. An unmatched path is the menu wearing
+that status, not the home document wearing that URL. The sitemap is every
+page Astro emitted; brand does not write it.
+
+Phase 0's boot timings were never taken. The island is the proof; the
+numbers that would have compared a word of prose against a GPU wait are
+not in this file.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).
@@ -5644,8 +5698,10 @@ Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md
   filter fields are the ones `docs/design/galaxy.md` lists for the galaxy map.
 - **Mode routes are not covered by a Node test.** Each drives a live engine, and
   a test that stubbed a renderer, a worker pool and a camera would assert
-  against the stub. `modeForPath`, the link builders, the dock algebra, the
-  gesture arithmetic and the compact dock all are; the boundary is deliberate.
+  against the stub. `modeForPath`, `stanceForPath`, the overlay store, the
+  link builders, the dock algebra, the gesture arithmetic and the compact
+  dock all are; `.astro` files stay thin enough that there is nothing in
+  them to assert. The boundary is deliberate.
 - **Piloting on a touchscreen is not designed.** The flight modes are
   desktop-only and the menu says so. The planetarium and the cinema player are
   the mobile surface.
