@@ -24,11 +24,12 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", `docs/hosting.md`, A
   GPU-free and the card stays the same card. `scripts/brand/og.mjs` carries the
   framing; re-shooting it is a deliberate commit, and the type is composited on
   top rather than baked in.
-- **The document head and `src/site.ts` are duplicated on purpose and change together.**
-  No social scraper runs JavaScript, so the static head is the only card the site has;
-  `DocumentMeta.tsx` covers only readers that execute scripts. `scripts/brand/checkHead.mjs`
-  is what holds them together, and it runs inside `pnpm brand:check` — adding a tag to the
-  head means covering it there and moving the census count, in that order.
+- **The document head interpolates `src/site.ts`.** A social scraper does not run
+  JavaScript, so the layout is the only card the site has; `DocumentMeta.tsx`
+  covers only in-app navigations that do not load a new document.
+  `scripts/brand/checkHead.mjs` is the gate that the layout still calls the
+  helpers, and it runs inside `pnpm brand:check` — adding a tag to the head
+  means covering it there and moving the census count, in that order.
 - **`DocumentMeta.tsx` is the one place `location.pathname` is read raw.** It is about the
   URL, not about what is on screen. Everything deciding _what is rendered_ still goes
   through `resolvedLocation`.

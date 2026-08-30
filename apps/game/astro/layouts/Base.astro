@@ -1,5 +1,30 @@
 ---
 import '../../src/index.css'
+import {
+  SITE,
+  canonicalUrl,
+  documentTitle,
+  jsonLd,
+  pageMetaFor,
+} from '../../src/site.ts'
+
+interface Props {
+  /**
+   * The path this document is served at.
+   *
+   * Defaults to `Astro.url.pathname`, which is the page's own path during
+   * a build. A caller passes it only when the file that owns `<html>` is
+   * not the file that owns the URL — there is no such caller yet.
+   */
+  pathname?: string
+}
+
+const pathname = Astro.props.pathname ?? Astro.url.pathname
+const page = pageMetaFor(pathname)
+const title = documentTitle(page)
+const canonical = canonicalUrl(pathname)
+const image = `${SITE.origin}${SITE.socialImage}`
+const ld = JSON.stringify(jsonLd())
 ---
 
 <!doctype html>
@@ -63,35 +88,28 @@ import '../../src/index.css'
     <meta name="color-scheme" content="dark" />
 
     <!--
-      THE STATIC HEAD, AND WHY IT IS HAND-KEPT.
+      THE DOCUMENT HEAD.
 
-      Everything from here to the JSON-LD block is duplicated from
-      `src/site.ts`, on purpose, and the two have to be changed together. The
-      reason is the one thing about a single-page application that no amount of
-      client-side care fixes: **a social scraper does not run JavaScript.**
-      Slack, iMessage, Discord, Bluesky and every other unfurler read the
-      document as it arrives off the wire, so an `og:title` written by React is
-      an `og:title` no card has ever seen.
+      Interpolated from `src/site.ts`, which is the only place the product
+      names itself. A social scraper does not run JavaScript, so whatever
+      React later writes into these tags is invisible to the card Slack or
+      iMessage draws — the values here are the card.
 
-      Because `not_found_handling` is `single-page-application`, this exact
-      document is served for *every* path — so what is written here is the
-      card for the whole site, and it is therefore written for the home page.
-      `pages/DocumentMeta.tsx` updates `<title>`, the description and the
-      canonical link per route, which covers the readers that *do* execute
-      scripts: the browser, Googlebot, an agent driving a headless browser.
+      Unmatched paths still SPA-fallback onto this layout, so a URL with
+      no file of its own carries the home page's card. A page that exists
+      as a file carries its own. The chrome island's `DocumentMeta`
+      rewrites `<title>` on an in-app navigation that does not load a new
+      document.
 
-      Making the Open Graph tags per-route means running the Worker on every
-      navigation so `HTMLRewriter` can rewrite four tags — which turns a free
-      static asset request into a billed invocation on every page load.
-      `docs/hosting.md` records that as a deliberate seam, not an oversight.
+      Per-route Open Graph is free at build time. Routing every navigation
+      through the Worker so `HTMLRewriter` can rewrite four tags would turn
+      a free asset request into a billed invocation, which is the trade
+      `docs/hosting.md` § H-7 declines.
     -->
-    <title>InertialRef — A real sky, in a browser tab</title>
-    <meta
-      name="description"
-      content="An open-source spaceflight simulator in a browser tab. The Milky Way is the real one — 7,123 cataloged systems within 150 light years, the rest from a seed."
-    />
-    <link rel="canonical" href="https://inertialref.jonjaques.com" />
-    <meta name="author" content="Jon Jaques" />
+    <title>{title}</title>
+    <meta name="description" content={page.description} />
+    <link rel="canonical" href={canonical} />
+    <meta name="author" content={SITE.author} />
     <!-- `max-image-preview:large` is what lets the share card be the card in a
          search result rather than a thumbnail. The rest is the default, stated
          because a missing robots tag and an explicit one read the same to a
@@ -126,10 +144,10 @@ import '../../src/index.css'
       black sky while the bundle loads.
     -->
     <link rel="manifest" href="/manifest.webmanifest" />
-    <meta name="theme-color" content="#020617" />
+    <meta name="theme-color" content={SITE.background} />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-title" content="InertialRef" />
+    <meta name="apple-mobile-web-app-title" content={SITE.name} />
     <meta
       name="apple-mobile-web-app-status-bar-style"
       content="black-translucent"
@@ -140,20 +158,11 @@ import '../../src/index.css'
          absolute URL: a relative one resolves against the scraper, not the
          site, and simply produces a card with no picture. -->
     <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="InertialRef" />
-    <meta
-      property="og:title"
-      content="InertialRef — A real sky, in a browser tab"
-    />
-    <meta
-      property="og:description"
-      content="An open-source spaceflight simulator in a browser tab. The Milky Way is the real one — 7,123 cataloged systems within 150 light years, the rest from a seed."
-    />
-    <meta property="og:url" content="https://inertialref.jonjaques.com" />
-    <meta
-      property="og:image"
-      content="https://inertialref.jonjaques.com/og.png"
-    />
+    <meta property="og:site_name" content={SITE.name} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={page.description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={image} />
     <meta property="og:image:type" content="image/png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
@@ -163,18 +172,9 @@ import '../../src/index.css'
     />
     <meta property="og:locale" content="en" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta
-      name="twitter:title"
-      content="InertialRef — A real sky, in a browser tab"
-    />
-    <meta
-      name="twitter:description"
-      content="An open-source spaceflight simulator that runs in a browser tab. The Milky Way is the real one, derived rather than downloaded."
-    />
-    <meta
-      name="twitter:image"
-      content="https://inertialref.jonjaques.com/og.png"
-    />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={page.description} />
+    <meta name="twitter:image" content={image} />
 
     <!--
       Structured data, for search engines and for the agents that read a page
@@ -190,52 +190,7 @@ import '../../src/index.css'
       `/llms.txt` is the long-form version of the same, written for a reader
       that is not a person.
     -->
-    <script type="application/ld+json">
-      {
-        "@context": "https://schema.org",
-        "@graph": [
-          {
-            "@type": "WebSite",
-            "@id": "https://inertialref.jonjaques.com/#website",
-            "url": "https://inertialref.jonjaques.com",
-            "name": "InertialRef",
-            "description": "An open-source spaceflight simulator that runs in a browser tab.",
-            "inLanguage": "en",
-            "publisher": { "@id": "https://inertialref.jonjaques.com/#author" }
-          },
-          {
-            "@type": "Person",
-            "@id": "https://inertialref.jonjaques.com/#author",
-            "name": "Jon Jaques",
-            "url": "https://github.com/jonjaques"
-          },
-          {
-            "@type": ["SoftwareApplication", "VideoGame"],
-            "@id": "https://inertialref.jonjaques.com/#app",
-            "name": "InertialRef",
-            "url": "https://inertialref.jonjaques.com",
-            "applicationCategory": "GameApplication",
-            "applicationSubCategory": "Space flight simulator",
-            "operatingSystem": "Any modern web browser with WebGPU",
-            "browserRequirements": "Requires WebGPU",
-            "description": "A spaceflight simulator whose universe is a deterministic function of a seed and a real star catalog: 7,123 cataloged systems and 702 known planets within 150 light years, and generated content beyond that. Runs offline, with nothing to install.",
-            "image": "https://inertialref.jonjaques.com/og.png",
-            "screenshot": "https://inertialref.jonjaques.com/og.png",
-            "author": { "@id": "https://inertialref.jonjaques.com/#author" },
-            "codeRepository": "https://github.com/jonjaques/inertialref",
-            "license": "https://www.apache.org/licenses/LICENSE-2.0",
-            "isAccessibleForFree": true,
-            "offers": {
-              "@type": "Offer",
-              "price": "0",
-              "priceCurrency": "USD"
-            },
-            "genre": ["Simulation", "Space flight"],
-            "gamePlatform": "Web browser"
-          }
-        ]
-      }
-    </script>
+    <script type="application/ld+json" set:html={ld} />
   </head>
   <body>
     <!--

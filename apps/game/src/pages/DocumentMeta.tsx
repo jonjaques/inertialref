@@ -16,9 +16,9 @@ import { canonicalUrl, documentTitle, pageMetaFor } from '../site.ts'
  * that execute JavaScript: the browser, Googlebot, an agent driving a headless
  * browser. Open Graph is read by things that do not — Slack, iMessage,
  * Discord, every unfurler — so rewriting `og:title` here would change nothing
- * any scraper ever sees while looking exactly like it had. Those live static in
- * `index.html`; `src/site.ts` carries the note about what that costs and what
- * it would take to make them per-route.
+ * any scraper ever sees while looking exactly like it had. Those live in the
+ * layout, interpolated from `src/site.ts`. This component covers the tab
+ * strip on an in-app navigation that does not load a new document.
  *
  * **The raw pathname, not `resolvedLocation`.** Everywhere else that would be
  * the bug AGENTS.md names: with a dialog open, the mode's location and the
