@@ -1,4 +1,5 @@
 ---
+import { ClientRouter } from 'astro:transitions'
 import '../../src/index.css'
 import {
   SITE,
@@ -57,7 +58,7 @@ const ld = JSON.stringify(jsonLd())
   `src/index.css` redefines the variant to key off it. Without this the whole
   registry renders in its light values on a machine set to light.
 -->
-<html lang="en" class="dark">
+<html lang="en" class="dark" transition:animate="none">
   <head>
     <meta charset="UTF-8" />
     <!--
@@ -210,6 +211,15 @@ const ld = JSON.stringify(jsonLd())
       that is not a person.
     -->
     <script type="application/ld+json" set:html={ld} />
+    <!--
+      The engine survives a click. ClientRouter swaps the document without
+      a full load; `transition:persist` on the backdrop keeps the canvas,
+      the renderer and the world. `fallback="swap"` skips the default fade
+      so the picture does not blink while the chrome remounts.
+      `transition:animate="none"` on `<html>` is the same decision for
+      browsers that have View Transitions.
+    -->
+    <ClientRouter fallback="swap" />
   </head>
   <body>
     <!--

@@ -14,6 +14,7 @@ import {
   displayOf,
   hrefOf,
   locationOf,
+  stancePathOf,
   type OverlayPorts,
   type LocationPort,
 } from './overlay.ts'
@@ -99,6 +100,27 @@ describe('href arithmetic', () => {
   it('round-trips a path with a query and a hash', () => {
     const href = '/planetarium?at=s%3ASOL%2Fb%3A2#x'
     expect(hrefOf(locationOf(href))).toBe(href)
+  })
+})
+
+describe('the path whose stance the backdrop holds', () => {
+  it('is the address bar on a mode document', () => {
+    const session = sessionAt(PLANETARIUM)
+    const state = createOverlayStore(session.ports).getState()
+    expect(stancePathOf(PLANETARIUM, state)).toBe(PLANETARIUM)
+  })
+
+  it('stays on the mode while a warm overlay is open', () => {
+    const session = sessionAt(PLANETARIUM)
+    const store = createOverlayStore(session.ports)
+    store.getState().open(SETTINGS)
+    expect(stancePathOf(SETTINGS, store.getState())).toBe(PLANETARIUM)
+  })
+
+  it('is the menu on a cold overlay', () => {
+    const session = sessionAt(SETTINGS)
+    const state = createOverlayStore(session.ports).getState()
+    expect(stancePathOf(SETTINGS, state)).toBe(HOME)
   })
 })
 

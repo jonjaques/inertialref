@@ -7,6 +7,7 @@ import App from './App.tsx'
 import { BUILD_ID } from './build.ts'
 import { KeymapProvider } from './input/KeymapProvider.tsx'
 import { registerServiceWorker } from './net/registerServiceWorker.ts'
+import { hrefOf, overlayStore, readLocation } from './pages/overlay.ts'
 
 /*
  * The chrome island.
@@ -102,6 +103,13 @@ export default function Root() {
   useEffect(() => {
     document.getElementById('boot')?.setAttribute('hidden', '')
     document.getElementById('doc-ssr')?.setAttribute('hidden', '')
+    const sync = (): void => {
+      overlayStore.getState().rehydrate(hrefOf(readLocation(window.location)))
+      document.getElementById('doc-ssr')?.setAttribute('hidden', '')
+    }
+    sync()
+    document.addEventListener('astro:page-load', sync)
+    return () => document.removeEventListener('astro:page-load', sync)
   }, [])
 
   return (

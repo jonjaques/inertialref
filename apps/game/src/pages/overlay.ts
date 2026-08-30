@@ -57,6 +57,18 @@ export function displayOf(state: OverlaySnapshot): PageLocation {
   return state.overlay === null ? state.mode : locationOf(state.overlay)
 }
 
+/**
+ * The path whose stance the backdrop should hold.
+ *
+ * A document navigation names the mode in the address bar. A warm overlay
+ * does not: the address bar names the dialog, and the mode underneath is
+ * still the one the observatory is flying. A cold overlay is the menu.
+ */
+export function stancePathOf(pathname: string, state: OverlaySnapshot): string {
+  if (!isOverlayPath(pathname)) return pathname
+  return state.warm ? state.mode.pathname : HOME
+}
+
 export interface OverlaySnapshot {
   /** Dialog href, or `null` when no dialog is open. */
   readonly overlay: string | null

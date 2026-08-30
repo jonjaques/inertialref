@@ -11,5 +11,5 @@ import Root from '../../src/Root.tsx'
   layout: a page that omitted the backdrop would tear the engine down on
   the next navigation, once ClientRouter persists it.
 -->
-<SceneBackdrop client:only="react" />
+<SceneBackdrop client:only="react" transition:persist="scene" />
 <Root client:only="react" />

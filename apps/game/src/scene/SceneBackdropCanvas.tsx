@@ -31,6 +31,7 @@ import {
 } from '../state/preferences.ts'
 import { engineStore, startEngineSampler } from '../state/engineStore.ts'
 import { SceneView } from './SceneView.tsx'
+import { usePageStance } from './usePageStance.ts'
 
 /** HUD refresh rate. The simulation runs at 64 Hz; a human reads about 8. */
 const PANEL_HZ = 8
@@ -57,6 +58,7 @@ function rendererKey(
 
 export function SceneBackdropCanvas({ catalog }: { catalog: StarCatalog }) {
   const engine = engineInstance(catalog)
+  usePageStance(engine)
   const [hdr] = usePersistentState(RENDER_HDR)
   const [lensFlare] = usePersistentState(RENDER_LENS_FLARE)
   const [aa] = usePersistentState(RENDER_AA)

@@ -77,7 +77,7 @@ export function ModeRoutes(props: ModeRouteProps) {
   if (engine === null) {
     // The menu's poster is the document. Everything else waits for the
     // backdrop: an unlit planetarium is a cover, not a page of words.
-    return mode === 'menu' ? <HomePage engine={null} /> : null
+    return mode === 'menu' ? <HomePage /> : null
   }
 
   switch (mode) {
@@ -110,6 +110,6 @@ export function ModeRoutes(props: ModeRouteProps) {
         />
       )
     default:
-      return <HomePage engine={engine} />
+      return <HomePage />
   }
 }
