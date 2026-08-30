@@ -41,3 +41,20 @@ export function docsRoute(param: string | undefined): string {
 export function docCardDescription(lead: string, fallback: string): string {
   return lead.length >= 60 && lead.length <= 160 ? lead : fallback
 }
+
+/** The served article. The chrome island copies this into the reading room. */
+export const DOC_SSR_ID = 'doc-ssr'
+
+/** Page metadata beside the article — headings, counts, source. Not the body. */
+export const DOC_PAGE_SCRIPT_ID = 'doc-page'
+
+/**
+ * JSON that can sit inside a `<script>` without closing it.
+ *
+ * A heading that contained `</script>` would otherwise terminate the tag and
+ * dump the rest of the file into the page. `\u003c` is the same code point
+ * after `JSON.parse`, and it is not a tag.
+ */
+export function encodeJsonScript(value: unknown): string {
+  return JSON.stringify(value).replace(/</g, '\\u003c')
+}
