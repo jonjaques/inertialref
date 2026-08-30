@@ -6,14 +6,18 @@ import { LENS_PRESETS } from '@inertialref/rendering'
 import {
   ABOUT,
   AUTH_CALLBACK,
+  CINEMA,
   HOME,
+  cinemaSceneFrom,
   modeForPath,
   overlayBackground,
   overlaySurface,
+  playModeFrom,
   PROFILE,
   resolvedLocation,
   SETTINGS,
   settingsSection,
+  settingsSectionFrom,
   SIGN_IN,
   SIGN_UP,
 } from './paths.ts'
@@ -259,5 +263,28 @@ describe('the surface a dialog belongs to', () => {
     expect(overlaySurface('/nonsense')).toBe('none')
     expect(overlaySurface('/')).toBe('none')
     expect(overlaySurface(SETTINGS + '/audio')).toBe(overlaySurface(SETTINGS))
+  })
+})
+
+describe('the rest of a path after a mode prefix', () => {
+  it('reads the play variant, and treats an unknown one as solo', () => {
+    expect(playModeFrom('/play/solo')).toBe('solo')
+    expect(playModeFrom('/play/online')).toBe('online')
+    expect(playModeFrom('/play/multiplayer')).toBe('multiplayer')
+    expect(playModeFrom('/play/audio')).toBe('solo')
+    expect(playModeFrom(HOME)).toBe('solo')
+  })
+
+  it('reads the cinema scene, and nothing at the library', () => {
+    expect(cinemaSceneFrom(CINEMA)).toBeUndefined()
+    expect(cinemaSceneFrom('/cinema/tng-intro')).toBe('tng-intro')
+    expect(cinemaSceneFrom('/cinema/tng-intro/extra')).toBe('tng-intro')
+    expect(cinemaSceneFrom(HOME)).toBeUndefined()
+  })
+
+  it('reads the settings section, and nothing at the dialog root', () => {
+    expect(settingsSectionFrom(SETTINGS)).toBeUndefined()
+    expect(settingsSectionFrom(settingsSection('camera'))).toBe('camera')
+    expect(settingsSectionFrom(HOME)).toBeUndefined()
   })
 })

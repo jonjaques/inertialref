@@ -146,6 +146,48 @@ export function modeHasBootCover(mode: AppMode): boolean {
   return mode === 'flight' || mode === 'planetarium' || mode === 'cinema'
 }
 
+const PLAY_MODES = ['solo', 'online', 'multiplayer'] as const
+export type PlayMode = (typeof PLAY_MODES)[number]
+
+/**
+ * The play variant a `/play/:mode` path names.
+ *
+ * Unknown values fall back to solo rather than 404: the URL is hand-typed,
+ * and a misspelling that opens flight is a better answer than one that
+ * opens nothing.
+ */
+export function playModeFrom(pathname: string): PlayMode {
+  const rest = pathname.startsWith('/play/')
+    ? pathname.slice('/play/'.length).split('/')[0]
+    : ''
+  return (PLAY_MODES as readonly string[]).includes(rest ?? '')
+    ? (rest as PlayMode)
+    : 'solo'
+}
+
+/**
+ * The scene a `/cinema/:scene` path names, or `undefined` at the library.
+ */
+export function cinemaSceneFrom(pathname: string): string | undefined {
+  if (pathname === CINEMA || !pathname.startsWith(`${CINEMA}/`))
+    return undefined
+  const rest = pathname.slice(CINEMA.length + 1).split('/')[0]
+  return rest === undefined || rest.length === 0
+    ? undefined
+    : decodeURIComponent(rest)
+}
+
+/**
+ * The section a `/settings/:section` path names, or `undefined` at `/settings`.
+ */
+export function settingsSectionFrom(pathname: string): string | undefined {
+  if (!pathname.startsWith(`${SETTINGS}/`)) return undefined
+  const rest = pathname.slice(SETTINGS.length + 1).split('/')[0]
+  return rest === undefined || rest.length === 0
+    ? undefined
+    : decodeURIComponent(rest)
+}
+
 /** Whether a path is a dialog that opens over a mode rather than replacing it. */
 export function isOverlayPath(pathname: string): boolean {
   return (
