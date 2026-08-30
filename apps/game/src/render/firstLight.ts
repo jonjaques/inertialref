@@ -1,5 +1,6 @@
-import { getLogger } from '@inertialref/shared'
+import { getLogger, getTimer } from '@inertialref/shared'
 import { createStore, type StoreApi } from 'zustand/vanilla'
+import { BOOT_MARKER, BOOT_PHASE } from '../engine/frameTiming.ts'
 import type { RendererDescription } from './output.ts'
 import { replayMeasurement, watchPresentation } from './presentationWatchdog.ts'
 import type { BootProgress } from './warmup.ts'
@@ -42,6 +43,7 @@ import type { BootProgress } from './warmup.ts'
  */
 
 const log = getLogger('game.firstlight')
+const timer = getTimer('game.firstlight')
 
 export type FirstLightPhase = 'booting' | 'revealing' | 'done'
 
@@ -233,6 +235,29 @@ export function createFirstLight(
     if (store.getState().phase !== 'booting') return
     if (!isWarmed || !isPresented) return
     log.info('first light')
+    /*
+     * **The measurement this project cares about most and stated nowhere.**
+     *
+     * Boot is measured everywhere else as `performance.now()` deltas that are
+     * never related to the navigation, so "how long from opening the link to
+     * first light" — the one duration a player actually experiences — was a
+     * number nothing here could produce. `0` in this clock *is*
+     * `performance.timeOrigin`, so one measure from it to now is the whole
+     * answer, and every boot entry above lands inside it.
+     *
+     * A marker beside it rather than instead of it. A marker draws as a
+     * vertical line across every track at once, so "first light" cuts through
+     * the frame track, the worker tracks and the boot track together — which is
+     * what makes a heightfield still landing after the cover came off visible
+     * as a fact rather than an inference.
+     */
+    if (timer.on) {
+      timer.measure('navigation to first light', 0, performance.now(), {
+        ...BOOT_PHASE,
+        tooltip: 'from performance.timeOrigin — what a player waits',
+      })
+      timer.mark('first light', BOOT_MARKER)
+    }
     store.setState({ ...store.getState(), phase: 'revealing' })
   }
 
@@ -317,6 +342,11 @@ export function createFirstLight(
 
     revealed() {
       if (store.getState().phase !== 'revealing') return
+      // The end of the reveal transition, which is when the interface is
+      // genuinely in the player's hands. The gap between this marker and
+      // `first light` is the cover's own fade, and it is the one part of boot
+      // that is a deliberate cost rather than a measured one.
+      timer.mark('revealed', BOOT_MARKER)
       store.setState({ ...store.getState(), phase: 'done' })
     },
   }
