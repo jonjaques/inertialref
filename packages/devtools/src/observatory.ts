@@ -1210,8 +1210,8 @@ export class Observatory {
      *
      * A stance is a height above the ground the viewer can see, and since Phase
      * 4 the ground the viewer can see carries a presentational tail the contact
-     * test does not — up to `drawnDivergence`, which is about two metres. Stood
-     * against `surfaceRadius` at a two-metre stance, the eye sits 0.4 m over the
+     * test does not — up to `drawnDivergence`, which is 1.25 m. Stood
+     * against `surfaceRadius` at a two-meter stance, the eye sits 0.4 m over the
      * plain in one place and inside a crater rim in the next, which is the
      * divergence made visible in exactly the picture the phase is judged from.
      * The ship still lands on `surfaceRadius`: physics may not read a term the

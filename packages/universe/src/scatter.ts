@@ -30,7 +30,7 @@ import {
  * to be loaded. Slot 37 either holds a rock or does not, and asking is a hash.
  *
  * **One level, derived from the body's own size.** Scatter is not a quadtree:
- * a rock is a metre across, it is invisible past a few hundred, and a second
+ * a rock is a meter across, it is invisible past a few hundred, and a second
  * copy of it one level up would be a second rock in the same place. So the whole
  * population lives at `scatterLevel` — the level whose regions are about
  * `SCATTER_REGION` across on this body — and a renderer asks for the regions
@@ -80,9 +80,9 @@ export interface ScatterRock {
 /**
  * Ground per candidate slot at saturation, square meters.
  *
- * One rock per sixty-four, which is a rock every eight metres. The Apollo
- * surface panoramas put blocks above about twenty centimetres every five to
- * fifteen metres on the mare, so this is the low end of the measured range —
+ * One rock per sixty-four, which is a rock every eight meters. The Apollo
+ * surface panoramas put blocks above about twenty centimeters every five to
+ * fifteen meters on the mare, so this is the low end of the measured range —
  * and the low end is the right end, because it is the ceiling: everything below
  * multiplies it down and nothing multiplies it up.
  */
@@ -99,8 +99,8 @@ const SCATTER_SPACING = 64
  * A power of two so the lattice is exact, and this large because rock abundance
  * is the one thing in this milestone a person standing on the ground reads
  * immediately. It is also what makes `slots` exist: resolving a candidate is a
- * field sample at fourteen microseconds, so a whole region is eight and a half
- * milliseconds and cannot be paid inside one frame.
+ * field sample, so a whole region is **2.6 to 5.8 ms** across the zoo and
+ * cannot be paid inside one frame.
  */
 export const SCATTER_SLOTS = 1_024
 
@@ -136,7 +136,7 @@ export const scatterLevel = (radius: Meters): number =>
  *
  * An airless body keeps what impacts excavate, so its plains are strewn; an
  * atmosphere buries the same rocks under dust and sediment within a geological
- * blink, which is why Venus's plains are smooth at metre scale and the Moon's
+ * blink, which is why Venus's plains are smooth at meter scale and the Moon's
  * are not. `1 − air` linearly, with a floor: Mars is 0.61 and the Viking and
  * MER sites are famously rocky, so this may not go to zero on a body that has
  * air — the floor is what Earth's own deserts and talus slopes are.
@@ -172,7 +172,7 @@ const MAX_RADIUS: Meters = 4
  * The mesh's own interpolation error, measured rather than guessed: at the
  * detail floor across the zoo a bilinear read of a patch differs from the field
  * it was built from by 3 to 9 cm in the mean and up to 0.70 m at the worst cell
- * on the body with the coarsest floor. Twelve centimetres seats the mean case;
+ * on the body with the coarsest floor. Twelve centimeters seats the mean case;
  * the tail is a small rock on an atmosphered world standing a little proud, and
  * it is named here rather than hidden because the honest fix is for the rock to
  * read the mesh instead of the field, which is the same change the deposits
@@ -187,11 +187,12 @@ const MESH_SEAT: Meters = 0.12
  * list, whatever else has been generated. Cost is one hash per slot and one
  * field sample per slot that survives the first gate — about six hundred of the
  * thousand on an airless body, and a field sample is the same band stack a
- * heightfield vertex pays for.
+ * heightfield vertex pays for. Measured across the zoo, 2.6 to 5.8 ms a region,
+ * of which 38 to 609 slots come back holding a rock.
  *
  * **`slots` is what makes that affordable, and it is a half-open range rather
- * than a count.** A whole region is eight and a half milliseconds, which is half
- * a frame; a caller streams it a slice at a time and concatenates. The slice
+ * than a count.** Five milliseconds is a third of a frame; a caller streams it a
+ * slice at a time and concatenates. The slice
  * boundary changes nothing about the answer — slot 837 is slot 837 whichever
  * call resolves it — so a region assembled over six frames is the region
  * generated in one, which is the property that lets the budget move without
@@ -263,8 +264,8 @@ export function regionScatter(
      *
      * A rock population's size–frequency is steep — the cumulative count above a
      * diameter falls as roughly `D^-2.5` on the lunar surface — so a uniform
-     * draw over the range would put a four-metre boulder every eight hundred
-     * square metres, which is a field of megaliths. The cube is the cheap
+     * draw over the range would put a four-meter boulder every eight hundred
+     * square meters, which is a field of megaliths. The cube is the cheap
      * version of that slope and it puts the median rock at a fifth of the range.
      */
     const size = toUnit(shape.x)
@@ -304,7 +305,7 @@ export function regionScatter(
        * interpolation error over one cell — measured at the detail floor across
        * the zoo, 3 to 9 cm in the mean and 0.35 to 0.70 m at the worst cell on
        * the coarsest body. A quarter of a 25 cm rock is 6 cm of burial, which
-       * the mean case already eats; twelve centimetres on top of it seats the
+       * the mean case already eats; twelve centimeters on top of it seats the
        * small rocks that would otherwise stand on a stalk.
        *
        * It is on the rock rather than in the placement because it is a fact

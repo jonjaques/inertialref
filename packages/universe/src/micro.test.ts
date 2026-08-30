@@ -103,14 +103,14 @@ describe('the ladder below the canonical floor', () => {
   })
 
   /*
-   * A resurfaced body has no kilometre craters and is still saturated at a
-   * metre, because retention at a metre is geologically instantaneous. Miranda
+   * A resurfaced body has no kilometer craters and is still saturated at a
+   * meter, because retention at a meter is geologically instantaneous. Miranda
    * is the case: `craterDensity` is zero, `largestCrater` is zero, and the
    * canonical ladder is empty — so a tail that continued the canonical one
    * would leave the youngest surfaces in the Solar System perfectly smooth at
    * every scale a person could stand next to.
    */
-  it('gives a body with no canonical craters a metre scale anyway', () => {
+  it('gives a body with no canonical craters a meter scale anyway', () => {
     const miranda = find('Miranda')
     expect(craterLadder(miranda.surface.grammar)).toHaveLength(0)
     expect(microLadder(miranda.surface.grammar).levels.length).toBeGreaterThan(
@@ -204,7 +204,7 @@ describe('the presentational tail', () => {
     for (const body of SUBJECTS) {
       const sketch = terrainSketch(body.surface)
       const radius = body.surface.grammar.meanRadius
-      // Two samples per metre of ground, over four kilometres of arc.
+      // Two samples per meter of ground, over four kilometers of arc.
       const step = 0.5 / radius
       const steps: number[] = []
       let previous = microRelief(
@@ -225,7 +225,7 @@ describe('the presentational tail', () => {
       steps.sort((a, b) => a - b)
       const largest = steps.at(-1) as number
       const typical = steps[Math.floor(steps.length * 0.999)] as number
-      // Half a metre of ground may not move the field by more than the deepest
+      // Half a meter of ground may not move the field by more than the deepest
       // thing in it, and the largest jump may not stand out from the p99.9.
       expect(largest).toBeLessThan(MICRO_CRATER_CEILING)
       expect(largest / Math.max(typical, 1e-9)).toBeLessThan(4)

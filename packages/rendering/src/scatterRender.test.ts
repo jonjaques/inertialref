@@ -105,7 +105,7 @@ describe('the rock shapes', () => {
         )
       }
       // Exactly one, not merely under it: the instance scale is the rock's
-      // radius in metres, so a variant 40% larger than the unit sphere would be
+      // radius in meters, so a variant 40% larger than the unit sphere would be
       // a different species at a different size rather than one population.
       expect(peak).toBeCloseTo(1, 5)
     }
@@ -134,8 +134,8 @@ describe('which rock regions the camera asks for', () => {
 
   /*
    * The gate is against the ground, not the datum. Written as a pair because
-   * only the pair can fail: a body whose sites sit hundreds of metres up reads
-   * as "in orbit" from a two-metre stance if the height is taken off the datum,
+   * only the pair can fail: a body whose sites sit hundreds of meters up reads
+   * as "in orbit" from a two-meter stance if the height is taken off the datum,
    * and every assertion above still passes because they all use `eyeAt`.
    */
   it('measures the stance against the ground it is standing on', () => {

@@ -3,6 +3,7 @@ import { rootSeed } from '@inertialref/procedural'
 import { vec3 } from '@inertialref/spatial'
 import {
   bodyAddress,
+  type RegionAddress,
   formatAddress,
   objectOf,
   parseAddress,
@@ -18,6 +19,7 @@ import {
   SCATTER_SLOTS,
   scatterLevel,
 } from './scatter.ts'
+import { SKETCH_CACHE_LIMIT, terrainSketch } from './sketch.ts'
 import { type Body, generateSystem, walkBodies } from './system.ts'
 import {
   drawnElevation,
@@ -247,24 +249,59 @@ describe('generation never depends on order', () => {
    */
   it('answers the same whichever order the regions are asked for', () => {
     const list = [...regions(LUNA, 16)]
-    const forward = list.map((region) =>
-      regionScatter(LUNA.surface, region)
+    const slots = (
+      surface: typeof LUNA.surface,
+      region: RegionAddress,
+    ): string =>
+      regionScatter(surface, region)
         .map((rock) => rock.index)
-        .join(','),
-    )
-    for (const other of [MARS, IAPETUS]) {
-      for (const region of regions(other, 4))
-        regionScatter(other.surface, region)
+        .join(',')
+    const forward = list.map((region) => slots(LUNA.surface, region))
+    /*
+     * Churned past `SKETCH_CACHE_LIMIT`, and the backward pass asks through a
+     * **fresh surface object**. Both halves are what make this test able to
+     * fail: `terrainSketch` puts a `WeakMap` on the surface identity in front of
+     * its string cache, so the same object short-circuits the key entirely, and
+     * the string cache is 96 entries deep, so a handful of other bodies evicts
+     * nothing. Written the easy way, this asserted a property of `regionScatter`
+     * and could not see the memo it names — which is exactly how a missing field
+     * in `cacheKey` stayed invisible.
+     */
+    for (let i = 0; i < SKETCH_CACHE_LIMIT + 8; i += 1) {
+      regionScatter(
+        { ...LUNA.surface, seed: rootSeed(`churn ${i}`) },
+        list[0] as RegionAddress,
+      )
     }
+    const fresh = { ...LUNA.surface }
     const backward = [...list]
       .reverse()
-      .map((region) =>
-        regionScatter(LUNA.surface, region)
-          .map((rock) => rock.index)
-          .join(','),
-      )
+      .map((region) => slots(fresh, region))
       .reverse()
     expect(backward).toEqual(forward)
+  })
+
+  /*
+   * The cache key is "what the derivation reads", and the sub-floor ladder added
+   * a reader — `grammar.air`, through `microCraterDensity`. Two grammars alike
+   * in everything else and different in that one have to derive two sketches;
+   * sharing one is order-dependence in the generator's own memo, and the seed
+   * being in the key is protection by coincidence rather than by design.
+   */
+  it('does not share a sketch between two bodies whose air differs', () => {
+    const seed = rootSeed('one seed, two atmospheres')
+    const airless = terrainSketch({
+      ...LUNA.surface,
+      seed,
+      grammar: { ...LUNA.surface.grammar, air: 0 },
+    })
+    const smothered = terrainSketch({
+      ...LUNA.surface,
+      seed,
+      grammar: { ...LUNA.surface.grammar, air: 1 },
+    })
+    expect(airless.microLevels.length).toBeGreaterThan(0)
+    expect(smothered.microLevels).toHaveLength(0)
   })
 
   it('gives two bodies with different seeds different rocks', () => {

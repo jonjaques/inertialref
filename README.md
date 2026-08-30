@@ -189,7 +189,7 @@ pnpm sim --help                # all flags
   the whole disk, seamless from orbit to standing height, generated in a worker
   pool, and shaded from the body's own geology: six deposits laid down in order
   over an ocean, crater rays, and the archive's published photograph on the
-  bodies that have one. It refines to cells of a third of a metre, with boulders
+  bodies that have one. It refines to cells of a third of a meter, with boulders
   addressed as `o:` objects lying on it — and the ground the ship lands on and
   the ground you can see are two functions 1.25 m apart, measured and written
   down.
@@ -409,11 +409,14 @@ Stated plainly, because discovering these by surprise is worse than reading them
   is drawn as its archive sphere, and a _generated_ world's sphere is a flat
   tint, so its maria and ray systems stop at the switch until the albedo bake
   exists; a mapped body has no such gap, because its ground wears the same
-  photograph its sphere does. Generating a bordered 65×65 patch costs 9 to 37 ms
-  across the zoo — 9 on a world with no craters at all, 32 on a rocky airless
-  one, 37 on a rocky atmosphered one — against a documented ≤ 8 ms budget, and a
-  whole-disk selection holds up to 242 MB of vertex buffers at the flight lens.
-  `pnpm sim --terrain-baseline` prints all of it; the
+  photograph its sphere does. Generating a bordered 65×65 patch costs 22 to 50 ms
+  across the zoo — 22 on a world young enough to have no crater population, 50 on
+  a battered icy one — against a documented ≤ 8 ms budget, and a whole-disk
+  selection peaks at 1,077 patches, which is 255 MB of vertex buffers at the
+  flight lens. **Generation is what binds now**: a two-meter stance on Luna
+  settles in one to three minutes on a retina window, because 1,562 patches at
+  43 ms is 67 s of single-core work and a pool of six does not divide it far
+  enough. `pnpm sim --terrain-baseline` prints all of it; the
   [roadmap](docs/roadmap.md#terrain) has the seams.
 - **Almost nothing is measured on the target machine.** The dev dock's perf panel
   (`P`) plots frame time, engine time, draw calls, worker queue and heap, and can

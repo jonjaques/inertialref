@@ -398,9 +398,9 @@ describe('the observatory on the ground', () => {
     /*
      * The **drawn** radius, because a stance is a height above the ground the
      * viewer can see. The two differ by the presentational tail — up to
-     * `drawnDivergence`, about two metres — and standing against the contact
+     * `drawnDivergence`, 1.25 m — and standing against the contact
      * test's radius instead would put the eye inside a crater rim at a
-     * two-metre stance. The ship still lands on `surfaceRadius`.
+     * two-meter stance. The ship still lands on `surfaceRadius`.
      */
     const ground = drawnSurfaceRadius(body, up)
     // A millimeter in a radius of hundreds of kilometers: the float64 offset

@@ -5311,7 +5311,7 @@ test can walk two cells wider and assert the two are _equal_.
 **Which plate is second is a rank, and a rank has a seam where it changes.**
 `plateAt` returned the nearest plate and the second-nearest, and the phase before
 this one made the blend between them continuous across the line separating them.
-It was. The field still had a kilometre of cliff in it, because the pair also
+It was. The field still had a kilometer of cliff in it, because the pair also
 changes along the locus where the second and third nearest are equidistant — a
 network of curves through every plate's interior, nowhere near an edge. Measured
 either side of one on Proxima Centauri II: the same nearest plate, base 0.432,
@@ -5523,7 +5523,7 @@ Numbers that settled things.
   Mars, almost all of it evaporite lifting ground the photograph had already
   drawn pale. Where a photograph exists it supplies the albedo outright; the
   deposits keep the roughness, the grain and the bump, which no map at ten
-  kilometres a texel has an opinion on. With all three, the gate is 3.1% on Mars
+  kilometers a texel has an opinion on. With all three, the gate is 3.1% on Mars
   and 1.5% on Earth and the frames are the same picture.
 - **An ocean is an invented channel too.** The generated field and the archive's
   photograph disagree about where Earth's land is — that disagreement _is_ the
@@ -5542,14 +5542,14 @@ Numbers that settled things.
 
 ### Four float32 defects, all of them the same defect
 
-Reported as a coastline warping several times a second at two kilometres over an
+Reported as a coastline warping several times a second at two kilometers over an
 island chain, and it was arithmetic in four places.
 
 **Altitude was a difference of two planetary radii.** Both terms are 6.4 × 10⁶
-on Earth where one float32 step is half a metre, so the water test — a band four
-metres wide — read a quantized value, and the CDLOD morph walks `local` across
+on Earth where one float32 step is half a meter, so the water test — a band four
+meters wide — read a quantized value, and the CDLOD morph walks `local` across
 those steps every frame. `(2(a·l) + l·l)/(|p| + |a|)` is the same number and
-never lets the large numbers meet; `anchorAltitude` carries the last half-metre,
+never lets the large numbers meet; `anchorAltitude` carries the last half-meter,
 measured in float64 against the same rounded vector the uniform holds, because a
 constant offset per patch is a grid of rectangles across a flat sea.
 
@@ -5560,13 +5560,13 @@ jumps by a whole turn along one meridian and its rate of change does not.
 
 **The detail fade was a screen-space derivative.** `local` is linear across a
 triangle, so `dFdx(local)` is constant over the whole triangle; at two
-kilometres up, where one far cell covers a hundred pixels, the fade stepped per
+kilometers up, where one far cell covers a hundred pixels, the fade stepped per
 polygon and the plain drew as flat-toned quadrilaterals. Distance times the
 lens's own pixel angle is continuous, and it is the same lens the selection
 refined against.
 
 **And the bump normalized its position derivatives**, which is right for a
-dimensionless texture difference and wrong for a height in metres: `det` stayed
+dimensionless texture difference and wrong for a height in meters: `det` stayed
 per-triangle constant while `dH` grew with the footprint, so the bump
 strengthened with distance and stepped at every edge.
 
@@ -5586,8 +5586,8 @@ not reach zero at its boundary appears there rather than beginning there. The
 filament threshold is cleared on about a third of azimuths at 1.2 crater radii,
 so crossing that radius stepped the brightness by 0.30 on Luna's ray craters and
 0.57 on Mars's, against a p99.9 adjacent-sample step of 3 × 10⁻⁷ just outside.
-It drew as a scalloped bright ring — a thirty-kilometre circle around a
-fifty-kilometre crater — on every mapless body, which is nearly all of them.
+It drew as a scalloped bright ring — a thirty-kilometer circle around a
+fifty-kilometer crater — on every mapless body, which is nearly all of them.
 Faded in across 0.4 radii, the step is 1 × 10⁻⁷, which is the probe's own
 epsilon. `cover.test.ts` holds it, and it goes red with the fade removed.
 
@@ -5638,7 +5638,7 @@ drawn a different planet through an identical heightfield. It compares all
 ## The ground goes below the field the ship lands on (30 Aug 2026)
 
 Phase 4 of [TERRAIN-PLAN](TERRAIN-PLAN.md), recorded in
-[ADR-0021](docs/adr/0021-the-ground.md). The ground at a two-metre stance was a
+[ADR-0021](docs/adr/0021-the-ground.md). The ground at a two-meter stance was a
 plane, and the reason is arithmetic rather than taste.
 
 **The floor could not have moved, and the loop is closed.**
@@ -5646,11 +5646,10 @@ plane, and the reason is arithmetic rather than taste.
 bilinear of its corners by more than `TERRAIN_DETAIL_TOLERANCE`, and that
 tolerance _is_ `CANONICAL_AMPLITUDE_FLOOR` — deliberately, so the level past
 which refinement stops buying detail is the level past which the field stops
-having any. So a term bounded by half a metre cannot deepen the floor by one
+having any. So a term bounded by half a meter cannot deepen the floor by one
 level however fine its wavelength, and "detail below the canonical floor" read as
 "amplitude under the floor too" is a field the mesh will never go and get. An
-eight-metre crater is 1.6 m deep because that is what an eight-metre crater is,
-and that is what buys the levels.
+sub-floor crater band cuts up to 0.8 m, and that is what buys the levels.
 
 The split is now two functions and a published number. `groundElevation` is the
 contact test, the saves and the survey sites; `drawnElevation` is the mesh, the
@@ -5669,9 +5668,10 @@ fBm. Nothing is versioned, because nothing canonical moved.
   which is the trap the Phase 3 entry already records and which caught this one
   too.
 - **A whole-disk selection peaks at 1,077 patches** against 862, so
-  `DEFAULT_MAX_PATCHES` is 1,280 and the corner case is 282 MB of vertex
-  buffers.
-- **The ground measures 12.3° of RMS slope at a one-metre baseline on Luna,
+  `DEFAULT_MAX_PATCHES` is 1,280 and the corner case is 303 MB of vertex buffers
+  — a patch is 237 KB, because it carries **two** four-byte cover attributes, its
+  own and its morph target's, and the constant's own arithmetic counted one.
+- **The ground measures 12.3° of RMS slope at a one-meter baseline on Luna,
   8.4° on Mars and 15.6° on Mercury**, against a published 5–20° for lunar
   regolith and the MER landing sites — and against **0.2° on Luna canonically**,
   which is what a flat plane measures. The first attempt was 1.6 m of ceiling
@@ -5681,7 +5681,7 @@ fBm. Nothing is versioned, because nothing canonical moved.
 
 ### What the browser says
 
-A two-metre stance on Luna, at the flight lens over 1600×900: **level 17, 895
+A two-meter stance on Luna, at the flight lens over 1600×900: **level 17, 895
 patches, 7.33 M triangles**, and every counter a fixed point over 240 consecutive
 frames — `cached` and `geometry` both 1,274 against caps of 3,840 and 2,560,
 `starved` zero, `saturated` false. At 1920×1200 over a device pixel ratio of 2 —
@@ -5706,22 +5706,22 @@ alone, its hashes cannot collide with any canonical rung, and Miranda's floor
 moves two levels rather than none.
 
 `young` is left out on its own argument: a resurfacing event deletes a crater
-population, and retention at a metre is geologically instantaneous, so the moon
-paved last week is saturated at a metre by the afternoon. Air enters harder
+population, and retention at a meter is geologically instantaneous, so the moon
+paved last week is saturated at a meter by the afternoon. Air enters harder
 instead, because an atmosphere screens the small impactor and then fills the
 hole in — `(1 − air)⁴` orders Luna 1, Mars 0.14, Earth 0.012, Venus 0. A world
-with Earth's air keeps its canonical floor and gets its metre scale from the
+with Earth's air keeps its canonical floor and gets its meter scale from the
 scatter and the grain band, which is the right answer rather than a gap.
 
-### A millimetre that differed between two patches
+### A millimeter that differed between two patches
 
 `2 − 2 cos θ` out of one dot product is how `craters.ts` measures the distance
 from a sample to a crater, and it cancels. At the canonical ladder's finest rung
 θ is about 2 × 10⁻⁴ and the subtraction costs seven significant figures, which
 leaves the height exact to a nanometre. Three decades further down it is not
-fine: a one-metre crater on a 1,700 km body subtends 3 × 10⁻⁷, so the expression
+fine: a one-meter crater on a 1,700 km body subtends 3 × 10⁻⁷, so the expression
 is 4 × 10⁻¹⁴ against a float64 ulp of 2 × 10⁻¹⁶ — half a percent, which is a
-millimetre on the crater's own depth and, worse, a millimetre that **differs
+millimeter on the crater's own depth and, worse, a millimeter that **differs
 between two patches that computed the same direction by different routes**. The
 sum of squared component differences is the same number with nothing cancelling
 and costs two divides a crater. `ChordForm` is the parameter; the canonical
@@ -5733,9 +5733,9 @@ ladder keeps the cheap form deliberately, because changing it would move
 `regionScatter` answers "does `r:…/o:837` hold a rock" with a hash — 1,024
 candidate slots over a 256 m region, one rock per 64 m² at saturation, gated by
 the cover the vertex already carries. `slots` is a half-open range because
-resolving one candidate is a field sample and a whole region is eight and a half
-milliseconds; the streamer takes it 128 slots a frame and a region is drawn only
-once it is whole.
+resolving one candidate is a field sample and a whole region is 2.6 to 5.8 ms
+across the zoo; the streamer takes it 128 slots a frame — 0.31 to 0.72 ms — and a
+region is drawn only once it is whole.
 
 They are drawn by **the terrain material itself**, not a second one. Three's node
 material inserts the instancing before `positionNode` runs — `instancedMesh(
@@ -5758,17 +5758,17 @@ same way was invisible until the real draw hit the same wall.
 
 ### The band between a mesh cell and a pixel
 
-A patch at the detail floor is 0.35 to 1.41 m a cell, and standing at two metres
+A patch at the detail floor is 0.35 to 1.41 m a cell, and standing at two meters
 one of those cells is two hundred display pixels across. `MICRO_METRES` is a
-seven-metre octave and there was nothing under it, so the near ground drew as a
+seven-meter octave and there was nothing under it, so the near ground drew as a
 smooth swell. The grain band is 0.7 m down to 9 cm at about fifteen degrees of
-slope, which is what lunar regolith measures at centimetre baselines.
+slope, which is what lunar regolith measures at centimeter baselines.
 
 Its domain is the interesting part. `positionLocal` is patch-local, so a noise on
-it jumps phase at every patch edge — invisible at seven metres of wavelength and
-a straight line across the ground at seventy centimetres. The body-fixed position
+it jumps phase at every patch edge — invisible at seven meters of wavelength and
+a straight line across the ground at seventy centimeters. The body-fixed position
 is continuous and useless: 1.7 × 10⁶ on Luna, where float32 resolves 0.1 m and
-quantizes a nine-centimetre octave out of existence. So the anchor is reduced
+quantizes a nine-centimeter octave out of existence. So the anchor is reduced
 modulo `GRAIN_PERIOD` wavelengths **in float64 on the CPU** and the noise is
 periodic over it — exact, continuous across every boundary, and repeating every
 45 m of ground, which is more than the band survives to. It is written out rather
@@ -5779,7 +5779,7 @@ built-ins has.
 
 - **The canonical crater ladder is still capped at eleven halvings**, so a body
   whose largest basin is 2,170 km has canonical craters down to 2.1 km and then
-  nothing until the tail starts at eight metres. Measured, raising it to fourteen
+  nothing until the tail starts at eight meters. Measured, raising it to fourteen
   moves the detail floor by 0 to 2 levels and costs 13% a patch — it works, and
   it moves the field the contact test integrates, which is terrain algorithm v3
   and every save's landed hull. The plan spends that bump once and this is not
@@ -5788,12 +5788,12 @@ built-ins has.
   same field.** They differ by the mesh's own interpolation error over one cell:
   3 to 9 cm in the mean at the detail floor and up to 0.70 m at the worst cell on
   the body with the coarsest floor. `MESH_SEAT` buries every rock twelve
-  centimetres to cover the mean; the tail is a small rock on an atmosphered world
+  centimeters to cover the mean; the tail is a small rock on an atmosphered world
   standing a little proud. The fix is for the rock to read the mesh instead of
   the field, which is the same change the deposits want.
 - **Scatter has no collision.** A rock is presentational until on-foot arrives,
   and the contact test does not know it exists — the same split the tail makes.
-- **Iapetus at a two-metre stance draws a smooth white sheet**, and it does so on
+- **Iapetus at a two-meter stance draws a smooth white sheet**, and it does so on
   `origin/main` too: a flat icy plain at the reflectance ceiling under a high sun
   has no contrast anywhere, so the terrain is there and unreadable. It is not
   this phase's regression and it is not this phase's fix; the plate set moved to

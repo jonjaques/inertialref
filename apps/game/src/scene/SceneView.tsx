@@ -48,7 +48,7 @@ export function SceneView({ engine }: { engine: GameEngine }) {
    *
    * Here rather than inside `TerrainPatches` because two components draw with
    * it and only one may own it: a rock and the regolith under it are the same
-   * surface a metre apart, and two instances of the same graph would drift the
+   * surface a meter apart, and two instances of the same graph would drift the
    * first time either component was touched. `TerrainPatches` writes its
    * uniforms — the palette, the sun, the pixel angle, the archive's map — for
    * the same reason, so there is one producer of each.

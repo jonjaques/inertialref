@@ -1,7 +1,7 @@
 import { fbm3, seedFromNumber } from '@inertialref/procedural'
 
 /*
- * The half-dozen shapes every rock on every world is drawn from.
+ * The four shapes every rock on every world is drawn from.
  *
  * There are no authored assets ([art](../../../docs/design/art.md) says when
  * there will be), so these are generated: a subdivided icosahedron with its
@@ -127,7 +127,7 @@ function build(variant: number): RockMesh {
   /*
    * Normalized so the longest half-extent is exactly one.
    *
-   * The instance scale is the rock's radius in metres, so a variant that came
+   * The instance scale is the rock's radius in meters, so a variant that came
    * out 1.4 across would be 40% larger than the size the geology asked for —
    * and by a different amount per variant, which reads as four rock species of
    * four different sizes rather than one population.

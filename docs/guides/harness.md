@@ -297,7 +297,7 @@ yesterday's. `ir.descend` and `ir.terrainBaseline` print the lens and the
 viewport in their headers and carry both in the returned object; `ir.terrain`
 carries the live one. Both probes take a `lens` and a `viewport` to ask the
 question at another setting, and `ir.descend` takes a `maxPatches` — the
-streamer's own 1,024 is a safety net that degrades the whole disk by a level
+streamer's own 1,280 is a safety net that degrades the whole disk by a level
 when it bites, so raising it is the only way to see what a selection _wanted_.
 
 ---

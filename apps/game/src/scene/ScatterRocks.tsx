@@ -19,6 +19,7 @@ import {
   rockMesh,
 } from '@inertialref/rendering'
 import type { GameEngine } from '../engine/GameEngine.ts'
+import { MAX_ROCKS } from '../engine/scatterField.ts'
 import { grainWrap, type TerrainMaterial } from '../render/terrain.ts'
 import { warmAtMount, warmCompile, warmRenderer } from '../render/warmup.ts'
 
@@ -27,7 +28,7 @@ import { warmAtMount, warmCompile, warmRenderer } from '../render/warmup.ts'
  *
  * Four `InstancedMesh`es — one per shape — wearing **the terrain's own
  * material**, which is the decision the rest of this file follows from. A rock
- * and the regolith it sits on are the same body's surface seen a metre apart, so
+ * and the regolith it sits on are the same body's surface seen a meter apart, so
  * they have to agree about the palette, the photometry, the terminator, the
  * aerial veil and the published photograph; a second material would be a third
  * surface for `AGENTS.md`'s "never add a shading term to the ground without
@@ -225,7 +226,7 @@ export function ScatterRocks({
         placement.orientation.w,
       )
       // The body's own compression, exactly as a patch wears it: rocks placed at
-      // true metres against ground drawn at compressed ones are somewhere else.
+      // true meters against ground drawn at compressed ones are somewhere else.
       mesh.scale.setScalar(placement.scale)
       // `Math.fround` for the reason `TerrainPatches` gives — the uniform is
       // float32 and the altitude arithmetic below it is exact only against the
@@ -279,11 +280,11 @@ export function ScatterRocks({
 /**
  * Instances each shape may hold.
  *
- * `MAX_ROCKS` in `scatterField.ts`, because that is the ceiling the field lays
- * out against and a capacity below it would silently drop the tail — but per
- * *variant*, since the split between the four is a property of the ground and
- * an even one cannot be assumed. Four thousand matrices is 256 KB a variant and
- * 1 MB for the session, which is a rounding error against the ground they sit
- * on.
+ * `MAX_ROCKS` itself rather than a copy of its value, because it is the ceiling
+ * the field lays out against and a capacity below it would silently drop the
+ * tail — but applied per *variant*, since the split between the four is a
+ * property of the ground and an even one cannot be assumed. Four thousand
+ * matrices is 256 KB a variant and 1 MB for the session, which is a rounding
+ * error against the ground they sit on.
  */
-const INSTANCE_CAPACITY = 4_000
+const INSTANCE_CAPACITY = MAX_ROCKS

@@ -49,7 +49,9 @@ import {
   elevationAt,
   faceToDirection,
   generateHeightfield,
+  drawnDivergence,
   drawnElevation,
+  drawnSurfaceRadius,
   groundElevation,
   HEIGHTFIELD_BORDER,
   HEIGHTFIELD_RESOLUTION,
@@ -932,16 +934,29 @@ describe('the ground has one owner', () => {
     throw new Error('no ocean world anywhere in the catalog')
   }
 
-  it('draws the mesh at the radius the physics lands on', () => {
+  /*
+   * The mesh is the *drawn* field and the contact test is the canonical one, so
+   * the claim is no longer "the same number" — it is "the same number plus a
+   * term this body publishes a bound for". Both halves are asserted, because
+   * only the pair can fail: against `drawnElevation` alone a mesh that had
+   * quietly picked up an unbounded term would still pass, and against the bound
+   * alone so would a mesh built from the wrong field entirely.
+   *
+   * `toBeCloseTo(…, 1)` on the first is the Float32Array storage between them
+   * and nothing else. On a body that has enough air, the tail is thinned to
+   * almost nothing and the two ends of this test are nearly the same assertion —
+   * so the third expectation names the body's own bound rather than a constant,
+   * and the fourth insists the tail is doing something somewhere on the patch.
+   */
+  it('draws the mesh at the drawn radius, inside the bound it publishes', () => {
     const body = oceanWorld()
     const region = regionAddress(0, 4, 5, 6)
     const field = generateHeightfield(body.surface, {
       region,
       resolution: HEIGHTFIELD_RESOLUTION,
     })
+    const bound = drawnDivergence(body.surface)
 
-    // Walk the patch corners and center: the elevation the mesh will extrude by
-    // has to be the elevation the contact test will stop at, exactly.
     for (const [s, t] of [
       [0, 0],
       [1, 0],
@@ -952,12 +967,52 @@ describe('the ground has one owner', () => {
       const row = Math.round(t * (HEIGHTFIELD_RESOLUTION - 1))
       const col = Math.round(s * (HEIGHTFIELD_RESOLUTION - 1))
       const meshed = heightfieldSample(field, row, col)
-      const physical =
-        surfaceRadius(body, regionDirection(region, s, t)) - body.radius
-      // Float32Array storage is the only thing between them, so the bound is
-      // that conversion and nothing else.
-      expect(meshed).toBeCloseTo(physical, 1)
+      const direction = regionDirection(region, s, t)
+      expect(meshed).toBeCloseTo(
+        drawnSurfaceRadius(body, direction) - body.radius,
+        1,
+      )
+      expect(
+        Math.abs(meshed - (surfaceRadius(body, direction) - body.radius)),
+      ).toBeLessThanOrEqual(bound)
     }
+
+    /*
+     * And the two fields are not the same function, which is what makes the
+     * bound above an assertion rather than a tautology.
+     *
+     * Asked on **dry** ground rather than on the patch, and that is the finding
+     * rather than a convenience: the sea clamp is a `max` applied to both
+     * fields, so every submarine sample has drawn and canonical equal by
+     * construction — and the patch this test picks is entirely under water, so
+     * a difference counted there is always zero and the assertion could never
+     * fail.
+     */
+    const sea = seaDatumElevation(body.surface) as number
+    let dry = 0
+    let apart = 0
+    for (let probe = 0; probe < 200; probe += 1) {
+      // Golden angle, so nothing clusters at a pole and a wet hemisphere cannot
+      // take the whole sample.
+      const z = 1 - (2 * probe + 1) / 200
+      const around = probe * Math.PI * (3 - Math.sqrt(5))
+      const ring = Math.sqrt(Math.max(0, 1 - z * z))
+      const direction = vec3(
+        Math.cos(around) * ring,
+        z,
+        Math.sin(around) * ring,
+      )
+      if (groundElevation(body.surface, direction) <= sea + 1) continue
+      dry += 1
+      const gap = Math.abs(
+        drawnElevation(body.surface, direction) -
+          groundElevation(body.surface, direction),
+      )
+      if (gap > 1e-3) apart += 1
+      expect(gap).toBeLessThanOrEqual(bound)
+    }
+    expect(dry).toBeGreaterThan(0)
+    expect(apart).toBe(dry)
   })
 
   it('clamps the ocean up to its datum rather than down to the seabed', () => {

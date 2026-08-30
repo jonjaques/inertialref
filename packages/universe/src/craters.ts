@@ -197,10 +197,10 @@ export function ladderField(
  * about 2 × 10⁻⁴ and the subtraction costs seven significant figures, which
  * leaves the profile exact to nine and the height to a nanometre.
  *
- * Three decades further down it is not fine. A one-metre crater on a
+ * Three decades further down it is not fine. A one-meter crater on a
  * 1,700 km body subtends 3 × 10⁻⁷, so `2 − 2 cos θ` is 4 × 10⁻¹⁴ against a
- * float64 ulp of 2 × 10⁻¹⁶ — half a percent of the value, which is a millimetre
- * on the crater's own depth and, worse, a millimetre that **differs between two
+ * float64 ulp of 2 × 10⁻¹⁶ — half a percent of the value, which is a millimeter
+ * on the crater's own depth and, worse, a millimeter that **differs between two
  * patches that computed the same direction by different routes**. A cube face's
  * gnomonic extension gives the neighbouring face's coordinate exactly in real
  * arithmetic and to the last bit in floating point, and the ill-conditioned form
@@ -910,8 +910,8 @@ export function rayBrightness(
        * onset, so without this it appeared at full strength the instant `t`
        * crossed: 0.30 of brightness on Luna's ray craters and 0.57 on Mars's,
        * against a p99.9 adjacent-sample step of 3e-7 just outside. It draws as
-       * a scalloped bright ring at 1.2 crater radii — a thirty-kilometre circle
-       * around a fifty-kilometre crater — and it is the same class as the
+       * a scalloped bright ring at 1.2 crater radii — a thirty-kilometer circle
+       * around a fifty-kilometer crater — and it is the same class as the
        * ejecta blanket's own entry step, which `craterProfile` above records.
        */
       const radial =

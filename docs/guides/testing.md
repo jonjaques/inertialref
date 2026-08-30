@@ -181,17 +181,22 @@ machine is. A test that spawns processes is the usual culprit — one here began
 as ten parallel `node` invocations under `it.each` and starved everything.
 
 **A test that needs more says so at the call site, with the same reasoning one
-order of magnitude up.** `gameEngine.test.ts` streams a landing — about nine
-hundred heightfields through an _inline_ worker, which is to say serially on the
-test's own thread — and takes some fifty seconds for it. Its timeout is five
-minutes, not two: two is only twice the idle cost, and twice is inside the range
-full-suite contention moves this by, so the tighter budget goes red on a green
-run. The descent is paid once in a shared `beforeAll` and four assertions read a
-reading taken there, because four landings is three and a half minutes where one
-is fifty seconds — and because an `it` that drives a shared engine is an `it`
-whose result depends on which one ran before it. What brings the number down is
-the GPU tile producer or a pool with real worker threads in it, not a shorter
-landing.
+order of magnitude up.** `gameEngine.test.ts` streams a landing — a whole-disk
+selection's worth of heightfields through an _inline_ worker, which is to say
+serially on the test's own thread — and takes about a hundred seconds for it. Its
+timeout is five minutes, not two: two is barely over the idle cost, and this
+descent has already run past 120 s under full-suite contention and been killed
+for it, so the tighter budget goes red on a green run. The descent is paid once
+in a shared `beforeAll` and four assertions read a reading taken there, because
+four landings is nearly seven minutes where one is a hundred — and because an
+`it` that drives a shared engine is an `it` whose result depends on which one ran
+before it. What brings the number down is the GPU tile producer or a pool with
+real worker threads in it, not a shorter landing.
+
+**The figure moves with the field, which is why it is not a budget.** A bordered
+65×65 patch costs 22 to 50 ms across the zoo, and every level the detail floor
+gains is another ring of them paid here at full serial cost; the browser has a
+pool of six and this has one thread.
 
 ### Check a distribution when the claim is about one
 

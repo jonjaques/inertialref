@@ -2,6 +2,7 @@ import type { Meters } from '@inertialref/shared'
 import { Quaternion as Q, Vec, type Vec3 } from '@inertialref/spatial'
 import {
   type Body,
+  type BodyFixedDirection,
   type RegionAddress,
   drawnElevation,
   regionCentreDirection,
@@ -39,9 +40,9 @@ import {
  *
  * **What it does do is a budget, and that is the whole of the interesting
  * part.** Resolving a candidate is a field sample — the same band stack a
- * heightfield vertex pays for, fourteen microseconds — so a region is eight and
- * a half milliseconds and cannot land inside one frame. `regionScatter` takes a
- * slot range for exactly this, and a region is drawn only once it is whole:
+ * heightfield vertex pays for — so a region is 2.6 to 5.8 ms across the zoo and
+ * cannot land inside one frame. `regionScatter` takes a slot range for exactly
+ * this, and a region is drawn only once it is whole:
  * a half-filled region drawn and then completed is rocks appearing out of
  * nothing in the middle of the frame, which is worse than a region that arrives
  * late.
@@ -86,11 +87,12 @@ const EMPTY: ScatterState = {
 /**
  * Candidate slots resolved per frame.
  *
- * A hundred and twenty-eight is 1.8 ms of field samples, which is a tenth of a
- * frame — enough that nine regions fill in about seventy frames, and a descent
- * spends far longer than that inside the range. Raising it buys a faster fill
- * and spends it out of the same budget the heightfield builds come from, which
- * is the one this has to share.
+ * A hundred and twenty-eight is 0.31 to 0.72 ms of field samples across the zoo,
+ * which is a twentieth of a frame at worst — enough that the five regions a
+ * flight lens asks for fill in about forty frames, and a descent spends far
+ * longer than that inside the range. Raising it buys a faster fill and spends it
+ * out of the same budget the heightfield builds come from, which is the one this
+ * has to share.
  */
 const SLOTS_PER_FRAME = 128
 
@@ -98,12 +100,16 @@ const SLOTS_PER_FRAME = 128
  * How many instances may be drawn at once.
  *
  * Four thousand, at about a hundred and fifty triangles apiece, is 600 k
- * triangles — a fifth of what the terrain under them draws, which is the right
- * proportion for a decoration however good it looks. The near field is what
- * survives the cut: instances are laid out nearest-first, so the ceiling takes
- * the far rocks, which are the ones already down to a few pixels.
+ * triangles — a twelfth of the 7.33 M the terrain under them draws at a
+ * two-meter stance, which is the right proportion for a decoration however good
+ * it looks. The near field is what survives the cut: instances are laid out
+ * nearest-first, so the ceiling takes the far rocks, which are the ones already
+ * down to a few pixels.
+ *
+ * Exported because `ScatterRocks` allocates its `InstancedMesh`es against it and
+ * a capacity below this would silently drop the tail. One constant, two readers.
  */
-const MAX_ROCKS = 4_000
+export const MAX_ROCKS = 4_000
 
 /**
  * How many pixels a rock has to cover to be drawn.
@@ -111,7 +117,7 @@ const MAX_ROCKS = 4_000
  * The same two `scatterRange` is quoted at, applied per rock rather than to the
  * region — which is what keeps the count finite. Rock size runs sixteen to one,
  * so a fixed range either draws the small ones as flickering points at two
- * hundred metres or stops the large ones at the same distance while they still
+ * hundred meters or stops the large ones at the same distance while they still
  * cover thirty pixels. Per rock, the population thins with distance exactly as
  * its own size distribution says it should.
  */
@@ -160,6 +166,7 @@ export class ScatterField {
     body: Body,
     address: string,
     eyeLocal: Vec3,
+    eyeDirection: BodyFixedDirection,
     pose: {
       readonly position: Vec3
       readonly orientation: Q.Quat
@@ -177,22 +184,21 @@ export class ScatterField {
       return
     }
     const level = scatterLevel(body.radius)
-    const direction = Vec.normalize(eyeLocal) as ScatterEye['direction']
     /*
      * One field sample a frame, and it is what makes the range mean anything.
      *
      * The selection needs the height above the *ground*, and a streamer has the
-     * height above the datum: `distance − radius` on a two-metre stance at
+     * height above the datum: `distance − radius` on a two-meter stance at
      * Iapetus's `rough` site is 687 m, which is three times the range, and the
      * field switches off standing on it. Fourteen microseconds a frame against
      * an eight-and-a-half-millisecond region is not a cost worth avoiding, and
      * the drawn field is the right one — a rock stands on the mesh.
      */
     const eye: ScatterEye = {
-      direction,
+      direction: eyeDirection,
       distance,
       radius: body.radius,
-      ground: body.radius + drawnElevation(body.surface, direction),
+      ground: body.radius + drawnElevation(body.surface, eyeDirection),
       level,
     }
     const wanted = selectScatterRegions(eye, lensView)
@@ -233,14 +239,14 @@ export class ScatterField {
      * The anchor: the datum point at the middle of the region under the camera.
      *
      * The same trick the patches use and for the same reason — instance
-     * positions are float32 and a rock measured from the body's centre would
-     * resolve to a tenth of a metre on Luna and half of one on Earth, which is
+     * positions are float32 and a rock measured from the body's center would
+     * resolve to a tenth of a meter on Luna and half of one on Earth, which is
      * a rock jittering as the camera moves. Measured from here they are under
-     * four hundred metres and resolve to microns.
+     * four hundred meters and resolve to microns.
      *
-     * It moves only when the camera crosses a region, which is every 256 m of
-     * ground and is also exactly when the drawn set changes — so the rebuild
-     * below is one rebuild rather than two.
+     * It moves only when the camera crosses a region, which is every 333 m of
+     * ground on Luna and is also exactly when the drawn set changes — so the
+     * rebuild below is one rebuild rather than two.
      */
     const home = wanted[0] as RegionAddress
     const anchor = Vec.scale(regionCentreDirection(home), body.radius)
@@ -254,13 +260,21 @@ export class ScatterField {
      *
      * The instance matrices are a few hundred kilobytes of trigonometry and the
      * inputs change rarely: a standing camera crosses no region, resolves no
-     * slot and moves no anchor for as long as it stands there. The signature is
-     * the drawn region set plus the anchor plus the range — the range because a
-     * zoom moves the per-rock cut without moving anything else.
+     * slot and moves no anchor for as long as it stands there.
+     *
+     * **But the eye is one of the inputs**, and the region set is a coarser
+     * thing than the cut `#build` makes with it: a camera moving tangentially
+     * without leaving its region changes which rocks are inside the range and
+     * which survive the two-pixel test, and which are nearest when `MAX_ROCKS`
+     * truncates. Measured on Luna at a two-meter stance, twenty-five meters of
+     * ground movement inside one region leaves about 8% of a thousand drawn
+     * rocks wrong at the range edge, which draws as rocks arriving in clusters
+     * when the region set finally moves rather than one at a time. Quantized to
+     * `EYE_STEP`, so a hover still rebuilds nothing.
      */
-    const signature = `${key(home)}|${range.toFixed(1)}|${ready
-      .map((region) => key(region))
-      .join(',')}`
+    const signature = `${key(home)}|${range.toFixed(1)}|${step(eyeLocal.x)},${step(
+      eyeLocal.y,
+    )},${step(eyeLocal.z)}|${ready.map((region) => key(region)).join(',')}`
     const batches =
       signature === this.#signature && this.#state.batches.length > 0
         ? this.#state.batches
@@ -269,7 +283,7 @@ export class ScatterField {
 
     this.#state = {
       anchor,
-      // A region centre is a point on the datum sphere by construction, so this
+      // A region center is a point on the datum sphere by construction, so this
       // is zero up to the float32 the uniform carries — the patches' own
       // `anchorAltitude` argument, restated at a different anchor.
       anchorAltitude:
@@ -294,7 +308,7 @@ export class ScatterField {
     }
   }
 
-  /** How much is held and what it costs, for `ir.scatter()`. */
+  /** How much is held and what it costs, for `ir.terrain().scatter`. */
   summary(): {
     readonly regions: number
     readonly resolving: number
@@ -335,18 +349,18 @@ export class ScatterField {
       const resident = this.#regions.get(key(region))
       if (resident === undefined) continue
       for (const rock of resident.rocks) {
-        // Where the rock's centre sits: on the ground, then down by its own
+        // Where the rock's center sits: on the ground, then down by its own
         // sink and the seat that covers the mesh's interpolation error.
         const radius =
           bodyRadius + rock.elevation - rock.sink * rock.radius - rock.seat
-        const centre = Vec.scale(rock.direction, radius)
-        const distance = Vec.length(Vec.sub(centre, eyeLocal))
+        const center = Vec.scale(rock.direction, radius)
+        const distance = Vec.length(Vec.sub(center, eyeLocal))
         if (distance > range) continue
         // Two pixels of the rock's own width, which is what makes the count
         // finite: a sixteen-to-one size range under a fixed distance either
         // flickers at the small end or truncates at the large one.
         if ((2 * rock.radius * perRadian) / distance < ROCK_PIXELS) continue
-        drawn.push({ rock, distance, local: Vec.sub(centre, anchor) })
+        drawn.push({ rock, distance, local: Vec.sub(center, anchor) })
       }
     }
     drawn.sort((a, b) => a.distance - b.distance)
@@ -378,6 +392,18 @@ export class ScatterField {
 
 const key = (region: RegionAddress): string =>
   `${region.face}.${region.i}.${region.j}`
+
+/**
+ * How far the eye may move before the instance list is laid out again, meters.
+ *
+ * Sixteen. The cut it changes is the range edge, where a rock is two pixels
+ * wide; sixteen meters of a 212 m range moves that edge by 7%, which is well
+ * inside the fade the two-pixel test is already the hard end of. Smaller is a
+ * rebuild every few frames of a walk for rocks nobody can resolve.
+ */
+const EYE_STEP: Meters = 16
+
+const step = (meters: number): number => Math.round(meters / EYE_STEP)
 
 /**
  * One rock's transform: stand it up, turn it, lean it, scale it.

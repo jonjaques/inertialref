@@ -108,12 +108,12 @@ export interface TerrainMaterial {
 /**
  * Ground wavelength of the coarsest detail octave, meters.
  *
- * Four kilometres, and the ceiling on it is float32 rather than taste. This
+ * Four kilometers, and the ceiling on it is float32 rather than taste. This
  * octave is evaluated on the *direction* — a unit vector, so it is continuous
  * over the whole body with no patch, face or level seam anywhere — and a float32
  * direction resolves about 6 × 10⁻⁸ of a radian. Asking for features finer than
- * roughly a hundred metres of ground quantizes the noise domain into visible
- * steps; three octaves down from four kilometres stops an order of magnitude
+ * roughly a hundred meters of ground quantizes the noise domain into visible
+ * steps; three octaves down from four kilometers stops an order of magnitude
  * short of that.
  */
 const MACRO_METRES = 4000
@@ -121,7 +121,7 @@ const MACRO_METRES = 4000
 /**
  * And of the middle octave, evaluated on the patch-local position instead.
  *
- * Anchor-relative metres are exact — a patch anchor is subtracted in float64 on
+ * Anchor-relative meters are exact — a patch anchor is subtracted in float64 on
  * the CPU, so `positionLocal` resolves to microns — but they are *patch*-local,
  * so this octave's phase jumps across a patch boundary. It is invisible for two
  * reasons and both are load-bearing: the contrast is a tenth, and the field
@@ -137,14 +137,15 @@ const MICRO_RELIEF = 0.25
 /**
  * Ground wavelength of the coarsest **grain** octave, meters.
  *
- * The band below the mesh. A patch at the detail floor is 0.33 to 3.7 m a cell,
- * and standing at two metres one of those cells is two hundred display pixels
- * across — so everything between a cell and a pixel is this band's, and there
- * was nothing there: the ground under the camera drew as a smooth swell with
- * `MICRO_METRES`'s seven-metre octave on it and no texture at all.
+ * The band below the mesh. A patch at the detail floor is 0.35 to 1.41 m a cell
+ * across the zoo, and standing at two meters one of those cells is two hundred
+ * display pixels across — so everything between a cell and a pixel is this
+ * band's, and there was nothing there: the ground under the camera drew as a
+ * smooth swell with `MICRO_METRES`'s seven-meter octave on it and no texture at
+ * all.
  *
- * Seventy centimetres down to nine, at a slope of about fifteen degrees, which
- * is what lunar regolith measures at centimetre baselines.
+ * Seventy centimeters down to nine, at a slope of about fifteen degrees, which
+ * is what lunar regolith measures at centimeter baselines.
  */
 export const GRAIN_METRES = 0.7
 
@@ -160,10 +161,10 @@ const GRAIN_RELIEF = 0.035
  * The whole point of this band is that its domain is **continuous across a
  * patch boundary**, which `positionLocal` is not: two patches have different
  * anchors, so a noise on the patch-local position jumps phase at every edge —
- * invisible at seven metres of wavelength and a straight line across the ground
- * at seventy centimetres. The obvious fix is the *body-fixed* position, and that
+ * invisible at seven meters of wavelength and a straight line across the ground
+ * at seventy centimeters. The obvious fix is the *body-fixed* position, and that
  * is worse: `anchor + local` is 1.7 × 10⁶ on Luna where float32 resolves 0.1 m,
- * which quantizes a nine-centimetre octave out of existence.
+ * which quantizes a nine-centimeter octave out of existence.
  *
  * So the domain is the body-fixed position **reduced modulo this period on the
  * CPU, in float64**, and the noise is periodic over it. Two patches whose
@@ -234,7 +235,7 @@ export function createTerrainMaterial(): TerrainMaterial {
    * compositional ramp are all *in* the photograph already, and inventing a
    * second set on top of them is two disagreeing planets in one frame.
    *
-   * The geometric deposits stay on both paths. A map is ten kilometres a texel
+   * The geometric deposits stay on both paths. A map is ten kilometers a texel
    * and knows nothing about the slope under the camera, so bedrock on a scarp
    * and frost on a north-facing floor are things only the terrain can say.
    */
@@ -254,7 +255,7 @@ export function createTerrainMaterial(): TerrainMaterial {
    *
    * float32 at planetary magnitude, and that is exactly good enough for what
    * reads it: a direction (to a twentieth of a microradian) and an altitude (to
-   * an eighth of a metre on Luna). Nothing that needs metre precision goes
+   * an eighth of a meter on Luna). Nothing that needs meter precision goes
    * through it — the detail octave that does reads `positionLocal` directly,
    * which never leaves the patch.
    */
@@ -265,7 +266,7 @@ export function createTerrainMaterial(): TerrainMaterial {
    * How far the *rounded* anchor sits above the datum, meters.
    *
    * An anchor is a point on the datum sphere by construction, so this would be
-   * zero — except that the uniform above is float32, and half a metre is one
+   * zero — except that the uniform above is float32, and half a meter is one
    * step at Earth's radius. Measured in float64 against the same rounded
    * vector the shader receives, so `altitude` below is exact rather than
    * exact-up-to-a-per-patch-offset. A constant offset per patch is a grid of
@@ -345,8 +346,8 @@ export function createTerrainMaterial(): TerrainMaterial {
      * against — built so that it can be *differentiated*.
      *
      * `normalize(anchor + local)` is the obvious form and its value is fine.
-     * Its derivative is not: at Earth's radius one float32 step is half a metre
-     * and a pixel two kilometres up covers a few, so the screen-space
+     * Its derivative is not: at Earth's radius one float32 step is half a meter
+     * and a pixel two kilometers up covers a few, so the screen-space
      * difference of that sum is a tenth noise and constant-biased per patch.
      * Everything downstream of the derivative then reads per-patch — which drew
      * the flat sea as a grid of rectangles, because the mip level the albedo map
@@ -366,17 +367,17 @@ export function createTerrainMaterial(): TerrainMaterial {
      *
      * `length(anchor + local) − datumRadius` is the obvious form and it is
      * unusable: both terms are 6.4 × 10⁶ on Earth, where one float32 step is
-     * half a metre, so the difference arrives quantized to half a metre — inside
-     * a water band four metres wide. The shoreline came out as a stair, and the
+     * half a meter, so the difference arrives quantized to half a meter — inside
+     * a water band four meters wide. The shoreline came out as a stair, and the
      * morph walks `local` across those steps every frame as the camera moves,
-     * so the stair *crawled*. Two kilometres above an island chain that is the
+     * so the stair *crawled*. Two kilometers above an island chain that is the
      * coastline visibly warping several times a second.
      *
      * The cancellation is avoided rather than tolerated. Since
      * `|p|² − |a|² = 2(a·l) + l·l` exactly, and `|p| − |a|` is that over
      * `|p| + |a|`, the large numbers never meet: `a·l` is 6 × 10⁸ against a
-     * `local` of a hundred metres, and the quotient lands within ten microns.
-     * `anchorAltitude` carries the last half-metre — how far the *rounded*
+     * `local` of a hundred meters, and the quotient lands within ten microns.
+     * `anchorAltitude` carries the last half-meter — how far the *rounded*
      * anchor sits off the datum, measured in float64 against the same vector
      * the uniform holds.
      */
@@ -421,7 +422,7 @@ export function createTerrainMaterial(): TerrainMaterial {
      * wrong in a way that is invisible until you look at flat ground: `local`
      * is linear across a triangle, so its screen derivative is **constant over
      * the whole triangle** and steps at every edge. The fade then steps with
-     * it, and at two kilometres up — where the far ground is coarse enough that
+     * it, and at two kilometers up — where the far ground is coarse enough that
      * one cell covers a hundred pixels — the ground draws as flat-toned
      * quadrilaterals, each one a mesh cell wearing its own amount of detail.
      *
@@ -447,7 +448,7 @@ export function createTerrainMaterial(): TerrainMaterial {
     const macro = mx_fractal_noise_float(up.mul(macroFrequency), 3, 2, 0.5).mul(
       macroFade,
     )
-    // Metres-domain, so it stays sharp at arm's length. See `MICRO_METRES`.
+    // Meters-domain, so it stays sharp at arm's length. See `MICRO_METRES`.
     const micro = mx_fractal_noise_float(
       local.mul(float(1 / MICRO_METRES)),
       2,
@@ -462,7 +463,7 @@ export function createTerrainMaterial(): TerrainMaterial {
      * Its own fade, its own domain and its own amplitude, so it is a separate
      * term from `detail` rather than two more octaves of it — `detail` is spent
      * on reflectance as well as on shape, and mottling an ocean or a dust plain
-     * at nine centimetres is not the same decision as bumping it.
+     * at nine centimeters is not the same decision as bumping it.
      */
     const grainFade = oneMinus(
       smoothstep(
@@ -520,8 +521,8 @@ export function createTerrainMaterial(): TerrainMaterial {
      * `groundElevation` clamps the mesh **to** the sea datum, so an ocean is
      * already flat geometry sitting at a known altitude and the test is one
      * comparison rather than a mask that has to be generated, streamed and
-     * morphed. The band is four metres, which is a few times the eighth of a
-     * metre float32 resolves an altitude to at planetary scale: narrower and
+     * morphed. The band is four meters, which is a few times the eighth of a
+     * meter float32 resolves an altitude to at planetary scale: narrower and
      * the shoreline shimmers, wider and it is a beach.
      *
      * **It runs upward from the datum, not across it, and that follows from the
@@ -562,7 +563,7 @@ export function createTerrainMaterial(): TerrainMaterial {
      * percent to five percent of the relief budget is 40 to 500 m above the
      * shoreline on Earth; taken out to a fifth of the budget instead, which was
      * the first reading of "low", every flat hectare below two and a half
-     * kilometres was a salt flat and the whole planet's lowland went white.
+     * kilometers was a salt flat and the whole planet's lowland went white.
      */
     const lowGround = oneMinus(
       smoothstep(
@@ -768,11 +769,11 @@ export function createTerrainMaterial(): TerrainMaterial {
      *
      * The built-in differences a *texture*, so its `dH` is dimensionless and
      * normalizing the position derivatives is what makes the result independent
-     * of the texture's scale. Here `height` is in metres, so the two halves have
+     * of the texture's scale. Here `height` is in meters, so the two halves have
      * to be measured against the same ruler: left normalized, `det` is a
      * per-triangle constant while `dH` grows with the pixel footprint, which
      * makes the bump strengthen with distance *and* step at every triangle
-     * edge. At two kilometres up, with the far ground coarse enough that one
+     * edge. At two kilometers up, with the far ground coarse enough that one
      * cell covers a hundred pixels, that draws flat-toned quadrilaterals across
      * the plain.
      *
@@ -969,8 +970,8 @@ export function createTerrainMaterial(): TerrainMaterial {
        *
        * A direction is dimensionless, so the wavelength has to be converted
        * through the body's own size — which is also what makes one constant
-       * serve a 236 km moon and a 6,371 km planet: four kilometres of ground is
-       * four kilometres of ground on both.
+       * serve a 236 km moon and a 6,371 km planet: four kilometers of ground is
+       * four kilometers of ground on both.
        */
       macroFrequency.value = (2 * Math.PI * datumRadius) / MACRO_METRES
     },
@@ -998,8 +999,8 @@ export function createTerrainMaterial(): TerrainMaterial {
  * directly. See `GRAIN_PERIOD` in `render/terrain.ts` for why the reduction has
  * to happen on this side of the uniform.
  */
-export function grainWrap(metres: number): number {
-  const cycles = metres / GRAIN_METRES
+export function grainWrap(meters: number): number {
+  const cycles = meters / GRAIN_METRES
   return cycles - Math.floor(cycles / GRAIN_PERIOD) * GRAIN_PERIOD
 }
 
@@ -1016,7 +1017,7 @@ export function grainWrap(metres: number): number {
  * coordinates and a perfectly good one here: `wrap` keeps every lattice index
  * under `period`, so the argument to `sin` never leaves the range float32
  * resolves finely. Eight corners, smoothstep interpolation, three octaves —
- * twenty-four hashes a fragment, on a band that has already faded out by a metre
+ * twenty-four hashes a fragment, on a band that has already faded out by a meter
  * of footprint.
  */
 function periodicFbm(point: Vector, octaves: number, period: number): Scalar {

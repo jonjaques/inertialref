@@ -374,12 +374,12 @@ function evaluate(
  *
  * The micro tail goes in **before** the clamp rather than after it, and that is
  * what keeps a shoreline continuous. Added afterwards it would rough up the
- * open sea by two metres — the one surface in this model that is flat by
+ * open sea by the whole bound — the one surface in this model that is flat by
  * definition — and a gate on "is this dry" would put a step at the waterline of
- * the whole tail's height. Under the clamp, submarine grit is flattened by the
+ * the same height. Under the clamp, submarine grit is flattened by the
  * same `max` that flattens the seabed, and ground that the tail lifts out of
- * shallow water is an island, which is what an eight-metre crater rim standing
- * in four metres of water is.
+ * shallow water is an island, which is what an eight-meter crater rim standing
+ * in four meters of water is.
  */
 export function groundCoverAt(
   surface: SurfaceParameters,
@@ -407,7 +407,7 @@ export function groundCoverAt(
  * `groundElevation`. Anything reading the wrong one is a category error rather
  * than a rounding difference: a contact test that read this would put physics
  * behind a term the renderer is free to change, and a mesh that read the other
- * would draw a plane at two metres.
+ * would draw a plane at two meters.
  */
 export function drawnElevation(
   surface: SurfaceParameters,
@@ -438,11 +438,11 @@ export function drawnDivergence(surface: SurfaceParameters): Meters {
  * The radius of the surface as it is drawn, including elevation and any ocean.
  *
  * `surfaceRadius`'s presentational twin, and the one a camera that has to stand
- * two metres above the ground the viewer can see must use. Standing against
- * `surfaceRadius` on a body whose tail lifts the ground by 1.6 m puts the eye
- * 0.4 m over the drawn plain in one place and inside a crater rim in the next,
- * which is the divergence made visible in the one picture this phase is judged
- * from.
+ * two meters above the ground the viewer can see must use. Standing against
+ * `surfaceRadius` on a body whose tail lifts the ground by up to 0.66 m and
+ * cuts it by 0.8 puts the eye a third of the way to the drawn plain in one
+ * place and inside a crater rim in the next, which is the divergence made
+ * visible in the one picture this phase is judged from.
  *
  * The contact test keeps `surfaceRadius`. Physics may not depend on a term the
  * renderer is free to change.
@@ -550,14 +550,15 @@ const detailFloorCache = new WeakMap<SurfaceParameters, Map<string, number>>()
  *
  * **It measures the field the mesh is made of, which is the drawn one.** That is
  * `drawnElevation` and not `groundElevation`, and the distinction decides how
- * deep a landing streams: the canonical field stops at eight metres of
+ * deep a landing streams: the canonical field stops at eight meters of
  * wavelength, so measured against it the search reports a floor whose cells are
- * one to seven metres across and the ground under a standing camera is a plane.
- * The presentational tail carries an eight-metre crater at 1.6 m of depth, which
- * is over the tolerance and therefore moves the answer — two to three levels
- * across the zoo. A tail bounded by the tolerance instead could not have moved
- * it by one, however fine its wavelength, because the tolerance *is* the
- * amplitude floor and the search would call every level of it quiet.
+ * one to seven meters across and the ground under a standing camera is a plane.
+ * The presentational tail cuts up to `MICRO_CRATER_CEILING`, which is over the
+ * tolerance and therefore moves the answer — one to four levels across the zoo,
+ * and ten on a body the canonical crater ladder gave nothing. A tail bounded by
+ * the tolerance instead could not have moved it by one, however fine its
+ * wavelength, because the tolerance *is* the amplitude floor and the search
+ * would call every level of it quiet.
  *
  * So the floor is measured rather than assumed, and measured from the field
  * rather than from a model of it: at each level, take one grid cell of a patch

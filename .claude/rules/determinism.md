@@ -41,7 +41,7 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", ADR-0001..0009.
   and are what the mesh, the material and a composing camera are made from. They differ
   by at most `drawnDivergence` — 1.25 m. Physics reading the drawn one puts a landing
   behind a term the renderer may change; a mesh reading the canonical one draws a plane
-  at two metres. ADR-0021.
+  at two meters. ADR-0021.
 - **Never persist anything regenerable.** A save stores references and mutations. If you
   want to store generated content you want a cache, and it is not a save.
 - **Never make the star catalog ambient.** It is a generation input alongside the seed

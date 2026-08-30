@@ -75,20 +75,28 @@ Reasoning: `AGENTS.md` § "The rules that actually matter",
   full cache miss at boot.
 - **Never subtract two planetary radii in a shader, and never take a screen-space
   derivative of a planetary position.** One float32 step at Earth's radius is half a
-  metre, so `length(anchor + local) − radius` is quantized to that and the morph walks
+  meter, so `length(anchor + local) − radius` is quantized to that and the morph walks
   it across the steps every frame — a coastline warping several times a second from two
-  kilometres up. Use `(2(a·l) + l·l)/(|p| + |a|)`. A derivative of the same sum is a
+  kilometers up. Use `(2(a·l) + l·l)/(|p| + |a|)`. A derivative of the same sum is a
   tenth noise and biased per patch; take it analytically from the patch-local step. And
   `local` is linear across a triangle, so `dFdx(local)` is constant over the whole
   triangle: a fade measured that way steps per polygon, where distance times the lens's
   pixel angle does not. ADR-0020.
 
-- **Never give two attribute names one `BufferAttribute` object.** The backend keys its
-  GPU buffer on the object the geometry hands back, so one object under two names is one
-  buffer at two shader locations and the pipeline does not build — reported as
+- **Never give two attribute names one `BufferAttribute` object.** Two vertex-rate
+  attributes sharing one object is a pipeline that does not build — reported as
   `[Invalid ShaderModule "fragment"] … due to a previous error`, with the real message on
   a channel the page console does not carry. `warmCompile` swallows its rejection, so a
-  warm-up making the same mistake fails invisibly first. ADR-0021.
+  warm-up making the same mistake fails invisibly first. The same aliasing on an
+  instanced attribute builds, which is how it was isolated; the mechanism is a guess and
+  the rule is deliberately the wider claim. ADR-0021.
+
+- **Never read the drawn ground where the canonical one belongs, or the reverse.**
+  `groundElevation`/`surfaceRadius` are what the contact test integrates and what a save
+  records; `drawnElevation`/`drawnSurfaceRadius` are that plus the presentational tail and
+  are what the mesh, the material and a composing camera are made from — 1.25 m apart at
+  worst. The observatory's stance, `descent.ts` and the scatter field all choose here
+  rather than in `packages/universe`, which is why this bullet is in two rules. ADR-0021.
 
 - **Never give a varying an attribute's name.** Both become identifiers in the generated
   WGSL; the redeclaration surfaces as `[Invalid ShaderModule "vertex"]` with the real

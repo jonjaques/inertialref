@@ -38,9 +38,9 @@ import { type Lens, pixelsPerRadian, type Viewport } from './lens.ts'
 
 /** Where the camera is, in the terms this selection needs. */
 export interface ScatterEye {
-  /** Body-fixed direction of the eye from the body's centre. */
+  /** Body-fixed direction of the eye from the body's center. */
   readonly direction: BodyFixedDirection
-  /** Eye distance from the centre, meters. */
+  /** Eye distance from the center, meters. */
   readonly distance: Meters
   /** The datum radius, which is what sizes a region at a level. */
   readonly radius: Meters
@@ -49,12 +49,12 @@ export interface ScatterEye {
    *
    * Separate from `radius`, and the separation is the whole of this selection's
    * geometry. `distance − radius` is the height above the *datum*, which for a
-   * camera standing on a mountain is `elevation + height` — 687 m for a two-metre
+   * camera standing on a mountain is `elevation + height` — 687 m for a two-meter
    * stance on Iapetus's `rough` site, which is three times the range and switches
    * the whole field off. It is the same mistake `terrainSelect` records under
    * "distance is measured to the ground, not to the datum", made again one object
    * down. The caller samples the drawn field once per frame; over the couple of
-   * hundred metres this reaches, the ground moves by metres and one radius
+   * hundred meters this reaches, the ground moves by meters and one radius
    * describes it.
    */
   readonly ground: Meters
@@ -89,7 +89,7 @@ const SMALLEST_ROCK: Meters = 0.25
  * `ROCK_PIXELS` — 212 m at the flight lens over the baseline, where a rock at
  * the *top* of the size range is still ten pixels. Exported because the streamer
  * fades the far edge over the last part of it and the two have to be the same
- * number, and because `ir.scatter()` reports it.
+ * number, and because `ir.terrain().scatter` reports it.
  */
 export const scatterRange = (lens: Lens, viewport: Viewport): Meters =>
   (2 * SMALLEST_ROCK * pixelsPerRadian(lens, viewport)) / ROCK_PIXELS
@@ -100,9 +100,10 @@ export const scatterRange = (lens: Lens, viewport: Viewport): Meters =>
  * A ceiling rather than a working limit, and it is the telephoto end that makes
  * one necessary: `scatterRange` goes as `pixelsPerRadian`, so the disk goes as
  * its square, and a 20° lens at 8× zoom asks for a thousand times the regions a
- * hover does. At the flight lens the answer is nine — a 212 m range on 167 m
- * regions on Luna — so this never binds on a lens anything is flown behind, and
- * where it does bind the far rocks simply stop rather than the frame going away.
+ * hover does. At the flight lens the answer is five — a 212 m range on Luna's
+ * 333 m regions — and thirty-three at the telephoto end, so this never binds on
+ * a lens anything is flown behind, and where it does bind the far rocks simply
+ * stop rather than the frame going away.
  */
 export const DEFAULT_MAX_SCATTER_REGIONS = 96
 
@@ -113,7 +114,7 @@ export const DEFAULT_MAX_SCATTER_REGIONS = 96
  * `regionNeighbor` so a cube-face edge and a cube corner are somebody else's
  * problem — the same reason `balance` uses it in `terrainSelect`. At a corner
  * three faces meet and the eight-way step names one of them twice, so the walk
- * de-duplicates rather than assuming eight distinct neighbours.
+ * de-duplicates rather than assuming eight distinct neighbors.
  *
  * Nearest first because the caller's budget is per frame: a partial answer
  * should be the rocks under the camera rather than whichever ring the walk
@@ -142,27 +143,27 @@ export function selectScatterRegions(
 
   const size = regionSize(eye.radius, eye.level)
   // How far the horizontal reach is, given that part of the range is spent
-  // climbing: a camera two metres up sees ground almost to the full range, one
+  // climbing: a camera two meters up sees ground almost to the full range, one
   // at four hundred sees a much smaller disk of it.
   const reach = Math.sqrt(Math.max(0, range * range - height * height))
   const rings = Math.min(16, Math.ceil(reach / size) + 1)
 
-  const centre = regionForDirection(eye.direction, eye.level)
+  const center = regionForDirection(eye.direction, eye.level)
   const found: { region: RegionAddress; distance: number }[] = []
   const seen = new Set<string>()
   for (let di = -rings; di <= rings; di += 1) {
     for (let dj = -rings; dj <= rings; dj += 1) {
-      const region = neighbourOf(centre, di, dj)
+      const region = neighborOf(center, di, dj)
       const key = `${region.face}.${region.i}.${region.j}`
       if (seen.has(key)) continue
       seen.add(key)
       /*
-       * Distance to the region's *centre*, not to its nearest corner.
+       * Distance to the region's *center*, not to its nearest corner.
        *
-       * A region is 167 m across on Luna and the range is 212, so a
+       * A region is 333 m across on Luna and the range is 212, so a
        * nearest-point test would admit a ring of regions whose near edge is in
        * range and whose rocks are almost all outside it — half again as many
-       * regions for rocks that are drawn and then faded out. The centre test
+       * regions for rocks that are drawn and then faded out. The center test
        * costs the far half of the outermost ring, which is rocks at more than
        * the range and therefore under two pixels.
        */
@@ -178,16 +179,16 @@ export function selectScatterRegions(
 }
 
 /** The region `di`/`dj` cells away, staying on this face where it can. */
-function neighbourOf(
-  centre: RegionAddress,
+function neighborOf(
+  center: RegionAddress,
   di: number,
   dj: number,
 ): RegionAddress {
-  const span = 2 ** centre.level
-  const i = centre.i + di
-  const j = centre.j + dj
+  const span = 2 ** center.level
+  const i = center.i + di
+  const j = center.j + dj
   if (i >= 0 && i < span && j >= 0 && j < span) {
-    return regionAddress(centre.face, centre.level, i, j)
+    return regionAddress(center.face, center.level, i, j)
   }
-  return regionNeighbor(centre, di, dj)
+  return regionNeighbor(center, di, dj)
 }

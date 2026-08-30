@@ -786,6 +786,11 @@ export class TerrainStreamer {
       surface,
       body.address,
       eyeLocal,
+      // The branded direction this frame's own selection was made against,
+      // rather than a second normalization of `eyeLocal` in the app layer —
+      // `bodyFixedDirection` is one of the three producers and this keeps it
+      // that way.
+      eye.direction,
       this.#pose,
       this.#lensView,
     )
@@ -1037,7 +1042,7 @@ export class TerrainStreamer {
     // `patches: 0` claims a selection was made against it, and none was.
     this.#lensView = null
     // The rocks go with the ground they lie on. Their cache stays: the eight-
-    // pixel gate is thousands of kilometres above the range they draw in, so a
+    // pixel gate is thousands of kilometers above the range they draw in, so a
     // frame that reaches this line has left the surface entirely.
     this.#scatter.forget()
   }

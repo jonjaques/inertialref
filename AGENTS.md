@@ -284,9 +284,9 @@ Violating one of these is a rewrite later, not a refactor.
   are title case; `text-transform` on the type step decides what is shouted.
 - **Never subtract two planetary radii from each other in a shader, and never take a
   screen-space derivative of a planetary position.** At Earth's radius one float32
-  step is half a metre, so `length(anchor + local) − radius` arrives quantized to
-  half a metre — and the morph walks it across those steps every frame, which is a
-  coastline visibly warping several times a second from two kilometres up. Use
+  step is half a meter, so `length(anchor + local) − radius` arrives quantized to
+  half a meter — and the morph walks it across those steps every frame, which is a
+  coastline visibly warping several times a second from two kilometers up. Use
   `(2(a·l) + l·l)/(|p| + |a|)`, which never lets the large numbers meet. The
   derivative is worse than the value: a tenth of noise and biased per patch, which
   moved the albedo map's mip level at every patch boundary. And `local` is linear
@@ -305,7 +305,7 @@ Violating one of these is a rewrite later, not a refactor.
   that composes a picture of them are made from. The two differ by at most
   `drawnDivergence`, which is 1.25 m. Physics reading the drawn one puts a
   landing behind a term the renderer is free to change; a mesh reading the
-  canonical one draws a plane at two metres, because the tolerance a patch is
+  canonical one draws a plane at two meters, because the tolerance a patch is
   refined against **is** the amplitude floor the canonical field stops at, so
   nothing under it can ever deepen the selection.
   [ADR-0021](docs/adr/0021-the-ground.md).

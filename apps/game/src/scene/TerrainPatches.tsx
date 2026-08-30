@@ -267,7 +267,7 @@ export function TerrainPatches({
          * `Math.fround` is not decoration: the uniform is float32, and the
          * material's altitude arithmetic is exact only if the offset beside it
          * describes the vector the shader actually gets rather than the float64
-         * one this array was built from. Half a metre at Earth's radius, which
+         * one this array was built from. Half a meter at Earth's radius, which
          * is a quarter of the water band.
          */
         const ax = Math.fround(patch.anchor.x)

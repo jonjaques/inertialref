@@ -44,7 +44,7 @@ is the engineering-facing view of this same table.
 | Star clusters, nebulae | ⬜     | Post-MVP                             | Density modulation in the galaxy generator + volumetric rendering                                                                                                                                                           |
 | Exotic remnants        | ⬜     | Post-MVP                             | White dwarfs, neutron stars, black holes — a body kind; the hard part is rendering                                                                                                                                          |
 | Vegetation, flora      | ⬜     | Post-MVP                             | Region-seeded scatter; the `o:` address segment exists for it                                                                                                                                                               |
-| Rocks, surface scatter | ⬜     | **MVP**                              | Same mechanism, much easier, and it is what makes a surface a place                                                                                                                                                         |
+| Rocks, surface scatter | 🟡     | **MVP**                              | Region-seeded boulders addressed as `o:` objects, four generated shapes instanced in the terrain's own material — [ADR-0021](../adr/0021-the-ground.md). No outcrops, no debris, no collision                               |
 | Structures, outposts   | ⬜     | 3 kinds, parts-assembled             | First real consumer of [persistent mutations](../roadmap.md#persistent-mutations)                                                                                                                                           |
 | Humanoids              | ⬜     | Post-MVP                             | Needs a character controller on a surface frame                                                                                                                                                                             |
 | Small physical objects | 🟡     | Samples, tools, debris               | Debug cubes render at correct scale today; no interaction                                                                                                                                                                   |
@@ -111,7 +111,7 @@ flowchart LR
     Q["quadtree LOD<br/>fine underfoot,<br/>coarse to the horizon"] --> S["edge stitching<br/>across faces<br/>and levels"]
     Q --> G["geology<br/>craters, plates, volcanism,<br/>from a per-body grammar"]
     G --> M["materials + biomes<br/>from latitude,<br/>altitude, slope"]
-    M --> SC["scatter<br/>rocks first,<br/>then flora"]
+    M --> SC["scatter<br/>rocks now,<br/>flora post-MVP"]
 
     style SC fill:#0369a1,stroke:#0c4a6e,color:#fff
 ```
@@ -167,14 +167,25 @@ maria are in the photograph already.
 
 ### Scatter
 
-Rocks before plants. A region-seeded scatter of boulders, outcrops and debris,
-instanced, generated from the `r:` region seed and addressed as `o:` objects — an
-address segment that already exists for exactly this.
+Rocks before plants, and the rocks are built —
+[ADR-0021](../adr/0021-the-ground.md) is the record. A boulder is an _address_
+rather than an entry in a list: `regionScatter` answers "does `r:…/o:837` hold a
+rock" with a hash over 1,024 candidate slots in a 256 m region, gated by the
+surface cover the vertex already carries, and slot 837 is slot 837 whichever call
+resolves it. Four generated shapes are instanced with **the terrain's own
+material**, so a rock comes out bedrock on its steep faces and regolith on its
+top, in the palette of the ground it is lying on.
 
-Scatter is what converts a heightfield into a _place_, and it is cheap: a dozen
-rock meshes, instanced, with per-instance rotation and scale, will do more for
-the feeling of standing on a world than any amount of additional terrain
-frequency.
+The cheapness is the point and it holds: a handful of instanced meshes with a
+rotation and a scale apiece do more for the feeling of standing on a world than
+any amount of additional terrain frequency, and the whole population inside 212 m
+is a few hundred kilobytes against the quadtree's hundreds of megabytes.
+
+Not yet here: outcrops and debris beside the boulders, the fade that scales a
+rock in from zero rather than popping it in at two pixels
+([art](art.md#also-required)), and collision — a rock is presentational, and the
+contact test does not know it exists. [On foot](onfoot.md) is the layer that
+changes the last of those.
 
 ---
 
@@ -199,24 +210,25 @@ the reason the frontier means something.
 For the [MVP](production.md#the-mvp-the-explorer), the numbers that have to be
 true:
 
-|                                | Target                                | How it is met                      |
-| ------------------------------ | ------------------------------------- | ---------------------------------- |
-| Star systems reachable         | Effectively unbounded                 | Generated; ~119k cataloged via HYG |
-| Systems with real catalog data | ~119,000                              | HYG ingest                         |
-| Confirmed exoplanets           | ~6,000 `[Assumption: read at ingest]` | NASA Exoplanet Archive             |
-| Landable bodies                | Millions                              | Generated                          |
-| Biomes                         | 8                                     | Authored material sets             |
-| Ship hulls                     | 6                                     | Parts-assembled                    |
-| Ship modules                   | ~60 across 12 lines × 5 grades        | Parametric                         |
-| Suit modules                   | ~18                                   | Parametric                         |
-| Room modules                   | 12                                    | Authored parts                     |
-| Rock / scatter meshes          | ~20                                   | Authored parts                     |
-| Weapons                        | 12 across 4 classes                   | Post-MVP                           |
-| Structures                     | 3 kinds, parts-assembled              | Post-MVP                           |
+|                                | Target                                | How it is met                        |
+| ------------------------------ | ------------------------------------- | ------------------------------------ |
+| Star systems reachable         | Effectively unbounded                 | Generated; ~119k cataloged via HYG   |
+| Systems with real catalog data | ~119,000                              | HYG ingest                           |
+| Confirmed exoplanets           | ~6,000 `[Assumption: read at ingest]` | NASA Exoplanet Archive               |
+| Landable bodies                | Millions                              | Generated                            |
+| Biomes                         | 8                                     | Authored material sets               |
+| Ship hulls                     | 6                                     | Parts-assembled                      |
+| Ship modules                   | ~60 across 12 lines × 5 grades        | Parametric                           |
+| Suit modules                   | ~18                                   | Parametric                           |
+| Room modules                   | 12                                    | Authored parts                       |
+| Rock / scatter meshes          | 4 today, ~20 eventually               | **Generated** — displaced icospheres |
+| Weapons                        | 12 across 4 classes                   | Post-MVP                             |
+| Structures                     | 3 kinds, parts-assembled              | Post-MVP                             |
 
-**The authored column totals roughly 40 meshes and 8 material sets.** That is the
-number that has to be affordable, and it is. Everything else in the table is a
-function.
+**The authored column totals roughly 20 meshes and 8 material sets.** The rock
+shapes are generated rather than modeled, which is twenty meshes the art budget
+does not have to spend. That is the number that has to be affordable, and it is.
+Everything else in the table is a function.
 
 ---
 

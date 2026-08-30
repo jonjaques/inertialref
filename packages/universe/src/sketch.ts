@@ -146,7 +146,7 @@ export interface TerrainSketch {
    *
    * A degree-one asymmetry, because that is what the measurement is. Lunar
    * mare covers 31% of the near side and 2% of the far side, and the
-   * explanation is a crust tens of kilometres thinner on one side of the body
+   * explanation is a crust tens of kilometers thinner on one side of the body
    * — one lobe, not a patchwork. A noise field alone cannot produce that
    * however it is tuned: its power is spread over several degrees, so it makes
    * a body with basalt everywhere in patches rather than a body with a near
@@ -479,7 +479,7 @@ export function craterLadder(
  * −2 cumulative slope for free.
  *
  * **These are presentational and the contact test never sees them**, which is
- * the whole of `micro.ts`. A ship's hull spans tens of metres and the deepest
+ * the whole of `micro.ts`. A ship's hull spans tens of meters and the deepest
  * thing in this list is a fifth of eight, so what the ship stands on and what
  * the eye sees differ by less than the landing gear — bounded by
  * `microReliefBound` and measured by `micro.test.ts`.
@@ -492,17 +492,17 @@ export function craterLadder(
  * instead, the tail is a property of the body's *size and air* alone, its hashes
  * cannot collide with a canonical rung (the canonical ladder reaches nineteen at
  * its widest and is capped at eleven), and a rung is the same rung on every body
- * of the same radius, which is what an eight-metre crater ought to be.
+ * of the same radius, which is what an eight-meter crater ought to be.
  *
  * **`young` does not enter and `air` enters harder**, and both follow from the
  * timescale. A resurfacing event deletes a crater population, which is why
- * `craterDensity` multiplies by `1 - young` — but retention at a metre is
- * geologically instantaneous, so the surface that has no kilometre craters
- * because it was paved last week is saturated at a metre by the following
- * afternoon. Europa is smooth at kilometres and rough at centimetres, and this
+ * `craterDensity` multiplies by `1 - young` — but retention at a meter is
+ * geologically instantaneous, so the surface that has no kilometer craters
+ * because it was paved last week is saturated at a meter by the following
+ * afternoon. Europa is smooth at kilometers and rough at centimeters, and this
  * is the term that says so. Air is the opposite: an atmosphere screens the small
  * impactor and then fills the hole in, so it takes the small population out
- * first — Venus has nothing under three kilometres. `(1 - air)⁴` is an ordering
+ * first — Venus has nothing under three kilometers. `(1 - air)⁴` is an ordering
  * fit rather than a measurement, and the order it reproduces is Luna 1, Mars
  * 0.14, Earth 0.012, Venus 0.
  *
@@ -510,7 +510,7 @@ export function craterLadder(
  * `MAX_CRATER_LEVELS` rather than this.** The canonical ladder stops at eleven
  * halvings whether or not it has reached the floor, so a world whose largest
  * basin is 2,170 km has canonical craters down to 2.1 km and then nothing until
- * eight metres. Closing it is a deeper canonical ladder, which moves the field
+ * eight meters. Closing it is a deeper canonical ladder, which moves the field
  * the contact test integrates and is therefore a version bump —
  * [ADR-0021](../../../docs/adr/0021-the-ground.md) names it rather than
  * smuggling it in here.
@@ -541,7 +541,7 @@ export function microLadder(
  *
  * One number for the whole tail rather than a climb per rung: `craterDensity`
  * climbs 1.35 a rung precisely because a young surface is unsaturated at the
- * large end, and by the time the ladder has fallen from a basin to eight metres
+ * large end, and by the time the ladder has fallen from a basin to eight meters
  * that climb has passed one on every body with any craters at all. Continuing it
  * here would be arithmetic that always returns the same answer.
  */
@@ -562,11 +562,13 @@ export const MICRO_RUNG_BASE = 32
 /**
  * The shortest ground wavelength the *presentational* field carries, meters.
  *
- * A metre, because that is the spacing the mesh is asked to reach and a feature
+ * A meter, because that is the spacing the mesh is asked to reach and a feature
  * needs two samples to exist. It is what `surfaceDetailFloor` walks down to and
- * therefore what sets how many patches a landing generates: measured across the
- * zoo, dropping it from the canonical eight to one moves the floor by two to
- * three levels and the peak drawn set by 180 to 270 patches.
+ * therefore what sets how many patches a landing generates: measured, dropping
+ * it from the canonical eight to one moves the floor by **one to four levels**
+ * across the zoo — and by ten on Europa, which is the shape of the answer
+ * rather than an outlier, because a body `young` deleted the canonical crater
+ * population from had nothing at any scale below its ice bands.
  *
  * Below it the ground is per-pixel in the material and nothing meshes it.
  */
@@ -775,6 +777,15 @@ const cacheKey = (seed: Seed, grammar: SurfaceGrammar): string =>
     grammar.largestCrater,
     grammar.meanRadius,
     grammar.stripes,
+    /*
+     * `air`, because `microLadder` reads it and nothing else in this list does.
+     * The key is what the derivation reads, and the sub-floor ladder's density
+     * is `(1 − air)⁴` — so without it two grammars alike in the nine fields
+     * above and different in the tenth share a sketch, and whichever was asked
+     * first decides whether the other has a meter scale at all. Production is
+     * protected by the seed alone, which is protection by coincidence.
+     */
+    grammar.air,
   ].join('|')
 
 /** The sketch for a surface, derived once and kept. */

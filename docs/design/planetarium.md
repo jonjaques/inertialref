@@ -163,10 +163,16 @@ cannot disagree about where the camera is.
 
 Three of its rules are decisions rather than details:
 
-- **Height is above the ground under you, never above the datum.** Terrain dips
-  below the datum as often as it rises above it, so a height above the datum puts
-  the camera underground on any peak and a kilometer up in any basin — the one
-  thing a control called altitude must never do.
+- **Height is above the ground under you, never above the datum — and it is the
+  ground you can _see_.** Terrain dips below the datum as often as it rises above
+  it, so a height above the datum puts the camera underground on any peak and a
+  kilometer up in any basin, which is the one thing a control called altitude must
+  never do. What it stands on is `drawnSurfaceRadius` rather than the contact
+  test's: the two are up to 1.25 m apart, and a two-meter stance measured against
+  the radius a ship lands on sits 0.4 m over the plain in one place and inside a
+  crater rim in the next. The ship keeps the other one — physics may not read a
+  term the renderer is free to change.
+  [ADR-0021](../adr/0021-the-ground.md).
 - **The scrub is logarithmic**, for the reason distance is, and worse: the band
   is 2 m to 3,186 km on Earth. Linearly, the approach, the low pass and the
   landing all live in the last pixel, so the control that exists to reach two
@@ -240,7 +246,7 @@ selection means _everything_, because a filter whose worst state is an empty
 list that looks exactly like a failed survey is a control with a trap in it. A
 star whose own class is off stays when something under it survived, and a moon
 stays when its planet was the thing removed — and a promoted moon sorts by
-where its _parent_ was, or nine rocks orbiting at a kilometre appear above
+where its _parent_ was, or nine rocks orbiting at a kilometer appear above
 Mercury.
 
 **The radius.** 5, 10, 25 or 50 light years. A search ignores it and reaches the
