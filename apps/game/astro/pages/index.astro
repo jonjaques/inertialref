@@ -7,4 +7,57 @@ import Root from '../../src/Root.tsx'
 <Base>
   <SceneBackdrop client:only="react" />
   <Root client:only="react" />
+  <!--
+    The page for a reader that will not run the application.
+
+    Two of them, and they want the same thing: a person who has scripting off,
+    and a crawler that indexes the served HTML rather than the rendered DOM.
+    This is the front door, which is a simulation, so with scripting off there
+    is nothing here to show — the repository and the documentation are the
+    product for anyone who cannot run it. Named, so a page that *is* a
+    document does not inherit a courtesy that covers the words.
+  -->
+  <noscript slot="noscript">
+    <div
+      style="
+        position: absolute;
+        inset: 0;
+        overflow: auto;
+        padding: 3rem 1.5rem;
+        background: #020617;
+        color: #cbd5e1;
+        font-family: ui-sans-serif, system-ui, sans-serif;
+        line-height: 1.6;
+      "
+    >
+      <div style="max-width: 40rem; margin: 0 auto">
+        <h1 style="color: #f8fafc; font-size: 2rem; margin: 0 0 0.5rem">
+          InertialRef
+        </h1>
+        <p style="color: #94a3b8; margin: 0 0 1.5rem">
+          A real sky, in a browser tab.
+        </p>
+        <p>
+          InertialRef is an open-source spaceflight simulator whose universe is
+          a deterministic function of a seed and a real star catalog — 7,123
+          cataloged systems and 702 known planets within 150 light years, and
+          generated content beyond that. There is nothing to download and
+          nothing to ask a server for: every client computes the same galaxy.
+        </p>
+        <p>
+          It needs JavaScript and WebGPU to run, because it is a simulation
+          rather than a page. With scripting turned off there is nothing here to
+          show you — but the source, the architecture decision records and the
+          design bible are all public.
+        </p>
+        <p>
+          <a
+            href="https://github.com/jonjaques/inertialref"
+            style="color: #7dd3fc">github.com/jonjaques/inertialref</a
+          >
+          · <a href="/llms.txt" style="color: #7dd3fc">/llms.txt</a>
+        </p>
+      </div>
+    </div>
+  </noscript>
 </Base>
