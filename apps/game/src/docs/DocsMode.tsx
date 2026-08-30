@@ -10,8 +10,9 @@ import { DocsRail } from './DocsRail.tsx'
 import { DocArticle } from './DocArticle.tsx'
 import { DocContents } from './DocContents.tsx'
 import { wingFor } from './docsNav.ts'
+import { readDocPage } from './fromDocument.ts'
 import { useDocsFraming } from './useDocsFraming.ts'
-import { useManifest, usePage } from './useDocs.ts'
+import { useManifest } from './useDocs.ts'
 
 /*
  * The reading room.
@@ -81,7 +82,7 @@ export function DocsMode({
   const manifest = useManifest()
   const wing =
     manifest.value === null ? undefined : wingFor(manifest.value, route)
-  const page = usePage(manifest.value, route)
+  const [page] = useState(readDocPage)
   const framed = useDocsFraming(engine, wing?.framing)
 
   const room = useRef<HTMLDivElement | null>(null)
@@ -144,13 +145,13 @@ export function DocsMode({
    * scrolls, and a fragment link into a container the browser did not scroll to
    * is a click that appears to do nothing.
    *
-   * On `page.value` rather than on `route`, so the scroll happens after the
-   * body it is scrolling through exists. Anchored a beat under the sticky bar
-   * by `scroll-margin-top` in `index.css`, so a heading never lands beneath it.
+   * On `page` rather than on `route`, so the scroll happens after the body
+   * it is scrolling through exists. Anchored a beat under the sticky bar by
+   * `scroll-margin-top` in `index.css`, so a heading never lands beneath it.
    */
   useEffect(() => {
     const box = scroller.current
-    if (box === null || page.value === null) return
+    if (box === null || page === null) return
     if (hash.length > 1) {
       const target = box.querySelector(`#${CSS.escape(hash.slice(1))}`)
       if (target !== null) {
@@ -159,7 +160,7 @@ export function DocsMode({
       }
     }
     box.scrollTop = 0
-  }, [page.value, hash])
+  }, [page, hash])
 
   // A route change closes the rail's sheet: on a phone the rail *is* the way
   // to a page, so leaving it up over the page it just opened hides the answer.
@@ -178,15 +179,15 @@ export function DocsMode({
         >
           <DocsMasthead
             wing={wing}
-            page={page.value}
+            page={page}
             route={route}
             counts={manifest.value?.counts ?? null}
-            pending={manifest.pending || page.pending}
+            pending={manifest.pending}
           />
           <DocsBar
             manifest={manifest.value}
             route={route}
-            page={page.value}
+            page={page}
             railOpen={railOpen}
             onRail={toggleRail}
           />
@@ -204,7 +205,7 @@ export function DocsMode({
                 page={page}
                 error={manifest.error}
               />
-              <DocContents page={page.value} />
+              <DocContents page={page} />
             </div>
           </div>
         </div>

@@ -3,7 +3,6 @@ import type { DocManifest, DocPage } from './content.ts'
 import { DocsMissingError } from './content.ts'
 import { DocFooter } from './DocFooter.tsx'
 import { drawDiagrams } from './mermaid.ts'
-import type { Loaded } from './useDocs.ts'
 import { useOverlayStore } from '../pages/overlay.ts'
 
 /**
@@ -39,13 +38,13 @@ export function DocArticle({
 }: {
   manifest: DocManifest | null
   route: string
-  page: Loaded<DocPage>
+  page: DocPage | null
   error: Error | null
 }) {
   const setModeHash = useOverlayStore((state) => state.setModeHash)
   const modePath = useOverlayStore((state) => state.mode.pathname)
   const body = useRef<HTMLDivElement | null>(null)
-  const html = page.value?.html ?? null
+  const html = page?.html ?? null
 
   /*
    * Diagrams, after the markup is in the DOM.
@@ -127,43 +126,31 @@ export function DocArticle({
     setModeHash(url.hash)
   }
 
-  if (error instanceof DocsMissingError)
-    return (
-      <article className="doc-article">
-        <div className="doc-notice">
-          <h2 className="type-title text-slate-100">
-            No documentation in this build
-          </h2>
-          <p className="type-body mt-2 text-slate-400">{error.message}</p>
-        </div>
-      </article>
-    )
+  if (page === null) {
+    if (error instanceof DocsMissingError)
+      return (
+        <article className="doc-article">
+          <div className="doc-notice">
+            <h2 className="type-title text-slate-100">
+              No documentation in this build
+            </h2>
+            <p className="type-body mt-2 text-slate-400">{error.message}</p>
+          </div>
+        </article>
+      )
 
-  if (error !== null)
-    return (
-      <article className="doc-article">
-        <div className="doc-notice">
-          <h2 className="type-title text-slate-100">
-            The contents could not be loaded
-          </h2>
-          <p className="type-body mt-2 text-slate-400">{error.message}</p>
-        </div>
-      </article>
-    )
+    if (error !== null)
+      return (
+        <article className="doc-article">
+          <div className="doc-notice">
+            <h2 className="type-title text-slate-100">
+              The contents could not be loaded
+            </h2>
+            <p className="type-body mt-2 text-slate-400">{error.message}</p>
+          </div>
+        </article>
+      )
 
-  if (page.pending || manifest === null)
-    return (
-      <article className="doc-article" aria-busy="true">
-        {/* Three lines of nothing, at the measure the prose will have.
-            A spinner would be a second thing to look at; this is the shape of
-            the answer, arriving. */}
-        <div className="doc-skeleton" />
-        <div className="doc-skeleton w-[88%]" />
-        <div className="doc-skeleton w-[64%]" />
-      </article>
-    )
-
-  if (page.value === null)
     return (
       <article className="doc-article">
         <div className="doc-notice">
@@ -176,6 +163,7 @@ export function DocArticle({
         </div>
       </article>
     )
+  }
 
   return (
     <article className="doc-article">
@@ -188,20 +176,22 @@ export function DocArticle({
        * thousand — and it is the honest version of a reading-time estimate,
        * which is the same number with an invented rate applied to it.
        */}
-      {page.value.words > 0 && (
+      {page.words > 0 && (
         <p className="type-micro mb-6 text-slate-400">
-          {page.value.words.toLocaleString('en-US')} words
-          {page.value.diagrams > 0 &&
-            ` · ${page.value.diagrams} diagram${page.value.diagrams === 1 ? '' : 's'}`}
+          {page.words.toLocaleString('en-US')} words
+          {page.diagrams > 0 &&
+            ` · ${page.diagrams} diagram${page.diagrams === 1 ? '' : 's'}`}
         </p>
       )}
       <div
         ref={body}
         className="doc-prose"
         onClick={onClick}
-        dangerouslySetInnerHTML={{ __html: page.value.html }}
+        dangerouslySetInnerHTML={{ __html: page.html }}
       />
-      <DocFooter manifest={manifest} route={route} page={page.value} />
+      {manifest !== null && (
+        <DocFooter manifest={manifest} route={route} page={page} />
+      )}
     </article>
   )
 }

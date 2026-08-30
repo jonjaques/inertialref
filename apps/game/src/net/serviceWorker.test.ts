@@ -229,14 +229,14 @@ describe('the service worker', () => {
    */
   it('does not store the application shell under a data file’s name', async () => {
     const sw = loadServiceWorker(() => okResponse('text/html; charset=utf-8'))
-    await settle(sw, request('/doc-content/page/vision-1a2b3.json'))
+    await settle(sw, request('/doc-content/search.json'))
     expect(sw.put).toEqual([])
   })
 
   it('does store the file when the file is what came back', async () => {
     const sw = loadServiceWorker(() => okResponse('application/json'))
-    await settle(sw, request('/doc-content/page/vision-1a2b3.json'))
-    expect(sw.put).toEqual([`${ORIGIN}/doc-content/page/vision-1a2b3.json`])
+    await settle(sw, request('/doc-content/search.json'))
+    expect(sw.put).toEqual([`${ORIGIN}/doc-content/search.json`])
   })
 
   it('names its cache after the build that installed it', async () => {

@@ -33,16 +33,16 @@ import { allWings, documentsUnderDocs, listedPages } from './wings.mjs'
  *
  * `apps/game/public/doc-content/` is a **runtime fetch**. The search index
  * lives only here — half a megabyte for the readers who type and nobody
- * else. The manifest and the page bodies are written here too, because
- * the chrome island loads them over the network. Bundling nine hundred
- * and five page bodies is the alternative that does not work: a module
- * graph that size is a chunk manifest larger than most of the pages.
+ * else. The manifest lives here too, because the rail is every page's
+ * navigation and embedding it in each document would pay its size on
+ * every click. Page bodies are not fetched: they are HTML in the
+ * document Astro emits from the staged copy.
  */
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url))
 /** Build input for Astro. Page bodies and the manifest. */
 const STAGED = join(ROOT, 'apps/game/.doc-content')
-/** Runtime fetch. Search, and (still) the manifest and page bodies. */
+/** Runtime fetch. Search, and the rail's manifest. */
 const PUBLIC = join(ROOT, 'apps/game/public/doc-content')
 
 const quiet = process.argv.includes('--quiet')
@@ -66,7 +66,7 @@ async function main() {
   await rm(STAGED, { recursive: true, force: true })
   await rm(PUBLIC, { recursive: true, force: true })
   await mkdir(join(STAGED, 'page'), { recursive: true })
-  await mkdir(join(PUBLIC, 'page'), { recursive: true })
+  await mkdir(PUBLIC, { recursive: true })
 
   /*
    * The body of every page, one file each, written before the manifest that
@@ -93,10 +93,7 @@ async function main() {
         memberKind: page.memberKind ?? null,
       }
       const name = assetName(page.route)
-      return Promise.all([
-        writeJson(join(STAGED, 'page', name), body),
-        writeJson(join(PUBLIC, 'page', name), body),
-      ])
+      return writeJson(join(STAGED, 'page', name), body)
     }),
   )
 
@@ -139,11 +136,11 @@ async function main() {
      * What the navigation, the breadcrumb and the document title need, and
      * nothing else.
      *
-     * This object is fetched before anything can be drawn, so every field in it
+     * This object is fetched before the rail can be drawn, so every field in it
      * is paid for on the way in. The lead, the word count and the diagram count
      * were here and are not: each is read on exactly one screen, and that screen
-     * has already fetched the page that carries them. Dropping the three took
-     * the manifest from 286 KB to 181 KB.
+     * has already been served the page that carries them. Dropping the three
+     * took the manifest from 286 KB to 181 KB.
      */
     pages: Object.fromEntries(
       pages.map((page) => [
