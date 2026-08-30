@@ -1196,10 +1196,20 @@ export class GameEngine implements PresentationHost {
   #maybeTraceOrbits(): void {
     if (!this.showOrbits) {
       if (this.orbits.length > 0) this.orbits = []
+      // Both keys, so "rebuilt when the toggle turns on" means the sampling
+      // too. Clearing only the scope key leaves `#orbitsAllKey` matching, so
+      // turning orbits back on after an hour of warp re-filters paths swept at
+      // the anomaly the body had before it — invisible in a uniform-alpha
+      // ellipse, and a claim the method's own docstring does not make.
       this.#orbitsSystems = ''
+      this.#orbitsAllKey = ''
       return
     }
     const systems = this.world.loadedSystems()
+    // Once. The scope key and the sampling key are both a function of it, and
+    // two spellings of "the loaded set" is two things a reader has to check
+    // are the same list.
+    const systemIds = systems.map((system) => system.id)
     /*
      * Which traces are worth drawing depends on what is being looked at, so the
      * focused frame is part of the rebuild key.
@@ -1231,10 +1241,7 @@ export class GameEngine implements PresentationHost {
       subject: this.harness.observatory.target?.address ?? null,
       scope: this.orbitScope,
     }
-    const key = orbitScopeKey(
-      systems.map((system) => system.id),
-      scope,
-    )
+    const key = orbitScopeKey(systemIds, scope)
     if (
       key === this.#orbitsSystems &&
       this.#orbitsWorld === this.#starFieldWorld
@@ -1245,7 +1252,7 @@ export class GameEngine implements PresentationHost {
 
     // The sampling half, keyed on what it actually reads. A retarget moves
     // `scope` and nothing here, so it re-filters instead of re-solving.
-    const systemsKey = `${this.#starFieldWorld}|${systems.map((system) => system.id).join(',')}`
+    const systemsKey = `${this.#starFieldWorld}|${systemIds.join(',')}`
     if (systemsKey !== this.#orbitsAllKey) {
       this.#orbitsAllKey = systemsKey
       this.#orbitsAll = systems.flatMap((system) =>
