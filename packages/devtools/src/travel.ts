@@ -64,7 +64,7 @@ export interface TravelTarget {
    * `sameTargets` keeps a listing whose every *text* is unchanged, so a
    * subscriber holding rows through a hover holds this number from whenever
    * the text last moved. It is wrong by less than `distanceText`'s own
-   * resolution and by no more; anything that needs the metre wants
+   * resolution and by no more; anything that needs the meter wants
    * `UV.distance` against a fresh pose rather than a row of a listing.
    */
   readonly distance: Meters
@@ -128,6 +128,29 @@ export interface TravelTarget {
 type ComparedField = Exclude<keyof TravelTarget, 'distance' | 'colour'>
 
 /**
+ * `true` for a field `!==` can decide, and `never` for one it cannot.
+ *
+ * The second half of the guard below, and the half that is easy to leave out.
+ * `Record<ComparedField, true>` proves the list is *complete*; it says nothing
+ * about whether each listed field is comparable by identity. Widen `parent` to
+ * a row reference or `children` to an array of ids and the table still
+ * typechecks, while `x[key] !== y[key]` becomes true on every fresh survey —
+ * `sameTargets` returns false forever, and the catalog goes back to
+ * re-rendering every row at the poll rate with nothing failing. Mapping the
+ * value type through this makes that an error at the declaration instead.
+ *
+ * `[T] extends [...]`, in brackets, because a bare `T extends` distributes over
+ * unions — and every field most at risk of being widened is already a union.
+ * Distributed, `ByIdentity<Row | null>` is `never | true`, which is `true`, so
+ * the guard passed exactly the three nullable fields it was written for
+ * (`parent`, `spectralType`, `bodyKind`) and caught only the non-nullable ones.
+ * The tuple makes the check a single non-distributive comparison.
+ */
+type ByIdentity<T> = [T] extends [string | number | boolean | null | undefined]
+  ? true
+  : never
+
+/**
  * The comparison's field list, as a table the type checker keeps complete.
  *
  * A chain of `x.name !== y.name || …` is the faster spelling and the one that
@@ -141,7 +164,7 @@ type ComparedField = Exclude<keyof TravelTarget, 'distance' | 'colour'>
  * every sweep and would defeat the whole bail-out; it is compared component-wise
  * below.
  */
-const COMPARED: Record<ComparedField, true> = {
+const COMPARED: { [K in ComparedField]: ByIdentity<TravelTarget[K]> } = {
   kind: true,
   address: true,
   name: true,
