@@ -9,8 +9,8 @@ The decisions are [ADR-0011](../adr/0011-application-shell-and-modes.md) and
 
 ## One canvas, for the life of the session
 
-`App` owns the `<Canvas>` and `.hud-layer`. Every route renders _inside_ that
-layer as a sibling of the canvas. A router over the whole tree rebuilds a
+`SceneBackdrop` owns the `<Canvas>`. Chrome renders inside `.hud-layer` as a
+sibling island. A router over the whole tree rebuilds a
 `WebGPURenderer` on every navigation.
 
 `.hud-layer` is `pointer-events: none` so the scene stays reachable. Mode

@@ -22,7 +22,7 @@ import type { BootProgress } from './warmup.ts'
  * Firefox sat at "first light…" indefinitely for exactly that reason. So the
  * signal is a seam with two adapters, chosen here, by backend.
  *
- * What this owns, and what `App` therefore no longer does:
+ * What this owns, and what the chrome island therefore does not:
  *
  *   - the conjunction, and the **latch** on the warm-up half. The HDR toggle
  *     rebuilds the renderer and re-runs the warm-up mid-session; the cover must
@@ -321,3 +321,13 @@ export function createFirstLight(
     },
   }
 }
+
+/**
+ * The app's machine. SceneBackdrop drives it; the chrome island reads the
+ * store. A React context cannot: they are separate trees.
+ *
+ * Constructed here rather than in a `useState` initializer because two islands
+ * have to see the same one, and StrictMode's double-invoke is already why
+ * `start()` is a method rather than work the factory does.
+ */
+export const firstLight = createFirstLight()

@@ -48,6 +48,7 @@ const EMPTY: EngineSnapshot = {
     chrome: true,
   },
   playhead: null,
+  output: null,
 }
 
 describe('the engine sampler', () => {
@@ -222,5 +223,34 @@ describe('the engine sampler', () => {
     const wide = store.getState().status
     sampleOnce(store, source)
     expect(store.getState().status).not.toBe(wide)
+  })
+
+  it('publishes the renderer description the backdrop built', () => {
+    // The chrome island cannot import the canvas, and the settings page still
+    // has to say what the renderer actually produced. A field on the snapshot
+    // is the one channel both trees already share.
+    const store = createEngineStore()
+    sampleOnce(store, { ...idle, cinematic: null })
+    expect(store.getState().output).toBeNull()
+
+    sampleOnce(store, {
+      ...idle,
+      cinematic: null,
+      gl: {
+        description: {
+          backend: 'webgpu',
+          mode: 'standard',
+          preference: 'auto',
+          headroom: 1,
+          capability: {
+            webgpu: true,
+            dynamicRangeHigh: false,
+            extendedCanvas: false,
+          },
+        },
+      },
+    })
+    expect(store.getState().output?.backend).toBe('webgpu')
+    expect(store.getState().output?.mode).toBe('standard')
   })
 })

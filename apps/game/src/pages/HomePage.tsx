@@ -119,7 +119,7 @@ const SPEC: readonly (readonly [string, string])[] = [
   ['0', 'To Install'],
 ]
 
-export function HomePage({ engine }: { engine: GameEngine }) {
+export function HomePage({ engine }: { engine: GameEngine | null }) {
   /*
    * Frame Earth, and carry the sun across it.
    *
@@ -141,6 +141,7 @@ export function HomePage({ engine }: { engine: GameEngine }) {
    * the picture is smooth and nothing here has to know the frame rate.
    */
   useEffect(() => {
+    if (engine === null) return
     const observatory = engine.harness.observatory
     /*
      * The menu's stance. It used to capture the previous values and put them

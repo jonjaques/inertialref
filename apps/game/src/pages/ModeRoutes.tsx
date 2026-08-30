@@ -30,7 +30,7 @@ import { CINEMA, DOCS, HOME, PLANETARIUM, resolvedLocation } from './paths.ts'
  */
 
 interface ModeRouteProps {
-  readonly engine: GameEngine
+  readonly engine: GameEngine | null
   readonly status: HarnessStatus | null
   readonly camera: CameraState
   /**
@@ -74,15 +74,26 @@ export function ModeRoutes(props: ModeRouteProps) {
   // The same resolution the shell derives its mode from — one function, so the
   // two cannot answer differently about what is on screen.
   const at = resolvedLocation(useLocation())
+  const engine = props.engine
+
+  if (engine === null) {
+    // The menu's poster is the document. Everything else waits for the
+    // backdrop: an unlit planetarium is a cover, not a page of words.
+    return (
+      <Routes location={at}>
+        <Route path={HOME} element={<HomePage engine={null} />} />
+      </Routes>
+    )
+  }
 
   return (
     <Routes location={at}>
-      <Route path={HOME} element={<HomePage engine={props.engine} />} />
+      <Route path={HOME} element={<HomePage engine={engine} />} />
       <Route
         path="/play/:mode"
         element={
           <FlightMode
-            engine={props.engine}
+            engine={engine}
             status={props.status}
             dev={props.dev}
             onNotice={props.onNotice}
@@ -93,7 +104,7 @@ export function ModeRoutes(props: ModeRouteProps) {
         path={PLANETARIUM}
         element={
           <PlanetariumMode
-            engine={props.engine}
+            engine={engine}
             camera={props.camera}
             dev={props.dev}
           />
@@ -109,15 +120,15 @@ export function ModeRoutes(props: ModeRouteProps) {
        */}
       <Route
         path={`${DOCS}/*`}
-        element={<DocsMode engine={props.engine} dev={props.dev} />}
+        element={<DocsMode engine={engine} dev={props.dev} />}
       />
       <Route
         path={CINEMA}
-        element={<CinemaMode engine={props.engine} dev={props.dev} />}
+        element={<CinemaMode engine={engine} dev={props.dev} />}
       />
       <Route
         path={`${CINEMA}/:scene`}
-        element={<CinemaMode engine={props.engine} dev={props.dev} />}
+        element={<CinemaMode engine={engine} dev={props.dev} />}
       />
       {/*
        * Anything else falls through to the menu rather than to a 404 page.
@@ -127,7 +138,7 @@ export function ModeRoutes(props: ModeRouteProps) {
        * misspelling look like a failure of the game. The menu is the answer to
        * "where am I", which is the question a wrong URL actually asks.
        */}
-      <Route path="*" element={<HomePage engine={props.engine} />} />
+      <Route path="*" element={<HomePage engine={engine} />} />
     </Routes>
   )
 }

@@ -1,24 +1,22 @@
-import { StrictMode, useEffect, useState } from 'react'
+import { StrictMode, useEffect } from 'react'
 import { MotionConfig } from 'motion/react'
 import { BrowserRouter } from 'react-router'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { createConsoleSink, logHub } from '@inertialref/shared'
-import type { StarCatalog } from '@inertialref/universe'
 import { startAnalytics } from './analytics.ts'
 import App from './App.tsx'
 import { BUILD_ID } from './build.ts'
-import { loadStarCatalog } from './engine/catalogAsset.ts'
 import { KeymapProvider } from './input/KeymapProvider.tsx'
 import { registerServiceWorker } from './net/registerServiceWorker.ts'
 
 /*
- * The client's island.
+ * The chrome island.
  *
- * Astro owns the document. This module is what `client:only="react"` mounts
- * into `#root`, and the side effects that used to live in a Vite entry live
- * here because they are still process-wide: a log sink, a third-party tag, a
- * service worker. The layout does not re-run them; the island's module
- * evaluates once.
+ * Astro owns the document. The canvas is a second `client:only` island
+ * (`scene/SceneBackdrop.tsx`) so this tree can paint without waiting for the
+ * catalog or for `three/webgpu`. Site-wide side effects live here because they
+ * are still process-wide: a log sink, a third-party tag, a service worker.
+ * The layout does not re-run them; the island's module evaluates once.
  */
 
 logHub.addSink(createConsoleSink(console, 'info'))
@@ -83,8 +81,6 @@ function reportFatal(cause: unknown): void {
   const message = document.createElement('div')
   message.style.cssText =
     'margin-top:0.25rem;color:#94a3b8;overflow-wrap:anywhere'
-  // `textContent`, never `innerHTML`: this string came from a thrown error, and
-  // an error message is the last place to start trusting markup.
   message.textContent = detail
   const hint = document.createElement('div')
   hint.style.cssText = 'margin-top:0.25rem;color:#475569'
@@ -104,26 +100,16 @@ window.addEventListener('unhandledrejection', (event) => {
 })
 
 export default function Root() {
-  const [catalog, setCatalog] = useState<StarCatalog | null>(null)
-
   useEffect(() => {
-    void loadStarCatalog().then(setCatalog, reportFatal)
-  }, [])
-
-  useEffect(() => {
-    if (catalog === null) return
     document.getElementById('boot')?.setAttribute('hidden', '')
-  }, [catalog])
-
-  if (catalog === null) return null
+  }, [])
 
   return (
     <StrictMode>
       {/*
-       * The router wraps the whole tree, but it does not *own* the view: the
-       * routed pages render inside `.hud-layer` (see `pages/ModeRoutes.tsx`), so
-       * `<Canvas>` is never inside a route and a navigation cannot remount the
-       * renderer.
+       * The router wraps the chrome, not the canvas. Routed pages render
+       * inside `.hud-layer`; `<Canvas>` is the other island, so a navigation
+       * cannot remount the renderer.
        *
        * `useTransitions={false}` is a deliberate opt-out. React Router v8 wraps
        * router state updates in `startTransition` by default, and its own
@@ -136,40 +122,10 @@ export default function Root() {
        * and none of them suspend.
        */}
       <BrowserRouter useTransitions={false}>
-        {/*
-         * Reduced motion, honored globally rather than per animation.
-         * `reducedMotion="user"` drops transform and layout animations for
-         * anyone whose system asks for that, and leaves opacity alone — so a
-         * page still fades in and simply does not travel. It cannot reach the
-         * cutscene director or the scene, which are camera moves in a
-         * simulation rather than interface motion.
-         */}
         <MotionConfig reducedMotion="user">
-          {/*
-           * One tooltip provider for the whole tree.
-           *
-           * Radix requires an ancestor provider and it is what shares the
-           * "one is already open, skip the delay" timer between them — per
-           * tooltip, every hover would wait the full delay again, which on a
-           * transport bar of five icon-only buttons is the behavior that
-           * makes people give up on tooltips.
-           *
-           * The delay and the container both live in the wrapper now — 350 ms
-           * (a hint, not a popover trailing the pointer), and a portal *into*
-           * `.hud-layer`. The chip grew the panel material — translucent, with
-           * a backdrop filter — and a backdrop filter samples what is behind
-           * it, which on the extended path includes a star's disk above
-           * diffuse white; that is exactly the case `dynamic-range-limit:
-           * standard` exists for, so the content has to render inside the
-           * clamped layer. `components/ui/tooltip.tsx` carries both decisions
-           * and the reasoning.
-           */}
           <TooltipProvider>
-            {/* Above the router and outside every mode: the keyboard outlives
-                a navigation, and rebuilding the one window listener per route
-                would drop a held axis at the moment the mode changed. */}
             <KeymapProvider>
-              <App catalog={catalog} />
+              <App />
             </KeymapProvider>
           </TooltipProvider>
         </MotionConfig>

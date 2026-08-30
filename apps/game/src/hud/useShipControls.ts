@@ -53,7 +53,7 @@ const AXES: Readonly<
 const AXIS_IDS = Object.keys(AXES) as readonly ActionId[]
 
 export function useShipControls(
-  engine: GameEngine,
+  engine: GameEngine | null,
   bindings: ControlBindings,
 ): void {
   /*
@@ -76,6 +76,7 @@ export function useShipControls(
       if (axis === 'translation') translation[index] += sign
       else rotation[index] += sign
     }
+    if (engine === null) return
     engine.setControl(translation, rotation)
   }
 

@@ -62,7 +62,7 @@ const state = {
  * means it calls `useKeyContext` — and a component that reaches for the
  * dispatcher outside a provider is a component that would throw in the browser
  * too. Stubbing the context instead would assert against the stub; this asserts
- * that the tree `main.tsx` builds is the tree these pages render in.
+ * that the tree `Root.tsx` builds is the tree these pages render in.
  */
 const at = (path: string): string =>
   renderToStaticMarkup(

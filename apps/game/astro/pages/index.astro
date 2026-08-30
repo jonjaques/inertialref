@@ -1,8 +1,10 @@
 ---
 import Base from '../layouts/Base.astro'
+import SceneBackdrop from '../../src/scene/SceneBackdrop.tsx'
 import Root from '../../src/Root.tsx'
 ---
 
 <Base>
+  <SceneBackdrop client:only="react" />
   <Root client:only="react" />
 </Base>

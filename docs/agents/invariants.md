@@ -37,7 +37,7 @@ table is one of those three, not drift.
 | Issue order is not orbital order                          | [Identity](../concepts/identity.md) · [ADR-0009](../adr/0009-issue-ordinal-addressing.md)                  |
 | No hosting SDK below the adapter                          | [Architecture](../architecture.md) · [Hosting](../hosting.md)                                              |
 | Do not let the compiler memoize a mutable read            | [Client](../guides/client.md)                                                                              |
-| The canvas is not inside a route                          | [Client](../guides/client.md) · [ADR-0011](../adr/0011-application-shell-and-modes.md)                     |
+| The canvas lives in one island                            | [Client](../guides/client.md) · [ADR-0011](../adr/0011-application-shell-and-modes.md)                     |
 | Mode is a function of the path                            | [Client](../guides/client.md)                                                                              |
 | Overlays resolve location through one helper              | [Client](../guides/client.md)                                                                              |
 | Render compression is radial about the eye                | [Rendering](../concepts/rendering.md) · [ADR-0003](../adr/0003-render-coordinates.md)                      |

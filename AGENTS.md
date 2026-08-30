@@ -113,9 +113,11 @@ Violating one of these is a rewrite later, not a refactor.
 - **Never let React Compiler memoize a component that reads mutable state.**
   Opt out with `'use no memo'`. See `apps/game/src/hud/PerfPanel.tsx`. This is
   not license to hand-write `useMemo`.
-- **Never put the `<Canvas>` inside a route,** and never let a mode assume it
-  owns the page. `App` owns the canvas and `.hud-layer` for the life of the
-  session. [ADR-0011](docs/adr/0011-application-shell-and-modes.md).
+- **Never put the `<Canvas>` in more than one island.** `SceneBackdrop` owns it;
+  no page constructs one. Chrome renders inside `.hud-layer` as a sibling of
+  that island. A router over the whole tree rebuilds a
+  `WebGPURenderer` on every navigation.
+  [ADR-0011](docs/adr/0011-application-shell-and-modes.md).
 - **Never hold the current mode in React state.** It is
   `modeForPath(resolvedLocation(location).pathname)` in `pages/paths.ts`.
 - **Never read the raw pathname when a dialog could be open over a mode.**

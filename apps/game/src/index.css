@@ -368,10 +368,11 @@ body,
 }
 
 /*
- * The island is a wrapper Astro inserts around the React tree. `display:
- * contents` makes it invisible to layout so `#root` still has one child that
- * fills it — the application — rather than a second box whose height is
- * auto and whose canvas is zero.
+ * The island is a wrapper Astro inserts around each React tree. `display:
+ * contents` makes it invisible to layout so `#root` still has the canvas and
+ * the chrome as siblings that fill it — rather than a second box whose height
+ * is auto and whose canvas is zero. Two islands, same trick: both wrappers
+ * vanish and the document sees the canvas, then the HUD, then `#boot`.
  */
 astro-island {
   display: contents;

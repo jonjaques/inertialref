@@ -26,10 +26,11 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", ADR-0011.
   put `showShip` back to a value it had never held. There is no carve-out for a field that
   looks like a preference — the frame loop reads `orbitScope`, which is the other half of
   why it cannot be component state.
-- **`App` owns the `<Canvas>` and `.hud-layer` for the life of the session.** Every route
-  renders _inside_ that layer, as a sibling of the canvas. A router over the whole tree
-  rebuilds the `WebGPURenderer` on every navigation — the black-screen class
-  `render/presentationWatchdog.ts` exists to recover from, arriving on purpose.
+- **`SceneBackdrop` owns the `<Canvas>` for the life of the session.** Chrome
+  renders inside `.hud-layer` as a sibling island. A second canvas, or a router
+  over the whole tree, rebuilds the `WebGPURenderer` on every navigation — the
+  black-screen class `render/presentationWatchdog.ts` exists to recover from,
+  arriving on purpose.
 - **The current mode is never React state.** It is
   `modeForPath(resolvedLocation(location).pathname)`, a pure function in `pages/paths.ts`,
   so a reload, a back button and a pasted link land in the same place by construction.

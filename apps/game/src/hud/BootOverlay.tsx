@@ -15,7 +15,7 @@ import { Logomark } from '../icons/Logomark.tsx'
  * itself is a single full-screen opacity tween — compositor work, so it runs
  * at frame rate no matter what the main thread is finishing up.
  *
- * Visually this continues the `#boot` placeholder in `index.html`: same
+ * Visually this continues the `#boot` placeholder in the document: same
  * black ground, same corner, same voice. React clears the placeholder on its
  * first commit, so this component is what stops that clear from flashing the
  * unlit canvas.
