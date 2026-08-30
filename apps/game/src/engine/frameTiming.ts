@@ -57,9 +57,12 @@ export const TERRAIN_SHORT = on('Terrain', 'error')
 /** One `useFrame` consumer. `engineMs` explicitly excludes all of them. */
 export const RENDER_PHASE = on('Render', 'tertiary')
 
-/** The pool and the workers. Each side emits only its own numbers. */
-export const WORKERS_PHASE = on('Workers', 'secondary-dark')
-export const WORKERS_QUEUE = on('Workers', 'secondary-light')
+/*
+ * The `Workers` and `Tasks` tracks are named in `packages/workers` rather than
+ * here, beside the code that emits onto them — the same place `getLogger`'s
+ * scope is named — and the group is filled in by the browser sink. A track name
+ * is a component describing itself; a group is the application's branding.
+ */
 
 /** Boot, which is over before any panel exists to plot it. */
 export const BOOT_PHASE = on('Boot', 'tertiary-light')

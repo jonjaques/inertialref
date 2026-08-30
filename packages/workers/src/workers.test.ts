@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { formatSeed, rootSeed } from '@inertialref/procedural'
 import { decodeUniverseVector } from '@inertialref/protocol'
-import { expect as unwrap } from '@inertialref/shared'
+import {
+  expect as unwrap,
+  timingHub,
+  type TimingRecord,
+} from '@inertialref/shared'
 import { UV } from '@inertialref/spatial'
 import {
   catalogStub,
@@ -331,5 +335,130 @@ describe('the inline transport matches the browser one', () => {
     ).rejects.toThrow(/could not be cloned|DataClone/i)
     expect(pool.stats().active).toBe(0)
     pool.terminate()
+  })
+})
+
+describe('timing across the worker boundary', () => {
+  /*
+   * The level has to *travel*, and the failure if it does not is silent: the
+   * page emits its tracks, the Workers and Tasks tracks stay empty, and nothing
+   * reports an error. That is the whole reason this is a message rather than a
+   * query on the worker's URL — see `WorkerTiming` in `packages/protocol` for
+   * the other three reasons — and it is why the crossing has a test.
+   */
+  it('sends the level to every worker, once per change', () => {
+    const sent: unknown[][] = [[], []]
+    const registry = createTaskRegistry()
+    const held = new WorkerPool({
+      factory: (index) => {
+        const port = createInlineWorker(registry)
+        return {
+          ...port,
+          post: (message, transfer) => {
+            sent[index]?.push(message)
+            port.post(message, transfer)
+          },
+        }
+      },
+      size: 2,
+    })
+
+    held.setTimingLevel('trace')
+    held.setTimingLevel('trace') // idempotent: a repeat is not a broadcast
+    held.setTimingLevel('off')
+
+    for (const perWorker of sent) {
+      expect(perWorker).toEqual([
+        { kind: 'timing', level: 'trace' },
+        { kind: 'timing', level: 'off' },
+      ])
+    }
+    held.terminate()
+  })
+
+  it('emits queue and run from the pool and the task from the loop', async () => {
+    /*
+     * Both sides, in one process, over the real `serveTasks`.
+     *
+     * The browser cannot check this end to end: a worker's entries live on the
+     * worker's own performance timeline and the page's `getEntriesByType`
+     * cannot see them, which is the separate-`timeOrigin` rule doing its job —
+     * so an unwired worker looks exactly like a working one from the page. The
+     * inline transport runs the same loop against the same registry with a
+     * microtask instead of a thread boundary, which makes the one thing that
+     * cannot be observed there observable here.
+     */
+    const records: TimingRecord[] = []
+    const clock = fakeClock()
+    const detach = timingHub.attach(
+      { write: (record) => records.push(record) },
+      { now: clock.now },
+    )
+    try {
+      const registry = createTaskRegistry()
+      const held = new WorkerPool({
+        factory: () => createInlineWorker(registry, clock.now),
+        size: 1,
+        now: clock.now,
+      })
+      await held.run(generateHeightfieldTask, {
+        surfaceSeed: formatSeed(SEED),
+        maxElevation: 8_000,
+        roughness: 3,
+        seaLevel: null,
+        grammar: surfaceGrammar(SEED, {
+          mass: 7.35e22,
+          meanRadius: 1.737e6,
+          atmosphere: null,
+          temperature: 270,
+          tidalProxy: 0,
+          hasOcean: false,
+          reliefSpent: 1,
+          publishedRelief: 8_000,
+        }),
+        region: { face: 2, level: 5, i: 11, j: 4 },
+        resolution: 17,
+      })
+      held.terminate()
+
+      const seen = records.map((r) => `${r.detail?.track}/${r.name}`)
+      expect(seen).toContain('Workers/queue universe.generateHeightfield')
+      expect(seen).toContain('Workers/run universe.generateHeightfield')
+      expect(seen).toContain('Tasks/universe.generateHeightfield')
+
+      // The label is the task's name and nothing more. Folding the region into
+      // it — which the plan asked for — gives one aggregation bucket per patch,
+      // an unbounded retained-name set, and a chart in which no two bars share
+      // a name. The address rides in the properties table instead.
+      const task = records.find((r) => r.detail?.track === 'Tasks')
+      expect(task?.name).toBe('universe.generateHeightfield')
+      expect(task?.detail?.properties).toEqual([['region', '2/5:11,4']])
+
+      // Neither side names the application. A track is a component describing
+      // itself; the group is branding, and the browser sink fills it in.
+      for (const record of records) expect(record.detail?.group).toBeUndefined()
+    } finally {
+      detach()
+    }
+  })
+
+  it('hands the worker loop a level it does not itself interpret', async () => {
+    // `packages/*` may not name `console.timeStamp`, so the loop decodes the
+    // message and the host decides what a level means. A level this build has
+    // never heard of still arrives — the host is what rejects it, which is what
+    // keeps a page open across a deploy from guessing.
+    const seen: string[] = []
+    const registry = createTaskRegistry()
+    const worker = createInlineWorker(registry, () => 0, {
+      onTimingLevel: (level) => seen.push(level),
+    })
+    worker.post({ kind: 'timing', level: 'full' })
+    worker.post({ kind: 'timing', level: 'from-a-later-build' })
+    // Inline delivery is deferred through a resolved promise, so a microtask
+    // turn is what makes this observable.
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(seen).toEqual(['full', 'from-a-later-build'])
+    worker.terminate()
   })
 })

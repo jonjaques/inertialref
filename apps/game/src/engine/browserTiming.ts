@@ -6,6 +6,7 @@ import {
   type TimingSink,
   timingHub,
 } from '@inertialref/shared'
+import { TRACK_GROUP } from './frameTiming.ts'
 
 /*
  * The only file in this application that names `console.timeStamp`,
@@ -151,7 +152,11 @@ const sink: TimingSink = {
       record.startMs,
       record.endMs,
       detail?.track,
-      detail?.group,
+      // The group defaulted here rather than at the call site, because
+      // `packages/workers` names its own tracks and must not know the
+      // application's name. A track is a component describing itself; a group
+      // is branding, and branding is the host's.
+      detail?.group ?? (detail?.track === undefined ? undefined : TRACK_GROUP),
       detail?.color,
     )
     if (level !== 'full' || !canUserTiming) return
@@ -169,8 +174,10 @@ function writeUserTiming(
     // tracks and the boot track at once. An interval is an entry on one track.
     dataType: record.kind === 'mark' ? 'marker' : 'track-entry',
   }
-  if (detail?.track !== undefined) devtools.track = detail.track
-  if (detail?.group !== undefined) devtools.trackGroup = detail.group
+  if (detail?.track !== undefined) {
+    devtools.track = detail.track
+    devtools.trackGroup = detail.group ?? TRACK_GROUP
+  }
   if (detail?.color !== undefined) devtools.color = detail.color
   if (detail?.properties !== undefined)
     devtools.properties = [...detail.properties]
@@ -258,6 +265,29 @@ export function setTimingLevel(next: TimingLevel): void {
     // that silently lands nowhere is the failure this line exists to name.
     userTiming: canUserTiming,
   })
+  for (const listener of listeners) listener(next)
+}
+
+/**
+ * Anything that has to be *told* the level rather than able to read it.
+ *
+ * There is exactly one such consumer and it is the reason this exists: a worker
+ * is a separate global scope with its own module registry, so it does not see
+ * this module's `level` at all and has to be sent it. The pool broadcasts.
+ *
+ * The listener is called once on subscribe with the current level, because the
+ * level is decided in `main.tsx` at module scope and a pool is constructed
+ * later — a subscription that only fired on *change* would leave a pool built
+ * after `?timing=full` never hearing about it.
+ */
+const listeners = new Set<(level: TimingLevel) => void>()
+
+export function onTimingLevel(
+  listener: (level: TimingLevel) => void,
+): () => void {
+  listeners.add(listener)
+  listener(level)
+  return () => listeners.delete(listener)
 }
 
 /** One entry, as something a terminal or an issue can carry. */

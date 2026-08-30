@@ -65,7 +65,7 @@ import type { LoadedShip } from '../render/shipModels.ts'
 import { createBrowserWorkerPort, poolSize } from './browserWorker.ts'
 import type { Camera, Object3D } from 'three/webgpu'
 import { FrameMetrics, usedHeapMb } from './frameMetrics.ts'
-import { timingDetailed } from './browserTiming.ts'
+import { onTimingLevel, timingDetailed } from './browserTiming.ts'
 import {
   ENGINE_LATE,
   ENGINE_PHASE,
@@ -678,8 +678,23 @@ export class GameEngine implements PresentationHost {
     })
     this.saves = this.session.store
     this.#terrain = new TerrainStreamer(this.session.pool())
+    /*
+     * The level, forwarded across the worker boundary.
+     *
+     * A worker is a separate global scope with its own module registry, so it
+     * cannot read `browserTiming.ts`'s level and has to be sent it. The engine
+     * is the one thing that holds both the switch and the pool, and it fires
+     * once on subscribe — the level is decided in `main.tsx` before any engine
+     * exists, and a change-only subscription would leave a pool built after
+     * `?timing=full` never hearing about it.
+     */
+    this.#releaseTiming = onTimingLevel((level) => {
+      this.session.pool()?.setTimingLevel(level)
+    })
     this.#start()
   }
+
+  readonly #releaseTiming: () => void
 
   /** Live read, never a captured reference — loading a save replaces it. */
   get world(): World {
@@ -1344,6 +1359,10 @@ export class GameEngine implements PresentationHost {
   }
 
   dispose(): void {
+    // Before the session, because releasing the subscription is what stops a
+    // level change reaching a pool that is about to be terminated. StrictMode
+    // builds two engines and disposes one; the survivor keeps its own.
+    this.#releaseTiming()
     this.session.dispose()
   }
 }
