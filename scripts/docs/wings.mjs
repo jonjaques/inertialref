@@ -209,7 +209,10 @@ export const WINGS = [
            reader who follows a guide expects the system to already behave that
            way. Filed beside them because the audience is the same one. */
         label: 'Plans',
-        pages: [['docs/plans/headless-webgpu.md', 'Headless WebGPU']],
+        pages: [
+          ['docs/plans/headless-webgpu.md', 'Headless WebGPU'],
+          ['docs/plans/the-timeline.md', 'The Timeline'],
+        ],
       },
       {
         label: 'For Agents',
