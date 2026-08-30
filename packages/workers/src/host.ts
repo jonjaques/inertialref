@@ -62,6 +62,17 @@ export function serveTasks(
 ): () => void {
   const log = getLogger('workers.host')
   const now = options.now ?? (() => 0)
+  /*
+   * Whether the numbers below are timeline coordinates or only statistics.
+   *
+   * The zero default is harmless in a `durationMs`: it reads as 0 ms and is
+   * obviously untimed. It is not harmless on a shared axis, where it stacks
+   * every entry at t=0 beside entries a host is timing with `performance.now()`
+   * — which looks like a recording rather than like a missing argument, exactly
+   * as `AttachOptions.now` says. A loop with no clock keeps its stats and emits
+   * nothing.
+   */
+  const timed = options.now !== undefined
   const cancelled = new Set<JobId>()
 
   const unsubscribe = port.subscribe((message) => {
@@ -117,22 +128,6 @@ export function serveTasks(
         }
         const transfer = task.transfers?.(result) ?? []
         const finished = now()
-        /*
-         * One entry per task, on this thread, named for the task and no more.
-         *
-         * A `full`-level drain on the main thread will not see this: a worker's
-         * User Timing entries live on the worker's own performance timeline and
-         * are invisible to the page's `getEntriesByType`. What does see them is
-         * a DevTools recording, which is where the correlation this exists for
-         * actually gets read.
-         */
-        if (timer.on)
-          timer.measure(
-            request.task,
-            started,
-            finished,
-            regionDetail(request.payload),
-          )
         port.post(
           {
             kind: 'success',
@@ -155,6 +150,27 @@ export function serveTasks(
         })
       } finally {
         cancelled.delete(request.job)
+        /*
+         * One entry per task, on this thread, named for the task and no more —
+         * and on every outcome, which is the same rule `pool.ts` states for its
+         * own `run` entry: a job that took 40 ms to fail occupied a worker for
+         * 40 ms, and a track that only showed successes would make a thrashing
+         * streamer look idle. In the `finally` because the cancellation path
+         * returns early and the failure path throws past the post.
+         *
+         * A `full`-level drain on the main thread will not see this: a worker's
+         * User Timing entries live on the worker's own performance timeline and
+         * are invisible to the page's `getEntriesByType`. What does see them is
+         * a DevTools recording, which is where the correlation this exists for
+         * actually gets read.
+         */
+        if (timed && timer.on)
+          timer.measure(
+            request.task,
+            started,
+            now(),
+            regionDetail(request.payload),
+          )
       }
     })()
   })

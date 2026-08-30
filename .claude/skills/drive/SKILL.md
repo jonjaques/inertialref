@@ -123,7 +123,7 @@ jumping twice a second came back identical to six pixels.
 
 `--cast <n>` records what the compositor actually presented and differences it. The
 signal it reports is not "how much changed" but **a frame that differs from both of
-its neighbours while those neighbours are identical to each other** — a static scene
+its neighbors while those neighbors are identical to each other** — a static scene
 with one frame departing from it. Motion produces none of those, which is what makes
 a clean result meaningful.
 

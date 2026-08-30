@@ -156,9 +156,13 @@ pnpm timing --threads                                         # read the trace b
 ```
 
 `ir.profile` arms the level, records, disarms and reports, so nothing is left
-retaining. It ends on the line worth having — _"9 of 61 frames over 25 ms;
-terrain.select dominated 7 of them at 8.4 ms mean"_ — which names the span that
-dominated the **late** frames rather than the busiest one overall.
+retaining. It ends on the line worth having — _"9 of 61 frames over 25 ms; terrain.select
+was the largest measured span in 7 of them, 8.4 ms of 31.0 ms"_ — which names
+the largest span inside the **late** frames rather than the busiest one overall,
+and puts the frame duration beside it so the ratio says whether the name is an
+explanation. Where it is not, the line says so: everything the GPU does happens
+after `frame` returns, so a late frame with nothing large inside it is the
+expected shape rather than a gap in the report.
 
 Off is the default everywhere and a recording without `?timing=trace` carries
 none of these tracks. The worker tracks are in a trace and never in a drain,
@@ -185,7 +189,7 @@ node scripts/drive.mjs --dpr 2 --width 1920 --height 1200 … --cast 200
 ```
 
 Both difference consecutive frames and report the ones that differ from **both**
-neighbours while those neighbours match each other. That shape is a strobe; motion
+neighbors while those neighbors match each other. That shape is a strobe; motion
 produces none, which is what makes a clean result mean something. A still cannot show
 any of it and neither can `--shot`.
 

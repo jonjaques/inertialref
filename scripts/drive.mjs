@@ -657,7 +657,11 @@ async function traceFor(send, subscribe, ms, out) {
   let complete = false
   const unsubscribe = subscribe((msg) => {
     if (msg.method === 'Tracing.dataCollected') {
-      events.push(...msg.params.value)
+      // A loop rather than `push(...chunk)`. Chrome chooses the chunk size and
+      // a spread is an argument list, so a large one throws `RangeError` from
+      // inside the socket's message handler — where the step's own `await`
+      // cannot catch it, so `--down` never runs and the browser is orphaned.
+      for (const event of msg.params.value) events.push(event)
       return true
     }
     if (msg.method === 'Tracing.tracingComplete') {
@@ -667,25 +671,31 @@ async function traceFor(send, subscribe, ms, out) {
     return false
   })
 
-  await send('Tracing.start', {
-    transferMode: 'ReportEvents',
-    traceConfig: {
-      recordMode: 'recordAsMuchAsPossible',
-      includedCategories: [
-        'blink.user_timing',
-        'devtools.timeline',
-        'disabled-by-default-devtools.timeline',
-        'disabled-by-default-devtools.timeline.frame',
-        'v8.execute',
-      ],
-    },
-  })
-  await sleep(ms)
-  await send('Tracing.end')
-  // Chrome flushes after `end`, so the events are still arriving here.
-  const deadline = Date.now() + 30_000
-  while (!complete && Date.now() < deadline) await sleep(50)
-  unsubscribe()
+  // In a `finally`, because a throw from `Tracing.start` — an unknown category,
+  // a target that went away — would otherwise leave this listener attached for
+  // the rest of the session, still appending to an array nothing will write.
+  try {
+    await send('Tracing.start', {
+      transferMode: 'ReportEvents',
+      traceConfig: {
+        recordMode: 'recordAsMuchAsPossible',
+        includedCategories: [
+          'blink.user_timing',
+          'devtools.timeline',
+          'disabled-by-default-devtools.timeline',
+          'disabled-by-default-devtools.timeline.frame',
+          'v8.execute',
+        ],
+      },
+    })
+    await sleep(ms)
+    await send('Tracing.end')
+    // Chrome flushes after `end`, so the events are still arriving here.
+    const deadline = Date.now() + 30_000
+    while (!complete && Date.now() < deadline) await sleep(50)
+  } finally {
+    unsubscribe()
+  }
 
   await mkdir(path.dirname(out), { recursive: true })
   await writeFile(out, JSON.stringify({ traceEvents: events }))

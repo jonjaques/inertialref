@@ -1,4 +1,4 @@
-import { getLogger, getTimer } from '@inertialref/shared'
+import { getLogger, getTimer, type Span } from '@inertialref/shared'
 import { BOOT_PHASE } from './frameTiming.ts'
 import {
   readCatalog,
@@ -48,14 +48,23 @@ export async function loadStarCatalog(): Promise<StarCatalog> {
    * apart, and on an offline launch the first is nearly free while on a cold
    * one it is most of the wait.
    */
+  /*
+   * Both spans are held out here so the failure path can close whichever one
+   * was open. A span left open emits nothing, so a fallback would silently drop
+   * the entry that says how long the failure took — which on a timeout, or on a
+   * truncated file that throws out of `readCatalog`, is the whole story. Both
+   * are closed in the `catch` and `Span.end` is idempotent, so the one that
+   * already finished is unaffected.
+   */
   const span = timer.span('catalog.fetch', BOOT_PHASE)
+  let decode: Span | null = null
   try {
     const response = await fetch(catalogUrl)
     if (!response.ok)
       throw new Error(`${response.status} ${response.statusText}`)
     const bytes = new Uint8Array(await response.arrayBuffer())
     span.end()
-    const decode = timer.span('catalog.decode', BOOT_PHASE)
+    decode = timer.span('catalog.decode', BOOT_PHASE)
     const catalog = readCatalog(bytes)
     decode.end()
     log.info('catalog loaded', {
@@ -64,10 +73,8 @@ export async function loadStarCatalog(): Promise<StarCatalog> {
     })
     return catalog
   } catch (cause) {
-    // Closed on the failure path too. A span left open emits nothing, so a
-    // fallback would silently drop the entry that says how long the failure
-    // took — which on a timeout is the whole story.
     span.end()
+    decode?.end()
     log.warn('no star catalog; falling back to Sol only', {
       cause: String(cause),
       url: catalogUrl,

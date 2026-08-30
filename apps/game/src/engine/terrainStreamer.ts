@@ -352,7 +352,7 @@ export interface TerrainState {
    * Kept against the resolved `Body` rather than rebuilt each frame, and the
    * cost that decides it is allocation rather than arithmetic: the palette is
    * twenty multiplies but about twenty short-lived objects, six of them nested
-   * records with a colour apiece, and `update` runs every frame terrain streams.
+   * records with a color apiece, and `update` runs every frame terrain streams.
    * There is nothing to invalidate — the body is an immutable object out of the
    * world, so a different world, a retarget or a reseed is a different
    * reference, and the identity check catches all three the way
@@ -433,7 +433,7 @@ export class TerrainStreamer {
    * walk hit its patch ceiling.
    *
    * Beside `summary()` for the reason `pool.queued` sits beside `stats()`: the
-   * frame loop reads these every frame to colour a trace entry, and `summary()`
+   * frame loop reads these every frame to color a trace entry, and `summary()`
    * allocates an object and a nested one for the scatter field. An entry that
    * turns red when the ground is going coarse is the one thing a screenshot of
    * a profile can say at a glance, and it must not cost a per-frame allocation
@@ -637,7 +637,7 @@ export class TerrainStreamer {
    * run unconditionally rather than behind an altitude gate, and the second is
    * what it costs where somebody is actually looking at ground. Measured on the
    * Terrain track on Earth's summit site, where a nine-level selection visits
-   * 446 nodes: `terrain.select` was 2.733 ms of a 4.461 ms frame — 61% of
+   * 446 nodes: `terrain.select` was 2.733 ms of a 4.461 ms engine step — 61% of
    * everything the engine did — with `terrain.request` at 0.916 ms,
    * `terrain.build` at 0.225 ms and `terrain.scatter` at 0.046 ms behind it.
    * A figure measured at one operating point is a figure about that point.

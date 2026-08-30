@@ -19,7 +19,7 @@ import { getTimer, type Timer, type TimingDetail } from '@inertialref/shared'
  *
  * **One clock read per boundary, not a pair per span.** The phases then *tile*
  * the frame — each one ends exactly where the next begins — so the quantization
- * error redistributes between neighbours instead of accumulating, and the sum
+ * error redistributes between neighbors instead of accumulating, and the sum
  * of the phases equals the whole. Fourteen independent reads would give seven
  * independent roundings whose total drifts from the frame they are meant to
  * decompose. It is also half the clock reads.
@@ -118,7 +118,7 @@ export class PhaseClock {
    *
    * For work that belongs to no phase — the render-space transforms between the
    * camera arms, which are a handful of quaternion multiplies. Charging them to
-   * whichever neighbour happens to follow would be a lie the tiling makes
+   * whichever neighbor happens to follow would be a lie the tiling makes
    * invisible.
    */
   skip(): void {

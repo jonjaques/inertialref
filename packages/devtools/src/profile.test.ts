@@ -59,6 +59,77 @@ describe('the profile report', () => {
     )
   })
 
+  it('will not blame a concurrent span that merely started inside a late frame', () => {
+    /*
+     * The pool times `run` from dispatch to answer on the page's clock, so a
+     * long worker job starts inside some frame and outlives it. Before
+     * containment was required it was the longest thing the scan found, and a
+     * real recording's verdict read "run universe.generateHeightfield dominated
+     * 14 of them at 49.7 ms mean" — a span on another thread, named as the
+     * cause of a main-thread frame.
+     */
+    const entries = [
+      measure('frame', 'Engine', 0, 40),
+      measure('run generateHeightfield', 'Workers', 5, 50), // ends past the frame
+      measure('scene', 'Engine', 6, 22), // contained, and the real answer
+    ]
+    const report = summarizeProfile(entries, { droppedFrameMs: 25 })
+    expect(report.late[0]?.dominatedBy).toBe('scene')
+    expect(report.late[0]?.dominatorMs).toBe(22)
+  })
+
+  it('says so when the largest span inside a late frame explains little of it', () => {
+    // Measured shape: `orbitTraces` was the biggest thing inside seven late
+    // frames at 0.7 ms of 39. Naming it without the ratio points a reader at
+    // 2% of the problem — everything the GPU does happens after `frame`
+    // returns, and a late frame with nothing large in it is the expected shape.
+    const entries = [
+      measure('frame', 'Engine', 0, 40),
+      measure('orbitTraces', 'Render', 1, 0.7),
+    ]
+    const report = summarizeProfile(entries, { droppedFrameMs: 25 })
+    expect(report.verdict).toMatch(/0\.7 ms of 40\.0 ms/)
+    expect(report.verdict).toMatch(/outside anything instrumented here/)
+  })
+
+  it('leaves a late frame unattributed when nothing measured is inside it', () => {
+    // GPU time and idle are outside every span here, so `null` is the honest
+    // answer rather than the nearest overlapping thing.
+    const report = summarizeProfile(
+      [measure('frame', 'Engine', 0, 40), measure('run', 'Workers', 5, 50)],
+      { droppedFrameMs: 25 },
+    )
+    expect(report.late[0]?.dominatedBy).toBe(null)
+    expect(report.verdict).toMatch(/with no span inside them/)
+  })
+
+  it('refuses a share for a span that occurs once and outlasts every frame', () => {
+    /*
+     * The case the overlap test structurally cannot see: `navigation to first
+     * light` is a single entry covering the whole boot, so `spans.length < 2`
+     * and `overlaps` returns false. It printed **320%** — a division whose
+     * numerator had nothing to do with its denominator.
+     *
+     * A contained serial span cannot exceed 100%, so the ceiling is the
+     * definition rather than a heuristic.
+     */
+    const report = summarizeProfile([
+      measure('frame', 'Engine', 100, 5),
+      measure('frame', 'Engine', 116, 5),
+      measure('navigation to first light', 'Boot', 0, 8588),
+      measure('preload', 'Boot', 441, 1798),
+    ])
+    const boot = report.spans.find((span) => span.name.startsWith('navigation'))
+    expect(boot?.shareOfFrame).toBe(null)
+    expect(
+      report.spans.find((span) => span.name === 'preload')?.shareOfFrame,
+    ).toBe(null)
+    // The frames themselves still divide by themselves and come to one.
+    expect(
+      report.spans.find((span) => span.name === 'frame')?.shareOfFrame,
+    ).toBe(1)
+  })
+
   it('refuses a share for spans that overlap each other', () => {
     /*
      * Four worker jobs running at once. Their total is four times the wall
@@ -101,8 +172,10 @@ describe('the profile report', () => {
     }
     const report = summarizeProfile(entries, { droppedFrameMs: 25 })
     expect(report.late).toHaveLength(4)
+    // The claim carries its own evidence — 34 of 40 ms is 85%, so it stands
+    // without the caveat the small-share case earns.
     expect(report.verdict).toBe(
-      '4 of 100 frames over 25 ms; rare dominated 4 of them at 34.0 ms mean',
+      '4 of 100 frames over 25 ms; rare was the largest measured span in 4 of them, 34.0 ms of 40.0 ms',
     )
     // `steady` has five times the total, and is correctly not the answer.
     const steady = report.spans.find((span) => span.name === 'steady')
@@ -112,9 +185,9 @@ describe('the profile report', () => {
 
   it('keeps a name that contains a space whole', () => {
     // Half the labels in this project have one — `queue
-    // universe.generateHeightfield`, `warming surface maps`, `advance ×2
-    // @1.00×` — and a bucket keyed on `track + ' ' + name` and split apart
-    // again reports a span called `queue`.
+    // universe.generateHeightfield`, `run universe.surveyRegion`, `warming
+    // surface maps` — and a bucket keyed on `track + ' ' + name` and split
+    // apart again reports a span called `queue`.
     const report = summarizeProfile([
       measure('queue universe.generateHeightfield', 'Workers', 0, 9),
     ])

@@ -76,7 +76,7 @@ import {
   PhaseClock,
   TRACK_GROUP,
 } from './frameTiming.ts'
-import { DROPPED_FRAME_MS } from './perfBudgets.ts'
+import { DROPPED_FRAME_MS, ENGINE_BUDGET_MS } from './perfBudgets.ts'
 import { IndexedDbSaveStore } from './indexedDbStore.ts'
 import {
   createCutsceneSession,
@@ -116,10 +116,10 @@ const log = getLogger('game.engine')
  *
  * `ENGINE_PHASE` and `ENGINE_LATE` are frozen module constants chosen by one
  * comparison, rather than a detail built per frame: a track, a group and a
- * colour are the same on every frame and only lateness varies. That keeps the
+ * color are the same on every frame and only lateness varies. That keeps the
  * cheap level allocation-free at the sites that run sixty times a second, which
  * is the claim the whole flag rests on. `DROPPED_FRAME_MS` is the same number
- * the panel draws its warning line at — one definition of over-budget colours
+ * the panel draws its warning line at — one definition of over-budget colors
  * the plot *and* the trace entry.
  */
 const timer = getTimer('game.engine')
@@ -613,6 +613,16 @@ export class GameEngine implements PresentationHost {
    */
   readonly #phases = new PhaseClock('game.engine')
 
+  /**
+   * When the previous animation frame began, so a `frame` entry can cover the
+   * interval between them rather than the engine's share of one.
+   *
+   * `null` until the first frame has been drawn. Written unconditionally, even
+   * while the level is `off`, so that turning it on mid-session cannot emit a
+   * first bar reaching back to whenever it was last on.
+   */
+  #lastFrameStart: number | null = null
+
   #scene: RenderScene | null = null
   #frameMs = 16
   #fps = 60
@@ -861,43 +871,68 @@ export class GameEngine implements PresentationHost {
     })
 
     /*
-     * The frame's own entry, from numbers this method already has.
+     * Two entries, and which budget each is judged against is the whole point.
      *
-     * No new clock read at all, which is the pattern to reach for everywhere
-     * both ends of an interval already exist — and it is why the overhead
-     * question here is about the emit rather than about the measurement.
+     * `engine` is this method's own work — ticks, snapshot, scene build, terrain
+     * reconciliation — and it is what `metrics.engineMs` plots against
+     * `ENGINE_BUDGET_MS`. `frame` is the wall-clock interval between animation
+     * frames, which is what `metrics.period` plots against `DROPPED_FRAME_MS`.
      *
-     * Emitted *after* `renderer.info` has been read rather than before
-     * `#step`, because at `full` the counts ride on the entry as properties.
-     * They are last frame's, which is the correct pairing for the same reason
-     * the plot uses them: a draw call count belongs to the scene that produced
-     * it. Built only at `full` — `trace` has no properties channel at all, so
-     * formatting two integers into strings sixty times a second would fill a
-     * table nothing renders.
+     * They were one entry, named `frame`, covering the engine step and colored
+     * against 25 ms — which is `perfBudgets.ts`'s constant for the *period*, and
+     * that file's own comment warns that "coloring on the budget alone gets this
+     * wrong in the most misleading direction". It did: a session whose engine ran
+     * at 2 ms while the renderer took 28 reported "none over 25 ms", because the
+     * only thing being compared to 25 was the half that was fine.
+     *
+     * **The period covers the frame that just ended, not the one starting now.**
+     * `[#lastFrameStart, started]` is the interval every span from the previous
+     * frame actually falls inside — its engine phases, and the ten `useFrame`
+     * consumers that run *after* `frame` returns and would otherwise be outside
+     * any frame at all. That containment is what lets `ir.profile` compute a
+     * share of wall clock and name a Render span as the thing that dominated a
+     * late frame. Skipped on the first frame, which has no previous.
+     *
+     * The counts ride on the period entry, which is where they belong: they are
+     * last frame's draw, and last frame is what this bar covers. Built only at
+     * `full` — `trace` has no properties channel, so formatting four integers
+     * into strings sixty times a second would fill a table nothing renders.
      */
     if (timer.on) {
-      const late = elapsed > DROPPED_FRAME_MS
       timer.measure(
-        'frame',
+        'engine',
         started,
         started + elapsed,
-        timingDetailed()
-          ? {
-              track: 'Engine',
-              group: TRACK_GROUP,
-              color: late ? 'error' : 'primary',
-              properties: [
-                ['drawCalls', String(render?.drawCalls ?? 0)],
-                ['triangles', String(render?.triangles ?? 0)],
-                ['ticks', String(this.#ticksLastFrame)],
-                ['queued', String(this.pool()?.queued ?? 0)],
-              ],
-            }
-          : late
-            ? ENGINE_LATE
-            : ENGINE_PHASE,
+        elapsed > ENGINE_BUDGET_MS ? ENGINE_LATE : ENGINE_PHASE,
       )
+      const previous = this.#lastFrameStart
+      if (previous !== null) {
+        const late = started - previous > DROPPED_FRAME_MS
+        timer.measure(
+          'frame',
+          previous,
+          started,
+          timingDetailed()
+            ? {
+                track: 'Engine',
+                group: TRACK_GROUP,
+                color: late ? 'error' : 'primary',
+                properties: [
+                  ['drawCalls', String(render?.drawCalls ?? 0)],
+                  ['triangles', String(render?.triangles ?? 0)],
+                  ['ticks', String(this.#ticksLastFrame)],
+                  ['queued', String(this.pool()?.queued ?? 0)],
+                ],
+              }
+            : late
+              ? ENGINE_LATE
+              : ENGINE_PHASE,
+        )
+      }
     }
+    // Outside the `timer.on` branch: turning the level on mid-session must not
+    // produce a first `frame` bar reaching back to whenever it was last off.
+    this.#lastFrameStart = started
 
     // Now that the previous frame's counters have been recorded, clear them for
     // the draw that follows. `autoReset` is off for the reason given where it is
@@ -927,21 +962,34 @@ export class GameEngine implements PresentationHost {
      * The tick batch, never one entry per tick: 64 marks a second is the
      * instrumentation becoming the load.
      *
-     * The name stays `advance` on an ordinary frame and folds the counts in
-     * only when there is something to say — a batch that is not one tick, or a
-     * clock that did not achieve the warp it was asked for. `trace` has no
-     * properties channel, so the label is the only place those two numbers can
-     * go; decorating *every* frame with them would fragment the aggregation in
-     * `ir.profile` and bury the anomaly in a wall of identical strings. This
-     * way the flame chart reads `advance` until the moment it reads
-     * `advance ×12 @0.6×`, which is the moment worth looking at.
+     * **The name is `advance` on every frame and the two counts ride in
+     * `properties`,** which is the same trade `serveTasks` makes for a region
+     * address and for the same three reasons: a label is the aggregation key in
+     * `ir.profile`, a key in the sink's retained-name set, and the argument to
+     * `clearMeasures`. `achievedTimeScale` is `timeScale × steps / wanted`, and
+     * once the step budget caps — which is what the warp button is for — that
+     * ratio is a different float every frame. Folding it in gives one bucket
+     * per frame, a name set that grows at frame rate, and a flame chart in
+     * which no two bars share a name, precisely in the mode where frames are
+     * most likely to be late.
+     *
+     * Behind `timingDetailed()`, so the ternary evaluates to a frozen constant
+     * at every level below `full` and this call site allocates nothing. It has
+     * to be here rather than inside `step`: arguments are evaluated before the
+     * call, so a string built for a `PhaseClock` that is closed is a string
+     * built for nothing, sixty times a second, in the shipped build.
      */
-    const warp = this.world.clock.achievedTimeScale
     this.#phases.step(
-      this.#ticksLastFrame === 1 && warp === 1
-        ? 'advance'
-        : `advance ×${this.#ticksLastFrame} @${warp.toFixed(2)}×`,
-      ENGINE_PHASE,
+      'advance',
+      timingDetailed()
+        ? {
+            ...ENGINE_PHASE,
+            properties: [
+              ['ticks', String(this.#ticksLastFrame)],
+              ['warp', this.world.clock.achievedTimeScale.toFixed(2)],
+            ],
+          }
+        : ENGINE_PHASE,
     )
 
     const shot = snapshot(this.world)
@@ -1273,6 +1321,22 @@ export class GameEngine implements PresentationHost {
         // The world this survey was asked about is gone; let the next frame
         // start one against the world that replaced it.
         if (world !== this.#starFieldWorld) return
+        /*
+         * The expensive half, and it is not inside any frame.
+         *
+         * The `survey` phase in `#step` brackets the *dispatch* — building the
+         * cataloged half and handing the region walk to the pool — and returns.
+         * This runs in a microtask whenever the worker answers, outside
+         * `frame()` entirely, and it allocates four arrays over every star in
+         * an 8 ly sweep. Left uninstrumented it was main-thread work on no
+         * track at all, which is the exact gap this whole phase exists to
+         * close.
+         *
+         * A span rather than a `PhaseClock` step, because it is a one-off with
+         * no neighbor to tile against. Opened after the stale-world return, so
+         * an entry means the field was actually rebuilt.
+         */
+        const applying = timer.span('survey.apply', ENGINE_PHASE)
         const positions: UniverseVector[] = []
         const names: string[] = []
         const colours: [number, number, number][] = []
@@ -1295,6 +1359,7 @@ export class GameEngine implements PresentationHost {
           }
         }
         this.#starField = { positions, names, colours, luminosities }
+        applying.end()
         log.info('starfield surveyed', {
           stars: positions.length,
           catalogued: catalogStars.length,
@@ -1365,8 +1430,10 @@ export class GameEngine implements PresentationHost {
 
   dispose(): void {
     // Before the session, because releasing the subscription is what stops a
-    // level change reaching a pool that is about to be terminated. StrictMode
-    // builds two engines and disposes one; the survivor keeps its own.
+    // level change reaching a pool that is about to be terminated. `App.tsx`
+    // holds the engine in a module `singleton ??=`, so StrictMode's second pass
+    // returns the same instance and the browser never reaches here at all —
+    // this is the tests' path, and the one a second host would take.
     this.#releaseTiming()
     this.session.dispose()
   }

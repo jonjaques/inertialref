@@ -1592,7 +1592,7 @@ dark-adapted interface.
 
 Not built — recorded so the archaeology is not repeated. `SystemStub`
 (`packages/universe/src/galaxy.ts`) already carries `temperature`, a computed
-blackbody `colour`, `catalogued` (which is provenance) and the confirmed
+blackbody `color`, `catalogued` (which is provenance) and the confirmed
 `planets`. **`TravelTarget` in `packages/devtools/src/travel.ts` carries none of
 it** — the destination list gets a pre-formatted `detail` string and a boolean.
 
@@ -4261,7 +4261,7 @@ two looked identical in the source.
 ### A brightness floor is desaturation
 
 The neighborhood rail and the catalog's star glyphs carry each star's own
-colour, which `docs/design/art.md` puts on the list of things this game may not
+color, which `docs/design/art.md` puts on the list of things this game may not
 invent — "a K dwarf is orange, it does not get to be a nicer orange". The first
 version lifted every channel toward white by 0.45 so a saturated M-dwarf red
 would be legible at 12 px over slate. It turned the whole neighborhood into
@@ -5254,7 +5254,7 @@ survivor and a 590 m defect. Reintroducing the step fails it on Luna by three
 orders of magnitude.
 
 **And the same class of step, twice more, at plate boundaries.** `hypsometryBand`
-blended a plate's base toward the average of it and its neighbour with a weight
+blended a plate's base toward the average of it and its neighbor with a weight
 that started at **0.5** rather than 0 — and `plate`/`neighbor` swap as you cross
 the line, so half the difference between the two plates stood as a cliff:
 **9,433.9 m on Proxima Centauri II, 46% of that world's whole relief budget**,
@@ -5485,10 +5485,10 @@ steady 1,421 and said nothing was wrong while the cache under it strobed.
 that ended the search — pinned at exactly 1,152, which is the signature
 `FIELD_CACHE`'s own comment describes.
 
-## The ground stops being a colour and becomes a face (29 Aug 2026)
+## The ground stops being a color and becomes a face (29 Aug 2026)
 
 Phase 3 of [TERRAIN-PLAN](TERRAIN-PLAN.md), recorded in
-[ADR-0020](docs/adr/0020-the-face.md). Terrain had one flat colour under the
+[ADR-0020](docs/adr/0020-the-face.md). Terrain had one flat color under the
 scene's ambient light — survivable while the streamed set was nine patches, and
 not survivable once the quadtree draws the whole disk, because the ground is
 then the picture of the planet.
@@ -5520,8 +5520,8 @@ disagreeing planets in one frame.
 
 Numbers that settled things.
 
-- **`BodyAppearance.colour` means two different things and they differ by a
-  factor of six.** A tint where there is a map, a colour where there is not — so
+- **`BodyAppearance.color` means two different things and they differ by a
+  factor of six.** A tint where there is a map, a color where there is not — so
   on Luna it is (1, 1, 1). Read as a reflectance it made lunar regolith 0.88
   against a published 0.136 and the lit side blew out to a white disk. Anchored
   properly, Luna is 0.136 with its mare at 0.073 against a measured 0.07.
@@ -5833,7 +5833,7 @@ built-ins has.
   and the contact test does not know it exists — the same split the tail makes.
 - **A rock reads as a silhouette under a high sun and correctly under a low
   one**, and the cause is not the palette: on a mapped body every deposit's
-  ratio is exactly 1.000, so a rock's colour is the ground's colour and the
+  ratio is exactly 1.000, so a rock's color is the ground's color and the
   difference is entirely in the shading. The suspect is the bump. Its height
   field is the grain band on `local`, and across a rock `local` changes by the
   rock's own width over a handful of pixels — far above the band's Nyquist rate
@@ -5873,8 +5873,8 @@ up to 2.5×.
 
 The answer was not to drop the span. It was **one clock read per boundary rather
 than a pair per span**, so the phases _tile_ the frame and the quantization
-error redistributes between neighbours instead of accumulating. Measured: the
-Engine phases sum to 271.4 ms against a frame total of 272.1 ms — 99.7% — and
+error redistributes between neighbors instead of accumulating. Measured: the
+Engine phases sum to 271.4 ms against an `engine` total of 272.1 ms — 99.7% — and
 the four Terrain phases to 3.920 ms against `Engine/terrain` at 3.921 ms. The
 consequence to keep is that a short phase is honest **in the mean and not in the
 instant**: over a 240-frame window the rounding is unbiased and the mean is good
@@ -5882,7 +5882,7 @@ to well under a microsecond, but one bar is not a reading.
 
 **Terrain selection is 40–90 µs from orbit and 2.7 ms on a summit.** Standing on
 Earth's summit site with a nine-level selection visiting 446 nodes,
-`terrain.select` was **2.733 ms of a 4.461 ms frame** — 61% of everything the
+`terrain.select` was **2.733 ms of a 4.461 ms engine step** — 61% of everything the
 engine did, and 30–68× the figure `terrainStreamer.ts` had carried since it was
 written. Both numbers are real; the comment now says which is which. This is the
 same lesson Earthrise taught about keep sets, arriving from a different

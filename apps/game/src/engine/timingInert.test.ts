@@ -109,11 +109,63 @@ describe('the timing port, with nothing listening', () => {
 
     expect(reads).toBeGreaterThan(FRAMES * 2)
     const names = new Set(records.map((record) => record.name))
+    expect(names.has('engine')).toBe(true)
     expect(names.has('frame')).toBe(true)
     expect(names.has('snapshot')).toBe(true)
-    // One frame entry per frame, which is also the claim that the loop ran.
-    expect(records.filter((record) => record.name === 'frame')).toHaveLength(
+    // One `engine` entry per frame, which is also the claim that the loop ran.
+    expect(records.filter((record) => record.name === 'engine')).toHaveLength(
       FRAMES,
     )
+    // One fewer `frame`: the period covers the interval between two frames, so
+    // the first has no predecessor to measure against.
+    expect(records.filter((record) => record.name === 'frame')).toHaveLength(
+      FRAMES - 1,
+    )
+  })
+
+  it('measures the period as a period and the engine as work', () => {
+    /*
+     * The two are different quantities against different budgets, and folding
+     * them into one entry hid a real class of defect: while `frame` covered the
+     * engine step and was coloured against `DROPPED_FRAME_MS` — which
+     * `perfBudgets.ts` defines for the *interval between frames*, and whose own
+     * comment warns that judging on the wrong one "gets this wrong in the most
+     * misleading direction" — a session whose engine ran at 2 ms while the
+     * renderer took 28 reported no late frames at all.
+     *
+     * `engine` must therefore be *inside* the wall clock and `frame` must *be*
+     * it. The clock here advances 16 ms a frame and the engine step is
+     * microseconds, so the two are unmistakable.
+     */
+    const records: TimingRecord[] = []
+    const detach = timingHub.attach(
+      { write: (record) => records.push(record) },
+      { now: () => performance.now() },
+    )
+    const engine = engineFor()
+    for (let i = 0; i < 8; i += 1) engine.frame(1 / 60)
+    engine.dispose()
+    detach()
+
+    const spanOf = (name: string): number[] =>
+      records
+        .filter((record) => record.name === name)
+        .map((record) => record.endMs - record.startMs)
+
+    const periods = spanOf('frame')
+    const steps = spanOf('engine')
+    expect(periods).toHaveLength(7)
+    expect(steps).toHaveLength(8)
+    // Every period contains its frame's work rather than being it.
+    for (const [i, period] of periods.entries()) {
+      expect(period).toBeGreaterThanOrEqual(steps[i] ?? 0)
+    }
+    // And the periods tile: each begins where the previous one ended.
+    const starts = records
+      .filter((record) => record.name === 'frame')
+      .map((record) => [record.startMs, record.endMs] as const)
+    for (let i = 1; i < starts.length; i += 1) {
+      expect(starts[i]?.[0]).toBe(starts[i - 1]?.[1])
+    }
   })
 })

@@ -48,14 +48,15 @@ const OPTIONS = {
    */
   'terrain-baseline': { type: 'boolean', default: false },
   /**
-   * Decompose the tick loop the way the browser decomposes a frame.
+   * Report what this run put on the timeline, with no browser anywhere.
    *
-   * The same span names, because they are emitted from `packages/*` and from
-   * the engine's own step rather than from anything browser-shaped — so a
-   * scenario that profiles in Chrome profiles here, which is the "same harness,
-   * both hosts" property this project already has for scenarios. It is also the
-   * half `terrainBaseline` explicitly says it cannot measure: this is CPU time
-   * in the simulation, with no renderer and no GPU anywhere near it.
+   * The span names are the browser's, because they are emitted from
+   * `packages/*` rather than from anything browser-shaped — so a worker job
+   * profiled in Chrome is the same entry here. What it is *not* is the frame
+   * decomposition: those spans live in `GameEngine`, which the runner has no
+   * instance of, and there are deliberately none in `packages/simulation`. The
+   * block above the collector says which invocations therefore have anything to
+   * report.
    */
   profile: { type: 'boolean', default: false },
   quiet: { type: 'boolean', default: false },
@@ -93,9 +94,13 @@ if (!values.quiet) {
  * generosity: **there is no span inside `packages/simulation`, deliberately**,
  * because the simulation depends on the integer tick and wall clock enters at
  * exactly one call. So a bare `--ticks` loop has nothing to decompose, and what
- * this reports is the worker pool — `--scenario descent`, `--terrain-baseline`
- * and anything else that dispatches jobs. The report says so rather than
- * printing an empty table that reads like a fast run.
+ * this reports is the worker pool, on a run that actually dispatches jobs —
+ * which in practice means `--self-test`, whose worker-task check is the only
+ * thing here that goes through the pool. `--scenario descent` simulates a
+ * descent on paper (`descent.ts`: "it does not run the worker pool") and
+ * `--terrain-baseline` generates inline and says "not measured here: … worker
+ * queue depth". Both print "nothing was recorded", which is the honest answer
+ * and not an empty table pretending to be a fast run.
  */
 const collected: TimingRecord[] = []
 const releaseTiming =

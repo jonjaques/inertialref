@@ -50,7 +50,10 @@ const defer = (run: () => void): void => {
  */
 export function createInlineWorker(
   registry: TaskRegistry,
-  now: () => number = () => 0,
+  // Optional rather than defaulted here, so `serveTasks` can tell a caller that
+  // omitted a clock from one that asked for the zero clock. It emits nothing on
+  // a timeline without one; see the `timed` flag there.
+  now?: () => number,
   serve: Omit<ServeOptions, 'now'> = {},
 ): WorkerPort {
   const toWorker = new Set<(message: WorkerInbound) => void>()
@@ -71,7 +74,10 @@ export function createInlineWorker(
     },
   }
 
-  serveTasks(registry, hostSide, { ...serve, now })
+  serveTasks(registry, hostSide, {
+    ...serve,
+    ...(now === undefined ? {} : { now }),
+  })
 
   return {
     post(message, transfer = []) {

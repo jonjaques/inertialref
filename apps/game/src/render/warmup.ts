@@ -33,7 +33,7 @@ import { BOOT_PHASE } from '../engine/frameTiming.ts'
 const log = getLogger('game.warmup')
 
 /*
- * The census is already a list of labelled units of work with a declared total.
+ * The census is already a list of labeled units of work with a declared total.
  * Timing each one is a `span` around the loop body, and it is the single place
  * that covers every producer in the application — `preload.ts` registers all of
  * its own through here, so instrumenting this instruments those for free and

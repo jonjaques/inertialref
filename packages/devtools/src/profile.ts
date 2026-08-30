@@ -12,8 +12,9 @@ import { Series } from './metrics.ts'
  * statistic the performance panel reports and the reason it reports it.
  *
  * The deliverable is the last line of the report. An agent asks "why is it
- * slow" and gets back *"9 of 61 frames over 25 ms; terrain.select dominated 7
- * of them at 8.4 ms mean"* rather than a screenshot and a p95.
+ * slow" and gets back *"9 of 61 frames over 25 ms; terrain.select was the
+ * largest measured span in 7 of them, 8.4 ms of 31.0 ms"* rather than a
+ * screenshot and a p95.
  */
 
 /** One entry, read back off a timeline. Plain data, so it survives a `--js`. */
@@ -51,7 +52,7 @@ export interface TimingPort {
    *
    * Taken from the host rather than defaulted here, because the whole point of
    * moving it out of `PerfPanel.tsx` was that one definition of over-budget
-   * should colour the plot, the trace entry *and* this report.
+   * should color the plot, the trace entry *and* this report.
    */
   readonly droppedFrameMs: number
 }
@@ -115,6 +116,12 @@ export interface SpanSummary {
    * the ones that describe other threads, and it is empirical rather than a
    * list of track names, so a track added later is classified correctly without
    * anybody remembering to.
+   *
+   * **Null, too, when the total exceeds all the frame time in the window.** A
+   * span that occurs once has nothing to overlap, so the test above passes it
+   * — and `navigation to first light` is one entry covering the whole boot,
+   * which printed 320%. A contained serial span cannot exceed 100% by
+   * construction, so the ceiling is the definition rather than a heuristic.
    */
   readonly shareOfFrame: number | null
 }
@@ -122,7 +129,14 @@ export interface SpanSummary {
 export interface LateFrame {
   readonly startMs: number
   readonly durationMs: number
-  /** The longest single span that started inside this frame. */
+  /**
+   * The longest span wholly *contained* in this frame, or null.
+   *
+   * Contained rather than overlapping, because the pool times a worker job
+   * from dispatch to answer on the page's clock — so a 50 ms heightfield
+   * starts inside a 42 ms frame, was the longest thing found there, and got
+   * named as the cause of a frame it ran on another thread from.
+   */
   readonly dominatedBy: string | null
   readonly dominatorMs: number
 }
@@ -173,8 +187,17 @@ interface Bucket {
  *
  * Sorted by start, then one pass: any entry beginning before its predecessor
  * ends means these are concurrent, and no fraction of a serial timeline
- * describes them. A hair of tolerance because the clock steps in 100 µs and two
- * adjacent entries on one thread legitimately share a boundary reading.
+ * describes them.
+ *
+ * The tolerance is an ULP guard, not a clock-quantum one — a distinction worth
+ * keeping, because the quantum reading argues for widening it to ~0.1 ms, which
+ * would start hiding real sub-100 µs concurrency. A `PhaseClock` boundary is
+ * bit-identical on both sides: `step` emits `measure(name, #at, at)` and then
+ * assigns `#at = at`, the same double. What is not identical is a boundary that
+ * has been through a trace: `scripts/timing.mjs` derives `startMs` and
+ * `durationMs` from separate microsecond fields, so `start + duration`
+ * reconstructs the neighbor's start to within a rounding error and a bare
+ * `<` would call two tiling phases concurrent.
  */
 function overlaps(spans: { start: number; end: number }[]): boolean {
   if (spans.length < 2) return false
@@ -214,12 +237,13 @@ export function summarizeProfile(
    *
    * The bucket carries its own track and name rather than being keyed on a
    * joined string that is split apart again. Half the names here contain a
-   * space — `queue universe.generateHeightfield`, `warming surface maps`,
-   * `advance ×2 @1.00×` — so a split on one reports a span called `queue` and
-   * throws the rest of its name away.
+   * space — `queue universe.generateHeightfield`, `run universe.surveyRegion`,
+   * `warming surface maps` — so a split on one reports a span called `queue`
+   * and throws the rest of its name away.
    */
   const buckets = new Map<string, Bucket>()
-  const keyOf = (entry: TimingEntry): string => `${entry.track} ${entry.name}`
+  const keyOf = (entry: TimingEntry): string =>
+    `${entry.track}\u0000${entry.name}`
   for (const entry of measures) {
     const key = keyOf(entry)
     const held = buckets.get(key) ?? {
@@ -259,8 +283,24 @@ export function summarizeProfile(
       meanMs: stats?.mean ?? 0,
       p95Ms: stats?.p95 ?? 0,
       maxMs: stats?.max ?? 0,
+      /*
+       * Null unless this really is a share of something.
+       *
+       * Two ways it is not, and the second was found printing 320%. A span
+       * whose occurrences overlap each other is concurrent — four worker jobs
+       * at once total four times the wall clock they occupy. And a span whose
+       * total *exceeds* all the frame time in the window was not inside those
+       * frames at all: `navigation to first light` is one entry covering the
+       * whole boot, so `overlaps` returns false at `spans.length < 2` and the
+       * division went ahead on a numerator that had nothing to do with the
+       * denominator.
+       *
+       * A contained serial span cannot exceed 100% by construction, so the
+       * ceiling is not a heuristic — it is the definition, and it catches the
+       * single-occurrence case the overlap test structurally cannot see.
+       */
       shareOfFrame:
-        frameTotal > 0 && !overlaps(held.spans)
+        frameTotal > 0 && !overlaps(held.spans) && held.totalMs <= frameTotal
           ? held.totalMs / frameTotal
           : null,
     })
@@ -274,22 +314,53 @@ export function summarizeProfile(
    * tile the frame and none of them straddles its edge. The frame's own entry
    * is skipped, or every late frame would be dominated by itself.
    *
-   * The scan is over a start-sorted copy and breaks at the frame's end, so this
-   * is linear in the entries inside a late frame rather than in the window —
-   * a profile with thousands of entries and a handful of late frames does not
-   * become quadratic.
+   * **A cursor, not a rescan.** The `break` bounds the tail and nothing bounded
+   * the head: starting each frame at `sorted[0]` and `continue`-ing past every
+   * earlier entry is linear in the *window*, so the pass was quadratic in the
+   * one case it is reached — a recording long enough and bad enough to profile.
+   * `--group all` over a DevTools export is hundreds of thousands of entries
+   * against hundreds of late frames. Both sequences are sorted by start, so one
+   * index that only moves forward makes the whole pass linear.
    */
   const sorted = [...measures].sort((a, b) => a.startMs - b.startMs)
+  const lateFrames = frames
+    .filter((frame) => frame.durationMs > droppedFrameMs)
+    .sort((a, b) => a.startMs - b.startMs)
   const late: LateFrame[] = []
-  for (const frame of frames) {
-    if (frame.durationMs <= droppedFrameMs) continue
+  let cursor = 0
+  for (const frame of lateFrames) {
     const end = frame.startMs + frame.durationMs
+    while (
+      cursor < sorted.length &&
+      (sorted[cursor]?.startMs ?? Infinity) < frame.startMs
+    )
+      cursor += 1
     let dominatedBy: string | null = null
     let dominatorMs = 0
-    for (const entry of sorted) {
-      if (entry.startMs < frame.startMs) continue
+    for (let i = cursor; i < sorted.length; i += 1) {
+      const entry = sorted[i]
+      if (entry === undefined) break
       if (entry.startMs >= end) break
       if (entry.name === frameSpan) continue
+      /*
+       * Contained, not merely overlapping — both ends inside the frame.
+       *
+       * A worker job is the case that forces this. The pool times `run` from
+       * dispatch to answer on the page's clock, so a 50 ms heightfield
+       * legitimately *starts* inside a 42 ms frame and was, before this, the
+       * longest thing found there: the verdict read "run
+       * universe.generateHeightfield dominated 14 of them at 49.7 ms mean" for
+       * a span that ran on another thread and cannot be on a frame's critical
+       * path. The saturated pool is a real correlate of those late frames and
+       * "dominated" is the wrong word for it.
+       *
+       * Anything genuinely on the critical path — an engine phase, a `useFrame`
+       * consumer, the engine step itself — is contained by construction, so
+       * this costs nothing it should have kept. A frame with no contained span
+       * gets `null`, which is the honest answer that nothing measured here
+       * explains it.
+       */
+      if (entry.startMs + entry.durationMs > end) continue
       if (entry.durationMs > dominatorMs) {
         dominatorMs = entry.durationMs
         dominatedBy = entry.name
@@ -328,10 +399,11 @@ export function summarizeProfile(
 /**
  * The deliverable, as one sentence.
  *
- * It names the dominating span *and its mean over the frames it dominated*,
- * rather than its mean over the whole window — a span that is cheap on average
+ * It names the largest span *inside the late frames*, with its mean over those
+ * frames rather than over the whole window — a span that is cheap on average
  * and catastrophic four times is exactly the case a mean hides, and the reason
- * this report exists at all.
+ * this report exists at all. The frame duration goes beside it, because the
+ * ratio is what says whether the name is an explanation.
  */
 function verdictFor(
   late: readonly LateFrame[],
@@ -341,11 +413,11 @@ function verdictFor(
   if (frames === 0) return 'no frames in the window'
   if (late.length === 0)
     return `${frames} frames, none over ${droppedFrameMs} ms`
-  const byName = new Map<string, number[]>()
+  const byName = new Map<string, LateFrame[]>()
   for (const one of late) {
     if (one.dominatedBy === null) continue
     const held = byName.get(one.dominatedBy) ?? []
-    held.push(one.dominatorMs)
+    held.push(one)
     byName.set(one.dominatedBy, held)
   }
   const worst = [...byName.entries()].sort((a, b) => b[1].length - a[1].length)
@@ -353,11 +425,30 @@ function verdictFor(
   if (found === undefined)
     return `${late.length} of ${frames} frames over ${droppedFrameMs} ms, with no span inside them`
   const [name, samples] = found
-  const mean = samples.reduce((sum, one) => sum + one, 0) / samples.length
-  return (
+  const mean =
+    samples.reduce((sum, one) => sum + one.dominatorMs, 0) / samples.length
+  const of =
+    samples.reduce((sum, one) => sum + one.durationMs, 0) / samples.length
+  const share = of > 0 ? mean / of : 0
+  /*
+   * The verdict states its own evidence, because "dominated" is a strong word
+   * and the number behind it is often small.
+   *
+   * Measured on a real recording: `orbitTraces` was the largest span inside
+   * seven late frames at 0.7 ms mean — of frames averaging 39 ms. Calling that
+   * domination points a reader at 2% of the problem. Everything the GPU does
+   * happens after `frame` returns, which `frameMetrics.ts` says in as many
+   * words, so a late frame with nothing large inside it is the *expected*
+   * shape rather than a gap in the report — and saying so is more useful than
+   * naming the biggest of the small things and stopping.
+   */
+  const claim =
     `${late.length} of ${frames} frames over ${droppedFrameMs} ms; ` +
-    `${name} dominated ${samples.length} of them at ${mean.toFixed(1)} ms mean`
-  )
+    `${name} was the largest measured span in ${samples.length} of them, ` +
+    `${mean.toFixed(1)} ms of ${of.toFixed(1)} ms`
+  return share >= 0.25
+    ? claim
+    : `${claim} — so most of those frames are outside anything instrumented here`
 }
 
 const pad = (value: number, width: number): string =>

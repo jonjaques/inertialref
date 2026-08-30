@@ -132,9 +132,23 @@ export class WorkerPool {
    */
   #timingLevel = 'off'
 
+  /**
+   * Whether `#now` is a clock or the zero stand-in.
+   *
+   * The zero default is harmless in a `PoolStats` figure — an average of 0 ms
+   * is obviously untimed — and not harmless on a shared axis, where it stacks
+   * every `queue` and `run` entry at t=0 beside entries the host is timing with
+   * `performance.now()`. That is the case `AttachOptions.now` refuses outright
+   * by throwing; a pool cannot throw, because a pool without a clock is a
+   * supported thing that simply has no timeline coordinates to offer. It keeps
+   * its stats and emits nothing.
+   */
+  readonly #timed: boolean
+
   constructor(options: PoolOptions) {
     invariant(options.size > 0, 'A worker pool needs at least one worker')
     this.#now = options.now ?? (() => 0)
+    this.#timed = options.now !== undefined
     this.#log = getLogger('workers.pool')
     for (let index = 0; index < options.size; index += 1) {
       const port = options.factory(index)
@@ -258,7 +272,7 @@ export class WorkerPool {
       sample(this.#queueSamples, waited)
       this.#longestQueueMs = Math.max(this.#longestQueueMs, waited)
       // From the two numbers the job already carries; no clock read of its own.
-      if (timer.on)
+      if (this.#timed && timer.on)
         timer.measure(
           `queue ${job.task}`,
           job.enqueuedAt,
@@ -318,7 +332,7 @@ export class WorkerPool {
      * occupied a worker for 40 ms, and a track that only showed successes would
      * make a thrashing streamer look idle.
      */
-    if (timer.on)
+    if (this.#timed && timer.on)
       timer.measure(
         `run ${job.task}`,
         job.dispatchedAt,

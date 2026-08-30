@@ -62,7 +62,7 @@ the dependency graph at all.
 
 **Two platform APIs sit behind one three-valued level, because they cost
 differently.** `console.timeStamp` reaches an active DevTools trace and nowhere
-else, cannot be read back, and carries label, track, group and colour and no
+else, cannot be read back, and carries label, track, group and color and no
 more. `performance.mark`/`measure` reach the page's own retained timeline, carry
 a properties table, and can be read back by `getEntriesByType`, a
 `PerformanceObserver` or `ir.timing.drain()`. Measured here, in Chrome, against
@@ -84,13 +84,25 @@ this timeline and boot happens before React mounts, so a level read in an effect
 misses the atmosphere bake, every texture upload, the pipeline warm and the gap
 between navigation and first light.
 
-**The phases tile the frame from one clock read per boundary.** Measured here,
+**The phases tile the engine step from one clock read per boundary.** Measured here,
 `performance.now()` steps in exactly **100 µs** — `crossOriginIsolated` is
 false, nothing sets COOP/COEP, and 200,000 consecutive reads produced two
 distinct deltas, both 100.00 µs. Reading once per boundary rather than twice per
-span makes the quantization error redistribute between neighbours instead of
-accumulating, so the phases sum to the frame: measured at 99.7% on the Engine
-track and to a microsecond on the Terrain track inside it.
+span makes the quantization error redistribute between neighbors instead of
+accumulating, so the phases sum to what they decompose: measured at 99.7% of
+the `engine` entry, and to a microsecond on the Terrain track inside it.
+
+**`engine` and `frame` are two entries against two budgets, and conflating them
+hid a whole class of defect.** `engine` is this loop's own work, judged against
+`ENGINE_BUDGET_MS`; `frame` is the wall-clock interval between animation frames,
+judged against `DROPPED_FRAME_MS`. They were one entry covering the engine step
+and colored against 25 ms — which `perfBudgets.ts` defines for the period, and
+whose own comment warns that judging on the wrong one "gets this wrong in the
+most misleading direction". It did: a session whose engine ran at 2 ms while the
+renderer took 28 reported no late frames at all, because the only thing compared
+to 25 was the half that was fine. The period covers the frame that just _ended_,
+so every span from it — the engine phases, and the ten `useFrame` consumers that
+run after `frame` returns — falls inside a bar rather than beside one.
 
 **Each side of the worker boundary emits only its own numbers**, because
 `console.timeStamp`'s arguments are milliseconds against `performance.timeOrigin`
@@ -152,7 +164,7 @@ invisible to every existing one.**
 
 `terrainStreamer.ts` documents selection at 40–90 µs for a whole disk. Standing
 on Earth's summit site, with a nine-level selection visiting 446 nodes,
-`terrain.select` is **2.733 ms of a 4.461 ms frame** — 61% of everything the
+`terrain.select` is **2.733 ms of a 4.461 ms engine step** — 61% of everything the
 engine does. Both figures are real and the comment now says which is which. A
 figure measured at one operating point is a figure about that point.
 
@@ -171,8 +183,8 @@ identical sentences four seconds apart with nothing relating them.
 **Over-budget now has one definition and three consumers.** `FRAME_BUDGET_MS`,
 `DROPPED_FRAME_MS`, `ENGINE_BUDGET_MS` and `DRAW_CALL_BUDGET` move from
 `hud/PerfPanel.tsx` to `engine/perfBudgets.ts`, because `hud/` sits above
-`engine/` and the sink must not import a panel. The same number colours the
-plot, colours the trace entry and bounds `ir.profile`'s verdict.
+`engine/` and the sink must not import a panel. The same number colors the
+plot, colors the trace entry and bounds `ir.profile`'s verdict.
 
 **The panel keeps its job and the split is worth stating.** The panel answers
 _"is it fast right now"_ while you fly; the timeline answers _"why was that

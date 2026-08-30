@@ -1618,8 +1618,7 @@ export class GameHarness {
    *
    * The level is restored afterwards rather than left at `full`, so a profile
    * taken mid-session does not silently leave the retained timeline growing for
-   * the rest of it. The drain before the wait discards whatever was already
-   * held — a profile is a window, and boot's entries are not in it.
+   * the rest of it.
    */
   async profile(ms = 2000): Promise<ProfileReport> {
     const port = this.#host.timing?.()
@@ -1631,9 +1630,16 @@ export class GameHarness {
       }
     }
     const was = port.level()
-    port.setLevel('full')
-    port.drain()
     try {
+      // Inside the `try` with the wait, not above it. Raising the level fans
+      // out synchronously — the browser port attaches a sink, logs, and calls
+      // every level listener, one of which reaches into the worker pool — so a
+      // throw on that path escaped with the level pinned at `full` and no
+      // restore, which is the state the `finally` exists to make unreachable.
+      port.setLevel('full')
+      // The drain before the wait discards whatever was already held: a profile
+      // is a window, and boot's entries are not in it.
+      port.drain()
       await port.wait(ms)
       return summarizeProfile(port.drain(), {
         droppedFrameMs: port.droppedFrameMs,

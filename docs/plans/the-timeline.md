@@ -14,7 +14,7 @@ without a single wall-clock read reaching canonical code.
 > a plan is read straight through and a reader should not have to find them:
 >
 > - **Terrain selection is not 40–90 µs where it matters.** That figure is a
->   whole disk from orbit. On a summit it is **2.733 ms of a 4.461 ms frame**,
+>   whole disk from orbit. On a summit it is **2.733 ms of a 4.461 ms engine step**,
 >   61% of everything the engine does. The plan reasons from the small figure
 >   throughout, including in the worry that `select` would quantize away.
 > - **`select` did not need folding into `update`, and `request`/`evict` did not

@@ -55,10 +55,22 @@ const FORBIDDEN = [
  * repository does not contain and would not be made safer by a dependency.
  */
 function withoutComments(source: string): string {
+  const blank = (text: string): string => text.replace(/[^\n]/g, ' ')
   return source.replace(
     /\/\*[\s\S]*?\*\/|\/\/[^\n]*|'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"|`(?:\\.|[^`\\])*`/g,
-    (match) =>
-      match.startsWith('/') ? match.replace(/[^\n]/g, ' ') : ' '.repeat(2),
+    (match) => {
+      // A template literal is the one form that carries code inside it, and
+      // `${performance.now()}` is code this test exists to find. Blanking the
+      // whole match — as replacing it with two spaces did — was both a false
+      // negative and the thing that broke the line numbers above: a literal
+      // spanning five lines collapsed to one, and `dossier.ts` reported seven
+      // lines short. Everything here preserves its own newlines and keeps the
+      // interpolations.
+      if (!match.startsWith('`')) return blank(match)
+      return match.replace(/\$\{[\s\S]*?\}|[^\n]/g, (part) =>
+        part.startsWith('${') ? part : ' ',
+      )
+    },
   )
 }
 

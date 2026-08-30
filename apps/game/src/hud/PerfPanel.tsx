@@ -40,7 +40,7 @@ import { SeriesStatsRow } from './SeriesStatsRow.tsx'
  * thing that could act on them was the plot — so "over budget" existed in
  * exactly one place and was available to nothing else. A trace entry wants the
  * same definition, `hud/` sits above `engine/`, and the sink must not import a
- * panel. One definition now colours the plot *and* colours the trace entry.
+ * panel. One definition now colors the plot *and* colors the trace entry.
  */
 
 export function PerfPanel({

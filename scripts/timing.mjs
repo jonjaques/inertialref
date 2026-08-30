@@ -4,7 +4,7 @@
  *
  *   node scripts/timing.mjs                       # .data/drive/trace.json
  *   node scripts/timing.mjs <trace.json[.gz]>     # a DevTools export, or --trace
- *   node scripts/timing.mjs <profile.json>        # ir.profile() / ir.timing.drain()
+ *   node scripts/timing.mjs <drain.json>          # ir.timing.drain()
  *
  * A timeline an agent cannot read is a timeline that only helps when a human is
  * already looking at DevTools. This is the other half: the same entries, as a
@@ -70,7 +70,9 @@ const { values, positionals } = parseArgs({
 
 const HELP = `node scripts/timing.mjs [file] [options]
 
-  file            a Chrome trace (.json/.json.gz) or an ir.profile() dump.
+  file            a Chrome trace (.json/.json.gz, either export form) or an
+                  ir.timing.drain() array. An ir.profile() report is already
+                  summarized and carries no entries to re-read.
                   Default: .data/drive/trace.json
 
   --group <name>  track group to report; "all" for every one, including
@@ -111,9 +113,27 @@ const text =
     : raw.toString('utf8')
 const parsed = JSON.parse(text)
 
+/*
+ * Three shapes reach here and only one of them announces itself.
+ *
+ * `traceFrames.mjs` already carries the first half of this: DevTools' download
+ * button wraps the events in `{ traceEvents }` and its file-system export hands
+ * out the bare array, so a reader that tests only for `traceEvents` sends a
+ * perfectly good export to `fromDump`, which maps trace events into entries
+ * with no `kind` — and `summarizeProfile` filters every one of them out and
+ * reports "nothing was recorded", blaming the level for a shape mismatch.
+ *
+ * A bare array is therefore disambiguated by its first element rather than by
+ * its container: a trace event has `ph`, a drained entry has `kind`.
+ */
+const isTraceEvent = (one) =>
+  typeof one === 'object' && one !== null && typeof one.ph === 'string'
+
 const entries = Array.isArray(parsed.traceEvents)
   ? fromTrace(parsed.traceEvents)
-  : fromDump(parsed)
+  : Array.isArray(parsed) && isTraceEvent(parsed[0])
+    ? fromTrace(parsed)
+    : fromDump(parsed)
 
 if (entries.length === 0) {
   process.stderr.write(
@@ -155,7 +175,26 @@ function fromTrace(events) {
    * and two threads reuse the same value — a map keyed on the id alone closes
    * one thread's span with another's end event and reports an interval that
    * never happened. A stack per key, because these nest.
+   *
+   * **Only for groups the pass above did not already cover, because at `full`
+   * the two halves are the same entries.** `sink.write` emits through
+   * `console.timeStamp` at *every* level and then falls through to
+   * `writeUserTiming` when the level is `full` — so a trace recorded at `full`,
+   * which is what `ir.profile()` and the panel's third option select, carries
+   * every InertialRef entry twice. Collecting both doubled `count`, `totalMs`
+   * and the frame count (halving the reported drop rate), and put two exactly
+   * coincident copies of every span into `overlaps()`, which nulled
+   * `shareOfFrame` for the whole report — the share column is the deliverable,
+   * and it went to em dashes at precisely the level that records the most.
+   *
+   * Filtering by group rather than by name and timestamp keeps the one reason
+   * this pass exists: React's `Components ⚛` and `Blocking` never appear as
+   * `TimeStamp` events, so their group is absent above and survives here. It
+   * also holds on a browser that ignores the `console.timeStamp` track
+   * arguments — there `data.track` is undefined, nothing is collected above,
+   * and User Timing is the only form the entries have.
    */
+  const covered = new Set(found.map((one) => one.group))
   const open = new Map()
   for (const event of events) {
     if (!String(event.cat).includes('user_timing')) continue
@@ -180,6 +219,8 @@ function fromTrace(events) {
       // and an interval, which is most of its value.
     }
     if (devtools.track === undefined) continue
+    // The same entry in its other form; see `covered` above.
+    if (covered.has(String(devtools.trackGroup ?? ''))) continue
     found.push({
       // React prefixes its component entries with a zero-width space so they
       // sort together; it is invisible in a table and confusing in a diff.
@@ -195,7 +236,13 @@ function fromTrace(events) {
   }
 
   if (found.length === 0) return []
-  const earliest = Math.min(...found.map((one) => one.startUs))
+  // A loop rather than `Math.min(...starts)`, for the reason `profile.ts` gives
+  // where it computes the window: a spread is an argument list, and V8 throws
+  // `RangeError` past about 125,000 of them. `--group all` pulls in React's
+  // `Components ⚛` track, measured at 338,065 entries in three seconds, so the
+  // spread overflows on exactly the recording this flag exists to read.
+  let earliest = Infinity
+  for (const one of found) earliest = Math.min(earliest, one.startUs)
   return found.map((one) => ({
     name: one.name,
     kind: one.kind,
@@ -208,8 +255,33 @@ function fromTrace(events) {
   }))
 }
 
-/** An `ir.profile()` report, or a bare `ir.timing.drain()` array. */
+/**
+ * A bare `ir.timing.drain()` array, or an object that wraps one.
+ *
+ * **Not an `ir.profile()` report.** That report is already the output of
+ * `summarizeProfile` and carries no raw entries at all — its `entries` field is
+ * the *count*, a number — so there is nothing here to re-aggregate. A reader
+ * that tested `Array.isArray(dump.entries)` fell through to an empty list and
+ * printed "no timing entries", which pointed at the level rather than at the
+ * file; `--json` output has the same shape, so the script could not read its
+ * own. Say what the file is instead.
+ */
 function fromDump(dump) {
+  if (
+    !Array.isArray(dump) &&
+    typeof dump === 'object' &&
+    dump !== null &&
+    typeof dump.entries === 'number' &&
+    Array.isArray(dump.spans)
+  ) {
+    process.stderr.write(
+      `${path.relative(ROOT, input)} is an ir.profile() report — already summarized,\n` +
+        'and it does not carry the entries it was summarized from.\n' +
+        'Capture the entries themselves:\n' +
+        '  node scripts/drive.mjs --js "JSON.stringify(ir.timing.drain())" ...\n',
+    )
+    process.exit(1)
+  }
   const list = Array.isArray(dump)
     ? dump
     : Array.isArray(dump.entries)
@@ -237,9 +309,28 @@ if (wanted.length === 0) {
   process.exit(1)
 }
 
+/*
+ * Validated, because `??` does not catch a NaN and the report does not either.
+ *
+ * `--late 25ms` is the natural typo — the help says `<ms>` — and `Number` gives
+ * NaN, which `summarizeProfile`'s `options.droppedFrameMs ?? 25` accepts. Every
+ * `duration <= NaN` is false, so every frame in the window is reported late and
+ * the verdict states it with confidence. `--top` fails the other way round:
+ * `slice(0, NaN)` is empty and `length > NaN` is false, so the table and the
+ * "… N more" line both vanish and it reads as a clean run.
+ */
+const number = (raw, flag) => {
+  const value = Number(raw)
+  if (!Number.isFinite(value) || value <= 0) {
+    process.stderr.write(`--${flag} wants a positive number, not "${raw}"\n`)
+    process.exit(1)
+  }
+  return value
+}
+
 const options = {
-  droppedFrameMs: Number(values.late),
-  top: Number(values.top),
+  droppedFrameMs: number(values.late, 'late'),
+  top: number(values.top, 'top'),
 }
 const report = summarizeProfile(wanted, options)
 

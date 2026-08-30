@@ -277,10 +277,14 @@ node scripts/drive.mjs --js "ir.visit('g:milky-way/s:SOL/b:2',{site:'summit',hei
 ```
 
 The last line of the report is the deliverable: _"9 of 61 frames over 25 ms;
-terrain.select dominated 7 of them at 8.4 ms mean"_ rather than a screenshot and
-a p95. It names the span that dominated the **late** frames, not the busiest one
-overall — a span that is cheap on average and catastrophic four times is exactly
-what a mean hides.
+terrain.select was the largest measured span in 7 of them, 8.4 ms of 31.0 ms"_
+rather than a screenshot and a p95. It names the largest span inside the **late**
+frames, not the busiest one overall — a span that is cheap on average and
+catastrophic four times is exactly what a mean hides — and carries the frame
+duration beside it, because the ratio is what says whether the name explains
+anything. A worker job is never named: the pool times it from dispatch to answer
+on the page's clock, so it starts inside a frame and outlives it, and it ran on
+another thread.
 
 Three things it will not tell you, each for a reason worth knowing.
 

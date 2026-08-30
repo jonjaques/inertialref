@@ -97,16 +97,26 @@ let level: TimingLevel = 'off'
 let detach: (() => void) | null = null
 
 /**
- * Every label this sink has put on the performance timeline, and its kind.
+ * Every label this sink has put on the performance timeline, one set per kind.
  *
  * Two clearing calls exist and the distinction is load-bearing:
  * `performance.clearMarks()` removes marks and `performance.clearMeasures()`
  * removes measures, so a drain that called one of them would leave behind
  * everything of the other kind. Both clear *everything* when called bare,
  * including entries another tool put there — so neither is ever called bare
- * here, and this is the list of names to pass.
+ * here, and these are the lists of names to pass.
+ *
+ * **Two sets rather than one name→kind map, because a name is not unique across
+ * the two kinds and the map's last writer won.** `ir.timing.mark(name)` takes
+ * whatever string a script hands it, and the engine already emits `frame`,
+ * `snapshot`, `preload` and `terrain.select` as *measures* — so one
+ * `ir.timing.mark('frame')` rewrote the kind, after which `clearEmitted` called
+ * only `clearMarks('frame')` and every `frame` measure stayed retained for the
+ * life of the page while `retained` was reset to zero, putting the ceiling
+ * permanently out of reach of them. `drainTiming` lost them for the same reason.
  */
-const emitted = new Map<string, TimingKind>()
+const emittedMarks = new Set<string>()
+const emittedMeasures = new Set<string>()
 
 /**
  * Retained entries since the last drain, and the ceiling that stops `full`
@@ -231,14 +241,15 @@ function writeUserTiming(
     // is not worth taking a frame down for, and the level is a debugging aid.
     return
   }
-  emitted.set(record.name, record.kind)
+  if (record.kind === 'mark') emittedMarks.add(record.name)
+  else emittedMeasures.add(record.name)
   retained += 1
   if (retained < RETENTION_CEILING) return
   if (!warnedAboutRetention) {
     warnedAboutRetention = true
     log.warn('retained timing entries hit the ceiling; clearing by name', {
       ceiling: RETENTION_CEILING,
-      names: emitted.size,
+      names: emittedMarks.size + emittedMeasures.size,
     })
   }
   clearEmitted()
@@ -246,11 +257,10 @@ function writeUserTiming(
 
 /** Clear what this sink put there, by name — never the bare form. */
 function clearEmitted(): void {
-  for (const [name, kind] of emitted) {
-    if (kind === 'mark') performance.clearMarks(name)
-    else performance.clearMeasures(name)
-  }
-  emitted.clear()
+  for (const name of emittedMarks) performance.clearMarks(name)
+  for (const name of emittedMeasures) performance.clearMeasures(name)
+  emittedMarks.clear()
+  emittedMeasures.clear()
   retained = 0
 }
 
@@ -283,10 +293,28 @@ export function setTimingLevel(next: TimingLevel): void {
   if (next === 'off') {
     detach?.()
     detach = null
-    if (canUserTiming) clearEmitted()
+    // The track set describes a recording, and switching off ends the one it
+    // was describing. Accumulating across sessions makes `ir.timing.tracks()`
+    // name a track nothing is emitting to — which is the promise the trace does
+    // not keep, and the reason this set is accumulated rather than declared. A
+    // driver that turns the level on in the planetarium, off, and on again in
+    // space would otherwise still be told `Terrain` is there, and
+    // `scripts/timing.mjs --track Terrain` answers that with `nothing matched`.
+    tracks.clear()
   } else if (detach === null) {
     detach = timingHub.attach(sink, { now: () => performance.now() })
   }
+  /*
+   * The entries go with the level that wrote them.
+   *
+   * `full` is the only level that retains, so *leaving* it is the moment its
+   * entries stop being anybody's — and clearing only on the way to `off` left
+   * `full` → `trace` holding up to `RETENTION_CEILING` measures and their
+   * detail payloads for the rest of the session. `trace` is the level whose
+   * whole promise is that it retains nothing, and the ceiling cannot reclaim
+   * them either, because nothing is being written to trip it.
+   */
+  if (was === 'full' && canUserTiming) clearEmitted()
   log.info('timing level', {
     from: was,
     to: next,
@@ -332,22 +360,26 @@ export function onTimingLevel(
 export function drainTiming(): readonly TimingEntry[] {
   if (!canUserTiming) return []
   const entries: TimingEntry[] = []
-  for (const [name, kind] of emitted) {
-    for (const entry of performance.getEntriesByName(name, kind)) {
-      const devtools = (
-        (entry as PerformanceEntry & { detail?: { devtools?: unknown } })
-          .detail ?? {}
-      ).devtools as DevToolsTrackEntry | undefined
-      entries.push({
-        name,
-        kind,
-        track: devtools?.track ?? 'Timing',
-        startMs: entry.startTime,
-        durationMs: entry.duration,
-        properties: Object.fromEntries(devtools?.properties ?? []),
-      })
+  const collect = (names: ReadonlySet<string>, kind: TimingKind): void => {
+    for (const name of names) {
+      for (const entry of performance.getEntriesByName(name, kind)) {
+        const devtools = (
+          (entry as PerformanceEntry & { detail?: { devtools?: unknown } })
+            .detail ?? {}
+        ).devtools as DevToolsTrackEntry | undefined
+        entries.push({
+          name,
+          kind,
+          track: devtools?.track ?? 'Timing',
+          startMs: entry.startTime,
+          durationMs: entry.duration,
+          properties: Object.fromEntries(devtools?.properties ?? []),
+        })
+      }
     }
   }
+  collect(emittedMarks, 'mark')
+  collect(emittedMeasures, 'measure')
   clearEmitted()
   entries.sort((a, b) => a.startMs - b.startMs)
   return entries
@@ -362,7 +394,7 @@ export function drainTiming(): readonly TimingEntry[] {
  *
  * `mark` is the agent's own marker — `ir.timing.mark('after the seek')` — and it
  * goes through the same hub as everything else, so it lands on the Boot track's
- * colour and draws as a line across every track. That is exactly what a script
+ * color and draws as a line across every track. That is exactly what a script
  * wants to bracket its own steps with.
  */
 export const browserTimingPort: TimingPort = {
