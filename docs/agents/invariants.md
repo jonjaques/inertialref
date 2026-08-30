@@ -25,6 +25,9 @@ table is one of those three, not drift.
 | One session constructor                                   | [Client](../guides/client.md)                                                                              |
 | Terrain is sampled in body-fixed axes                     | [Frames](../concepts/frames.md)                                                                            |
 | No field value read off a rank                            | [ADR-0019](../adr/0019-the-geology.md) · [Determinism](../concepts/determinism.md)                         |
+| No planetary radius subtracted in a shader                | [ADR-0020](../adr/0020-the-face.md) · [Rendering](../concepts/rendering.md)                                |
+| The ground and the sphere behind it shade alike           | [ADR-0020](../adr/0020-the-face.md) · [Rendering](../concepts/rendering.md)                                |
+| No varying named after an attribute                       | [ADR-0020](../adr/0020-the-face.md) · [Rendering](../concepts/rendering.md)                                |
 | Entity writes go through `World`                          | [Extending](../guides/extending.md)                                                                        |
 | Landedness is a consequence, never asserted               | [Extending](../guides/extending.md)                                                                        |
 | Saves store references, not regenerable content           | [Persistence](../concepts/persistence.md) · [ADR-0007](../adr/0007-persistence.md)                         |

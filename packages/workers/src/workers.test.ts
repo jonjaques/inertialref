@@ -232,12 +232,17 @@ describe('terrain task', () => {
     expect(result.border).toBe(HEIGHTFIELD_BORDER)
     expect(result.elevations.length).toBe(37 * 37)
     expect(result.maxElevation).toBeLessThanOrEqual(8_000 * 1.2)
-    // Declared as transferable, which is what keeps a planet's worth of patches
-    // from being copied twice per frame.
-    expect(generateHeightfieldTask.transfers?.(result)).toHaveLength(1)
+    // The cover is the patch's own vertices and carries no border, so it is
+    // 33² rather than the elevations' 37². See `cover.ts`.
+    expect(result.cover).toBeInstanceOf(Uint8Array)
+    expect(result.cover.length).toBe(33 * 33 * 4)
+    // Both declared transferable, which is what keeps a planet's worth of
+    // patches from being copied twice per frame.
+    expect(generateHeightfieldTask.transfers?.(result)).toHaveLength(2)
 
     const again = await p.run(generateHeightfieldTask, payload)
     expect(Array.from(again.elevations)).toEqual(Array.from(result.elevations))
+    expect(Array.from(again.cover)).toEqual(Array.from(result.cover))
   })
 
   it('surveys a system through the same generator the world uses', async () => {

@@ -514,6 +514,7 @@ describe('terrain mesh', () => {
       resolution: 17,
       border: field.border,
       elevations: field.elevations,
+      cover: field.cover,
       bodyRadius: planet.radius,
     })
 
@@ -639,6 +640,7 @@ describe('terrain mesh', () => {
           resolution,
           border: field.border,
           elevations: field.elevations,
+          cover: field.cover,
           bodyRadius: planet.radius,
         })
 

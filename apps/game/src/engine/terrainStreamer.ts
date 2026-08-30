@@ -41,6 +41,8 @@ import {
   type SelectedPatch,
   selectTerrain,
   type TerrainEye,
+  type TerrainPalette,
+  terrainPalette,
   terrainPatchKey,
 } from '@inertialref/rendering'
 import { generateHeightfieldTask, type WorkerPool } from '@inertialref/workers'
@@ -236,9 +238,10 @@ const TERRAIN_RELIEF_PIXELS = 8
  * by design because the second is taken from where the eye is *going*, so three
  * times the cap is the working set with room to spare.
  *
- * A bordered 65×65 field is 19 KB, so at a cap of 1,024 this is 3,072 fields
- * and 58 MB. Both numbers move with `DEFAULT_MAX_PATCHES` rather than with
- * anything here, which is why they are stated as arithmetic.
+ * A bordered 65×65 field is 19 KB of elevations and 17 KB of cover — 36 KB — so
+ * at a cap of 1,024 this is 3,072 fields and 110 MB. Both numbers move with
+ * `DEFAULT_MAX_PATCHES` rather than with anything here, which is why they are
+ * stated as arithmetic.
  */
 export const FIELD_CACHE = DEFAULT_MAX_PATCHES * 3
 
@@ -285,17 +288,22 @@ export const FIELD_CACHE = DEFAULT_MAX_PATCHES * 3
  * 1,450 against 1,152. `FIELD_CACHE` above carries the same argument for
  * heightfields; geometry never got it.
  *
- * A patch is 203 KB of vertex buffers, which is the expensive half of terrain's
- * memory and the half attribute packing would halve. This is a *ceiling*, not
- * an allocation — what is resident is the working set, ~700 patches and 142 MB
- * at 1600×900, 1,597 and 324 MB at 3840×2400 — so raising it costs nothing at
- * the sizes that already fit. Full, it is **416 MB**, which is the number to
- * weigh against a strobe and against the 208 MB the selection alone quotes.
+ * A patch is 220 KB of vertex buffers — 203 KB of positions and normals, plus
+ * the 17 KB of morph cover it owns; the unmorphed cover beside it is the
+ * field's array by reference and is counted there. That is the expensive half
+ * of terrain's memory and the half attribute packing would halve. This is a
+ * *ceiling*, not an allocation — what is resident is the working set, ~700
+ * patches and 154 MB at 1600×900, 1,597 and 351 MB at 3840×2400 — so raising it
+ * costs nothing at the sizes that already fit. Full, it is **450 MB**, which is
+ * the number to weigh against a strobe and against the 208 MB the selection
+ * alone quotes.
  */
 export const GEOMETRY_CACHE = DEFAULT_MAX_PATCHES * 2
 
 interface CachedField {
   readonly elevations: Float32Array
+  /** Four bytes of surface cover per vertex, unbordered. See `cover.ts`. */
+  readonly cover: Uint8Array
   readonly region: RegionAddress
   readonly border: number
 }
@@ -337,17 +345,50 @@ export interface TerrainState {
   readonly cached: number
   readonly level: number
   /**
-   * The body's own published color, linear.
+   * What the ground on this body is made of, or null when nothing is streaming.
    *
-   * Terrain has no material of its own yet — Phase 3 is the biome splat, the
-   * crater rays and the mapped bodies' albedo — and one flat sandstone color
-   * for every world was survivable while the streamed set was nine patches near
-   * the ground. It is not survivable now that the quadtree draws the whole
-   * disk: the ground *is* the picture of the planet, and Callisto and Mars are
-   * not the same color. This is the same number the datum sphere is tinted
-   * with, so the two agree until there is something better to say.
+   * Kept against the resolved `Body` rather than rebuilt each frame, and the
+   * cost that decides it is allocation rather than arithmetic: the palette is
+   * twenty multiplies but about twenty short-lived objects, six of them nested
+   * records with a colour apiece, and `update` runs every frame terrain streams.
+   * There is nothing to invalidate — the body is an immutable object out of the
+   * world, so a different world, a retarget or a reseed is a different
+   * reference, and the identity check catches all three the way
+   * `terrainSketch`'s `WeakMap` does.
    */
-  readonly colour: { r: number; g: number; b: number }
+  readonly palette: TerrainPalette | null
+  /**
+   * Body-fixed axes to render space — the rotation every patch is drawn with.
+   *
+   * On the state rather than read off `patches[0]` because the renderer needs
+   * it in the frame where the drawn set is *empty*: that is exactly the frame a
+   * body is acquired, and the material's uniforms are written before there is
+   * anything to draw with them.
+   */
+  readonly orientation: Q.Quat | null
+  /** The body's centre in render space, for the direction of its star. */
+  readonly centre: Vec3 | null
+  /**
+   * The radius the patches were **built** on, meters.
+   *
+   * `body.radius`, which is the equatorial one, because that is what `#build`
+   * hands `buildPatch` and therefore what every vertex is measured from. Not
+   * the mean radius, and the difference is not academic: on Earth they are 7 km
+   * apart, which is twenty times the ocean datum. Read against the mean, an
+   * altitude of "at sea level" came out at 7,356 m — so no water was ever
+   * detected, and the highland, dune and evaporite gates were all reading a
+   * relief fraction of 0.74 on ground at the shoreline.
+   */
+  readonly datumRadius: Meters
+  /**
+   * The optics the selection was made against, or null when nothing streams.
+   *
+   * The material composes through the same lens the predicate refined against,
+   * which is what keeps the detail fading out exactly where the mesh carrying
+   * it stops being refined — and what makes a zoom move both together instead
+   * of leaving one behind.
+   */
+  readonly lens: LensView | null
 }
 
 export class TerrainStreamer {
@@ -377,7 +418,17 @@ export class TerrainStreamer {
     /** The camera in body-fixed axes, from the body's center. */
     eye: Vec3
   } | null = null
-  #colour = { r: 0.61, g: 0.51, b: 0.4 }
+  #palette: TerrainPalette | null = null
+  /**
+   * The body the kept palette was derived from, and the palette itself.
+   *
+   * Separate from `#palette`, which `#forget` nulls: a streamer that stops
+   * drawing has no palette to report, but the one it derived is still the one
+   * this body wants when the relief clears the gate again.
+   */
+  #paletteBody: Body | null = null
+  #paletteValue: TerrainPalette | null = null
+  #datumRadius = 1
   /**
    * Last eye in body-fixed axes, for the velocity the request set is
    * extrapolated along.
@@ -517,7 +568,11 @@ export class TerrainStreamer {
       pending: this.#inFlight.size,
       cached: this.#fields.size,
       level: this.#deepest,
-      colour: this.#colour,
+      palette: this.#palette,
+      orientation: pose?.orientation ?? null,
+      centre: pose?.position ?? null,
+      datumRadius: this.#datumRadius,
+      lens: this.#lensView,
     }
   }
 
@@ -589,7 +644,12 @@ export class TerrainStreamer {
       scale: body.placement.compression,
       eye: eyeLocal,
     }
-    this.#colour = surface.appearance.colour
+    if (surface !== this.#paletteBody) {
+      this.#paletteBody = surface
+      this.#paletteValue = terrainPalette(surface)
+    }
+    this.#palette = this.#paletteValue
+    this.#datumRadius = surface.radius
 
     const { lens, viewport } = this.lensView ?? DEFAULT_LENS_VIEW
     this.#lensView = this.lensView ?? DEFAULT_LENS_VIEW
@@ -810,6 +870,7 @@ export class TerrainStreamer {
           resolution: HEIGHTFIELD_RESOLUTION,
           border: field.border,
           elevations: field.elevations,
+          cover: field.cover,
           bodyRadius: body.radius,
         }),
       )
@@ -868,6 +929,7 @@ export class TerrainStreamer {
           if (epoch !== this.#epoch) return
           this.#fields.set(key, {
             elevations: result.elevations,
+            cover: result.cover,
             region,
             border: result.border,
           })
@@ -932,6 +994,10 @@ export class TerrainStreamer {
     this.#starved = 0
     this.#saturated = false
     this.#pose = null
+    // Same argument as the lens below: a palette beside `patches: 0` describes
+    // a body this streamer is no longer drawing, and the material would keep
+    // wearing the last world's ground.
+    this.#palette = null
     // The lens is a selection mirror like the rest: reporting one beside
     // `patches: 0` claims a selection was made against it, and none was.
     this.#lensView = null

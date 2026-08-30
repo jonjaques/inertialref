@@ -515,6 +515,92 @@ card is built identically for `provenance: 'observed'` bodies, so Earth's page r
 ones. **When a new `FactGroup` derives its values from the generator, check what it says on
 Sol's mapped bodies, not on a projected one.**
 
+## The `if (t > k)` hard gate is now a _two_-site recurrence, and the second one is albedo
+
+`craterProfile`'s `if (t > 1)` ejecta apron was the first. `feat/the-face` shipped the
+same shape in `craters.ts`'s `rayBrightness`: `if (t > 1.2)` opens the filament term, and
+that term is **not** zero at its own boundary — `radial = (1 − smoothstep(0.55,1,t/16))/t^1.6`
+is 0.81 at t = 1.2 and `filament` is a smoothstep of an azimuthal harmonic sum that is
+already above its cut on about a third of azimuths. Measured with an _exact_ great-circle
+rotation: the `bright` channel steps 0.296 on Luna / Mercury / Callisto / Iapetus and 0.571
+on Mars at exactly 1.2 crater radii, against a p99.9 adjacent-sample step of 3e-7 nearby —
+a ratio of 1e6. 30.1% of azimuths over all 16 of Luna's ray craters carry a step > 0.02;
+mean over the whole circle 0.085. It draws as a scalloped bright ring at 1.2 radii around
+every ray crater, on every mapless body (the 19 archived bodies gate `bright` off via
+`invented`, so Sol hides it everywhere except Iapetus).
+
+**The probe trap that nearly made me miss it.** Offsetting by `angularRadius * t` in the
+tangent plane and then normalizing gives `atan(span)/angularRadius`, not `t` — on a 50 km
+lunar crater that is t = 1.19998, so a ±1e-9 scan lands entirely on one side of the gate and
+reports a step of exactly 0. Build the sample with `axis·cos(θ) + u·sin(θ)`, θ = t·angularRadius.
+
+## `depositGain` halved the mapped ratios and four comments still quote the mapless ones
+
+`terrainPalette`'s `depositGain = texture === null ? 1 : 0.5` was added a commit after the
+palette's prose. Measured: `basalt/regolith` is **0.769** and `rock/regolith` **1.090** on
+every mapped body (Luna, Mars, Mercury, Callisto, Venus, Earth), 0.538 / 1.180 on the mapless
+ones (Enceladus, Iapetus). Three comments state the _mapped_ figure as 0.54 / 1.18 by name —
+`terrainPalette.ts` (`referenceReflectance` docstring, `nonNegative` docstring) and
+`render/terrain.ts`'s ceiling comment — and `terrainPalette.test.ts` already pins the true
+0.77. Then the docs pass wrote 0.54 into `docs/concepts/rendering.md` as _fresh prose_, which
+is the "retired figure returns inside newly authored text" pattern again.
+
+**Generic check:** when a diff adds a gain/scale factor to a table of ratios, grep the ratio
+literals and ask which branch each comment is talking about.
+
+## `surfaceTemperature`'s docstring names a fit the constant does not produce
+
+`GREENHOUSE_GAIN = 0.0076` with `equilibrium·(1 + gain·log10(air/100)^4)` gives Mars 213.0,
+Earth 295.5, Venus 913.1 against the docstring's stated targets of 210 / 288 / **737**. The
+rest of the branch is consistent with the _code_ (920 K appears in `terrainPalette.ts`,
+`cover.test.ts` and `terrainPalette.test.ts`), so 737 is the single outlier. Nothing breaks —
+every consumer only asks "above the frost point?" and "below 450 K?" — but a docstring that
+says "fitted to three measured bodies" is arithmetic, and it is two lines to check.
+
+## Worked examples in cover/palette prose are not checked against the generator
+
+`cover.ts`'s `iceCover` says "Europa is ice at the equator at noon" and its `mineral` docstring
+says "Europa runs clean ice to sulphur-stained". Measured: Europa's `grammar.icy` is **0.00** in
+this generator, so `shell` is 0, `supply` is 0 and its `ice` channel is 0 over 1,500 directions;
+it also gets zero ray craters. The author's own test quietly uses **Callisto** instead. Related:
+`mineralLow`/`mineralHigh` are two hard-coded constants for every body, while the docstring
+argues a scalar was chosen _because_ "the ends of the ramp are a property of the body".
+
+**Check:** every body named in a new field's prose, run through `surfaceCoverAt` /
+`terrainPalette` once. It is fifteen lines and it catches the exemplar that does not work.
+
+## Two predicates for "this body has a map", and the docstring cites the wrong one
+
+`terrainPalette` branches on `body.appearance.texture !== null` (the _key_); the material's
+`mapped` uniform is set from whether `texturesFor(...).albedo` came back non-null (the
+_resolved asset_). `referenceReflectance`'s docstring claims the split is made "mechanically,
+on whether a texture resolves", which is the material's predicate rather than its own. Latent
+today — all 19 keys in `data/textures/manifest.json` have an albedo and every file is on disk —
+but a key with no albedo asset gets a half-strength palette on a white reference with the
+invented channels back on.
+
+## `viewport` on `LensView` is display pixels, so the buffer ratio is a _reciprocal_
+
+`TerrainPatches` computes `const supersample = state.lens.viewport.height / gl.domElement.height`,
+which is 1/`engine.supersample` (the engine already divides the factor out in
+`set viewportPixels`). The arithmetic is right — buffer pixel angle is display angle ÷ s — but
+the local shares a name with the engine field that holds its reciprocal, and the comment beside
+it says the angle is "scaled back up".
+
+## Cheap things that came back clean on `feat/the-face`, worth not re-deriving
+
+- `rayCraters`'s sort is **total**: `(index, ix, iy, iz)` uniquely identifies a walked cell, so
+  the `age → index → ix → iy → iz` comparator can only return 0 for identical entries.
+- Cover determinism across cache eviction: 129 Sol bodies × 40 directions, forward, then 63
+  foreign bodies to churn the 96-entry FIFO, then reversed — bitwise identical.
+- The ray enumeration reuses `levelContribution`'s exact hashes: `pcg4d(ix ^ seed, iy, iz, index)`
+  and `pcg4d(iy, iz, ix ^ seed, index + 8_191)`, same density test, same diameter, same jitter.
+- `morphCover`'s `evenRow/evenCol = row & ~1` cannot index the border: resolution is odd, so the
+  largest even index is `resolution − 1`.
+- `pnpm graph` clean; no `three` in `packages/*`, no bare `three` in `apps/game`; both new docs
+  are in `scripts/docs/wings.mjs`; the Cursor rendering adapter `@`-references the canonical rule
+  so new bullets need no glob change.
+
 ## Resolved on earlier branches — do not re-report
 
 - `Observatory.stand` guards `focus` on `wanted.address !== this.#target?.address`.

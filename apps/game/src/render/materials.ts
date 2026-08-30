@@ -6,20 +6,17 @@ import {
   DataTexture,
   InstancedBufferAttribute,
   MeshBasicNodeMaterial,
-  MeshStandardNodeMaterial,
   OneFactor,
   OneMinusSrcAlphaFactor,
   PointsNodeMaterial,
   RGBAFormat,
   SrcAlphaFactor,
   type Texture,
-  Vector2,
   Vector3,
   ZeroFactor,
 } from 'three/webgpu'
 import {
   abs,
-  attribute,
   cameraPosition,
   cross,
   dot,
@@ -34,7 +31,6 @@ import {
   mx_fractal_noise_float,
   mx_worley_noise_float,
   normalize,
-  normalLocal,
   normalWorld,
   oneMinus,
   positionLocal,
@@ -45,18 +41,13 @@ import {
   sqrt,
   step,
   texture,
-  transformNormalToView,
   uniform,
   uv,
-  varying,
   vec2,
   vec3,
   vec4,
 } from 'three/tsl'
-import {
-  type AtmosphereRecipe,
-  NO_MORPH_DISTANCE,
-} from '@inertialref/rendering'
+import type { AtmosphereRecipe } from '@inertialref/rendering'
 
 /*
  * Every material the scene draws, as node graphs.
@@ -572,71 +563,10 @@ export function createStarfieldMaterial(capacity: number): StarfieldMaterial {
  * `render/planet.ts`.
  */
 
-/**
- * Streamed terrain, with the CDLOD morph in its vertex stage.
- *
- * One material for every patch on the body, because a material per patch is a
- * pipeline per patch and a whole-disk selection is a couple of hundred of them.
- * What differs per patch — where the eye is in that patch's own frame, and the
- * two distances its morph runs between — arrives through `onObjectUpdate`
- * uniforms read from the mesh's `userData`, which is the node system's own seam
- * for exactly this.
- *
- * The morph itself is one `mix` between attributes the CPU computed and
- * `terrainPatch.test.ts` checked: a vertex slides from where its own grid puts
- * it to where its parent's grid does, arriving before the parent takes over. It
- * is deliberately that thin. A TSL graph cannot be evaluated in Node, so
- * anything here that could be wrong is something no test can see — the endpoint
- * is a claim about two `Float32Array`s and it is tested as one.
- *
- * The eye arrives as a *patch-local* position rather than being taken from
- * `positionView`, and that is load-bearing. Beyond `NEAR_LIMIT` a body is drawn
- * compressed, with the mesh carrying the body's render scale, so a distance
- * measured in view space is in compressed meters while the morph band is in
- * real ones. Subtracting a patch-local eye leaves the arithmetic in the units
- * the selection used, whatever the placement did.
+/*
+ * The streamed ground is `render/terrain.ts`, not this file. It carries its own
+ * photometry rather than a standard material's, because the quadtree draws the
+ * whole disk: the ground *is* the picture of the planet, and a rough dielectric
+ * sphere under the scene's ambient light is not what a regolith world looks
+ * like at any phase angle.
  */
-export function createTerrainMaterial(): MeshStandardNodeMaterial {
-  const material = new MeshStandardNodeMaterial({
-    color: 0x9c8367,
-    roughness: 1,
-    flatShading: false,
-  })
-
-  const eyeLocal = uniform(new Vector3()).onObjectUpdate(
-    ({ object }) => (object?.userData.eyeLocal as Vector3 | undefined) ?? ZERO,
-  )
-  const morphBand = uniform(new Vector2()).onObjectUpdate(
-    ({ object }) =>
-      (object?.userData.morphBand as Vector2 | undefined) ?? NO_MORPH,
-  )
-  const shaded = varying(vec3(), 'terrainNormal')
-
-  material.positionNode = Fn(() => {
-    const target = attribute('terrainMorph', 'vec3')
-    const targetNormal = attribute('terrainMorphNormal', 'vec3')
-    const distance = length(positionLocal.sub(eyeLocal))
-    // `max` on the denominator rather than a branch: a patch at level 0 has no
-    // parent and arrives with both ends of its band at the same enormous
-    // number, which has to read as "never morph" rather than as a divide.
-    const k = saturate(
-      distance
-        .sub(morphBand.x)
-        .div(max(morphBand.y.sub(morphBand.x), float(1))),
-    )
-    shaded.assign(normalize(mix(normalLocal, targetNormal, k)))
-    return mix(positionLocal, target, k)
-  })()
-  material.normalNode = transformNormalToView(shaded)
-
-  return material
-}
-
-const ZERO = new Vector3()
-/**
- * Both ends past any distance: a patch with no parent never morphs. The
- * selection's own finite sentinel, because `Number.MAX_VALUE` rounds to
- * Infinity in the float32 uniform and `Inf − Inf` is a NaN in the morph
- * denominator — see `NO_MORPH_DISTANCE`.
- */
-const NO_MORPH = new Vector2(NO_MORPH_DISTANCE, NO_MORPH_DISTANCE)

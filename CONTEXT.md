@@ -5466,6 +5466,175 @@ steady 1,421 and said nothing was wrong while the cache under it strobed.
 that ended the search — pinned at exactly 1,152, which is the signature
 `FIELD_CACHE`'s own comment describes.
 
+## The ground stops being a colour and becomes a face (29 Aug 2026)
+
+Phase 3 of [TERRAIN-PLAN](TERRAIN-PLAN.md), recorded in
+[ADR-0020](docs/adr/0020-the-face.md). Terrain had one flat colour under the
+scene's ambient light — survivable while the streamed set was nine patches, and
+not survivable once the quadtree draws the whole disk, because the ground is
+then the picture of the planet.
+
+**The split is by who can answer.** Latitude is the direction against the spin
+axis, altitude is the radius and slope is the normal against the radial: a
+fragment has all three for free. What a shader cannot derive is the body's past,
+and that is four bytes a vertex — impact-fresh material, flood basalt, where the
+crust sits on the body's own compositional ramp, condensed volatiles. Eight bits
+a channel because every one is a fraction read through a splat weight. It morphs
+with the geometry, bit-exactly, for the same reason the normal does.
+
+**Rays are a short list rather than a wider walk.** Tycho's reach thirty-five of
+its own radii where its apron reaches 2.6, and a lattice walk that wide is
+hundreds of cells a sample. `rayCraters` enumerates the coarse rungs once per
+body and keeps the youngest sixteen, reading every field back from the same two
+hashes the height walk reads — so a ray system is centred on a bowl the field
+actually digs. The test silences every other rung to say so, because comparing
+the whole field against itself cannot: a fresh 60 km crater on the inward slope
+of a 700 km basin reads _higher_ than the ground beside it, and four of Luna's
+sixteen do.
+
+**A mapped body's ground wears its published map.** The archive's photograph is
+the truth about large-scale albedo and it is also what the approach view is
+already drawing, so on those bodies the palette holds pure ratios, the material
+multiplies the two, and the cover's invented channels switch off — the maria and
+the ray systems are in the photograph, and a second set on top of them is two
+disagreeing planets in one frame.
+
+Numbers that settled things.
+
+- **`BodyAppearance.colour` means two different things and they differ by a
+  factor of six.** A tint where there is a map, a colour where there is not — so
+  on Luna it is (1, 1, 1). Read as a reflectance it made lunar regolith 0.88
+  against a published 0.136 and the lit side blew out to a white disk. Anchored
+  properly, Luna is 0.136 with its mare at 0.073 against a measured 0.07.
+- **The reflectance ceiling belongs on the reference, not on each deposit.**
+  Enceladus reflects 1.375 at full phase; clamped deposit by deposit, its
+  bedrock, its mantle and its ice all landed on 0.88 together and the moon had
+  no contrast anywhere.
+- **Three terms had to be matched before the two halves of a descent agreed**,
+  and each was found by measuring across the eight-pixel gate rather than by
+  reading the code. **Skylight added beside the direct beam** rather than taken
+  out of it: 15% brighter than the photograph of the same planet on Mars.
+  **The aerial veil**, which `render/planet.ts` carries because the atmosphere
+  shell is a back-side sphere and only survives the depth test _outside_ the
+  silhouette — so everything the air does in front of the ground has to happen
+  in the surface material, and the terrain is inside the silhouette too: 48% on
+  Earth, and a blue planet whose coastlines were in the wrong places. And **the
+  deposits' own brightness on a body that has a map**: halved it was still 9% on
+  Mars, almost all of it evaporite lifting ground the photograph had already
+  drawn pale. Where a photograph exists it supplies the albedo outright; the
+  deposits keep the roughness, the grain and the bump, which no map at ten
+  kilometres a texel has an opinion on. With all three, the gate is 3.1% on Mars
+  and 1.5% on Earth and the frames are the same picture.
+- **An ocean is an invented channel too.** The generated field and the archive's
+  photograph disagree about where Earth's land is — that disagreement _is_ the
+  mapped-body carve-out — so painting deep ocean wherever the _generated_ sea
+  datum said water goes put open sea over the map's continents. The override is
+  gated on `invented`, like the maria and the rays.
+- **The soft-limited crater sum carries no information about basins.** `tanh` at
+  a raw sum several ceilings deep is within 2% of its asymptote over half of
+  Luna, and reading the mare off it flooded 49% of the Moon. Read raw and
+  thresholded at two and five ceilings, and gated by a _dipole_ rather than a
+  noise — a noise spreads its power over several degrees and gives a body basalt
+  in patches, where the measurement is 31% of the near side against 2% of the
+  far — Luna comes out at 10.8% mare with the flooded directions averaging 0.61
+  of a unit vector, where a hemisphere would be 0.5.
+- **The cover costs 0.55 to 1.0 ms a patch** against 8.2 to 36.9 before.
+
+### Four float32 defects, all of them the same defect
+
+Reported as a coastline warping several times a second at two kilometres over an
+island chain, and it was arithmetic in four places.
+
+**Altitude was a difference of two planetary radii.** Both terms are 6.4 × 10⁶
+on Earth where one float32 step is half a metre, so the water test — a band four
+metres wide — read a quantized value, and the CDLOD morph walks `local` across
+those steps every frame. `(2(a·l) + l·l)/(|p| + |a|)` is the same number and
+never lets the large numbers meet; `anchorAltitude` carries the last half-metre,
+measured in float64 against the same rounded vector the uniform holds, because a
+constant offset per patch is a grid of rectangles across a flat sea.
+
+**The map's UV gradient came from that same quantized position**, so the mip
+level changed at every patch boundary. It is analytic now, from the tangential
+part of a precise step — which also deletes the wrap hack, because the longitude
+jumps by a whole turn along one meridian and its rate of change does not.
+
+**The detail fade was a screen-space derivative.** `local` is linear across a
+triangle, so `dFdx(local)` is constant over the whole triangle; at two
+kilometres up, where one far cell covers a hundred pixels, the fade stepped per
+polygon and the plain drew as flat-toned quadrilaterals. Distance times the
+lens's own pixel angle is continuous, and it is the same lens the selection
+refined against.
+
+**And the bump normalized its position derivatives**, which is right for a
+dimensionless texture difference and wrong for a height in metres: `det` stayed
+per-triangle constant while `dH` grew with the footprint, so the bump
+strengthened with distance and stepped at every edge.
+
+Two more came out of the same look. The evaporite's "low ground" ran to a fifth
+of the relief budget — 2.5 km on Earth — so every flat hectare on the planet was
+a salt flat; it is 40 to 500 m above the shoreline now, and an ocean is excluded
+outright, because an ocean _is_ the flattest lowest ground on a body and without
+the gate Earth's sea surface came out as playa at 2.4 times the reference with a
+white sheet of water under it. And a deposit's own brightness is halved where a
+photograph already carries it.
+
+### Two more the audit found, and a constant that had drifted from its own fit
+
+**The ray filaments entered at full strength at their own gate.** The same class
+`craterProfile` records above it, and the same shape: a term whose value does
+not reach zero at its boundary appears there rather than beginning there. The
+filament threshold is cleared on about a third of azimuths at 1.2 crater radii,
+so crossing that radius stepped the brightness by 0.30 on Luna's ray craters and
+0.57 on Mars's, against a p99.9 adjacent-sample step of 3 × 10⁻⁷ just outside.
+It drew as a scalloped bright ring — a thirty-kilometre circle around a
+fifty-kilometre crater — on every mapless body, which is nearly all of them.
+Faded in across 0.4 radii, the step is 1 × 10⁻⁷, which is the probe's own
+epsilon. `cover.test.ts` holds it, and it goes red with the fade removed.
+
+The probe has a trap worth writing down: offsetting by `angularRadius · t` in
+the tangent plane and normalizing gives `atan(span)/angularRadius`, which on a
+50 km lunar crater is t = 1.19998. A tight scan either side of 1.2 then lands
+entirely on one side and reports a step of exactly zero. The great-circle
+rotation is the one that sees it.
+
+**`GREENHOUSE_GAIN` was falsified by its own docstring.** The fit claims Mars,
+Earth and Venus at 210, 288 and 737 K; at 0.0076 it produced 213, 296 and 913 —
+Venus 24% high. At 0.0054 it produces 213, 286 and 739. No consumer noticed,
+because every one of them only asks whether the ground is above 170 K or below
+450, but a docstring that says "fitted" is arithmetic and this one was not.
+
+**And capability check 10 was comparing half of what it claimed.** The heightfield
+task transfers a cover beside the elevations and the check looped over the
+elevations alone, so a worker whose sketch had diverged would have passed it and
+drawn a different planet through an identical heightfield. It compares all
+16,900 cover bytes now.
+
+### What did not land, stated rather than dropped
+
+- **No orbital albedo bake.** A generated body's sphere is still a flat tint
+  while its ground has maria, rays and caps, so the far half of a descent is the
+  one half that does not agree. A mapped body has no such gap. It needs a worker
+  task, a cube texture with a slot allocator, and a second consumer in
+  `render/planet.ts`.
+- **No hex-tiling and no triplanar**, which § 7 of the plan specifies. Both
+  answer questions an authored material set asks — a period to break, a
+  projection to choose — and there are no authored textures. The detail is
+  gradient noise on the body-fixed position, which has neither. The seam is the
+  detail field in `render/terrain.ts`.
+- **Deposits chosen from the mesh step at a level boundary.** Two patches
+  covering adjacent ground at different levels report different slopes for it,
+  so a weight read off the normal steps by about 4% of the drawn value on
+  Earth's coastal plain. Widening the flatness bands to reach the angle of
+  repose takes near-flat ground out of the transition and does not account for
+  all of it; the footprint, the map gradient and the altitude were each isolated
+  after their fixes and come back smooth on a fresh browser, so it is none of
+  those three. The fix is for the deposits to read the canonical field instead
+  of the mesh, which means more channels on the cover.
+- **Shading terrain with a real light exposes the mesh's own normals.** The
+  selection refines to about a pixel of error by design, so a low sun on
+  saturated ground aliases where a flat ambient fill could not show it. At
+  device pixel ratio 2 the same frame is clean.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

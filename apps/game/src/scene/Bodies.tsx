@@ -220,7 +220,18 @@ function tuningFor(body: RenderBody): PlanetTuning {
     // Closer to Lambert than it was: the aerial veil now brightens the limb
     // on top of this, and 0.45 under the veil left the disk reading flat.
     lunarLambert: air ? 0.3 : 0.92,
-    terminator: air ? 0.09 : 0.025,
+    /*
+     * The same number the ground uses, from the same producer.
+     *
+     * A disk and the terrain streamed in front of it are one body, and a
+     * descent crosses between them at the eight-pixel relief gate — so a
+     * terminator each of them derived for itself is a step at the switch. It
+     * was: 4.2× on Luna and 6.6× on Iapetus, because the ground widened its
+     * band by the body's own relief and the disk did not. `terminatorFor` is
+     * where the widening lives now; `buildScene` spends it once and both the
+     * disk and the ground read the result.
+     */
+    terminator: body.terminator,
     limbDarkening: 0,
     saturation: 1,
     flowRate: 0,
@@ -753,6 +764,8 @@ export function Bodies({ engine }: { engine: GameEngine }) {
           placement: star.placement,
           orientation: { x: 0, y: 0, z: 0, w: 1 },
           hasAtmosphere: false,
+          // A star has no surface and no terminator; the disk is unlit.
+          terminator: 0,
           atmosphereScale: 1,
           trueRadius: 1,
           rotationPeriod: 1,

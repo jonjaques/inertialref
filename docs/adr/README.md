@@ -1,6 +1,6 @@
 # Architectural decision records
 
-Nineteen decisions that are expensive to reverse. Each records the **context**, the
+Twenty decisions that are expensive to reverse. Each records the **context**, the
 **decision**, the **alternatives that were rejected**, and the **consequences**
 — including the ones that turned out to be costs.
 
@@ -29,6 +29,7 @@ Nineteen decisions that are expensive to reverse. Each records the **context**, 
 | [0017](0017-the-lens.md)                    | The lens                    | accepted     | The camera carries focal length, gauge, aperture, focus and gain; the field of view is derived. One producer, under the pose's own precedence.                                                                                                                                                                        |
 | [0018](0018-the-instrument.md)              | The instrument              | accepted     | The aim is an offset on the pose; compositions are one list with two placers; the keymap has one dispatcher and contexts that may share a chord; preferences are a registry with one storage call site.                                                                                                               |
 | [0019](0019-the-geology.md)                 | The geology                 | accepted     | Terrain is a grammar derived from body facts, a per-body sketch, and a band stack of shares that sum to one; `maxElevation` is a strength limit rather than a dial; craters are placed on a cubic lattice in ℝ³; one field at every level, because the morph is exact only if two patches evaluate the same function. |
+| [0020](0020-the-face.md)                    | The face                    | accepted     | The ground carries four bytes of cover a vertex for what a shader cannot derive; the palette is ratios against the body's own colour; a mapped body's terrain wears its published map and the invented channels switch off; deposits are layered rather than splatted, and everything shades in body-fixed axes.      |
 
 ---
 
@@ -55,6 +56,7 @@ flowchart TB
     A17["<b>0017</b><br/>the lens"]
     A18["<b>0018</b><br/>the instrument"]
     A19["<b>0019</b><br/>the geology"]
+    A20["<b>0020</b><br/>the face"]
 
     A1 -->|"precision already solved,<br/>so frames are free to be<br/>about motion"| A2
     A1 -->|"canonical → GPU"| A3
@@ -89,6 +91,9 @@ flowchart TB
     A15 -->|"the quadtree wanted<br/>something to draw"| A19
     A5 -->|"a grammar is a pure<br/>function of the seed"| A19
     A14 -->|"the geology is a claim<br/>about the place"| A19
+    A19 -->|"a shape wants<br/>a face"| A20
+    A17 -->|"the detail fades against<br/>the lens's pixel angle"| A20
+    A13 -->|"the published map<br/>is not negotiable"| A20
 
     style A1 fill:#0369a1,stroke:#0c4a6e,color:#fff
     style A8 fill:#334155,stroke:#1e293b,color:#94a3b8,stroke-dasharray: 5 5

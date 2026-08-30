@@ -122,6 +122,7 @@ export const WINGS = [
           ['docs/adr/0017-the-lens.md', 'The Lens'],
           ['docs/adr/0018-the-instrument.md', 'The Instrument'],
           ['docs/adr/0019-the-geology.md', 'The Geology'],
+          ['docs/adr/0020-the-face.md', 'The Face'],
         ],
       },
     ],
@@ -201,6 +202,13 @@ export const WINGS = [
           ['docs/guides/catalogue.md', 'The Star Catalog'],
           'docs/hosting.md',
         ],
+      },
+      {
+        /* A plan describes what is not built yet, so it is not a guide — a
+           reader who follows a guide expects the system to already behave that
+           way. Filed beside them because the audience is the same one. */
+        label: 'Plans',
+        pages: [['docs/plans/headless-webgpu.md', 'Headless WebGPU']],
       },
       {
         label: 'For Agents',

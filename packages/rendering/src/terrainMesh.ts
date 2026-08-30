@@ -2,6 +2,7 @@ import type { Meters } from '@inertialref/shared'
 import { invariant } from '@inertialref/shared'
 import { Quaternion as Q, Vec, type Vec3 } from '@inertialref/spatial'
 import {
+  COVER_CHANNELS,
   heightfieldStride,
   type RegionAddress,
   regionDirection,
@@ -51,6 +52,15 @@ export interface PatchInput {
   /** Rings of samples outside the patch, as generated. */
   readonly border: number
   readonly elevations: Float32Array
+  /**
+   * Four bytes of surface cover per vertex, row-major, **unbordered**.
+   *
+   * The asymmetry with `elevations` is deliberate and it is the border's own
+   * reason restated: those rings exist to be differenced against, and nothing
+   * differences the cover. `resolution²` entries where the heightfield has
+   * `(resolution + 2·border)²`. See `cover.ts` in `packages/universe`.
+   */
+  readonly cover: Uint8Array
   readonly bodyRadius: Meters
 }
 
@@ -65,6 +75,27 @@ export interface RenderPatch {
   readonly morphPositions: Float32Array
   /** The normal it shades with there — the parent's, over the parent's cells. */
   readonly morphNormals: Float32Array
+  /**
+   * Surface cover per vertex, four bytes, as generated.
+   *
+   * The one buffer here that is `PatchInput`'s own array rather than a fresh
+   * one — the heightfield's, which the caller may still be holding in a field
+   * cache. Nothing writes to it, and copying 17 KB a patch to say so is the
+   * expensive half of terrain's memory paid twice; but a producer that ever
+   * pools or rewrites a heightfield has to know this attribute is a view of it.
+   */
+  readonly cover: Uint8Array
+  /**
+   * And the cover it wears once morphed: the parent's, at the parent's vertex.
+   *
+   * The material has to hand over with the geometry for the same reason the
+   * normal does. A fully morphed child sits exactly where its parent sits, so
+   * if it is still wearing its own vertex's cover there, the frame the parent
+   * takes over is the frame every ray and every mare edge jumps by one child
+   * cell — a shimmering ring at the morph band rather than a pop, which is
+   * worse because it does not stop.
+   */
+  readonly morphCover: Uint8Array
   /** Shared between every patch of this resolution; see `patchIndices`. */
   readonly indices: Uint32Array
   /**
@@ -125,7 +156,7 @@ export function patchIndices(resolution: number): Uint32Array {
 }
 
 export function buildPatch(input: PatchInput): RenderPatch {
-  const { region, resolution, border, elevations, bodyRadius } = input
+  const { region, resolution, border, elevations, cover, bodyRadius } = input
   invariant(
     border >= 2,
     `A patch needs two rings of border to morph; got ${border}`,
@@ -145,6 +176,10 @@ export function buildPatch(input: PatchInput): RenderPatch {
   invariant(
     elevations.length === stride * stride,
     `Heightfield is ${elevations.length} samples, expected ${stride * stride}`,
+  )
+  invariant(
+    cover.length === resolution * resolution * COVER_CHANNELS,
+    `Cover is ${cover.length} bytes, expected ${resolution * resolution * COVER_CHANNELS}`,
   )
 
   // The datum point at the middle of the patch. Subtracting it is what keeps
@@ -190,6 +225,7 @@ export function buildPatch(input: PatchInput): RenderPatch {
   const normals = new Float32Array(count * 3)
   const morphPositions = new Float32Array(count * 3)
   const morphNormals = new Float32Array(count * 3)
+  const morphCover = new Uint8Array(count * COVER_CHANNELS)
 
   let lowX = Infinity
   let lowY = Infinity
@@ -231,6 +267,14 @@ export function buildPatch(input: PatchInput): RenderPatch {
       morphPositions[index * 3] = extended[even] as number
       morphPositions[index * 3 + 1] = extended[even + 1] as number
       morphPositions[index * 3 + 2] = extended[even + 2] as number
+      // The cover is unbordered, so it indexes off the patch's own grid rather
+      // than the extended one — the same even vertex, a different stride.
+      const evenCover = (evenRow * resolution + evenCol) * COVER_CHANNELS
+      const target = index * COVER_CHANNELS
+      morphCover[target] = cover[evenCover] as number
+      morphCover[target + 1] = cover[evenCover + 1] as number
+      morphCover[target + 2] = cover[evenCover + 2] as number
+      morphCover[target + 3] = cover[evenCover + 3] as number
       // Two cells, because that is one of the parent's. Shading has to hand
       // over with the geometry or the switch trades a pop for a shimmer.
       writeNormal(
@@ -254,6 +298,8 @@ export function buildPatch(input: PatchInput): RenderPatch {
     normals,
     morphPositions,
     morphNormals,
+    cover,
+    morphCover,
     indices: patchIndices(resolution),
     anchor,
     boundsCentre: {

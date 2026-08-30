@@ -47,10 +47,9 @@ export function SceneView({ engine }: { engine: GameEngine }) {
           readable; the fill is what does the work, and it was a fixed world
           direction pretending to be camera-mounted until the title sequence
           caught it. Ambient stays small because it is the one term with no
-          direction: raising *it* to rescue a shadowed hull flattens the
-          terminator on every streamed terrain patch as well, which is the only
-          other thing in the scene these lights reach — planets and atmospheres
-          shade from their own `sunDirection` uniform and never see them. */}
+          direction, and it now reaches the ship and the near-field props
+          alone: planets, atmospheres and the streamed ground all shade from
+          their own `sunDirection` uniform and never see these lights. */}
       <ambientLight intensity={0.16} />
       <EngineTick engine={engine} />
       <CameraRig engine={engine} />

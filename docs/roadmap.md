@@ -84,7 +84,7 @@ change** — they are generators plus representations.
 | Planets, moons           | ✅     | Confirmed exoplanets and the Solar System are `observed`; the rest is `projected`                                                                                                                                               |
 | Moons of real planets    | 🟡     | Sol's 62 are `observed` and measured; every exoplanet's moon is a projection, and `PackedPlanet` still has no moon list to change that                                                                                          |
 | Catalog revision diff    | ✅     | `versionDrift` in `packages/protocol` — one verdict, read by the handshake, the save loader and the health panel                                                                                                                |
-| Planetary terrain        | 🟡     | Whole-disk heightfields, seamless; craters, plates, volcanism and ice from a per-body grammar, and no materials                                                                                                                 |
+| Planetary terrain        | 🟡     | Whole-disk heightfields, seamless; craters, plates, volcanism and ice from a per-body grammar, shaded from a palette derived from the same facts; no authored material sets and no albedo bake for a generated body's sphere    |
 | Ships                    | 🟡     | One modeled hull (a CC-BY Enterprise-D in `data/models/`, debug cone as fallback), no variants or subsystems                                                                                                                    |
 | Rings                    | ✅     | All four giants, with Saturn's shadow on its own and theirs on it; Haumea, Quaoar, Chariklo and Chiron carry theirs; procedural giants get a 1-in-6 chance                                                                      |
 | Asteroids / belts        | 🟡     | 50 real asteroids and comets in Sol, and 6–18 generated per system — but they are `b:` bodies at system scale, not the `o:` region population a _visible_ belt would need (see [belts as a population](#belts-as-a-population)) |
@@ -113,8 +113,8 @@ The most visible shallowness, and the milestone in progress —
 
 ```mermaid
 flowchart TB
-    NOW["<b>today</b><br/>a grammar, a sketch and six bands<br/>over a restricted quadtree<br/>craters, plates, volcanism, ice"]
-    D["<b>the face</b><br/>biomes, splat materials,<br/>the orbital albedo bake"]
+    NOW["<b>today</b><br/>a geology with a face<br/>deposits, rays, a published map<br/>on the ground that wears it"]
+    D["<b>the albedo bake</b><br/>a generated body's sphere<br/>shows its own maria"]
     E["<b>the ground</b><br/>meter-scale levels,<br/>rock scatter"]
     F["<b>the GPU producer</b><br/>TSL compute tiles"]
 
@@ -142,6 +142,19 @@ every patch count in the plan is a function of that one number — the flight le
 is 848 px/rad against the guess's 935, and the telephoto end of the
 field-of-view slider saturates the patch cap on most of a descent's steps.
 
+Phase 3 landed 29 Aug 2026: the ground has a material.
+[ADR-0020](adr/0020-the-face.md) is the decision record. Four bytes a vertex
+carry what a shader cannot derive — impact-fresh material, flood basalt, where
+the crust sits on the body's compositional ramp, condensed volatiles — and the
+three a shader _can_ are read per pixel from the mesh it is standing on.
+Deposits are layered rather than splatted, in the order they are laid down, and
+the angle of repose does most of the visible work. A body with a published map
+wears it: the same photograph the sphere in front of it is drawn from, sampled
+by direction, with the invented channels switched off because the maria are
+already in the picture. Measured either side of the eight-pixel gate, the
+streamed ground and the archive's sphere are 3.1% apart on Mars and 1.5% apart
+on Earth.
+
 Phase 2 landed 28 Aug 2026: the three noise bands are a surface grammar derived
 from each body's own facts, a per-body sketch of plate nuclei, hotspots and a
 crater ladder, and six bands over them.
@@ -153,11 +166,11 @@ strength limit rather than a dial, and terrain moved to algorithm version 2.
 
 | Gap                                              | Consequence today                                                                                                                                         | Seam                                                                                                                                                              |
 | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| One flat color per body                          | Terrain reads as geometry, never as a place                                                                                                               | Elevation, slope and latitude are already available per vertex                                                                                                    |
-| A mapped body's terrain is not its map           | Procedural ground under a photographic albedo, near the surface only                                                                                      | The DEM ingest ends the carve-out; Phase 3's material is what makes the patches wear the published map meanwhile                                                  |
-| The sphere-tier shell needs an albedo bake       | Terrain is switched off past 8 px of relief, so an approach shows the sphere                                                                              | A per-face normal + albedo tile, baked in workers like any patch                                                                                                  |
+| A generated body's sphere is a flat tint         | Its ground has maria, rays and caps below the eight-pixel gate and none of them above it — the far half of a descent is the only half that does not agree | A per-face albedo cube baked in workers, sampled by direction, read by `render/planet.ts` as well as by the terrain                                               |
+| Deposits are chosen from the mesh                | Two patches at different levels report different slopes for the same ground, so a weight read off the normal steps by ~4% at a level boundary             | More channels on the cover, so the deposits read the canonical field instead of the LOD                                                                           |
+| No authored material sets                        | Detail is gradient noise, which has no period to break and no projection to choose — so hex-tiling and triplanar answer questions nothing is asking       | The detail field in `render/terrain.ts`; both techniques come back with the textures that need them                                                               |
 | The selection is not frustum-culled              | A whole disk is generated, of which the renderer draws about a third                                                                                      | The streamer has the camera; a generous cone would keep a turn from bursting                                                                                      |
-| Vertex attributes are float32                    | 203 KB a patch, so a whole-disk selection is 85–205 MB at the flight lens                                                                                 | Int8 normals and Int16 morph deltas are worth about half                                                                                                          |
+| Vertex attributes are float32                    | 237 KB a patch — 203 KB of float32 geometry and 34 KB of cover — so a whole-disk selection is 99–239 MB at the flight lens                                | Int8 normals and Int16 morph deltas are worth about half                                                                                                          |
 | The mesh is built on the main thread             | 0.25 ms a patch, four a frame                                                                                                                             | The worker already has the field; the mesh arithmetic has to move to `packages/universe` first, for the layer rule                                                |
 | Patch generation is over its budget              | 9 to 37 ms per bordered 65×65 patch across the zoo — 9 with no craters, 32 rocky airless, 36 icy dead, 37 rocky atmosphered — against a documented ≤ 8 ms | `pnpm sim --terrain-baseline` is the measurement; the crater neighborhood is most of it, and its radial bound, `EJECTA_REACH` and the GPU producer are the levers |
 | A coarse patch costs more than a fine one        | Consecutive samples of a coarse patch land in different noise lattice cells                                                                               | A whole-disk selection pays it on the shell; per-level merging would amortize it                                                                                  |

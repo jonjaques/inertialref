@@ -206,6 +206,8 @@ export interface HeightfieldResponse {
   readonly resolution: number
   readonly border: number
   readonly elevations: Float32Array
+  /** Four bytes of surface cover per vertex, unbordered. See `cover.ts`. */
+  readonly cover: Uint8Array
   readonly minElevation: number
   readonly maxElevation: number
 }
@@ -227,8 +229,13 @@ export const generateHeightfieldTask = defineTask<
    * version 3 payload would read `undefined` for every band amplitude and
    * return a field of `NaN` — which reaches the mesh as a patch that vanishes
    * rather than as an error.
+   *
+   * 4: the response carries the surface cover beside the elevations. A version
+   * 3 worker's answer has no `cover`, and `buildPatch` reads its length —
+   * which is an invariant failure on the first patch rather than a patch that
+   * quietly wears the wrong material.
    */
-  version: 3,
+  version: 4,
   run(payload) {
     const seed: Seed = parseSeed(payload.surfaceSeed)
     const field: Heightfield = generateHeightfield(
@@ -255,6 +262,7 @@ export const generateHeightfieldTask = defineTask<
       resolution: field.resolution,
       border: field.border,
       elevations: field.elevations,
+      cover: field.cover,
       minElevation: field.minElevation,
       maxElevation: field.maxElevation,
     }
@@ -262,7 +270,7 @@ export const generateHeightfieldTask = defineTask<
   transfers(response) {
     // Transferred, not copied: the main thread hands this straight to a
     // BufferAttribute and the worker has no further use for it.
-    return [response.elevations.buffer]
+    return [response.elevations.buffer, response.cover.buffer]
   },
 })
 

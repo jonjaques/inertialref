@@ -25,6 +25,7 @@ import {
   MAX_RELIEF,
   reliefLimit,
   surfaceGrammar,
+  surfaceTemperature,
 } from './grammar.ts'
 import { craterLadder, PLATE_MARGIN, plateAt, terrainSketch } from './sketch.ts'
 import { type Body, generateSystem, walkBodies } from './system.ts'
@@ -56,6 +57,34 @@ function* sphere(count: number): Generator<ReturnType<typeof vec3>> {
 }
 
 describe('the surface grammar', () => {
+  /*
+   * `surfaceTemperature`'s docstring says it is *fitted* to three bodies where
+   * both the equilibrium and the ground temperature are published. Nothing
+   * asserted that, and the gain drifted far enough to put Venus at 913 K —
+   * twenty-four percent above the 737 the sentence claims — without a single
+   * test noticing, because every consumer only asks whether the ground is above
+   * a frost point or below a boiling one.
+   *
+   * The tolerances are the fit's own error against the measurements, not a
+   * margin: Mars is claimed at 210 and lands at 213, Earth 288 and 286, Venus
+   * 737 and 739.
+   */
+  it('lands its fitted anchors where the docstring says it does', () => {
+    const rows = [
+      ['Mars', 213, 220, 210, 4],
+      ['Earth', 263, 10_200, 288, 3],
+      ['Venus', 310, 1.0e6, 737, 5],
+    ] as const
+    for (const [name, equilibrium, airMass, published, tolerance] of rows) {
+      const fitted = surfaceTemperature(equilibrium, airMass)
+      expect(`${name}: ${Math.abs(fitted - published) < tolerance}`).toBe(
+        `${name}: true`,
+      )
+    }
+    // And no air is no greenhouse, exactly, rather than nearly.
+    expect(surfaceTemperature(263, 0)).toBe(263)
+  })
+
   /*
    * The anchors § 6 of the plan names, checked against the bodies they were
    * written from. Not exact figures — the grammar is a model and these are

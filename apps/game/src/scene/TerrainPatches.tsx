@@ -10,11 +10,13 @@ import {
   Vector2,
   Vector3,
 } from 'three/webgpu'
+import { Quaternion as Q, Vec } from '@inertialref/spatial'
 import { HEIGHTFIELD_RESOLUTION } from '@inertialref/universe'
-import { patchIndices } from '@inertialref/rendering'
+import { patchIndices, pixelAngle } from '@inertialref/rendering'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { GEOMETRY_CACHE } from '../engine/terrainStreamer.ts'
-import { createTerrainMaterial } from '../render/materials.ts'
+import { texturesFor } from '../render/planetTextures.ts'
+import { createTerrainMaterial } from '../render/terrain.ts'
 import { warmAtMount, warmCompile, warmRenderer } from '../render/warmup.ts'
 
 /**
@@ -39,7 +41,8 @@ import { warmAtMount, warmCompile, warmRenderer } from '../render/warmup.ts'
 export function TerrainPatches({ engine }: { engine: GameEngine }) {
   const group = useRef<Group>(null)
   const meshes = useMemo(() => new Map<string, Mesh>(), [])
-  const material = useMemo(() => createTerrainMaterial(), [])
+  const terrain = useMemo(() => createTerrainMaterial(), [])
+  const material = terrain.material
   /*
    * One index attribute for the session. It is a function of the resolution
    * alone, and the renderer keys its GPU buffers on the attribute instance — so
@@ -50,6 +53,9 @@ export function TerrainPatches({ engine }: { engine: GameEngine }) {
     [],
   )
   const gl = useThree((state) => state.gl)
+  const anisotropy = useThree(
+    (state) => state.gl.capabilities?.getMaxAnisotropy?.() ?? 8,
+  )
   const camera = useThree((state) => state.camera)
   const scene = useThree((state) => state.scene)
 
@@ -80,10 +86,20 @@ export function TerrainPatches({ engine }: { engine: GameEngine }) {
         geometry.setAttribute('normal', new BufferAttribute(up, 3))
         geometry.setAttribute('terrainMorph', new BufferAttribute(triangle, 3))
         geometry.setAttribute('terrainMorphNormal', new BufferAttribute(up, 3))
+        const cover = new Uint8Array(12)
+        geometry.setAttribute(
+          'terrainCover',
+          new BufferAttribute(cover, 4, true),
+        )
+        geometry.setAttribute(
+          'terrainMorphCover',
+          new BufferAttribute(cover, 4, true),
+        )
         geometry.setIndex([0, 1, 2])
         const dummy = new Mesh(geometry, material)
         dummy.userData.eyeLocal = new Vector3()
         dummy.userData.morphBand = new Vector2(1, 2)
+        dummy.userData.anchor = new Vector3(0, 0, 1)
         await warmCompile(warmRenderer(gl), {
           object: dummy,
           camera,
@@ -110,10 +126,66 @@ export function TerrainPatches({ engine }: { engine: GameEngine }) {
       height: gl.domElement.height,
     }
     const state = engine.terrainState()
-    // The ground is the picture of the planet now that the quadtree draws the
-    // whole disk, so it wears the body's own published color rather than one
-    // sandstone for every world. Phase 3 replaces this with the biome splat.
-    material.color.setRGB(state.colour.r, state.colour.g, state.colour.b)
+    const datumRadius = state.datumRadius
+    /*
+     * The body's own appearance, and the star that lights it.
+     *
+     * The sun arrives in **body-fixed** axes because everything in the material
+     * is: the shading normal is body-fixed because the geometry is, and the eye
+     * already had to be for the morph. Rotating one vector on the CPU here is
+     * cheaper and has one fewer frame in it than transforming the normal to
+     * world space per fragment to meet a world-space sun.
+     */
+    if (state.palette !== null && state.orientation !== null) {
+      terrain.setPalette(state.palette, state.datumRadius)
+      /*
+       * The pixel angle of the **drawing buffer**, not of the display.
+       *
+       * The selection deliberately measures in display pixels: a two-times
+       * display wants twice the patches for the same picture and a two-times
+       * supersample does not. Anti-aliasing is the opposite question — what
+       * matters is the grid the samples actually land on — so the display angle
+       * is divided by the supersampling factor to get the angle one *sample*
+       * covers.
+       *
+       * The ratio below is that factor's **reciprocal**, and it is spelled as a
+       * ratio rather than read from `engine.supersample` for exactly that
+       * reason: the engine's field is the factor itself, and reaching for it
+       * here would be a factor of four the wrong way at 4× AA.
+       */
+      if (state.lens !== null) {
+        const display = pixelAngle(state.lens.lens, state.lens.viewport)
+        const perSample =
+          state.lens.viewport.height / Math.max(1, gl.domElement.height)
+        terrain.setPixelAngle(display * perSample)
+      }
+      /*
+       * The same texture set `Bodies.tsx` draws the sphere from, looked up by
+       * the same key. Not passed down from there, because the two components
+       * see different frames of the same body and the loader is a cache: asking
+       * it again is a map lookup, and sharing a reference would make the
+       * terrain's material depend on whether the body happened to be in the
+       * drawn set this frame.
+       */
+      terrain.setAlbedoMap(
+        texturesFor(state.palette.textureKey, anisotropy).albedo,
+        state.palette.textureKey !== null,
+      )
+      const key = engine.scene()?.stars[0]
+      if (key !== undefined && state.centre !== null) {
+        const toStar = Vec.sub(key.placement.position, state.centre)
+        // A body sitting exactly on its star leaves this zero-length, and a
+        // normalized zero is a NaN across the whole surface.
+        if (Vec.length(toStar) > 0) {
+          const local = Q.rotate(
+            Q.conjugate(state.orientation),
+            Vec.normalize(toStar),
+          )
+          terrain.sunDirection.value.set(local.x, local.y, local.z)
+        }
+        terrain.sunColour.value.setRGB(key.color.r, key.color.g, key.color.b)
+      }
+    }
     const seen = new Set<string>()
 
     for (const placed of state.patches) {
@@ -148,6 +220,23 @@ export function TerrainPatches({ engine }: { engine: GameEngine }) {
           'terrainMorphNormal',
           new BufferAttribute(patch.morphNormals, 3),
         )
+        /*
+         * The cover, as normalized bytes rather than floats.
+         *
+         * Four channels of a fraction, read through a splat weight — eight bits
+         * resolves each to a four-hundredth, which is finer than anything
+         * downstream of a mip chain can tell from a float, and it is a quarter
+         * of the bandwidth. A whole-disk selection is several hundred patches
+         * and vertex memory is already the streamer's largest number.
+         */
+        geometry.setAttribute(
+          'terrainCover',
+          new BufferAttribute(patch.cover, 4, true),
+        )
+        geometry.setAttribute(
+          'terrainMorphCover',
+          new BufferAttribute(patch.morphCover, 4, true),
+        )
         geometry.setIndex(indices)
         /*
          * Set rather than computed. `computeBoundingSphere` walks the position
@@ -166,6 +255,21 @@ export function TerrainPatches({ engine }: { engine: GameEngine }) {
         mesh = new Mesh(geometry, material)
         mesh.userData.eyeLocal = new Vector3()
         mesh.userData.morphBand = new Vector2()
+        /*
+         * Body-fixed and constant for the life of the patch, which is what
+         * turns an anchor-relative vertex back into a place on the planet.
+         *
+         * `Math.fround` is not decoration: the uniform is float32, and the
+         * material's altitude arithmetic is exact only if the offset beside it
+         * describes the vector the shader actually gets rather than the float64
+         * one this array was built from. Half a metre at Earth's radius, which
+         * is a quarter of the water band.
+         */
+        const ax = Math.fround(patch.anchor.x)
+        const ay = Math.fround(patch.anchor.y)
+        const az = Math.fround(patch.anchor.z)
+        mesh.userData.anchor = new Vector3(ax, ay, az)
+        mesh.userData.anchorAltitude = Math.hypot(ax, ay, az) - datumRadius
         mesh.userData.patch = patch
         meshes.set(key, mesh)
       }
