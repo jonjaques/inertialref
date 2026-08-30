@@ -5,23 +5,21 @@ import type { DocFraming } from './content.ts'
 /*
  * The masthead's camera.
  *
- * The same mechanism the front door uses — a stance pushed on mount, an
- * observatory target, and a phase ramp driven by real elapsed time — with one
- * difference that is the whole reason this is a hook rather than four lines in
- * a component: the framing changes when the reader moves between wings, and it
- * has to change without releasing the stance underneath it. Releasing and
- * re-pushing per wing would hand the camera back to whatever is below for a
- * frame, which is a visible cut to the ship's chase view in the middle of a
- * navigation.
+ * The same mechanism the front door uses — a stance pushed on mount and an
+ * observatory target — with one difference that is the whole reason this is a
+ * hook rather than four lines in a component: the framing changes when the
+ * reader moves between wings, and it has to change without releasing the stance
+ * underneath it. Releasing and re-pushing per wing would hand the camera back
+ * to whatever is below for a frame, which is a visible cut to the ship's chase
+ * view in the middle of a navigation.
  *
  * So the stance is pushed once for the whole visit and only the *target* is
  * re-aimed. That is legal — the stance owns the observatory's lifetime, not
  * where it points, which is `GameEngine.#step`'s (AGENTS.md, "no fourth camera
- * producer").
+ * producer"). The phase is the wing's declared phase, set once; a rAF ramp
+ * would be animation in a reading room, and it is the one place a wall clock
+ * would have to enter the masthead.
  */
-
-/** How fast the phase ramps, degrees per second. */
-const PHASE_RATE = -1.5
 
 /**
  * How much of the lens's ghost chain a masthead shows.
@@ -71,9 +69,9 @@ export function useDocsFraming(
    * `wingFor` returns a member of `manifest.wings`, so `wing.framing` is the
    * same reference for the life of the session. What the values survive is the
    * manifest being *replaced*: a second fetch, or a wing whose framing is
-   * unchanged arriving inside a new object, would re-aim the camera and restart
-   * the phase ramp for no change at all. The dependency is what the camera is
-   * actually pointed at, so that is what it is written as.
+   * unchanged arriving inside a new object, would re-aim the camera for no
+   * change at all. The dependency is what the camera is actually pointed at, so
+   * that is what it is written as.
    */
   const address = framing?.address
   const phase = framing?.phase
@@ -112,15 +110,7 @@ export function useDocsFraming(
       return
     }
 
-    let handle = 0
-    const opened = performance.now()
-    const drift = (): void => {
-      handle = window.requestAnimationFrame(drift)
-      const elapsed = (performance.now() - opened) / 1000
-      observatory.setPhase(phase + elapsed * PHASE_RATE, tilt)
-    }
-    handle = window.requestAnimationFrame(drift)
-    return () => window.cancelAnimationFrame(handle)
+    observatory.setPhase(phase, tilt)
   }, [engine, address, phase, tilt, fill])
 
   return body
