@@ -5746,6 +5746,25 @@ regolith on its top, in the palette of the ground it lies on, by the same slope
 term that decides the ground.
 
 Two things this cost, both worth remembering.
+**Every rock was inside out, and three quarters of them were underground.**
+Both found by `/code-review max --fix` after this had already opened, and both
+invisible to every test that existed. The instance basis `(east, up, north)` is
+_left_-handed — `north` is `up × east`, so `east × up` is `−north` — and three
+columns in that order are a reflection with determinant `−sx·sy·sz`. The
+terrain material never sets `.side`, so front-face culling applies, and Three
+flips `frontFace` only on the _object's_ `matrixWorld` determinant, never the
+per-instance matrix: every rock drew its far shell through the hole where its
+near one was culled. `scatterRender.test.ts` asserts exactly that invariant one
+object up, about the shapes rather than the instances.
+
+And `sink` is a fraction of the rock spent against `rock.radius`, which is half
+its _longest_ dimension while it is drawn 0.62 to 0.82 of that tall — so the
+median rock sat entirely below the surface. `rockRise` is the drawn half-extent
+now and the seat, the sink and the instance scale all read it. The fixed
+twelve-centimetre seat then buried the small end on its own, because it is
+taller than a 25 cm rock's own 17 cm of stand: **0 buried across 14,727 rocks
+against 3,588 before**, in every size class.
+
 **Two attribute names may not share one `BufferAttribute` object.** The backend
 keys its GPU buffer on the object the geometry hands back, so one object under
 two names is one buffer at two shader locations and the whole pipeline fails to
@@ -5793,6 +5812,21 @@ built-ins has.
   the field, which is the same change the deposits want.
 - **Scatter has no collision.** A rock is presentational until on-foot arrives,
   and the contact test does not know it exists — the same split the tail makes.
+- **A rock reads as a silhouette under a high sun and correctly under a low
+  one**, and the cause is not the palette: on a mapped body every deposit's
+  ratio is exactly 1.000, so a rock's colour is the ground's colour and the
+  difference is entirely in the shading. The suspect is the bump. Its height
+  field is the grain band on `local`, and across a rock `local` changes by the
+  rock's own width over a handful of pixels — far above the band's Nyquist rate
+  — while `grainFade` keys on the _footprint_, which is the same for a rock and
+  for the ground behind it. So the fade cannot switch it off and the
+  perturbation swamps the rock's true normal; at a low sun the ground is dark
+  and any normal reads plausibly, at a high sun the ground saturates and the
+  rock reads as noise. **That is a suspect rather than a measurement** — a TSL
+  graph cannot be evaluated in Node, so it is settled on a GPU or not at all,
+  and it is not settled. The rocks are placed, solid and correctly oriented,
+  which is what this phase claims; their photometry is the next thing to look
+  at, and the material has no channel left to tell a rock from the ground with.
 - **Iapetus at a two-meter stance draws a smooth white sheet**, and it does so on
   `origin/main` too: a flat icy plain at the reflectance ceiling under a high sun
   has no contrast anywhere, so the terrain is there and unreadable. It is not

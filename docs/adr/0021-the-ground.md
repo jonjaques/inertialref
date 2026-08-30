@@ -118,6 +118,18 @@ raising `DEFAULT_MAX_PATCHES` was for. Reaching that state at retina takes
 between one and three minutes, because 1,562 patches at 43 ms is 67 s of
 single-core generation and the pool does not divide it far enough.
 
+**A rock's photometry is not settled.** Under a low sun a boulder reads as a
+solid, correctly lit rock; under a high one it reads as a black silhouette
+against a saturated plain. It is not the palette — on a mapped body every
+deposit's ratio is exactly 1.000, so a rock's color _is_ the ground's color and
+the whole difference is in the shading. The suspect is the bump: its height
+field is the grain band on `local`, which across a rock changes by the rock's
+own width over a handful of pixels, while `grainFade` keys on the footprint,
+which is the same for a rock and for the ground behind it. A TSL graph cannot be
+evaluated in Node, so this is settled on a GPU or not at all and is not settled;
+sharing the ground's material is what makes it one question rather than two, and
+the material has no channel left to tell a rock from the ground with.
+
 **The contact test and the drawn ground are 1.25 m apart at worst.** A landing
 ship spans tens of meters, so it is invisible to flight; a person will notice,
 and [on foot](../design/onfoot.md) is where the floor drops and the number is
