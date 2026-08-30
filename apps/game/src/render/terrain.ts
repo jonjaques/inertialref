@@ -18,6 +18,8 @@ import {
   dot,
   exp,
   float,
+  floor,
+  fract,
   Fn,
   length,
   max,
@@ -29,8 +31,10 @@ import {
   min,
   positionLocal,
   pow,
+  mod,
   saturate,
   sign,
+  sin,
   smoothstep,
   sqrt,
   texture,
@@ -115,7 +119,7 @@ export interface TerrainMaterial {
 const MACRO_METRES = 4000
 
 /**
- * And of the finest, evaluated on the patch-local position instead.
+ * And of the middle octave, evaluated on the patch-local position instead.
  *
  * Anchor-relative metres are exact — a patch anchor is subtracted in float64 on
  * the CPU, so `positionLocal` resolves to microns — but they are *patch*-local,
@@ -124,14 +128,55 @@ const MACRO_METRES = 4000
  * fades out entirely once a pixel covers more than a couple of wavelengths, so
  * at any distance where the boundary itself is a visible line the detail on
  * both sides of it is already gone.
- *
- * Sub-metre relief is Phase 4's, and it needs the floating-origin trick applied
- * to the noise domain rather than a finer octave here.
  */
 const MICRO_METRES = 7
 
 /** Peak-to-peak relief of the micro octave, meters. Half the canonical floor. */
 const MICRO_RELIEF = 0.25
+
+/**
+ * Ground wavelength of the coarsest **grain** octave, meters.
+ *
+ * The band below the mesh. A patch at the detail floor is 0.33 to 3.7 m a cell,
+ * and standing at two metres one of those cells is two hundred display pixels
+ * across — so everything between a cell and a pixel is this band's, and there
+ * was nothing there: the ground under the camera drew as a smooth swell with
+ * `MICRO_METRES`'s seven-metre octave on it and no texture at all.
+ *
+ * Seventy centimetres down to nine, at a slope of about fifteen degrees, which
+ * is what lunar regolith measures at centimetre baselines.
+ */
+export const GRAIN_METRES = 0.7
+
+/** Octaves of it. Three reaches 9 cm, which is a pixel at arm's length. */
+const GRAIN_OCTAVES = 3
+
+/** Peak-to-peak relief of the coarsest grain octave, meters. */
+const GRAIN_RELIEF = 0.035
+
+/**
+ * How many grain wavelengths the field repeats over.
+ *
+ * The whole point of this band is that its domain is **continuous across a
+ * patch boundary**, which `positionLocal` is not: two patches have different
+ * anchors, so a noise on the patch-local position jumps phase at every edge —
+ * invisible at seven metres of wavelength and a straight line across the ground
+ * at seventy centimetres. The obvious fix is the *body-fixed* position, and that
+ * is worse: `anchor + local` is 1.7 × 10⁶ on Luna where float32 resolves 0.1 m,
+ * which quantizes a nine-centimetre octave out of existence.
+ *
+ * So the domain is the body-fixed position **reduced modulo this period on the
+ * CPU, in float64**, and the noise is periodic over it. Two patches whose
+ * anchors differ by any amount agree exactly wherever they overlap, because both
+ * evaluate the same periodic function of the same reduced coordinate — and the
+ * coordinate stays under 45 m, where float32 resolves microns.
+ *
+ * Sixty-four, because every octave has to close on the same period: octave `i`
+ * has `64 · 2ⁱ` wavelengths in it, which is a whole number for all three. The
+ * repeat is 45 m of ground, which at the distance this band survives to is
+ * always less than one period across the frame.
+ */
+export const GRAIN_PERIOD = 64
 
 export function createTerrainMaterial(): TerrainMaterial {
   const sunDirection = uniform(new Vector3(1, 0, 0))
@@ -229,6 +274,19 @@ export function createTerrainMaterial(): TerrainMaterial {
   const anchorAltitude = uniform(0).onObjectUpdate(
     ({ object }) =>
       (object?.userData.anchorAltitude as number | undefined) ?? 0,
+  )
+  /*
+   * The patch anchor reduced modulo the grain period, in grain wavelengths.
+   *
+   * Computed in float64 by the producer and handed over already small, which is
+   * the whole trick: added to `positionLocal` it gives a coordinate that is
+   * continuous across every patch boundary *and* exact, where the body-fixed
+   * position is continuous and quantized and the patch-local one is exact and
+   * discontinuous. See `GRAIN_PERIOD`.
+   */
+  const grainOrigin = uniform(new Vector3()).onObjectUpdate(
+    ({ object }) =>
+      (object?.userData.grainOrigin as Vector3 | undefined) ?? ZERO,
   )
 
   /*
@@ -397,6 +455,27 @@ export function createTerrainMaterial(): TerrainMaterial {
       0.55,
     ).mul(microFade)
     const detail = macro.mul(0.6).add(micro.mul(0.4))
+
+    /*
+     * And the grain: the band between a mesh cell and a pixel.
+     *
+     * Its own fade, its own domain and its own amplitude, so it is a separate
+     * term from `detail` rather than two more octaves of it — `detail` is spent
+     * on reflectance as well as on shape, and mottling an ocean or a dust plain
+     * at nine centimetres is not the same decision as bumping it.
+     */
+    const grainFade = oneMinus(
+      smoothstep(
+        float(GRAIN_METRES * 0.3),
+        float(GRAIN_METRES * 1.5),
+        footprint,
+      ),
+    )
+    const grit = periodicFbm(
+      asVector(grainOrigin.add(local.mul(float(1 / GRAIN_METRES)))),
+      GRAIN_OCTAVES,
+      GRAIN_PERIOD,
+    ).mul(grainFade)
 
     /* --- which deposit is here --------------------------------------------- */
 
@@ -678,7 +757,11 @@ export function createTerrainMaterial(): TerrainMaterial {
      * flat sea with rock grain is the one thing that would make an ocean read
      * as wet concrete.
      */
-    const height = detail.mul(float(MICRO_RELIEF)).mul(bump).mul(dry)
+    const height = detail
+      .mul(float(MICRO_RELIEF))
+      .add(grit.mul(float(GRAIN_RELIEF)))
+      .mul(bump)
+      .mul(dry)
     /*
      * The position derivatives are **not** normalized, and that is the one
      * place this departs from `bumpMap()` in TSL.
@@ -907,6 +990,95 @@ export function createTerrainMaterial(): TerrainMaterial {
     },
   }
 }
+
+/**
+ * One body-fixed coordinate reduced into the grain field's own period.
+ *
+ * In grain wavelengths, so the shader adds `positionLocal / GRAIN_METRES` to it
+ * directly. See `GRAIN_PERIOD` in `render/terrain.ts` for why the reduction has
+ * to happen on this side of the uniform.
+ */
+export function grainWrap(metres: number): number {
+  const cycles = metres / GRAIN_METRES
+  return cycles - Math.floor(cycles / GRAIN_PERIOD) * GRAIN_PERIOD
+}
+
+/**
+ * Value noise on a wrapped integer lattice, in [-1, 1].
+ *
+ * Written out rather than taken from `mx_*`, because the one property this band
+ * needs is the one none of the built-ins has: **periodicity**. The domain is a
+ * patch-local position offset by an origin already reduced modulo the period, so
+ * two patches agree wherever they overlap only if the field itself closes on
+ * that period — otherwise the reduction is the seam it was added to remove.
+ *
+ * The hash is the classic `fract(sin(dot))`, which is a poor hash at large
+ * coordinates and a perfectly good one here: `wrap` keeps every lattice index
+ * under `period`, so the argument to `sin` never leaves the range float32
+ * resolves finely. Eight corners, smoothstep interpolation, three octaves —
+ * twenty-four hashes a fragment, on a band that has already faded out by a metre
+ * of footprint.
+ */
+function periodicFbm(point: Vector, octaves: number, period: number): Scalar {
+  let sum: Scalar = asScalar(float(0))
+  let norm = 0
+  let amplitude = 1
+  for (let i = 0; i < octaves; i += 1) {
+    const scale = 2 ** i
+    sum = asScalar(
+      sum.add(
+        periodicNoise(asVector(point.mul(float(scale))), period * scale).mul(
+          amplitude,
+        ),
+      ),
+    )
+    norm += amplitude
+    amplitude *= 0.5
+  }
+  return asScalar(sum.mul(float(1 / norm)))
+}
+
+/** One octave of it: eight wrapped corners, trilinear through a Hermite step. */
+function periodicNoise(point: Vector, period: number): Scalar {
+  const cell = asVector(floor(point))
+  const inside = asVector(point.sub(cell))
+  // The same Hermite `smoothstep` uses, spelled out because the endpoints are 0
+  // and 1 and a `smoothstep(0, 1, x)` would be two more constants to read.
+  const t = asVector(inside.mul(inside).mul(inside.mul(-2).add(3)))
+  const corner = (dx: number, dy: number, dz: number): Scalar =>
+    latticeValue(asVector(cell.add(vec3(dx, dy, dz))), period)
+  const x00 = mix(corner(0, 0, 0), corner(1, 0, 0), t.x)
+  const x10 = mix(corner(0, 1, 0), corner(1, 1, 0), t.x)
+  const x01 = mix(corner(0, 0, 1), corner(1, 0, 1), t.x)
+  const x11 = mix(corner(0, 1, 1), corner(1, 1, 1), t.x)
+  return mix(mix(x00, x10, t.y), mix(x01, x11, t.y), t.z)
+    .mul(2)
+    .sub(1)
+}
+
+/** One lattice cell's value in [0, 1), wrapped so the field is periodic. */
+function latticeValue(cell: Vector, period: number): Scalar {
+  const wrapped = asVector(mod(cell, float(period)))
+  return asScalar(
+    fract(sin(dot(wrapped, vec3(127.1, 311.7, 74.7))).mul(float(43758.5453))),
+  )
+}
+
+/**
+ * The two node shapes the noise above passes around, and the two re-narrowings
+ * that keep it readable.
+ *
+ * TSL's builders each return their own node class — `vec3()` a join, `.mul()` an
+ * operator, `mix()` a math node — so an arithmetic chain changes type at every
+ * step and a helper typed against one of them cannot be called with the result
+ * of another. Every one of them is the same thing at runtime and generates the
+ * same WGSL; the cast is a re-narrowing rather than a lie, and it is the same
+ * one `sampled` above makes for the same reason.
+ */
+type Vector = ReturnType<typeof vec3>
+type Scalar = ReturnType<typeof float>
+const asVector = (node: unknown): Vector => node as Vector
+const asScalar = (node: unknown): Scalar => node as Scalar
 
 /**
  * A texture read with explicit gradients, as a colour.

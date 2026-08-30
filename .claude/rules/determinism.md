@@ -35,6 +35,13 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", ADR-0001..0009.
   through a plate's interior, not along its boundary. Weight every candidate inside a
   margin, normalize, and sum (`plateProperty`), or use a lattice with no ranking in it
   (`craters.ts`). The weight reaches zero before a candidate can leave the set.
+- **Never read the drawn ground where the canonical one belongs, or the reverse.**
+  `groundElevation`/`surfaceRadius` are what the contact test integrates and what a save
+  records; `drawnElevation`/`drawnSurfaceRadius` are that plus the presentational tail
+  and are what the mesh, the material and a composing camera are made from. They differ
+  by at most `drawnDivergence` — 1.25 m. Physics reading the drawn one puts a landing
+  behind a term the renderer may change; a mesh reading the canonical one draws a plane
+  at two metres. ADR-0021.
 - **Never persist anything regenerable.** A save stores references and mutations. If you
   want to store generated content you want a cache, and it is not a save.
 - **Never make the star catalog ambient.** It is a generation input alongside the seed

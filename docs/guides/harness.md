@@ -261,7 +261,7 @@ for (const height of [40000, 2000, 120, 2]) {
 ```js
 ir.zoo() // one body per surface archetype, found rather than listed
 ir.descend(address?, { site, steps }) // fly a descent on paper
-ir.terrain() // what the live streamer holds this frame
+ir.terrain() // what the live streamer holds this frame, rocks included
 ir.terrainBaseline() // the zoo, its descents, and measured patch cost
 ir.dossier(address) // the record, whose Geology card is the surface grammar
 ```
@@ -280,6 +280,14 @@ both caches, `cached` for heightfields and `geometry` for meshes, because they
 fail differently: refinement gates on the mesh, so a geometry cache losing what
 the draw set is standing on collapses the selection to the roots while `cached`
 sits at its steady value and reports nothing wrong.
+
+`ir.terrain().scatter` is the rocks on it, and it is part of the terrain report
+rather than a verb of its own because a rock count without the ground under it
+is not a number anyone can act on: `resolving` above zero beside `rocks` at zero
+is a field filling in, and the same pair beside `starved` is a descent
+outrunning both budgets at once. `range` is how far rocks are drawn this frame —
+212 m at the flight lens over the baseline viewport, and a function of the lens
+like everything else here.
 
 **Every count here is a function of the lens, so every report states one.** The
 demand climbs steeply with the pixels-per-radian — measured, the telephoto end

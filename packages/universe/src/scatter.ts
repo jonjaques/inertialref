@@ -63,6 +63,8 @@ export interface ScatterRock {
   readonly radius: Meters
   /** How much of it is under the surface, 0 to 1 of its own radius. */
   readonly sink: number
+  /** And a fixed depth under that, meters. See where it is written. */
+  readonly seat: Meters
   /** Turn about the local vertical. */
   readonly spin: Radians
   /** Lean off the local vertical, and which way. */
@@ -76,37 +78,54 @@ export interface ScatterRock {
 }
 
 /**
- * How wide a scatter region is, meters — the ground one `r:` address covers.
+ * Ground per candidate slot at saturation, square meters.
  *
- * Two hundred and fifty, and both ends of the range are set by the renderer
- * rather than by geology. Smaller regions mean more of them near the camera and
- * more addresses to reconcile per frame: at 64 m a five-hundred-metre view is
- * eight hundred regions. Larger ones mean a region is generated long before any
- * of its rocks is close enough to see, and generation is a field sample per
- * candidate. Two hundred and fifty puts about fifty regions inside the distance
- * a one-metre rock stops being a pixel — `1 · pixelsPerRadian / range`, which at
- * the flight lens is 500 m for two pixels.
- *
- * It is a *target*: `levelForSize` rounds to the nearest level, so the real
- * figure runs from 0.7 to 1.4 of it depending on the body's radius.
+ * One rock per sixty-four, which is a rock every eight metres. The Apollo
+ * surface panoramas put blocks above about twenty centimetres every five to
+ * fifteen metres on the mare, so this is the low end of the measured range —
+ * and the low end is the right end, because it is the ceiling: everything below
+ * multiplies it down and nothing multiplies it up.
  */
-export const SCATTER_REGION: Meters = 250
+const SCATTER_SPACING = 64
 
 /**
- * Candidate slots per region.
+ * Candidate slots per region: a 32 by 32 lattice.
  *
  * The `o:` index runs 0 to this, and every slot is a fixed question — does this
- * region hold a rock at slot 37 — rather than a counter over the rocks that
+ * region hold a rock at slot 837 — rather than a counter over the rocks that
  * exist. That is what makes an address stable: adding a density term changes
- * *whether* slot 37 is occupied and never *which* rock it is.
+ * *whether* slot 837 is occupied and never *which* rock it is.
  *
- * Sixty-four over a 250 m region is one rock per 980 m² at saturation, which on
- * the lunar mare is about right for blocks above half a metre and an
- * underestimate inside a fresh ejecta blanket. The density terms below take it
- * down from there; nothing takes it up, so this is the ceiling and the number
- * that bounds the per-frame work.
+ * A power of two so the lattice is exact, and this large because rock abundance
+ * is the one thing in this milestone a person standing on the ground reads
+ * immediately. It is also what makes `slots` exist: resolving a candidate is a
+ * field sample at fourteen microseconds, so a whole region is eight and a half
+ * milliseconds and cannot be paid inside one frame.
  */
-export const SCATTER_SLOTS = 64
+export const SCATTER_SLOTS = 1_024
+
+/** Slots per side of the lattice. `SCATTER_SLOTS` is its square. */
+const SCATTER_SIDE = 32
+
+/**
+ * How wide a scatter region is, meters — the ground one `r:` address covers.
+ *
+ * Not a free choice: it is `SCATTER_SLOTS` slots at `SCATTER_SPACING` apiece,
+ * written out so that changing either moves the region with it rather than
+ * silently changing the density. 1,024 slots at one per 64 m² is a 256 m square.
+ *
+ * The size that results is also the one the renderer wants. Smaller regions mean
+ * more of them near the camera and more addresses to reconcile per frame; larger
+ * ones mean a region is generated long before any of its rocks is close enough
+ * to see, and generating one is a field sample per candidate. At 256 m, the
+ * 212 m a rock stops being two pixels at is four to nine regions.
+ *
+ * It is a *target*: `levelForSize` rounds to the nearest level, so the real
+ * figure runs from 0.7 to 1.4 of it and the density with it.
+ */
+export const SCATTER_REGION: Meters = Math.round(
+  Math.sqrt(SCATTER_SLOTS * SCATTER_SPACING),
+)
 
 /** The subdivision level a body's rocks are addressed at. */
 export const scatterLevel = (radius: Meters): number =>
@@ -148,13 +167,35 @@ const MIN_RADIUS: Meters = 0.25
 const MAX_RADIUS: Meters = 4
 
 /**
+ * How far every rock is pushed under the ground on top of its own sink, meters.
+ *
+ * The mesh's own interpolation error, measured rather than guessed: at the
+ * detail floor across the zoo a bilinear read of a patch differs from the field
+ * it was built from by 3 to 9 cm in the mean and up to 0.70 m at the worst cell
+ * on the body with the coarsest floor. Twelve centimetres seats the mean case;
+ * the tail is a small rock on an atmosphered world standing a little proud, and
+ * it is named here rather than hidden because the honest fix is for the rock to
+ * read the mesh instead of the field, which is the same change the deposits
+ * want and belongs with it.
+ */
+const MESH_SEAT: Meters = 0.12
+
+/**
  * The rocks in one region, in slot order.
  *
  * Pure and deterministic: the same surface and the same region give the same
  * list, whatever else has been generated. Cost is one hash per slot and one
- * field sample per slot that survives the first gate — about thirty of the
- * sixty-four on an airless body, and a field sample is the same band stack a
- * heightfield vertex pays for. Measured in `scatter.test.ts`.
+ * field sample per slot that survives the first gate — about six hundred of the
+ * thousand on an airless body, and a field sample is the same band stack a
+ * heightfield vertex pays for.
+ *
+ * **`slots` is what makes that affordable, and it is a half-open range rather
+ * than a count.** A whole region is eight and a half milliseconds, which is half
+ * a frame; a caller streams it a slice at a time and concatenates. The slice
+ * boundary changes nothing about the answer — slot 837 is slot 837 whichever
+ * call resolves it — so a region assembled over six frames is the region
+ * generated in one, which is the property that lets the budget move without
+ * moving a rock.
  *
  * `region` is expected to be at `scatterLevel`; nothing enforces it, because a
  * caller asking at another level gets a consistent answer for that level and the
@@ -163,8 +204,11 @@ const MAX_RADIUS: Meters = 4
 export function regionScatter(
   surface: SurfaceParameters,
   region: RegionAddress,
+  slots?: { readonly from: number; readonly to: number },
 ): readonly ScatterRock[] {
   if (surface.maxElevation <= 0) return []
+  const first = Math.max(0, slots?.from ?? 0)
+  const last = Math.min(SCATTER_SLOTS, slots?.to ?? SCATTER_SLOTS)
   const sketch = terrainSketch(surface)
   const grammar = surface.grammar
   const sea = seaDatumElevation(surface)
@@ -182,14 +226,17 @@ export function regionScatter(
     (sketch.latticeSeed ^ (region.face * 31 + region.level * 131)) | 0
   const cover = new Uint8Array(COVER_CHANNELS)
   const rocks: ScatterRock[] = []
-  for (let index = 0; index < SCATTER_SLOTS; index += 1) {
+  for (let index = first; index < last; index += 1) {
     const draw = pcg4d(region.i ^ seed, region.j, index, seed)
     const exists = toUnit(draw.x)
     // The cheap gate first: two thirds of the slots on a windy world never
     // reach a field sample, and a field sample is the whole cost here.
     if (exists >= abundance) continue
-    const s = (index % 8) / 8 + toUnit(draw.y) / 8
-    const t = Math.floor(index / 8) / 8 + toUnit(draw.z) / 8
+    const s =
+      (index % SCATTER_SIDE) / SCATTER_SIDE + toUnit(draw.y) / SCATTER_SIDE
+    const t =
+      Math.floor(index / SCATTER_SIDE) / SCATTER_SIDE +
+      toUnit(draw.z) / SCATTER_SIDE
     const direction = regionDirection(region, s, t)
     const elevation = groundCoverAt(surface, direction, cover, 0)
     // Nothing lies on the sea floor that anyone can see, and the sea surface is
@@ -247,8 +294,24 @@ export function regionScatter(
        * last week. So the sink rises with size and falls with `bright`.
        */
       sink: clamp01(
-        0.15 + 0.35 * size - 0.25 * here.bright + 0.2 * toUnit(shape.w),
+        0.25 + 0.35 * size - 0.2 * here.bright + 0.2 * toUnit(shape.w),
       ),
+      /*
+       * And a fixed seat on top of the fraction, meters.
+       *
+       * A rock's foot is the *field* and the ground it stands on is a
+       * triangulation of the same field, so the two differ by the mesh's own
+       * interpolation error over one cell — measured at the detail floor across
+       * the zoo, 3 to 9 cm in the mean and 0.35 to 0.70 m at the worst cell on
+       * the coarsest body. A quarter of a 25 cm rock is 6 cm of burial, which
+       * the mean case already eats; twelve centimetres on top of it seats the
+       * small rocks that would otherwise stand on a stalk.
+       *
+       * It is on the rock rather than in the placement because it is a fact
+       * about the two fields disagreeing, and the renderer that draws the rock
+       * is not the place that knows how far apart they are.
+       */
+      seat: MESH_SEAT,
       spin: toUnit(shape.y) * 2 * Math.PI,
       tilt: (0.05 + 0.25 * toUnit(shape.z)) * (1 - 0.5 * size),
       tiltAzimuth: toUnit(shape.w) * 2 * Math.PI,

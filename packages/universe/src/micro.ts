@@ -57,7 +57,7 @@ import { CANONICAL_DETAIL_FLOOR, type TerrainSketch } from './sketch.ts'
  * eight-metre crater is 1.6 m deep because that is what an eight-metre crater
  * is, and that is what buys the two to three levels this phase is named for.
  */
-export const MICRO_CRATER_CEILING: Meters = 0.2 * CANONICAL_DETAIL_FLOOR
+export const MICRO_CRATER_CEILING: Meters = 0.8
 
 /**
  * Peak-to-datum relief of the regolith grit, meters, on an airless world.

@@ -13,6 +13,7 @@ import { TEST_CATALOG } from './catalog/fixture.ts'
 import { catalogStub, MILKY_WAY } from './galaxy.ts'
 import {
   regionScatter,
+  type ScatterRock,
   SCATTER_REGION,
   SCATTER_SLOTS,
   scatterLevel,
@@ -161,7 +162,7 @@ describe('the geology decides how many', () => {
    * The claim the abundance terms make, as an ordering rather than as a count:
    * an airless body keeps what impacts excavate and an atmosphered one buries
    * it. Stated over the whole body rather than per region, because a single
-   * region is a sample of sixty-four draws and says nothing.
+   * region is a sample of a thousand draws and says nothing.
    */
   it('strews an airless body more heavily than one with air', () => {
     const airless = count(LUNA)
@@ -180,7 +181,9 @@ describe('the geology decides how many', () => {
     let matureRegions = 0
     for (const region of regions(LUNA, 96)) {
       const rocks = regionScatter(LUNA.surface, region)
-      const bright = rocks.reduce((sum, rock) => sum + rock.tone, 0) / 64
+      const bright =
+        rocks.reduce((sum, rock) => sum + rock.tone, 0) /
+        Math.max(1, rocks.length)
       if (bright > 0.2) {
         freshRocks += rocks.length
         freshRegions += 1
@@ -202,6 +205,37 @@ describe('the geology decides how many', () => {
     }
     return total
   }
+})
+
+describe('a region can be assembled a slice at a time', () => {
+  /*
+   * The property the per-frame budget rests on. A whole region is eight and a
+   * half milliseconds of field samples, so the streamer takes it in slices —
+   * and a slice boundary that moved a rock would make the ground depend on the
+   * frame rate.
+   */
+  it('gives the same rocks whether it is asked in one call or eight', () => {
+    for (const region of regions(LUNA, 4)) {
+      const whole = regionScatter(LUNA.surface, region)
+      const sliced: ScatterRock[] = []
+      const step = SCATTER_SLOTS / 8
+      for (let from = 0; from < SCATTER_SLOTS; from += step) {
+        sliced.push(
+          ...regionScatter(LUNA.surface, region, { from, to: from + step }),
+        )
+      }
+      expect(sliced).toEqual(whole)
+    }
+  })
+
+  it('clamps a slice that runs past either end', () => {
+    const region = [...regions(LUNA, 1)][0] as ReturnType<
+      typeof regionForDirection
+    >
+    expect(
+      regionScatter(LUNA.surface, region, { from: -50, to: SCATTER_SLOTS * 3 }),
+    ).toEqual(regionScatter(LUNA.surface, region))
+  })
 })
 
 describe('generation never depends on order', () => {

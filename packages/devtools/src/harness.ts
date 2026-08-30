@@ -1633,7 +1633,7 @@ export class GameHarness {
       '  ir.ascend()                   back to orbit, at the framing you left',
       '  ir.descend(address?, {site, steps})',
       '                                fly a descent on paper: level churn, burst, cache',
-      '  ir.terrain()                  what the live streamer holds this frame',
+      '  ir.terrain()                  the live streamer, and the rocks on it',
       '  ir.lens()                     the camera as an instrument: mm, f-stop, depth of field',
       '  ir.zoo()                      one body per surface archetype',
       '  ir.terrainBaseline()          the zoo, its descents, and measured patch cost',

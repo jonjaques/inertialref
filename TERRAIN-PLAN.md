@@ -1191,11 +1191,34 @@ channels on the cover so they read the canonical field instead.
 _Done means:_ the approach view and the landed view are recognizably the
 same world in a single uncut descent capture.
 
-**Phase 4 — the ground.** Levels to ~1 m spacing, per-pixel micro relief
-below the canonical floor, rock scatter from region seeds as `o:` objects.
-_Done means:_ a plate at 2 m altitude that has something at every scale in
-frame, and the canonical/presentational divergence bound measured and
-written down.
+**Phase 4 — the ground. Landed 30 Aug 2026.** Levels to ~1 m spacing, micro
+relief below the canonical floor per vertex _and_ per pixel, rock scatter from
+region seeds as `o:` objects. [ADR-0021](docs/adr/0021-the-ground.md) is the
+record and [`CONTEXT.md`](CONTEXT.md#the-ground-goes-below-the-field-the-ship-lands-on-30-aug-2026)
+has the numbers: the detail floor moves from 15/16/12/10 to 19/17/14/12 across
+the zoo — cells of 0.35, 0.87, 1.10 and 1.41 m against 5.54, 1.75, 4.40 and 5.66
+— a patch costs 6 to 15 ms more, a whole-disk selection peaks at 1,077 patches
+against 862, and the divergence bound is 1.25 m.
+
+**One line of § 5 did not survive contact, and it is the arithmetic under it.**
+"Below that, detail is synthesized at render time" reads as "and its amplitude
+stays under the floor too", and a term bounded by the floor **cannot move the
+mesh**: `TERRAIN_DETAIL_TOLERANCE` _is_ `CANONICAL_AMPLITUDE_FLOOR`, so the
+refinement search calls every level of such a term quiet and stops exactly where
+it stops today. What buys the levels is that an eight-metre crater is 1.6 m deep,
+which is above the tolerance and below the fresh-crater depth law because a
+saturated population is in equilibrium. The divergence bound is the price and it
+is 1.25 m rather than the half-metre § 5 implies.
+
+Three things did not land as written, stated rather than quietly dropped. **The
+canonical crater ladder is still capped at eleven halvings** — measured, fourteen
+moves the floor by 0 to 2 levels and costs 13% a patch, and it moves the field
+the contact test integrates, which is the one version bump § 5 reserves. **A rock
+reads the field rather than the mesh**, so it sits 3 to 9 cm off the triangle
+under it in the mean and up to 0.70 m at the worst cell on the coarsest body;
+`MESH_SEAT` buries it twelve centimetres and the honest fix is more channels on
+the cover, which is the same change the deposits want. **And scatter has no
+collision**, which is [on foot](docs/design/onfoot.md)'s, exactly as § 7 says.
 
 **Phase 5 — the GPU producer.** TSL compute tile production (heightfield +
 normal tiles into a texture-array cache, Proland's shape in WebGPU terms),

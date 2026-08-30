@@ -1,4 +1,6 @@
+import { useMemo } from 'react'
 import type { GameEngine } from '../engine/GameEngine.ts'
+import { createTerrainMaterial } from '../render/terrain.ts'
 import { Bodies } from './Bodies.tsx'
 import { CameraRig } from './CameraRig.tsx'
 import { EngineTick } from './EngineTick.tsx'
@@ -7,6 +9,7 @@ import { OrbitTraces } from './OrbitTraces.tsx'
 import { ShipModel } from './ShipModel.tsx'
 import { Starfield } from './Starfield.tsx'
 import { SunFlare } from './SunFlare.tsx'
+import { ScatterRocks } from './ScatterRocks.tsx'
 import { TerrainPatches } from './TerrainPatches.tsx'
 import { WarpFx } from './WarpFx.tsx'
 
@@ -39,6 +42,22 @@ import { WarpFx } from './WarpFx.tsx'
  * simulation.
  */
 export function SceneView({ engine }: { engine: GameEngine }) {
+  /*
+   * One ground material for the session, shared by the patches and the rocks
+   * standing on them.
+   *
+   * Here rather than inside `TerrainPatches` because two components draw with
+   * it and only one may own it: a rock and the regolith under it are the same
+   * surface a metre apart, and two instances of the same graph would drift the
+   * first time either component was touched. `TerrainPatches` writes its
+   * uniforms — the palette, the sun, the pixel angle, the archive's map — for
+   * the same reason, so there is one producer of each.
+   *
+   * It is two *pipelines*, and that is Three's business rather than this file's:
+   * the instancing insert changes the vertex stage, so the backend compiles a
+   * second program from the same material. `ScatterRocks` warms it.
+   */
+  const terrain = useMemo(() => createTerrainMaterial(), [])
   return (
     <>
       {/* Space is genuinely high-contrast, but a debug build that renders its
@@ -55,7 +74,8 @@ export function SceneView({ engine }: { engine: GameEngine }) {
       <CameraRig engine={engine} />
       <Starfield engine={engine} />
       <Bodies engine={engine} />
-      <TerrainPatches engine={engine} />
+      <TerrainPatches engine={engine} terrain={terrain} />
+      <ScatterRocks engine={engine} terrain={terrain} />
       <OrbitTraces engine={engine} />
       <SunFlare engine={engine} />
       <ShipModel engine={engine} />

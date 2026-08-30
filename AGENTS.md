@@ -297,6 +297,28 @@ Violating one of these is a rewrite later, not a refactor.
   `[Invalid ShaderModule "vertex"]` with the real message on a channel the page
   console does not carry.
   [ADR-0020](docs/adr/0020-the-face.md).
+- **Never read the drawn ground where the canonical one belongs, or the
+  reverse.** `groundElevation` and `surfaceRadius` are the field the contact
+  test integrates, the saves record and the survey sites name;
+  `drawnElevation` and `drawnSurfaceRadius` are that field plus a
+  presentational tail, and they are what the mesh, the material and any camera
+  that composes a picture of them are made from. The two differ by at most
+  `drawnDivergence`, which is 1.25 m. Physics reading the drawn one puts a
+  landing behind a term the renderer is free to change; a mesh reading the
+  canonical one draws a plane at two metres, because the tolerance a patch is
+  refined against **is** the amplitude floor the canonical field stops at, so
+  nothing under it can ever deepen the selection.
+  [ADR-0021](docs/adr/0021-the-ground.md).
+- **Never give two attribute names one `BufferAttribute` object.** The backend
+  builds its vertex layout by asking the geometry for each attribute the graph
+  names and keys the GPU buffer on the object it gets back, so one object
+  answering to two names is one buffer at two shader locations and the pipeline
+  does not build. It reports `[Invalid ShaderModule "fragment"] is invalid due
+to a previous error`, with the real message on a channel the page console does
+  not carry and the canvas never presenting — and `warmCompile` swallows its
+  rejection, so a warm-up making the same mistake fails silently first. Two
+  attribute objects over one array is a few bytes and one fewer trap.
+  [ADR-0021](docs/adr/0021-the-ground.md).
 - **Never add a shading term to the ground without adding it to the sphere.**
   `render/terrain.ts` and `render/planet.ts` draw the same body on either side
   of the eight-pixel relief gate — the streamed ground below it, the archive's

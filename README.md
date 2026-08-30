@@ -189,7 +189,10 @@ pnpm sim --help                # all flags
   the whole disk, seamless from orbit to standing height, generated in a worker
   pool, and shaded from the body's own geology: six deposits laid down in order
   over an ocean, crater rays, and the archive's published photograph on the
-  bodies that have one.
+  bodies that have one. It refines to cells of a third of a metre, with boulders
+  addressed as `o:` objects lying on it — and the ground the ship lands on and
+  the ground you can see are two functions 1.25 m apart, measured and written
+  down.
 - **Save and load to IndexedDB in under 800 bytes**, because a save is a reference
   and not a copy.
 - **Genuinely offline** — a service worker caches the app, and with the server

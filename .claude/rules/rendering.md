@@ -83,6 +83,13 @@ Reasoning: `AGENTS.md` § "The rules that actually matter",
   triangle: a fade measured that way steps per polygon, where distance times the lens's
   pixel angle does not. ADR-0020.
 
+- **Never give two attribute names one `BufferAttribute` object.** The backend keys its
+  GPU buffer on the object the geometry hands back, so one object under two names is one
+  buffer at two shader locations and the pipeline does not build — reported as
+  `[Invalid ShaderModule "fragment"] … due to a previous error`, with the real message on
+  a channel the page console does not carry. `warmCompile` swallows its rejection, so a
+  warm-up making the same mistake fails invisibly first. ADR-0021.
+
 - **Never give a varying an attribute's name.** Both become identifiers in the generated
   WGSL; the redeclaration surfaces as `[Invalid ShaderModule "vertex"]` with the real
   message on a channel the page console does not carry, and a planet that draws nothing.
