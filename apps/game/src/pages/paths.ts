@@ -134,6 +134,18 @@ export function modeForPath(pathname: string): AppMode {
   return 'menu'
 }
 
+/**
+ * Whether this mode covers the scene until first light.
+ *
+ * Content pages (`menu`, `docs`) have no cover: the words are the document
+ * and the canvas fades in behind them. Interactive modes cover the *mode's
+ * own box* so an unlit canvas does not flash through a planetarium or a
+ * cockpit, while the IR menu — server HTML, later — stays live around it.
+ */
+export function modeHasBootCover(mode: AppMode): boolean {
+  return mode === 'flight' || mode === 'planetarium' || mode === 'cinema'
+}
+
 /** Whether a path is a dialog that opens over a mode rather than replacing it. */
 export function isOverlayPath(pathname: string): boolean {
   return (

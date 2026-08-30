@@ -4,6 +4,7 @@ import {
   cinemaLink,
   cinemaScene,
   modeForPath,
+  modeHasBootCover,
   planetariumLink,
   QUERY,
 } from '../pages/paths.ts'
@@ -228,5 +229,18 @@ describe('the mode a path runs in', () => {
     expect(modeForPath('/planetariums')).toBe('menu')
     expect(modeForPath('/cinemascope')).toBe('menu')
     expect(modeForPath('/playground')).toBe('menu')
+  })
+})
+
+describe('the boot cover', () => {
+  it('covers the interactive modes and not the content pages', () => {
+    // A word of prose is the document; an unlit canvas behind it is a backdrop
+    // arriving late, not a page that is not there. A planetarium or a cockpit
+    // with no scene yet is a black hole in the mode's own box.
+    expect(modeHasBootCover('menu')).toBe(false)
+    expect(modeHasBootCover('docs')).toBe(false)
+    expect(modeHasBootCover('flight')).toBe(true)
+    expect(modeHasBootCover('planetarium')).toBe(true)
+    expect(modeHasBootCover('cinema')).toBe(true)
   })
 })
