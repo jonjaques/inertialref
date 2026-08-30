@@ -1,4 +1,3 @@
-import { Link } from 'react-router'
 import { ChevronRight, PanelLeft } from 'lucide-react'
 import { FOCUS_RING } from '../hud/focus.ts'
 import { Github } from '../icons/index.tsx'
@@ -73,12 +72,12 @@ export function DocsBar({
         >
           {route !== DOCS && (
             <>
-              <Link
-                to={DOCS}
+              <a
+                href={DOCS}
                 className={`shrink-0 rounded transition-colors hover:text-sky-200 ${FOCUS_RING}`}
               >
                 Docs
-              </Link>
+              </a>
               <ChevronRight
                 aria-hidden
                 className="size-3 shrink-0 text-slate-700"
@@ -92,12 +91,12 @@ export function DocsBar({
               whose title *is* the wing's name. */}
           {wing !== undefined && route !== DOCS && route !== wing.home && (
             <>
-              <Link
-                to={wingHome}
+              <a
+                href={wingHome}
                 className={`shrink-0 rounded transition-colors hover:text-sky-200 ${FOCUS_RING}`}
               >
                 {wing.label}
-              </Link>
+              </a>
               <ChevronRight
                 aria-hidden
                 className="size-3 shrink-0 text-slate-700"
@@ -106,12 +105,12 @@ export function DocsBar({
           )}
           {parent !== null && manifest !== null && (
             <>
-              <Link
-                to={parent}
+              <a
+                href={parent}
                 className={`hidden shrink-0 rounded transition-colors hover:text-sky-200 sm:block ${FOCUS_RING}`}
               >
                 {manifest.pages[parent]?.label ?? parent}
-              </Link>
+              </a>
               <ChevronRight
                 aria-hidden
                 className="hidden size-3 shrink-0 text-slate-700 sm:block"

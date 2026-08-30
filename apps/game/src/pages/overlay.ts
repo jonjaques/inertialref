@@ -1,4 +1,4 @@
-import { useStore } from 'zustand'
+import { useSyncExternalStore } from 'react'
 import { createStore, type StoreApi } from 'zustand/vanilla'
 import { HOME, isOverlayPath } from './paths.ts'
 
@@ -38,7 +38,13 @@ export function locationOf(href: string): PageLocation {
   }
 }
 
-export function readLocation(source: PageLocation): PageLocation {
+export interface LocationPort {
+  pathname: string
+  search: string
+  hash: string
+}
+
+export function readLocation(source: LocationPort): PageLocation {
   return {
     pathname: source.pathname,
     search: source.search,
@@ -72,7 +78,7 @@ export interface HistoryPort {
 
 export interface OverlayPorts {
   readonly history: HistoryPort
-  readonly location: PageLocation
+  readonly location: LocationPort
   /** Load a different document. Cold-overlay close is this. */
   assign(url: string): void
   onPop(run: () => void): () => void
@@ -211,8 +217,21 @@ const defaultPorts =
 
 export const overlayStore = createOverlayStore(defaultPorts)
 
+/**
+ * Subscribe to a slice of the overlay store.
+ *
+ * Both snapshots read the live store. Zustand's default server snapshot is
+ * the state at creation, which is wrong for a module singleton a test
+ * rehydrates before `renderToStaticMarkup` — OverlayRoutes would paint no
+ * dialog and every dialog test would see ''. The chrome island is
+ * `client:only`, so a real document never server-renders this hook.
+ */
 export function useOverlayStore<T>(
   select: (state: OverlaySnapshot & OverlayApi) => T,
 ): T {
-  return useStore(overlayStore, select)
+  return useSyncExternalStore(
+    overlayStore.subscribe,
+    () => select(overlayStore.getState()),
+    () => select(overlayStore.getState()),
+  )
 }

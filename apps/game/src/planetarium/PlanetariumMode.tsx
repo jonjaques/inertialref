@@ -1,6 +1,5 @@
 'use no memo'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router'
 import type { PerspectiveCamera } from 'three/webgpu'
 import { DEFAULT_FILL } from '@inertialref/devtools'
 import type { GameEngine } from '../engine/GameEngine.ts'
@@ -22,7 +21,8 @@ import {
 import { useChromeHidden } from '../hud/chrome.ts'
 import { useKeyLabel } from '../input/useKeymap.ts'
 import { useEngine } from '../state/engineStore.ts'
-import { QUERY } from '../pages/paths.ts'
+import { QUERY, withSearchParam } from '../pages/paths.ts'
+import { useOverlayStore } from '../pages/overlay.ts'
 import type { PlanetariumContext } from './context.ts'
 import { planetariumPanels } from './registry.tsx'
 import { pick } from './pick.ts'
@@ -57,8 +57,11 @@ export function PlanetariumMode({
   camera: CameraState
   dev: DevWorkspace
 }) {
-  const [params, setParams] = useSearchParams()
-  const requested = params.get(QUERY.at)
+  const search = useOverlayStore((state) => state.mode.search)
+  const setModeSearch = useOverlayStore((state) => state.setModeSearch)
+  const requested = new URLSearchParams(
+    search.startsWith('?') ? search.slice(1) : search,
+  ).get(QUERY.at)
 
   const [target, setTarget] = useState<string | null>(null)
   const [labels, setLabels] = usePersistentState(PLANETARIUM_LABELS)
@@ -160,13 +163,8 @@ export function PlanetariumMode({
           // `replace`, not push: focusing is a continuous act — a tour through
           // six moons is six clicks — and a back button that walked back
           // through every one of them would be useless for leaving the mode.
-          setParams(
-            (current) => {
-              const next = new URLSearchParams(current)
-              next.set(QUERY.at, status.target?.address ?? '')
-              return next
-            },
-            { replace: true },
+          setModeSearch(
+            withSearchParam(search, QUERY.at, status.target?.address ?? ''),
           )
         }
       } catch (cause) {
@@ -176,7 +174,7 @@ export function PlanetariumMode({
         })
       }
     },
-    [engine, setParams],
+    [engine, search, setModeSearch],
   )
 
   /*

@@ -15,7 +15,7 @@ import {
   hrefOf,
   locationOf,
   type OverlayPorts,
-  type PageLocation,
+  type LocationPort,
 } from './overlay.ts'
 
 /*
@@ -37,7 +37,7 @@ interface Session {
 
 function sessionAt(start: string): Session {
   const url = new URL(start, 'https://inertialref.invalid')
-  const location: PageLocation = {
+  const location: LocationPort = {
     pathname: url.pathname,
     search: url.search,
     hash: url.hash,

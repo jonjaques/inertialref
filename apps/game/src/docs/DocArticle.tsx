@@ -1,10 +1,10 @@
 import { useEffect, useRef, type MouseEvent } from 'react'
-import { useNavigate } from 'react-router'
 import type { DocManifest, DocPage } from './content.ts'
 import { DocsMissingError } from './content.ts'
 import { DocFooter } from './DocFooter.tsx'
 import { drawDiagrams } from './mermaid.ts'
 import type { Loaded } from './useDocs.ts'
+import { useOverlayStore } from '../pages/overlay.ts'
 
 /**
  * The document itself.
@@ -27,10 +27,8 @@ import type { Loaded } from './useDocs.ts'
  * A tree with no components in it cannot carry `onClick` props, so both live on
  * the container:
  *
- *   - **links**, so a cross-reference goes through the router. Nine hundred
- *     pages of these, and a full page load on any of them rebuilds the WebGPU
- *     renderer and drops the scene behind the masthead — a documentation link
- *     costing a second of black canvas.
+ *   - **links**, so a same-page heading hash scrolls the inner scroller.
+ *     Cross-page links are documents and load the next HTML file.
  *   - **copy**, on the button `highlight.mjs` emits into every listing.
  */
 export function DocArticle({
@@ -44,7 +42,8 @@ export function DocArticle({
   page: Loaded<DocPage>
   error: Error | null
 }) {
-  const navigate = useNavigate()
+  const setModeHash = useOverlayStore((state) => state.setModeHash)
+  const modePath = useOverlayStore((state) => state.mode.pathname)
   const body = useRef<HTMLDivElement | null>(null)
   const html = page.value?.html ?? null
 
@@ -108,15 +107,10 @@ export function DocArticle({
     const link = target.closest('a')
     if (link === null) return
     /*
-     * Everything same-origin goes through the router, including a bare
-     * `#section` — which is the same page at a different hash and is what a
-     * heading's own anchor is. Left unhandled, a fragment click updates
-     * `window.location` without telling the router, so `useLocation().hash`
-     * goes stale and the next real navigation scrolls to the wrong place.
-     *
-     * A modified click is the browser's: a new tab, a new window, a download,
-     * a saved link. Intercepting those is how a single-page application breaks
-     * middle-click, and there is no reason to.
+     * Same-document hash links scroll the inner scroller, which the browser
+     * cannot: html and body do not scroll. A heading's own `#section` is
+     * that case. Cross-page links are documents — they load the next HTML
+     * file — and a modified click is the browser's.
      */
     if (
       event.metaKey ||
@@ -128,8 +122,9 @@ export function DocArticle({
       return
     const url = new URL(link.href, window.location.href)
     if (url.origin !== window.location.origin) return
+    if (url.pathname !== modePath) return
     event.preventDefault()
-    void navigate(`${url.pathname}${url.search}${url.hash}`)
+    setModeHash(url.hash)
   }
 
   if (error instanceof DocsMissingError)

@@ -1,6 +1,5 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { type Location, MemoryRouter } from 'react-router'
 import { describe, expect, it } from 'vitest'
 import { LENS_PRESETS } from '@inertialref/rendering'
 import {
@@ -9,18 +8,16 @@ import {
   CINEMA,
   HOME,
   cinemaSceneFrom,
-  modeForPath,
-  overlayBackground,
   overlaySurface,
   playModeFrom,
   PROFILE,
-  resolvedLocation,
   SETTINGS,
   settingsSection,
   settingsSectionFrom,
   SIGN_IN,
   SIGN_UP,
 } from './paths.ts'
+import { overlayStore } from './overlay.ts'
 import { KeymapProvider } from '../input/KeymapProvider.tsx'
 import { OverlayRoutes } from './OverlayRoutes.tsx'
 
@@ -68,18 +65,12 @@ const state = {
  * too. Stubbing the context instead would assert against the stub; this asserts
  * that the tree `Root.tsx` builds is the tree these pages render in.
  */
-const at = (path: string): string =>
-  renderToStaticMarkup(
-    createElement(
-      KeymapProvider,
-      null,
-      createElement(
-        MemoryRouter,
-        { initialEntries: [path] },
-        createElement(OverlayRoutes, state),
-      ),
-    ),
+const at = (path: string): string => {
+  overlayStore.getState().rehydrate(path)
+  return renderToStaticMarkup(
+    createElement(KeymapProvider, null, createElement(OverlayRoutes, state)),
   )
+}
 
 describe('the routed dialogs', () => {
   it('renders nothing at all while a mode is running', () => {
@@ -161,62 +152,6 @@ describe('the routed dialogs', () => {
     // The URL is the only way to reach a page, so a typed one is a normal
     // event. The game behind it is unaffected and there is nothing to say.
     expect(at('/almanac/does-not-exist')).toBe('')
-  })
-})
-
-/*
- * The background-location contract, as arithmetic.
- *
- * Only the pure half is reachable here — React Router does not serialize a
- * link's `state` into the anchor, so "every intra-dialog link carries the
- * background" has no observable in static markup and is checked by driving the
- * real app (`/drive`). What *is* checkable is the function everything else
- * agrees through, which is where the disagreement was.
- */
-describe('the location a dialog is drawn over', () => {
-  const location = (pathname: string, state?: unknown): Location =>
-    ({
-      pathname,
-      search: '',
-      hash: '',
-      key: 'k',
-      state: state ?? null,
-    }) as Location
-
-  it('resolves to the mode behind a dialog, not the dialog', () => {
-    /*
-     * The whole finding, as one assertion. `ModeRoutes` renders at the
-     * background, so anything deriving "which mode is running" from the raw
-     * pathname disagrees with the tree it is drawn over: from `/planetarium`,
-     * opening `/settings` computed `menu` while `PlanetariumMode` was still
-     * mounted. Over a cutscene the same disagreement unmounted the cinema
-     * player, which stopped the scene, which remounted it — several times a
-     * second.
-     */
-    const behind = location('/planetarium')
-    const dialog = location(SETTINGS, { background: behind })
-    expect(resolvedLocation(dialog)).toBe(behind)
-    expect(modeForPath(resolvedLocation(dialog).pathname)).toBe('planetarium')
-    expect(overlayBackground(dialog)).toBe(behind)
-  })
-
-  it('is the location itself on a cold load, which has nothing behind it', () => {
-    // A fresh tab at `/settings` has no session behind it, and `menu` is the
-    // honest answer rather than a fallback.
-    const cold = location(SETTINGS)
-    expect(resolvedLocation(cold)).toBe(cold)
-    expect(overlayBackground(cold)).toBeNull()
-    expect(modeForPath(resolvedLocation(cold).pathname)).toBe('menu')
-  })
-
-  it('survives history state written by something other than a link', () => {
-    // `location.state` is whatever the history entry carries — a scroll
-    // restoration key, a value from another app on the same origin, or null.
-    for (const junk of [undefined, 42, 'planetarium', { background: null }]) {
-      const odd = location('/cinema/tng-intro', junk)
-      expect(resolvedLocation(odd)).toBe(odd)
-      expect(modeForPath(resolvedLocation(odd).pathname)).toBe('cinema')
-    }
   })
 })
 

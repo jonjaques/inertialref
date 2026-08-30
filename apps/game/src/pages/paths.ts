@@ -1,5 +1,3 @@
-import type { Location } from 'react-router'
-
 /*
  * The route table, as data.
  *
@@ -118,12 +116,11 @@ export type AppMode = (typeof MODES)[number]
 /**
  * The mode a path runs in.
  *
- * Overlay routes — settings, about, the account pages — deliberately answer
- * `menu`. They are dialogs and can be opened over any mode, and when one is
- * opened from inside a mode the router carries the mode's location as the
- * background (see `routes.tsx`), so this is only consulted for a *cold* load.
- * Cold-loading `/settings` over the menu is the honest answer: there is no
- * session behind it yet.
+ * Overlay paths — settings, about, the account pages — deliberately answer
+ * `menu`. They are dialogs and can be opened over any mode. `modeForPath` is
+ * consulted with the overlay store's *mode* location, not the address bar:
+ * a cold load of `/settings` has no session behind it, so the mode is the
+ * menu; a warm open from the planetarium keeps `planetarium`.
  */
 export function modeForPath(pathname: string): AppMode {
   if (pathname === DOCS || pathname.startsWith(`${DOCS}/`)) return 'docs'
@@ -207,78 +204,17 @@ export function isOverlayPath(pathname: string): boolean {
  *
  * `/settings/camera` and `/settings/display` are one panel showing different
  * content, so they share a key and the panel never re-enters between them.
- * Anything that is not a dialog is the absence of one, which is the state the
- * `null` fallback route renders.
+ * Anything that is not a dialog is the absence of one.
  *
- * Keyed on the full pathname instead — which it was — every settings tab is a
- * fresh entrance, and because the exiting and entering children render together
+ * Keyed on the full pathname instead, every settings tab is a fresh
+ * entrance, and because the exiting and entering children render together
  * two 70% scrims stack to 91%: the scene visibly darkens on every click of a
- * tab. `routes.tsx` carries the rest of the argument, including why the
- * `mode="wait"` that used to hide this could not stay.
+ * tab. OverlayRoutes carries the rest of the argument, including why
+ * `mode="wait"` cannot hide this.
  */
 export function overlaySurface(pathname: string): string {
   if (!isOverlayPath(pathname)) return 'none'
   return pathname.split('/')[1] ?? 'dialog'
-}
-
-/* ------------------------------------------------------------------------- */
-/* Opening a dialog over a mode                                               */
-/* ------------------------------------------------------------------------- */
-
-/**
- * What a `Link` puts in `location.state` to keep a mode on screen behind a
- * dialog.
- *
- * The standard React Router modal pattern, and the alternative is worse than it
- * looks: without it, opening settings from the planetarium unmounts the
- * planetarium — which drops the observatory's target, hands the camera back to
- * the ship, and tears down a dock layout mid-drag. The dialog would be correct
- * and the thing behind it would have quietly reset.
- *
- * Here rather than in `routes.tsx` so that file exports components and nothing
- * else, which is what keeps Fast Refresh able to reload it.
- */
-export interface OverlayLocationState {
-  readonly background?: Location
-}
-
-export const overlayState = (location: Location): OverlayLocationState => ({
-  background: location,
-})
-
-/**
- * The mode's location behind a dialog, or `null` when there is none.
- *
- * A cold load of `/settings` has no background: the tab was opened at that
- * address and there is no session behind it.
- */
-export function overlayBackground(location: Location): Location | null {
-  const state = location.state as OverlayLocationState | null
-  return state?.background ?? null
-}
-
-/**
- * The location the shell actually resolves against.
- *
- * **Everything that asks "which mode is running" must ask this, not
- * `location.pathname`.** `ModeRoutes` renders at the background location, so
- * with a dialog open the raw pathname is the *dialog's* — and a shell that
- * derived its mode from it disagreed with the tree it was drawn over. From
- * `/planetarium`, opening `/settings` computed `menu` while `PlanetariumMode`
- * was still mounted, so the shell bar dropped its badge and rendered the way
- * back as an inert span. Over a running cutscene it was worse than cosmetic:
- * the gate that keeps the cinema player mounted is `mode === 'cinema'`, so
- * navigating to a dialog unmounted the player, whose cleanup stopped the
- * scene, which republished `cinema: false` an eighth of a second later, which
- * mounted it again — a remount flap several times a second that re-teleported
- * the player, with the requested dialog never rendering at all.
- *
- * Still a pure function of the URL, so the invariant holds: the mode is never
- * held in React state. Reading the background *is* reading the URL — React
- * Router carries it in the history entry.
- */
-export function resolvedLocation(location: Location): Location {
-  return overlayBackground(location) ?? location
 }
 
 /* ------------------------------------------------------------------------- */
@@ -302,6 +238,30 @@ export const QUERY = {
   /** Every mode: the world seed, which `GameEngine` already reads. */
   seed: 'seed',
 } as const
+
+/** One query value, from a `location.search` string that may start with `?`. */
+export function searchParam(search: string, key: string): string | null {
+  const qs = search.startsWith('?') ? search.slice(1) : search
+  return new URLSearchParams(qs).get(key)
+}
+
+/**
+ * Set one query key, keeping the rest.
+ *
+ * Returns a `search` string that is either empty or starts with `?`, which is
+ * what `PageLocation.search` stores.
+ */
+export function withSearchParam(
+  search: string,
+  key: string,
+  value: string,
+): string {
+  const qs = search.startsWith('?') ? search.slice(1) : search
+  const next = new URLSearchParams(qs)
+  next.set(key, value)
+  const encoded = next.toString()
+  return encoded.length === 0 ? '' : `?${encoded}`
+}
 
 /**
  * A cinema link, with everything it needs to reproduce the frame on screen.

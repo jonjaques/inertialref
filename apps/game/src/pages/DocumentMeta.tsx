@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
-import { useLocation } from 'react-router'
 import { recordPageView } from '../analytics.ts'
+import { hrefOf, useOverlayStore } from './overlay.ts'
 import { canonicalUrl, documentTitle, pageMetaFor } from '../site.ts'
 
 /*
@@ -18,18 +18,21 @@ import { canonicalUrl, documentTitle, pageMetaFor } from '../site.ts'
  * Discord, every unfurler — so rewriting `og:title` here would change nothing
  * any scraper ever sees while looking exactly like it had. Those live in the
  * layout, interpolated from `src/site.ts`. This component covers the tab
- * strip on an in-app navigation that does not load a new document.
+ * strip on a `pushState` that does not load a new document — opening Settings
+ * over the planetarium, a settings tab, closing a dialog.
  *
- * **The raw pathname, not `resolvedLocation`.** Everywhere else that would be
- * the bug AGENTS.md names: with a dialog open, the mode's location and the
- * URL differ, and anything deciding *what is on screen* has to use the mode's.
- * This is the other question. The address bar reads `/settings`, so the tab,
- * the bookmark and the canonical link have to say Settings — they are about the
- * URL, which is exactly what `location.pathname` is.
+ * **The address bar, not the mode.** Everywhere else that would be the bug:
+ * with a dialog open, the mode's location and the URL differ, and anything
+ * deciding *what is on screen* has to use the mode's. This is the other
+ * question. The address bar reads `/settings`, so the tab, the bookmark and
+ * the canonical link have to say Settings.
  */
+
 export function DocumentMeta() {
-  const location = useLocation()
-  const pathname = location.pathname
+  const href = useOverlayStore((state) =>
+    state.overlay === null ? hrefOf(state.mode) : state.overlay,
+  )
+  const pathname = href.split('?')[0]?.split('#')[0] ?? href
 
   useEffect(() => {
     const page = pageMetaFor(pathname)
@@ -53,7 +56,7 @@ export function DocumentMeta() {
 }
 
 /**
- * Update a tag `index.html` already has, and do nothing if it does not.
+ * Update a tag the layout already has, and do nothing if it does not.
  *
  * Deliberately not "create it if missing": every tag this touches is in the
  * static head, because a scraper that does not run scripts has to find it

@@ -1,4 +1,4 @@
-import { Link, useParams } from 'react-router'
+import { OverlayLink } from './OverlayLink.tsx'
 import {
   Aperture,
   Database,
@@ -18,8 +18,8 @@ import { FOCUS_RING } from '../hud/focus.ts'
 import { ControlsSection } from './ControlsSection.tsx'
 import { DataSection } from './DataSection.tsx'
 import { OverlayPage } from './OverlayPage.tsx'
-import { settingsSection } from './paths.ts'
-import { useOverlay } from './useOverlay.ts'
+import { locationOf, useOverlayStore } from './overlay.ts'
+import { settingsSection, settingsSectionFrom } from './paths.ts'
 
 /*
  * Settings, as a page with sections.
@@ -66,17 +66,11 @@ export function SettingsPage({
   camera: CameraState
   render: HudRenderState
 }) {
-  const { section } = useParams<{ section?: string }>()
-  /*
-   * Every link that stays inside the dialog has to carry the background on.
-   *
-   * A section tab is a route, so clicking one is a navigation — and without
-   * the state it clears `location.state`, `ModeRoutes` re-resolves at
-   * `/settings/camera`, matches nothing, falls through to the menu and tears
-   * down the mode behind the open dialog. The IR menu's own gear link passes
-   * the state; these did not.
-   */
-  const { keep } = useOverlay()
+  const overlay = useOverlayStore((state) => state.overlay)
+  const section =
+    overlay === null
+      ? undefined
+      : settingsSectionFrom(locationOf(overlay).pathname)
   // An unknown section falls back rather than 404s: the URL is hand-typed, and
   // `/settings/audio` from a future build should open settings, not nothing.
   const active: SectionId =
@@ -89,10 +83,9 @@ export function SettingsPage({
         className="mb-3 flex gap-1 border-b border-slate-800 pb-2"
       >
         {SECTIONS.map((entry) => (
-          <Link
+          <OverlayLink
             key={entry.id}
             to={settingsSection(entry.id)}
-            state={keep}
             replace
             aria-current={entry.id === active ? 'page' : undefined}
             className={`type-label flex min-h-7 items-center gap-1.5 rounded px-2 py-1 transition-colors ${FOCUS_RING} ${
@@ -103,7 +96,7 @@ export function SettingsPage({
           >
             <entry.icon aria-hidden className="size-3.5" />
             {entry.title}
-          </Link>
+          </OverlayLink>
         ))}
       </nav>
 

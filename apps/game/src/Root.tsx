@@ -1,6 +1,5 @@
 import { StrictMode, useEffect } from 'react'
 import { MotionConfig } from 'motion/react'
-import { BrowserRouter } from 'react-router'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { createConsoleSink, logHub } from '@inertialref/shared'
 import { startAnalytics } from './analytics.ts'
@@ -107,30 +106,13 @@ export default function Root() {
 
   return (
     <StrictMode>
-      {/*
-       * The router wraps the chrome, not the canvas. Routed pages render
-       * inside `.hud-layer`; `<Canvas>` is the other island, so a navigation
-       * cannot remount the renderer.
-       *
-       * `useTransitions={false}` is a deliberate opt-out. React Router v8 wraps
-       * router state updates in `startTransition` by default, and its own
-       * guidance is to turn that off for applications built on
-       * `useSyncExternalStore` — which this one is: `state/engineStore.ts`
-       * republishes an engine snapshot eight times a second and a
-       * `useSyncExternalStore` update cannot be a transition, so every sample
-       * would force a synchronous update through a router mid-transition.
-       * There is nothing to gain here in exchange — no route does data loading
-       * and none of them suspend.
-       */}
-      <BrowserRouter useTransitions={false}>
-        <MotionConfig reducedMotion="user">
-          <TooltipProvider>
-            <KeymapProvider>
-              <App />
-            </KeymapProvider>
-          </TooltipProvider>
-        </MotionConfig>
-      </BrowserRouter>
+      <MotionConfig reducedMotion="user">
+        <TooltipProvider>
+          <KeymapProvider>
+            <App />
+          </KeymapProvider>
+        </TooltipProvider>
+      </MotionConfig>
     </StrictMode>
   )
 }

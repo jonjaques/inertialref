@@ -40,7 +40,6 @@
     "react-dnd-html5-backend": "^16.0.1",
     "react-dnd-touch-backend": "^16.0.1",
     "react-dom": "^19.2.8",
-    "react-router": "^8.3.0",
     "tailwind-merge": "^3.6.0",
     "three": "^0.182.0",
     "zustand": "^5.0.15"

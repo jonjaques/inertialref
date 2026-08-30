@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { useLocation } from 'react-router'
 import { Workspace } from '../dock/Workspace.tsx'
 import type { DevWorkspace } from '../dock/workspace.ts'
 import type { GameEngine } from '../engine/GameEngine.ts'
-import { resolvedLocation } from '../pages/paths.ts'
+import { useOverlayStore } from '../pages/overlay.ts'
 import { DocsBar } from './DocsBar.tsx'
 import { DocsHorizon } from './DocsHorizon.tsx'
 import { DocsMasthead } from './DocsMasthead.tsx'
@@ -65,20 +64,19 @@ export function DocsMode({
   dev: DevWorkspace
 }) {
   /*
-   * The mode's own location, not the address bar's. With a dialog open over the
-   * reading room the two differ, and this component is drawn at the background
-   * — reading `location.pathname` here would refetch the page for `/settings`
-   * and find nothing. `pages/paths.ts` carries the argument at length.
+   * The mode's own location, not the address bar's. With a dialog open over
+   * the reading room the two differ, and this component reads the overlay
+   * store's `mode` — reading the address bar here would refetch the page
+   * for `/settings` and find nothing.
    *
-   * The **hash** comes from the same place, and that is not symmetry for its
-   * own sake: a dialog's location carries no fragment, so reading it raw turns
-   * opening Settings from `/docs/concepts/frames#the-chain` into a `hash` that
-   * changed to `''`, which re-runs the scroll below and throws the reading room
-   * back to the top behind the scrim.
+   * The **hash** comes from the same place: a dialog's URL carries no
+   * fragment, so reading it raw turns opening Settings from
+   * `/docs/concepts/frames#the-chain` into a `hash` that changed to `''`,
+   * which re-runs the scroll below and throws the reading room back to the
+   * top behind the scrim.
    */
-  const here = resolvedLocation(useLocation())
-  const route = normalize(here.pathname)
-  const hash = here.hash
+  const route = normalize(useOverlayStore((state) => state.mode.pathname))
+  const hash = useOverlayStore((state) => state.mode.hash)
 
   const manifest = useManifest()
   const wing =

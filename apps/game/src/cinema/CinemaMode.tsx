@@ -1,4 +1,3 @@
-import { useParams } from 'react-router'
 import { Workspace } from '../dock/Workspace.tsx'
 import type { DevWorkspace } from '../dock/workspace.ts'
 import type { GameEngine } from '../engine/GameEngine.ts'
@@ -17,11 +16,12 @@ import { useTransportIdle } from './useTransportIdle.ts'
 export function CinemaMode({
   engine,
   dev,
+  scene,
 }: {
   engine: GameEngine
   dev: DevWorkspace
+  scene: string | undefined
 }) {
-  const { scene } = useParams<{ scene?: string }>()
   /*
    * Is a scene actually playing — running, not merely open?
    *

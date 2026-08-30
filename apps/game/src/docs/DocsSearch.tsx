@@ -1,5 +1,4 @@
 import { useRef, useState } from 'react'
-import { useNavigate } from 'react-router'
 import { Search } from 'lucide-react'
 import { FOCUS_RING } from '../hud/focus.ts'
 import { useAction, useKeyContext } from '../input/useKeymap.ts'
@@ -25,7 +24,6 @@ import { DocsSearchResult } from './DocsSearchResult.tsx'
  * type, Tab into a list, arrow, Enter.
  */
 export function DocsSearch({ wings }: { wings: readonly DocWing[] }) {
-  const navigate = useNavigate()
   const field = useRef<HTMLInputElement | null>(null)
   const [query, setQuery] = useState('')
   const [index, setIndex] = useState<SearchIndex | null>(null)
@@ -78,7 +76,7 @@ export function DocsSearch({ wings }: { wings: readonly DocWing[] }) {
     setOpen(false)
     setQuery('')
     field.current?.blur()
-    void navigate(hit.route)
+    window.location.assign(hit.route)
   }
 
   return (

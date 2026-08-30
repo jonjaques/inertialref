@@ -1,4 +1,3 @@
-import { Link } from 'react-router'
 import { FOCUS_RING } from '../hud/focus.ts'
 
 /**
@@ -26,8 +25,8 @@ export function DocsRailLink({
 }) {
   return (
     <li>
-      <Link
-        to={to}
+      <a
+        href={to}
         aria-current={current ? 'page' : undefined}
         title={label}
         className={`type-ui block truncate border-l py-[3px] pl-3 transition-colors ${FOCUS_RING} ${
@@ -39,7 +38,7 @@ export function DocsRailLink({
         }`}
       >
         {label}
-      </Link>
+      </a>
     </li>
   )
 }

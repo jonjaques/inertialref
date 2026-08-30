@@ -1,4 +1,3 @@
-import { Link, useLocation } from 'react-router'
 import { motion } from 'motion/react'
 import {
   BookText,
@@ -14,7 +13,8 @@ import {
 } from '@/components/ui/tooltip'
 import { FOCUS_RING } from '../hud/focus.ts'
 import { Logomark } from '../icons/Logomark.tsx'
-import { DOCS, HOME, overlayState, SETTINGS } from '../pages/paths.ts'
+import { OverlayLink } from '../pages/OverlayLink.tsx'
+import { DOCS, HOME, SETTINGS } from '../pages/paths.ts'
 import { MenuToggle } from './MenuToggle.tsx'
 import type { PanelGroup } from './panels.ts'
 import { isOpen, type Workspace } from './useWorkspace.ts'
@@ -57,8 +57,6 @@ export function IrMenu({
   revealed: ReadonlySet<string>
   onReveal: (group: string) => void
 }) {
-  const location = useLocation()
-
   return (
     <motion.nav
       aria-label="Workspace"
@@ -77,14 +75,14 @@ export function IrMenu({
        */}
       <Tooltip>
         <TooltipTrigger asChild>
-          <Link
-            to={HOME}
+          <a
+            href={HOME}
             aria-label="Back to the menu"
             className={`flex min-h-7 shrink-0 items-center gap-2 rounded px-1.5 text-slate-300 transition-colors hover:text-sky-200 ${FOCUS_RING}`}
           >
             <Logomark className="size-4 shrink-0" />
             <span className="type-label">{mode}</span>
-          </Link>
+          </a>
         </TooltipTrigger>
         <TooltipContent side="top">Back to the menu</TooltipContent>
       </Tooltip>
@@ -163,33 +161,32 @@ export function IrMenu({
        */}
       <Tooltip>
         <TooltipTrigger asChild>
-          <Link
-            to={DOCS}
+          <a
+            href={DOCS}
             aria-label="Documentation"
             className={`flex size-7 shrink-0 items-center justify-center rounded text-slate-400 transition-colors hover:bg-slate-800/60 hover:text-sky-200 ${FOCUS_RING}`}
           >
             <BookText aria-hidden className="size-4" />
-          </Link>
+          </a>
         </TooltipTrigger>
         <TooltipContent side="top">Documentation</TooltipContent>
       </Tooltip>
 
       {/*
-       * Settings carries the current location as its `state`, which is what
-       * keeps the mode behind it mounted (see `pages/paths.ts`). Without it,
-       * opening settings from the planetarium drops the observatory's target
-       * and hands the camera back to the ship behind the dialog.
+       * Settings is a dialog over this mode, not a document. OverlayLink
+       * pushStates so the observatory keeps its target and the renderer
+       * stays up. A real `<a href="/settings">` would load the settings
+       * document and tear this mode down.
        */}
       <Tooltip>
         <TooltipTrigger asChild>
-          <Link
+          <OverlayLink
             to={SETTINGS}
-            state={overlayState(location)}
             aria-label="Settings"
             className={`flex size-7 shrink-0 items-center justify-center rounded text-slate-400 transition-colors hover:bg-slate-800/60 hover:text-sky-200 ${FOCUS_RING}`}
           >
             <SlidersHorizontal className="size-4" />
-          </Link>
+          </OverlayLink>
         </TooltipTrigger>
         <TooltipContent side="top">Settings</TooltipContent>
       </Tooltip>

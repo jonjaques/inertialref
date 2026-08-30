@@ -1,5 +1,4 @@
 import { AnimatePresence } from 'motion/react'
-import { Route, Routes, useLocation } from 'react-router'
 import type {
   CameraState,
   GraphicsState,
@@ -8,6 +7,7 @@ import type {
 import { AboutPage } from './AboutPage.tsx'
 import { KeysPage } from './KeysPage.tsx'
 import { AuthCallbackPage } from './AuthCallbackPage.tsx'
+import { locationOf, useOverlayStore } from './overlay.ts'
 import { overlaySurface } from './paths.ts'
 import {
   ABOUT,
@@ -36,11 +36,11 @@ interface OverlayRouteProps {
 /**
  * The dialogs: settings, about, the account pages.
  *
- * `AnimatePresence` is what gives one an exit animation — React Router swaps
+ * `AnimatePresence` is what gives one an exit animation — the store swaps
  * the subtree, and without something holding the outgoing tree mounted there is
- * nothing left to animate out. The `null` fallback route is the "no dialog"
- * state, and it is a real route rather than an absence so that closing one
- * animates instead of cutting.
+ * nothing left to animate out. Rendering `null` when no dialog is open is the
+ * "no dialog" state, and it is a real child rather than an absence so that
+ * closing one animates instead of cutting.
  *
  * **Not `mode="wait"`, and not keyed on the pathname.** Both were, and together
  * they leaked the dialog: on close the scrim animated to `opacity: 0` and then
@@ -58,30 +58,35 @@ interface OverlayRouteProps {
  * inside a panel that never re-enters, which is what it looks like anyway.
  */
 export function OverlayRoutes({ graphics, camera, render }: OverlayRouteProps) {
-  const location = useLocation()
-  return (
-    <AnimatePresence>
-      <Routes location={location} key={overlaySurface(location.pathname)}>
-        <Route
-          path={SETTINGS}
-          element={
-            <SettingsPage graphics={graphics} camera={camera} render={render} />
-          }
+  const overlay = useOverlayStore((state) => state.overlay)
+  const path = overlay === null ? '' : locationOf(overlay).pathname
+  const surface = overlaySurface(path)
+
+  let dialog = null
+  if (overlay !== null) {
+    if (path === SETTINGS || path.startsWith(`${SETTINGS}/`)) {
+      dialog = (
+        <SettingsPage
+          key={surface}
+          graphics={graphics}
+          camera={camera}
+          render={render}
         />
-        <Route
-          path={`${SETTINGS}/:section`}
-          element={
-            <SettingsPage graphics={graphics} camera={camera} render={render} />
-          }
-        />
-        <Route path={ABOUT} element={<AboutPage />} />
-        <Route path={KEYS} element={<KeysPage />} />
-        <Route path={SIGN_IN} element={<SignInPage />} />
-        <Route path={SIGN_UP} element={<SignUpPage />} />
-        <Route path={PROFILE} element={<ProfilePage />} />
-        <Route path={AUTH_CALLBACK} element={<AuthCallbackPage />} />
-        <Route path="*" element={null} />
-      </Routes>
-    </AnimatePresence>
-  )
+      )
+    } else if (path === ABOUT) {
+      dialog = <AboutPage key={surface} />
+    } else if (path === KEYS) {
+      dialog = <KeysPage key={surface} />
+    } else if (path === SIGN_IN) {
+      dialog = <SignInPage key={surface} />
+    } else if (path === SIGN_UP) {
+      dialog = <SignUpPage key={surface} />
+    } else if (path === PROFILE) {
+      dialog = <ProfilePage key={surface} />
+    } else if (path === AUTH_CALLBACK) {
+      dialog = <AuthCallbackPage key={surface} />
+    }
+  }
+
+  return <AnimatePresence>{dialog}</AnimatePresence>
 }

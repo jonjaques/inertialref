@@ -1,4 +1,3 @@
-import { Link } from 'react-router'
 import { House, RotateCcw, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { FOCUS_RING } from '../hud/focus.ts'
@@ -69,18 +68,18 @@ export function EndCard({
             variant="outline"
             className={`type-ui h-auto gap-1.5 rounded border-slate-700 bg-transparent px-3 py-1.5 font-normal text-slate-300 shadow-none hover:border-sky-500/60 hover:bg-transparent hover:text-sky-200 ${FOCUS_RING}`}
           >
-            <Link to={CINEMA}>
+            <a href={CINEMA}>
               <X className="size-3.5" /> Library
-            </Link>
+            </a>
           </Button>
           <Button
             asChild
             variant="outline"
             className={`type-ui h-auto gap-1.5 rounded border-slate-700 bg-transparent px-3 py-1.5 font-normal text-slate-300 shadow-none hover:border-sky-500/60 hover:bg-transparent hover:text-sky-200 ${FOCUS_RING}`}
           >
-            <Link to={HOME}>
+            <a href={HOME}>
               <House className="size-3.5" /> Menu
-            </Link>
+            </a>
           </Button>
         </div>
         {onDismiss !== undefined && (

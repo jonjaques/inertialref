@@ -1,6 +1,5 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { MemoryRouter } from 'react-router'
 import { describe, expect, it } from 'vitest'
 import { Circle, Globe, Star } from 'lucide-react'
 import { CompactDock } from './CompactDock.tsx'
@@ -56,21 +55,16 @@ const LAYOUT: DockLayout = movePanel(
 )
 
 /*
- * Inside a router, because the bar carries the two links that used not to exist
- * on a phone at all — the mark going home and the settings dialog. A memory
- * router is the whole dependency: nothing here reads a path, only writes one.
+ * The bar carries the two links that used not to exist on a phone at all —
+ * the mark going home and the settings dialog. They are ordinary anchors.
  */
 const render = (layout: DockLayout = LAYOUT): string =>
   renderToStaticMarkup(
-    createElement(
-      MemoryRouter,
-      null,
-      createElement(CompactDock, {
-        panels: PANELS,
-        layout,
-        mode: 'planetarium',
-      }),
-    ),
+    createElement(CompactDock, {
+      panels: PANELS,
+      layout,
+      mode: 'planetarium',
+    }),
   )
 
 describe('the compact dock', () => {

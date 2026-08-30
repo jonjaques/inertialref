@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useStore } from 'zustand'
 import { AnimatePresence, motion } from 'motion/react'
-import { useLocation, useNavigate } from 'react-router'
 import type { GameEngine } from './engine/GameEngine.ts'
 import { currentEngine } from './engine/instance.ts'
 import type {
@@ -37,14 +36,8 @@ import { type AaLevel, type OutputPreference } from './render/output.ts'
 import { DocumentMeta } from './pages/DocumentMeta.tsx'
 import { ModeRoutes } from './pages/ModeRoutes.tsx'
 import { OverlayRoutes } from './pages/OverlayRoutes.tsx'
-import {
-  KEYS,
-  modeForPath,
-  modeHasBootCover,
-  overlayState,
-  resolvedLocation,
-  SETTINGS,
-} from './pages/paths.ts'
+import { useOverlayStore } from './pages/overlay.ts'
+import { KEYS, modeForPath, modeHasBootCover, SETTINGS } from './pages/paths.ts'
 import { useEngine } from './state/engineStore.ts'
 
 /*
@@ -82,9 +75,9 @@ export default function App() {
   const engine: GameEngine | null = currentEngine()
   const { phase: boot, status: bootStatus } = useStore(firstLight.store)
 
-  const location = useLocation()
-  const navigate = useNavigate()
-  const mode = modeForPath(resolvedLocation(location).pathname)
+  const modePath = useOverlayStore((snapshot) => snapshot.mode.pathname)
+  const openOverlay = useOverlayStore((snapshot) => snapshot.open)
+  const mode = modeForPath(modePath)
 
   const [debug, setDebug] = usePersistentState(DEBUG_ON)
   const [notice, setNotice] = useState<string | null>(null)
@@ -220,18 +213,8 @@ export default function App() {
   useAction('time.normal', commands.realTime)
   useAction('chrome.instruments', () => setDebug(!debug))
   useAction('chrome.all', () => engine?.setChrome(!engine.chrome))
-  useAction(
-    'chrome.keys',
-    () =>
-      void navigate(KEYS, { state: overlayState(resolvedLocation(location)) }),
-  )
-  useAction(
-    'chrome.settings',
-    () =>
-      void navigate(SETTINGS, {
-        state: overlayState(resolvedLocation(location)),
-      }),
-  )
+  useAction('chrome.keys', () => openOverlay(KEYS))
+  useAction('chrome.settings', () => openOverlay(SETTINGS))
 
   return (
     /*
@@ -246,8 +229,7 @@ export default function App() {
       id="app"
     >
       {/* Renders nothing; keeps the tab, the canonical link and the analytics
-          page view in step with the address bar. Inside the shell rather than
-          in `Root.tsx` because it needs the router's location. */}
+          page view in step with the address bar. */}
       <DocumentMeta />
 
       {/*

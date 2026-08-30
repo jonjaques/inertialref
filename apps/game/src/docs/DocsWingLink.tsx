@@ -1,4 +1,3 @@
-import { Link } from 'react-router'
 import { FOCUS_RING } from '../hud/focus.ts'
 import type { DocWing } from './content.ts'
 
@@ -27,8 +26,8 @@ export function DocsWingLink({
 }) {
   return (
     <li>
-      <Link
-        to={to}
+      <a
+        href={to}
         aria-current={current ? 'true' : undefined}
         title={wing.blurb}
         className={`flex items-center gap-2 rounded border-l-2 py-1 pl-2.5 transition-colors ${FOCUS_RING} ${
@@ -38,7 +37,7 @@ export function DocsWingLink({
         }`}
       >
         <span className="type-title text-[0.9375rem]">{wing.label}</span>
-      </Link>
+      </a>
     </li>
   )
 }
