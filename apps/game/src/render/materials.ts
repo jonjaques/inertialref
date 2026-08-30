@@ -5,6 +5,7 @@ import {
   CustomBlending,
   DataTexture,
   InstancedBufferAttribute,
+  LinearFilter,
   MeshBasicNodeMaterial,
   OneFactor,
   OneMinusSrcAlphaFactor,
@@ -204,9 +205,19 @@ const MIE_G = 0.76
  * graph: full transmittance and no multiple scattering, with the scattering
  * coefficients defaulting to zero — a vacuum that draws nothing, rather than
  * one frame of some other planet's sky.
+ *
+ * Filtered like the tables they stand in for, or the graph is not identical
+ * where it counts: `DataTexture` defaults to nearest, the WGSL builder reads a
+ * nearest texture with `textureLoad` and no sampler, and the baked tables are
+ * linear and read with `textureSample`. Two different programs, so the shell
+ * the boot warm-up compiles against these is not the pipeline a real sky
+ * draws with. The terrain stand-in has the sharper version of the same trap —
+ * see `BLANK` in `terrain.ts`.
  */
 function lutPixel(r: number, g: number, b: number): DataTexture {
   const map = new DataTexture(new Uint8Array([r, g, b, 255]), 1, 1, RGBAFormat)
+  map.magFilter = LinearFilter
+  map.minFilter = LinearFilter
   map.needsUpdate = true
   return map
 }

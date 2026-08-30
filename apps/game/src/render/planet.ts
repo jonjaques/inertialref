@@ -2,6 +2,7 @@ import {
   Color,
   DataTexture,
   DoubleSide,
+  LinearFilter,
   MeshBasicNodeMaterial,
   RGBAFormat,
   type Texture,
@@ -95,6 +96,13 @@ import type { BodyTextures } from './planetTextures.ts'
 function pixel(r: number, g: number, b: number, a: number): Texture {
   const data = new Uint8Array([r, g, b, a])
   const map = new DataTexture(data, 1, 1, RGBAFormat)
+  // Linear, like the maps these stand in for. A nearest `DataTexture` — the
+  // constructor's default — is read with `textureLoad` and no sampler, which
+  // is a different program from the one a loaded map draws with, and the
+  // warm-up would be compiling that one. `lutPixel` in `materials.ts` and
+  // `BLANK` in `terrain.ts` say the rest.
+  map.magFilter = LinearFilter
+  map.minFilter = LinearFilter
   map.needsUpdate = true
   return map
 }

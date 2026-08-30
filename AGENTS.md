@@ -335,6 +335,18 @@ error`, with the real message on a channel the page console does not carry
   mechanism is unexplained and the rule is deliberately the wider claim. Two
   attribute objects over one array is a few bytes and one fewer trap.
   [ADR-0021](docs/adr/0021-the-ground.md).
+- **Never leave a stand-in `DataTexture` at its nearest default.** Every
+  material here runs one graph whether or not its maps have arrived, on the
+  strength of a 1×1 stand-in — and the boot warm-up compiles against those
+  stand-ins. `DataTexture` defaults to `NearestFilter` both ways, and the WGSL
+  builder reads a nearest texture with `textureLoad` and no sampler where it
+  reads a loaded map with `textureSample` and one: two programs, so the
+  warm-up compiles a pipeline no real body draws with. The gradient sample
+  has no `textureLoad` path at all, so against a nearest stand-in the ground
+  referenced a sampler that was never declared, Tint refused the module, and
+  standing on a mapless body streamed 706 patches into a black frame with
+  `[Invalid ShaderModule "fragment"]` on the console. Set both filters linear;
+  `materials.gpu.test.ts` holds each stand-in and a real map to one program.
 - **Never add a shading term to the ground without adding it to the sphere.**
   `render/terrain.ts` and `render/planet.ts` draw the same body on either side
   of the eight-pixel relief gate — the streamed ground below it, the archive's
