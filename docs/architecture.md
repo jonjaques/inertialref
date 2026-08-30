@@ -292,9 +292,10 @@ flowchart TB
   `Worker`; everything else talks to a port. [Workers](concepts/workers.md)
 - **The harness** is the same object the headless runner uses, so a bug
   reproduced in Chrome replays in a test. [Harness](guides/harness.md)
-- **The service worker** caches the app shell. With the server stopped the game
-  still loads and passes all twelve capability checks — there is nothing else to
-  fetch, because content comes from the seed.
+- **The service worker** precaches the four mode documents. With the server
+  stopped the game still loads and passes all twelve capability checks — there
+  is nothing else to fetch, because content comes from the seed. A
+  documentation page nobody has opened is the browser's offline page.
 
 ---
 
@@ -302,7 +303,7 @@ flowchart TB
 
 | App             | What it is for                                                                                                                     |
 | --------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `apps/game`     | The client. React for UI, R3F for the view, and an engine that owns everything else.                                               |
+| `apps/game`     | The client. Astro owns the document; React islands own the canvas and the chrome.                                                  |
 | `apps/headless` | The same core in Node — no DOM, no React, no WebGL. Proves the boundary and runs the capability checks via `pnpm sim --self-test`. |
 
 Both open a session through the same `Session` in `devtools`, which owns the
