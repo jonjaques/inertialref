@@ -53,7 +53,6 @@ export function devPanels(context: DevContext): readonly DockPanelDefinition[] {
       render: () => (
         <ControlsPanel
           engine={context.engine}
-          world={context.status?.world ?? null}
           commands={context.commands}
           onNotice={context.onNotice}
         />
@@ -89,7 +88,6 @@ export function devPanels(context: DevContext): readonly DockPanelDefinition[] {
       hint: 'what the simulation thinks is true, this tick',
       render: () => (
         <TelemetryPanel
-          status={context.status}
           output={context.render.output}
           connection={context.connection}
           onCheckConnection={context.onCheckConnection}
@@ -103,9 +101,7 @@ export function devPanels(context: DevContext): readonly DockPanelDefinition[] {
       zone: 'left',
       defaultOpen: false,
       hint: 'frame time, gpu time, and the budgets they are against',
-      render: () => (
-        <PerfPanel engine={context.engine} status={context.status} />
-      ),
+      render: () => <PerfPanel engine={context.engine} />,
     },
   ]
 }

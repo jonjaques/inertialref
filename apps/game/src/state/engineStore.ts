@@ -1,4 +1,4 @@
-import { useStore } from 'zustand'
+import { useSyncExternalStore } from 'react'
 import { createStore, type StoreApi } from 'zustand/vanilla'
 import type { HarnessStatus, ObserverStatus } from '@inertialref/devtools'
 import type { Playhead } from '../cinema/session.ts'
@@ -189,9 +189,23 @@ export const engineStore = createEngineStore()
  * construction. That is correct for a component that reads most of it and
  * wrong for one that reads two fields; the fix for the second is a selector
  * that returns the two fields, wrapped in `useShallow`.
+ *
+ * `useSyncExternalStore` directly rather than zustand's `useStore`, for the
+ * third argument alone: zustand hands the *initial* state to a server render,
+ * which keeps hydration honest and is wrong for both renderers this app
+ * actually has. The browser never hydrates server markup, and the one
+ * renderer without a DOM is the test suite's `renderToStaticMarkup` — which
+ * samples the store first and then asserts the panel shows it, so handing it
+ * the empty boot snapshot would make every such assertion fail against
+ * "waiting for the first frame…". The selector contract is unchanged: a
+ * selector returning a fresh object every call still needs `useShallow`.
  */
 export function useEngine<T>(select: (snapshot: EngineSnapshot) => T): T {
-  return useStore(engineStore, select)
+  return useSyncExternalStore(
+    engineStore.subscribe,
+    () => select(engineStore.getState()),
+    () => select(engineStore.getState()),
+  )
 }
 
 export { useShallow } from 'zustand/react/shallow'

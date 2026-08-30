@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import type { HarnessStatus } from '@inertialref/devtools'
 import type { GameEngine } from '../engine/GameEngine.ts'
+import { useEngine } from '../state/engineStore.ts'
 import {
   setTimingLevel,
   TIMING_LEVELS,
@@ -43,13 +43,7 @@ import { SeriesStatsRow } from './SeriesStatsRow.tsx'
  * panel. One definition now colors the plot *and* colors the trace entry.
  */
 
-export function PerfPanel({
-  engine,
-  status,
-}: {
-  engine: GameEngine
-  status: HarnessStatus | null
-}) {
+export function PerfPanel({ engine }: { engine: GameEngine }) {
   /*
    * React Compiler is on, and it is exactly wrong about this component.
    *
@@ -64,11 +58,18 @@ export function PerfPanel({
    * `use no memo` is the documented opt-out and this is what it is for. It is
    * not a license to hand-write `useMemo` here — see CLAUDE.md — it is a
    * statement that this subtree's whole job is to read mutable state on every
-   * render, at the 8 Hz the dock re-renders at.
+   * render, at the sampler's 8 Hz.
    */
   'use no memo'
 
   const metrics = engine.metrics
+  /*
+   * The store subscription is the panel's clock as well as its data. `status`
+   * is a fresh graph every sample, so this line re-renders the panel at 8 Hz —
+   * which is what refreshes the ring-buffer plots above, now that the
+   * workspace around it no longer re-renders on the sampler's behalf.
+   */
+  const status = useEngine((snapshot) => snapshot.status)
   const world = status?.world ?? null
   const workers = status?.workers ?? null
   const [gpuBusy, setGpuBusy] = useState(false)

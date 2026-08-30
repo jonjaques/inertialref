@@ -17,7 +17,7 @@ import {
 } from '@inertialref/universe'
 import { Quaternion as Q, UV, Vec, vec3 } from '@inertialref/spatial'
 import { runCapabilityChecks, summarizeCapabilities } from './capabilities.ts'
-import { canHoldOrbit } from './travel.ts'
+import { canHoldOrbit, sameTargets } from './travel.ts'
 import type { GameHarness } from './harness.ts'
 import { inspectWorld } from './inspect.ts'
 import { openSession, type Session } from './session.ts'
@@ -354,6 +354,31 @@ describe('travel targets', () => {
       .filter((t) => t.kind === 'system')
       .map((t) => t.distance)
     expect([...systems].sort((a, b) => a - b)).toEqual(systems)
+  })
+
+  it('calls two surveys of an unmoved sky the same listing', () => {
+    /*
+     * `sameTargets` is the catalog panel's bail-out: the survey rebuilds every
+     * row it answers with, so without it a 2 Hz poll re-renders a couple of
+     * hundred rows forever. The tolerance is exactly one field — the raw
+     * `distance` may drift below what `distanceText` can express — and
+     * anything a reader could see changing must break the equality.
+     */
+    const { harness: ir } = harness()
+    const first = ir.targets({ lightYears: 6 })
+    const second = ir.targets({ lightYears: 6 })
+    expect(sameTargets(first, second)).toBe(true)
+
+    const drifted = second.map((row, index) =>
+      index === 0 ? { ...row, distance: row.distance + 1 } : row,
+    )
+    expect(sameTargets(first, drifted)).toBe(true)
+
+    const renamed = second.map((row, index) =>
+      index === 0 ? { ...row, distanceText: 'somewhere else' } : row,
+    )
+    expect(sameTargets(first, renamed)).toBe(false)
+    expect(sameTargets(first, second.slice(1))).toBe(false)
   })
 
   it('says whether a destination was observed or is a projection', () => {

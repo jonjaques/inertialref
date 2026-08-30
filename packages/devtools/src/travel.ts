@@ -115,6 +115,59 @@ export interface TravelTarget {
   readonly parent: string | null
 }
 
+/**
+ * Whether two listings would draw the same panel.
+ *
+ * The survey rebuilds every row it answers with, so a poll that re-reads an
+ * unchanged sky still hands its subscriber a fresh array — and in React a
+ * fresh array is a re-render of every row in the catalog, at the poll rate,
+ * forever. This is the bail-out: everything a row displays is compared, and
+ * `distance` alone is not, because it is the raw measure that moves by meters
+ * every sweep while `distanceText` — the thing a reader sees, at the
+ * resolution that matters — holds still. A listing whose every text is
+ * unchanged has moved less than the text can say, and the stale raw number
+ * kept with it is wrong by less than that.
+ */
+export function sameTargets(
+  a: readonly TravelTarget[],
+  b: readonly TravelTarget[],
+): boolean {
+  if (a === b) return true
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i += 1) {
+    const x = a[i] as TravelTarget
+    const y = b[i] as TravelTarget
+    if (
+      x.kind !== y.kind ||
+      x.address !== y.address ||
+      x.name !== y.name ||
+      x.system !== y.system ||
+      x.depth !== y.depth ||
+      x.detail !== y.detail ||
+      x.distanceText !== y.distanceText ||
+      x.landable !== y.landable ||
+      x.loaded !== y.loaded ||
+      x.provenance !== y.provenance ||
+      x.bodyKind !== y.bodyKind ||
+      x.spectralType !== y.spectralType ||
+      x.radius !== y.radius ||
+      x.semiMajorAxis !== y.semiMajorAxis ||
+      x.children !== y.children ||
+      x.parent !== y.parent
+    ) {
+      return false
+    }
+    const cx = x.colour
+    const cy = y.colour
+    if (cx === null || cy === null) {
+      if (cx !== cy) return false
+    } else if (cx.r !== cy.r || cx.g !== cy.g || cx.b !== cy.b) {
+      return false
+    }
+  }
+  return true
+}
+
 export interface TravelTargetOptions {
   /**
    * Radius of the star survey. Loaded systems are always listed regardless —

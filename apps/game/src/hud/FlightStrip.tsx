@@ -1,5 +1,5 @@
-import type { HarnessStatus } from '@inertialref/devtools'
 import { formatDistance } from '@inertialref/shared'
+import { useEngine } from '../state/engineStore.ts'
 
 /**
  * Compact flight readout, bottom left.
@@ -8,8 +8,14 @@ import { formatDistance } from '@inertialref/shared'
  * dock is what you read when you have stopped to look at something. It stays
  * legible with the dock collapsed, which is the state the game is actually
  * played in.
+ *
+ * It subscribes to the sampler itself rather than taking the status as a
+ * prop: the figures on it change every sample, so this component re-rendering
+ * at 8 Hz is the job — and the mode above it re-rendering to deliver the prop
+ * was the whole interface paying that rate.
  */
-export function FlightStrip({ status }: { status: HarnessStatus | null }) {
+export function FlightStrip() {
+  const status = useEngine((snapshot) => snapshot.status)
   if (status === null || status.player === null) return null
   const { player, world } = status
   // 85% rather than 75%. Measured in front of the Sun filling the frame: at 75%

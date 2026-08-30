@@ -1,5 +1,5 @@
-import type { HarnessStatus } from '@inertialref/devtools'
 import type { Connection } from '../net/health.ts'
+import { useEngine } from '../state/engineStore.ts'
 import { describeOutput, type RendererDescription } from '../render/output.ts'
 import { AuthoritySection } from './AuthoritySection.tsx'
 import { NetworkSection } from './NetworkSection.tsx'
@@ -46,16 +46,18 @@ function summarise(items: readonly string[]): string {
 }
 
 export function TelemetryPanel({
-  status,
   output,
   connection,
   onCheckConnection,
 }: {
-  status: HarnessStatus | null
   output: RendererDescription | null
   connection: Connection
   onCheckConnection: () => void
 }) {
+  // The whole status, deliberately: this panel's job is to show most of it, so
+  // re-rendering at the full sample rate is correct — and subscribing here is
+  // what keeps that rate the panel's own rather than the interface's.
+  const status = useEngine((snapshot) => snapshot.status)
   // The network section does not wait for the first frame, because the two are
   // unrelated: a session that never reaches a server still flies, and a session
   // still building its first frame may already know it cannot reach one.

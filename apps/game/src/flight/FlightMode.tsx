@@ -1,6 +1,5 @@
 import { useEffect } from 'react'
 import { useParams } from 'react-router'
-import type { HarnessStatus } from '@inertialref/devtools'
 import { Workspace } from '../dock/Workspace.tsx'
 import type { DevWorkspace } from '../dock/workspace.ts'
 import type { GameEngine } from '../engine/GameEngine.ts'
@@ -33,12 +32,10 @@ type PlayMode = (typeof KNOWN)[number]
 
 export function FlightMode({
   engine,
-  status,
   dev,
   onNotice,
 }: {
   engine: GameEngine
-  status: HarnessStatus | null
   dev: DevWorkspace
   onNotice: (message: string) => void
 }) {
@@ -84,7 +81,7 @@ export function FlightMode({
             what="the flight strip"
             className="type-readout pointer-events-auto absolute bottom-3 left-3 max-w-[calc(100%-1.5rem)]"
           >
-            <FlightStrip status={status} />
+            <FlightStrip />
           </ErrorBoundary>
 
           {/* The aiming reticle. Center of frame, and the only permanent piece
