@@ -439,7 +439,18 @@ async function checkWorkerTask(
    * loop over elevations alone said nothing about four bytes a vertex that
    * decide what the ground is made of — a worker whose sketch had diverged
    * would have passed this check and drawn a different planet.
+   *
+   * The length is compared before the bytes because the loop is bounded by the
+   * *local* array: a short answer would be reported as the first missing byte
+   * differing, and a long one would go unread past the end.
    */
+  if (local.cover.length !== remote.cover.length) {
+    return failure(
+      10,
+      'Worker task',
+      `cover is ${remote.cover.length} bytes from the worker, ${local.cover.length} locally`,
+    )
+  }
   for (let i = 0; i < local.cover.length; i += 1) {
     if (local.cover[i] !== remote.cover[i]) {
       return failure(

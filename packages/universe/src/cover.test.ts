@@ -1,12 +1,11 @@
-import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { rootSeed } from '@inertialref/procedural'
+import { rootSeed, seedFromNumber } from '@inertialref/procedural'
 import { Vec, vec3, type Vec3 } from '@inertialref/spatial'
 import { TEST_CATALOG } from './catalog/fixture.ts'
 import { COVER_CHANNELS } from './cover.ts'
 import { craterField, rayBrightness } from './craters.ts'
 import { catalogStub, MILKY_WAY } from './galaxy.ts'
-import { terrainSketch } from './sketch.ts'
+import { SKETCH_CACHE_LIMIT, terrainSketch } from './sketch.ts'
 import { type Body, generateSystem, walkBodies } from './system.ts'
 import {
   generateHeightfield,
@@ -196,7 +195,10 @@ describe('ray craters', () => {
           worst = Math.max(worst, Math.abs(at(1.2 + 1e-7) - at(1.2 - 1e-7)))
         }
       }
-      expect(`${name}: ${worst < 1e-5}`).toBe(`${name}: true`)
+      // The probe's own epsilon, which is what the comment above claims the
+      // bound is. Measured: 1.04e-7 on Luna, Mercury and Callisto, 6.3e-8 on
+      // Mars — a step, un-faded, was 0.30 and 0.57.
+      expect(`${name}: ${worst < 2e-7}`).toBe(`${name}: true`)
     }
   })
 
@@ -239,31 +241,29 @@ describe('ray craters', () => {
 })
 
 describe('the cover field', () => {
-  it('is a pure function of the direction, on every body', () => {
+  /*
+   * A property about *derivation*, not about arithmetic, and getting it to
+   * exercise one takes work. `terrainSketch` memoizes twice: a `WeakMap` on the
+   * surface object, then a string cache keyed by what the derivation reads. A
+   * second call on the same reference never re-derives; a spread copy reaches
+   * past the `WeakMap` and lands squarely in the string cache the first call
+   * just populated. Either way the second evaluation is the first one's sketch
+   * and the test cannot fail.
+   *
+   * So the copy goes through a cache that has been *churned* past its own
+   * ninety-six-entry limit, which forces a real re-derivation — the plates, the
+   * hotspots, the crater ladder and the ray craters all built again, in a
+   * different order, against a sketch cache in a different state.
+   */
+  it('re-derives to the same cover, on a sketch cache that has been churned', () => {
     const body = find('Luna')
-    fc.assert(
-      fc.property(
-        fc.double({ min: -1, max: 1, noNaN: true }),
-        fc.double({ min: 0, max: 2 * Math.PI, noNaN: true }),
-        (z, around) => {
-          const ring = Math.sqrt(Math.max(0, 1 - z * z))
-          const d = vec3(Math.cos(around) * ring, z, Math.sin(around) * ring)
-          /*
-           * The second call goes through a *copy* of the surface, which is the
-           * only way this assertion can fail. `terrainSketch` memoizes on the
-           * object identity first, so twice on the same reference never
-           * re-derives anything and the evaluation below it is stateless
-           * arithmetic — the test would pass whatever the sketch did. A spread
-           * reaches past the `WeakMap` to the string cache and, on a miss, to
-           * a fresh derivation.
-           */
-          expect(surfaceCoverAt({ ...body.surface }, d)).toEqual(
-            surfaceCoverAt(body.surface, d),
-          )
-        },
-      ),
-      { numRuns: 120 },
-    )
+    for (const d of sphere(24)) {
+      const first = surfaceCoverAt(body.surface, d)
+      for (let i = 0; i < SKETCH_CACHE_LIMIT + 4; i += 1) {
+        surfaceCoverAt({ ...body.surface, seed: seedFromNumber(i) }, d)
+      }
+      expect(surfaceCoverAt({ ...body.surface }, d)).toEqual(first)
+    }
   })
 
   it('stays inside the unit interval everywhere', () => {
@@ -313,7 +313,10 @@ describe('the cover field', () => {
      */
     let bias = vec3(0, 0, 0)
     for (const s of flooded) bias = Vec.add(bias, s.d)
-    expect(Vec.length(bias) / flooded.length).toBeGreaterThan(0.4)
+    // The hemisphere the sentence above names, not a number below it: a field
+    // that pooled over a shape *less* concentrated than a half-sphere is the
+    // grey planet this test exists to reject. Measured here: 0.578.
+    expect(Vec.length(bias) / flooded.length).toBeGreaterThan(0.5)
   })
 
   it('gives an airless world rays and a thick-aired one none', () => {

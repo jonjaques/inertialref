@@ -169,6 +169,7 @@ export function TerrainPatches({ engine }: { engine: GameEngine }) {
        */
       terrain.setAlbedoMap(
         texturesFor(state.palette.textureKey, anisotropy).albedo,
+        state.palette.textureKey !== null,
       )
       const key = engine.scene()?.stars[0]
       if (key !== undefined && state.centre !== null) {

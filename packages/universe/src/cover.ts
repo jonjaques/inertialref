@@ -236,7 +236,12 @@ function mineralCover(
  * is why a cap needs a body already close to the frost point rather than merely
  * tilted away from the sun.
  *
- * An ice shell short-circuits all of it. Callisto is ice at the equator at noon.
+ * An ice shell carries the term rather than bypassing it. Callisto is ice at
+ * the equator at noon because Callisto is at 134 K there and the cap saturates,
+ * not because being made of ice exempts a body from being measured — a shell
+ * read *over* the frost test draws a 491 K rock as two-thirds ice, since `icy`
+ * is a function of density alone and density does not know where the body
+ * orbits. See `supply` and the return below.
  */
 function iceCover(
   sketch: TerrainSketch,
@@ -258,15 +263,9 @@ function iceCover(
   if (supply <= 0) return 0
 
   /*
-   * Latitude, as radiative equilibrium and nothing more: absorbed flux goes as
-   * the cosine of the solar zenith angle and emission as the fourth power of
-   * temperature, so the ground runs as `cos^(1/4)`. That is a weak function —
-   * Earth's poles come out at 0.55 of the equator's temperature — which is why
-   * a cap needs a body already near the frost point rather than merely one
-   * that is tilted.
-   *
-   * `direction` is a unit vector in body-fixed axes and the spin axis is +Y,
-   * which is the convention `datumRadius` divides `polarRadius` into.
+   * The latitude term the docstring above derives. `direction` is a unit vector
+   * in body-fixed axes and the spin axis is +Y, which is the convention
+   * `datumRadius` divides `polarRadius` into.
    */
   const cosZenith = Math.max(0.02, Math.sqrt(Math.max(0, 1 - direction.y ** 2)))
   const local = grammar.groundTemperature * cosZenith ** 0.25
@@ -280,7 +279,17 @@ function iceCover(
       direction.z * 9,
     ) * 12
   const cap = smoothstep(FROST_POINT + 22, FROST_POINT - 12, local + ragged)
-  return clamp01(Math.max(shell, Math.min(cap, supply)))
+  /*
+   * The shell rides inside `supply`, not around the whole expression.
+   *
+   * `supply` is already `max(shell, air)`, so on a genuinely cold icy body
+   * `min(cap, supply)` is `supply` and the outer `max(shell, ...)` this
+   * replaces changed nothing — it could only ever fire where `cap < shell`,
+   * which is exactly the case where the frost test has said the ground is too
+   * warm to hold volatiles. Across the whole catalog one body moves: a 491 K
+   * sub-2,400 kg/m³ rock inside its star's frost line, from 0.69 ice to none.
+   */
+  return clamp01(Math.min(cap, supply))
 }
 
 /**
@@ -301,6 +310,23 @@ export function packCover(
   out[at + 1] = Math.round(clamp01(cover.dark) * 255)
   out[at + 2] = Math.round(clamp01(cover.mineral) * 255)
   out[at + 3] = Math.round(clamp01(cover.ice) * 255)
+}
+
+/**
+ * The four bytes back, as a record. The inverse of `packCover`.
+ *
+ * Beside it rather than at the reader, because the channel order and the 255
+ * are one fact and a reader that spells them out again is a second place they
+ * have to stay true — and the order is a live question while the deposits still
+ * want a channel for the canonical slope.
+ */
+export function unpackCover(bytes: Uint8Array, at: number): SurfaceCover {
+  return {
+    bright: (bytes[at] as number) / 255,
+    dark: (bytes[at + 1] as number) / 255,
+    mineral: (bytes[at + 2] as number) / 255,
+    ice: (bytes[at + 3] as number) / 255,
+  }
 }
 
 /** How many bytes `packCover` writes per sample. */

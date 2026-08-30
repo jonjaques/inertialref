@@ -20,6 +20,7 @@ import type {
 } from '@inertialref/simulation'
 import type { BodyAppearance, EntityId } from '@inertialref/universe'
 import { atmosphereShellRatio, ringScales, sunkSphereRadius } from './datum.ts'
+import { terminatorFor } from './terrainPalette.ts'
 import {
   LOD_THRESHOLDS,
   type LodThresholds,
@@ -44,6 +45,16 @@ export interface RenderBody {
   readonly placement: RenderPlacement
   readonly orientation: Quat
   readonly hasAtmosphere: boolean
+  /**
+   * Half-width of this body's terminator, in cosine of the incidence angle.
+   *
+   * Derived here so the disk and the terrain streamed in front of it read one
+   * number: they are the same body, a descent crosses between them at the
+   * eight-pixel relief gate, and a terminator each derived for itself is a step
+   * at the switch. `terminatorFor` is the producer; this carries it to the
+   * material, which has a `RenderBody` and not a `Body`.
+   */
+  readonly terminator: number
   readonly atmosphereScale: number
   readonly trueRadius: Meters
   /**
@@ -235,6 +246,7 @@ export function buildScene(
       placement,
       orientation: orientationToRenderSpace(origin, body.orientation),
       hasAtmosphere: body.appearance.haze !== null,
+      terminator: terminatorFor(body.hasAtmosphere, body.relief, body.radius),
       // From the *haze*, not from `atmosphereCeiling`. That ceiling is where the
       // drag model stops integrating, which for a gas giant is a thousand
       // kilometers of "there is no surface" — drawn as a shell it put a halo on

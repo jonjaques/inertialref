@@ -90,11 +90,12 @@ const FILL_INTENSITY = 0.35
  * The response is steeply non-linear through the tone curve's shoulder, which
  * is why this was found by capture rather than by arithmetic — 2.6 measured
  * 21.0 on the same band, almost all of the error still there, while costing
- * *more* wipe frames than 4.2. In flight the same light
- * stays at `FILL_INTENSITY` because the only other thing these lights reach is
- * streamed terrain, and a second sun on a planet's night side is a worse lie
- * than a dark hull. Planets, atmospheres and rings are not at risk either way:
- * they shade from their own `sunDirection` uniform and never see these lights.
+ * *more* wipe frames than 4.2. In flight the same light stays at
+ * `FILL_INTENSITY`, and the reason is the hull's own read rather than anything
+ * else in the frame: nothing these lights reach is at risk. Planets,
+ * atmospheres, rings and the streamed ground all shade from their own
+ * `sunDirection` uniform — `render/terrain.ts` is a `MeshBasicNodeMaterial`
+ * and carries its own night floor — so none of them sees a scene light at all.
  */
 const STAGE_FILL_INTENSITY = 1.6
 

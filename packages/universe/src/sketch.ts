@@ -632,7 +632,16 @@ function derive(seed: Seed, grammar: SurfaceGrammar): TerrainSketch {
  */
 const BY_SURFACE = new WeakMap<SurfaceParameters, TerrainSketch>()
 const CACHE = new Map<string, TerrainSketch>()
-const CACHE_LIMIT = 96
+/**
+ * Sketches kept by the string cache.
+ *
+ * Exported because a test that wants a *fresh derivation* has to get past both
+ * memos, and the only way past the second is to overflow it — see
+ * `cover.test.ts`. A number a test hard-codes is a number that silently stops
+ * churning anything the day this moves.
+ */
+export const SKETCH_CACHE_LIMIT = 96
+const CACHE_LIMIT = SKETCH_CACHE_LIMIT
 
 const cacheKey = (seed: Seed, grammar: SurfaceGrammar): string =>
   [

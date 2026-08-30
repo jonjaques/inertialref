@@ -75,7 +75,15 @@ export interface RenderPatch {
   readonly morphPositions: Float32Array
   /** The normal it shades with there — the parent's, over the parent's cells. */
   readonly morphNormals: Float32Array
-  /** Surface cover per vertex, four bytes, as generated. */
+  /**
+   * Surface cover per vertex, four bytes, as generated.
+   *
+   * The one buffer here that is `PatchInput`'s own array rather than a fresh
+   * one — the heightfield's, which the caller may still be holding in a field
+   * cache. Nothing writes to it, and copying 17 KB a patch to say so is the
+   * expensive half of terrain's memory paid twice; but a producer that ever
+   * pools or rewrites a heightfield has to know this attribute is a view of it.
+   */
   readonly cover: Uint8Array
   /**
    * And the cover it wears once morphed: the parent's, at the parent's vertex.

@@ -545,11 +545,15 @@ const RAY_REACH = 16
 /**
  * The finest lattice rays are drawn from, in cells per unit of direction space.
  *
- * Equivalently: a crater smaller than `meanRadius / 24` gets no rays. That is
- * 72 km on Luna, which keeps Tycho and Copernicus and drops Kepler — and it is
- * a cost bound as much as a judgment. The enumeration below walks every cell of
- * every qualifying level once per body, which is `(4π/3)·cells³` cell tests;
- * at 24 the whole ladder above it comes to about 27,000, and each step finer
+ * It gates a **level**, and a level places craters over an octave — from half
+ * its own diameter to all of it — so the smallest crater that can carry rays is
+ * `meanRadius / 48` rather than `/ 24`. On Luna that is 49 km, which keeps
+ * Tycho and Copernicus; the smallest the seed actually places is 50.
+ *
+ * It is a cost bound as much as a judgment. The enumeration below walks a
+ * `(2⌈cells⌉ + 3)³` box per qualifying level, once per body: 71,506 cell tests
+ * on Luna across four levels and 132,651 on Callisto, which has one level
+ * coarse enough to qualify and therefore the widest box. Each step finer
  * multiplies that by eight.
  *
  * The judgment is defensible on its own terms too. A ray system is bright
@@ -586,6 +590,16 @@ const MAX_RAY_CRATERS = 16
  * anywhere on the circle.
  */
 const RAY_HARMONICS = [7, 11, 17, 23, 31, 43] as const
+
+/**
+ * Hoisted, because the loop it bounds runs per harmonic per crater per sample.
+ *
+ * A `.length` on a `const` array is a property read the engine cannot hoist out
+ * of a loop whose body it cannot prove side-effect-free, and this one is inside
+ * the cover's inner loop — the same argument the module-local binding of the
+ * procedural primitives at the top of this file makes, one level down.
+ */
+const RAY_HARMONIC_COUNT = RAY_HARMONICS.length
 
 /**
  * The young large craters of a body, in age order.
@@ -653,6 +667,20 @@ export function rayCraters(
           const age = toUnit(shape.x)
           if (age >= RAY_AGE) continue
 
+          const jx = (ix + toUnit(hash.y)) * size
+          const jy = (iy + toUnit(hash.z)) * size
+          const jz = (iz + toUnit(hash.w)) * size
+          /*
+           * Rejected here rather than after the sort, because after it the cell
+           * has already spent one of the sixteen slots and skipping it leaves
+           * the body with fifteen ray systems for no reason anybody could name.
+           * It is the cell whose jittered centre lands on the origin, which is
+           * one cell in the whole lattice and only when the jitter cancels the
+           * index — but the youngest sixteen is a *ranking*, and a ranking that
+           * can carry an entry it will then drop is a ranking of the wrong set.
+           */
+          if (jx * jx + jy * jy + jz * jz < 1e-24) continue
+
           found.push({
             ix,
             iy,
@@ -660,9 +688,9 @@ export function rayCraters(
             index,
             diameter: level.diameter * (0.5 + (0.5 * draw) / level.density),
             age,
-            jx: (ix + toUnit(hash.y)) * size,
-            jy: (iy + toUnit(hash.z)) * size,
-            jz: (iz + toUnit(hash.w)) * size,
+            jx,
+            jy,
+            jz,
           })
         }
       }
@@ -688,12 +716,11 @@ export function rayCraters(
   const craters: RayCrater[] = []
   for (const it of found.slice(0, MAX_RAY_CRATERS)) {
     const length = Math.sqrt(it.jx * it.jx + it.jy * it.jy + it.jz * it.jz)
-    if (length < 1e-12) continue
     const axis = vec3(it.jx / length, it.jy / length, it.jz / length)
     const angularRadius = it.diameter / (2 * grammar.meanRadius)
     const [tangent, bitangent] = tangentFrame(axis)
-    const phases = new Float64Array(RAY_HARMONICS.length)
-    for (let k = 0; k < RAY_HARMONICS.length; k += 1) {
+    const phases = new Float64Array(RAY_HARMONIC_COUNT)
+    for (let k = 0; k < RAY_HARMONIC_COUNT; k += 1) {
       const spin = pcg4d(it.ix, it.iy, it.iz ^ latticeSeed, 4_099 + k)
       phases[k] = toUnit(spin.x) * 2 * Math.PI
     }
@@ -782,12 +809,12 @@ export function rayBrightness(
         direction.z * crater.bitangent.z
       const azimuth = Math.atan2(py, px)
       let wave = 0
-      for (let k = 0; k < RAY_HARMONICS.length; k += 1) {
+      for (let k = 0; k < RAY_HARMONIC_COUNT; k += 1) {
         wave +=
           Math.cos(
             (RAY_HARMONICS[k] as number) * azimuth +
               (crater.phases[k] as number),
-          ) / RAY_HARMONICS.length
+          ) / RAY_HARMONIC_COUNT
       }
       /*
        * The filaments, and the threshold is what makes them filaments.

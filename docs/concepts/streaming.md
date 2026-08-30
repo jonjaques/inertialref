@@ -241,9 +241,12 @@ material's uniforms.
 Four of those five are on the state rather than read off `patches[0]`, and that
 is deliberate. The frame a body is acquired is a frame with a palette and no
 patches, and the uniforms are written before there is anything to draw with
-them. The reverse also has to hold: all five go back to `null` when the streamer
-clears, because a palette reported beside `patches: 0` describes a body nothing
-is drawing, and the material would go on wearing the last world's ground.
+them. The reverse also has to hold: the four nullable ones go back to `null`
+when the streamer clears, because a palette reported beside `patches: 0`
+describes a body nothing is drawing and the material would go on wearing the
+last world's ground. `datumRadius` is a number and keeps its last value — there
+is nothing to read it with while the palette is null, and a sentinel radius
+would be a second thing to be wrong about.
 
 `datumRadius` is `body.radius`, the equatorial one, because that is what
 `buildPatch` measures every vertex from. Not the mean radius: on Earth they are

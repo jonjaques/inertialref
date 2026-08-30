@@ -252,6 +252,42 @@ function unitLuminance(colour: LinearRgb | undefined): LinearRgb {
   return { r: colour.r / grey, g: colour.g / grey, b: colour.b / grey }
 }
 
+/**
+ * Half-width of a body's terminator, in cosine of the incidence angle.
+ *
+ * **Exported because the sphere has to use the same number.** A disk drawn from
+ * a photograph would end at 0.025 on an airless body, because its surface is
+ * smooth at the resolution of the map; terrain is not, and a peak of height `h`
+ * catches the sun `√(2h/R)` of a radian past the geometric shadow line. Given
+ * to the ground alone, the two halves of one body fade out over bands differing
+ * by 4.2× on Luna and 6.6× on Iapetus, and a descent crossing the eight-pixel
+ * gate walks straight through that step — which is the third of the three terms
+ * `AGENTS.md` names as shared.
+ *
+ * Widening the disk is the right direction rather than a concession. Its normal
+ * map carries real slopes at 2.2× exaggeration on an airless body, and the
+ * Moon's terminator seen from space genuinely is ragged over about the angle
+ * its relief subtends. On a body with air the wider figure is already the air's
+ * own 0.09 and this changes nothing: Earth and Mars were the two that agreed
+ * before, and they agree by taking the same branch.
+ *
+ * Scalars rather than a `Body`, because the two callers hold different things —
+ * the palette a `Body`, `buildScene` a `BodySnapshot` — and both already carry
+ * a relief and a radius. The radius is the equatorial one on both sides; the
+ * mean differs from it by under half a percent, which is nothing under a
+ * square root.
+ */
+export function terminatorFor(
+  hasAir: boolean,
+  relief: Meters,
+  radius: Meters,
+): number {
+  return Math.max(
+    hasAir ? 0.09 : 0.025,
+    Math.sqrt((2 * relief) / Math.max(radius, 1)),
+  )
+}
+
 export function terrainPalette(body: Body): TerrainPalette {
   const grammar = body.surface.grammar
   const base = referenceReflectance(body)
@@ -366,21 +402,10 @@ export function terrainPalette(body: Body): TerrainPalette {
     freshGain: 1.6,
     // The same pair `tuningFor` gives the body material. A powder backscatters.
     lunarLambert: air > 0 ? 0.3 : 0.92,
-    /*
-     * The terminator, widened by the body's own relief.
-     *
-     * A disk drawn from a photograph ends at 0.025 of a cosine because its
-     * surface is smooth at the resolution of the map. Terrain is not: a peak of
-     * height `h` catches the sun `√(2h/R)` of a radian past the geometric
-     * shadow line, which on Luna's 22 km over 1,737 km is 0.16 — six times the
-     * disk's figure. Drawn at the narrower one, every summit past the
-     * terminator switches off at once, in a straight line across the planet.
-     */
-    terminator: Math.max(
-      air > 0 ? 0.09 : 0.025,
-      Math.sqrt(
-        (2 * body.surface.maxElevation) / Math.max(grammar.meanRadius, 1),
-      ),
+    terminator: terminatorFor(
+      grammar.air > 0,
+      body.surface.maxElevation,
+      body.radius,
     ),
 
     // Wind needs air to blow and something loose to move. `dunes` is the

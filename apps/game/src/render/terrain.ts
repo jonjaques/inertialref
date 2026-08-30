@@ -40,6 +40,7 @@ import {
   vec3,
   vec4,
 } from 'three/tsl'
+import type { LinearRgb } from '@inertialref/universe'
 import {
   NO_MORPH_DISTANCE,
   REFLECTANCE_CEILING,
@@ -97,7 +98,7 @@ export interface TerrainMaterial {
    * a `Texture` before its pixels arrive and the graph is built once against
    * whatever the manifest says exists.
    */
-  setAlbedoMap(map: Texture | null): void
+  setAlbedoMap(map: Texture | null, hasMap: boolean): void
 }
 
 /**
@@ -371,9 +372,10 @@ export function createTerrainMaterial(): TerrainMaterial {
      * Divided by how square-on the surface is, because a grazing pixel covers
      * far more ground than a head-on one and it is grazing pixels that alias.
      */
-    const view = normalize(eyeLocal.sub(local))
+    const toEye = eyeLocal.sub(local)
+    const view = normalize(toEye)
     const squareOn = max(dot(normal, view).abs(), float(0.08))
-    const footprint = length(eyeLocal.sub(local)).mul(pixelAngle).div(squareOn)
+    const footprint = length(toEye).mul(pixelAngle).div(squareOn)
 
     const macroFade = oneMinus(
       smoothstep(float(MACRO_METRES * 0.25), float(MACRO_METRES), footprint),
@@ -426,7 +428,9 @@ export function createTerrainMaterial(): TerrainMaterial {
      * the mesh, which means more channels on the cover and belongs with the
      * scatter that will want them.
      */
-    const flat = oneMinus(smoothstep(repose.mul(0.6), repose.mul(2.2), slope))
+    const mantled = oneMinus(
+      smoothstep(repose.mul(0.6), repose.mul(2.2), slope),
+    )
     // A dune sea and a playa need flatter ground than a regolith mantle does.
     const level = oneMinus(smoothstep(repose.mul(0.05), repose.mul(1), slope))
 
@@ -437,9 +441,17 @@ export function createTerrainMaterial(): TerrainMaterial {
      * `groundElevation` clamps the mesh **to** the sea datum, so an ocean is
      * already flat geometry sitting at a known altitude and the test is one
      * comparison rather than a mask that has to be generated, streamed and
-     * morphed. The band is two metres, which is a few times the eighth of a
+     * morphed. The band is four metres, which is a few times the eighth of a
      * metre float32 resolves an altitude to at planetary scale: narrower and
      * the shoreline shimmers, wider and it is a beach.
+     *
+     * **It runs upward from the datum, not across it, and that follows from the
+     * clamp.** No vertex is ever below the sea, so a band centred on the datum
+     * has half of itself in ground that does not exist and the sea sits on its
+     * midpoint: `water` saturates at 0.5, `dry` never falls below 0.5, and every
+     * gate below that spends `dry` is half-open over open ocean — the mottle and
+     * the bump the comments here say a sea must not have, and the salt flat the
+     * next paragraph says this gate removes, all at half strength.
      *
      * An ocean is also the flattest and lowest ground on the body, which is the
      * evaporite's own definition — so without this gate Earth's entire sea
@@ -458,7 +470,7 @@ export function createTerrainMaterial(): TerrainMaterial {
      */
     const water = seaEnabled
       .mul(invented)
-      .mul(oneMinus(smoothstep(seaDatum.sub(2), seaDatum.add(2), altitude)))
+      .mul(oneMinus(smoothstep(seaDatum, seaDatum.add(4), altitude)))
     const dry = oneMinus(water)
     /*
      * Low ground, measured from the *shoreline* rather than from the datum.
@@ -481,8 +493,7 @@ export function createTerrainMaterial(): TerrainMaterial {
       ),
     )
 
-    const mantled = flat
-    const flooded = saturate(cover.y).mul(oneMinus(mapped))
+    const flooded = saturate(cover.y).mul(invented)
     /*
      * A dune sea is not on the high ground: an erg is where saltating grains
      * *end up*, which is the low flat middle of a basin rather than a plateau.
@@ -496,8 +507,21 @@ export function createTerrainMaterial(): TerrainMaterial {
         .mul(oneMinus(smoothstep(0.25, 0.7, relief))),
     )
     const dried = saturate(evaporitic.mul(level).mul(dry).mul(lowGround))
-    // Volatiles last, because they condense on top of everything else.
-    const frozen = saturate(cover.w)
+    /*
+     * Volatiles last, because they condense on top of everything else — and
+     * subject to the same repose rule as the regolith under them.
+     *
+     * Without `flat` this is the outermost mix in both stacks at a weight of
+     * exactly one on every mapless icy moon: `iceCover`'s shell term saturates
+     * at a bulk density of 1,680, which is Mimas, Enceladus, Tethys, Dione,
+     * Rhea, Iapetus, Miranda, Ariel, Umbriel, Titania and Oberon. Eleven bodies
+     * whose bedrock, regolith and basalt were all mixed out, and with them the
+     * whole slope path — so the one thing that makes a crater wall read as a
+     * crater wall could never appear on any of them, and they drew as featureless
+     * white. Frost slides off a steep slope exactly as dust does, so it takes
+     * the same `mantled` weight the regolith does.
+     */
+    const frozen = saturate(cover.w).mul(mantled)
 
     let colour = mix(rock.albedo, regolith.albedo, mantled)
     colour = mix(colour, basalt.albedo, flooded)
@@ -517,12 +541,20 @@ export function createTerrainMaterial(): TerrainMaterial {
 
     /* --- what it reflects --------------------------------------------------- */
 
-    // The compositional ramp, as a tint on whatever deposit won.
-    const mineral = mix(
-      mineralLow,
-      mineralHigh,
-      mix(float(0.5), cover.z, invented),
-    )
+    /*
+     * The compositional ramp, as a tint on whatever deposit won — and *white*
+     * where a photograph already carries the composition.
+     *
+     * Neutralized at the tint rather than at the ramp position, which is the
+     * distinction that matters here. The ramp's ends are deliberately asymmetric
+     * — `{0.9, 0.93, 1.02}` against `{1.1, 1.04, 0.93}` — so its midpoint is
+     * `{1, 0.985, 0.975}` rather than white, and pinning `cover.z` to 0.5 on a
+     * mapped body multiplies the archive's photograph by a fixed warm tint
+     * 1.25% down in luminance that `render/planet.ts` does not carry. That is a
+     * step at the eight-pixel gate of the same order as the 1.7% the deposit
+     * gain was tuned to reach, and in the one place this phase promises none.
+     */
+    const mineral = mix(mix(mineralLow, mineralHigh, cover.z), vec3(1), mapped)
     /*
      * Mottling: the detail field spent on reflectance rather than on shape, and
      * nothing at all on water.
@@ -602,14 +634,27 @@ export function createTerrainMaterial(): TerrainMaterial {
      *
      * On a mapped body the palette holds multipliers on a photograph rather
      * than reflectances, so clamping at the palette's end would clamp the
-     * multiplier and flatten every contrast the photograph has. What may not exceed one
-     * is the product: a diffuse surface that reflects more than it receives
+     * multiplier and flatten every contrast the photograph has. What may not
+     * exceed one is the product: a surface that reflects more than it receives
      * gains energy at every bounce and blows out to white while its neighbours
      * are correctly exposed.
      */
-    const ground = min(
-      colour.mul(published).mul(mineral).mul(mottle).mul(fresh),
-      float(REFLECTANCE_CEILING),
+    const raw = colour.mul(published).mul(mineral).mul(mottle).mul(fresh)
+    /*
+     * Ceilinged by the brightest channel, so the whole colour scales together.
+     *
+     * A per-channel `min` is the obvious form and it does not clamp a colour,
+     * it *rotates* one: an evaporite whose red is over the ceiling and whose
+     * blue is not comes back with its red clipped and its blue untouched, so
+     * the hue slides toward grey exactly where the surface is brightest. The
+     * palette's reference ceiling keeps bedrock, regolith and basalt under the
+     * line by construction; the deposits above the brightest one a body can
+     * reach — an evaporite at 1.9 of the reference, on the ten Saturnian and
+     * Uranian moons where it lands at 1.42 — are what this catches.
+     */
+    const peak = max(max(raw.r, raw.g), raw.b)
+    const ground = raw.mul(
+      min(float(1), float(REFLECTANCE_CEILING).div(max(peak, float(1e-4)))),
     )
 
     const surfaceAlbedo = mix(ground, oceanColour, water)
@@ -660,7 +705,21 @@ export function createTerrainMaterial(): TerrainMaterial {
     const gradient = sign(determinant).mul(
       dFdx(height).mul(r1).add(dFdy(height).mul(r2)),
     )
-    const shaded = normalize(determinant.abs().mul(normal).sub(gradient))
+    /*
+     * The floor on `|det|` is a NaN guard, not a term.
+     *
+     * A quad that is degenerate in screen space — a sliver at the limb, or one
+     * whose two triangles carry the same `local` — has `sigmaX ≈ sigmaY ≈ 0`, so
+     * `det` is zero and `sign(det)` takes `gradient` to zero with it. The
+     * argument is then the zero vector, and `normalize` of that is NaN across
+     * the whole quad, through `mu0`, `mu` and `skyView` into the final colour.
+     * 1e-9 is far below any real determinant — it goes as the pixel footprint
+     * squared, which is 1e-4 m² on the finest patch under a landing ship — and
+     * its square survives float32, which 1e-20 would not.
+     */
+    const shaded = normalize(
+      max(determinant.abs(), float(1e-9)).mul(normal).sub(gradient),
+    )
 
     /* --- the light ---------------------------------------------------------- */
 
@@ -729,7 +788,10 @@ export function createTerrainMaterial(): TerrainMaterial {
       .mul(skyView)
       .mul(saturate(incidence.add(0.25)))
       .mul(sunlight)
-      .add(float(AMBIENT))
+      // Through `skyView` as well, and not beside it: a floor added after the
+      // hemisphere term is a flat wash, which is the one thing `AMBIENT` says
+      // it is not. A crater floor sees half the sky a plain does.
+      .add(skyView.mul(float(AMBIENT)))
     const indirect = surfaceAlbedo.mul(ambient)
 
     /*
@@ -803,16 +865,8 @@ export function createTerrainMaterial(): TerrainMaterial {
       write(sand, palette.sand)
       write(evaporite, palette.evaporite)
       write(ice, palette.ice)
-      mineralLow.value.setRGB(
-        palette.mineralLow.r,
-        palette.mineralLow.g,
-        palette.mineralLow.b,
-      )
-      mineralHigh.value.setRGB(
-        palette.mineralHigh.r,
-        palette.mineralHigh.g,
-        palette.mineralHigh.b,
-      )
+      paint(mineralLow, palette.mineralLow)
+      paint(mineralHigh, palette.mineralHigh)
       freshGain.value = palette.freshGain
       lunarLambert.value = palette.lunarLambert
       terminator.value = palette.terminator
@@ -822,27 +876,11 @@ export function createTerrainMaterial(): TerrainMaterial {
       maxElevation.value = palette.maxElevation
       seaEnabled.value = palette.seaLevel === null ? 0 : 1
       seaDatum.value = palette.seaLevel ?? 0
-      oceanColour.value.setRGB(
-        palette.oceanColour.r,
-        palette.oceanColour.g,
-        palette.oceanColour.b,
-      )
-      skyColour.value.setRGB(
-        palette.skyColour.r,
-        palette.skyColour.g,
-        palette.skyColour.b,
-      )
-      hazeColour.value.setRGB(
-        palette.hazeColour.r,
-        palette.hazeColour.g,
-        palette.hazeColour.b,
-      )
+      paint(oceanColour, palette.oceanColour)
+      paint(skyColour, palette.skyColour)
+      paint(hazeColour, palette.hazeColour)
       skyStrength.value = palette.airThickness
-      sunsetTint.value.setRGB(
-        palette.sunsetTint.r,
-        palette.sunsetTint.g,
-        palette.sunsetTint.b,
-      )
+      paint(sunsetTint, palette.sunsetTint)
       /*
        * The macro octave's frequency, in cycles per unit of the *direction*.
        *
@@ -853,9 +891,19 @@ export function createTerrainMaterial(): TerrainMaterial {
        */
       macroFrequency.value = (2 * Math.PI * datumRadius) / MACRO_METRES
     },
-    setAlbedoMap(map) {
+    setAlbedoMap(map, hasMap) {
+      /*
+       * The **key** decides whether a body is mapped; the texture only supplies
+       * the pixels. Two predicates was one predicate too many: `texturesFor`
+       * returns `NO_TEXTURES` for a key with no manifest entry, so a body that
+       * gained a key before its asset shipped had the palette calling it mapped
+       * — white reference, deposit ratios at one — while this called it
+       * unmapped and switched the invented cover and the ocean back on. A white
+       * planet with invented maria on it, and the sphere beside it drawing
+       * something else again.
+       */
       albedoMap.value = map ?? BLANK
-      mapped.value = map === null ? 0 : 1
+      mapped.value = hasMap ? 1 : 0
     },
   }
 }
@@ -895,8 +943,19 @@ interface Deposit {
 }
 
 function write(into: Deposit, from: SurfaceMaterial): void {
-  into.albedo.value.setRGB(from.albedo.r, from.albedo.g, from.albedo.b)
+  paint(into.albedo, from.albedo)
   into.params.value.set(from.roughness, from.grain, from.bump)
+}
+
+/**
+ * One palette colour into one uniform.
+ *
+ * Spelled out, each of these names its field three times, which is the shape a
+ * `skyColour.b` pasted into the `hazeColour` block type-checks through and then
+ * reads as an art choice rather than as a bug.
+ */
+function paint(into: { value: Color }, from: LinearRgb): void {
+  into.value.setRGB(from.r, from.g, from.b)
 }
 
 /**
@@ -910,11 +969,10 @@ function write(into: Deposit, from: SurfaceMaterial): void {
  * the night side is exactly black, which is true and is a hole in the frame.
  *
  * Three percent is where a night limb reads as a dark planet against darker
- * space. It is not the scene's own `ambientLight`, which this material no
- * longer sees: that one is a fill for the ship and the near-field props, and at
- * 0.16 through the old standard material it lit the night side to a tenth —
- * bright enough to flatten the terminator, which is what `SceneView` warns
- * about.
+ * space. It is not the scene's own `ambientLight`, which this material does not
+ * see: that one is a fill for the ship and the near-field props, and at 0.16 it
+ * lights a night side to a tenth — bright enough to flatten the terminator,
+ * which is what `SceneView` warns about.
  *
  * It is scaled by how much sky the point can see, so a crater floor is darker
  * at night than the plain around it rather than a flat wash.

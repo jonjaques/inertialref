@@ -564,9 +564,9 @@ export function createStarfieldMaterial(capacity: number): StarfieldMaterial {
  */
 
 /*
- * `createTerrainMaterial` used to live here: one `MeshStandardNodeMaterial`
- * with a flat colour and the CDLOD morph in its vertex stage. It is gone. The
- * ground is the picture of the planet now that the quadtree draws the whole
- * disk, and a rough dielectric sphere under the scene's ambient light is not
- * what a regolith world looks like at any phase angle. See `render/terrain.ts`.
+ * The streamed ground is `render/terrain.ts`, not this file. It carries its own
+ * photometry rather than a standard material's, because the quadtree draws the
+ * whole disk: the ground *is* the picture of the planet, and a rough dielectric
+ * sphere under the scene's ambient light is not what a regolith world looks
+ * like at any phase angle.
  */

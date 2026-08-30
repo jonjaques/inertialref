@@ -28,6 +28,7 @@ import {
   packCover,
   type SurfaceCover,
   surfaceCover,
+  unpackCover,
 } from './cover.ts'
 import { CANONICAL_AMPLITUDE_FLOOR, terrainSketch } from './sketch.ts'
 import type { Body, SurfaceParameters } from './system.ts'
@@ -387,12 +388,7 @@ export function surfaceCoverAt(
 ): SurfaceCover {
   const bytes = new Uint8Array(COVER_CHANNELS)
   evaluate(surface, Vec.normalize(direction), bytes, 0)
-  return {
-    bright: (bytes[0] as number) / 255,
-    dark: (bytes[1] as number) / 255,
-    mineral: (bytes[2] as number) / 255,
-    ice: (bytes[3] as number) / 255,
-  }
+  return unpackCover(bytes, 0)
 }
 
 /**

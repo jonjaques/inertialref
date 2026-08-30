@@ -238,9 +238,10 @@ const TERRAIN_RELIEF_PIXELS = 8
  * by design because the second is taken from where the eye is *going*, so three
  * times the cap is the working set with room to spare.
  *
- * A bordered 65×65 field is 19 KB, so at a cap of 1,024 this is 3,072 fields
- * and 58 MB. Both numbers move with `DEFAULT_MAX_PATCHES` rather than with
- * anything here, which is why they are stated as arithmetic.
+ * A bordered 65×65 field is 19 KB of elevations and 17 KB of cover — 36 KB — so
+ * at a cap of 1,024 this is 3,072 fields and 110 MB. Both numbers move with
+ * `DEFAULT_MAX_PATCHES` rather than with anything here, which is why they are
+ * stated as arithmetic.
  */
 export const FIELD_CACHE = DEFAULT_MAX_PATCHES * 3
 
@@ -287,12 +288,15 @@ export const FIELD_CACHE = DEFAULT_MAX_PATCHES * 3
  * 1,450 against 1,152. `FIELD_CACHE` above carries the same argument for
  * heightfields; geometry never got it.
  *
- * A patch is 203 KB of vertex buffers, which is the expensive half of terrain's
- * memory and the half attribute packing would halve. This is a *ceiling*, not
- * an allocation — what is resident is the working set, ~700 patches and 142 MB
- * at 1600×900, 1,597 and 324 MB at 3840×2400 — so raising it costs nothing at
- * the sizes that already fit. Full, it is **416 MB**, which is the number to
- * weigh against a strobe and against the 208 MB the selection alone quotes.
+ * A patch is 220 KB of vertex buffers — 203 KB of positions and normals, plus
+ * the 17 KB of morph cover it owns; the unmorphed cover beside it is the
+ * field's array by reference and is counted there. That is the expensive half
+ * of terrain's memory and the half attribute packing would halve. This is a
+ * *ceiling*, not an allocation — what is resident is the working set, ~700
+ * patches and 154 MB at 1600×900, 1,597 and 351 MB at 3840×2400 — so raising it
+ * costs nothing at the sizes that already fit. Full, it is **450 MB**, which is
+ * the number to weigh against a strobe and against the 208 MB the selection
+ * alone quotes.
  */
 export const GEOMETRY_CACHE = DEFAULT_MAX_PATCHES * 2
 
@@ -343,9 +347,14 @@ export interface TerrainState {
   /**
    * What the ground on this body is made of, or null when nothing is streaming.
    *
-   * Derived from the body every frame rather than kept: it is twenty multiplies
-   * and a cache keyed by body address is a thing to invalidate on a retarget,
-   * a reseed and a catalog bump.
+   * Kept against the resolved `Body` rather than rebuilt each frame, and the
+   * cost that decides it is allocation rather than arithmetic: the palette is
+   * twenty multiplies but about twenty short-lived objects, six of them nested
+   * records with a colour apiece, and `update` runs every frame terrain streams.
+   * There is nothing to invalidate — the body is an immutable object out of the
+   * world, so a different world, a retarget or a reseed is a different
+   * reference, and the identity check catches all three the way
+   * `terrainSketch`'s `WeakMap` does.
    */
   readonly palette: TerrainPalette | null
   /**
@@ -410,6 +419,15 @@ export class TerrainStreamer {
     eye: Vec3
   } | null = null
   #palette: TerrainPalette | null = null
+  /**
+   * The body the kept palette was derived from, and the palette itself.
+   *
+   * Separate from `#palette`, which `#forget` nulls: a streamer that stops
+   * drawing has no palette to report, but the one it derived is still the one
+   * this body wants when the relief clears the gate again.
+   */
+  #paletteBody: Body | null = null
+  #paletteValue: TerrainPalette | null = null
   #datumRadius = 1
   /**
    * Last eye in body-fixed axes, for the velocity the request set is
@@ -626,7 +644,11 @@ export class TerrainStreamer {
       scale: body.placement.compression,
       eye: eyeLocal,
     }
-    this.#palette = terrainPalette(surface)
+    if (surface !== this.#paletteBody) {
+      this.#paletteBody = surface
+      this.#paletteValue = terrainPalette(surface)
+    }
+    this.#palette = this.#paletteValue
     this.#datumRadius = surface.radius
 
     const { lens, viewport } = this.lensView ?? DEFAULT_LENS_VIEW
