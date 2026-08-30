@@ -116,7 +116,10 @@ two-meter stance on Luna is level 17 with 895 patches and 7.33 M triangles at
 frames, `starved` zero and both caches well under their caps, which is what
 raising `DEFAULT_MAX_PATCHES` was for. Reaching that state at retina takes
 between one and three minutes, because 1,562 patches at 43 ms is 67 s of
-single-core generation and the pool does not divide it far enough.
+single-core generation and a pool of four does not divide it far enough. That
+figure is taken at a ceiling of four workers; it is eight now — worth three
+drawn levels in twenty seconds on a Mars landing, and not re-measured here.
+[perf](../plans/perf.md) § "The heightfield queue" has the table.
 
 **A rock's photometry is not settled.** Under a low sun a boulder reads as a
 solid, correctly lit rock; under a high one it reads as a black silhouette

@@ -127,14 +127,17 @@ function rendererKey(
 export default function App({ catalog }: { catalog: StarCatalog }) {
   const engine = engineInstance(catalog)
   /*
-   * The engine's latest description, and whether a cutscene is playing — both
-   * read from the sampler in `state/engineStore.ts` rather than held here.
+   * Whether a cutscene is playing — read from the sampler in
+   * `state/engineStore.ts` rather than held here.
    *
-   * `status` is a fresh object on every sample, so selecting it re-renders this
-   * component at the sample rate exactly as the old `useState` did; the
-   * difference is that a panel can now subscribe to the field it needs instead
-   * of being handed the whole thing. `cinema` is a boolean, so it re-renders
-   * when it flips and not eight times a second.
+   * What is deliberately *not* read here is `status`. It is a fresh object
+   * graph on every sample, so selecting it re-renders this component — and
+   * everything under it, the catalog's every row included — at the sample
+   * rate. Measured on the shipped build in the planetarium: 4–5 ms of
+   * react-dom work eight times a second, the largest avoidable cost on the
+   * main thread, and in the dev build each of those was a whole dropped
+   * frame. The panels that display live figures subscribe to the store
+   * themselves, which is the subscription model the store's header promises.
    *
    * Only the *chrome* hangs off `cinema` — the dock, the flight strip, the
    * crosshair all step out of the frame so a capture is the picture and nothing
@@ -142,7 +145,6 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    * exists because React needs a re-render to unmount chrome, and 8 Hz is fast
    * enough for a thing a human just clicked.
    */
-  const status = useEngine((snapshot) => snapshot.status)
   const cinema = useEngine((snapshot) => snapshot.cinema)
   /*
    * Which mode is running, derived from the URL rather than held.
@@ -515,7 +517,6 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
   const dev = {
     panels: devPanels({
       engine,
-      status,
       render: renderState,
       graphics: graphicsState,
       camera: cameraState,
@@ -750,7 +751,6 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
               >
                 <ModeRoutes
                   engine={engine}
-                  status={status}
                   camera={cameraState}
                   dev={dev}
                   onNotice={flash}

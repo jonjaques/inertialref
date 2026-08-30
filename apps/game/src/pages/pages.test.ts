@@ -9,6 +9,7 @@ import {
   HOME,
   modeForPath,
   overlayBackground,
+  QUERY,
   overlaySurface,
   PROFILE,
   resolvedLocation,
@@ -252,6 +253,20 @@ describe('the surface a dialog belongs to', () => {
       '/cinema/tng-intro',
     ])
       expect(overlaySurface(path)).toBe('none')
+  })
+
+  it('pins the query keys that are part of the public surface', () => {
+    /*
+     * These two are read from outside the app as well as inside it —
+     * `scripts/drive.mjs` sets `presentation` on every URL it navigates to, and
+     * `workers` is how the pool-size table in `engine/browserWorker.ts` gets
+     * re-run on a machine that doubts it. The driver imports `QUERY` rather
+     * than spelling either by hand, so a rename moves both together; this pins
+     * the *strings*, because they are also in prose, in the skill card and in
+     * two plans, and none of those move with a rename.
+     */
+    expect(QUERY.presentation).toBe('presentation')
+    expect(QUERY.workers).toBe('workers')
   })
 
   it('answers for a path it has never heard of without throwing', () => {

@@ -579,11 +579,14 @@ const detailFloorCache = new WeakMap<SurfaceParameters, Map<string, number>>()
  * the band stack for a body, so nothing is JIT-warm when it runs — the same
  * search costs 4 to 16 ms once the field has been sampled, and quoting that
  * figure would be quoting a number the application never pays. It is memoized,
- * and it is paid by `TerrainStreamer.#update` on the frame a body becomes the
- * terrain target: two dropped frames exactly when the player arrives. Nothing
- * about it needs the main thread — `HeightfieldRequestPayload` already carries
- * everything it reads — so the number is here because it is what would justify
- * making it a second task on the pool.
+ * and the cold number is what a body costs the first time anything asks — which
+ * is why nothing in the browser asks on the main thread. It reads only what
+ * `HeightfieldRequestPayload` already carries, so it is a second task on the
+ * pool, `universe.surfaceDetailFloor`, and the streamer holds a body's ground
+ * back for the frames it takes rather than paying it inside the frame that body
+ * arrives. The synchronous path here is what a host with no pool gets: the
+ * headless runner, the tests and the Node benchmarks, none of which has a frame
+ * to drop.
  *
  * This lives beside `elevationAt` because it is a property of those bands and
  * has to move when they do — the band stack put crater rims and scarps into the

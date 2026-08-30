@@ -25,11 +25,13 @@
  *  - A real window, not `--headless`. Headless macOS Chrome falls back to a
  *    software WebGPU adapter, and a software adapter is not the thing under test.
  *
- * The expensive thing here is boot — about eleven seconds of shader warm and
- * body build, on top of the dev server's own start. So Chrome is left running
+ * The expensive thing here is boot — about five seconds of shader warm and body
+ * build, on top of the dev server's own start. So Chrome is left running
  * between invocations and a second call attaches to the booted page instead of
- * reloading it: measured, 17 s cold against 70 ms warm. That is what makes a
- * batch of steps worth writing on one command line:
+ * reloading it: measured, 6 s cold against 80 ms warm. Most of that cold figure
+ * is the dev server and Chrome rather than the page — `?presentation=occluded`
+ * below is what keeps the page's own boot to one warm-up census. That is what
+ * makes a batch of steps worth writing on one command line:
  *
  *     node scripts/drive.mjs --js "ir.look('g:milky-way/s:SOL/b:2')" \
  *                            --wait 2000 --shot earth.jpg
@@ -46,6 +48,12 @@ import { parseArgs, promisify } from 'node:util'
 import { analyseFrames, differenceMap, reportFrames } from './frameDiff.mjs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+// The key table itself, not a copy of one of its values. Node strips the types
+// on the way in — `paths.ts` imports nothing at runtime — and `scripts/brand/`
+// already reaches into `apps/game/src` this way. A literal here is a twin of
+// `QUERY.presentation` that nothing holds to it, and the rename that broke it
+// would show up as a slow boot rather than as an error.
+import { QUERY } from '../apps/game/src/pages/paths.ts'
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url))
 const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
@@ -162,7 +170,7 @@ Lifecycle:
   --down             close the Chrome and the dev server this rig started
 
 Chrome stays up between invocations and the next call attaches to the booted
-page: 17 s cold, 70 ms warm. --down when you are finished.`
+page: 6 s cold, 80 ms warm. --down when you are finished.`
 
 const { values, tokens } = parseArgs({
   options: OPTIONS,
@@ -176,7 +184,30 @@ if (values.help === true) {
 }
 
 const PORT = Number(values.port)
-const URL_ = String(values.url)
+/*
+ * The asked-for URL, plus the one thing this rig has to tell the page about
+ * itself.
+ *
+ * This Chrome is occluded — it is behind whatever the human is doing — and
+ * focus emulation is what makes it run animation frames anyway. The side
+ * effect is that `document.visibilityState` reports `visible` for a window
+ * that never composites, so the presentation watchdog's pixel readback comes
+ * back transparent black for a renderer that is fine, climbs its whole
+ * recovery ladder, and rebuilds the canvas: a second full preload and warm-up
+ * census 4.5 s after the first, roughly 6.5 s of every boot here, and an
+ * uncaught dispose from inside Three on the remount. No player pays it, and
+ * every boot figure taken from this rig did.
+ *
+ * `?presentation=occluded` tells the page the probe is unreadable rather than
+ * black — `QUERY.presentation` in `apps/game/src/pages/paths.ts` carries the
+ * argument. It is added to whatever `--url` asks for, and the attach check
+ * below compares asked-for keys only, so it does not disturb the match.
+ */
+const URL_ = (() => {
+  const url = new URL(String(values.url))
+  url.searchParams.set(QUERY.presentation, 'occluded')
+  return url.toString()
+})()
 const WIDTH = Number(values.width)
 const HEIGHT = Number(values.height)
 const DPR = Number(values.dpr)
@@ -229,7 +260,7 @@ const count = (arg, flag, least) => {
 }
 
 /** Every numeric step argument, checked before the dev server, Chrome and an
- *  eleven-second boot: a typo'd `--wait` should cost a line of output, not the
+ *  six-second boot: a typo'd `--wait` should cost a line of output, not the
  *  whole start-up it sits behind. */
 function checkScript() {
   for (const { step, arg } of script) {
@@ -458,7 +489,7 @@ async function boot(send, { force }) {
   // same keys back as it plays — `CinemaPlayer` replaces `t` on every frame,
   // `PlanetariumMode` replaces `at` on every target — so an exact comparison
   // would miss on a page that is already showing exactly what was asked for,
-  // and turn every warm attach into an eleven-second re-boot.
+  // and turn every warm attach into a six-second re-boot.
   const wanted = new URL(URL_)
   const here = await evaluate(
     send,

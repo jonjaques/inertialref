@@ -195,7 +195,31 @@ export const objectOf = (
 const formatRegion = (r: RegionAddress): string =>
   `${r.face}.${r.level}.${r.i}.${r.j}`
 
+/**
+ * The text form of every address that is still reachable.
+ *
+ * An address is an immutable value object held for as long as the thing it
+ * names, so the string it formats to is a property of the object rather than
+ * of the moment — and this is called on a schedule that makes rebuilding it
+ * absurd. `snapshot()` formats every loaded body's address four times a frame
+ * (once for the field, once through `bodyFrameId`, twice through the
+ * body-fixed frame lookup): 129 bodies in Sol is over 30,000 formats and
+ * 23,000 template strings a second, on the one path every operating point
+ * pays. A `WeakMap` rather than a `Map` because a region address is built
+ * fresh and thrown away — those entries have to die with their key or this is
+ * a leak with a per-patch growth rate.
+ */
+const formatted = new WeakMap<UniverseAddress, string>()
+
 export function formatAddress(address: UniverseAddress): string {
+  const hit = formatted.get(address)
+  if (hit !== undefined) return hit
+  const text = format(address)
+  formatted.set(address, text)
+  return text
+}
+
+function format(address: UniverseAddress): string {
   const parts = [`g:${address.galaxy}`]
   if (address.kind === 'galaxy') return parts.join('/')
   parts.push(`s:${address.system}`)

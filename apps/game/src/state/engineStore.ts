@@ -1,4 +1,4 @@
-import { useStore } from 'zustand'
+import { useSyncExternalStore } from 'react'
 import { createStore, type StoreApi } from 'zustand/vanilla'
 import type { HarnessStatus, ObserverStatus } from '@inertialref/devtools'
 import type { Playhead } from '../cinema/session.ts'
@@ -14,12 +14,14 @@ import type { Playhead } from '../cinema/session.ts'
  *
  * Two things it buys that `useState` in `App` did not:
  *
- *   1. **Panels can subscribe instead of being handed props.** `useStore`
- *      is `useSyncExternalStore` with a selector, so a component that reads the
- *      tick re-renders when the tick changes and not when the frame graph does.
- *      Today every panel re-renders eight times a second because `App` holds
- *      the whole status and passes it down; that is the thing this exists to
- *      let the panels stop doing.
+ *   1. **Panels subscribe instead of being handed props.** `useEngine` is
+ *      `useSyncExternalStore` with a selector, so a component that reads the
+ *      tick re-renders when the tick changes and not when the frame graph
+ *      does. `App` reads no `status` at all, which is the point: it is the
+ *      root of the whole interface, and a fresh object graph selected there
+ *      re-renders the catalog's every row eight times a second — 4–5 ms of
+ *      react-dom work per sample on the shipped build. The four panels that
+ *      display live figures pay that rate alone.
  *   2. **React Compiler stops being a hazard.** The compiler assumes what a
  *      component derives is a pure function of its inputs, which is false for a
  *      component reading mutable engine fields — hence `'use no memo'` in
@@ -28,12 +30,14 @@ import type { Playhead } from '../cinema/session.ts'
  *      needed. Do not read this as license to point panels at live engine
  *      fields; it is the argument for pointing them here instead.
  *
- * zustand rather than a hand-rolled `useSyncExternalStore`: the selector
- * subscription, the equality bail-out and `useShallow` are the whole feature,
- * they are three files of subtle code to get right, and the tearing rules
- * around concurrent React are not a thing to re-derive. The store is created by
- * a factory so a test can have its own; the module singleton below is what the
- * app uses, alongside the engine singleton in `App.tsx`, for the same reason.
+ * zustand's *vanilla* store, and React's own `useSyncExternalStore` over it —
+ * see `useEngine` for why the hook is not `zustand/react`'s. The store carries
+ * the subscription, the snapshot identity and `useShallow`, which are the whole
+ * feature and three files of subtle code to get right; the hook is four lines
+ * because the tearing rules around concurrent React live in React. The store is
+ * created by a factory so a test can have its own; the module singleton below is
+ * what the app uses, alongside the engine singleton in `App.tsx`, for the same
+ * reason.
  */
 
 /** The presentation switches, as a panel reads them. */
@@ -189,9 +193,31 @@ export const engineStore = createEngineStore()
  * construction. That is correct for a component that reads most of it and
  * wrong for one that reads two fields; the fix for the second is a selector
  * that returns the two fields, wrapped in `useShallow`.
+ *
+ * `useSyncExternalStore` directly rather than zustand's `useStore`, for the
+ * third argument alone: zustand hands the *initial* state to a server render,
+ * which keeps hydration honest and is wrong for both renderers this app
+ * actually has. The browser never hydrates server markup, and the one
+ * renderer without a DOM is the test suite's `renderToStaticMarkup` — which
+ * samples the store first and then asserts the panel shows it, so handing it
+ * the empty boot snapshot would make every such assertion fail against
+ * "waiting for the first frame…".
+ *
+ * **`useShallow` is not optional here the way it was under `useStore`.** That
+ * hook went through `useSyncExternalStoreWithSelector`, which memoized the
+ * selection against the snapshot, so a selector that allocated cost one extra
+ * render a sample. React's own hook compares what `getSnapshot` returns with
+ * `Object.is` and nothing caches it, so a selector returning a fresh object
+ * never compares equal and re-renders forever — "The result of getSnapshot
+ * should be cached to avoid an infinite loop", then a pegged tab. A selector
+ * that builds anything wraps in `useShallow`; one that returns a scalar or a
+ * field off the snapshot does not need to.
  */
 export function useEngine<T>(select: (snapshot: EngineSnapshot) => T): T {
-  return useStore(engineStore, select)
+  // One closure, read for both the client and the server snapshot — see above
+  // for why the server one is the live store rather than the boot state.
+  const read = (): T => select(engineStore.getState())
+  return useSyncExternalStore(engineStore.subscribe, read, read)
 }
 
 export { useShallow } from 'zustand/react/shallow'

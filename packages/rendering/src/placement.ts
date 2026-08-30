@@ -1,7 +1,9 @@
 import type { Meters } from '@inertialref/shared'
 import {
+  Quaternion as Q,
   type RenderOrigin,
   toRenderSpace,
+  UV,
   type UniverseVector,
   Vec,
   type Vec3,
@@ -182,6 +184,72 @@ export function placeAt(
     tier,
     compressed: true,
     angularRadius: angle,
+  }
+}
+
+/**
+ * Place a whole path into a vertex buffer, the way `placeAt` places one point.
+ *
+ * Same arithmetic, no `RenderPlacement`. `OrbitTraces` re-places every vertex
+ * of every visible trace every frame — correctly, because compression is
+ * radial about the eye and the eye moves — and eight traces of 97 points was
+ * ~800 `placeAt` calls and several thousand short-lived objects a frame: the
+ * span read 0.57 ms on the shipped build in the planetarium and fed the
+ * scavenger that eats 3-5% of an idle main thread. Per point it was a
+ * `UV.translate` (three `carry` objects and a result), a `difference`, a
+ * `conjugate`, a `rotate`, three more vectors through `Vec.sub`/`scale`/`add`,
+ * and a placement record — for three floats. It also spent a `Math.asin` and
+ * an LOD selection on an angular radius and a tier that a line has no use for.
+ *
+ * What survives per point is the one call this must not inline: `difference`
+ * is the sector arithmetic and `spatial` owns it. A copy of it in the R3F layer
+ * is the defect `placeOnStarShell` exists to keep out of that layer.
+ *
+ * @param shift - a universe-axes displacement added to every point first. The
+ * caller's `UV.translate` per point was four allocations to express something
+ * affine: differencing is linear, so the shift can be rotated into render axes
+ * once and added there.
+ * @param out - three floats per point, in order. Writes `min(points.length,
+ * out.length / 3)` of them.
+ */
+export function placePathInto(
+  origin: RenderOrigin,
+  points: readonly UniverseVector[],
+  shift: Vec3,
+  radius: Meters,
+  eye: Vec3,
+  out: Float32Array,
+): void {
+  // Both constant over the path. Inside the loop the conjugate was rebuilt per
+  // point, because `rotateInverse` is `rotate(conjugate(q), v)`.
+  const inverse = Q.conjugate(origin.orientation)
+  const shifted = Q.rotate(inverse, shift)
+  const count = Math.min(points.length, Math.floor(out.length / 3))
+  for (let i = 0; i < count; i += 1) {
+    const point = points[i]
+    if (point === undefined) continue
+    const local = Q.rotate(inverse, UV.difference(point, origin.position))
+    const fx = local.x + shifted.x
+    const fy = local.y + shifted.y
+    const fz = local.z + shifted.z
+    const dx = fx - eye.x
+    const dy = fy - eye.y
+    const dz = fz - eye.z
+    const distance = Math.sqrt(dx * dx + dy * dy + dz * dz)
+    const surfaceDistance = Math.max(0, distance - radius)
+    if (surfaceDistance <= NEAR_LIMIT || distance === 0) {
+      // `placeAt`'s near-field branch: the untouched render-space position, not
+      // one reconstructed through the eye, so a trace and the terrain placed
+      // straight off the origin agree to the meter.
+      out[i * 3] = fx
+      out[i * 3 + 1] = fy
+      out[i * 3 + 2] = fz
+      continue
+    }
+    const factor = (radius + compressDistance(surfaceDistance)) / distance
+    out[i * 3] = eye.x + dx * factor
+    out[i * 3 + 1] = eye.y + dy * factor
+    out[i * 3 + 2] = eye.z + dz * factor
   }
 }
 

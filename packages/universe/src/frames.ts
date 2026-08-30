@@ -57,10 +57,32 @@ export function systemOfFrameId(id: FrameId): SystemId | null {
   const rest = id.slice(2)
   return isSystemId(rest) ? rest : null
 }
-export const bodyFrameId = (address: UniverseAddress): FrameId =>
-  frameId(`b:${formatAddress(address)}`)
-export const bodyFixedFrameId = (address: UniverseAddress): FrameId =>
-  frameId(`bf:${formatAddress(address)}`)
+/*
+ * Both memoized on the address object, for the reason `formatAddress` is.
+ *
+ * These are the other two strings `snapshot()` builds per body per frame, and
+ * a body's frame ids are as immutable as its address — `frameId` is a cast, so
+ * what is actually being cached is the concatenation. A `WeakMap` keyed by the
+ * address keeps a region address, which is built fresh per call, from
+ * accumulating.
+ */
+const bodyFrames = new WeakMap<UniverseAddress, FrameId>()
+const bodyFixedFrames = new WeakMap<UniverseAddress, FrameId>()
+
+export const bodyFrameId = (address: UniverseAddress): FrameId => {
+  const hit = bodyFrames.get(address)
+  if (hit !== undefined) return hit
+  const id = frameId(`b:${formatAddress(address)}`)
+  bodyFrames.set(address, id)
+  return id
+}
+export const bodyFixedFrameId = (address: UniverseAddress): FrameId => {
+  const hit = bodyFixedFrames.get(address)
+  if (hit !== undefined) return hit
+  const id = frameId(`bf:${formatAddress(address)}`)
+  bodyFixedFrames.set(address, id)
+  return id
+}
 /**
  * Angles in a frame id are formatted through this, not through `toFixed`
  * directly.

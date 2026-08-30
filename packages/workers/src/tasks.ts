@@ -17,6 +17,7 @@ import {
   type RegionAddress,
   regionAddress,
   type SurfaceGrammar,
+  surfaceDetailFloor,
   type SystemId,
   type SystemStub,
   walkBodies,
@@ -274,6 +275,58 @@ export const generateHeightfieldTask = defineTask<
   },
 })
 
+/**
+ * The fields of a `SurfaceParameters` that cross a structured clone.
+ *
+ * Derived from the heightfield request rather than retyped beside it, because
+ * "the two payloads describe a surface the same way" is the property that lets
+ * a worker parse it once — and retyped, that property is a sentence in a
+ * comment rather than something the compiler checks. Everything a *region*
+ * needs is what is subtracted.
+ */
+export type SurfaceDetailFloorRequest = Omit<
+  HeightfieldRequestPayload,
+  'region' | 'border'
+>
+
+export const surfaceDetailFloorTask = defineTask<
+  SurfaceDetailFloorRequest,
+  { readonly level: number }
+>({
+  /*
+   * The level floor, off the arrival frame.
+   *
+   * `surfaceDetailFloor` refines trial fields until the field stops selling
+   * detail, which is ~1,500 samples and 33-43 ms cold on the bodies measured
+   * here — and it is cold exactly once per body, in the frame the streamer
+   * first has that body underfoot. That was 85% of a 40 ms first-contact spike
+   * on Earth and of the 114 ms one on Proxima Centauri b, on the one frame a
+   * player is watching the ground arrive.
+   *
+   * Nothing in it needs the main thread; its own docstring said so. It reads
+   * only what the heightfield request already carries, and it is a pure
+   * function of that, so the answer is the same wherever it runs. The streamer
+   * holds the ground back for the frames it takes rather than blocking on it —
+   * which is what it already does for the heightfields themselves.
+   */
+  name: 'universe.surfaceDetailFloor',
+  version: 1,
+  run(payload) {
+    return {
+      level: surfaceDetailFloor(
+        {
+          seed: parseSeed(payload.surfaceSeed),
+          maxElevation: payload.maxElevation,
+          roughness: payload.roughness,
+          seaLevel: payload.seaLevel,
+          grammar: payload.grammar,
+        },
+        payload.resolution,
+      ),
+    }
+  },
+})
+
 export interface SurveySystemRequest {
   readonly seed: string
   readonly galaxy: string
@@ -355,5 +408,6 @@ export function createTaskRegistry(): TaskRegistry {
   registry.register(surveyRegionTask)
   registry.register(generateHeightfieldTask)
   registry.register(surveySystemTask)
+  registry.register(surfaceDetailFloorTask)
   return registry
 }

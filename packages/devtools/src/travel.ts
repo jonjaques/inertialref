@@ -57,7 +57,16 @@ export interface TravelTarget {
   readonly depth: number
   /** Kind, size and orbit, already formatted for display. */
   readonly detail: string
-  /** Distance from wherever the listing was taken, right now. */
+  /**
+   * Distance from wherever the listing was taken.
+   *
+   * From the sweep that produced the row, which is not always the last one:
+   * `sameTargets` keeps a listing whose every *text* is unchanged, so a
+   * subscriber holding rows through a hover holds this number from whenever
+   * the text last moved. It is wrong by less than `distanceText`'s own
+   * resolution and by no more; anything that needs the meter wants
+   * `UV.distance` against a fresh pose rather than a row of a listing.
+   */
   readonly distance: Meters
   readonly distanceText: string
   /** Whether `land` will work: solid ground and big enough to be a place. */
@@ -113,6 +122,101 @@ export interface TravelTarget {
    * and a list that cannot be collapsed is a list nobody scrolls twice.
    */
   readonly parent: string | null
+}
+
+/** The scalar half of a row: every field `sameTargets` compares with `!==`. */
+type ComparedField = Exclude<keyof TravelTarget, 'distance' | 'colour'>
+
+/**
+ * `true` for a field `!==` can decide, and `never` for one it cannot.
+ *
+ * The second half of the guard below, and the half that is easy to leave out.
+ * `Record<ComparedField, true>` proves the list is *complete*; it says nothing
+ * about whether each listed field is comparable by identity. Widen `parent` to
+ * a row reference or `children` to an array of ids and the table still
+ * typechecks, while `x[key] !== y[key]` becomes true on every fresh survey —
+ * `sameTargets` returns false forever, and the catalog goes back to
+ * re-rendering every row at the poll rate with nothing failing. Mapping the
+ * value type through this makes that an error at the declaration instead.
+ *
+ * `[T] extends [...]`, in brackets, because a bare `T extends` distributes over
+ * unions — and every field most at risk of being widened is already a union.
+ * Distributed, `ByIdentity<Row | null>` is `never | true`, which is `true`, so
+ * the guard passed exactly the three nullable fields it was written for
+ * (`parent`, `spectralType`, `bodyKind`) and caught only the non-nullable ones.
+ * The tuple makes the check a single non-distributive comparison.
+ */
+type ByIdentity<T> = [T] extends [string | number | boolean | null | undefined]
+  ? true
+  : never
+
+/**
+ * The comparison's field list, as a table the type checker keeps complete.
+ *
+ * A chain of `x.name !== y.name || …` is the faster spelling and the one that
+ * goes quietly stale: a field added to `TravelTarget` next year is simply
+ * absent from it, the panel stops redrawing when that field alone changes, and
+ * nothing fails. `Record` over the key set makes the omission an error at the
+ * moment the field is declared, which is the only moment anyone is looking.
+ *
+ * Two keys are deliberately not in it. `distance` is the exclusion
+ * `sameTargets` is about. `colour` is a nested value, so `!==` on it is true on
+ * every sweep and would defeat the whole bail-out; it is compared component-wise
+ * below.
+ */
+const COMPARED: { [K in ComparedField]: ByIdentity<TravelTarget[K]> } = {
+  kind: true,
+  address: true,
+  name: true,
+  system: true,
+  depth: true,
+  detail: true,
+  distanceText: true,
+  landable: true,
+  loaded: true,
+  provenance: true,
+  bodyKind: true,
+  spectralType: true,
+  radius: true,
+  semiMajorAxis: true,
+  children: true,
+  parent: true,
+}
+
+const COMPARED_KEYS = Object.keys(COMPARED) as readonly ComparedField[]
+
+/**
+ * Whether two listings would draw the same panel.
+ *
+ * The survey rebuilds every row it answers with, so a poll that re-reads an
+ * unchanged sky still hands its subscriber a fresh array — and in React a
+ * fresh array is a re-render of every row in the catalog, at the poll rate,
+ * forever. This is the bail-out: everything a row displays is compared, and
+ * `distance` alone is not, because it is the raw measure that moves by meters
+ * every sweep while `distanceText` — the thing a reader sees, at the
+ * resolution that matters — holds still. A listing whose every text is
+ * unchanged has moved less than the text can say, and the stale raw number
+ * kept with it is wrong by less than that.
+ */
+export function sameTargets(
+  a: readonly TravelTarget[],
+  b: readonly TravelTarget[],
+): boolean {
+  if (a === b) return true
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i += 1) {
+    const x = a[i] as TravelTarget
+    const y = b[i] as TravelTarget
+    for (const key of COMPARED_KEYS) if (x[key] !== y[key]) return false
+    const cx = x.colour
+    const cy = y.colour
+    if (cx === null || cy === null) {
+      if (cx !== cy) return false
+    } else if (cx.r !== cy.r || cx.g !== cy.g || cx.b !== cy.b) {
+      return false
+    }
+  }
+  return true
 }
 
 export interface TravelTargetOptions {

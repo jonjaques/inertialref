@@ -1,5 +1,5 @@
-import type { WorldInspection } from '@inertialref/devtools'
 import type { GameEngine } from '../engine/GameEngine.ts'
+import { useEngine } from '../state/engineStore.ts'
 import { useActionTitle } from '../input/useKeymap.ts'
 import { Action } from './Action.tsx'
 import type { HudCommands } from './controls.ts'
@@ -34,15 +34,17 @@ import { Section } from './Section.tsx'
 
 export function ControlsPanel({
   engine,
-  world,
   commands,
   onNotice,
 }: {
   engine: GameEngine
-  world: WorldInspection | null
   commands: HudCommands
   onNotice: (message: string) => void
 }) {
+  // Subscribed here rather than handed down: the world inspection is a fresh
+  // object every sample, so this is what re-renders the clock readout at the
+  // sampler's 8 Hz without the workspace around it paying the same rate.
+  const world = useEngine((snapshot) => snapshot.status?.world ?? null)
   const pause = useActionTitle('time.pause', 'Pause the simulated clock')
   const slower = useActionTitle('time.slower', 'Slower')
   const faster = useActionTitle('time.faster', 'Faster')

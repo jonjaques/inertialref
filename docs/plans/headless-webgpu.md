@@ -21,14 +21,14 @@ machine; the ones that would move on another are called out where they appear.
 
 Shader work is the one part of this codebase with no fast feedback. Everything
 else answers in a Node test in milliseconds; a change to a TSL graph is answered
-by [`scripts/drive.mjs`](../../scripts/drive.mjs), which pays about **17 s** to
+by [`scripts/drive.mjs`](../../scripts/drive.mjs), which pays about **6 s** to
 boot Chrome and the dev server before it can show anything.
 
-| Question                           | Browser rig           | This                 |
-| ---------------------------------- | --------------------- | -------------------- |
-| Does this material still compile?  | 17 s cold, 70 ms warm | **24–37 ms**         |
-| What WGSL does this graph emit?    | not available         | **5 ms**             |
-| Is this shader's arithmetic right? | eyeball a screenshot  | **4–7 ms**, asserted |
+| Question                           | Browser rig          | This                 |
+| ---------------------------------- | -------------------- | -------------------- |
+| Does this material still compile?  | 6 s cold, 80 ms warm | **24–37 ms**         |
+| What WGSL does this graph emit?    | not available        | **5 ms**             |
+| Is this shader's arithmetic right? | eyeball a screenshot | **4–7 ms**, asserted |
 
 A whole vitest file — four GPU tests, including compiling a production material
 to a Metal pipeline — runs in **136 ms**. A standalone Node process that boots

@@ -104,7 +104,7 @@ node scripts/drive.mjs --down
 ```
 
 Steps run in the order written, in one session, and Chrome stays up between
-invocations — boot is about ten seconds and every call after the first attaches
+invocations — boot is about five seconds and every call after the first attaches
 to the booted page in well under one. Batch the steps rather than paying a
 process per question. `--help` lists them all.
 
@@ -123,11 +123,27 @@ three; they are here because they explain what it is doing:
    `engine.gl` null, which looks like a rendering bug and is not one.
 4. **A wedged Chrome needs `--down` and a fresh start.** Reloading is not always
    enough to recover its GPU state.
-5. **Chrome left running is contention the test suite feels.** The driver keeps
+5. **The page is told its own pixels are unreadable, with `?presentation=occluded`,
+   and the driver adds it to every URL.** The presentation watchdog decides
+   whether the canvas has ever presented by reading the bitmap back, and skips
+   the check while `document.visibilityState` is not `visible` — because an
+   occluded window legitimately never presents. Focus emulation, which is what
+   makes trap 1 work, reports `visible` for a window that is still behind
+   everything else, so the gate opened on a readback that is transparent black
+   for a perfectly healthy renderer. The ladder then exhausted and remounted
+   the canvas on **every** automated boot: a second full preload and warm-up
+   census 4.5 s after the first — about 6.5 s of a 10.2 s `navigation to first
+light` — an uncaught dispose from inside Three on the way, and a drawing
+   buffer that came back at 3200×1800 for a rig asking for 1600×900 at DPR 1,
+   because `useDevicePixelRatio`'s media query does not re-fire under
+   emulation. **Every terrain figure taken after a rebuild in this rig was a
+   retina figure**, which is the trap below arriving without being asked for.
+   Boot from this rig is now one census and ~4.3 s to first light.
+6. **Chrome left running is contention the test suite feels.** The driver keeps
    it up on purpose, and a full `pnpm test` beside it has timed out on a
    different unrelated file each run and passed clean once `--down` had run.
    A single timeout that moves between runs is a reading about the machine.
-6. **`--serve` cannot start a dev server in a worktree that has never built** —
+7. **`--serve` cannot start a dev server in a worktree that has never built** —
    `wrangler dev` needs `apps/game/dist`. Use `pnpm dev:client` and `--no-serve`,
    or build once. [development](../guides/development.md) § Commands.
 
@@ -140,6 +156,24 @@ the root URL, neither `ir.land` nor `ir.orbit(address, 8)` was close enough:
 both left `visited: 0` and `lens: null`. `ir.visit(address, { site: 'summit',
 height: 2 })` **in the planetarium** is what makes the streamer run. Check
 `visited` before concluding anything about ground.
+
+**And `visited` is a figure about the last frame that walked, not about this
+one.** `visited`, `culled`, `starved` and `level` are mirrors of whichever
+frame last re-selected, and a converged stance re-selects on none of them — the
+walks are a pure function of the eye, the optics, the level floor and the
+geometry cache, so a frame in which none of them moved reuses the answer. The
+counter that says whether a frame walked is `selections`, a total since the
+streamer was made: two reads a second apart that differ by sixty are a
+selection recomputed every frame, and two that agree are the memo holding.
+Read it beside `visited` or the other four will describe a frame that walked
+nothing.
+
+**A pooled streamer's first frame on a body selects nothing at all.** The
+subdivision floor is a worker answer — `surfaceDetailFloor` is 33–43 ms cold
+and used to be paid inside the arrival frame — so a body it has not measured
+yet has no ceiling to select against and the ground waits, the same way it
+waits for the heightfields themselves. `--wait` through it; a single frame
+after `ir.visit` reports zeros for a reason that is not the gate above.
 
 ---
 
@@ -168,6 +202,40 @@ Off is the default everywhere and a recording without `?timing=trace` carries
 none of these tracks. The worker tracks are in a trace and never in a drain,
 because each side of the boundary times against its own `timeOrigin`.
 [ADR-0022](../adr/0022-the-timeline.md).
+
+### Measuring so the number means something
+
+**Take a performance figure on a quiet machine, and take nothing else at the
+same time.** A worker figure is the one that goes wrong silently: the same
+summit arrival reads 45 ms runs quiet and 285 ms with a build running beside
+it, so a `pnpm test` in another shell does not make the measurement noisy, it
+makes it a measurement of the test run. Finish the suite, let the machine
+settle, then measure. Chrome left up by the driver is part of the same
+contention in both directions — trap 6 above is this one seen from the test
+suite's side.
+
+**Say which build.** Dev React is about five times the shipped cost and every
+number below is a dev-build number; both are real and only one is about a
+player. `pnpm preview` on 8787 is the shipped one, and it is worth re-measuring
+anything that lands in a design document there.
+
+**Name the operating point, and prefer two.** A figure measured at one is a
+figure about that point. The four that recur, all dev build, 1600×900 at DPR 1
+on an Apple M5, with `Engine/frame` vsync-bound at 16.7 ms throughout:
+
+| point                             | engine  | notable                                        |
+| --------------------------------- | ------- | ---------------------------------------------- |
+| Planetarium, Earth from 14,400 km | 0.36 ms | snapshot 0.26, orbitTraces 0.13, starfield ~0  |
+| Converged summit stance, 2 m      | 0.45 ms | terrainPatches 1.10, terrain 0.15, select 0.01 |
+| Four retargets in a Sol tour      | 0.33 ms | orbits max 0.20, bodies max 25.7 on one frame  |
+| Jump to a generated system        | 0.45 ms | one `Boot/bake atmosphere` of 39.7 ms mid-jump |
+
+**`?workers=N` overrides the pool size**, bounded at sixteen, and it is how the
+ceiling in `engine/browserWorker.ts` was chosen rather than assumed. The
+experiment is worth re-running on any machine whose core count is not this
+one's: land, converge for twenty seconds, and read `jobs/s`, `averageRunMs` and
+`ir.terrain().level` together — throughput alone hides the dilation, and the
+drawn level is the one a player watches.
 
 ---
 

@@ -180,6 +180,17 @@ renderer`), and rebuilding the renderer re-runs the warm-up. Nothing could show
 that as a shape before: the panel does not exist yet at boot, and the log is two
 identical sentences four seconds apart with nothing relating them.
 
+**All three have since been acted on, and the first and third are superseded as
+figures rather than as findings.** `terrain.select` is a held answer at a
+converged stance and the walks no longer run every frame; the doubled census was
+the driver's own window — focus emulation reports `visible` for a Chrome that
+never composites, so the presentation watchdog rebuilt a healthy renderer, which
+`?presentation=occluded` now stands down from. No player ever paid the second
+census. What the numbers above are kept for is the shape of the argument: each
+was a claim no existing instrument could have made, and the first is still the
+worked example of a figure measured at one operating point being a figure about
+that point. [`docs/plans/perf.md`](../plans/perf.md) carries the current ones.
+
 **Over-budget now has one definition and three consumers.** `FRAME_BUDGET_MS`,
 `DROPPED_FRAME_MS`, `ENGINE_BUDGET_MS` and `DRAW_CALL_BUDGET` move from
 `hud/PerfPanel.tsx` to `engine/perfBudgets.ts`, because `hud/` sits above

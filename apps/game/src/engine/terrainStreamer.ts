@@ -35,6 +35,7 @@ import {
   type LensView,
   type PatchPlacement,
   patchPlacement,
+  regionKey,
   type RenderBody,
   type RenderPatch,
   pixelsPerRadian,
@@ -45,7 +46,12 @@ import {
   terrainPalette,
   terrainPatchKey,
 } from '@inertialref/rendering'
-import { generateHeightfieldTask, type WorkerPool } from '@inertialref/workers'
+import {
+  generateHeightfieldTask,
+  type JobHandle,
+  surfaceDetailFloorTask,
+  type WorkerPool,
+} from '@inertialref/workers'
 import { PhaseClock, TERRAIN_PHASE, TERRAIN_SHORT } from './frameTiming.ts'
 import { ScatterField, type ScatterState } from './scatterField.ts'
 
@@ -134,11 +140,13 @@ const REQUESTS_PER_FRAME = 24
  * second the first is unbounded: `#request` filtered on "not cached and not
  * already asked for" and nothing consulted how much was already in flight, so at
  * 24 a frame it committed the whole 400-to-1,024-patch wanted set inside forty
- * frames. `WorkerPool`'s queue is uncapped and the pool is two to four workers
- * at 9 to 37 ms a patch, which drains 50 to 400 a second against a submit rate
- * of 1,440 — so after a camera turn the pool spent seconds generating ground
- * nobody was looking at before it reached the new selection, and
- * `PREFETCH_SECONDS` was describing a queue rather than a lookahead.
+ * frames. `WorkerPool`'s queue is uncapped and `poolSize()` is one to eight
+ * workers at 9 to 37 ms a patch — 27 to 888 a second at the ends of that
+ * range, against a submit rate of 1,440 — so without a depth the pool spends
+ * seconds after a camera turn generating ground nobody is looking at before it
+ * reaches the new selection, and `PREFETCH_SECONDS` describes a queue rather
+ * than a lookahead. The measured figure on the machine `browserWorker.ts`
+ * tables is 41.6 jobs a second at eight workers, converging on Mars.
  *
  * A hundred and twenty-eight is a little over one rung of a whole-disk
  * selection, which is about ninety patches. That is the unit that matters,
@@ -227,6 +235,32 @@ const BUILDS_PER_FRAME = 4
  * opacity fade traded for a transparency ramp.
  */
 const TERRAIN_RELIEF_PIXELS = 8
+
+/**
+ * How far the eye may move, in body-fixed meters, before a held selection is
+ * re-walked.
+ *
+ * The refinement predicate compares eye distance against cell spacings of
+ * meters and up, so millimeters cannot change a selection except by landing
+ * exactly on a refinement threshold — where being one frame late is the cost
+ * of a patch that was already deep inside its morph band. What the epsilon
+ * actually absorbs is the pose round-trip: a stance is fixed in body-fixed
+ * axes, but the camera comes back through universe coordinates, and the
+ * reconversion jitters by ~0.15 mm frame to frame — measured standing on
+ * Earth's summit over 120 frames. Five millimeters is 30× that jitter and
+ * two orders under the finest cell the zoo refines to.
+ */
+const SELECTION_EYE_EPSILON: Meters = 0.005
+
+/**
+ * The same threshold squared, because the frame test compares against it.
+ *
+ * `Vec.length` is `Math.hypot`, which is careful about overflow at a cost of
+ * roughly an order of magnitude over a multiply — and the quantity here is
+ * millimeters, where there is nothing to overflow. The predicate is identical
+ * on the squared pair.
+ */
+const SELECTION_EYE_EPSILON_SQ = SELECTION_EYE_EPSILON * SELECTION_EYE_EPSILON
 
 /**
  * Heightfields held, as a multiple of the largest selection.
@@ -406,9 +440,43 @@ export interface TerrainState {
 export class TerrainStreamer {
   readonly #pool: WorkerPool | null
   readonly #scatter = new ScatterField()
-  readonly #fields = new Map<string, CachedField>()
-  readonly #patches = new Map<string, RenderPatch>()
-  readonly #inFlight = new Set<string>()
+  /*
+   * Keyed by `regionKey` — packed arithmetic, no body in it — because the
+   * request filter names over a thousand regions a frame and building that
+   * many template strings was most of `terrain.request`'s 0.7 ms. A body
+   * change clears these caches and `#epoch` drops the answers that outlive
+   * one, which is what lets the key stay body-free; `terrainPatchKey` remains
+   * the spelling for the renderer's mesh cache, the one consumer that retains
+   * across a retarget.
+   */
+  readonly #fields = new Map<number | string, CachedField>()
+  readonly #patches = new Map<number | string, RenderPatch>()
+  /*
+   * The handle, not just the key, because a job nobody wants any more is worth
+   * cancelling and only the handle can do it. `#epoch` discards an *answer*
+   * that outlives its view; the job behind it ran to completion regardless, so
+   * leaving a landing view with the window full left up to 128 heightfields
+   * queued ahead of everything the next view wanted — measured at 42 arrivals
+   * through the title cutscene alone.
+   */
+  readonly #inFlight = new Map<number | string, JobHandle<unknown>>()
+  /*
+   * The level floor per surface, once a worker has measured it.
+   *
+   * Keyed on the `SurfaceParameters` object rather than on an address, because
+   * that identity is exactly the right one: it is immutable, it belongs to the
+   * loaded body, and a reseed under the same address produces a new one — so a
+   * new world cannot inherit the old one's floor and nothing has to clear this.
+   *
+   * It exists because the search is 33-43 ms cold and was paid inside the
+   * frame the streamer first had a body underfoot: 85% of a 40 ms spike on
+   * Earth and of the 114 ms one on Proxima Centauri b. `surfaceDetailFloorTask`
+   * carries the reasoning; what is here is the consequence, which is that a
+   * body with no floor yet streams nothing for the frames it takes to arrive.
+   * That is the same shape as waiting for the heightfields themselves.
+   */
+  readonly #floors = new WeakMap<Body['surface'], number>()
+  readonly #floorsAsked = new WeakSet<Body['surface']>()
   #bodyAddress: string | null = null
   #drawn: readonly SelectedPatch[] = []
   #deepest = 0
@@ -499,6 +567,52 @@ export class TerrainStreamer {
    * would be a different claim from the one the numbers beside it describe.
    */
   #lensView: LensView | null = null
+  /**
+   * The last selection's inputs, and the request list it assembled.
+   *
+   * The walks are a pure function of the eye in body-fixed axes, the optics,
+   * the level floor and the geometry cache — and at a stance or a hover none
+   * of them move: the camera rides the body, so `eyeLocal` is constant to the
+   * pose round-trip's ~0.15 mm of jitter, and a converged cache stops
+   * changing. Re-selecting anyway cost 2.1 ms a frame standing on Earth's
+   * summit in the shipped build — the largest single item in the engine step,
+   * spent recomputing an answer that could not have changed. `#cacheEpoch` is
+   * the cache half of the key; it is recorded at walk time, so a frame that
+   * goes on to build or evict invalidates its own selection and re-walks into
+   * the new geometry.
+   */
+  #selection: {
+    readonly body: Body
+    readonly eye: Vec3
+    readonly maxLevel: number
+    readonly cacheEpoch: number
+    /*
+     * The optics as one number, not as the fields they are spelled with.
+     *
+     * `selectTerrain` reads the lens and the viewport through exactly one
+     * expression — `pixelsPerRadian(lens, viewport) / cellPixels` — so this is
+     * the whole of what the walks are a function of, and comparing it is
+     * complete by construction. Naming `focalLength`, `gauge` and `zoom`
+     * instead compares three of `Lens`'s seven fields against a callee free to
+     * read a fourth: the day the cell-pixel predicate takes an aperture term
+     * the memo freezes the selection with no test failing and nothing in the
+     * log, which is the shape `travel.ts` builds `COMPARED` to prevent.
+     */
+    readonly optics: number
+    readonly requested: readonly RegionAddress[]
+  } | null = null
+  /**
+   * What `#request` was last topped up against, on the held path.
+   *
+   * A pair rather than a flag: an answer bumps the epoch, and a *failure*
+   * frees an in-flight slot without bumping anything, so both have to be in
+   * it. See the held branch for why the top-up is worth skipping at all.
+   */
+  #toppedUp: { epoch: number; inFlight: number } = { epoch: -1, inFlight: -1 }
+  /** Bumped whenever `#fields` or `#patches` gain or lose an entry. */
+  #cacheEpoch = 0
+  /** How many times the walks have actually run. `summary()` reports it. */
+  #selections = 0
 
   /**
    * The optics the selection is measured against.
@@ -547,6 +661,7 @@ export class TerrainStreamer {
     readonly culled: number
     readonly starved: number
     readonly saturated: boolean
+    readonly selections: number
     readonly lens: LensView | null
     readonly scatter: {
       readonly regions: number
@@ -559,7 +674,7 @@ export class TerrainStreamer {
     let vertices = 0
     let triangles = 0
     for (const selected of this.#drawn) {
-      const patch = this.#patches.get(this.#key(selected.region))
+      const patch = this.#patches.get(regionKey(selected.region))
       if (patch === undefined) continue
       placed += 1
       vertices += patch.positions.length / 3
@@ -583,6 +698,9 @@ export class TerrainStreamer {
       culled: this.#culled,
       starved: this.#starved,
       saturated: this.#saturated,
+      // Total walks, not walks a second: a hover that stops re-selecting is
+      // visible as this number standing still while the frame count climbs.
+      selections: this.#selections,
       lens: this.#lensView,
       scatter: this.#scatter.summary(),
     }
@@ -593,12 +711,13 @@ export class TerrainStreamer {
     const patches: PlacedPatch[] = []
     if (pose !== null) {
       for (const selected of this.#drawn) {
-        const key = this.#key(selected.region)
-        const patch = this.#patches.get(key)
+        const patch = this.#patches.get(regionKey(selected.region))
         if (patch === undefined) continue
         patches.push({
           patch,
-          key,
+          // The one string key a frame still builds — the renderer's mesh
+          // cache retains across a retarget, so its identity carries the body.
+          key: this.#key(selected.region),
           placement: patchPlacement(
             patch,
             pose.position,
@@ -732,12 +851,166 @@ export class TerrainStreamer {
       return
     }
 
-    const options = {
-      maxLevel: surfaceDetailFloor(surface.surface),
-      lens,
-      viewport,
+    const maxLevel = this.#detailFloor(surface)
+    if (maxLevel === null) {
+      // The floor is being measured off-thread. Nothing can be selected
+      // against a ceiling that is not known yet, and guessing one would either
+      // starve the ground or spend worker time on patches that are upsamples
+      // of their parents.
+      this.#forget()
+      return
+    }
+    const options = { maxLevel, lens, viewport }
+
+    /*
+     * Reuse the held selection while nothing it is a function of has moved.
+     *
+     * At a stance or a hover this is every frame: the eye rides the body, the
+     * optics hold, and once the cache converges nothing bumps the epoch — so
+     * the 2.1 ms the walks cost standing on Earth's summit drops to the
+     * request top-up below. The comparison is against what the walks actually
+     * read: the eye in body-fixed axes, the level floor, the one scalar the
+     * selection's optics reduce to (the engine allocates a fresh `LensView`
+     * every frame), the resolved body by identity (a reseed under the same
+     * address is a different `Body`), and the cache epoch recorded at walk
+     * time.
+     */
+    const optics = pixelsPerRadian(lens, viewport)
+    const held = this.#selection
+    if (
+      held !== null &&
+      held.body === surface &&
+      held.maxLevel === options.maxLevel &&
+      held.cacheEpoch === this.#cacheEpoch &&
+      held.optics === optics &&
+      Vec.lengthSquared(Vec.sub(eyeLocal, held.eye)) < SELECTION_EYE_EPSILON_SQ
+    ) {
+      /*
+       * The walk that did not happen, billed where the walk is billed.
+       *
+       * `open()` is at the top of `update`, so whichever phase steps first
+       * carries the resolve, the pose, the palette and the eye with it — on
+       * the walking path that is `terrain.select`, and without this boundary
+       * it would be `terrain.request` here, which is the one phase this
+       * branch actually does work in. Emitting it also keeps `terrain.select`
+       * present on every frame: a label that only appears on the frames it
+       * runs reports the same 2.1 ms mean it always did, and the whole point
+       * of the memo is invisible in the one instrument that should show it.
+       */
+      this.#phases.step(
+        'terrain.select',
+        // The same colour the walking path emits, for the same reason: a
+        // starved or saturated selection is a *stable* state — nothing builds,
+        // nothing evicts, so the epoch never moves and the memo holds — and a
+        // red band that goes out the moment the picture stops changing is off
+        // for exactly the frames somebody is reading it.
+        this.#starved > 0 || this.#saturated ? TERRAIN_SHORT : TERRAIN_PHASE,
+      )
+      /*
+       * The same four labels the walking path emits, in the same order, three
+       * of them zero-width — and that is the report rather than an omission.
+       * A label recorded only on the frames it runs has its mean taken over
+       * those frames alone, so `terrain.build` would keep reporting the 0.225
+       * ms a *walk* costs long after it stopped happening on most frames,
+       * while `terrain.select` beside it is per-frame and the two are no
+       * longer comparable. That is the trap `terrain.select` is stepped above
+       * to avoid, applied to its neighbours.
+       */
+      this.#phases.step('terrain.build', TERRAIN_PHASE)
+      /*
+       * The pipeline gets topped up from the held list, but only when a slot
+       * could have opened: `#request` walks the whole request list — over a
+       * thousand regions on a summit, a key and two map probes each — and its
+       * own `budget <= 0` exit does not fire in the state this branch exists
+       * for, because a converged window is empty rather than full. The two
+       * things that can free a slot both show here: an answer bumps the epoch
+       * (and then this branch is not taken at all), and a failure shrinks the
+       * in-flight set without one.
+       */
+      if (
+        this.#toppedUp.epoch !== this.#cacheEpoch ||
+        this.#toppedUp.inFlight !== this.#inFlight.size
+      ) {
+        this.#request(held.requested, surface)
+        this.#toppedUp = {
+          epoch: this.#cacheEpoch,
+          inFlight: this.#inFlight.size,
+        }
+      }
+      this.#phases.step('terrain.request', TERRAIN_PHASE)
+      this.#phases.step('terrain.evict', TERRAIN_PHASE)
+    } else {
+      this.#reselect(
+        surface,
+        spinPose,
+        bodyPose.position,
+        eyeLocal,
+        renderTime,
+        previous,
+        eye,
+        options,
+        optics,
+      )
     }
 
+    /*
+     * The rocks, last, because they stand on ground this frame has just decided
+     * how to draw — and driven from here rather than from the engine because
+     * everything they need is already resolved: the body, the eye in body-fixed
+     * axes, the pose the patches are placed with, and the lens the whole picture
+     * was selected against.
+     */
+    this.#scatter.update(
+      surface,
+      body.address,
+      eyeLocal,
+      // The branded direction this frame's own selection was made against,
+      // rather than a second normalization of `eyeLocal` in the app layer —
+      // `bodyFixedDirection` is one of the three producers and this keeps it
+      // that way.
+      eye.direction,
+      this.#pose,
+      this.#lensView,
+    )
+    /*
+     * The one phase that most wants a timeline rather than a mean.
+     *
+     * `scatterField.ts` resolves a fixed budget of 128 candidate slots per
+     * frame against a whole region that costs 2.6–5.8 ms, so the work is
+     * deliberately smeared across frames — and a budget spread thin is
+     * invisible to a scalar by construction, while on a track it is the obvious
+     * repeating band.
+     */
+    this.#phases.step('terrain.scatter', TERRAIN_PHASE)
+  }
+
+  /**
+   * The two walks, the geometry build, the request list and the evictor — a
+   * frame's full reconciliation, held so `update` can reuse it.
+   *
+   * `cacheEpoch` is captured *before* `#build` and `#evict` mutate the
+   * caches, deliberately: a frame that builds geometry has changed the answer
+   * `ready` would give, so its own selection is already stale and the next
+   * frame walks again — which is what lets refinement advance. At
+   * convergence nothing mutates, the epoch captured equals the epoch
+   * compared, and the walks stop until something real changes.
+   */
+  #reselect(
+    surface: Body,
+    spinPose: FramePose,
+    centre: UniverseVector,
+    eyeLocal: Vec3,
+    renderTime: Seconds,
+    previous: { eye: Vec3; time: Seconds } | null,
+    eye: TerrainEye,
+    options: {
+      readonly maxLevel: number
+      readonly lens: LensView['lens']
+      readonly viewport: LensView['viewport']
+    },
+    /** `pixelsPerRadian(lens, viewport)`, computed by the caller. */
+    optics: number,
+  ): void {
     // What to draw: refine only into ground already in the cache, so a patch
     // that has not arrived costs detail rather than leaving a hole.
     const drawn = selectTerrain(eye, {
@@ -756,7 +1029,7 @@ export class TerrainStreamer {
        * `#build` can feed it, which is the honest rate, and the picture is
        * never short of ground.
        */
-      ready: (region) => this.#patches.has(this.#key(region)),
+      ready: (region) => this.#patches.has(regionKey(region)),
     })
     this.#drawn = drawn.patches
     this.#deepest = drawn.deepestLevel
@@ -772,7 +1045,7 @@ export class TerrainStreamer {
       this.#lookAhead(
         surface,
         spinPose,
-        bodyPose.position,
+        centre,
         eyeLocal,
         renderTime,
         previous,
@@ -780,6 +1053,9 @@ export class TerrainStreamer {
       ),
       options,
     )
+    // What the walks were made against, captured before `#build` and `#evict`
+    // change it — see the method's own doc for why that ordering is the memo.
+    const cacheEpoch = this.#cacheEpoch
 
     /*
      * The rung below the drawn set — what makes the ladder climb: with
@@ -848,35 +1124,18 @@ export class TerrainStreamer {
     this.#evict(requested)
     this.#phases.step('terrain.evict', TERRAIN_PHASE)
 
-    /*
-     * The rocks, last, because they stand on ground this frame has just decided
-     * how to draw — and driven from here rather than from the engine because
-     * everything they need is already resolved: the body, the eye in body-fixed
-     * axes, the pose the patches are placed with, and the lens the whole picture
-     * was selected against.
-     */
-    this.#scatter.update(
-      surface,
-      body.address,
-      eyeLocal,
-      // The branded direction this frame's own selection was made against,
-      // rather than a second normalization of `eyeLocal` in the app layer —
-      // `bodyFixedDirection` is one of the three producers and this keeps it
-      // that way.
-      eye.direction,
-      this.#pose,
-      this.#lensView,
-    )
-    /*
-     * The one phase that most wants a timeline rather than a mean.
-     *
-     * `scatterField.ts` resolves a fixed budget of 128 candidate slots per
-     * frame against a whole region that costs 2.6–5.8 ms, so the work is
-     * deliberately smeared across frames — and a budget spread thin is
-     * invisible to a scalar by construction, while on a track it is the obvious
-     * repeating band.
-     */
-    this.#phases.step('terrain.scatter', TERRAIN_PHASE)
+    this.#selection = {
+      body: surface,
+      eye: eyeLocal,
+      maxLevel: options.maxLevel,
+      cacheEpoch,
+      optics,
+      requested,
+    }
+    // The held path's top-up compares against this walk's own request, which
+    // has just spent whatever budget there was.
+    this.#toppedUp = { epoch: this.#cacheEpoch, inFlight: this.#inFlight.size }
+    this.#selections += 1
   }
 
   #key(region: RegionAddress): string {
@@ -975,15 +1234,103 @@ export class TerrainStreamer {
     }
   }
 
+  /**
+   * The subdivision floor for a body, or null while a worker is finding it.
+   *
+   * Synchronous with no pool — the headless runner, the tests and the Node
+   * benchmarks, none of which have frames to drop — and asked for exactly once
+   * per surface otherwise.
+   *
+   * A cancellation releases the surface, because it is this streamer's own
+   * decision and the next frame should ask again. **Every other failure falls
+   * back to the main thread** rather than releasing it. Releasing on all of
+   * them is a retry with no bound and no backoff: `update` asks once a frame,
+   * so a job that fails for a reason that will not change — a worker bundle
+   * without `universe.surfaceDetailFloor`, a task-version mismatch across a
+   * deploy — becomes sixty submissions and sixty warnings a second, of a job
+   * the task's own doc measures at 33-43 ms, queued ahead of every heightfield
+   * the player is waiting for, while `maxLevel` stays null and the body never
+   * streams ground at all. Worse after `dispose()`: `terminate()` rejects with
+   * `pool terminated`, which is not `cancelled`, and the next `run` throws
+   * `submit`'s invariant synchronously out of the frame.
+   *
+   * The fallback is one 33-43 ms hitch on a path that only runs when the
+   * worker path is broken, which is what this cost before it moved off-thread
+   * — and strictly better than a permanent hole with a log flood over it.
+   *
+   * `pool terminated` is the third case and takes neither branch. It is what
+   * `terminate()` rejects with, so it means `dispose()` and nothing else:
+   * there is no frame left to spend an answer on, and measuring one there
+   * would put a 33-43 ms synchronous search on the teardown of every session
+   * that had a floor job outstanding.
+   */
+  #detailFloor(body: Body): number | null {
+    const surface = body.surface
+    const held = this.#floors.get(surface)
+    if (held !== undefined) return held
+    if (this.#pool === null) {
+      const level = surfaceDetailFloor(surface)
+      this.#floors.set(surface, level)
+      return level
+    }
+    if (this.#floorsAsked.has(surface)) return null
+    this.#floorsAsked.add(surface)
+    void this.#pool
+      .run(surfaceDetailFloorTask, {
+        surfaceSeed: formatSeed(surface.seed),
+        maxElevation: surface.maxElevation,
+        roughness: surface.roughness,
+        seaLevel: surface.seaLevel,
+        grammar: surface.grammar,
+        resolution: HEIGHTFIELD_RESOLUTION,
+      })
+      .then((result) => {
+        this.#floors.set(surface, result.level)
+        // The held selection was made against no floor at all, so it is not
+        // merely stale — there is none. `#forget` above left nothing to keep;
+        // this is what lets the next frame walk.
+        this.#cacheEpoch += 1
+      })
+      .catch((cause: unknown) => {
+        const message = cause instanceof Error ? cause.message : String(cause)
+        // This streamer's own decision arriving back at it, so the surface is
+        // released and the next frame asks again. Holding it instead left the
+        // surface in `#floorsAsked` with no answer and no job, and that body
+        // never streamed again for the life of the session.
+        if (message === 'cancelled') {
+          this.#floorsAsked.delete(surface)
+          return
+        }
+        // The pool is gone, which is `dispose()` and nothing else: `terminate`
+        // rejects everything pending with this. Held rather than released, and
+        // *not* measured — there is no frame left to spend the answer on, and
+        // releasing it would let a late `update` reach `submit`'s terminated
+        // invariant, which throws synchronously into the engine step.
+        if (message === 'pool terminated') return
+        // What is left is a task failure that will not fix itself on a retry:
+        // a worker bundle without `universe.surfaceDetailFloor`, a version
+        // mismatch across a deploy, a throw inside the search. Answered here.
+        log.warn('detail floor failed; measuring it on this thread', {
+          cause: message,
+        })
+        this.#floors.set(surface, surfaceDetailFloor(surface))
+        this.#cacheEpoch += 1
+      })
+    return null
+  }
+
   /** Build geometry for the regions that need it next, under budget. */
   #build(wanted: readonly RegionAddress[], body: Body): void {
     let built = 0
     for (const region of wanted) {
       if (built >= BUILDS_PER_FRAME) return
-      const key = this.#key(region)
+      const key = regionKey(region)
       if (this.#patches.has(key)) continue
       const field = this.#fields.get(key)
       if (field === undefined) continue
+      // A new mesh changes what `ready` answers, so the held selection is
+      // stale the moment this lands.
+      this.#cacheEpoch += 1
       // Built once. The geometry is body-fixed, so nothing that happens to the
       // planet or to the render origin can invalidate it.
       this.#patches.set(
@@ -1011,45 +1358,54 @@ export class TerrainStreamer {
    */
   #request(wanted: readonly RegionAddress[], body: Body): void {
     if (this.#pool === null) return
-    const seen = new Set<string>()
+    /*
+     * The budget before the filter, and the early exit is the point.
+     *
+     * A queue at its depth buys nothing this frame, and the filter below walks
+     * the whole request list — over a thousand regions on a summit, a key and
+     * two map probes each — only for the slice to throw every one of them
+     * away. It is also what keeps a negative budget from reaching `slice`: a
+     * negative end index slices from the *back* of the array, so an over-full
+     * queue would ask for the tail of the wanted list rather than for nothing.
+     */
+    const budget = Math.min(
+      REQUESTS_PER_FRAME,
+      IN_FLIGHT_CAP - this.#inFlight.size,
+    )
+    if (budget <= 0) return
+    const seen = new Set<number | string>()
     const missing = wanted
       .filter((region) => {
-        const key = this.#key(region)
+        const key = regionKey(region)
         if (seen.has(key)) return false
         seen.add(key)
         return !this.#fields.has(key) && !this.#inFlight.has(key)
       })
-      // `Math.max(0, …)` because a negative end index slices from the *back* of
-      // the array — an over-full queue would have asked for the tail of the
-      // wanted list rather than for nothing.
-      .slice(
-        0,
-        Math.max(
-          0,
-          Math.min(REQUESTS_PER_FRAME, IN_FLIGHT_CAP - this.#inFlight.size),
-        ),
-      )
+      .slice(0, budget)
 
     for (const region of missing) {
-      const key = this.#key(region)
+      const key = regionKey(region)
       // Captured beside the key: a result that outlives its world is dropped
       // rather than cached, because the key alone cannot tell a new seed's
       // s:SOL/b:2 from the old one's.
       const epoch = this.#epoch
-      this.#inFlight.add(key)
-      void this.#pool
-        .run(generateHeightfieldTask, {
-          surfaceSeed: formatSeed(body.surface.seed),
-          maxElevation: body.surface.maxElevation,
-          roughness: body.surface.roughness,
-          seaLevel: body.surface.seaLevel,
-          grammar: body.surface.grammar,
-          region,
-          resolution: HEIGHTFIELD_RESOLUTION,
-          border: HEIGHTFIELD_BORDER,
-        })
+      const handle = this.#pool.submit(generateHeightfieldTask, {
+        surfaceSeed: formatSeed(body.surface.seed),
+        maxElevation: body.surface.maxElevation,
+        roughness: body.surface.roughness,
+        seaLevel: body.surface.seaLevel,
+        grammar: body.surface.grammar,
+        region,
+        resolution: HEIGHTFIELD_RESOLUTION,
+        border: HEIGHTFIELD_BORDER,
+      })
+      this.#inFlight.set(key, handle)
+      void handle.result
         .then((result) => {
           if (epoch !== this.#epoch) return
+          // The answer invalidates the held selection: `#build` has ground
+          // it can now turn into geometry, so the next frame walks.
+          this.#cacheEpoch += 1
           this.#fields.set(key, {
             elevations: result.elevations,
             cover: result.cover,
@@ -1058,10 +1414,19 @@ export class TerrainStreamer {
           })
         })
         .catch((cause: unknown) => {
+          // A cancellation is this streamer's own decision arriving back at
+          // it, not a failure: `clear()` cancels the whole window on a
+          // retarget, so a warning here would be a hundred and twenty lines of
+          // log for one keystroke.
+          if (cause instanceof Error && cause.message === 'cancelled') return
           log.warn('terrain patch failed', { key, cause: String(cause) })
         })
         .finally(() => {
-          this.#inFlight.delete(key)
+          // Epoch-guarded like the result above, and for the same reason the
+          // key is body-free: after a retarget this entry belongs to the new
+          // body, and deleting it here would let the same region be asked for
+          // twice. `clear()` drops the whole set instead.
+          if (epoch === this.#epoch) this.#inFlight.delete(key)
         })
     }
   }
@@ -1087,16 +1452,22 @@ export class TerrainStreamer {
     ) {
       return
     }
-    const keep = new Set<string>()
-    for (const region of requested) keep.add(this.#key(region))
+    const keep = new Set<number | string>()
+    for (const region of requested) keep.add(regionKey(region))
 
     for (const key of this.#fields.keys()) {
       if (this.#fields.size <= FIELD_CACHE) break
-      if (!keep.has(key)) this.#fields.delete(key)
+      if (!keep.has(key)) {
+        this.#cacheEpoch += 1
+        this.#fields.delete(key)
+      }
     }
     for (const key of this.#patches.keys()) {
       if (this.#patches.size <= GEOMETRY_CACHE) break
-      if (!keep.has(key)) this.#patches.delete(key)
+      if (!keep.has(key)) {
+        this.#cacheEpoch += 1
+        this.#patches.delete(key)
+      }
     }
   }
 
@@ -1116,6 +1487,9 @@ export class TerrainStreamer {
     this.#culled = 0
     this.#starved = 0
     this.#saturated = false
+    // The selection mirrors it summarized are gone with it; a held one would
+    // otherwise revive them wholesale on the frame the gate reopens.
+    this.#selection = null
     this.#pose = null
     // Same argument as the lens below: a palette beside `patches: 0` describes
     // a body this streamer is no longer drawing, and the material would keep
@@ -1124,9 +1498,13 @@ export class TerrainStreamer {
     // The lens is a selection mirror like the rest: reporting one beside
     // `patches: 0` claims a selection was made against it, and none was.
     this.#lensView = null
-    // The rocks go with the ground they lie on. Their cache stays: the eight-
-    // pixel gate is thousands of kilometers above the range they draw in, so a
-    // frame that reaches this line has left the surface entirely.
+    // The rocks go with the ground they lie on. Their cache stays, and that is
+    // what makes this safe on the two shapes of frame that reach it: one that
+    // has left the surface entirely — the eight-pixel gate is thousands of
+    // kilometers above the range they draw in — and one that is standing on it
+    // with no level floor yet, which is every arrival frame until the worker
+    // answers. `ScatterField.forget` drops the frame's state and keeps
+    // `#regions`, so the second kind re-derives rather than regenerating.
     this.#scatter.forget()
   }
 
@@ -1134,8 +1512,31 @@ export class TerrainStreamer {
   clear(): void {
     // In-flight answers are for the world this discards; see `#epoch`.
     this.#epoch += 1
+    this.#cacheEpoch += 1
     this.#fields.clear()
     this.#patches.clear()
+    /*
+     * The in-flight window is cancelled and dropped, which is two fixes.
+     *
+     * Dropped, because `#request` filters on `!#inFlight.has(key)` and a key
+     * is packed arithmetic over the region alone — so a job still out for the
+     * world this discards names the *same* key the new body's roots do, and
+     * filtered the nearest-first head of the new request list out until it
+     * settled. The ground came in a heightfield's worth of latency late on
+     * every retarget, silently. The stale job's own `finally` is epoch-guarded
+     * so it cannot take a new entry with it when it lands.
+     *
+     * Cancelled, because dropping the key only discards the *answer*. At the
+     * 128-job cap all but `poolSize()` of those are still in the pool's queue,
+     * where cancelling is a splice and the work never happens; leaving them
+     * there put up to 50 s of ground nobody will see ahead of everything the
+     * next view wants, and the star survey behind it read 4-8 s of queue on a
+     * jump home. The few actually running finish — `generateHeightfield` polls
+     * nothing and cannot be interrupted mid-field — and their answers are
+     * discarded by the epoch.
+     */
+    for (const handle of this.#inFlight.values()) handle.cancel()
+    this.#inFlight.clear()
     this.#bodyAddress = null
     this.#previous = null
     this.#scatter.clear()

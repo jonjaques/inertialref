@@ -343,6 +343,21 @@ fail differently: refinement gates on the mesh, so a geometry cache losing what
 the draw set is standing on collapses the selection to the roots while `cached`
 sits at its steady value and reports nothing wrong.
 
+**`visited`, `culled`, `starved` and `level` are from the last frame that
+walked, not from this one.** The walks are a pure function of the eye, the
+optics, the level floor and the geometry cache, so a stance or a converged
+hover holds all four still and reuses the answer — the counters stay at
+whatever the last re-selection left. `selections` is the one that says so: a
+total since the streamer was made, so two reads a second apart that differ by
+sixty are a selection recomputed every frame and two that agree are the memo
+holding. Read it beside the rest or `visited: 446` will describe a frame that
+walked nothing.
+
+**The first frame on a body reports zeros for a reason that is not the relief
+gate.** The subdivision floor is a worker answer, so a body the streamer has
+not measured has no ceiling to select against and it holds the ground back
+rather than guessing one — the same way it waits for the heightfields.
+
 `ir.terrain().scatter` is the rocks on it, and it is part of the terrain report
 rather than a verb of its own because a rock count without the ground under it
 is not a number anyone can act on: `resolving` above zero beside `rocks` at zero

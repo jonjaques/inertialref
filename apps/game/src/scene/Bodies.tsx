@@ -9,6 +9,7 @@ import {
   SphereGeometry,
   Vector3,
 } from 'three/webgpu'
+import { getLogger } from '@inertialref/shared'
 import type { RenderBody } from '@inertialref/rendering'
 import { formatAddress, walkBodies } from '@inertialref/universe'
 import type { GameEngine } from '../engine/GameEngine.ts'
@@ -46,6 +47,8 @@ import { useTimedFrame } from './useTimedFrame.ts'
  */
 const MAX_BODIES = 160
 
+const log = getLogger('game.bodies')
+
 interface BodyVisual {
   readonly mesh: Mesh
   readonly planet: PlanetMaterial | null
@@ -56,6 +59,51 @@ interface BodyVisual {
   readonly rings: Mesh | null
   readonly ringMaterial: RingMaterial | null
   readonly star: StarMaterial | null
+}
+
+/**
+ * Take a body's visuals out of the scene and give their materials back.
+ *
+ * One place, because both callers below are the same loop and one of them runs
+ * on a recovery path — and because `dispose()` on a node material can throw
+ * from inside Three.
+ *
+ * The throw is `TypeError: Cannot read properties of undefined (reading
+ * 'usedTimes')`, in `Nodes.delete`. A material's dispose event reaches every
+ * `RenderObject` built from it, and `Nodes.delete` reads
+ * `this.get(renderObject).nodeBuilderState` and decrements it without checking
+ * that there is one — which there is not for a render object the renderer
+ * created but never built a pipeline for. That is the ordinary state of the
+ * scene when the presentation watchdog gives up on a canvas that never
+ * presented and remounts it: the objects exist, nothing was ever drawn, and
+ * the remount disposes them.
+ *
+ * It is Three's bug and there is nothing this side can do to stop it. What
+ * this side controls is what the throw takes with it: uncaught, it aborted the
+ * loop, so every visual after the first one was left parented to a scene that
+ * was about to be replaced with its materials undisposed — on exactly the path
+ * whose whole purpose is to rebuild them. Caught per object, the recovery
+ * completes and the failure is one line in the log rather than a leak nobody
+ * can see.
+ */
+function retire(visual: BodyVisual): void {
+  for (const object of [
+    visual.mesh,
+    visual.atmosphere,
+    visual.clouds,
+    visual.rings,
+  ]) {
+    if (object === null) continue
+    object.removeFromParent()
+    const material = object.material
+    for (const one of Array.isArray(material) ? material : [material]) {
+      try {
+        one.dispose()
+      } catch (cause) {
+        log.warn('a material would not dispose', { cause: String(cause) })
+      }
+    }
+  }
 }
 
 /*
@@ -318,20 +366,7 @@ export function Bodies({ engine }: { engine: GameEngine }) {
    */
   useEffect(
     () => () => {
-      for (const visual of visuals.values()) {
-        for (const object of [
-          visual.mesh,
-          visual.atmosphere,
-          visual.clouds,
-          visual.rings,
-        ]) {
-          if (object === null) continue
-          object.removeFromParent()
-          const material = object.material
-          if (Array.isArray(material)) for (const m of material) m.dispose()
-          else material.dispose()
-        }
-      }
+      for (const visual of visuals.values()) retire(visual)
       visuals.clear()
       for (const tier of spheres) tier.geometry.dispose()
       rings.dispose()
@@ -369,18 +404,7 @@ export function Bodies({ engine }: { engine: GameEngine }) {
     const evictStale = (): boolean => {
       for (const [key, visual] of visuals) {
         if (seen.has(key) || visual.mesh.visible) continue
-        for (const object of [
-          visual.mesh,
-          visual.atmosphere,
-          visual.clouds,
-          visual.rings,
-        ]) {
-          if (object === null) continue
-          object.removeFromParent()
-          const material = object.material
-          if (Array.isArray(material)) for (const m of material) m.dispose()
-          else material.dispose()
-        }
+        retire(visual)
         visuals.delete(key)
         return true
       }

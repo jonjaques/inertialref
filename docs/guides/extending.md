@@ -202,7 +202,15 @@ Two practical rules from the existing renderer:
 - **Mutate imperatively for per-frame work.** A React reconcile per body per
   frame at 144 Hz is a lot of work to arrive at the same matrix.
 - **Record the origin generation** on anything you build from render-space
-  coordinates, so a rebase invalidates it.
+  _positions_, so a rebase invalidates it. A buffer that holds only
+  **directions** is the exception, and reaching for the counter there is
+  expensive: a direction is invariant under translation, so moving `d` swings
+  the nearest thing in the buffer through at most `d/r` radians while the
+  generation ticks every 4,096 m regardless. `scene/Starfield.tsx` is the worked
+  case — the counter fired every ninth frame in Earth orbit to rewrite twenty
+  thousand stars that had not moved a pixel, and the budget it uses instead is a
+  parallax tolerance against the nearest star, which in orbit is the system's own
+  sun and about 1,500 km of travel.
 
 ---
 

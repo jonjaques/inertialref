@@ -68,9 +68,19 @@ Today's tasks:
 | Task                           | Work                                                                                                                            |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
 | `universe.generateHeightfield` | 65×65 samples × six bands and a crater ladder → a transferable `Float32Array` of elevations and a `Uint8Array` of surface cover |
+| `universe.surfaceDetailFloor`  | the level past which a patch is an upsample of its parent — ~1,500 samples of the same bands, once per body                     |
 | `universe.generateCell`        | every star in one 20 ly generation cell                                                                                         |
 | `universe.surveyRegion`        | a block of cells — tens of thousands of stars                                                                                   |
 | `universe.surveySystem`        | a whole system's bodies, for the map                                                                                            |
+
+`surfaceDetailFloor` is on the pool because it reads nothing a heightfield
+request does not already carry, and paying it on the main thread paid it inside
+the frame a body arrives — 85% of a 40 ms spike on Earth, on the one frame a
+player is watching the ground appear. The consequence a caller has to know is
+that a body whose floor is not measured yet has no ceiling to select against, so
+the streamer holds the ground back for the frames it takes rather than guessing
+one. A host with no pool computes it synchronously; none of those have a frame
+to drop.
 
 ---
 
@@ -126,7 +136,7 @@ They fail differently, so the pool measures them separately, over a rolling
 64-job window, and the debug overlay shows both:
 
 ```
-workers  4w · 0 active · 0 queued · 25 done · q 9.2ms · run 11.3ms
+workers  8w · 0 active · 0 queued · 25 done · q 9.2ms · run 11.3ms
 ```
 
 The clock is **injected**, so the pool has no host API dependency and timing
@@ -143,15 +153,26 @@ A job can be canceled whether or not it has started:
   `context.cancelled()` at a sensible granularity (per cell in a region survey,
   not per star — the check should not cost more than the work).
 
+**The terrain streamer is the caller that makes this pay.** `submit` hands it a
+`JobHandle` rather than a bare promise, it holds one per in-flight heightfield,
+and `clear()` cancels the whole window on a retarget. Dropping the answer is not
+enough: at the 128-job cap all but `poolSize()` of those are still queued, where
+cancelling is a splice and the work never happens, and leaving them there put up
+to 50 s of ground nobody will see ahead of everything the next view wants. The
+few actually running finish — `generateHeightfield` polls nothing and cannot be
+interrupted mid-field — and their answers are discarded by the streamer's epoch.
+A cancellation arriving back at its own caller is that caller's decision, not a
+failure, so the rejection is matched on and not logged.
+
 ---
 
 ## What is deliberately not here
 
-| Not used                                     | Why                                                                                                                                                                                            |
-| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `SharedArrayBuffer`                          | Requires cross-origin isolation headers, which constrains hosting. Nothing yet needs shared mutable memory; transferables cover the current traffic.                                           |
-| The simulation itself in a worker            | Plausible rather than proven: `apps/headless` shows the core runs unchanged with no DOM, no React and no WebGL — but nothing yet requires it. [Roadmap](../roadmap.md#simulation-in-a-worker). |
-| A second pool for a different priority class | One pool, FIFO. Priorities become interesting when terrain competes with something else.                                                                                                       |
+| Not used                                     | Why                                                                                                                                                                                                                                                                 |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SharedArrayBuffer`                          | Requires cross-origin isolation headers, which constrains hosting. Nothing yet needs shared mutable memory; transferables cover the current traffic.                                                                                                                |
+| The simulation itself in a worker            | Plausible rather than proven: `apps/headless` shows the core runs unchanged with no DOM, no React and no WebGL — but nothing yet requires it. [Roadmap](../roadmap.md#simulation-in-a-worker).                                                                      |
+| A second pool for a different priority class | One pool, FIFO — and terrain does compete with the star survey, which read 4–8 s of queue behind a landing's heightfields. Cancelling the window the streamer no longer wants is what that needed; a priority class would have reordered work nobody wanted at all. |
 
 ---
 

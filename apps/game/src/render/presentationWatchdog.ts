@@ -1,4 +1,5 @@
 import { getLogger } from '@inertialref/shared'
+import { QUERY } from '../pages/paths.ts'
 
 /*
  * The presentation watchdog: the fix for the blank-scene boot.
@@ -39,6 +40,31 @@ import { getLogger } from '@inertialref/shared'
  */
 
 const log = getLogger('game.presentation')
+
+/**
+ * Whether this document has told us its own pixels cannot be read back.
+ *
+ * The one thing `visibilityState` is a proxy for is "the compositor is
+ * presenting this window", and a driver breaks the proxy: CDP focus emulation
+ * makes an occluded Chrome run its animation frames *and* report `visible`, so
+ * the gate below opens on a window that has never composited and the readback
+ * is transparent black for a renderer that is perfectly healthy. `QUERY.presentation`
+ * carries the argument and the measured cost.
+ *
+ * Read from the URL at each check rather than latched, because it costs
+ * nothing and a latch would need a place to live. A page with no `location` —
+ * a test harness — is not automated and reads as false.
+ */
+const unsampled = (): boolean => {
+  try {
+    return (
+      new URLSearchParams(window.location.search).get(QUERY.presentation) ===
+      'occluded'
+    )
+  } catch {
+    return false
+  }
+}
 
 /** How long after renderer-ready the first sample waits. */
 const FIRST_CHECK_MS = 1_200
@@ -198,7 +224,28 @@ export function watchPresentation(
 
   const check = (): void => {
     if (cancelled) return
-    if (probe === null) return
+    /*
+     * The two ways there is nothing to read, before anything that could read.
+     *
+     * `probe === null` is a document that would not give a 2D context —
+     * memory pressure, a fingerprint-resistant profile — and it used to return
+     * without settling, so the boot cover stayed over a scene that was
+     * rendering perfectly and no rung ever fired again. Every other terminal
+     * rung calls `onPresented`; this one has to as well, for the reason the
+     * exhausted rung does: an overlay hiding a possibly-fine scene forever is
+     * strictly worse than revealing one the log has already warned about.
+     *
+     * `unsampled()` is the driven window saying its own pixels cannot be
+     * sampled. See `QUERY.presentation`.
+     */
+    if (probe === null || unsampled()) {
+      log.info('presentation probe unreadable; standing down', {
+        reason: probe === null ? 'no probe context' : 'declared unreadable',
+      })
+      standDown()
+      options.onPresented?.()
+      return
+    }
     if (document.visibilityState !== 'visible') {
       // An occluded window legitimately never presents; keep waiting. The
       // visibilitychange listener below re-checks the moment that changes —

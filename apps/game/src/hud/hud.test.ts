@@ -1,7 +1,8 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { openSession } from '@inertialref/devtools'
+import { engineStore } from '../state/engineStore.ts'
 import { LensSection } from './LensSection.tsx'
 import type { DevContext } from './context.ts'
 import { ErrorBoundary } from './ErrorBoundary.tsx'
@@ -43,7 +44,6 @@ function devContext(
     // as the engine would be a lie about what is exercised, so the cast is
     // confined to one line with this comment on it.
     engine: { harness } as never,
-    status: null,
     render: {
       preference: 'auto',
       output: null,
@@ -100,14 +100,18 @@ function panelMarkup(context: DevContext, id: string): string {
 }
 
 describe('the author’s instruments', () => {
+  // The live panels subscribe to the sampler's store rather than taking the
+  // status as a prop, so a test that wants one showing data publishes a sample
+  // the way `startEngineSampler` would — and clears it, so the tests that
+  // assert the pre-first-frame rendering keep meaning what they say.
+  afterEach(() => engineStore.setState({ status: null }))
+
   it('renders the universe it is pointed at', () => {
     const session = openSession({ seed: 'inertialref', workers: null })
     const ir = session.harness
 
-    const markup = panelMarkup(
-      devContext(ir, { status: ir.status() }),
-      'telemetry',
-    )
+    engineStore.setState({ status: ir.status() })
+    const markup = panelMarkup(devContext(ir), 'telemetry')
 
     // The overlay's whole justification is that the invisible state is visible.
     expect(markup).toContain(ir.status().world.stateHash)
@@ -195,10 +199,8 @@ describe('the author’s instruments', () => {
      */
     const session = openSession({ seed: 'inertialref', workers: null })
     const status = session.harness.status()
-    const markup = panelMarkup(
-      devContext(session.harness, { status }),
-      'telemetry',
-    )
+    engineStore.setState({ status })
+    const markup = panelMarkup(devContext(session.harness), 'telemetry')
     expect(markup).toContain(`title="${status.world.stateHash}"`)
     session.dispose()
   })

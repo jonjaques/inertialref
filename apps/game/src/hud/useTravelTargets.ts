@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { TravelTarget } from '@inertialref/devtools'
+import { sameTargets, type TravelTarget } from '@inertialref/devtools'
 import type { GameEngine } from '../engine/GameEngine.ts'
 
 /*
@@ -86,7 +86,16 @@ export function useTravelTargets(
             : engine.harness.search(needle, {
                 ...(origin === undefined ? {} : { origin }),
               })
-        setListing({ rows, ready: true, failure: null })
+        // An unchanged sky keeps the previous listing object, so the poll
+        // stops re-rendering a couple of hundred catalog rows a second while
+        // nobody moves — `sameTargets` says what "unchanged" tolerates.
+        setListing((current) =>
+          current.ready &&
+          current.failure === null &&
+          sameTargets(current.rows, rows)
+            ? current
+            : { rows, ready: true, failure: null },
+        )
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : String(cause)
         // Identical state bails out of the re-render, so a failure that keeps

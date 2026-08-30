@@ -48,7 +48,7 @@ node scripts/drive.mjs --help
 ```
 
 It starts `pnpm dev` if nothing is serving, boots the renderer, and then **leaves Chrome
-running**. Boot is the expensive part — about ten seconds of shader warm and body build
+running**. Boot is the expensive part — about five seconds of shader warm and body build
 on top of the dev server's own start — and every call after the first attaches to the
 booted page in well under a second. That is what makes a batch worth writing:
 
@@ -226,33 +226,43 @@ handles the first three — they are here because they explain what it is doing.
    `engine.gl` null, which reads as a rendering bug and is not one.
 4. **A wedged Chrome needs `--down` and a fresh start.** Reloading is not always enough
    to recover its GPU state.
-5. **The default rig is 1600×900 at DPR 1, and that is not what anyone is looking at.**
+5. **`?presentation=occluded` is on every URL the driver navigates to**, and it is what
+   stops the rig measuring itself. The presentation watchdog reads the canvas bitmap
+   back to decide whether it has ever presented, and defers while `visibilityState` is
+   not `visible`. Focus emulation — trap 1 — reports `visible` for a window that is
+   still behind everything else, so the gate opened on a readback that is transparent
+   black for a healthy renderer, the ladder exhausted, and the canvas was remounted on
+   every boot: a second full preload 4.5 s after the first, an uncaught Three dispose,
+   and a drawing buffer that came back **3200×1800 for a rig asking for 1600×900 at
+   DPR 1**. Every terrain figure taken after a rebuild here was a retina figure. The
+   flag says "unreadable, not black"; the watchdog stands down and lifts the cover.
+6. **The default rig is 1600×900 at DPR 1, and that is not what anyone is looking at.**
    Terrain selection is measured in _display pixels_, so the streamer at a retina window
    asks for four times the patches and behaves like a different subsystem: the geometry
    cache strobed the whole disk at 2.3 Hz above a 3840×2400 drawing buffer and was
    perfectly stable at the default. **A defect you cannot reproduce is a defect whose
    window you have not matched** — get `--width`, `--height` and `--dpr` from the
    reporter, or read the frame size off their trace, before concluding anything.
-6. **A quiet `--cast` under 40 fps is not an all-clear.** The capture rate is bounded by
+7. **A quiet `--cast` under 40 fps is not an all-clear.** The capture rate is bounded by
    how fast Chrome encodes a frame; a subsampled stream misses a one-frame artifact by
    coin toss. The step reports its own rate and says so, but the reflex worth keeping is
    to read the fps before believing the verdict.
-7. **`--serve` cannot start a dev server in a worktree that has never built.**
+8. **`--serve` cannot start a dev server in a worktree that has never built.**
    `pnpm dev` needs `apps/game/dist` for the Worker's asset binding, and without it both
    halves exit — so the driver waits its full sixty seconds and then reports that nothing
    answers the URL. Run `pnpm dev:client` yourself and pass `--no-serve`, or `pnpm build`
    once. [development](../../../docs/guides/development.md) § Commands has it.
-8. **Terrain does not stream just because you are at a body.** The streamer forgets
+9. **Terrain does not stream just because you are at a body.** The streamer forgets
    everything above the eight-pixel relief gate, so `ir.land` and `ir.orbit(addr, 8)` from
    the root URL both left `ir.terrain()` reporting `visited: 0` and `lens: null` — which
    reads exactly like a broken streamer and is the gate working. `ir.visit(addr, {site:
 'summit', height: 2})` **in the planetarium** is what makes it stream; check
    `ir.terrain().visited` before concluding anything about ground.
-9. **There is no key-press step, and a synthetic `KeyboardEvent` is not a substitute.**
-   Dispatching one on `window` did not fire `chrome.instruments`, and the driver exposes
-   no `Input.dispatchKeyEvent`. Reach a keyboard affordance through the preference it
-   toggles or the harness verb behind it — never by faking the event and believing the
-   silence.
+10. **There is no key-press step, and a synthetic `KeyboardEvent` is not a substitute.**
+    Dispatching one on `window` did not fire `chrome.instruments`, and the driver exposes
+    no `Input.dispatchKeyEvent`. Reach a keyboard affordance through the preference it
+    toggles or the harness verb behind it — never by faking the event and believing the
+    silence.
 
 Readiness is `window.engine.gl`, not `window.ir` — the harness appears seconds earlier,
 so a probe on it screenshots an unlit canvas. And a canvas readback is always transparent
@@ -271,6 +281,26 @@ and `?` prints whatever they are now.
 **Look at the perf panel before optimizing anything**, and before believing a
 performance claim in a design document: the first thing it found was that time warp had
 never worked above 5×.
+
+## Measuring so the number means something
+
+**A quiet machine, and one measurement at a time.** The same summit arrival reads 45 ms
+worker runs quiet and 285 ms with a build running beside it — so a `pnpm test` in another
+shell does not add noise, it replaces the subject. Finish the suite, let the machine
+settle, then measure. It cuts both ways: trap 6 is this seen from the test suite's side.
+
+**Say which build**: dev React is ~5× shipped. **Name the operating point, and prefer
+two** — a figure measured at one is a figure about that point, which is the mistake that
+reached an ADR before an audit caught it.
+
+**`?workers=N`** overrides the pool size (bounded at sixteen). It is how the ceiling in
+`engine/browserWorker.ts` was chosen: land, converge twenty seconds, and read `jobs/s`,
+`averageRunMs` and `ir.terrain().level` _together_ — throughput alone hides the per-job
+dilation, and the drawn level is the number a player actually watches.
+
+**`ir.terrain()`'s `visited`, `culled`, `starved` and `level` are from the last frame
+that walked, not from this one.** A converged stance walks on none of them. `selections`
+is the total that says whether a frame walked at all; read it beside the rest.
 
 **A panel registered with `defaultOpen: false` is collapsed, not missing.** Perf is one,
 so a fresh profile shows Catalog, Time, Object and Camera and nothing else, and a DOM

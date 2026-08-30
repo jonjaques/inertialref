@@ -300,6 +300,72 @@ describe('a cutscene session', () => {
     expect(session.sample()?.frame).toBe(900)
   })
 
+  it('leaves a scene it did not open alone when it ends', () => {
+    /*
+     * THE FROZEN WORLD. `sample()` runs on the engine store's sampler, which
+     * is session-wide and keeps running with no cinema mounted — so a scene
+     * started from the console (`ir.play('tngIntro')`, which every driven
+     * measurement does) ended, the director restored the clock, and this
+     * reopened it two frames short and paused the clock again to hold a
+     * picture nobody had asked for. Every flight and warp figure taken after
+     * that described a world that was not advancing, with nothing on screen to
+     * say so.
+     */
+    const { host, director, calls } = fake()
+    const session = createCutsceneSession(host)
+
+    // Not through `session.open`: the console, the harness, a driver script.
+    director.play('tng-intro')
+    expect(session.sample()?.id).toBe('tng-intro')
+
+    director.finish('ended')
+    expect(session.sample()).toBeNull()
+    expect(calls).not.toContain('pause')
+    expect(director.paused).toBe(false)
+  })
+
+  it('stops reacting to an ending the moment the player leaves', () => {
+    // The window is one sample wide and the sampler is 8 Hz. `stop()` drops the
+    // claim *before* it stops the director, so an ending that arrives in the
+    // same beat the player navigates away has nothing left to react to it: the
+    // unmount stops the director, and a session still holding the ending would
+    // reopen and pause after there is nobody to read the card.
+    const { host, director, calls } = fake()
+    const session = createCutsceneSession(host)
+    session.open('tng-intro', 0, true)
+
+    director.finish('ended')
+    session.stop()
+    session.sample()
+    session.sample()
+
+    expect(calls).not.toContain(`seek:${DURATION - 2}`)
+    expect(director.paused).toBe(false)
+  })
+
+  it('drops its claim when an open fails, rather than keeping the last one', () => {
+    /*
+     * The claim is the *id*, and it is cleared before `host.play` rather than
+     * after. A session that opened A and then fails to open B has no scene of
+     * its own — but a flag set by the last successful open still reads as one,
+     * so whatever ends next gets reopened and the clock paused for a reader
+     * who is looking at an error message.
+     */
+    const { host, director, calls } = fake()
+    const session = createCutsceneSession(host)
+    session.open('tng-intro', 0, true)
+    expect(session.open('nothing', 0, true)).toContain('Unknown cutscene')
+
+    // Something else entirely, from the console.
+    director.play('tng-intro')
+    calls.length = 0
+    director.finish('ended')
+
+    expect(session.sample()).toBeNull()
+    expect(calls).not.toContain('pause')
+    expect(director.paused).toBe(false)
+  })
+
   it('says nothing at all before a scene has ever been opened', () => {
     const { host } = fake()
     expect(createCutsceneSession(host).sample()).toBeNull()

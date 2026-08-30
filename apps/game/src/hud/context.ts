@@ -1,4 +1,3 @@
-import type { HarnessStatus } from '@inertialref/devtools'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import type { Connection } from '../net/health.ts'
 import type {
@@ -17,10 +16,15 @@ import type {
  * that can assemble it — the renderer description, the connection monitor and
  * the command table all live there — which is also why the dev group is passed
  * down to the modes rather than composed inside one.
+ *
+ * No `status` field, and its absence is load-bearing. A `HarnessStatus` is a
+ * fresh object graph every sample, so carrying it here meant `App` had to
+ * subscribe to it, and `App` re-rendering is the whole interface re-rendering
+ * at the sample rate. The panels that display live figures subscribe to
+ * `state/engineStore.ts` themselves, at the same 8 Hz, alone.
  */
 export interface DevContext {
   readonly engine: GameEngine
-  readonly status: HarnessStatus | null
   readonly render: HudRenderState
   readonly graphics: GraphicsState
   readonly camera: CameraState
