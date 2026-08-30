@@ -25,9 +25,10 @@ Reasoning: [ADR-0016](../../docs/adr/0016-documentation-as-a-mode.md),
   the seventy files here link to each other by relative path, so it is also every
   inbound link inside the corpus.
 
-- **`apps/game/public/doc-content/` is derived. Never edit it.** It is generated the way
-  the brand artifacts are, and the markdown is the source. It is gitignored, and
-  `pnpm build` regenerates it.
+- **`apps/game/.doc-content/` is derived. Never edit it.** It is a build input
+  for Astro — the page bodies the documents are emitted from. `public/doc-content/`
+  is the runtime fetch: the rail's manifest and the search index. Page bodies
+  are not files there. Both are gitignored; `pnpm build` regenerates them.
 
 - **A cross-reference in a doc comment is checked.** TypeDoc fails the build on a
   `{@link}` naming a symbol that no longer exists, rather than rendering words that link

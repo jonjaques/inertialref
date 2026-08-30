@@ -117,12 +117,17 @@ Violating one of these is a rewrite later, not a refactor.
   no page constructs one. Chrome renders inside `.hud-layer` as a sibling of
   that island. A router over the whole tree rebuilds a
   `WebGPURenderer` on every navigation.
-  [ADR-0011](docs/adr/0011-application-shell-and-modes.md).
-- **Never hold the current mode in React state.** It is
-  `modeForPath(resolvedLocation(location).pathname)` in `pages/paths.ts`.
-- **Never read the raw pathname when a dialog could be open over a mode.**
-  Use `resolvedLocation`. Links that stay inside a dialog, and controls that
-  close one, go through `pages/useOverlay.ts`.
+  [ADR-0011](docs/adr/0011-application-shell-and-modes.md),
+  [ADR-0021](docs/adr/0021-the-astro-shell.md).
+- **Never hold the current mode in React state.** It is `modeForPath` of the
+  overlay store's `mode.pathname` in `pages/paths.ts`. A page knows its mode
+  at build time; the island reads the same function.
+- **Never derive the camera owner from the address bar while a dialog is open.**
+  Mode is the overlay store's `mode`; the address bar is `displayOf`.
+  `stancePathOf` is the path whose stance the backdrop holds. Overlay links
+  go through `OverlayLink`, never a document `<a>` — following `/settings` as
+  a document from the planetarium unmounts the planetarium.
+  [ADR-0021](docs/adr/0021-the-astro-shell.md).
 - **Never apply `flattening` to a body that has a `figure`.** A `figure` is
   present exactly when a body is not a spheroid, and its mesh already carries
   all three measured half-extents. `flattening` is `polarRadius / radius`, which
@@ -320,9 +325,9 @@ Violating one of these is a rewrite later, not a refactor.
 - **Never edit a file `pnpm brand` writes.** The mark is
   `design/brand/brandmark.svg`. `pnpm brand:check` is in `pnpm check`.
 - **Never change what the site says about itself in only one place.**
-  `src/site.ts` supplies shared values, `astro/layouts/Base.astro` is what a
-  scraper reads, and `pages/DocumentMeta.tsx` applies route-specific browser
-  metadata.
+  `src/site.ts` is the source. `astro/layouts/Base.astro` interpolates it at
+  build, which is the card a scraper reads. `pages/DocumentMeta.tsx` rewrites
+  `<title>` on an overlay `pushState`, which does not load a new document.
 - **Never load a third-party tag from the document.** `src/analytics.ts` is
   the gate: production build, canonical host, no Global Privacy Control.
 

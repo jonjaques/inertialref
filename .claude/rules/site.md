@@ -17,8 +17,10 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", `docs/hosting.md`, A
 - **Never edit a file `pnpm brand` writes.** `favicon.svg`, `favicon.ico`, `apple-touch-icon.png`,
   `icon-*.png`, `og.png`, `manifest.webmanifest`, `robots.txt` and
   `src/icons/brandmark.ts` are all generated from `design/brand/brandmark.svg`,
-  `design/brand/og-plate.png` and `src/site.ts`. Edit the source, run `pnpm brand`,
-  commit the result. `pnpm brand:check` is in `pnpm check`.
+  `design/brand/og-plate.png` and `src/site.ts`. Brand does not write
+  `sitemap.xml` — `@astrojs/sitemap` emits every page the build produced. Edit
+  the source, run `pnpm brand`, commit the result. `pnpm brand:check` is in
+  `pnpm check`.
 - **`design/brand/og-plate.png` is the share card's background and is a capture,
   not a drawing.** One frame of the real renderer, committed so the build stays
   GPU-free and the card stays the same card. `scripts/brand/og.mjs` carries the
@@ -30,9 +32,10 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", `docs/hosting.md`, A
   `scripts/brand/checkHead.mjs` is the gate that the layout still calls the
   helpers, and it runs inside `pnpm brand:check` — adding a tag to the head
   means covering it there and moving the census count, in that order.
-- **`DocumentMeta.tsx` is the one place `location.pathname` is read raw.** It is about the
-  URL, not about what is on screen. Everything deciding _what is rendered_ still goes
-  through `resolvedLocation`.
+- **`DocumentMeta.tsx` rewrites `<title>` on an overlay `pushState`.** That
+  navigation does not load a new document, so the layout's head would keep
+  naming the mode underneath. Everything deciding _what is rendered_ — mode,
+  stance, camera owner — reads the overlay store, not the address bar.
 - **Never load a third-party tag from the document.** `src/analytics.ts` gates on
   production + canonical host + no Global Privacy Control, and `site.test.ts` states it.
 - **Never commit a measurement id or any other `VITE_*` value.** The repository is

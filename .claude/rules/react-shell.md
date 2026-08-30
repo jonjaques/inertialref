@@ -31,15 +31,17 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", ADR-0011.
   over the whole tree, rebuilds the `WebGPURenderer` on every navigation — the
   black-screen class `render/presentationWatchdog.ts` exists to recover from,
   arriving on purpose.
-- **The current mode is never React state.** It is
-  `modeForPath(resolvedLocation(location).pathname)`, a pure function in `pages/paths.ts`,
-  so a reload, a back button and a pasted link land in the same place by construction.
-  Same for everything else the URL carries — `?at=`, `?t=`.
-- **Never read the raw pathname while a dialog can be open over a mode.** The dialog
-  records the mode's location in `location.state.background`; `ModeRoutes` renders at
-  _that_, `resolvedLocation` resolves it, and `pages/useOverlay.ts` is what every
-  intra-dialog link and every close control uses. Ignored, closing a dialog returns to the
-  menu and tears the mode down — and over a cutscene it remounts the player on a loop.
+- **The current mode is never React state.** It is `modeForPath` of the overlay
+  store's `mode.pathname`, a pure function in `pages/paths.ts`, so a reload, a
+  back button and a pasted link land in the same place by construction. Same
+  for everything else the URL carries — `?at=`, `?t=`.
+- **Never derive the camera owner from the address bar while a dialog is open.**
+  Mode is the overlay store's `mode`; the address bar is `displayOf`.
+  `stancePathOf` is the path whose stance the backdrop holds. Overlay links go
+  through `OverlayLink`, never a document `<a>` — following `/settings` as a
+  document from the planetarium unmounts the planetarium. `useOverlay().close`
+  is the close control. Ignored, a warm dialog becomes a document load and the
+  mode behind it unmounts.
 - **Every mode's chrome needs `pointer-events-auto`.** `.hud-layer` is
   `pointer-events: none` so the scene stays reachable, and `ErrorBoundary`'s `className`
   styles its _fallback_, not a wrapper. Getting this wrong is silent: the hit target at
