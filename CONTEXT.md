@@ -210,6 +210,21 @@ Every driving verb took an address and nothing produced one.
 
 ## Bugs the tests found (worth not reintroducing)
 
+- **A cache keyed without the body, cleared without the queue.** `regionKey` is
+  packed arithmetic over the region alone, so after a retarget a job still out
+  for the discarded world names the same key the new body's roots do — and
+  `#request` filtered the nearest-first head of the new list out until it
+  settled. The ground arrived a heightfield's latency late on every retarget,
+  silently. `clear()` empties `#inFlight` and cancels it, and the stale job's
+  own `finally` is epoch-guarded so it cannot delete an entry the new body
+  just made.
+- **A session that reacts to an ending nobody is watching.** The cutscene
+  session reopened an ended scene and paused the world clock from a sampler
+  that runs whether or not the cinema is mounted, so a console `ir.play` left
+  the world frozen for the rest of the session. Two tests in
+  `cinema/session.test.ts` pin it: a scene the session did not open, and an
+  ending that arrives in the same sample as the leave.
+
 Each of these was invisible in a running browser and caught by a test or by
 driving the harness. They are listed because the same mistake is easy to make
 again in a neighboring system.
@@ -5979,6 +5994,127 @@ Finally, a figure **not** to quote: the `navigation to first light` entry read
 waits while the presentation watchdog gives up twice, on a Vite dev server
 transforming modules. The entry is verified; the number is about that window and
 not about a player.
+
+## The frame stops rebuilding what has not moved (30 Aug 2026)
+
+The verifying pass over [perf](docs/plans/perf.md) and
+[perf-2](docs/plans/perf-2.md). Both plans now carry a status per entry and the
+numbers below; what is worth keeping here is what the fixes had in common and
+the two instruments that were lying.
+
+**Four of the five frame fixes are one shape: a rebuild key that mixes two
+invalidation sources, so the cheap half pays the expensive half's cadence.**
+The starfield rewrote twenty thousand stars whenever `origin.generation` moved
+— every 4,096 m, which is every ninth frame in Earth orbit — for a buffer of
+_directions_, which translation does not change. It is gated on parallax now:
+the survey's identity, the origin's orientation and anchor exactly, and its
+position within 1e-5 of the nearest star's distance. That star is the system's
+own sun at ~1 AU, so the budget in orbit is ~1,500 km. `Render/starfield` in
+the planetarium at Earth: 0.48 ms mean and 1.7 max, to 0.00 and 0.10.
+
+`#maybeTraceOrbits` re-solved ninety-seven Kepler steps for every body in every
+loaded system whenever the _focus_ changed, because the sampling and the scope
+filter shared one key — 18.4 ms on a Sol retarget, 22.2 on a Proxima one, 12.3
+on every planetarium mount. Split, with the path's anchor making it legal: four
+retargets in one profile window leave `Engine/orbits` at 0.20 ms max. What does
+age is the phase, since the sweep starts at the body's own eccentric anomaly,
+and a full ellipse looks the same wherever it is cut.
+
+`balance` rebuilt a depth map over the whole node list in each of its passes. A
+summit selection settles in seven and the first is the only large one — the
+passes split 72, 29, 12, 10, 5, 2 and 0 nodes, so six of them walked nine
+hundred ancestor chains to find at most twenty-nine splits. Depth is monotone,
+so the map is carried: 0.777 to 0.612 ms a walk with the selection
+byte-identical. Two further ideas were measured and declined, which is the more
+useful half — skipping the ring probe for nodes within one level of the deepest
+is exact and worth 8%, because a summit selection is flat across levels
+(5:8 6:60 7:75 8:75 9:75 10:80 11:60 12:64 13:55 14:32 15:16) and only 48 of
+600 qualify; driving each pass from a recheck set costs more key arithmetic
+than the eight probes it saves at those pass sizes.
+
+And `snapshot()` formatted every body's address four times a frame — once for
+the field, once through `bodyFrameId`, and twice inside a ternary that spelled
+`bf:${formatAddress(…)}` on both arms. Sol is 129 bodies: over 30,000 formats
+and 23,000 template strings a second, on the one path every operating point
+pays. Memoized on the address object, in a `WeakMap` because a region address
+is built fresh per call and a `Map` would be a leak with a per-patch growth
+rate.
+
+**Forgetting an answer is not retiring the work.** `TerrainStreamer.#epoch`
+discarded heightfields that outlived their view; the jobs behind them ran to
+completion, so a departure left up to 128 of them queued ahead of everything
+the next view wanted. `#inFlight` holds the `JobHandle` now and `clear()`
+cancels it. Landed on Mars and then looking away: queued 124 to 0 within 60 ms,
+at a 264 ms mean run — 33 seconds of worker time not spent. At the cap all but
+`poolSize()` of the window are still in the pool's queue, where cancelling is a
+splice and the work never happens.
+
+**The pool ceiling was four on a ten-core machine and nothing had measured it.**
+`IN_FLIGHT_CAP` over `poolSize()` times the run time _is_ the queue, so the only
+question was whether extra workers dilate each job by more than the parallelism
+buys. On an M5, landing on Mars and converging twenty seconds: four workers is
+30.4 jobs/s at a 129 ms mean run and 4,037 ms of queue, reaching drawn level 10;
+eight is 41.6 jobs/s at 187 ms and 2,876 ms, reaching level 13. Runs dilate 45%
+and it is not close. The frame does not pay — 16.67 ms mean and 23.3 p95 at
+four against 16.71 and 19.3 at eight. The ceiling is eight and `?workers=N`
+re-runs the table anywhere.
+
+**The rig was measuring itself, and it was doing it twice over.** The
+presentation watchdog decides whether the canvas has ever presented by reading
+the bitmap back, and defers while `document.visibilityState` is not `visible`,
+because an occluded window legitimately never presents. CDP focus emulation —
+which is what makes an occluded Chrome run animation frames at all — reports
+`visible` for a window that is still behind everything else. Probed directly in
+the rig: `visibilityState` visible, `hasFocus()` true, and all four readback
+strips pure transparent black, alpha included, on a renderer that was drawing
+fine. So the gate opened, the ladder exhausted, and the canvas was remounted on
+every automated boot. That cost a second full preload and warm-up census 4.5 s
+after the first — about 6.5 s of a 10.2 s `navigation to first light` — and it
+also brought the drawing buffer back at 3200×1800 for a rig asking for 1600×900
+at DPR 1, because `useDevicePixelRatio`'s media query does not re-fire under
+emulation. **Terrain selection is measured in display pixels, so every terrain
+figure taken after a rebuild in this rig was a retina figure wearing a
+default-window label.** `?presentation=occluded` tells the page its probe is
+unreadable rather than black; the watchdog stands down and releases the boot
+cover, which is the exhausted rung minus the four samples, two nudges and the
+remount. Boot: `renderer ready` 9.1 to 5.2 s, and a clean Boot track for the
+first time — first light 4,302 ms, preload 1,843 of which `warming surface
+maps` is 1,569, one census rather than two.
+
+The remount also produced an uncaught `TypeError: Cannot read properties of
+undefined (reading 'usedTimes')` on every boot, from Three's `Nodes.delete`,
+which decrements `nodeBuilderState.usedTimes` without checking there is one —
+and there is not, for a render object the renderer created but never built a
+pipeline for, which is the ordinary state of a scene that has never presented.
+It is Three's bug and nothing this side can prevent. What this side controls is
+what the throw takes with it: uncaught it aborted the cleanup loop, so every
+visual after the first was left with its materials undisposed on exactly the
+path whose purpose is to rebuild them.
+
+**And the clock had been paused by the harness verb that measures it.**
+`CutsceneSession.sample()` runs on the engine store's sampler, which is
+session-wide and does not stop when the cinema does, so an ending is visible to
+it however the scene was started. It reacts by reopening the scene two frames
+short and pausing the world clock to hold the last picture — right for a reader
+holding an end card, wrong for a driver's `ir.play('tngIntro')`: the director
+restores the clock when the scene ends and the session paused it again. Every
+flight and warp figure taken after that described a frozen world with nothing
+on screen to say so, which is why the second pass found the clock at tick 5782
+and could not bisect it out of the timeline. It was never in the timeline. A
+session reopens only a scene it opened itself now, and `CinemaPlayer` unmounts
+through the session rather than past it, which also closes the one-sample
+window where an ending arrives in the same beat as the leave.
+
+Two smaller things worth not re-deriving. `surfaceDetailFloor` is 33–43 ms cold
+and was paid inside the frame a body arrives — 85% of a 40 ms first-contact
+spike on Earth, measured in Node as first `update` 39.8 ms against 0.5 warm,
+and the same ratio on Mars (40.3/34.0) and Luna (48.6/42.8). Its own docstring
+already said nothing about it needs the main thread, so it is a pool task and
+the streamer holds the ground back for the frames it takes. And `placePathInto`
+replaced `placeAt` per orbit vertex; its property test shrank to a shift of
+eight micrometres and reported the _reference_ as wrong, because a universe
+offset runs to 2^40 m where a double resolves 0.24 mm, so `UV.translate` rounds
+a fine shift away and adding it after the difference does not.
 
 ## Known gaps
 
