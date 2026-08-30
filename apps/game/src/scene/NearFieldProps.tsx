@@ -1,8 +1,8 @@
-import { useFrame } from '@react-three/fiber'
 import { useRef } from 'react'
 import type { Group } from 'three/webgpu'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { debugMaterials } from './debugMaterials.ts'
+import { useTimedFrame } from './useTimedFrame.ts'
 
 /**
  * Meter-scale reference objects around the player.
@@ -15,7 +15,7 @@ export function NearFieldProps({ engine }: { engine: GameEngine }) {
   const group = useRef<Group>(null)
   const rack = useRef<Group>(null)
 
-  useFrame(() => {
+  useTimedFrame('nearFieldProps', () => {
     const scene = engine.scene()
     if (scene === null || group.current === null) return
     // The props ride the same toggle as the ship: both are debug hardware, and

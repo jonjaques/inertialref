@@ -1,4 +1,4 @@
-import { useFrame, useThree } from '@react-three/fiber'
+import { useThree } from '@react-three/fiber'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   BufferAttribute,
@@ -31,6 +31,7 @@ import { scatteringFor } from '../render/atmosphereLuts.ts'
 import { texturesFor } from '../render/planetTextures.ts'
 import { proceduralRingStrip } from '../render/proceduralRings.ts'
 import { shapeGeometryFor } from '../render/shapeModels.ts'
+import { useTimedFrame } from './useTimedFrame.ts'
 
 /**
  * How many body visuals may be resident at once. See `evictStale`.
@@ -338,7 +339,7 @@ export function Bodies({ engine }: { engine: GameEngine }) {
     [visuals, spheres, rings],
   )
 
-  useFrame(() => {
+  useTimedFrame('bodies', () => {
     const scene = engine.scene()
     const container = group.current
     if (scene === null || container === null) return

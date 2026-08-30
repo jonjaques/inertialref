@@ -8,7 +8,7 @@ import {
   HEIGHTFIELD_RESOLUTION,
   type RegionAddress,
   surfaceDetailFloor,
-  surfaceRadius,
+  drawnSurfaceRadius,
   type SurveySite,
   surveySites,
 } from '@inertialref/universe'
@@ -218,6 +218,28 @@ export interface TerrainReport {
   readonly starved: number
   /** True when the patch budget stopped the refinement a level early. */
   readonly saturated: boolean
+  /**
+   * The rocks lying on it.
+   *
+   * Part of the terrain report rather than a verb of its own, because a scatter
+   * count without the ground it is standing on is not a number anyone can act
+   * on: `resolving` above zero and `rocks` at zero is a field filling in, and
+   * the same pair beside `starved` is a descent outrunning both budgets at once.
+   *
+   * `range` is how far rocks are drawn this frame, which is the lens's own
+   * figure — 212 m at the flight lens — and it is here for the same reason
+   * `lens` is: a count taken through a telephoto is not comparable with one
+   * taken through the flight lens, and nothing else in this report says so.
+   */
+  readonly scatter: {
+    /** Scatter regions held, whole or partial. */
+    readonly regions: number
+    /** How many of those are still resolving their candidate slots. */
+    readonly resolving: number
+    /** Instances drawn this frame, after the per-rock pixel cut. */
+    readonly rocks: number
+    readonly range: Meters
+  }
 }
 
 /**
@@ -394,7 +416,7 @@ export function simulateDescent(
     const latitude = clampLatitude(target.latitude + offset * 0.5)
     const longitude = target.longitude + offset
     const direction = geodeticDirection(latitude, longitude)
-    const distance = surfaceRadius(body, direction) + height
+    const distance = drawnSurfaceRadius(body, direction) + height
 
     const selection = selectTerrain(
       {

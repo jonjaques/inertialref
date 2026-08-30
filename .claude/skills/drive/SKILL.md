@@ -59,8 +59,16 @@ node scripts/drive.mjs --url http://localhost:5173/planetarium \
 node scripts/drive.mjs --js "ir.play('tng-intro')" --js "ir.pause()" \
     --js "ir.seekCutscene(1150)" --wait 2500 --shot beat-1150.jpg
 node scripts/drive.mjs --sample 240 --sample-js "ir.terrain()"  # per-frame, min..max
+node scripts/drive.mjs --js "(await ir.profile(2000)).text"     # why was that slow
 node scripts/drive.mjs --down                                   # when finished
 ```
+
+**`--trace` needs the level turned on and it is off by default.** Put
+`?timing=trace` on the `--url`, or `--js "ir.timing('trace')"` before it, or the
+recording carries a frame track and none of this project's own. `pnpm timing` reads
+the result; `pnpm timing --threads` is what separates the four worker threads from
+the main one. `ir.profile(ms)` is the same answer without a trace file, and it arms
+and disarms the level itself.
 
 Steps run in the order written, in one process and one session. Prefer one command with
 five steps to five commands.
@@ -73,6 +81,7 @@ five steps to five commands.
 | `--shot <path>` | a bare filename lands in `.data/drive/`; `.jpg` is the one to read      |
 | `--sample <n>`  | `n` consecutive rAF frames, with a min..max per field                   |
 | `--cast <n>`    | `n` **rendered** frames, differenced — the only step that sees a strobe |
+| `--trace <ms>`  | a Chrome trace; `pnpm timing` reads it back as a table and a verdict    |
 | `--logs`        | console output and page errors buffered so far                          |
 | `--reload`      | hard reload, then wait for the renderer                                 |
 
@@ -83,6 +92,12 @@ the attached page is not showing what the URL asks for. That silently discards t
 observatory — `ir.preset('earthrise')` in one invocation and `ir.terrain()` in the
 next reports the menu. Either repeat the whole session line every time, or put the
 setup and the measurement in one invocation. The second is cheaper and always right.
+
+**The failure is silent and it answers plausibly**, which is what makes it expensive:
+you land back on the home page and every probe after it returns a real value about the
+wrong document. Three consecutive invocations went that way while looking for a dock
+panel, each reporting `[]` for a control that was there the whole time. If an answer
+is empty when it should not be, check the page before checking the code.
 
 Session flags worth knowing: `--url` (the mode is a function of the path and the query,
 and the driver re-boots unless the attached page is already showing everything the URL
@@ -108,7 +123,7 @@ jumping twice a second came back identical to six pixels.
 
 `--cast <n>` records what the compositor actually presented and differences it. The
 signal it reports is not "how much changed" but **a frame that differs from both of
-its neighbours while those neighbours are identical to each other** — a static scene
+its neighbors while those neighbors are identical to each other** — a static scene
 with one frame departing from it. Motion produces none of those, which is what makes
 a clean result meaningful.
 
@@ -222,6 +237,22 @@ handles the first three — they are here because they explain what it is doing.
    how fast Chrome encodes a frame; a subsampled stream misses a one-frame artifact by
    coin toss. The step reports its own rate and says so, but the reflex worth keeping is
    to read the fps before believing the verdict.
+7. **`--serve` cannot start a dev server in a worktree that has never built.**
+   `pnpm dev` needs `apps/game/dist` for the Worker's asset binding, and without it both
+   halves exit — so the driver waits its full sixty seconds and then reports that nothing
+   answers the URL. Run `pnpm dev:client` yourself and pass `--no-serve`, or `pnpm build`
+   once. [development](../../../docs/guides/development.md) § Commands has it.
+8. **Terrain does not stream just because you are at a body.** The streamer forgets
+   everything above the eight-pixel relief gate, so `ir.land` and `ir.orbit(addr, 8)` from
+   the root URL both left `ir.terrain()` reporting `visited: 0` and `lens: null` — which
+   reads exactly like a broken streamer and is the gate working. `ir.visit(addr, {site:
+'summit', height: 2})` **in the planetarium** is what makes it stream; check
+   `ir.terrain().visited` before concluding anything about ground.
+9. **There is no key-press step, and a synthetic `KeyboardEvent` is not a substitute.**
+   Dispatching one on `window` did not fire `chrome.instruments`, and the driver exposes
+   no `Input.dispatchKeyEvent`. Reach a keyboard affordance through the preference it
+   toggles or the harness verb behind it — never by faking the event and believing the
+   silence.
 
 Readiness is `window.engine.gl`, not `window.ir` — the harness appears seconds earlier,
 so a probe on it screenshots an unlit canvas. And a canvas readback is always transparent
@@ -240,6 +271,22 @@ and `?` prints whatever they are now.
 **Look at the perf panel before optimizing anything**, and before believing a
 performance claim in a design document: the first thing it found was that time warp had
 never worked above 5×.
+
+**A panel registered with `defaultOpen: false` is collapsed, not missing.** Perf is one,
+so a fresh profile shows Catalog, Time, Object and Camera and nothing else, and a DOM
+probe for it comes back empty. Open it from the dock, or write the layout the mode keeps:
+
+```js
+localStorage.setItem('ir.hud.debug.on', 'true')
+localStorage.setItem(
+  'ir.hud.dock.layout.planetarium',
+  JSON.stringify({ left: ['perf'], right: ['object'], float: [], hidden: [] }),
+)
+// then --reload, because `usePersistentState` reads at mount
+```
+
+`innerText` will still not find a section below the fold of a scrolled panel — query the
+DOM rather than the rendered text, or scroll the container first.
 
 ## The cutscene reference
 

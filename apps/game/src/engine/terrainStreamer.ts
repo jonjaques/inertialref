@@ -46,6 +46,8 @@ import {
   terrainPatchKey,
 } from '@inertialref/rendering'
 import { generateHeightfieldTask, type WorkerPool } from '@inertialref/workers'
+import { PhaseClock, TERRAIN_PHASE, TERRAIN_SHORT } from './frameTiming.ts'
+import { ScatterField, type ScatterState } from './scatterField.ts'
 
 /*
  * Terrain streaming.
@@ -350,7 +352,7 @@ export interface TerrainState {
    * Kept against the resolved `Body` rather than rebuilt each frame, and the
    * cost that decides it is allocation rather than arithmetic: the palette is
    * twenty multiplies but about twenty short-lived objects, six of them nested
-   * records with a colour apiece, and `update` runs every frame terrain streams.
+   * records with a color apiece, and `update` runs every frame terrain streams.
    * There is nothing to invalidate — the body is an immutable object out of the
    * world, so a different world, a retarget or a reseed is a different
    * reference, and the identity check catches all three the way
@@ -389,10 +391,21 @@ export interface TerrainState {
    * of leaving one behind.
    */
   readonly lens: LensView | null
+  /**
+   * The rocks lying on it, or an empty field when nothing is close enough.
+   *
+   * On the terrain state rather than beside it because the two are one answer
+   * about one body: the scatter's anchor, its placement and its lens all come
+   * from the pose this streamer resolved, and a second producer of "which body
+   * is being looked at" would disagree with this one for a frame every time the
+   * target changed. `ScatterField` carries the argument.
+   */
+  readonly scatter: ScatterState
 }
 
 export class TerrainStreamer {
   readonly #pool: WorkerPool | null
+  readonly #scatter = new ScatterField()
   readonly #fields = new Map<string, CachedField>()
   readonly #patches = new Map<string, RenderPatch>()
   readonly #inFlight = new Set<string>()
@@ -404,6 +417,35 @@ export class TerrainStreamer {
   #culled = 0
   #starved = 0
   #saturated = false
+  /**
+   * The streamer's own four phases, inside the Engine track's one `terrain`.
+   *
+   * See `frameTiming.ts`: the clock steps in 100 µs here, so `select` at
+   * 40–90 µs for a whole disk cannot be read one frame at a time. It is still
+   * worth a phase — over a 240-frame window the rounding is unbiased and the
+   * mean is good to well under a microsecond — and the tiling means the four
+   * sum to the `terrain` phase exactly rather than drifting from it.
+   */
+  readonly #phases = new PhaseClock('game.terrain')
+
+  /**
+   * How much of the drawn selection is waiting on geometry, and whether the
+   * walk hit its patch ceiling.
+   *
+   * Beside `summary()` for the reason `pool.queued` sits beside `stats()`: the
+   * frame loop reads these every frame to color a trace entry, and `summary()`
+   * allocates an object and a nested one for the scatter field. An entry that
+   * turns red when the ground is going coarse is the one thing a screenshot of
+   * a profile can say at a glance, and it must not cost a per-frame allocation
+   * to say it.
+   */
+  get starved(): number {
+    return this.#starved
+  }
+
+  get saturated(): boolean {
+    return this.#saturated
+  }
   /*
    * The transform the patches are drawn with, refreshed by `update` every frame.
    *
@@ -506,6 +548,12 @@ export class TerrainStreamer {
     readonly starved: number
     readonly saturated: boolean
     readonly lens: LensView | null
+    readonly scatter: {
+      readonly regions: number
+      readonly resolving: number
+      readonly rocks: number
+      readonly range: Meters
+    }
   } {
     let placed = 0
     let vertices = 0
@@ -536,6 +584,7 @@ export class TerrainStreamer {
       starved: this.#starved,
       saturated: this.#saturated,
       lens: this.#lensView,
+      scatter: this.#scatter.summary(),
     }
   }
 
@@ -573,6 +622,7 @@ export class TerrainStreamer {
       centre: pose?.position ?? null,
       datumRadius: this.#datumRadius,
       lens: this.#lensView,
+      scatter: this.#scatter.state(),
     }
   }
 
@@ -580,9 +630,17 @@ export class TerrainStreamer {
    * Reconcile the loaded set against where the camera is.
    *
    * Called every frame; cheap when nothing has changed, because the work is
-   * keyed by (body, region) and both are stable while the player hovers. The
-   * selection itself is 40–90 µs for a whole disk, which is what lets it run
-   * unconditionally rather than behind an altitude gate.
+   * keyed by (body, region) and both are stable while the player hovers.
+   *
+   * **The selection is 40–90 µs for a whole disk seen from orbit, and 2.7 ms
+   * standing on a summit.** Both are real; the first is the one that lets this
+   * run unconditionally rather than behind an altitude gate, and the second is
+   * what it costs where somebody is actually looking at ground. Measured on the
+   * Terrain track on Earth's summit site, where a nine-level selection visits
+   * 446 nodes: `terrain.select` was 2.733 ms of a 4.461 ms engine step — 61% of
+   * everything the engine did — with `terrain.request` at 0.916 ms,
+   * `terrain.build` at 0.225 ms and `terrain.scatter` at 0.046 ms behind it.
+   * A figure measured at one operating point is a figure about that point.
    */
   update(
     world: World,
@@ -591,6 +649,10 @@ export class TerrainStreamer {
     origin: RenderOrigin,
     body: RenderBody | null,
   ): void {
+    // Opened before the early exits so a frame that clears or forgets emits
+    // nothing at all, which is the truthful picture — there was no terrain work
+    // to decompose.
+    this.#phases.open()
     if (body === null) {
       this.clear()
       return
@@ -606,7 +668,14 @@ export class TerrainStreamer {
     const previous = this.#previous
 
     const resolved = this.#resolve(world, renderTime, body.address)
-    if (resolved === null) return
+    // Through `#forget`, like every other exit. A bare return leaves the pose,
+    // the palette, the drawn set and the rocks describing a body this world
+    // cannot resolve any more — a system unloaded under a target it still
+    // names — and the frame draws last frame's ground at last frame's place.
+    if (resolved === null) {
+      this.#forget()
+      return
+    }
     const { surface, bodyPose, spinPose } = resolved
     /*
      * Solid bodies only. A gas giant has no surface to stream and the tier must
@@ -723,10 +792,28 @@ export class TerrainStreamer {
     const starvedChildren = drawn.starved.flatMap((region) =>
       regionChildren(region),
     )
+    /*
+     * Both quadtree walks under one entry, and red when the ground is short.
+     *
+     * One phase rather than two because a single walk is 40–90 µs against a
+     * 100 µs clock — the pair is the smallest thing here that resolves at all,
+     * and splitting it would produce two bars whose difference is quantization.
+     * `starved` and `saturated` are the streamer's own words for "the picture
+     * is coarser than the selection asked for", and they are exactly what a
+     * reader wants to see without reading a number.
+     */
+    this.#phases.step(
+      'terrain.select',
+      this.#starved > 0 || this.#saturated ? TERRAIN_SHORT : TERRAIN_PHASE,
+    )
+
     this.#build(
       [...drawn.patches.map((patch) => patch.region), ...starvedChildren],
       surface,
     )
+    // Main-thread vertex work: 0.25 ms a patch, four a frame by budget. The one
+    // phase here that clears the clock's resolution comfortably.
+    this.#phases.step('terrain.build', TERRAIN_PHASE)
     /*
      * The draw set first, then the ideal one.
      *
@@ -753,7 +840,43 @@ export class TerrainStreamer {
       ...pyramid(wanted.patches),
     ]
     this.#request(requested, surface)
+    // Together 0.916 ms on a summit, against a request list naming over a
+    // thousand regions — so they clear the 100 µs step easily where it matters
+    // and quantize together from orbit, where there is nothing to see anyway.
+    this.#phases.step('terrain.request', TERRAIN_PHASE)
+
     this.#evict(requested)
+    this.#phases.step('terrain.evict', TERRAIN_PHASE)
+
+    /*
+     * The rocks, last, because they stand on ground this frame has just decided
+     * how to draw — and driven from here rather than from the engine because
+     * everything they need is already resolved: the body, the eye in body-fixed
+     * axes, the pose the patches are placed with, and the lens the whole picture
+     * was selected against.
+     */
+    this.#scatter.update(
+      surface,
+      body.address,
+      eyeLocal,
+      // The branded direction this frame's own selection was made against,
+      // rather than a second normalization of `eyeLocal` in the app layer —
+      // `bodyFixedDirection` is one of the three producers and this keeps it
+      // that way.
+      eye.direction,
+      this.#pose,
+      this.#lensView,
+    )
+    /*
+     * The one phase that most wants a timeline rather than a mean.
+     *
+     * `scatterField.ts` resolves a fixed budget of 128 candidate slots per
+     * frame against a whole region that costs 2.6–5.8 ms, so the work is
+     * deliberately smeared across frames — and a budget spread thin is
+     * invisible to a scalar by construction, while on a track it is the obvious
+     * repeating band.
+     */
+    this.#phases.step('terrain.scatter', TERRAIN_PHASE)
   }
 
   #key(region: RegionAddress): string {
@@ -1001,6 +1124,10 @@ export class TerrainStreamer {
     // The lens is a selection mirror like the rest: reporting one beside
     // `patches: 0` claims a selection was made against it, and none was.
     this.#lensView = null
+    // The rocks go with the ground they lie on. Their cache stays: the eight-
+    // pixel gate is thousands of kilometers above the range they draw in, so a
+    // frame that reaches this line has left the surface entirely.
+    this.#scatter.forget()
   }
 
   /** Drop everything. The world was replaced; none of this describes it. */
@@ -1011,6 +1138,7 @@ export class TerrainStreamer {
     this.#patches.clear()
     this.#bodyAddress = null
     this.#previous = null
+    this.#scatter.clear()
     this.#forget()
   }
 }

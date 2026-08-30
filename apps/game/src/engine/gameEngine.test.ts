@@ -34,11 +34,14 @@ import { GameEngine } from './GameEngine.ts'
 /**
  * How long the descent in `beforeAll` below is given, milliseconds.
  *
- * Five minutes against the suite's twenty seconds, and it runs in about fifty.
- * It generates a landing's worth of terrain — some nine hundred bordered 65×65
- * heightfields, the coarse ones 20 ms apiece — through an **inline** worker,
- * which is to say serially on this thread. In a browser that is a pool of six
- * and a four-second sharpen.
+ * Five minutes against the suite's twenty seconds, and it runs in **99.7 s**
+ * measured clean. It generates a landing's worth of terrain — bordered 65×65
+ * heightfields at 22 to 50 ms apiece since the field grew a sub-floor tail and
+ * the detail floor followed it — through an **inline** worker, which is to say
+ * serially on this thread. In a browser that is a pool of six.
+ *
+ * The figure tracks the field rather than this file: every level the floor
+ * gains is another ring of patches, so it has roughly doubled once already.
  *
  * It is a timeout rather than a target: what it guards against is a hang, so
  * the headroom is the point. Two minutes is only twice the idle cost, and twice

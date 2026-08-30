@@ -7,7 +7,8 @@
 >
 > Code: `packages/simulation/src/world.ts` (`updateInterest`),
 > `packages/rendering/src/terrainSelect.ts`,
-> `apps/game/src/engine/terrainStreamer.ts`
+> `apps/game/src/engine/terrainStreamer.ts`,
+> `apps/game/src/engine/scatterField.ts`
 
 ---
 
@@ -108,6 +109,31 @@ GPU, and it is why the terrain budget has measured numbers in it at all — the
 browser asks the question once a frame, `ir.descend` asks it a few hundred times
 in a millisecond ([harness](../guides/harness.md#measuring-terrain)).
 
+### Two fields, and which one each reader gets
+
+The mesh, the detail floor, the material and the observatory's standing camera
+read `drawnElevation`. The contact test, the saves and the survey sites read
+`groundElevation`. The first is the second plus a presentational tail, and
+`drawnDivergence` publishes how far apart they may get: **1.25 m**.
+
+They are two functions rather than one because of a single line of arithmetic.
+`surfaceDetailFloor` refines while the middle of a grid cell differs from the
+bilinear of its corners by more than `TERRAIN_DETAIL_TOLERANCE`, and that
+tolerance **is** `CANONICAL_AMPLITUDE_FLOOR` — deliberately, so that the level
+past which refining stops buying detail is the level past which the field stops
+having any. The loop that closes is this: a term whose amplitude stays under
+that floor cannot deepen the floor, however fine its wavelength, because the
+search calls every level of it quiet. What buys the last levels is that an
+eight-meter crater is 1.6 m deep, which is over the tolerance — and a term that
+size cannot go in the canonical field without moving the ground every save's
+landed hull was written against.
+
+So a reader on the wrong side of the line is a category error rather than a
+rounding difference. Physics reading the drawn ground puts a landing behind a
+term the renderer is free to change; a mesh reading the canonical ground draws a
+plane at two meters. [ADR-0021](../adr/0021-the-ground.md) has the alternatives,
+including the one that reads as obvious and does nothing.
+
 ### The four rules the traversal follows
 
 **Refine while a patch's own grid cell is coarser than the screen can tell.**
@@ -137,13 +163,15 @@ patches to draw geometry the resolve filter averages away.
 
 **Stop where the field stops.** Past some level a patch is a bilinear upsample of
 its parent. `surfaceDetailFloor` measures that per body from the field itself
-rather than assuming it, and it lands at level 10 to 16 across the zoo — 10 on
-Iapetus, 16 on the atmosphered rocky world, as `pnpm sim --terrain-baseline`
-prints it against each body's descent. The
+rather than assuming it, and it lands at level 12 to 19 across the zoo — 12 on
+Miranda, 19 on the airless rocky world, as `pnpm sim --terrain-baseline` prints
+it against each body's descent. That is a grid cell of 1.41 m down to 0.35 m,
+which is the difference between standing on a world and standing on a plane. The
 [band stack](rendering.md#terrain-meshing) puts crater rims in the field, a rim
 is about a seventh of its crater wide, and resolving one to half a meter takes
-samples seven times finer again. It moved there from 7–10 the day the geology
-landed, with no constant to raise, which is what measuring it from the field buys.
+samples seven times finer again; the presentational tail below it is worth the
+last two to three levels on its own. Nothing in any of that is a constant to
+raise, which is what measuring it from the field buys.
 
 Two things settle the walk rather than one. A quiet level counts only if its
 stencils touched dry ground — the sea clamp manufactures exact zeros over open
@@ -181,7 +209,7 @@ from the selection's own ceiling now, and eviction keeps everything the frame's
 request list names — the drawn set, the starved children, the whole pyramid —
 because the pyramid is re-asked for every frame: a keep set of the two
 selections' leaves alone turns the cap into a treadmill that evicts a rung,
-re-requests it, and regenerates it at 9 to 37 ms a patch.
+re-requests it, and regenerates it at 22 to 50 ms a patch.
 
 **The cap has to clear that keep set, and neither selection measures it.** The
 request set is two independently capped selections — the drawn one and the one
@@ -224,9 +252,35 @@ along the orbit rather than along the camera's track over the ground.
 **Twenty-four requests go out a frame**, because that ladder is strictly serial:
 a level cannot refine until all four children of every node on it have arrived,
 so a frame that under-asks is a frame the next level waits for, and with the
-detail floor twelve to sixteen levels down that is most of a landing. More
+detail floor twelve to nineteen levels down that is most of a landing. More
 would queue rather than work — the requests go to a pool, and a queue is what a
 camera turn has to throw away.
+
+### The rocks stream too, and not through the quadtree
+
+Scatter is a second streamer — `apps/game/src/engine/scatterField.ts` — and it is
+a much smaller one, because a rock has no tree in it. It lives at one level, so
+there is no morph to close and no coarser version to hand over to; the whole
+population is inside 212 m at the flight lens, which a descent crosses in seconds
+and a stance never crosses at all; and a dozen regions of a thousand slots is a
+few hundred kilobytes against the quadtree's hundreds of megabytes, so there is
+no eviction pressure worth the name either.
+
+What it does share is the budget problem. `regionScatter(surface, region, slots)`
+answers "does `r:…/o:837` hold a rock" with a hash over 1,024 candidate slots in
+a 256 m region, and **resolving one candidate is a field sample** — the same band
+stack a heightfield vertex pays for — so a whole region is eight and a half
+milliseconds and cannot land inside a frame. The slot range is half-open for
+exactly that reason, 128 slots go out a frame, and a region is drawn only once it
+is whole: half a region drawn and then completed is rocks appearing out of
+nothing in the middle of the frame, which is worse than a region that arrives
+late. Slot 837 is slot 837 whichever call resolves it.
+
+It runs on the main thread rather than through the pool, which is the one place
+this differs from the heightfields, and it is affordable only at that budget:
+128 field samples is 1.8 ms. `ir.terrain().scatter` reports what it holds —
+regions, regions still resolving, rocks drawn, and the range they are drawn to
+([harness](../guides/harness.md#measuring-terrain)).
 
 ### What the streamer hands the renderer
 
@@ -312,7 +366,8 @@ gone.
 | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
 | Interest is a radius scan over generation cells  | Fine at 6 ly; a spatial index is needed for large radii                                                                           | [roadmap](../roadmap.md#streaming-and-scale) |
 | The selection is not frustum-culled              | A whole disk is generated, of which the renderer draws about a third                                                              | [roadmap](../roadmap.md#terrain)             |
-| Vertex attributes are float32                    | 237 KB a patch, so a whole-disk selection is 99–239 MB at the flight lens                                                         | [roadmap](../roadmap.md#terrain)             |
+| Vertex attributes are float32                    | 237 KB a patch, so a whole-disk selection is 113–255 MB at the flight lens                                                        | [roadmap](../roadmap.md#terrain)             |
+| Scatter resolves on the main thread              | A candidate slot is a field sample, so a 1,024-slot region is 8.5 ms and cannot land inside a frame; 128 slots go out a frame     | [roadmap](../roadmap.md#terrain)             |
 | The mesh is built on the main thread             | 0.25 ms a patch, budgeted at four a frame; the worker already has the field                                                       | [roadmap](../roadmap.md#terrain)             |
 | A generated body's sphere is a flat tint         | Its ground has maria, rays and caps below the eight-pixel gate, and none above it                                                 | [roadmap](../roadmap.md#terrain)             |
 | Deposits are chosen from the mesh, not the field | Two patches at different levels report different slopes for the same ground, so a deposit weight steps by ~4% at a level boundary | [roadmap](../roadmap.md#terrain)             |
@@ -332,3 +387,4 @@ against 300 to 600, so the band stays narrow and the tree is restricted instead.
 
 - [Determinism](determinism.md) · [Identity](identity.md) · [Workers](workers.md)
 - [Rendering](rendering.md#terrain-meshing) — what happens to a heightfield
+- [ADR-0021](../adr/0021-the-ground.md) — the drawn field, the divergence bound, and the rocks

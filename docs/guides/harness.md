@@ -256,12 +256,74 @@ for (const height of [40000, 2000, 120, 2]) {
 
 ---
 
+## The performance timeline
+
+```js
+ir.timing() // the level: off | trace | full
+ir.timing('trace') // the same switch the URL, the preference and the panel reach
+ir.timing.tracks() // what this session has actually emitted onto
+ir.timing.mark('after the seek') // a marker of your own, across every track
+ir.timing.drain() // the retained entries, cleared by name on the way out
+await ir.profile(2000) // arm, record, disarm, report
+```
+
+`ir.profile` is the one that answers a question. It returns structured data and
+a `.text` block — the shape `terrainBaseline` established — because the point is
+a terminal-readable answer from a single `--js` call:
+
+```
+node scripts/drive.mjs --js "ir.visit('g:milky-way/s:SOL/b:2',{site:'summit',height:2})" \
+                       --wait 5000 --js "(await ir.profile(2000)).text" --down
+```
+
+The last line of the report is the deliverable: _"9 of 61 frames over 25 ms;
+terrain.select was the largest measured span in 7 of them, 8.4 ms of 31.0 ms"_
+rather than a screenshot and a p95. It names the largest span inside the **late**
+frames, not the busiest one overall — a span that is cheap on average and
+catastrophic four times is exactly what a mean hides — and carries the frame
+duration beside it, because the ratio is what says whether the name explains
+anything. A worker job is never named: the pool times it from dispatch to answer
+on the page's clock, so it starts inside a frame and outlives it, and it ran on
+another thread.
+
+Three things it will not tell you, each for a reason worth knowing.
+
+**The worker tracks are absent from a drain.** A worker's User Timing entries
+live on the worker's own performance timeline, invisible to the page's
+`getEntriesByType`, because each side times and emits against its own
+`timeOrigin`. They are in a _trace_, on their own threads — `pnpm timing
+--threads` separates them.
+
+**A share of frame time is undefined for concurrent spans**, printed as an em
+dash. Worker queue waits overlap each other and the frames they cross, so the
+ratio is real and describes nothing.
+
+**A span under about 300 µs is a mean, not a reading.** `performance.now()` here
+steps in 100 µs — nothing sets COOP/COEP — so one bar is not a measurement even
+though a window of them is.
+
+`ir.profile` restores the level it found, so a profile taken mid-session does
+not leave the timeline retaining for the rest of it. `off` is the default
+everywhere: there is no capability query for the custom-track arguments, so a
+level that turned itself on would make browsers that cannot draw these entries
+pay for them anyway.
+
+Recording a trace instead, and reading it back:
+
+```
+node scripts/drive.mjs --url "http://localhost:5173/?timing=trace" --wait 5000 --trace 3000
+pnpm timing --top 20            # the table and the verdict
+pnpm timing --track Tasks --threads   # one row per worker
+```
+
+---
+
 ## Measuring terrain
 
 ```js
 ir.zoo() // one body per surface archetype, found rather than listed
 ir.descend(address?, { site, steps }) // fly a descent on paper
-ir.terrain() // what the live streamer holds this frame
+ir.terrain() // what the live streamer holds this frame, rocks included
 ir.terrainBaseline() // the zoo, its descents, and measured patch cost
 ir.dossier(address) // the record, whose Geology card is the surface grammar
 ```
@@ -281,6 +343,14 @@ fail differently: refinement gates on the mesh, so a geometry cache losing what
 the draw set is standing on collapses the selection to the roots while `cached`
 sits at its steady value and reports nothing wrong.
 
+`ir.terrain().scatter` is the rocks on it, and it is part of the terrain report
+rather than a verb of its own because a rock count without the ground under it
+is not a number anyone can act on: `resolving` above zero beside `rocks` at zero
+is a field filling in, and the same pair beside `starved` is a descent
+outrunning both budgets at once. `range` is how far rocks are drawn this frame —
+212 m at the flight lens over the baseline viewport, and a function of the lens
+like everything else here.
+
 **Every count here is a function of the lens, so every report states one.** The
 demand climbs steeply with the pixels-per-radian — measured, the telephoto end
 of the slider wants 1.9× to 3.2× what the flight lens does — so a figure taken
@@ -289,7 +359,7 @@ yesterday's. `ir.descend` and `ir.terrainBaseline` print the lens and the
 viewport in their headers and carry both in the returned object; `ir.terrain`
 carries the live one. Both probes take a `lens` and a `viewport` to ask the
 question at another setting, and `ir.descend` takes a `maxPatches` — the
-streamer's own 1,024 is a safety net that degrades the whole disk by a level
+streamer's own 1,280 is a safety net that degrades the whole disk by a level
 when it bites, so raising it is the only way to see what a selection _wanted_.
 
 ---

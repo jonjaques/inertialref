@@ -1,4 +1,4 @@
-import { useFrame, useThree } from '@react-three/fiber'
+import { useThree } from '@react-three/fiber'
 import { useEffect, useRef, useState } from 'react'
 import type { Group } from 'three/webgpu'
 import type { GameEngine } from '../engine/GameEngine.ts'
@@ -8,6 +8,7 @@ import {
   loadShipModel,
 } from '../render/shipModels.ts'
 import { debugMaterials } from './debugMaterials.ts'
+import { useTimedFrame } from './useTimedFrame.ts'
 
 /**
  * The player's ship: a modeled hull once its glTF resolves, the debug cone
@@ -39,7 +40,7 @@ export function ShipModel({ engine }: { engine: GameEngine }) {
     }
   }, [engine, anisotropy])
 
-  useFrame(() => {
+  useTimedFrame('shipModel', () => {
     const scene = engine.scene()
     if (scene === null || group.current === null) return
 

@@ -76,3 +76,4 @@ every touch of its directory, and the thing it is competing with for attention i
 | `testing.md`     | any `*.test.ts`                                                       |
 | `site.md`        | the document head, `public/`, the brand pipeline, analytics           |
 | `documents.md`   | any markdown under `docs/`, or the documentation build                |
+| `timing.md`      | the timing seam, the sink, the budgets or the profile report          |

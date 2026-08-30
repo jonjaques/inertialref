@@ -1,4 +1,3 @@
-import { useFrame } from '@react-three/fiber'
 import { useMemo, useRef } from 'react'
 import { Sprite } from 'three/webgpu'
 import { LIGHT_YEAR } from '@inertialref/shared'
@@ -6,6 +5,7 @@ import { UV, type UniverseVector } from '@inertialref/spatial'
 import { placeOnStarShell } from '@inertialref/rendering'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { createStarfieldMaterial } from '../render/materials.ts'
+import { useTimedFrame } from './useTimedFrame.ts'
 
 /** How many stars the instanced sprite buffer has room for. */
 const MAX_STARS = 20_000
@@ -51,7 +51,7 @@ export function Starfield({ engine }: { engine: GameEngine }) {
   const generation = useRef(-1)
   const surveyed = useRef(-1)
 
-  useFrame(() => {
+  useTimedFrame('starfield', () => {
     const scene = engine.scene()
     const stars = engine.starField
     if (scene === null) return

@@ -1,5 +1,6 @@
-import { getLogger } from '@inertialref/shared'
+import { getLogger, getTimer } from '@inertialref/shared'
 import type { Camera, Object3D, Scene } from 'three/webgpu'
+import { BOOT_PHASE } from '../engine/frameTiming.ts'
 
 /*
  * The compile-ahead recipe, and the census of what boot is warming.
@@ -30,6 +31,15 @@ import type { Camera, Object3D, Scene } from 'three/webgpu'
  */
 
 const log = getLogger('game.warmup')
+
+/*
+ * The census is already a list of labeled units of work with a declared total.
+ * Timing each one is a `span` around the loop body, and it is the single place
+ * that covers every producer in the application — `preload.ts` registers all of
+ * its own through here, so instrumenting this instruments those for free and
+ * cannot fall out of step with a producer somebody adds next year.
+ */
+const timer = getTimer('game.warmup')
 
 /* ------------------------------------------------------------------------- */
 /* The recipe                                                                 */
@@ -294,6 +304,11 @@ export function createWarmup(
         label = producer.label
         const before = done
         publish()
+        // The producer's own label, which is prose written for the boot status
+        // line — "warming surface maps", "compiling the sky". It is also the
+        // right label on a track: the entry and the line a viewer read while it
+        // was happening say the same thing.
+        const span = timer.span(producer.label, BOOT_PHASE)
         try {
           await producer.run(() => {
             done += 1
@@ -307,6 +322,11 @@ export function createWarmup(
             cause: String(cause),
           })
         }
+        // Outside the catch as well as the try: a producer that threw still
+        // spent the time, and an entry that appeared only on success would make
+        // a failing warm-up look instantaneous — which is the opposite of what
+        // it is. `Span.end` is idempotent, so this is safe on both paths.
+        span.end()
         // Credit whatever it did not report, so the bar cannot stall below its
         // own total on a producer that overcounted or gave up early.
         done = Math.max(done, before + producer.units)
@@ -316,8 +336,14 @@ export function createWarmup(
       await waitForTickets()
       settled = true
       notify = null
+      const finished = performance.now()
+      // The whole warm-up as one entry, over the per-producer ones — from the
+      // two numbers the log line already had. The tracked producers are inside
+      // it and the frame-driven ones are the tail, which is the shape that
+      // shows a build-ahead still draining after everything awaited is done.
+      if (timer.on) timer.measure('warm-up', started, finished, BOOT_PHASE)
       log.info('warm-up complete', {
-        ms: Math.round(performance.now() - started),
+        ms: Math.round(finished - started),
         producers: queue.length,
         tracked: tickets.length,
         units: total(),

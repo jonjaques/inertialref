@@ -51,6 +51,20 @@ Violating one of these is a rewrite later, not a refactor.
 - **Never use `Math.random()`, `Date.now()`, or `performance.now()` in
   canonical code.** Generation derives from seeds. Simulation depends on the
   integer tick. Wall clock enters at exactly one call, `clock.advance`.
+- **Never call `console.timeStamp`, `performance.mark` or `performance.measure`
+  outside `engine/browserTiming.ts`,** and never name `performance.` in
+  `packages/*` at all. Emit through a `Timer` from
+  `packages/shared/src/timing.ts`; the sink is the one place that knows a
+  platform API. Two reasons, and the first is the rule above wearing a different
+  hat: **canonical code may write to the wall clock and may not read one**, and
+  `Span.end()` returning `void` is what makes that true by construction rather
+  than by discipline — there is no expression a caller can write that observes a
+  duration, so no canonical value can be a function of wall time. The second is
+  that the level, the drain and the clear are each impossible unless the set of
+  emitters is known in one place, which is the same argument the `localStorage`
+  rule makes. `apps/headless/src/coreHostApis.test.ts` greps for it, because
+  `performance` is a global rather than an import and `pnpm graph` structurally
+  cannot see it. [ADR-0022](docs/adr/0022-the-timeline.md).
 - **Never make generation depend on order.** Derive a seed from the address.
   Do not draw from a shared stream.
 - **Never put canonical state in a React component,** and never put gameplay
@@ -284,9 +298,9 @@ Violating one of these is a rewrite later, not a refactor.
   are title case; `text-transform` on the type step decides what is shouted.
 - **Never subtract two planetary radii from each other in a shader, and never take a
   screen-space derivative of a planetary position.** At Earth's radius one float32
-  step is half a metre, so `length(anchor + local) − radius` arrives quantized to
-  half a metre — and the morph walks it across those steps every frame, which is a
-  coastline visibly warping several times a second from two kilometres up. Use
+  step is half a meter, so `length(anchor + local) − radius` arrives quantized to
+  half a meter — and the morph walks it across those steps every frame, which is a
+  coastline visibly warping several times a second from two kilometers up. Use
   `(2(a·l) + l·l)/(|p| + |a|)`, which never lets the large numbers meet. The
   derivative is worse than the value: a tenth of noise and biased per patch, which
   moved the albedo map's mip level at every patch boundary. And `local` is linear
@@ -297,6 +311,28 @@ Violating one of these is a rewrite later, not a refactor.
   `[Invalid ShaderModule "vertex"]` with the real message on a channel the page
   console does not carry.
   [ADR-0020](docs/adr/0020-the-face.md).
+- **Never read the drawn ground where the canonical one belongs, or the
+  reverse.** `groundElevation` and `surfaceRadius` are the field the contact
+  test integrates, the saves record and the survey sites name;
+  `drawnElevation` and `drawnSurfaceRadius` are that field plus a
+  presentational tail, and they are what the mesh, the material and any camera
+  that composes a picture of them are made from. The two differ by at most
+  `drawnDivergence`, which is 1.25 m. Physics reading the drawn one puts a
+  landing behind a term the renderer is free to change; a mesh reading the
+  canonical one draws a plane at two meters, because the tolerance a patch is
+  refined against **is** the amplitude floor the canonical field stops at, so
+  nothing under it can ever deepen the selection.
+  [ADR-0021](docs/adr/0021-the-ground.md).
+- **Never give two attribute names one `BufferAttribute` object.** Two
+  vertex-rate attributes sharing one object is a pipeline that does not build.
+  It reports `[Invalid ShaderModule "fragment"] is invalid due to a previous
+error`, with the real message on a channel the page console does not carry
+  and the canvas never presenting — and `warmCompile` swallows its rejection,
+  so a warm-up making the same mistake fails silently first. The same aliasing
+  on an _instanced_ attribute builds, which is how it was isolated; the
+  mechanism is unexplained and the rule is deliberately the wider claim. Two
+  attribute objects over one array is a few bytes and one fewer trap.
+  [ADR-0021](docs/adr/0021-the-ground.md).
 - **Never add a shading term to the ground without adding it to the sphere.**
   `render/terrain.ts` and `render/planet.ts` draw the same body on either side
   of the eight-pixel relief gate — the streamed ground below it, the archive's

@@ -55,7 +55,7 @@ a production build. What follows is depth, not foundations.
 | Offline-first                       | ✅     | Service worker + IndexedDB + migrations                                                                                                                           |
 | Persistence model                   | 🟡     | Proven; [mutations](#persistent-mutations) unbuilt                                                                                                                |
 | Streaming                           | 🟡     | Systems and terrain stream; [policy is naive](#streaming-and-scale)                                                                                               |
-| Level of detail                     | 🟡     | Tiers exist; [terrain](#terrain) is a restricted morphing quadtree over a measured detail floor; no scatter below a patch cell                                    |
+| Level of detail                     | 🟡     | Tiers exist; [terrain](#terrain) is a restricted morphing quadtree over a measured detail floor, with rock scatter and a per-pixel grain band under it            |
 | Units and conventions               | ✅     |                                                                                                                                                                   |
 | Repository structure and layering   | ✅     | Enforced by `pnpm graph`                                                                                                                                          |
 | Protocols and serialization         | 🟡     | Worker + save done; net, replay and binary unbuilt                                                                                                                |
@@ -113,16 +113,15 @@ The most visible shallowness, and the milestone in progress —
 
 ```mermaid
 flowchart TB
-    NOW["<b>today</b><br/>a geology with a face<br/>deposits, rays, a published map<br/>on the ground that wears it"]
-    D["<b>the albedo bake</b><br/>a generated body's sphere<br/>shows its own maria"]
-    E["<b>the ground</b><br/>meter-scale levels,<br/>rock scatter"]
+    NOW["<b>today</b><br/>a geology with a face,<br/>meter-scale ground,<br/>and rocks lying on it"]
     F["<b>the GPU producer</b><br/>TSL compute tiles"]
+    D["<b>the albedo bake</b><br/>a generated body's sphere<br/>shows its own maria"]
 
-    NOW --> D --> E
-    E -.->|"generation is now the<br/>binding constraint"| F
+    NOW -->|"generation is the<br/>binding constraint"| F
+    NOW --> D
 
     style NOW fill:#334155,stroke:#1e293b,color:#fff
-    style D fill:#0369a1,stroke:#0c4a6e,color:#fff
+    style F fill:#0369a1,stroke:#0c4a6e,color:#fff
 ```
 
 Phase 1 landed 27 Aug 2026: per-patch level selection, whole-disk coverage,
@@ -155,6 +154,17 @@ already in the picture. Measured either side of the eight-pixel gate, the
 streamed ground and the archive's sphere are 3.1% apart on Mars and 1.5% apart
 on Earth.
 
+Phase 4 landed 30 Aug 2026: the drawn ground goes below the field the ship lands
+on. [ADR-0021](adr/0021-the-ground.md) is the decision record. The crater ladder
+continues from the canonical eight-meter floor down to one, presentationally, and
+the detail floor follows it — cells of 0.35 to 1.41 m across the zoo against 1.75
+to 5.66, which is meter-scale ground under a two-meter stance where there was a
+plane. `drawnElevation` and `groundElevation` are two functions 1.25 m apart at
+worst, and nothing canonical moved. Rocks arrive with it: `r:…/o:837` is a
+hash, and they are drawn by the terrain's own material, so a boulder is bedrock
+on its steep faces and regolith on its top in the palette of the ground it lies
+on.
+
 Phase 2 landed 28 Aug 2026: the three noise bands are a surface grammar derived
 from each body's own facts, a per-body sketch of plate nuclei, hotspots and a
 crater ladder, and six bands over them.
@@ -164,17 +174,19 @@ along their margins; Venus the same size as Earth and a stagnant lid, because it
 has no ocean; Enceladus with four parallel fractures. `maxElevation` is a
 strength limit rather than a dial, and terrain moved to algorithm version 2.
 
-| Gap                                              | Consequence today                                                                                                                                         | Seam                                                                                                                                                              |
-| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A generated body's sphere is a flat tint         | Its ground has maria, rays and caps below the eight-pixel gate and none of them above it — the far half of a descent is the only half that does not agree | A per-face albedo cube baked in workers, sampled by direction, read by `render/planet.ts` as well as by the terrain                                               |
-| Deposits are chosen from the mesh                | Two patches at different levels report different slopes for the same ground, so a weight read off the normal steps by ~4% at a level boundary             | More channels on the cover, so the deposits read the canonical field instead of the LOD                                                                           |
-| No authored material sets                        | Detail is gradient noise, which has no period to break and no projection to choose — so hex-tiling and triplanar answer questions nothing is asking       | The detail field in `render/terrain.ts`; both techniques come back with the textures that need them                                                               |
-| The selection is not frustum-culled              | A whole disk is generated, of which the renderer draws about a third                                                                                      | The streamer has the camera; a generous cone would keep a turn from bursting                                                                                      |
-| Vertex attributes are float32                    | 237 KB a patch — 203 KB of float32 geometry and 34 KB of cover — so a whole-disk selection is 99–239 MB at the flight lens                                | Int8 normals and Int16 morph deltas are worth about half                                                                                                          |
-| The mesh is built on the main thread             | 0.25 ms a patch, four a frame                                                                                                                             | The worker already has the field; the mesh arithmetic has to move to `packages/universe` first, for the layer rule                                                |
-| Patch generation is over its budget              | 9 to 37 ms per bordered 65×65 patch across the zoo — 9 with no craters, 32 rocky airless, 36 icy dead, 37 rocky atmosphered — against a documented ≤ 8 ms | `pnpm sim --terrain-baseline` is the measurement; the crater neighborhood is most of it, and its radial bound, `EJECTA_REACH` and the GPU producer are the levers |
-| A coarse patch costs more than a fine one        | Consecutive samples of a coarse patch land in different noise lattice cells                                                                               | A whole-disk selection pays it on the shell; per-level merging would amortize it                                                                                  |
-| No craters below a two-thousandth of the largest | A kilometer on Mercury, a hundred meters on Callisto — the ladder is capped at eleven halvings for cost                                                   | Phase 4's micro relief, synthesized per pixel below the canonical floor rather than meshed                                                                        |
+| Gap                                         | Consequence today                                                                                                                                         | Seam                                                                                                                                                              |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A generated body's sphere is a flat tint    | Its ground has maria, rays and caps below the eight-pixel gate and none of them above it — the far half of a descent is the only half that does not agree | A per-face albedo cube baked in workers, sampled by direction, read by `render/planet.ts` as well as by the terrain                                               |
+| Deposits are chosen from the mesh           | Two patches at different levels report different slopes for the same ground, so a weight read off the normal steps by ~4% at a level boundary             | More channels on the cover, so the deposits read the canonical field instead of the LOD                                                                           |
+| No authored material sets                   | Detail is gradient noise, which has no period to break and no projection to choose — so hex-tiling and triplanar answer questions nothing is asking       | The detail field in `render/terrain.ts`; both techniques come back with the textures that need them                                                               |
+| The selection is not frustum-culled         | A whole disk is generated, of which the renderer draws about a third                                                                                      | The streamer has the camera; a generous cone would keep a turn from bursting                                                                                      |
+| Vertex attributes are float32               | 237 KB a patch — 203 KB of float32 geometry and 34 KB of cover — so a whole-disk selection is 113–255 MB at the flight lens                               | Int8 normals and Int16 morph deltas are worth about half                                                                                                          |
+| A rock reads the field, not the mesh        | Its foot is 3–9 cm off the triangle under it in the mean and up to 0.70 m at the worst cell on the coarsest body; `MESH_SEAT` buries it 12 cm             | More channels on the cover, which is the same change the deposits want                                                                                            |
+| Scatter has no collision                    | A rock is presentational; the contact test does not know it exists                                                                                        | [On foot](design/onfoot.md), where the canonical floor drops as well                                                                                              |
+| The canonical crater ladder stops at eleven | A body whose largest basin is 2,170 km has craters down to 2.1 km and then nothing until the presentational tail starts at 8 m                            | `MAX_CRATER_LEVELS`; fourteen moves the detail floor 0–2 levels at 13% a patch, and it is terrain algorithm v3                                                    |
+| The mesh is built on the main thread        | 0.25 ms a patch, four a frame                                                                                                                             | The worker already has the field; the mesh arithmetic has to move to `packages/universe` first, for the layer rule                                                |
+| Patch generation is over its budget         | 21.6 to 49.8 ms per bordered 65×65 patch across the zoo, against a documented ≤ 8 ms — and a landing now wants 700 to 1,077 of them                       | `pnpm sim --terrain-baseline` is the measurement; the crater neighborhood is most of it, and its radial bound, `EJECTA_REACH` and the GPU producer are the levers |
+| A coarse patch costs more than a fine one   | Consecutive samples of a coarse patch land in different noise lattice cells                                                                               | A whole-disk selection pays it on the shell; per-level merging would amortize it                                                                                  |
 
 ---
 
@@ -266,17 +278,17 @@ The principle is _design for these, measure before optimising_
 ([vision](vision.md#measure-before-optimizing)). The design admits all of them;
 almost none are applied, and almost nothing is measured.
 
-| Technique            | Status | Where it would go first                                                                                                           |
-| -------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------- |
-| Typed arrays         | ✅     | Heightfields, vertex buffers                                                                                                      |
-| Transferable buffers | ✅     | Worker results                                                                                                                    |
-| Worker pools         | ✅     |                                                                                                                                   |
-| Instanced rendering  | 🟡     | Star field is instanced sprites — WebGPU has no point size. Asteroids and scatter are not                                         |
-| Object pooling       | ⬜     | `Vec3` allocation in the flight inner loop                                                                                        |
-| Spatial indexes      | ⬜     | Interest queries                                                                                                                  |
-| WASM                 | ⬜     | Noise generation, if profiling justifies it                                                                                       |
-| WebGPU               | 🟡     | `WebGPURenderer` + TSL shipped, WebGL 2 retained as fallback. Compute shaders, storage buffers and indirect draw are not used yet |
-| `SharedArrayBuffer`  | ⬜     | Requires cross-origin isolation; nothing needs it yet                                                                             |
+| Technique            | Status | Where it would go first                                                                                                                            |
+| -------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Typed arrays         | ✅     | Heightfields, vertex buffers                                                                                                                       |
+| Transferable buffers | ✅     | Worker results                                                                                                                                     |
+| Worker pools         | ✅     |                                                                                                                                                    |
+| Instanced rendering  | 🟡     | Star field is instanced sprites — WebGPU has no point size; rock scatter is four instanced meshes in the terrain's own material. Asteroids are not |
+| Object pooling       | ⬜     | `Vec3` allocation in the flight inner loop                                                                                                         |
+| Spatial indexes      | ⬜     | Interest queries                                                                                                                                   |
+| WASM                 | ⬜     | Noise generation, if profiling justifies it                                                                                                        |
+| WebGPU               | 🟡     | `WebGPURenderer` + TSL shipped, WebGL 2 retained as fallback. Compute shaders, storage buffers and indirect draw are not used yet                  |
+| `SharedArrayBuffer`  | ⬜     | Requires cross-origin isolation; nothing needs it yet                                                                                              |
 
 **What is measured today:** simulation throughput (~100–105k ticks/s headless,
 ~1.25M ticks/s browser for one entity), worker queue latency and execution time,
@@ -284,9 +296,17 @@ frame time, engine time, draw calls, triangles, JS heap, and GPU milliseconds pe
 frame — the last measured across a drained queue rather than from
 `renderer.info.render.timestamp`, which
 [lies](spikes.md#2--tsl-and-the-atmosphere-integral). All of it is live in the
-dev dock's **perf** panel. **What is not:** allocation rate, GC pressure, cold load
-to interactive, anything at all on the target machine, and any stored baseline —
-so there is still nothing that can fail a pull request for getting slower.
+dev dock's **perf** panel, and all of it is a scalar — which is why
+[ADR-0022](adr/0022-the-timeline.md) adds the shared time axis those scalars
+never had: the engine step decomposed into eight phases, the streamer into five,
+ten `useFrame` consumers, both sides of the worker boundary, and boot from
+navigation to first light. `ir.profile(ms)` and `pnpm timing` read it back from
+a terminal. **What is not:** allocation rate, GC pressure, anything at all on the
+target machine, and any stored baseline — so there is still nothing that can fail
+a pull request for getting slower. Cold load to interactive now has an
+instrument rather than a figure: the one reading taken is a driver's occluded
+Chrome against a Vite dev server, which is a number about that window and not
+about a player.
 
 The overlay earned itself on the first day: it found that the simulation clock
 capped time warp at 7.5× while the UI offered 100,000×.

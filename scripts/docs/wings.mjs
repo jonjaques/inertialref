@@ -123,6 +123,8 @@ export const WINGS = [
           ['docs/adr/0018-the-instrument.md', 'The Instrument'],
           ['docs/adr/0019-the-geology.md', 'The Geology'],
           ['docs/adr/0020-the-face.md', 'The Face'],
+          ['docs/adr/0021-the-ground.md', 'The Ground'],
+          ['docs/adr/0022-the-timeline.md', 'The Timeline'],
         ],
       },
     ],
@@ -211,6 +213,7 @@ export const WINGS = [
         pages: [
           ['docs/plans/astro-shell.md', 'The Astro Shell'],
           ['docs/plans/headless-webgpu.md', 'Headless WebGPU'],
+          ['docs/plans/the-timeline.md', 'The Timeline'],
         ],
       },
       {

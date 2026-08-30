@@ -31,7 +31,7 @@ including frame resolution.
 
 | Package         | Layer | State                                                                                                                         |
 | --------------- | ----- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `shared`        | 0     | done — units, brands, invariants, structured logging                                                                          |
+| `shared`        | 0     | done — units, brands, invariants, structured logging, the timing port (ADR-0022)                                              |
 | `spatial`       | 1     | done — UniverseVector, frame graph, floating origin                                                                           |
 | `procedural`    | 1     | done — PRNG, hierarchical seeds, noise, algorithm versions                                                                    |
 | `physics`       | 2     | done — Kepler, rigid body, atmosphere, thrusters                                                                              |
@@ -223,6 +223,25 @@ again in a neighboring system.
   same commit and neither reported anything. Page filenames are lowercase with a
   digest of the route appended, and the manifest carries the name so nothing has
   to re-derive it. `scripts/docs/routes.test.mjs` fails if either half is undone.
+- **A performance sink that crashed the frame it was measuring.**
+  `console.timeStamp` is not a function in the Node context a `GameEngine` test
+  runs in, and an unguarded call threw straight out of the frame loop — a crash
+  in a debugging aid, which is strictly worse than the aid being absent. The
+  trap underneath it is that two questions look like one: whether the method
+  _exists_ is a `typeof`, and whether it accepts the four custom-track arguments
+  is a Chromium extension with **no capability query at all**. Guarding the first
+  and assuming it answers the second is how Safari, Firefox and Node end up
+  paying a hot path for entries that land nowhere. The level is the gate for the
+  second; the `typeof` only covers the first.
+- **An inertness test that could not fail.** The obvious shape — attach a
+  recording sink, leave the level `off`, assert no entries arrive — is vacuous
+  by construction, because a sink _is_ what "on" means, so attaching one opens
+  every guard and the entries arrive correctly. The observable that means
+  something is the count of `performance.now` calls: exactly two a frame when
+  nothing is listening, which is what the frame loop read before any
+  instrumentation existed. Written as an equality rather than a bound, because
+  the claim is that the instrumented and uninstrumented builds do identical
+  work. `apps/game/src/engine/timingInert.test.ts`.
 - Terrain sampled in **inertial** rather than body-fixed axes: mountains stood
   still while the planet rotated under them.
 - **No ground contact at all**: a ship dropped from orbit flew through the
@@ -1573,7 +1592,7 @@ dark-adapted interface.
 
 Not built — recorded so the archaeology is not repeated. `SystemStub`
 (`packages/universe/src/galaxy.ts`) already carries `temperature`, a computed
-blackbody `colour`, `catalogued` (which is provenance) and the confirmed
+blackbody `color`, `catalogued` (which is provenance) and the confirmed
 `planets`. **`TravelTarget` in `packages/devtools/src/travel.ts` carries none of
 it** — the destination list gets a pre-formatted `detail` string and a boolean.
 
@@ -4242,7 +4261,7 @@ two looked identical in the source.
 ### A brightness floor is desaturation
 
 The neighborhood rail and the catalog's star glyphs carry each star's own
-colour, which `docs/design/art.md` puts on the list of things this game may not
+color, which `docs/design/art.md` puts on the list of things this game may not
 invent — "a K dwarf is orange, it does not get to be a nicer orange". The first
 version lifted every channel toward white by 0.45 so a saturated M-dwarf red
 would be legible at 12 px over slate. It turned the whole neighborhood into
@@ -5235,7 +5254,7 @@ survivor and a 590 m defect. Reintroducing the step fails it on Luna by three
 orders of magnitude.
 
 **And the same class of step, twice more, at plate boundaries.** `hypsometryBand`
-blended a plate's base toward the average of it and its neighbour with a weight
+blended a plate's base toward the average of it and its neighbor with a weight
 that started at **0.5** rather than 0 — and `plate`/`neighbor` swap as you cross
 the line, so half the difference between the two plates stood as a cliff:
 **9,433.9 m on Proxima Centauri II, 46% of that world's whole relief budget**,
@@ -5311,7 +5330,7 @@ test can walk two cells wider and assert the two are _equal_.
 **Which plate is second is a rank, and a rank has a seam where it changes.**
 `plateAt` returned the nearest plate and the second-nearest, and the phase before
 this one made the blend between them continuous across the line separating them.
-It was. The field still had a kilometre of cliff in it, because the pair also
+It was. The field still had a kilometer of cliff in it, because the pair also
 changes along the locus where the second and third nearest are equidistant — a
 network of curves through every plate's interior, nowhere near an edge. Measured
 either side of one on Proxima Centauri II: the same nearest plate, base 0.432,
@@ -5466,10 +5485,10 @@ steady 1,421 and said nothing was wrong while the cache under it strobed.
 that ended the search — pinned at exactly 1,152, which is the signature
 `FIELD_CACHE`'s own comment describes.
 
-## The ground stops being a colour and becomes a face (29 Aug 2026)
+## The ground stops being a color and becomes a face (29 Aug 2026)
 
 Phase 3 of [TERRAIN-PLAN](TERRAIN-PLAN.md), recorded in
-[ADR-0020](docs/adr/0020-the-face.md). Terrain had one flat colour under the
+[ADR-0020](docs/adr/0020-the-face.md). Terrain had one flat color under the
 scene's ambient light — survivable while the streamed set was nine patches, and
 not survivable once the quadtree draws the whole disk, because the ground is
 then the picture of the planet.
@@ -5501,8 +5520,8 @@ disagreeing planets in one frame.
 
 Numbers that settled things.
 
-- **`BodyAppearance.colour` means two different things and they differ by a
-  factor of six.** A tint where there is a map, a colour where there is not — so
+- **`BodyAppearance.color` means two different things and they differ by a
+  factor of six.** A tint where there is a map, a color where there is not — so
   on Luna it is (1, 1, 1). Read as a reflectance it made lunar regolith 0.88
   against a published 0.136 and the lit side blew out to a white disk. Anchored
   properly, Luna is 0.136 with its mare at 0.073 against a measured 0.07.
@@ -5523,7 +5542,7 @@ Numbers that settled things.
   Mars, almost all of it evaporite lifting ground the photograph had already
   drawn pale. Where a photograph exists it supplies the albedo outright; the
   deposits keep the roughness, the grain and the bump, which no map at ten
-  kilometres a texel has an opinion on. With all three, the gate is 3.1% on Mars
+  kilometers a texel has an opinion on. With all three, the gate is 3.1% on Mars
   and 1.5% on Earth and the frames are the same picture.
 - **An ocean is an invented channel too.** The generated field and the archive's
   photograph disagree about where Earth's land is — that disagreement _is_ the
@@ -5542,14 +5561,14 @@ Numbers that settled things.
 
 ### Four float32 defects, all of them the same defect
 
-Reported as a coastline warping several times a second at two kilometres over an
+Reported as a coastline warping several times a second at two kilometers over an
 island chain, and it was arithmetic in four places.
 
 **Altitude was a difference of two planetary radii.** Both terms are 6.4 × 10⁶
-on Earth where one float32 step is half a metre, so the water test — a band four
-metres wide — read a quantized value, and the CDLOD morph walks `local` across
+on Earth where one float32 step is half a meter, so the water test — a band four
+meters wide — read a quantized value, and the CDLOD morph walks `local` across
 those steps every frame. `(2(a·l) + l·l)/(|p| + |a|)` is the same number and
-never lets the large numbers meet; `anchorAltitude` carries the last half-metre,
+never lets the large numbers meet; `anchorAltitude` carries the last half-meter,
 measured in float64 against the same rounded vector the uniform holds, because a
 constant offset per patch is a grid of rectangles across a flat sea.
 
@@ -5560,13 +5579,13 @@ jumps by a whole turn along one meridian and its rate of change does not.
 
 **The detail fade was a screen-space derivative.** `local` is linear across a
 triangle, so `dFdx(local)` is constant over the whole triangle; at two
-kilometres up, where one far cell covers a hundred pixels, the fade stepped per
+kilometers up, where one far cell covers a hundred pixels, the fade stepped per
 polygon and the plain drew as flat-toned quadrilaterals. Distance times the
 lens's own pixel angle is continuous, and it is the same lens the selection
 refined against.
 
 **And the bump normalized its position derivatives**, which is right for a
-dimensionless texture difference and wrong for a height in metres: `det` stayed
+dimensionless texture difference and wrong for a height in meters: `det` stayed
 per-triangle constant while `dH` grew with the footprint, so the bump
 strengthened with distance and stepped at every edge.
 
@@ -5586,8 +5605,8 @@ not reach zero at its boundary appears there rather than beginning there. The
 filament threshold is cleared on about a third of azimuths at 1.2 crater radii,
 so crossing that radius stepped the brightness by 0.30 on Luna's ray craters and
 0.57 on Mars's, against a p99.9 adjacent-sample step of 3 × 10⁻⁷ just outside.
-It drew as a scalloped bright ring — a thirty-kilometre circle around a
-fifty-kilometre crater — on every mapless body, which is nearly all of them.
+It drew as a scalloped bright ring — a thirty-kilometer circle around a
+fifty-kilometer crater — on every mapless body, which is nearly all of them.
 Faded in across 0.4 radii, the step is 1 × 10⁻⁷, which is the probe's own
 epsilon. `cover.test.ts` holds it, and it goes red with the fade removed.
 
@@ -5635,10 +5654,372 @@ drawn a different planet through an identical heightfield. It compares all
   saturated ground aliases where a flat ambient fill could not show it. At
   device pixel ratio 2 the same frame is clean.
 
+## The ground goes below the field the ship lands on (30 Aug 2026)
+
+Phase 4 of [TERRAIN-PLAN](TERRAIN-PLAN.md), recorded in
+[ADR-0021](docs/adr/0021-the-ground.md). The ground at a two-meter stance was a
+plane, and the reason is arithmetic rather than taste.
+
+**The floor could not have moved, and the loop is closed.**
+`surfaceDetailFloor` refines while one grid cell's middle differs from the
+bilinear of its corners by more than `TERRAIN_DETAIL_TOLERANCE`, and that
+tolerance _is_ `CANONICAL_AMPLITUDE_FLOOR` — deliberately, so the level past
+which refinement stops buying detail is the level past which the field stops
+having any. So a term bounded by half a meter cannot deepen the floor by one
+level however fine its wavelength, and "detail below the canonical floor" read as
+"amplitude under the floor too" is a field the mesh will never go and get. An
+sub-floor crater band cuts up to 0.8 m, and that is what buys the levels.
+
+The split is now two functions and a published number. `groundElevation` is the
+contact test, the saves and the survey sites; `drawnElevation` is the mesh, the
+material and the camera that composes a picture of them; and
+`drawnDivergence` is **1.25 m**, by construction rather than by measurement —
+`softLimit` is asymptotic to `MICRO_CRATER_CEILING` and the grit is a normalized
+fBm. Nothing is versioned, because nothing canonical moved.
+
+- **The floor goes 15/16/12/10 → 19/17/14/12 across the zoo**, which is cells of
+  **0.35, 0.87, 1.10 and 1.41 m** against 5.54, 1.75, 4.40 and 5.66. That is
+  "levels to ~1 m spacing", measured.
+- **A patch costs 6 to 15 ms more** — 43.4 / 43.2 / 49.8 / 21.6 ms against
+  32.5 / 37.2 / 35.0 / 8.7 — because the tail is four more rungs of the crater
+  walk, and the walk is most of a patch. Measured with nothing else on the
+  machine; the same command with Chrome up reads 79 to 84 and says nothing,
+  which is the trap the Phase 3 entry already records and which caught this one
+  too.
+- **A whole-disk selection peaks at 1,077 patches** against 862, so
+  `DEFAULT_MAX_PATCHES` is 1,280 and the corner case is 303 MB of vertex buffers
+  — a patch is 237 KB, because it carries **two** four-byte cover attributes, its
+  own and its morph target's, and the constant's own arithmetic counted one.
+- **The ground measures 12.3° of RMS slope at a one-meter baseline on Luna,
+  8.4° on Mars and 15.6° on Mercury**, against a published 5–20° for lunar
+  regolith and the MER landing sites — and against **0.2° on Luna canonically**,
+  which is what a flat plane measures. The first attempt was 1.6 m of ceiling
+  and drew as broken glass at 21°; halving it is the statement that a
+  _saturated_ population is in equilibrium and its members destroy each other,
+  so the net relief is not the depth of one fresh crater.
+
+### What the browser says
+
+A two-meter stance on Luna, at the flight lens over 1600×900: **level 17, 895
+patches, 7.33 M triangles**, and every counter a fixed point over 240 consecutive
+frames — `cached` and `geometry` both 1,274 against caps of 3,840 and 2,560,
+`starved` zero, `saturated` false. At 1920×1200 over a device pixel ratio of 2 —
+the window that found the Phase 3 strobe — it reaches **level 17, 1,106 patches
+and 9.06 M triangles**, and 120 consecutive frames are again identical. The
+geometry cache is not the binding constraint at either size, which is what
+`DEFAULT_MAX_PATCHES` at 1,280 was raised to buy.
+
+**What is binding is generation.** The retina stance had not converged after
+sixty seconds — level 15, 128 in flight, 17 starved — and had after a hundred
+and eighty. 1,562 patches at 43 ms is 67 s of single-core work and the pool does
+not turn that into 17, which is the Phase 5 argument arriving as a wall-clock
+number rather than as a projection.
+
+### The rungs are numbered from a fixed base, and `young` does not enter them
+
+Continuing the canonical ladder needs a largest crater to count down from, and
+`grammar.largestCrater` is zero on every surface `young` deletes — Miranda,
+Enceladus, Europa, three of the most interesting places to stand. Anchored at
+`MICRO_RUNG_BASE` instead, the tail is a property of the body's size and air
+alone, its hashes cannot collide with any canonical rung, and Miranda's floor
+moves two levels rather than none.
+
+`young` is left out on its own argument: a resurfacing event deletes a crater
+population, and retention at a meter is geologically instantaneous, so the moon
+paved last week is saturated at a meter by the afternoon. Air enters harder
+instead, because an atmosphere screens the small impactor and then fills the
+hole in — `(1 − air)⁴` orders Luna 1, Mars 0.14, Earth 0.012, Venus 0. A world
+with Earth's air keeps its canonical floor and gets its meter scale from the
+scatter and the grain band, which is the right answer rather than a gap.
+
+### A millimeter that differed between two patches
+
+`2 − 2 cos θ` out of one dot product is how `craters.ts` measures the distance
+from a sample to a crater, and it cancels. At the canonical ladder's finest rung
+θ is about 2 × 10⁻⁴ and the subtraction costs seven significant figures, which
+leaves the height exact to a nanometer. Three decades further down it is not
+fine: a one-meter crater on a 1,700 km body subtends 3 × 10⁻⁷, so the expression
+is 4 × 10⁻¹⁴ against a float64 ulp of 2 × 10⁻¹⁶ — half a percent, which is a
+millimeter on the crater's own depth and, worse, a millimeter that **differs
+between two patches that computed the same direction by different routes**. The
+sum of squared component differences is the same number with nothing cancelling
+and costs two divides a crater. `ChordForm` is the parameter; the canonical
+ladder keeps the cheap form deliberately, because changing it would move
+`elevationAt` in its last bits on every body.
+
+### Rocks are addresses, and they wear the ground's material
+
+`regionScatter` answers "does `r:…/o:837` hold a rock" with a hash — 1,024
+candidate slots over a 256 m region, one rock per 64 m² at saturation, gated by
+the cover the vertex already carries. `slots` is a half-open range because
+resolving one candidate is a field sample and a whole region is 2.6 to 5.8 ms
+across the zoo; the streamer takes it 128 slots a frame — 0.31 to 0.72 ms — and a
+region is drawn only once it is whole.
+
+They are drawn by **the terrain material itself**, not a second one. Three's node
+material inserts the instancing before `positionNode` runs — `instancedMesh(
+object )` assigns into `positionLocal` and `normalLocal` — so the graph reads the
+instanced position and every term it derives is right for the rock rather than
+for the field's anchor. A rock therefore comes out bedrock on its steep faces and
+regolith on its top, in the palette of the ground it lies on, by the same slope
+term that decides the ground.
+
+Two things this cost, both worth remembering.
+**Every rock was inside out, and three quarters of them were underground.**
+Both found by `/code-review max --fix` after this had already opened, and both
+invisible to every test that existed. The instance basis `(east, up, north)` is
+_left_-handed — `north` is `up × east`, so `east × up` is `−north` — and three
+columns in that order are a reflection with determinant `−sx·sy·sz`. The
+terrain material never sets `.side`, so front-face culling applies, and Three
+flips `frontFace` only on the _object's_ `matrixWorld` determinant, never the
+per-instance matrix: every rock drew its far shell through the hole where its
+near one was culled. `scatterRender.test.ts` asserts exactly that invariant one
+object up, about the shapes rather than the instances.
+
+And `sink` is a fraction of the rock spent against `rock.radius`, which is half
+its _longest_ dimension while it is drawn 0.62 to 0.82 of that tall — so the
+median rock sat entirely below the surface. `rockRise` is the drawn half-extent
+now and the seat, the sink and the instance scale all read it. The fixed
+twelve-centimetre seat then buried the small end on its own, because it is
+taller than a 25 cm rock's own 17 cm of stand: **0 buried across 14,727 rocks
+against 3,588 before**, in every size class.
+
+**Two attribute names may not share one `BufferAttribute` object.** The backend
+keys its GPU buffer on the object the geometry hands back, so one object under
+two names is one buffer at two shader locations and the whole pipeline fails to
+build — reported as `[Invalid ShaderModule "fragment"] is invalid due to a
+previous error`, with the real message on the channel the page console does not
+carry and the canvas never presenting. Isolated by un-aliasing the two
+vertex-rate attributes and leaving the instanced pair aliased, which builds.
+**And `warmCompile` swallows its rejection**, so the warm-up dummy failing the
+same way was invisible until the real draw hit the same wall.
+
+### The band between a mesh cell and a pixel
+
+A patch at the detail floor is 0.35 to 1.41 m a cell, and standing at two meters
+one of those cells is two hundred display pixels across. `MICRO_METRES` is a
+seven-meter octave and there was nothing under it, so the near ground drew as a
+smooth swell. The grain band is 0.7 m down to 9 cm at about fifteen degrees of
+slope, which is what lunar regolith measures at centimeter baselines.
+
+Its domain is the interesting part. `positionLocal` is patch-local, so a noise on
+it jumps phase at every patch edge — invisible at seven meters of wavelength and
+a straight line across the ground at seventy centimeters. The body-fixed position
+is continuous and useless: 1.7 × 10⁶ on Luna, where float32 resolves 0.1 m and
+quantizes a nine-centimeter octave out of existence. So the anchor is reduced
+modulo `GRAIN_PERIOD` wavelengths **in float64 on the CPU** and the noise is
+periodic over it — exact, continuous across every boundary, and repeating every
+45 m of ground, which is more than the band survives to. It is written out rather
+than taken from `mx_*` because periodicity is the one property none of the
+built-ins has.
+
+### What did not land, stated rather than dropped
+
+- **The canonical crater ladder is still capped at eleven halvings**, so a body
+  whose largest basin is 2,170 km has canonical craters down to 2.1 km and then
+  nothing until the tail starts at eight meters. Measured, raising it to fourteen
+  moves the detail floor by 0 to 2 levels and costs 13% a patch — it works, and
+  it moves the field the contact test integrates, which is terrain algorithm v3
+  and every save's landed hull. The plan spends that bump once and this is not
+  the phase.
+- **A rock's foot is the field and the ground under it is a triangulation of the
+  same field.** They differ by the mesh's own interpolation error over one cell:
+  3 to 9 cm in the mean at the detail floor and up to 0.70 m at the worst cell on
+  the body with the coarsest floor. `MESH_SEAT` buries every rock twelve
+  centimeters to cover the mean; the tail is a small rock on an atmosphered world
+  standing a little proud. The fix is for the rock to read the mesh instead of
+  the field, which is the same change the deposits want.
+- **Scatter has no collision.** A rock is presentational until on-foot arrives,
+  and the contact test does not know it exists — the same split the tail makes.
+- **A rock reads as a silhouette under a high sun and correctly under a low
+  one**, and the cause is not the palette: on a mapped body every deposit's
+  ratio is exactly 1.000, so a rock's color is the ground's color and the
+  difference is entirely in the shading. The suspect is the bump. Its height
+  field is the grain band on `local`, and across a rock `local` changes by the
+  rock's own width over a handful of pixels — far above the band's Nyquist rate
+  — while `grainFade` keys on the _footprint_, which is the same for a rock and
+  for the ground behind it. So the fade cannot switch it off and the
+  perturbation swamps the rock's true normal; at a low sun the ground is dark
+  and any normal reads plausibly, at a high sun the ground saturates and the
+  rock reads as noise. **That is a suspect rather than a measurement** — a TSL
+  graph cannot be evaluated in Node, so it is settled on a GPU or not at all,
+  and it is not settled. The rocks are placed, solid and correctly oriented,
+  which is what this phase claims; their photometry is the next thing to look
+  at, and the material has no channel left to tell a rock from the ground with.
+- **Iapetus at a two-meter stance draws a smooth white sheet**, and it does so on
+  `origin/main` too: a flat icy plain at the reflectance ceiling under a high sun
+  has no contrast anywhere, so the terrain is there and unreadable. It is not
+  this phase's regression and it is not this phase's fix; the plate set moved to
+  Luna, where the archive's photograph supplies the contrast.
+- **`[Invalid ShaderModule "fragment"]` is printed at boot on `main` as well.**
+  Reproduced on `origin/main` at the same site before any of this landed. Nothing
+  visible fails with it; it is a thread to pull separately.
+
+## The six instruments get the axis they were missing (30 Aug 2026)
+
+[ADR-0022](docs/adr/0022-the-timeline.md) and
+[the plan](docs/plans/the-timeline.md) carry the decisions. What belongs here is
+the measurements, and the three things the instrument found on the days it was
+built.
+
+**`performance.now()` in this app steps in exactly 100 µs, and it reshaped the
+design.** `crossOriginIsolated` is false — nothing sets COOP/COEP, and
+`frameMetrics.usedHeapMb` reading `performance.memory` is the other
+confirmation — so Chrome coarsens the clock. Two hundred thousand consecutive
+reads produced **two** distinct deltas, both 100.00 µs; a busy-wait of 40 µs
+reads back as 100 µs and so does one of 90 µs. Terrain selection is documented
+at 40–90 µs, so a span over it would have quantized to a single tick and lied by
+up to 2.5×.
+
+The answer was not to drop the span. It was **one clock read per boundary rather
+than a pair per span**, so the phases _tile_ the engine step and the
+quantization error redistributes between neighbors instead of accumulating.
+Measured: the eight Engine phases sum to 271.4 ms against an `engine` total of
+272.1 ms — 99.7% — and the five Terrain phases to 3.920 ms against
+`Engine/terrain` at 3.921 ms. The consequence to keep is that a short phase is
+honest **in the mean and not in the instant**: over a 240-frame window the
+rounding is unbiased and the mean is good to well under a microsecond, but one
+bar is not a reading.
+
+**Terrain selection is 40–90 µs from orbit and 2.7 ms on a summit.** Standing on
+Earth's summit site with a nine-level selection visiting 446 nodes,
+`terrain.select` was **2.733 ms of a 4.461 ms engine step** — 61% of everything the
+engine did, and 30–68× the figure `terrainStreamer.ts` had carried since it was
+written. Both numbers are real; the comment now says which is which. This is the
+same lesson Earthrise taught about keep sets, arriving from a different
+direction: a figure measured at one operating point is a figure about that
+point.
+
+`terrain.request` and `terrain.evict` were briefly folded into one entry on the
+assumption they were sub-resolution bookkeeping. The summit measurement
+falsified it within the hour at 0.916 ms, and they are two entries again.
+
+**A heightfield waits 2.94 s in the queue and then runs for 83 ms.** On arrival
+at that summit, over 112 jobs: `queue` at 2937.75 ms mean and `run` at 83.45 ms,
+with `PoolStats` corroborating — 124 queued, four workers, none idle. The pool's
+header has always named the distinction ("slow tasks want optimization, a deep
+queue wants more workers or fewer requests"); both numbers existed and there was
+nowhere to see that one of them was three seconds. Per thread the four workers
+took 52 jobs each at 53.38, 53.58, 53.68 and 53.94 ms mean, which is a balanced
+pool and was also unstatable before.
+
+**The whole preload and warm-up census runs twice on a cold boot.** 1798 ms,
+then 920 ms 4.5 s later. Not StrictMode, which was the obvious guess and the
+wrong one: the log says `canvas never presented despite nudges; rebuilding the
+renderer`, and rebuilding the renderer re-runs the warm-up. It is the
+presentation watchdog's documented recovery path, and the timeline is the first
+instrument that could show it as a _shape_ — the panel does not exist yet at
+boot, and the log is two identical sentences four seconds apart with nothing
+relating them.
+
+**The entry costs, measured rather than taken from Chrome's documentation.**
+Against a 7.0 ns/iteration empty loop over 200,000 iterations, in Chrome, landed
+on Earth: `console.timeStamp(label, start, end, track, group, color)` at
+**46.5 ns** and `performance.measure` with a devtools detail at **988.5 ns**.
+Net of the loop, ~40 ns and ~981 ns. At the ~22 entries a frame this emits,
+`trace` costs 0.87 µs a frame — 0.005% of the 16.6 ms budget — and `full` costs
+21.6 µs, 0.13%. The 25:1 ratio is the whole argument for two levels. Measured
+with no DevTools recording active, which is the case that decides whether
+turning `trace` on costs anything; under a live recording it will be higher.
+
+**Retention is real and it is not only ours.** Three seconds at `full` retained
+8,394 of this project's entries — and **338,065 of React DevTools'** in the same
+timeline. That is why nothing here ever calls `performance.clearMarks()` or
+`clearMeasures()` bare, and why the drain clears by name and by kind: `clearMarks`
+does not remove a measure, so a drain calling one of them leaves half of what it
+emitted. The sink's own ceiling is 250,000, which at the measured ~2,800 entries
+a second is about ninety seconds — longer than any profile window, shorter than a
+session somebody walked away from.
+
+**A share of frame time is undefined for concurrent spans**, and it printed
+**58,767%** before that was noticed. Worker queue waits overlap each other and
+the frames they cross, so the ratio is arithmetically true and describes nothing.
+`summarizeProfile` now detects the overlap empirically, per span, and prints an
+em dash — empirically rather than by a list of track names, so a track added
+later classifies itself.
+
+**Two defects the tests found, both worth not reintroducing.**
+
+`console.timeStamp` is not a function in this Node context, and the sink threw
+through a `GameEngine` — a crash in a debugging aid, which is worse than the aid
+being absent. It is bound once behind a `typeof` now. The trap is that this
+guard and the _extension_ guard look like one question and are two: whether the
+method exists is a `typeof`, and whether it accepts the four track arguments has
+no query at all, which is why the level is the gate.
+
+`timingInert.test.ts` took two attempts to become non-vacuous, and the first
+attempt is the instructive one. Attaching a recording sink and leaving the level
+`off` proves nothing — a sink _is_ what `on` means, so attaching one opens every
+guard and the entries arrive correctly. The observable that means something is
+the count of `performance.now` calls: **exactly 240 over 120 frames**, which is
+the two reads `GameEngine.frame` already made before any of this existed. An
+equality rather than a bound, because the claim is that the instrumented build
+and the uninstrumented one do identical work. Checked against a clock read moved
+one line outside its guard: 1200 instead of 240.
+
+**What the trace event actually looks like**, because it is not guessable and
+the answer belongs somewhere findable. An extended `console.timeStamp` lands as
+a single _instant_ event carrying its own interval —
+`cat: 'devtools.timeline'`, `name: 'TimeStamp'`, `ph: 'I'`, with
+`args.data: { name, message, start, end, track, trackGroup, color }` — and
+`start`/`end` are **microseconds on the trace's monotonic clock**, not the page's
+`performance.now()` milliseconds. `performance.measure` lands separately under
+`blink.user_timing` as a `b`/`e` pair joined by `id2.local` with the payload in
+`args.detail` as a JSON string, which is where React's own tracks live.
+
+That trace also settled the one claim the page structurally cannot check. Two
+attempts to attach to a worker thread over CDP both hung; the trace answered it
+for free — the `Tasks` track appears on **four distinct `tid`s**, one per worker,
+while Engine, Terrain and Render share the main thread's. The level crossed the
+worker boundary, the worker's own sink attached, and each side timed and emitted
+against its own `timeOrigin`.
+
+Finally, a figure **not** to quote: the `navigation to first light` entry read
+8588 ms on the run that verified it. That is what the driver's occluded Chrome
+waits while the presentation watchdog gives up twice, on a Vite dev server
+transforming modules. The entry is verified; the number is about that window and
+not about a player.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).
 
+- **The timeline has no span inside `packages/simulation`, so `pnpm sim
+--profile` reports only the worker pool.** That is deliberate rather than
+  unfinished — the simulation depends on the integer tick and wall clock enters
+  at one call — but it means a bare `--ticks` loop has nothing to decompose and
+  the headless half of the profile story is thinner than
+  [the plan](docs/plans/the-timeline.md) hoped. The seam for changing that is
+  ADR-0022's `void` return, which is what would keep a tick span from becoming a
+  canonical read.
+- **A worker's entries are invisible to `ir.timing.drain()`.** They live on the
+  worker's own performance timeline because each side times against its own
+  `timeOrigin`, so a `full`-level drain on the main thread covers Engine,
+  Terrain, Render and Boot and stops there. The worker tracks are in a _trace_ —
+  `pnpm drive --trace`, then `pnpm timing --threads` — and closing the gap means
+  collecting from both sides over `postMessage`, which is a protocol change
+  nobody has needed yet.
+- **The entry-cost figures were taken with no DevTools recording active.**
+  46.5 ns for `console.timeStamp` and 988.5 ns for `performance.measure` are the
+  numbers that decide whether _turning the level on_ costs anything, which is the
+  question that matters for shipping. What they do not answer is the cost under a
+  live recording, where the category is enabled and the entry is actually written
+  somewhere. `--trace` now exists to measure that and it has not been done.
+- **Nothing checks the timeline against a real browser, including the one claim
+  ADR-0022 calls out as failing silently.** The inertness check is
+  `apps/game/src/engine/timingInert.test.ts` — a Node unit test with a stubbed
+  clock counting `performance.now` calls — and `pnpm sim --self-test` exercises
+  none of it. The figures the whole three-level design rests on (46.5 ns and
+  988.5 ns an entry, 0.87 µs a frame at `trace`) came from one manual browser
+  session, and no automated check reproduces them. The seam for closing it is
+  the same one the twelve capability checks use; the reason it is not a
+  thirteenth is in the ADR.
+- **A 3-second trace is 41 MB and 204,000 events.** `pnpm timing` carries
+  `--max-old-space-size=8192` for that reason. The categories are already the
+  narrow set — the V8 CPU profiler is deliberately excluded — and most of the
+  volume is `disabled-by-default-v8.gc`, which comes along with
+  `devtools.timeline`. A longer recording wants streaming rather than one
+  `JSON.parse`, and `traceFrames.mjs` has the same shape of limit.
 - **The planetarium has no bookmarks, filters or measure tool.** The address is
   already the whole record for a bookmark, so what is missing is a store; the
   filter fields are the ones `docs/design/galaxy.md` lists for the galaxy map.

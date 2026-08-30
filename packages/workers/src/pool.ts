@@ -1,4 +1,10 @@
-import { getLogger, invariant, type Logger } from '@inertialref/shared'
+import {
+  getLogger,
+  getTimer,
+  invariant,
+  type Logger,
+  type TimingDetail,
+} from '@inertialref/shared'
 import type { JobId, WorkerOutbound } from '@inertialref/protocol'
 import type { TaskDefinition } from './task.ts'
 import type { WorkerFactory, WorkerPort } from './transport.ts'
@@ -15,7 +21,47 @@ import type { WorkerFactory, WorkerPort } from './transport.ts'
  * Instrumentation separates queue latency from execution time on purpose. They
  * fail differently: slow tasks want optimization, a deep queue wants more
  * workers or fewer requests.
+ *
+ * Both of those are also emitted onto a timeline, from the numbers `PendingJob`
+ * already holds — `enqueuedAt`, `dispatchedAt`, and the moment the answer
+ * arrives. As `PoolStats` they are two rolling means over the last 64 jobs; as
+ * a track they are the *shape* of the queue, and the difference is that you can
+ * see which frame the depth started at. A `generateHeightfield` at 37 ms
+ * appears in the same recording as the frame that drew coarse ground because it
+ * was still waiting, which is a picture this project could not previously draw.
+ *
+ * `getTimer` is called here directly, exactly as `getLogger` is two lines
+ * below, and for the same reason: it is a workspace import at layer 0 rather
+ * than a host API. The plan proposed `PoolOptions.timing?: Timer` on the
+ * strength of the port rule, but the thing that actually needs a port is the
+ * *clock*, and `PoolOptions.now` already is one.
+ *
+ * **Each side emits only its own numbers.** `console.timeStamp`'s arguments are
+ * milliseconds against `performance.timeOrigin`, and a worker's origin is not
+ * the page's — so a start time computed on one thread and emitted on another
+ * lands on the timeline wrong by however long the worker took to spawn. The
+ * pool never emits a worker's run and the worker never emits the pool's queue.
+ * The two `run` figures differ by construction and both are wanted: this one is
+ * dispatch to answer-in-hand, including the round trip, and the worker's is the
+ * task on its own thread.
  */
+
+const timer = getTimer('workers.pool')
+
+/*
+ * No `group` on either: the track name is the pool describing itself, which is
+ * the same thing the logger scope above already is, while the group is the
+ * host's branding. The browser sink fills it in.
+ */
+const QUEUE_DETAIL: TimingDetail = Object.freeze({
+  track: 'Workers',
+  color: 'secondary-light',
+})
+
+const RUN_DETAIL: TimingDetail = Object.freeze({
+  track: 'Workers',
+  color: 'secondary-dark',
+})
 
 export interface PoolOptions {
   readonly factory: WorkerFactory
@@ -76,10 +122,33 @@ export class WorkerPool {
   #cancelled = 0
   #longestQueueMs = 0
   #terminated = false
+  /**
+   * The level last broadcast, so a worker that has not heard yet can be told.
+   *
+   * Every worker is spawned in the constructor here, so in practice this is
+   * only the ordering between construction and the host's first
+   * `setTimingLevel`. A worker that has not heard is `off`, which is the right
+   * default for the frame or two it lasts.
+   */
+  #timingLevel = 'off'
+
+  /**
+   * Whether `#now` is a clock or the zero stand-in.
+   *
+   * The zero default is harmless in a `PoolStats` figure — an average of 0 ms
+   * is obviously untimed — and not harmless on a shared axis, where it stacks
+   * every `queue` and `run` entry at t=0 beside entries the host is timing with
+   * `performance.now()`. That is the case `AttachOptions.now` refuses outright
+   * by throwing; a pool cannot throw, because a pool without a clock is a
+   * supported thing that simply has no timeline coordinates to offer. It keeps
+   * its stats and emits nothing.
+   */
+  readonly #timed: boolean
 
   constructor(options: PoolOptions) {
     invariant(options.size > 0, 'A worker pool needs at least one worker')
     this.#now = options.now ?? (() => 0)
+    this.#timed = options.now !== undefined
     this.#log = getLogger('workers.pool')
     for (let index = 0; index < options.size; index += 1) {
       const port = options.factory(index)
@@ -152,6 +221,22 @@ export class WorkerPool {
     return this.#queue.length
   }
 
+  /**
+   * Tell every worker how much of itself to describe.
+   *
+   * Broadcast on every change rather than read once at spawn, because the level
+   * changes mid-session — `ir.timing()`, the performance panel — and a value
+   * fixed at construction would leave the worker tracks empty for the rest of
+   * it. `WorkerTiming` in the protocol package carries the rest of the argument,
+   * including the three other reasons a query on the worker's URL does not work.
+   */
+  setTimingLevel(level: string): void {
+    if (level === this.#timingLevel) return
+    this.#timingLevel = level
+    for (const worker of this.#workers)
+      worker.port.post({ kind: 'timing', level })
+  }
+
   stats(): PoolStats {
     return {
       workers: this.#workers.length,
@@ -186,6 +271,14 @@ export class WorkerPool {
       const waited = job.dispatchedAt - job.enqueuedAt
       sample(this.#queueSamples, waited)
       this.#longestQueueMs = Math.max(this.#longestQueueMs, waited)
+      // From the two numbers the job already carries; no clock read of its own.
+      if (this.#timed && timer.on)
+        timer.measure(
+          `queue ${job.task}`,
+          job.enqueuedAt,
+          job.dispatchedAt,
+          QUEUE_DETAIL,
+        )
       worker.job = job
       this.#active.set(job.id, job)
       try {
@@ -224,6 +317,28 @@ export class WorkerPool {
     if (job === undefined) return
     this.#active.delete(message.job)
     if (worker.job?.id === message.job) worker.job = null
+
+    /*
+     * Dispatch to answer-in-hand, on the page's clock.
+     *
+     * Deliberately not `message.durationMs`: that is the task's own time,
+     * measured on the worker's thread against the worker's `timeOrigin`, and
+     * plotting it against page time would place it wrong by however long the
+     * worker took to spawn. The worker emits that one itself. The difference
+     * between the two entries is the round trip and the structured clone, which
+     * is a cost nothing here previously attributed to anything.
+     *
+     * Cancellations and failures are timed too — a job that took 40 ms to fail
+     * occupied a worker for 40 ms, and a track that only showed successes would
+     * make a thrashing streamer look idle.
+     */
+    if (this.#timed && timer.on)
+      timer.measure(
+        `run ${job.task}`,
+        job.dispatchedAt,
+        this.#now(),
+        RUN_DETAIL,
+      )
 
     if (message.kind === 'success') {
       sample(this.#runSamples, message.durationMs)

@@ -6,8 +6,9 @@ import {
   type Scene,
   SphereGeometry,
 } from 'three/webgpu'
-import { getLogger } from '@inertialref/shared'
+import { getLogger, getTimer } from '@inertialref/shared'
 import type { GameEngine } from '../engine/GameEngine.ts'
+import { BOOT_PHASE } from '../engine/frameTiming.ts'
 import type { RendererHandle } from './createRenderer.ts'
 import { scatteringFor } from './atmosphereLuts.ts'
 import { createAtmosphereMaterial, createStarMaterial } from './materials.ts'
@@ -63,6 +64,7 @@ import {
  */
 
 const log = getLogger('game.preload')
+const timer = getTimer('game.preload')
 
 export type { BootProgress }
 
@@ -254,8 +256,14 @@ async function warm(
 
   await warmup.run(onProgress)
 
+  const finished = performance.now()
+  // The whole preload, over the per-producer entries `warmup.run` emits — this
+  // is the one that carries the fetch and the registration around them, so the
+  // difference between it and `warm-up` is what this file spends outside the
+  // census it declares.
+  if (timer.on) timer.measure('preload', started, finished, BOOT_PHASE)
   log.info('scene warmed', {
-    ms: Math.round(performance.now() - started),
+    ms: Math.round(finished - started),
     textures: textureCount,
     atmospheres: bakeCount,
     backend: handle.description.backend,

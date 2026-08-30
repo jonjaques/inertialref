@@ -100,6 +100,22 @@ _"needs a character controller on a surface frame."_
 | EVA thruster ΔV   | 42 m/s total   | Rechargeable at the ship only. **This is the scariest number in the game.** |
 | Fall damage onset | 4.5 m/s impact | Scales with suit mass                                                       |
 
+**The ground drawn here is not quite the ground the contact test integrates, and
+this is the layer where that stops being free.** The mesh, the material and the
+standing camera are made from `drawnElevation`; the contact test, the saves and
+the survey sites read `groundElevation`; and `drawnDivergence` bounds the gap at
+**1.25 m** ([ADR-0021](../adr/0021-the-ground.md)). A landing ship spans tens of
+meters and never notices. A walker does — 1.25 m is nearly three times the jump
+height in the table above, so a rim you can see and a rim you can stand on are a
+traversal decision apart. Closing it means carrying the tail into the canonical
+field, which is terrain algorithm v3 and the one version bump
+[TERRAIN-PLAN](../../TERRAIN-PLAN.md) § 5 reserves, because it moves the ground
+under every landed hull in every save.
+
+**Scatter has no collision**, for the same reason and with a cheaper fix. A rock
+is generated, addressed as `r:…/o:n`, and instanced in the terrain's material,
+and the contact test does not know it exists.
+
 > 🎮 Designer's Note: EVA thruster ΔV as a hard, non-regenerating budget is the
 > single mechanic that will produce the game's best stories. Forty-two meters per
 > second, spent, is a person drifting away from their ship. It should never be
@@ -236,4 +252,5 @@ Stated so it does not get added by accident:
 - [combat](combat.md#on-foot-combat) — the scarce, lethal version
 - [exploration](exploration.md#tier-4--ground-truth) — why the on-foot layer exists mechanically
 - [ux](ux.md#on-foot-hud) — where the five gauges live
+- [ADR-0021](../adr/0021-the-ground.md) — the 1.25 m between the ground you see and the ground you land on
 - [`docs/roadmap.md`](../roadmap.md#content-the-rest-of-the-vision) — humanoids, structures, small objects

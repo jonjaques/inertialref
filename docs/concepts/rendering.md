@@ -234,12 +234,15 @@ streamer, the worker task and capability check 10 — which compares worker outp
 to main-thread output sample by sample, and would otherwise be capable of
 comparing two differently sized grids and calling them equal.
 
-The heightfield is `groundElevation`, not the bare `elevationAt`: the same
-sea-level clamp the physics uses. Before that had one owner, `seaLevel` was
-carried from the generator through the worker to the mesh and then ignored, so on
-an ocean world the landing pad sat on the water datum while the mesh drew the
-seabed underneath it. A test now asserts the mesh is drawn at the radius the
-contact test stops at.
+The heightfield is `drawnElevation`, not the bare `elevationAt`: the same
+sea-level clamp the physics uses, and then the presentational tail below the
+canonical floor. The clamp has exactly one owner, because a `seaLevel` carried
+from the generator through the worker to the mesh and read by neither puts the
+landing pad on the water datum while the mesh draws the seabed underneath it,
+and a test asserts they agree there. The tail is the one term the mesh has that
+the contact test does not, it is bounded by `drawnDivergence` at 1.25 m, and
+[streaming](streaming.md#two-fields-and-which-one-each-reader-gets) has why the
+two fields have to be two.
 
 ```mermaid
 sequenceDiagram
@@ -571,6 +574,37 @@ into the sky is light that did not arrive along the sun ray, and added beside it
 the streamed ground came out 15% brighter than the photograph of the same
 planet. [ADR-0020](../adr/0020-the-face.md) has the alternatives.
 
+**Below a mesh cell there is a grain band, and its domain is the interesting
+part of it.** A patch at the detail floor is 0.35 to 1.41 m a cell, and from a
+two-meter stance one of those cells is two hundred display pixels across — so
+everything between a cell and a pixel is per-pixel or it is nothing at all. The
+band runs from 0.7 m down to 9 cm, at about fifteen degrees of slope, which is
+what lunar regolith measures at centimeter baselines. What it may not use is
+either of the two positions already in the graph. `positionLocal` is
+_patch_-local, so a noise on it jumps phase at every patch edge — invisible at
+the seven-meter octave above it, and a straight line across the ground at seventy
+centimeters. The body-fixed position is continuous and useless: 1.7 × 10⁶ on
+Luna, where float32 resolves 0.1 m and quantizes a nine-centimeter octave out of
+existence. So the anchor is reduced modulo `GRAIN_PERIOD` wavelengths **in
+float64 on the CPU** and the noise is written out to be periodic over that
+period — exact, continuous across every boundary, and repeating every 45 m of
+ground, which is further than the band survives to. It is hand-written rather
+than taken from `mx_*` because periodicity is the one property none of the
+built-ins has.
+
+**The rocks wear this material rather than one of their own**, which is what
+keeps a boulder and the regolith it is lying on agreeing about the palette, the
+photometry, the terminator, the aerial veil and the published photograph. They
+are the same body's surface seen a meter apart. Sharing costs nothing and needs
+no branch, because Three's node material inserts the instancing _before_
+`positionNode` runs — `instancedMesh( object )` assigns into `positionLocal` and
+`normalLocal`, and this graph reads exactly those — so the altitude, the
+latitude, the map's UV and the footprint the detail fades on are all right for
+the rock rather than for the field's anchor. A rock comes out bedrock on its
+steep faces and regolith on its top, in the palette of the ground under it, by
+the same slope term that decides the ground.
+[ADR-0021](../adr/0021-the-ground.md).
+
 ### Two float32 rules that only a planetary shader needs
 
 Both were reported as one defect — a coastline warping several times a second,
@@ -594,12 +628,25 @@ a detail fade measured that way steps per polygon. Both are analytic instead:
 the UV gradient from the tangential part of a precise step, the fade from
 distance times the lens's own pixel angle.
 
-One more, which is a WGSL fact rather than a numerical one: **a varying may not
-take an attribute's name.** `varying(vec4(), 'terrainCover')` beside
-`attribute('terrainCover')` is a redeclaration in the generated shader, and it
-surfaces as `[Invalid ShaderModule "vertex"]` with the real message on a channel
-the page console does not carry — so what you see is a planet that draws
-nothing.
+Two more are backend facts rather than numerical ones, and they fail the same
+way: a message on a channel the page console does not carry, and a planet that
+draws nothing.
+
+**A varying may not take an attribute's name.** `varying(vec4(), 'terrainCover')`
+beside `attribute('terrainCover')` is a redeclaration in the generated shader,
+and it surfaces as `[Invalid ShaderModule "vertex"]`.
+
+**And two attribute names may not share one `BufferAttribute` object.** The
+backend builds its vertex layout by asking the geometry for each attribute the
+graph names, and keys the GPU buffer on the object it gets back — so one object
+answering to two names is one buffer at two shader locations, and the pipeline
+does not build at all. It reports `[Invalid ShaderModule "fragment"] is invalid
+due to a previous error`, and `warmCompile` swallows its rejection, so a
+compile-ahead making the same mistake fails silently before the real draw hits
+the same wall. Two attribute objects over one array is a few bytes and one fewer
+trap; `ScatterRocks` gives its rocks their morph targets that way, because the
+terrain graph reads morph attributes a rock has no coarser version to morph to.
+[ADR-0021](../adr/0021-the-ground.md).
 
 ---
 
@@ -723,6 +770,7 @@ flowchart TB
 
 - [ADR-0013](../adr/0013-measured-figures.md) — why a body that gravity never rounded off carries a radius grid rather than a sphere
 - [ADR-0020](../adr/0020-the-face.md) — the cover field, the palette and the one terrain material
+- [ADR-0021](../adr/0021-the-ground.md) — the grain band, and the rocks that wear the same material
 - [Coordinates](coordinates.md) — what render space is derived from
 - [Streaming](streaming.md) — how terrain patches are chosen and reconciled
 - [Time](time.md) — where the interpolation alpha comes from

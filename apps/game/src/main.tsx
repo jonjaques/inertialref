@@ -10,6 +10,9 @@ import { KeymapProvider } from './input/KeymapProvider.tsx'
 import { registerServiceWorker } from './net/registerServiceWorker.ts'
 import { BUILD_ID } from './build.ts'
 import { loadStarCatalog } from './engine/catalogAsset.ts'
+import { isTimingLevel, setTimingLevel } from './engine/browserTiming.ts'
+import { QUERY } from './pages/paths.ts'
+import { read, TIMING_LEVEL } from './state/preferences.ts'
 import './index.css'
 
 /*
@@ -22,6 +25,35 @@ import './index.css'
  * hub.
  */
 logHub.addSink(createConsoleSink(console, 'info'))
+
+/*
+ * The performance timeline, wired here for the same reason and one more.
+ *
+ * `timingHub` is module-global too, so attaching its sink is a process-wide
+ * side effect that belongs to the entry point. The extra reason is fatal to
+ * every alternative: **boot is the most interesting thing on this timeline and
+ * boot happens before React mounts.** A level read in an effect misses the
+ * atmosphere bake, every texture upload, the pipeline warm and the whole gap
+ * between navigation and first light — which is the one duration a player
+ * actually experiences.
+ *
+ * Three values, not a boolean, and read by name: `?timing=full` retains entries
+ * anything can read back, `?timing=trace` only feeds a live recording, and a
+ * boolean cannot select between them. The URL wins over the stored preference,
+ * so a link can profile a machine that has never been profiled on.
+ *
+ * `off` is the default everywhere, and it has to be: there is no capability
+ * query for the `console.timeStamp` track arguments, so a sink that attached on
+ * a `typeof` check would make Safari, Firefox and Node pay the hot path for
+ * entries that land nowhere. Asking is the gate.
+ */
+setTimingLevel(
+  (() => {
+    const asked = new URLSearchParams(window.location.search).get(QUERY.timing)
+    if (isTimingLevel(asked)) return asked
+    return read(TIMING_LEVEL)
+  })(),
+)
 
 /*
  * Analytics, wired here for the same reason the log sink is: loading a third

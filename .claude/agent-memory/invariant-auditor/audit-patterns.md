@@ -30,6 +30,25 @@ the seed. `loadedSystems()`, `#target`, `clock.tick`, a module-level cache. Then
 by loading extra systems before the call. The two-line reproduction is worth more than
 any amount of reading.
 
+## The sketch cache key must list every grammar field `derive` reads — and it drifts
+
+**Highest-yield determinism check on any diff that touches `sketch.ts`'s `derive`.**
+`cacheKey` is nine `|`-joined grammar fields plus the seed, with a docstring claiming it
+is "keyed by what the derivation reads". Every phase that adds a term to `derive` risks
+adding a tenth read without a tenth key field.
+
+Confirmed on `feat/the-ground`: `microLadder` → `microCraterDensity(grammar)` reads
+`grammar.air`, which is **not** in the key. Reproduction, two lines:
+`terrainSketch({...luna.surface, grammar: {...g, air: 1}})` returns `microLevels.length === 4`
+(the airless tail) because Luna's real surface was derived first; asked in the other order
+it returns `[]`. Latent in production only because the seed is in the key and bodies have
+distinct seeds — but it is order-dependence in canonical-adjacent generation and one word
+to fix.
+
+**Mechanical check:** `grep 'grammar\.' ` inside `derive` and every function it calls
+(`craterLadder`, `microLadder`, `rayCraters`, …), and diff that set against the `cacheKey`
+array.
+
 ## Two test idioms here that degenerate into assertions that cannot fail
 
 The house style labels an assertion by interpolating the subject into both sides:
@@ -55,20 +74,15 @@ framing you left" in three docstrings and `docs/guides/harness.md`.
 resolve step" almost always inherits a reset it did not want. Read the callee's whole
 body, not its first line.
 
-## `faceToDirection` is a fourth `BodyFixedDirection` producer AGENTS.md does not name
+## `BodyFixedDirection` producers keep multiplying outside the three `AGENTS.md` names
 
 The invariant enumerates three (`bodyFixedDirection`, `geodeticDirection`,
-`regionDirection`) and the enumeration _is_ the enforcement. `terrain.ts:62` exports a
-fourth and its own docstring says "there are exactly two producers below". Until
-`feat/the-terrain-rig` it was only used inside `terrain.ts` and in tests; `surveySites.ts`
-now calls it in production. Not a correctness bug — face-local UV is body-fixed by
-construction — but the list should say four or the call should go through
-`regionDirection`.
-
-Related and unresolved as of `feat/the-geology`: `elevationAt`, and now every exported
-band function in `bands.ts`/`craters.ts`/`sketch.ts`, take a bare `Vec3` rather than a
-`BodyFixedDirection`. That was already true of `elevationAt` on `main`, so it is not a
-regression — but the geology widened the public surface of it by six functions.
+`regionDirection`) and the enumeration _is_ the enforcement. Known extras:
+`terrain.ts`'s `faceToDirection`; `flight.ts:298`'s `as BodyFixedDirection`; and now
+`apps/game/src/engine/scatterField.ts:180`, `Vec.normalize(eyeLocal) as ScatterEye['direction']`
+— the first one in `apps/`. Each is semantically correct and each widens the surface the
+enumeration is supposed to close. Also unresolved: `elevationAt`, `drawnElevation` and
+every exported band function take a bare `Vec3`.
 
 ## Design docs carry "Not built" tables that the diff silently falsifies
 
@@ -79,7 +93,7 @@ grep the design doc the touched invariant cites for the feature name.
 
 ## The mirror goes stale in one direction: AGENTS.md forward, rules back
 
-This is now the highest-yield check in the whole audit and it has fired twice.
+This is now the highest-yield check in the whole audit and it has fired three times.
 
 When a diff **amends** an existing `AGENTS.md` bullet (rather than adding a new one), the
 `.claude/rules/` mirror is almost never amended with it. Adding a _new_ invariant is
@@ -98,18 +112,22 @@ A field name added to the canonical list and missing from the mirror is the find
 The three-part contract for a _new_ code invariant still holds and is usually satisfied:
 a bullet in `AGENTS.md`, a one-liner in `.claude/rules/` + a `.cursor/rules/*.mdc` whose
 comma-joined `globs:` equals the `paths:` list, and a row in `docs/agents/invariants.md`.
-**Process** rules (`branching`, `writing`) sit outside it deliberately.
+**Process** rules (`branching`, `writing`) sit outside it deliberately. The `.cursor/rules`
+adapters `@`-reference the canonical `.claude/rules` file, so a new bullet needs no glob
+change — but see the next section for the failure that replaced this one.
 
-## A new path-scoped rule can contradict a file already inside its own scope
+## A new rule lands in the wrong path scope for the files that make the mistake
 
-`record.md` landed with `paths: apps/game/src/planetarium/**` and the flat imperative
-"the reading is formatted here, never by `Intl`" — while `planetarium/simulationTime.ts`
-builds two `Intl.DateTimeFormat`s on a well-argued 16-line rationale (a time zone is a
-property of the reader, not of the ephemeris).
+The mirror-drift failure has mutated. `feat/the-ground` put the canonical/drawn ground
+invariant in `.claude/rules/determinism.md`, whose `paths:` are
+`packages/{simulation,procedural,universe,spatial,physics}/**` — and **every file in the
+diff that actually had to choose between `surfaceRadius` and `drawnSurfaceRadius` is
+outside it**: `packages/devtools/src/observatory.ts`, `packages/devtools/src/descent.ts`,
+`apps/game/src/engine/scatterField.ts`, `packages/rendering/**`. The rendering rule covers
+those paths and carries only the _other_ new bullet.
 
-**Check:** take each new rule's `paths:` glob and grep the matched files for the thing the
-rule forbids. A rule whose scope contains its own counterexample will get a correct file
-deleted by a future agent.
+**The check, and it is one command:** take the files the diff changed to satisfy the new
+invariant, and confirm each is matched by the `paths:` of the rule that states it.
 
 ## `text-slate-500` is the recurring design-invariant leak
 
@@ -171,19 +189,23 @@ On `feat/the-geology` it was worse: a concurrent session **checked the
 main working directory out to an older commit and back** mid-run (`git reflog` showed
 `checkout: moving from feat/the-geology to c71bac5` and back), which silently poisoned a
 main-vs-HEAD comparison — both sides reported `TERRAIN_ALGORITHM` v1.
+On `feat/the-ground` the docs pass ran _concurrently and uncommitted_: eight `docs/` files
+plus `README.md` went from clean to modified during the audit. Grep the **working tree**
+for a figure you are about to call stale — it may already be being rewritten, and the
+uncommitted prose is worth auditing too (it repeated the same retired `1.6 m`).
 
-**The discipline that fixes it, and it costs thirty seconds:** make two detached worktrees
-under the scratch dir (`git worktree add --detach <scratch>/mainwt origin/main`, same for
-the branch tip by SHA), symlink `node_modules` from the real repo into each, and run every
-measurement against those paths. Never measure from the live checkout. Re-run
-`git status` / `git log` before writing, and drop findings the working tree already fixes.
+**The discipline that fixes it, and it costs thirty seconds:** the cheapest safe way to get
+a second revision is `git archive origin/main | tar -x -C <scratch>/mainwt` — it touches no
+git metadata at all, unlike `git worktree add`, so a concurrent session cannot be disturbed.
+Symlink `node_modules` from the real repo into it and import the modules under test by
+absolute path. Re-run `git status` / `git log` before writing, and drop findings the working
+tree already fixes.
 
 **Trap in that setup:** symlinking `node_modules` makes bare specifiers
-(`@inertialref/universe`) resolve to the _real repo's_ packages, not the worktree's. Import
+(`@inertialref/universe`) resolve to the _real repo's_ packages, not the copy's. Import
 by absolute path (`${ROOT}/packages/universe/src/system.ts`) for the module under test, and
-verify with a probe that prints something version-shaped (`TERRAIN_ALGORITHM`) before
-trusting any cross-revision diff. A module that reaches its siblings by bare specifier
-(`terrainZoo.ts`, `World`) cannot be compared this way at all.
+verify with a probe that prints something version-shaped before trusting any cross-revision
+diff. A module that reaches its siblings by bare specifier cannot be compared this way at all.
 
 ## What `pnpm graph` covers
 
@@ -206,8 +228,23 @@ address, and the defect is entirely in the cache.
 expression. Additive composites and template strings without separators are the tell.
 
 Fixed on `feat/the-quadtree-covers-the-disk` (`${radius}|${resolution}|${tolerance}`), and
-`feat/the-geology` added `sketch.ts`'s `CACHE` on the same pattern — `|`-joined, keyed on
-exactly the nine grammar fields `derive` reads, with a FIFO cap. That one is clean.
+`feat/the-geology` added `sketch.ts`'s `CACHE` on the same pattern — `|`-joined, with a FIFO
+cap. The separator is fine; what drifts is _which fields are in it_ — see the `air` section
+at the top.
+
+## A memo key that omits the _eye_ while the memoized build reads it
+
+`feat/the-ground`'s `ScatterField` rebuilds instance matrices only when
+`${home}|${range}|${readyRegions}` changes — but `#build` culls each rock against
+`eyeLocal` (a 212 m range test and a two-pixel test) and sorts nearest-first for the
+`MAX_ROCKS` truncation. Measured on Luna at a 2 m stance: moving 25 m tangentially leaves
+the region set identical while **81 rocks should have entered and 79 should have left** of
+1,050 drawn. The docstring only argues the standing case ("a standing camera crosses no
+region"), which is true and is not the code's actual predicate.
+
+**Generic form of the check:** list every input the memoized function _reads_, then diff
+that list against the signature string. A comment that justifies a cache by describing one
+motion state is where to look.
 
 ## A cache layer added in front of another disarms the test for the one behind it
 
@@ -216,8 +253,13 @@ a test named "derives the same sketch whatever order it is asked in". `perf/the-
 put a `WeakMap<SurfaceParameters, TerrainSketch>` in front of it, and `terrainSketch` returns
 from that WeakMap **before `cacheKey` is called**. The test asks the same _object_ twice, so
 both its assertions became WeakMap identity lookups and it can no longer see the string cache
-at all. Demonstrated: with `CACHE_LIMIT` at 1, the base-branch shape FAILS the assertion and
-the two-layer shape PASSES.
+at all.
+
+This keeps recurring in _new_ tests too: `feat/the-ground`'s
+`scatter.test.ts` "answers the same whichever order the regions are asked for" passes the
+same `LUNA.surface` object on both passes and churns only 8 derivations against a 96-entry
+cap — so it reaches neither the string cache nor its eviction, and it could not have caught
+the `air` key gap in the same commit.
 
 **The check:** when a diff adds a fast path in front of existing memoized state, re-read the
 test that covers that state and ask whether its inputs reach past the new layer. The fix is
@@ -226,77 +268,53 @@ alongside the same-object assertion.
 
 Verified separately, and worth not re-reporting: the two-layer cache is value-correct.
 2,000 `elevationAt` samples over five bodies, interleaved and flushed with 129 other bodies
-every 40 steps, are bitwise identical to a sequential run. Eviction can split _object
-identity_ (two equal surfaces get two distinct `TerrainSketch` objects after 96 derivations)
-and nothing in the tree compares sketch identity, so that is currently harmless.
+every 40 steps, are bitwise identical to a sequential run.
 
-## A retired figure comes back inside _new_ prose, not in the text that was left alone
+## The retired figure is now usually the _constant_, and the prose keeps arguing the old one
 
-The usual restated-figure drift is old text nobody updated. This one is the inverse and it is
-harder to grep for: `surfaceDetailFloor`'s "13–17" was corrected to "12–16" across the tree on
-`feat/the-geology`, and `perf/the-cost-of-a-sample` wrote **"between thirteen and seventeen"
-into a freshly authored comment** in `terrainSelect.ts` — 440 lines below the same file's own
-"level 12 to 16" — and into a new `CONTEXT.md` entry that reports the measured floors as
-(12, 13, 15, 16) eighty lines later.
+The classic shape is stale text nobody updated. `feat/the-ground` inverted it and it is the
+richest single finding on that branch: `MICRO_CRATER_CEILING` was **halved from 1.6 to 0.8**
+after a visual pass (`CONTEXT.md` says so outright — "the first attempt was 1.6 m of ceiling
+and drew as broken glass at 21°"), and the constant's own docstring still reads "A fifth of
+`CANONICAL_DETAIL_FLOOR`" — which is 1.6 — while four other sites (`terrain.ts` ×2,
+`terrainSelect.ts`, `TERRAIN-PLAN.md`, and `CONTEXT.md` two paragraphs above its own
+correction) argue the phase from "an eight-meter crater is 1.6 m deep". Measured deepest
+sub-floor cut: 0.799 m. Only ADR-0021 states both halves correctly.
 
-**The check:** grep the _retired_ literal against the diff's **added** lines, not against the
-whole tree. `git diff base...HEAD | rg '^\+' | rg '<retired figure>'`.
+**The check, and it is cheap:** for every new constant whose docstring contains arithmetic
+("a fifth of X", "half of Y"), _evaluate the arithmetic against the shipped value_. When it
+disagrees, grep the derived literal across the tree — it will be in three to five places.
+Then check `CONTEXT.md` for a sentence admitting the change; that is where the true story is.
 
-Corollary on the same branch: the perf figures moved 20/37 -> 9/60 and the docs pass caught
-`README.md`, `docs/roadmap.md`, `docs/design/technical.md`, `docs/agents/driving.md`,
-`docs/concepts/streaming.md` and `TERRAIN-PLAN.md` — and missed the three sites that are not
-under `docs/`: `apps/game/src/engine/terrainStreamer.ts` (twice, one of them the stated
-justification for `PREFETCH_SECONDS`), `docs/adr/0015` and `packages/universe/src/sketch.ts`
-(where the stale number sits inside the paragraph the same commit rewrote). **A docs pass
-sweeps `docs/`; the misses are always in `apps/` and `packages/`.**
+Same branch, same shape, smaller: the tail's headline effect is quoted as "two to three
+levels" in three places while the branch's own zoo table is 15→19, 16→17, 12→14, 10→12
+(one to four), and across Sol it runs 0 to +10 (Europa 6→16).
 
-## The rank-seam class now has three sites and no `AGENTS.md` bullet
+## Count words and index tables in doc headers drift on every row added
 
-"Read a field value off a thing chosen by rank and you inherit a seam wherever the ranking
-changes." `craters.ts` (the cube-face corner, ring walk counts a neighbor twice),
-`bands.ts` (the boundary blend, 9,433.9 m on Proxima Centauri II) and `sketch.ts` (the
-interior seam where second- and third-nearest plates are equidistant, 1,532 m Proxima /
-3,081 m Earth). The precedent for promotion is `AGENTS.md`'s own `renderTime` bullet: "Three
-sites have now had to learn this ... and nothing mechanical catches a fourth, so it is a rule
-rather than three comments." Nothing in `AGENTS.md`, `.claude/rules/determinism.md` or
-`docs/agents/invariants.md` states it. Recommend it every time this area is touched until it
-lands.
+`docs/adr/README.md:3` opens "Twenty decisions" and `README.md:380` repeats it — and
+`feat/the-ground` added ADR-0021 with **no table row and no Mermaid node** in
+`docs/adr/README.md` at all, only the `scripts/docs/wings.mjs` entry. Both count words and
+the index table itself are worth checking on any diff that adds an ADR; nothing greps them.
 
-## Running `packages/universe` standalone from a worktree is cheap and settles most claims
+## A measured figure gets restated in five places and corrected in one
 
-`node --experimental-strip-types` runs the sources directly. Absolute imports of
-`packages/universe/src/{terrain,system,galaxy,grammar,sketch,craters,bands}.ts` +
-`catalog/fixture.ts` (`TEST_CATALOG`, **not** `testCatalog.ts`) reproduces the test
-fixtures in about fifteen lines. `generateSystem(rootSeed('inertialref'), MILKY_WAY,
-catalogStub(TEST_CATALOG.stars[0]))` is Sol; `walkBodies` gives all 129. `MILKY_WAY` and
-`catalogStub` live in `galaxy.ts`, not `address.ts`. `new World({ seed, catalog })` — the
-seed is required and its absence throws inside `hashString`.
+The geology's headline numbers each live in a docstring, an ADR paragraph, `CONTEXT.md`'s
+before/after table and one or two module headers. When the measurement is later refined,
+the ADR and `CONTEXT.md` get the new number and the **code comments do not**.
 
-**The single most valuable thing this buys is a whole-galaxy diff.** Dump every body of
-every star in `TEST_CATALOG` as JSON with the fields under test stripped recursively, run
-it against both worktrees, and compare. On `feat/the-geology` that settled the whole
-`SYSTEM_ALGORITHM`-does-not-move claim in one command: 192 bodies, byte-identical except
-`surface.maxElevation` and its restatement `appearance.relief`. Strip **recursively** —
-`Body.moons` carries nested surfaces and a top-level `delete` leaves them in.
+**The check:** for every distinctive number the diff introduces, `rg` the literal across
+`docs/`, `packages/`, `apps/`, `README.md` and `CONTEXT.md` and count the sites. Then
+re-measure it yourself. On `feat/the-ground` three separate figures failed this:
+`drawnDivergence` is "about two meters" in two comments against a published 1.25 m;
+a patch's memory is "220 KB / 282 MB" in `terrainSelect.ts` where a patch carries **two**
+4-byte cover attributes (237 KB / 303 MB, which `docs/roadmap.md` gets right in the same
+diff); and a scatter region is "167 m across on Luna" twice, where `scatterLevel(1737400)`
+is 13 and `regionSize` is 333 m — the 167 comes from the _test's_ `LEVEL = 14` fixture,
+which is one level finer than production.
 
-Trap: `rg -rn` is `--replace n`, not "recursive with line numbers". Use `rg -n`.
-
-## "Ready" predicates that test a different cache than the one the drawer reads
-
-`terrainSelect`'s `ready` is documented as the thing that prevents holes: refine only into
-regions that are drawable. The streamer answered it with `#fields.has(key)` — the
-_heightfield_ cache — while `state()` skips any region whose `RenderPatch` has not been
-built. Measured on a landing: 204 selected / 104 built at frame 40.
-
-**The check, and it generalizes:** when a predicate names a precondition ("it is drawable",
-"it is loaded", "it is ready"), find the code that actually _consumes_ the thing and confirm
-it reads the same map.
-
-## An ordering argument in a docstring, with no sort in the code
-
-`#request`'s comment says "coarsest first and then nearest … a stable sort keeps that
-grouping". There is no sort — it filters and slices. Comments that _argue_ for a property
-are where to look, not comments that state one.
+**Corollary worth its own line: when a docstring's number matches a test fixture and not
+the code, the test fixture is the bug.**
 
 ## A comment claims a coverage guarantee the arithmetic does not provide
 
@@ -306,50 +324,47 @@ neighborhood is guaranteed to contain every crater whose support reaches it". Ce
 direction space is `1/cells = diameter/meanRadius`; a crater's angular radius is
 `diameter/(2R)` = half a cell; `EJECTA_REACH = 2.6` radii is therefore **1.3 cells**, so a
 crater two cells away can still reach the sample. The guarantee needs reach ≤ 1 cell or a
-5×5×5 walk.
+5×5×5 walk. (Still open; `feat/the-ground` inherits it four rungs deeper.)
 
 **The check:** when a comment says "guaranteed to contain", write the support radius and
-the cell width in the same units and divide. It is two lines of arithmetic and it is
-almost never done by the author.
+the cell width in the same units and divide.
+
+## An octave/rung count derived from a ratio is almost always off by one
+
+`GRIT_OCTAVES = ceil(log(CANONICAL_DETAIL_FLOOR / GRIT_FLOOR) / log(2.03))` = 2, and
+`fbm3` runs frequencies `f·λ^0 … f·λ^(N−1)` — so two octaves reach 8/2.03 = **3.94 m**, not
+the `GRIT_FLOOR = 2` m the constant is named for and whose docstring reasons at length
+about why the 1 m octave is excluded. It needs `+ 1`. The irony worth remembering: the
+docstring warns that "an octave count derived against the wrong lacunarity lands short"
+while landing short for a different reason.
+
+**The check:** write out the actual frequency list for the shipped count and compare its
+last entry to the floor the constant claims.
 
 ## Profile/falloff primitives: check every branch boundary, not just the outer one
 
-`profile.ts` opens with "Every one is C1 at both ends … a feature whose _value_ does not
-reach zero draws a step at it. Both survive into the normals." `craters.ts`'s
-`craterProfile` then guards the ejecta apron with `if (t > 1)` and evaluates
-`(1/t³)·(1 − smoothstep(1.8, 2.6, t))`, which is **1 at t = 1⁺ and absent at t = 1⁻** — a
-C0 step of `0.12·depth·rimLife·(0.6 + 0.8·typeDraw)` at the rim of every crater on every
-body. Measured on Luna: two adjacent doubles apart in direction, `elevationAt` differs by
-1,040 m; the same scan finds 896 m on Mercury, 873 on Iapetus, 442 on Callisto — every one
-inside the predicted `[0.072, 0.168]·depth` band of that body's largest crater.
+`craterProfile`'s `if (t > 1)` ejecta apron was the first (fixed since, by
+`smoothstep(1, RIM_OUTER, t)`); `rayBrightness`'s `if (t > 1.2)` was the second.
+The scan that finds them: walk a great circle in ~400,000 steps with an _exact_ rotation
+(`axis·cos θ + u·sin θ`, never a normalized offset), record `max |Δ|` between adjacent
+samples, and compare to the p99.9. A ratio above ~5 is a discontinuity. Then bisect: if the
+gap survives to adjacent doubles it is a real C0 step.
 
-**The check that found it, and it is generic and fast:** walk a great-circle arc in
-~400,000 steps, record `max |Δ|` between adjacent samples, and compare it to the p99.9.
-A ratio above ~5 is a discontinuity, not terrain. Then bisect between the two samples: if
-the gap survives down to adjacent doubles it is a real C0 step, and printing which lattice
-cell indices moved tells you whether it is the window or the profile. The author's own
-continuity test ("crosses a cube-face corner without a step in it") compares two walks of
-_different arc length_ under a factor-of-three bound and cannot see any of this.
+Run clean on `feat/the-ground`'s `microRelief`: 400k samples at 10 cm of ground over five
+bodies, max/p99.9 ratio 1.5–1.7, every bisected gap 0. The tail introduces no step. Note the
+branch's own continuity test walks a **non-unit** circle (`vec3(cos·0.95, 0.31, sin·0.95)`)
+at 0.5 m sampling, which could not have seen one anyway.
 
 ## A normalization that ignores the thing it is normalizing
 
 `field.ts`'s `fbmField`/`ridgedField` accumulate `value += amplitude · damp · n` but
-`norm += amplitude` — the damping is left out of the divisor. For `fbmField` that is a
-symmetric amplitude loss. For `ridgedField` the `(value/norm)·2 − 1` remap turns it into a
-**DC offset**: measured mean +0.265 undamped (matching v1 `ridged3`'s +0.255) against
-−0.890 at damping 6 and −0.965 at damping 24. The docstring says the two are
-"interchangeable as band inputs and an amplitude tuned against one reads the same against
-the other", which is true only in the case the function does not exist for.
-
-Downstream, `beltBand`'s stagnant-lid branch `(1 − ranges)³·2 − 0.1` amplifies it: on Mars
-the band's mean is 1.599 (σ 0.21) and 97.5% of samples exceed the stated `[-1, 1]`; on
-Venus 1.795 and 99.6%. That is a 3,064 m / 2,625 m uniform pedestal, and it also falsifies
-the ADR's "the shares sum to one, so no band can grow past its allowance".
+`norm += amplitude` — the damping is left out of the divisor. For `ridgedField` the
+`(value/norm)·2 − 1` remap turns it into a **DC offset**: measured mean +0.265 undamped
+against −0.890 at damping 6 and −0.965 at damping 24.
 
 **The check:** for any new normalized accumulator, ask whether every factor applied to the
 numerator is applied to the denominator, then measure the **mean** over a few thousand
 directions — not the range. A DC offset is invisible in a min/max and obvious in a mean.
-Do it for each value the caller can pass, not just the default.
 
 ## A fix pass's residue: the _guard_ is fixed, the _reader_ is not
 
@@ -361,57 +376,29 @@ before an invalidating call.
 
 ## A cap sized from one selection when the keep set is the union of two
 
-The streamer's recurring defect, now three times: `GEOMETRY_CACHE` was
-`DEFAULT_MAX_PATCHES + 128` "because only drawn patches get geometry", while
-`#evict` keeps `drawn ∪ starvedChildren ∪ pyramid(wanted)` — and `wanted` is a
-_second_ `selectTerrain` call at the look-ahead eye. `#evict` cannot delete a
-keep-set member, so a cap below `|keep|` does not bound the map: it pins
-residency at the keep set and makes every non-keep mesh a victim every frame.
+The streamer's recurring defect: `GEOMETRY_CACHE` was `DEFAULT_MAX_PATCHES + 128`
+"because only drawn patches get geometry", while `#evict` keeps
+`drawn ∪ starvedChildren ∪ pyramid(wanted)` — and `wanted` is a _second_ `selectTerrain`
+call at the look-ahead eye. A cap below `|keep|` pins residency at the keep set and makes
+every non-keep mesh a victim every frame. Fixed to `* 2` on `feat/the-ground`'s base.
 
-`perf/the-cost-of-a-sample` fixed the number (`* 2`) and then, in the follow-up
-docs commit, wrote a **stronger claim than the fix supports**: "`selectTerrain`
-caps the selection, so the keep set is bounded by `DEFAULT_MAX_PATCHES` and not
-by the viewport — measured 1,232 to 1,327 at both 3840×2400 and 5120×2880"
-(ADR-0015 Consequences, `CONTEXT.md`). Measured against the shipped code, on one
-body at one stance, the keep set moves with the viewport in every row: Ganymede
-at 2 km altitude with a 1 km look-ahead is **1,084 / 1,349 / 1,625** at
-1600×900 / 3840×2400 / 5120×2880. Invariance only appears when the camera is
-_stationary_ (the look-ahead collapses, drawn == wanted) or when
-`surfaceDetailFloor` binds before `maxPatches` does. The real ceiling is
-`|drawn| + 4·|starved| + |pyramid(wanted)|` ≈ 2.35× the selection cap, not 1.33×.
-
-**The probe that settles it, ~40 lines and reusable.** Reimplement the streamer's
-private `pyramid` (it walks `regionParent`), then for each body call
-`selectTerrain` twice — once at `direction`, once at a direction offset by
-`lead / body.radius` — and size the union of `drawn.patches`,
-`regionChildren(starved)` and `pyramid(wanted.patches)`. Sweep viewport ×
-look-ahead lead (`PREFETCH_SECONDS` is 2, so 1 km of lead is 500 m/s). Any claim
-of the form "X does not depend on the viewport" is one table away from being
-settled, and the author's version of the table was taken at a hover.
+Any claim of the form "X does not depend on the viewport" is one table away from being
+settled, and the author's version of the table is usually taken at a hover.
 
 ## A regression bound written from the theoretical floor, not the measurement
 
-Same branch: `gameEngine.test.ts` asserts `GEOMETRY_CACHE > (DEFAULT_MAX_PATCHES
-
-- 4. / 3`= 1,365 — the *floor* the docstring itself says holds "before the
-starved rung is counted".`DEFAULT_MAX_PATCHES * 1.5` = 1,536 passes that
-     assertion and still sits under the measured keep set of 1,625 at 5120×2880, so
-     the test admits the whole range [1,366, ~1,860] that reproduces the shipped
-     strobe. When a fix's own commit body quotes measurements (1,597 and 1,713
-     resident), the assertion should be pinned to the largest of them, per CLAUDE.md's
-     "name the limit in the assertion".
+`gameEngine.test.ts` asserts `GEOMETRY_CACHE > (DEFAULT_MAX_PATCHES * 4)/3` = 1,365 — the
+_floor_ the docstring itself says holds "before the starved rung is counted". When a fix's
+own commit body quotes measurements, the assertion should be pinned to the largest of them,
+per CLAUDE.md's "name the limit in the assertion".
 
 ## "One constant instead of two that must agree" usually leaves a smaller twin
 
-`GEOMETRY_KEPT = GEOMETRY_CACHE` is right, but `descent.ts`'s `DEFAULT_CACHE =
-DEFAULT_MAX_PATCHES * 3` restates the streamer's `FIELD_CACHE`. And the _test_ keeps the
-retired number — grep the retired literal across tests, not just source.
-
-`feat/the-geology` reintroduced the shape twice: `terrainRig.test.ts` asserts
-`peakDrawn < 1_024` where 1,024 _is_ `DEFAULT_MAX_PATCHES` spelled as a literal (so the
-test can no longer say anything the cap does not), and `terrainStreamer.ts` states the
-per-patch cost as "24 to 44 ms" in one comment and "20 to 37 ms" in another, forty lines
-apart in the same file.
+`GEOMETRY_KEPT = GEOMETRY_CACHE` is right, but `descent.ts`'s `DEFAULT_CACHE` restates the
+streamer's `FIELD_CACHE`. And the _test_ keeps the retired number — grep the retired
+literal across tests, not just source. `feat/the-ground` added
+`ScatterRocks.tsx`'s `INSTANCE_CAPACITY = 4_000`, a hand-copied twin of `scatterField.ts`'s
+un-exported `MAX_ROCKS = 4_000`, with a docstring that names the other constant.
 
 ## A new gate in the code is a new branch in the docs' flowchart
 
@@ -419,35 +406,18 @@ apart in the same file.
 `docs/concepts/streaming.md`'s Mermaid gate node still read `"a solid body, relief over
 8 px?"`. Mermaid node labels are prose nobody greps.
 
-## Count words in doc headers drift on every row added
-
-`docs/adr/README.md:3` opens "Eighteen decisions" over a table the diff just gave a
-nineteenth row. `README.md:375` says "Seventeen". Nothing greps these.
-`rg -n 'One|Two|…|Twenty'` over the touched markdown is enough.
-
-## A measured figure gets restated in five places and corrected in one
-
-The geology's headline numbers each live in a docstring, an ADR paragraph, `CONTEXT.md`'s
-before/after table and one or two module headers. When the measurement is later refined,
-the ADR and `CONTEXT.md` get the new number and the **code comments do not**:
-`surfaceDetailFloor` "13–16" was corrected to "13–17" in `ADR-0019`, `CONTEXT.md` and
-`docs/concepts/streaming.md` while `terrainStreamer.ts`, `terrainSelect.ts` (twice) and
-`terrainRig.test.ts` kept the old range.
-
-**The check:** for every distinctive number the diff introduces, `rg` the literal across
-`docs/`, `packages/`, `apps/`, `README.md` and `CONTEXT.md` and count the sites. Then
-re-measure it yourself — on this branch, Earth's atmospheric column is quoted as
-"10,200 kg/m² against a measured 10,330" in three places and the code computes
-`1.217 × 8500 = 10,344.5`, which is _above_ the measured value rather than below it; and
-`grammar.ts:328` says "Mars comes out at 0.30" where `mobility` is 0.092, because the
-prose was written with the `hasOcean ? 1 : 0.3` factor at 1.
-
 ## A comment's _reason_ can be false while its code is right
 
 `useDocsFraming.ts` destructures `framing` "because the manifest hands back a fresh
-`framing` on every render … eight times a second". Neither half is true. The destructuring
-is still the right call. A comment that cites a cadence (`8 Hz`, `every render`, `every
-frame`) is arithmetic — find the subscription that would produce it.
+`framing` on every render … eight times a second". Neither half is true. A comment that
+cites a cadence (`8 Hz`, `every render`, `every frame`) is arithmetic — find the
+subscription that would produce it.
+
+The invariant version of this: `AGENTS.md`'s new "never give two attribute names one
+`BufferAttribute` object" states the mechanism universally ("the pipeline does not build"),
+while `ScatterRocks.tsx`'s own isolation note says the _instanced_ pair was left aliased
+"which builds — it is the vertex-rate attributes that collide". The rule is a fine
+defensive superset; its stated mechanism contradicts the author's own evidence.
 
 ## `<Routes location={x}>` already rebinds `useLocation` for the whole subtree
 
@@ -456,19 +426,25 @@ carrying `locationArg`, and `ModeRoutes` renders `<Routes location={resolvedLoca
 So every `useLocation()` inside a mode already returns the background. Read the
 node_modules source before filing a raw-pathname finding inside a mode.
 
+## Read `node_modules/three` before filing a TSL semantics finding
+
+Twice now the suspicion was wrong and thirty seconds of reading settled it. TSL `mod` is
+`OperatorNode('%')`, and for float operands the WGSL backend emits
+`tsl_mod_vec3(x, y) = x - y * floor(x / y)` — **floor-based, so it is non-negative for a
+positive modulus** and a periodic-noise wrap survives negative coordinates. Version pinned
+at `three@0.182.0` under `node_modules/.pnpm/`.
+
 ## A "one producer" getter resolves precedence for the _wrong_ consumer
 
 `GameEngine.lens = this.cinematic?.lens ?? this.flightLens` hands every consumer a
 cutscene-first value, including the observatory, which is defined as the arm that only
 runs when the cutscene arm is null. Measured: `observatory.focus('s:SOL/b:2')` during
-`tng-intro` returns 29,761,384 m against 20,779,658 m clean. **When a single getter
-collapses a precedence order, list the consumers and ask which arm each one is part of.**
+`tng-intro` returns 29,761,384 m against 20,779,658 m clean.
 
 ## `JSON.stringify(Infinity)` is `null`, and a persisted preference is JSON
 
 `Lens.focus: Meters` holds `Infinity` by default; `usePersistentState` round-trips through
-JSON. Values survived by luck (`Number.isFinite` guards); the `===` against the constant
-did not. Resolved by `revive: reviveLens`.
+JSON. Resolved by `revive: reviveLens`.
 
 ## The branch's own re-measurement falsifies its own source comments
 
@@ -487,12 +463,6 @@ them is React state, the port needs to go through the React setter.**
 `pixelAngle(lens, viewport)` is radians per _device_ pixel. Anything multiplying it by a
 pointer delta is off by the DPR. `Observatory.dragSensitivity()` does exactly this.
 
-## The mirror drift fired a third time, in its usual direction
-
-Phase 1.6 added `chrome` and `labels` to `Stance` and left the presentation-switch bullet
-enumerating the previous five. **Amending is what gets missed, every time.** Diff the type
-definition, not the prose.
-
 ## A new "provable by grep" claim in an ADR is a grep you should run
 
 ADR-0018's "no key name written as a string literal in a label" is violated by
@@ -507,104 +477,53 @@ optional host port, look at what the test session passes for `host`.**
 
 ## The dossier can state a generated number as a measured fact
 
-ADR-0014's rules are about missing rows and the _voice_ of a reason, and `dossier.test.ts`
-says outright that it cannot check whether a value is true. `feat/the-geology`'s geology
-card is built identically for `provenance: 'observed'` bodies, so Earth's page reads
-"Lithosphere: 22 plates" (Earth has 7–8 major) and "largest basin 418 km across"
-(Vredefort is ~300 km) with no marker distinguishing the derived rows from the archived
-ones. **When a new `FactGroup` derives its values from the generator, check what it says on
-Sol's mapped bodies, not on a projected one.**
-
-## The `if (t > k)` hard gate is now a _two_-site recurrence, and the second one is albedo
-
-`craterProfile`'s `if (t > 1)` ejecta apron was the first. `feat/the-face` shipped the
-same shape in `craters.ts`'s `rayBrightness`: `if (t > 1.2)` opens the filament term, and
-that term is **not** zero at its own boundary — `radial = (1 − smoothstep(0.55,1,t/16))/t^1.6`
-is 0.81 at t = 1.2 and `filament` is a smoothstep of an azimuthal harmonic sum that is
-already above its cut on about a third of azimuths. Measured with an _exact_ great-circle
-rotation: the `bright` channel steps 0.296 on Luna / Mercury / Callisto / Iapetus and 0.571
-on Mars at exactly 1.2 crater radii, against a p99.9 adjacent-sample step of 3e-7 nearby —
-a ratio of 1e6. 30.1% of azimuths over all 16 of Luna's ray craters carry a step > 0.02;
-mean over the whole circle 0.085. It draws as a scalloped bright ring at 1.2 radii around
-every ray crater, on every mapless body (the 19 archived bodies gate `bright` off via
-`invented`, so Sol hides it everywhere except Iapetus).
-
-**The probe trap that nearly made me miss it.** Offsetting by `angularRadius * t` in the
-tangent plane and then normalizing gives `atan(span)/angularRadius`, not `t` — on a 50 km
-lunar crater that is t = 1.19998, so a ±1e-9 scan lands entirely on one side of the gate and
-reports a step of exactly 0. Build the sample with `axis·cos(θ) + u·sin(θ)`, θ = t·angularRadius.
-
-## `depositGain` halved the mapped ratios and four comments still quote the mapless ones
-
-`terrainPalette`'s `depositGain = texture === null ? 1 : 0.5` was added a commit after the
-palette's prose. Measured: `basalt/regolith` is **0.769** and `rock/regolith` **1.090** on
-every mapped body (Luna, Mars, Mercury, Callisto, Venus, Earth), 0.538 / 1.180 on the mapless
-ones (Enceladus, Iapetus). Three comments state the _mapped_ figure as 0.54 / 1.18 by name —
-`terrainPalette.ts` (`referenceReflectance` docstring, `nonNegative` docstring) and
-`render/terrain.ts`'s ceiling comment — and `terrainPalette.test.ts` already pins the true
-0.77. Then the docs pass wrote 0.54 into `docs/concepts/rendering.md` as _fresh prose_, which
-is the "retired figure returns inside newly authored text" pattern again.
-
-**Generic check:** when a diff adds a gain/scale factor to a table of ratios, grep the ratio
-literals and ask which branch each comment is talking about.
-
-## `surfaceTemperature`'s docstring names a fit the constant does not produce
-
-`GREENHOUSE_GAIN = 0.0076` with `equilibrium·(1 + gain·log10(air/100)^4)` gives Mars 213.0,
-Earth 295.5, Venus 913.1 against the docstring's stated targets of 210 / 288 / **737**. The
-rest of the branch is consistent with the _code_ (920 K appears in `terrainPalette.ts`,
-`cover.test.ts` and `terrainPalette.test.ts`), so 737 is the single outlier. Nothing breaks —
-every consumer only asks "above the frost point?" and "below 450 K?" — but a docstring that
-says "fitted to three measured bodies" is arithmetic, and it is two lines to check.
+`feat/the-geology`'s geology card is built identically for `provenance: 'observed'` bodies,
+so Earth's page reads "Lithosphere: 22 plates" (Earth has 7–8 major) with no marker
+distinguishing derived rows from archived ones. **When a new `FactGroup` derives its values
+from the generator, check what it says on Sol's mapped bodies.**
 
 ## Worked examples in cover/palette prose are not checked against the generator
 
-`cover.ts`'s `iceCover` says "Europa is ice at the equator at noon" and its `mineral` docstring
-says "Europa runs clean ice to sulphur-stained". Measured: Europa's `grammar.icy` is **0.00** in
-this generator, so `shell` is 0, `supply` is 0 and its `ice` channel is 0 over 1,500 directions;
-it also gets zero ray craters. The author's own test quietly uses **Callisto** instead. Related:
-`mineralLow`/`mineralHigh` are two hard-coded constants for every body, while the docstring
-argues a scalar was chosen _because_ "the ends of the ramp are a property of the body".
-
-**Check:** every body named in a new field's prose, run through `surfaceCoverAt` /
-`terrainPalette` once. It is fifteen lines and it catches the exemplar that does not work.
-
-## Two predicates for "this body has a map", and the docstring cites the wrong one
-
-`terrainPalette` branches on `body.appearance.texture !== null` (the _key_); the material's
-`mapped` uniform is set from whether `texturesFor(...).albedo` came back non-null (the
-_resolved asset_). `referenceReflectance`'s docstring claims the split is made "mechanically,
-on whether a texture resolves", which is the material's predicate rather than its own. Latent
-today — all 19 keys in `data/textures/manifest.json` have an albedo and every file is on disk —
-but a key with no albedo asset gets a half-strength palette on a white reference with the
-invented channels back on.
+`cover.ts`'s `iceCover` says "Europa is ice at the equator at noon". Measured: Europa's
+`grammar.icy` is **0.00** in this generator. The author's own test quietly uses Callisto.
+**Check every body named in a new field's prose by running it through the generator once.**
+Same class on `feat/the-ground`: the "zero where a body has neither tail nor grit" case in
+`microReliefBound` is unreachable, because `gritRelief = 0.45 · (1 − 0.35 · air)` bottoms
+out at 0.29 and `air` is capped at 1.
 
 ## `viewport` on `LensView` is display pixels, so the buffer ratio is a _reciprocal_
 
-`TerrainPatches` computes `const supersample = state.lens.viewport.height / gl.domElement.height`,
-which is 1/`engine.supersample` (the engine already divides the factor out in
-`set viewportPixels`). The arithmetic is right — buffer pixel angle is display angle ÷ s — but
-the local shares a name with the engine field that holds its reciprocal, and the comment beside
-it says the angle is "scaled back up".
+`TerrainPatches` computes `supersample = state.lens.viewport.height / gl.domElement.height`,
+which is 1/`engine.supersample`. The arithmetic is right; the local shares a name with the
+engine field that holds its reciprocal.
 
-## Cheap things that came back clean on `feat/the-face`, worth not re-deriving
+## Cheap things that came back clean on `feat/the-ground`, worth not re-deriving
 
-- `rayCraters`'s sort is **total**: `(index, ix, iy, iz)` uniquely identifies a walked cell, so
-  the `age → index → ix → iy → iz` comparator can only return 0 for identical entries.
-- Cover determinism across cache eviction: 129 Sol bodies × 40 directions, forward, then 63
-  foreign bodies to churn the 96-entry FIFO, then reversed — bitwise identical.
-- The ray enumeration reuses `levelContribution`'s exact hashes: `pcg4d(ix ^ seed, iy, iz, index)`
-  and `pcg4d(iy, iz, ix ^ seed, index + 8_191)`, same density test, same diameter, same jitter.
-- `morphCover`'s `evenRow/evenCol = row & ~1` cannot index the border: resolution is odd, so the
-  largest even index is `resolution − 1`.
-- `pnpm graph` clean; no `three` in `packages/*`, no bare `three` in `apps/game`; both new docs
-  are in `scripts/docs/wings.mjs`; the Cursor rendering adapter `@`-references the canonical rule
-  so new bullets need no glob change.
+- `elevationAt` is **bit-identical to `origin/main`**: 2,640 samples over all 22 solid Sol
+  bodies, zero mismatches. The `ChordForm` default (`'fast'`) and `ladderField`'s
+  `firstIndex + rung` with `firstIndex = 0` reproduce the old walk exactly.
+- The published `drawnDivergence` bound holds: max |drawn − canonical| over 3,000 directions
+  is 1.02 m on Enceladus against a bound of 1.25 m. Mean is −0.30 m on airless bodies (the
+  tail is net-negative, as craters cut down) and 0.00 on Venus.
+- No C0 step in `microRelief` (see the profile section above).
+- The grain band's domain really is continuous across a patch/rock boundary: `grainWrap` is
+  floor-based on the CPU, TSL `mod` is floor-based in WGSL, and every octave `i` wraps at
+  `GRAIN_PERIOD · 2ⁱ` in its own scaled domain, so a shift of 64 wavelengths is exact.
+- Rocks wear the terrain material and the morph collapses correctly: `morphBand` is
+  `(NO_MORPH_DISTANCE, NO_MORPH_DISTANCE)`, so `k = saturate(d − NO_MORPH) = 0` and all three
+  mixes are the identity. All five `onObjectUpdate` uniforms are set in `ScatterRocks`.
+- `regionScatter` is genuinely order-independent: `pcg4d` per slot, half-open slice ranges,
+  no counter, no shared stream.
+- `pnpm graph` clean; no `three` in `packages/*`; no bare `three` in `apps/game`; no
+  `Math.random`/`Date.now`/`performance.now`/`localStorage` added; no `text-slate-500`.
+- `stateHash`, saves, `surveySites` and `installSurfaceFrame` all still read the canonical
+  field; `TerrainSketch` is derived and never persisted.
 
 ## Resolved on earlier branches — do not re-report
 
 - `Observatory.stand` guards `focus` on `wanted.address !== this.#target?.address`.
 - `CAMERA_LENS` gained `revive: reviveLens`; the Reset-stays-enabled bug is gone.
 - The `surfaceDetailFloor` memo key is `|`-separated, and `universe.test.ts`'s
-  order-independence test was re-armed with `(33, 32.5)` after `(64, 1.5)` stopped
-  producing a different answer.
+  order-independence test was re-armed with `(33, 32.5)`.
+- `craterProfile`'s `if (t > 1)` ejecta step is fixed by `smoothstep(1, RIM_OUTER, t)`.
+- `rayCraters`'s sort is total; `morphCover`'s `evenRow/evenCol` cannot index the border.
