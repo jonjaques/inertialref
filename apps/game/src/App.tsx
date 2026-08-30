@@ -4,7 +4,8 @@ import { useStore } from 'zustand'
 import { AnimatePresence, motion } from 'motion/react'
 import { useLocation, useNavigate } from 'react-router'
 import type { StarCatalog } from '@inertialref/universe'
-import { DEFAULT_FOV_DEG, GameEngine } from './engine/GameEngine.ts'
+import { DEFAULT_FOV_DEG } from './engine/GameEngine.ts'
+import { engineInstance } from './engine/instance.ts'
 import type {
   CameraState,
   GraphicsState,
@@ -70,8 +71,8 @@ import {
 /*
  * The application shell.
  *
- * React owns the UI and nothing else. The engine is created once, outside the
- * component tree's data flow, and lives in a ref-like module singleton; the
+ * React owns the UI and nothing else. The engine is created once, in
+ * `engine/instance.ts`, outside the component tree's data flow; the
  * component subscribes to it at a human-readable rate rather than re-rendering
  * per simulated tick. Canonical state never enters component state — the panel
  * receives a snapshot description, and if this component unmounted the universe
@@ -82,17 +83,6 @@ import {
  * nobody would find, and the dock is what makes the game drivable without
  * memorising the keyboard first.
  */
-
-let singleton: GameEngine | null = null
-
-function engineInstance(catalog: StarCatalog): GameEngine {
-  singleton ??= new GameEngine({
-    seed:
-      new URLSearchParams(window.location.search).get('seed') ?? 'inertialref',
-    catalog,
-  })
-  return singleton
-}
 
 /** HUD refresh rate. The simulation runs at 64 Hz; a human reads about 8. */
 const PANEL_HZ = 8

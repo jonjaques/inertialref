@@ -33,7 +33,8 @@ import type { Playhead } from '../cinema/session.ts'
  * they are three files of subtle code to get right, and the tearing rules
  * around concurrent React are not a thing to re-derive. The store is created by
  * a factory so a test can have its own; the module singleton below is what the
- * app uses, alongside the engine singleton in `App.tsx`, for the same reason.
+ * app uses, alongside the engine singleton in `engine/instance.ts`, for the
+ * same reason.
  */
 
 /** The presentation switches, as a panel reads them. */
