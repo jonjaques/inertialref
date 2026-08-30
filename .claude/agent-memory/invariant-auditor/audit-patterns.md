@@ -278,7 +278,7 @@ after a visual pass (`CONTEXT.md` says so outright — "the first attempt was 1.
 and drew as broken glass at 21°"), and the constant's own docstring still reads "A fifth of
 `CANONICAL_DETAIL_FLOOR`" — which is 1.6 — while four other sites (`terrain.ts` ×2,
 `terrainSelect.ts`, `TERRAIN-PLAN.md`, and `CONTEXT.md` two paragraphs above its own
-correction) argue the phase from "an eight-metre crater is 1.6 m deep". Measured deepest
+correction) argue the phase from "an eight-meter crater is 1.6 m deep". Measured deepest
 sub-floor cut: 0.799 m. Only ADR-0021 states both halves correctly.
 
 **The check, and it is cheap:** for every new constant whose docstring contains arithmetic
@@ -306,7 +306,7 @@ the ADR and `CONTEXT.md` get the new number and the **code comments do not**.
 **The check:** for every distinctive number the diff introduces, `rg` the literal across
 `docs/`, `packages/`, `apps/`, `README.md` and `CONTEXT.md` and count the sites. Then
 re-measure it yourself. On `feat/the-ground` three separate figures failed this:
-`drawnDivergence` is "about two metres" in two comments against a published 1.25 m;
+`drawnDivergence` is "about two meters" in two comments against a published 1.25 m;
 a patch's memory is "220 KB / 282 MB" in `terrainSelect.ts` where a patch carries **two**
 4-byte cover attributes (237 KB / 303 MB, which `docs/roadmap.md` gets right in the same
 diff); and a scatter region is "167 m across on Luna" twice, where `scatterLevel(1737400)`

@@ -5718,7 +5718,7 @@ scatter and the grain band, which is the right answer rather than a gap.
 `2 − 2 cos θ` out of one dot product is how `craters.ts` measures the distance
 from a sample to a crater, and it cancels. At the canonical ladder's finest rung
 θ is about 2 × 10⁻⁴ and the subtraction costs seven significant figures, which
-leaves the height exact to a nanometre. Three decades further down it is not
+leaves the height exact to a nanometer. Three decades further down it is not
 fine: a one-meter crater on a 1,700 km body subtends 3 × 10⁻⁷, so the expression
 is 4 × 10⁻¹⁴ against a float64 ulp of 2 × 10⁻¹⁶ — half a percent, which is a
 millimeter on the crater's own depth and, worse, a millimeter that **differs

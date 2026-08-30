@@ -3,10 +3,12 @@ import { Quaternion as Q, Vec, type Vec3 } from '@inertialref/spatial'
 import {
   type Body,
   type BodyFixedDirection,
+  packCover,
   type RegionAddress,
   drawnElevation,
   regionCentreDirection,
   regionScatter,
+  rockRise,
   type ScatterRock,
   SCATTER_SLOTS,
   scatterLevel,
@@ -15,6 +17,7 @@ import {
   type LensView,
   type PatchPlacement,
   pixelsPerRadian,
+  ROCK_PIXELS,
   ROCK_VARIANTS,
   type ScatterEye,
   scatterRange,
@@ -111,18 +114,6 @@ const SLOTS_PER_FRAME = 128
  */
 export const MAX_ROCKS = 4_000
 
-/**
- * How many pixels a rock has to cover to be drawn.
- *
- * The same two `scatterRange` is quoted at, applied per rock rather than to the
- * region — which is what keeps the count finite. Rock size runs sixteen to one,
- * so a fixed range either draws the small ones as flickering points at two
- * hundred meters or stops the large ones at the same distance while they still
- * cover thirty pixels. Per rock, the population thins with distance exactly as
- * its own size distribution says it should.
- */
-const ROCK_PIXELS = 2
-
 interface Resident {
   readonly region: RegionAddress
   readonly rocks: ScatterRock[]
@@ -135,6 +126,8 @@ export class ScatterField {
   #bodyAddress: string | null = null
   #state: ScatterState = EMPTY
   #signature = ''
+  /** Whether `#state.batches` is the answer `#signature` describes. */
+  #built = false
 
   state(): ScatterState {
     return this.#state
@@ -146,12 +139,14 @@ export class ScatterField {
     this.#bodyAddress = null
     this.#state = EMPTY
     this.#signature = ''
+    this.#built = false
   }
 
   /** Nothing is close enough to draw. The cache stays; the frame gets nothing. */
   forget(): void {
     this.#state = EMPTY
     this.#signature = ''
+    this.#built = false
   }
 
   /**
@@ -275,11 +270,18 @@ export class ScatterField {
     const signature = `${key(home)}|${range.toFixed(1)}|${step(eyeLocal.x)},${step(
       eyeLocal.y,
     )},${step(eyeLocal.z)}|${ready.map((region) => key(region)).join(',')}`
+    /*
+     * `#built` rather than `batches.length > 0`: an empty answer is an answer.
+     * Gated on the length, a pose where every resolved rock fails the range or
+     * the two-pixel cut re-walked every rock of every ready region on every
+     * frame, forever, to produce the same nothing.
+     */
     const batches =
-      signature === this.#signature && this.#state.batches.length > 0
+      this.#built && signature === this.#signature
         ? this.#state.batches
         : this.#build(ready, anchor, eyeLocal, body.radius, lensView, range)
     this.#signature = signature
+    this.#built = true
 
     this.#state = {
       anchor,
@@ -344,32 +346,61 @@ export class ScatterField {
     range: Meters,
   ): readonly ScatterBatch[] {
     const perRadian = pixelsPerRadian(lensView.lens, lensView.viewport)
-    const drawn: { rock: ScatterRock; distance: number; local: Vec3 }[] = []
+    const drawn: {
+      rock: ScatterRock
+      distance: number
+      local: Vec3
+      variant: number
+    }[] = []
     for (const region of regions) {
       const resident = this.#regions.get(key(region))
       if (resident === undefined) continue
       for (const rock of resident.rocks) {
-        // Where the rock's center sits: on the ground, then down by its own
-        // sink and the seat that covers the mesh's interpolation error.
+        /*
+         * Where the rock's center sits: on the ground, then down by its own
+         * sink and the seat that covers the mesh's interpolation error.
+         *
+         * The sink is spent against the **drawn** half-height rather than
+         * against `rock.radius`. `radius` is half the rock's *longest*
+         * dimension and `writeInstance` draws it flatter than that — 0.62 to
+         * 0.82 of it up the local vertical, because a rock is not a sphere — so
+         * taking a sink of 0.7 off the long axis put the whole rock under the
+         * ground. Median sink is 0.53 and median half-height 0.67, which left
+         * 0.14 of a 0.72 m rock standing against a 0.12 m seat: the median rock
+         * did not show. `sink` is documented as a fraction of the rock, and
+         * this is the extent the rock actually has in the direction it sinks.
+         */
         const radius =
-          bodyRadius + rock.elevation - rock.sink * rock.radius - rock.seat
+          bodyRadius +
+          rock.elevation -
+          rock.sink * rockRise(rock.radius, rock.angularity) -
+          rock.seat
         const center = Vec.scale(rock.direction, radius)
-        const distance = Vec.length(Vec.sub(center, eyeLocal))
+        const distance = Vec.distance(center, eyeLocal)
         if (distance > range) continue
-        // Two pixels of the rock's own width, which is what makes the count
-        // finite: a sixteen-to-one size range under a fixed distance either
-        // flickers at the small end or truncates at the large one.
+        // `ROCK_PIXELS` of the rock's own width, applied per rock rather than
+        // to the region — which is what makes the count finite: a
+        // sixteen-to-one size range under a fixed distance either flickers at
+        // the small end or truncates at the large one. The same constant
+        // `scatterRange` is quoted at, imported rather than copied so the disk
+        // and the cut inside it cannot describe different fields.
         if ((2 * rock.radius * perRadian) / distance < ROCK_PIXELS) continue
-        drawn.push({ rock, distance, local: Vec.sub(center, anchor) })
+        drawn.push({
+          rock,
+          distance,
+          local: Vec.sub(center, anchor),
+          variant: scatterVariant(rock.angularity),
+        })
       }
     }
     drawn.sort((a, b) => a.distance - b.distance)
     if (drawn.length > MAX_ROCKS) drawn.length = MAX_ROCKS
 
+    // Resolved once and carried: `scatterVariant` is a four-way search, and
+    // asking it three times a rock is twelve thousand searches at the ceiling.
     const counts = new Array<number>(ROCK_VARIANTS).fill(0)
     for (const entry of drawn) {
-      counts[scatterVariant(entry.rock.angularity)] =
-        (counts[scatterVariant(entry.rock.angularity)] as number) + 1
+      counts[entry.variant] = (counts[entry.variant] as number) + 1
     }
     const batches = counts.map((count, variant) => ({
       variant,
@@ -379,7 +410,7 @@ export class ScatterField {
     }))
     const cursors = new Array<number>(ROCK_VARIANTS).fill(0)
     for (const entry of drawn) {
-      const variant = scatterVariant(entry.rock.angularity)
+      const variant = entry.variant
       const batch = batches[variant] as (typeof batches)[number]
       const at = cursors[variant] as number
       cursors[variant] = at + 1
@@ -441,23 +472,38 @@ function writeInstance(
   const lean = Q.fromAxisAngle(leanAxis, rock.tilt)
   const attitude = Q.multiply(lean, spin)
 
-  // The rock's local axes, rotated: Y is its own up, X and Z its width.
+  /*
+   * The rock's local axes, rotated: Y is its own up, X and Z its width.
+   *
+   * Z is `−north`, and the sign is the whole of a rock being solid. `(east,
+   * up, north)` is *left*-handed — `north` is `up × east`, so `east × up` is
+   * `−north` — and three columns in that order are a reflection: the matrix
+   * determinant is `−sx·sy·sz` for every rock. A reflected instance reverses
+   * the winding of every triangle in it, the material is `FrontSide`, and
+   * Three flips `frontFace` from `object.matrixWorld` alone and never looks at
+   * the instance matrix. So each rock drew its far shell through the hole
+   * where its near one was culled — the exact defect
+   * `scatterRender.test.ts` proves the *geometry* does not have.
+   */
   const ax = Q.rotate(attitude, east)
   const ay = Q.rotate(attitude, up)
-  const az = Q.rotate(attitude, north)
+  const az = Q.rotate(attitude, Vec.scale(north, -1))
 
   /*
    * Non-uniform, and the two horizontal axes differ from each other.
    *
    * A rock is not a sphere and the shapes are near-spherical by construction —
    * the elongation has to come from somewhere, and per instance is where it is
-   * free. `spin` doubles as the draw: it is already uniform on a turn and
-   * nothing else reads it, so a rock's proportions and its heading come out of
-   * the same number without a fifth hash.
+   * free. `spin` doubles as the draw, so a rock's proportions and its heading
+   * come out of one number without a fifth hash — at the cost of a correlation
+   * worth naming: `spin` and `angularity` are the same `pcg4d` lane, and
+   * `scatterVariant` bins on `angularity`, so a shape and a heading are not
+   * independent. Decorrelating them is a fifth draw, which moves every rock on
+   * every body and is therefore a change of its own.
    */
   const wobble = Math.cos(rock.spin)
   const sx = rock.radius * (1 + 0.32 * wobble)
-  const sy = rock.radius * (0.62 + 0.2 * rock.angularity)
+  const sy = rockRise(rock.radius, rock.angularity)
   const sz = rock.radius * (1 - 0.28 * wobble)
 
   out[at] = ax.x * sx
@@ -488,15 +534,22 @@ function writeInstance(
  * on a highland plain lands in `dark` instead.
  */
 function writeCover(out: Uint8Array, at: number, rock: ScatterRock): void {
-  const byte = (value: number): number =>
-    Math.max(0, Math.min(255, Math.round(value * 255)))
-  out[at] = byte(Math.max(0, rock.tone))
-  out[at + 1] = byte(Math.max(0, -rock.tone))
-  // Neutral on the compositional ramp: a block is the same rock as the crust it
-  // was excavated from, which is what the ramp's midpoint means.
-  out[at + 2] = 128
-  // And nothing frozen on it. A rock warm enough to be a rock is a rock; the
-  // material's own slope term already takes frost off anything steep, and a
-  // rock is steep everywhere.
-  out[at + 3] = 0
+  // Through `packCover`, which owns the channel order and the 255 — `cover.ts`
+  // says so beside `unpackCover`, and the order is a live question while the
+  // deposits still want a channel of their own.
+  packCover(
+    {
+      bright: Math.max(0, rock.tone),
+      dark: Math.max(0, -rock.tone),
+      // Neutral on the compositional ramp: a block is the same rock as the
+      // crust it was excavated from, which is what the ramp's midpoint means.
+      mineral: 0.5,
+      // And nothing frozen on it. A rock warm enough to be a rock is a rock;
+      // the material's own slope term already takes frost off anything steep,
+      // and a rock is steep everywhere.
+      ice: 0,
+    },
+    out,
+    at,
+  )
 }

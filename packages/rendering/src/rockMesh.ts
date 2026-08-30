@@ -38,6 +38,14 @@ export interface RockMesh {
 }
 
 /**
+ * A variant's own angularity, ordered rounded to angular.
+ *
+ * `scatterVariant` picks by nearest, so a rock whose geology says 0.7 lands on
+ * the third and one that says 0.1 lands on the first.
+ */
+const ANGULARITY: readonly number[] = [0.1, 0.4, 0.7, 0.95]
+
+/**
  * How many shapes there are.
  *
  * Four, and it is a taste judgment with a cost behind it: each is a draw call
@@ -45,16 +53,13 @@ export interface RockMesh {
  * instances spread over them. Two is visibly two, and eight is four more
  * pipelines to compile at boot for a difference nobody looking at a rock field
  * can name.
- */
-export const ROCK_VARIANTS = 4
-
-/**
- * A variant's own angularity, ordered rounded to angular.
  *
- * `scatterVariant` picks by nearest, so a rock whose geology says 0.7 lands on
- * the third and one that says 0.1 lands on the first.
+ * Counted off `ANGULARITY` rather than written down beside it, because the
+ * three tables below are indexed by variant and a count that outran them built
+ * a mesh out of `undefined` — every vertex `NaN`, cached under that key, and
+ * nothing anywhere throwing.
  */
-const ANGULARITY: readonly number[] = [0.1, 0.4, 0.7, 0.95]
+export const ROCK_VARIANTS = ANGULARITY.length
 
 const cache = new Map<number, RockMesh>()
 
@@ -122,7 +127,9 @@ function build(variant: number): RockMesh {
     positions[i] = x * scale
     positions[i + 1] = y * scale
     positions[i + 2] = z * scale
-    peak = Math.max(peak, Math.hypot(x * scale, y * scale, z * scale))
+    // `scale` *is* the length: the icosphere's vertices are on the unit sphere,
+    // so measuring the displaced one back out is a hypot that cancels.
+    peak = Math.max(peak, scale)
   }
   /*
    * Normalized so the longest half-extent is exactly one.
@@ -159,7 +166,7 @@ function icosphere(subdivisions: number): {
   indices: Uint16Array
 } {
   const t = (1 + Math.sqrt(5)) / 2
-  let points: number[][] = [
+  const points: number[][] = [
     [-1, t, 0],
     [1, t, 0],
     [-1, -t, 0],
@@ -252,7 +259,6 @@ function icosphere(subdivisions: number): {
     indices[i * 3 + 1] = face[1] as number
     indices[i * 3 + 2] = face[2] as number
   }
-  points = []
   return { positions, indices }
 }
 

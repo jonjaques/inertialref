@@ -1251,8 +1251,14 @@ export class Observatory {
        * a terrain elevation. On Phobos that is about −3.5 km of "elevation" on a
        * body with a kilometer of relief; on Haumea it reaches −513 km. Worse, the
        * Surface panel prints it directly under site buttons showing
-       * `SurveySite.elevation`, which is this exact function — the same place,
+       * `SurveySite.elevation`, which is the same quantity — the same place,
        * two numbers, kilometers apart.
+       *
+       * It is the **drawn** field and the site's is canonical, so the two are
+       * still not the same number: up to `drawnDivergence`, 1.25 m on Luna.
+       * That is the right side to be on — the readout is under an altitude the
+       * stance above stands on, and the stance is drawn — and it is the site
+       * that has the wrong field, which is `surveySites` to fix and not this.
        */
       groundElevation: elevation,
       radius: datumRadius(body, up) + elevation + stance.height,

@@ -384,7 +384,7 @@ function evaluate(
 export function groundCoverAt(
   surface: SurfaceParameters,
   direction: Vec3,
-  out: Uint8Array,
+  out: Uint8Array | null,
   at: number,
 ): Meters {
   const d = Vec.normalize(direction)
@@ -403,7 +403,7 @@ export function groundCoverAt(
  * of it are made from, and the two differ by at most `drawnDivergence`.
  *
  * Every producer of drawn geometry goes through this or through `groundCoverAt`
- * beside it, and every producer of canonical geometry goes through
+ * under it, and every producer of canonical geometry goes through
  * `groundElevation`. Anything reading the wrong one is a category error rather
  * than a rounding difference: a contact test that read this would put physics
  * behind a term the renderer is free to change, and a mesh that read the other
@@ -413,10 +413,10 @@ export function drawnElevation(
   surface: SurfaceParameters,
   direction: Vec3,
 ): Meters {
-  const d = Vec.normalize(direction)
-  const sea = seaDatumElevation(surface)
-  const elevation = evaluate(surface, d, null, 0) + tail(surface, d)
-  return sea === null ? elevation : Math.max(elevation, sea)
+  // Through `groundCoverAt` with no cover, rather than beside it. The sea clamp
+  // has one owner and `groundElevation` records what a second copy of the
+  // expression cost; this is the drawn field's half of the same rule.
+  return groundCoverAt(surface, direction, null, 0)
 }
 
 /** The tail, or nothing on a body whose relief budget is zero. */

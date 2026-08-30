@@ -19,7 +19,7 @@ import {
   rockMesh,
 } from '@inertialref/rendering'
 import type { GameEngine } from '../engine/GameEngine.ts'
-import { MAX_ROCKS } from '../engine/scatterField.ts'
+import { MAX_ROCKS, type ScatterBatch } from '../engine/scatterField.ts'
 import { grainWrap, type TerrainMaterial } from '../render/terrain.ts'
 import { warmAtMount, warmCompile, warmRenderer } from '../render/warmup.ts'
 
@@ -64,6 +64,12 @@ export function ScatterRocks({
   terrain: TerrainMaterial
 }) {
   const group = useRef<Group>(null)
+  // What the instance buffers currently hold, by identity — the batch array
+  // *and* the meshes it was written into. See the upload below.
+  const uploaded = useRef<{
+    meshes: readonly InstancedMesh[]
+    batches: readonly ScatterBatch[]
+  } | null>(null)
   const material = terrain.material
   const gl = useThree((state) => state.gl)
   const camera = useThree((state) => state.camera)
@@ -180,7 +186,19 @@ export function ScatterRocks({
           new InstancedBufferAttribute(bytes, 4, true),
         )
         geometry.setIndex([0, 1, 2])
-        const dummy = new InstancedMesh(geometry, material, 1)
+        /*
+         * At the real capacity, and drawn one instance deep.
+         *
+         * `InstanceNode` branches on `instanceMatrix.count`: a UBO read at or
+         * under a thousand matrices, four instanced `vec4` attributes over an
+         * interleaved buffer above it. Different WGSL, different vertex layout,
+         * different pipeline — so a dummy of one compiled a program the real
+         * meshes never use, and the first frame a landing brought rocks into
+         * range still paid the build this effect exists to remove. `count`
+         * limits the draw; the capacity is what picks the path.
+         */
+        const dummy = new InstancedMesh(geometry, material, INSTANCE_CAPACITY)
+        dummy.count = 1
         dummy.setMatrixAt(0, new Matrix4())
         dummy.userData.eyeLocal = new Vector3()
         dummy.userData.morphBand = new Vector2(
@@ -250,12 +268,40 @@ export function ScatterRocks({
         ;(mesh.userData.eyeLocal as Vector3).set(eye.x, eye.y, eye.z)
       }
     }
+    /*
+     * The buffers are re-uploaded only when the field laid out a new list.
+     *
+     * `ScatterField` returns the *same* batch array by identity while the eye,
+     * the anchor, the range and the ready set hold still — that memo is what
+     * makes a hover free — and copying it in anyway spent it: 4,000 matrices
+     * is 256 KB memcpy'd and re-written to the GPU sixty times a second for
+     * bytes already resident. The transforms above still move every frame,
+     * because the render origin does.
+     */
+    const held = uploaded.current
+    // The meshes as well as the batches: a new set of `InstancedMesh`es has
+    // empty buffers, and matching on the batch array alone would leave them
+    // that way for as long as the field kept handing back the same list.
+    const fresh = held?.batches !== scatter.batches || held.meshes !== meshes
+    uploaded.current = { meshes, batches: scatter.batches }
     for (const batch of scatter.batches) {
       const mesh = meshes[batch.variant]
       if (mesh === undefined) continue
       const count = Math.min(batch.count, INSTANCE_CAPACITY)
       mesh.count = count
+      if (!fresh) continue
       mesh.instanceMatrix.array.set(batch.matrices.subarray(0, count * 16))
+      /*
+       * Cleared first, and it is `instanceMatrix` alone that needs it. The
+       * backend clears the ranges of the attribute it uploads, and above a
+       * thousand instances that attribute is the `InstancedInterleavedBuffer`
+       * Three builds beside this one — `InstanceNode.update` copies these
+       * ranges into it and clears only its own. So without this the array
+       * grows by one entry a frame, the driver takes that many `writeBuffer`
+       * calls for the same bytes, and the spread that copies them eventually
+       * exceeds the argument limit outright.
+       */
+      mesh.instanceMatrix.clearUpdateRanges()
       mesh.instanceMatrix.addUpdateRange(0, count * 16)
       mesh.instanceMatrix.needsUpdate = true
       // Both names are separate attribute objects over one array, so the write
@@ -267,8 +313,10 @@ export function ScatterRocks({
         'terrainMorphCover',
       ) as InstancedBufferAttribute
       ;(cover.array as Uint8Array).set(batch.cover.subarray(0, count * 4))
+      cover.clearUpdateRanges()
       cover.addUpdateRange(0, count * 4)
       cover.needsUpdate = true
+      morphCover.clearUpdateRanges()
       morphCover.addUpdateRange(0, count * 4)
       morphCover.needsUpdate = true
     }

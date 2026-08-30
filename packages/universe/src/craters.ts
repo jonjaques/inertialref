@@ -195,14 +195,14 @@ export function ladderField(
  * `2 − 2 cos θ` out of one dot product is the cheap form and it is what every
  * canonical rung uses. It cancels: at the ladder's finest *canonical* level θ is
  * about 2 × 10⁻⁴ and the subtraction costs seven significant figures, which
- * leaves the profile exact to nine and the height to a nanometre.
+ * leaves the profile exact to nine and the height to a nanometer.
  *
  * Three decades further down it is not fine. A one-meter crater on a
  * 1,700 km body subtends 3 × 10⁻⁷, so `2 − 2 cos θ` is 4 × 10⁻¹⁴ against a
  * float64 ulp of 2 × 10⁻¹⁶ — half a percent of the value, which is a millimeter
  * on the crater's own depth and, worse, a millimeter that **differs between two
  * patches that computed the same direction by different routes**. A cube face's
- * gnomonic extension gives the neighbouring face's coordinate exactly in real
+ * gnomonic extension gives the neighboring face's coordinate exactly in real
  * arithmetic and to the last bit in floating point, and the ill-conditioned form
  * turns that last bit into a visible-in-principle seam.
  *

@@ -43,7 +43,14 @@ import {
   systemSeedOf,
   systemsWithin,
 } from './galaxy.ts'
-import { findBody, generateSystem, orbitalOrder, walkBodies } from './system.ts'
+import {
+  type Body,
+  findBody,
+  generateSystem,
+  orbitalOrder,
+  walkBodies,
+} from './system.ts'
+import type { RegionAddress } from './address.ts'
 import {
   directionToFace,
   elevationAt,
@@ -378,7 +385,7 @@ describe('cube-sphere terrain', () => {
 
     // And the ring is the field one step outside, not a clamp of the edge.
     // `drawnElevation` rather than `groundElevation`, because a heightfield is
-    // the *drawn* field — the border row has to be exactly what the neighbouring
+    // the *drawn* field — the border row has to be exactly what the neighboring
     // patch generates for itself, tail included, or every patch boundary carries
     // a one-sided difference of up to `drawnDivergence`.
     // `fround` because Float32Array storage is the only step between them.
@@ -1013,7 +1020,74 @@ describe('the ground has one owner', () => {
     }
     expect(dry).toBeGreaterThan(0)
     expect(apart).toBe(dry)
+
+    /*
+     * And once more against a **mesh**, on dry ground.
+     *
+     * The two loops above each cover half of the claim and neither covers the
+     * whole of it: the corners are all submarine, where the sea clamp makes the
+     * two fields equal by construction, and the probe compares the fields to
+     * each other without asking a heightfield anything. So a
+     * `generateHeightfield` that dropped the tail from its *interior* samples —
+     * the `groundCoverAt` path, which the border ring does not exercise — would
+     * pass both. This is the vertex that says it did not.
+     */
+    const shore = dryRegion(body, sea)
+    const dryField = generateHeightfield(body.surface, {
+      region: shore.region,
+      resolution: HEIGHTFIELD_RESOLUTION,
+    })
+    const above = regionDirection(shore.region, shore.s, shore.t)
+    expect(heightfieldSample(dryField, shore.row, shore.col)).toBeCloseTo(
+      drawnElevation(body.surface, above),
+      1,
+    )
+    expect(
+      Math.abs(
+        heightfieldSample(dryField, shore.row, shore.col) -
+          groundElevation(body.surface, above),
+      ),
+    ).toBeGreaterThan(1e-3)
   })
+
+  /**
+   * A patch vertex on dry land, on a world that is mostly not.
+   *
+   * Searched rather than written down: the ocean world is whichever the catalog
+   * yields first, and a hand-picked region is a coordinate that goes stale the
+   * day the seed or the sea datum moves. Every eighth vertex, because a full
+   * 65x65 sweep is four thousand band stacks and one in sixty-four is enough.
+   */
+  function dryRegion(
+    body: Body,
+    sea: number,
+  ): {
+    region: RegionAddress
+    row: number
+    col: number
+    s: number
+    t: number
+  } {
+    for (let probe = 0; probe < 200; probe += 1) {
+      const z = 1 - (2 * probe + 1) / 200
+      const around = probe * Math.PI * (3 - Math.sqrt(5))
+      const ring = Math.sqrt(Math.max(0, 1 - z * z))
+      const seed = vec3(Math.cos(around) * ring, z, Math.sin(around) * ring)
+      if (groundElevation(body.surface, seed) <= sea + 1) continue
+      const region = regionForDirection(seed, 4)
+      for (let row = 0; row < HEIGHTFIELD_RESOLUTION; row += 8) {
+        for (let col = 0; col < HEIGHTFIELD_RESOLUTION; col += 8) {
+          const s = col / (HEIGHTFIELD_RESOLUTION - 1)
+          const t = row / (HEIGHTFIELD_RESOLUTION - 1)
+          const at = regionDirection(region, s, t)
+          if (groundElevation(body.surface, at) > sea + 1) {
+            return { region, row, col, s, t }
+          }
+        }
+      }
+    }
+    throw new Error('no dry patch vertex anywhere on the ocean world')
+  }
 
   it('clamps the ocean up to its datum rather than down to the seabed', () => {
     const body = oceanWorld()

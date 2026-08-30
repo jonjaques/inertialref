@@ -139,8 +139,8 @@ export const DEFAULT_MAX_LEVEL = 12
  *
  * **It was 768, then 1,024, and each time it was the field getting deeper.** A
  * whole-disk selection costs about ninety patches per level between the horizon
- * and the ground. The band stack pushed `surfaceDetailFloor` from 7–10 to 12–16
- * because crater rims are sharp; the presentational tail pushed it to 13–19,
+ * and the ground. The band stack pushed `surfaceDetailFloor` from 7–10 to 10–16
+ * because crater rims are sharp; the presentational tail pushed it to 12–19,
  * because the sub-floor crater band cuts up to 0.8 m and that is over the
  * tolerance a cell is refined against. Every extra level underfoot is another ring of
  * patches. Holding the old cap would have spent this phase's whole point: the

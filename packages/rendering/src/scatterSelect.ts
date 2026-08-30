@@ -3,13 +3,14 @@ import { Vec } from '@inertialref/spatial'
 import {
   type BodyFixedDirection,
   type RegionAddress,
-  regionAddress,
   regionCentreDirection,
   regionForDirection,
   regionNeighbor,
   regionSize,
+  SCATTER_MIN_RADIUS,
 } from '@inertialref/universe'
 import { type Lens, pixelsPerRadian, type Viewport } from './lens.ts'
+import { DEFAULT_LENS, DEFAULT_VIEWPORT } from './terrainSelect.ts'
 
 /*
  * Which patches of *rocks* the camera is asking for.
@@ -76,20 +77,30 @@ export interface ScatterSelectOptions {
  * flickers as the camera moves and contributes nothing a slightly rougher
  * normal would not — and the whole population past that distance is thousands of
  * draws for a dusting of noise.
+ *
+ * Exported because the streamer applies the same figure per *rock* — the range
+ * sizes the disk of regions and the per-rock cut thins the population inside
+ * it, and two spellings of the threshold is a disk sized for a field the cut no
+ * longer draws.
  */
-const ROCK_PIXELS = 2
+export const ROCK_PIXELS = 2
 
 /** The radius the range is quoted for: the smallest thing scatter places. */
-const SMALLEST_ROCK: Meters = 0.25
+const SMALLEST_ROCK: Meters = SCATTER_MIN_RADIUS
 
 /**
  * How far rocks are drawn, meters.
  *
  * The distance at which the smallest rock the generator places covers
  * `ROCK_PIXELS` — 212 m at the flight lens over the baseline, where a rock at
- * the *top* of the size range is still ten pixels. Exported because the streamer
- * fades the far edge over the last part of it and the two have to be the same
- * number, and because `ir.terrain().scatter` reports it.
+ * the *top* of the size range is still ten pixels. Exported because the
+ * streamer applies the same cut per rock and both have to be the same number,
+ * and because `ir.terrain().scatter` reports it.
+ *
+ * The far edge is a hard edge: nothing fades. A 4 m boulder crossing it appears
+ * already covering thirty pixels, which is a pop the two-pixel test cannot
+ * hide, and the fix is a per-instance ramp in the material rather than another
+ * number here.
  */
 export const scatterRange = (lens: Lens, viewport: Viewport): Meters =>
   (2 * SMALLEST_ROCK * pixelsPerRadian(lens, viewport)) / ROCK_PIXELS
@@ -127,10 +138,11 @@ export function selectScatterRegions(
   const lens = options.lens
   const viewport = options.viewport
   const maxRegions = options.maxRegions ?? DEFAULT_MAX_SCATTER_REGIONS
-  const range =
-    lens !== undefined && viewport !== undefined
-      ? scatterRange(lens, viewport)
-      : 0
+  // The baseline optics when the caller has none, exactly as `selectTerrain`
+  // does. Returning nothing instead made "no lens was passed" and "the camera
+  // is in orbit" the same answer, and a headless rig that forgot one saw a
+  // field that simply did not exist with nothing to say why.
+  const range = scatterRange(lens ?? DEFAULT_LENS, viewport ?? DEFAULT_VIEWPORT)
   if (!(range > 0)) return []
   /*
    * Height above the datum, which is what decides whether any of this is in
@@ -149,11 +161,14 @@ export function selectScatterRegions(
   const rings = Math.min(16, Math.ceil(reach / size) + 1)
 
   const center = regionForDirection(eye.direction, eye.level)
+  // Invariant over the walk, and the walk is up to 1,089 cells at the
+  // telephoto end — a fresh vector a cell is a thousand allocations a frame.
+  const from = Vec.scale(eye.direction, eye.distance)
   const found: { region: RegionAddress; distance: number }[] = []
   const seen = new Set<string>()
   for (let di = -rings; di <= rings; di += 1) {
     for (let dj = -rings; dj <= rings; dj += 1) {
-      const region = neighborOf(center, di, dj)
+      const region = regionNeighbor(center, di, dj)
       const key = `${region.face}.${region.i}.${region.j}`
       if (seen.has(key)) continue
       seen.add(key)
@@ -168,27 +183,11 @@ export function selectScatterRegions(
        * the range and therefore under two pixels.
        */
       const to = Vec.scale(regionCentreDirection(region), eye.ground)
-      const from = Vec.scale(eye.direction, eye.distance)
-      const distance = Vec.length(Vec.sub(to, from))
+      const distance = Vec.distance(to, from)
       if (distance > range + size * 0.5) continue
       found.push({ region, distance })
     }
   }
   found.sort((a, b) => a.distance - b.distance)
   return found.slice(0, maxRegions).map((entry) => entry.region)
-}
-
-/** The region `di`/`dj` cells away, staying on this face where it can. */
-function neighborOf(
-  center: RegionAddress,
-  di: number,
-  dj: number,
-): RegionAddress {
-  const span = 2 ** center.level
-  const i = center.i + di
-  const j = center.j + dj
-  if (i >= 0 && i < span && j >= 0 && j < span) {
-    return regionAddress(center.face, center.level, i, j)
-  }
-  return regionNeighbor(center, di, dj)
 }

@@ -626,7 +626,14 @@ export class TerrainStreamer {
     const previous = this.#previous
 
     const resolved = this.#resolve(world, renderTime, body.address)
-    if (resolved === null) return
+    // Through `#forget`, like every other exit. A bare return leaves the pose,
+    // the palette, the drawn set and the rocks describing a body this world
+    // cannot resolve any more — a system unloaded under a target it still
+    // names — and the frame draws last frame's ground at last frame's place.
+    if (resolved === null) {
+      this.#forget()
+      return
+    }
     const { surface, bodyPose, spinPose } = resolved
     /*
      * Solid bodies only. A gas giant has no surface to stream and the tier must

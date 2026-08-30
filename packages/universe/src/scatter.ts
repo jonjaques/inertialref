@@ -1,5 +1,5 @@
 import type { Meters, Radians } from '@inertialref/shared'
-import { clamp01, pcg4d, toUnit } from '@inertialref/procedural'
+import { clamp01, latticeSeed, pcg4d, toUnit } from '@inertialref/procedural'
 import type { RegionAddress } from './address.ts'
 import { COVER_CHANNELS, unpackCover } from './cover.ts'
 import { terrainSketch } from './sketch.ts'
@@ -162,12 +162,41 @@ const EJECTA_GAIN = 2.4
  */
 const BURIAL = 0.9
 
-/** Smallest and largest rock this places, meters. */
-const MIN_RADIUS: Meters = 0.25
+/**
+ * Smallest and largest rock this places, meters.
+ *
+ * The minimum is exported because `scatterRange` is quoted *for* it — the draw
+ * range is the distance at which the smallest rock the generator places covers
+ * two pixels — and a renderer holding its own copy would keep sizing the disk
+ * for a rock the geology had stopped making.
+ */
+export const SCATTER_MIN_RADIUS: Meters = 0.25
+const MIN_RADIUS: Meters = SCATTER_MIN_RADIUS
 const MAX_RADIUS: Meters = 4
 
 /**
- * How far every rock is pushed under the ground on top of its own sink, meters.
+ * How far a rock stands above its own center, meters.
+ *
+ * Its half-extent along the local vertical, and it is **not** its radius: a rock
+ * is flatter than it is wide, and the elongation is per instance because the
+ * four shapes are near-spherical by construction. The angular ones are squatter
+ * than the rounded, which is what a broken block lying on its widest face is.
+ *
+ * Here rather than in the renderer that applies it, because the seat and the
+ * sink are both spent against it and a second spelling would let the three
+ * drift. `scatterField` scales the instance by exactly this.
+ */
+export const rockRise = (radius: Meters, angularity: number): Meters =>
+  radius * (0.62 + 0.2 * angularity)
+
+/** How much of a rock the seat may take. See where it is spent. */
+const SEAT_FRACTION = 0.35
+
+/** And how much of itself a rock must stand above the ground. */
+const MIN_PROUD = 0.15
+
+/**
+ * The most a rock is pushed under the ground on top of its own sink, meters.
  *
  * The mesh's own interpolation error, measured rather than guessed: at the
  * detail floor across the zoo a bilinear read of a patch differs from the field
@@ -214,17 +243,24 @@ export function regionScatter(
   const grammar = surface.grammar
   const sea = seaDatumElevation(surface)
   const abundance = baseAbundance(grammar.air)
-  if (abundance <= 0) return []
   /*
    * One integer identifying the region, mixed into the lattice seed.
    *
    * `pcg4d` takes four lanes and the address needs five — face, level, i, j and
    * the slot — so the face and the level ride with the surface seed. They are
    * small and the seed is already a full 32-bit mix, so `imul`-free arithmetic
-   * on them cannot alias the way adding coordinates would.
+   * on them cannot alias the way adding coordinates would. 31 and 131 are
+   * coprime, so no two (face, level) pairs in range fold to the same integer.
+   *
+   * The lattice seed is the **scatter's own**, not `sketch.latticeSeed`.
+   * `seeds.scatter` is derived for this and the sketch documents it as such;
+   * riding the crater ladder's seed instead is what makes a future change to
+   * the crater lattice silently relocate every rock on every body.
    */
   const seed =
-    (sketch.latticeSeed ^ (region.face * 31 + region.level * 131)) | 0
+    (latticeSeed(sketch.seeds.scatter) ^
+      (region.face * 31 + region.level * 131)) |
+    0
   const cover = new Uint8Array(COVER_CHANNELS)
   const rocks: ScatterRock[] = []
   for (let index = first; index < last; index += 1) {
@@ -282,6 +318,25 @@ export function regionScatter(
       0.25 + 0.6 * here.bright + 0.3 * toUnit(shape.y) - 0.15,
     )
     const kind = kindFor(angularity, here, toUnit(shape.z))
+    /*
+     * The seat, and it is capped by the rock rather than fixed at `MESH_SEAT`.
+     *
+     * A rock's foot is the *field* and the ground it stands on is a
+     * triangulation of the same field, so the two differ by the mesh's own
+     * interpolation error over one cell — 3 to 9 cm in the mean at the detail
+     * floor across the zoo, and up to 0.70 m at the worst cell on the coarsest
+     * body. Twelve centimeters covers the mean, and **twelve centimeters is
+     * taller than the bottom quarter of this population**: a 25 cm rock stands
+     * 17 cm above its own center, so a fixed seat put 60% of them entirely
+     * under the ground — 24% of every field sample, instance matrix and
+     * `MAX_ROCKS` slot spent on geometry no camera can see.
+     *
+     * So it is the smaller of the two. A rock below the mesh's own error cannot
+     * be both seated and visible, and a pebble that floats by four centimeters
+     * on ground known to seven is the better half of that trade.
+     */
+    const stand = rockRise(radius, angularity)
+    const seat = Math.min(MESH_SEAT, stand * SEAT_FRACTION)
     rocks.push({
       index,
       direction,
@@ -293,26 +348,17 @@ export function regionScatter(
        * A small rock sits on the regolith; a large one displaces it and
        * settles, and the ones that do not are the ones a fresh impact threw
        * last week. So the sink rises with size and falls with `bright`.
+       *
+       * Capped so that what is left standing clears `MIN_PROUD` of the rock's
+       * own height with the seat already spent. On a two-metre boulder the seat
+       * is 6% of it and the cap never binds; on a pebble it is a third, and the
+       * cap is what keeps the pebble a rock rather than a buried one.
        */
-      sink: clamp01(
-        0.25 + 0.35 * size - 0.2 * here.bright + 0.2 * toUnit(shape.w),
+      sink: Math.min(
+        clamp01(0.25 + 0.35 * size - 0.2 * here.bright + 0.2 * toUnit(shape.w)),
+        Math.max(0, 1 - seat / stand - MIN_PROUD),
       ),
-      /*
-       * And a fixed seat on top of the fraction, meters.
-       *
-       * A rock's foot is the *field* and the ground it stands on is a
-       * triangulation of the same field, so the two differ by the mesh's own
-       * interpolation error over one cell — measured at the detail floor across
-       * the zoo, 3 to 9 cm in the mean and 0.35 to 0.70 m at the worst cell on
-       * the coarsest body. A quarter of a 25 cm rock is 6 cm of burial, which
-       * the mean case already eats; twelve centimeters on top of it seats the
-       * small rocks that would otherwise stand on a stalk.
-       *
-       * It is on the rock rather than in the placement because it is a fact
-       * about the two fields disagreeing, and the renderer that draws the rock
-       * is not the place that knows how far apart they are.
-       */
-      seat: MESH_SEAT,
+      seat,
       spin: toUnit(shape.y) * 2 * Math.PI,
       tilt: (0.05 + 0.25 * toUnit(shape.z)) * (1 - 0.5 * size),
       tiltAzimuth: toUnit(shape.w) * 2 * Math.PI,

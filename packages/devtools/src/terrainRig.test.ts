@@ -292,20 +292,23 @@ describe('a simulated descent', () => {
        * to the level at the horizon costs about ninety patches per level
        * between the two, and changing the tolerance moves it by a few percent.
        *
-       * 380 to 862 across the zoo's twenty-four site descents, where the
-       * three bands this replaced cost 410 to 480 — the band stack put crater
-       * rims in the field, `surfaceDetailFloor` went from 7–10 to 12–16 to
-       * resolve them, and every extra level underfoot is another ring. The
-       * assertion is here so that a change to either is a change to a number
-       * rather than a surprise in a frame.
+       * 476 to 1,077 across the zoo's twenty-four site descents, where the
+       * canonical field alone costs 380 to 862 and the three bands before it
+       * cost 410 to 480 — the band stack put crater rims in the field and the
+       * presentational tail put sub-floor craters under them,
+       * `surfaceDetailFloor` went from 7–10 to 10–16 to 12–19 to resolve them,
+       * and every extra level underfoot is another ring. The assertion is here
+       * so that a change to either is a change to a number rather than a
+       * surprise in a frame.
        *
        * **Nine tenths of the cap, taken from the constant rather than typed as
        * a literal.** A bare `< 1_024` is the cap itself, which can only say
        * "the selection did not saturate" — it passes at 1,023 with the cap
        * doing the work it is supposed to be a safety net for, and raising
-       * `DEFAULT_MAX_PATCHES` silently raises the assertion with it. 862 is the
-       * measured worst and 921 is the bound, so what this says is that there is
-       * still headroom, which is the property the constant was raised to have.
+       * `DEFAULT_MAX_PATCHES` silently raises the assertion with it. 1,077 is
+       * the measured worst and 1,152 is the bound, so what this says is that
+       * there is still headroom, which is the property the constant was raised
+       * to have — 7%, against 7% at the previous cap.
        */
       expect(
         `${entry.name}: ${report.peakDrawn < DEFAULT_MAX_PATCHES * 0.9}`,
@@ -407,11 +410,18 @@ describe('the observatory on the ground', () => {
     // arithmetic resolves far better than that, so a looser bound would let a
     // datum error through.
     expect(Vec.length(offset)).toBeCloseTo(ground + 120, 3)
-    // And the two are not the same number, which is what makes the line above a
-    // choice rather than a coincidence.
-    expect(Math.abs(ground - surfaceRadius(body, up))).toBeLessThanOrEqual(
-      drawnDivergence(body.surface),
-    )
+    /*
+     * And the two are not the same number, which is what makes the line above a
+     * choice rather than a coincidence. Both halves, because only the pair can
+     * fail: a `<=` on its own is satisfied by zero, so deleting the tail from
+     * `drawnElevation` would leave this whole test green with the feature gone.
+     * The lower bound is a millimeter rather than zero — the tail is a sum of a
+     * `tanh`-limited crater band and an fBm, and one direction in the zoo
+     * landing on an exact zero is a flake nobody could reproduce.
+     */
+    const apart = Math.abs(ground - surfaceRadius(body, up))
+    expect(apart).toBeLessThanOrEqual(drawnDivergence(body.surface))
+    expect(apart).toBeGreaterThan(1e-3)
 
     /*
      * And it is standing on *that* point, not merely at that distance.
