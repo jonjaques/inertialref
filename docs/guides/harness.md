@@ -256,6 +256,64 @@ for (const height of [40000, 2000, 120, 2]) {
 
 ---
 
+## The performance timeline
+
+```js
+ir.timing() // the level: off | trace | full
+ir.timing('trace') // the same switch the URL, the preference and the panel reach
+ir.timing.tracks() // what this session has actually emitted onto
+ir.timing.mark('after the seek') // a marker of your own, across every track
+ir.timing.drain() // the retained entries, cleared by name on the way out
+await ir.profile(2000) // arm, record, disarm, report
+```
+
+`ir.profile` is the one that answers a question. It returns structured data and
+a `.text` block — the shape `terrainBaseline` established — because the point is
+a terminal-readable answer from a single `--js` call:
+
+```
+node scripts/drive.mjs --js "ir.visit('g:milky-way/s:SOL/b:2',{site:'summit',height:2})" \
+                       --wait 5000 --js "(await ir.profile(2000)).text" --down
+```
+
+The last line of the report is the deliverable: _"9 of 61 frames over 25 ms;
+terrain.select dominated 7 of them at 8.4 ms mean"_ rather than a screenshot and
+a p95. It names the span that dominated the **late** frames, not the busiest one
+overall — a span that is cheap on average and catastrophic four times is exactly
+what a mean hides.
+
+Three things it will not tell you, each for a reason worth knowing.
+
+**The worker tracks are absent from a drain.** A worker's User Timing entries
+live on the worker's own performance timeline, invisible to the page's
+`getEntriesByType`, because each side times and emits against its own
+`timeOrigin`. They are in a _trace_, on their own threads — `pnpm timing
+--threads` separates them.
+
+**A share of frame time is undefined for concurrent spans**, printed as an em
+dash. Worker queue waits overlap each other and the frames they cross, so the
+ratio is real and describes nothing.
+
+**A span under about 300 µs is a mean, not a reading.** `performance.now()` here
+steps in 100 µs — nothing sets COOP/COEP — so one bar is not a measurement even
+though a window of them is.
+
+`ir.profile` restores the level it found, so a profile taken mid-session does
+not leave the timeline retaining for the rest of it. `off` is the default
+everywhere: there is no capability query for the custom-track arguments, so a
+level that turned itself on would make browsers that cannot draw these entries
+pay for them anyway.
+
+Recording a trace instead, and reading it back:
+
+```
+node scripts/drive.mjs --url "http://localhost:5173/?timing=trace" --wait 5000 --trace 3000
+pnpm timing --top 20            # the table and the verdict
+pnpm timing --track Tasks --threads   # one row per worker
+```
+
+---
+
 ## Measuring terrain
 
 ```js

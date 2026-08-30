@@ -1,0 +1,8 @@
+---
+globs: apps/game/src/engine/browserTiming.ts,apps/game/src/engine/frameTiming.ts,apps/game/src/engine/perfBudgets.ts,packages/shared/src/timing.ts,packages/devtools/src/profile.ts,scripts/timing.mjs
+alwaysApply: false
+---
+
+Apply the canonical performance-timeline rule:
+
+@.claude/rules/timing.md

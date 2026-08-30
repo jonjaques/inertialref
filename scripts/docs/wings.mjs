@@ -124,6 +124,7 @@ export const WINGS = [
           ['docs/adr/0019-the-geology.md', 'The Geology'],
           ['docs/adr/0020-the-face.md', 'The Face'],
           ['docs/adr/0021-the-ground.md', 'The Ground'],
+          ['docs/adr/0022-the-timeline.md', 'The Timeline'],
         ],
       },
     ],

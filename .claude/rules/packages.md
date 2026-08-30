@@ -20,6 +20,11 @@ Reasoning: `docs/guides/development.md`, `pnpm graph`.
 - **A host capability is a port.** Declare an interface here, let the host implement it —
   `workers/src/transport.ts`, `persistence/src/store.ts`. That is why the worker pool can
   be driven by an in-process fake in Node tests.
+- **No `performance.` and no `console.timeStamp` anywhere here.** They are host globals,
+  their types are not in scope, and Node's `console.timeStamp` is not Chrome's. Emit
+  through a `Timer` from `shared/src/timing.ts`; `Span.end()` returns `void`, so nothing
+  here can observe a duration. `apps/headless/src/coreHostApis.test.ts` greps for it,
+  because a global is not an import and `pnpm graph` cannot see one. ADR-0022.
 - **Imports carry their `.ts` extension.** `allowImportingTsExtensions` is on and Node
   runs the sources directly.
 - **No `enum`, no parameter properties, no runtime namespaces** — `erasableSyntaxOnly`.

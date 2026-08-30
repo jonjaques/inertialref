@@ -223,6 +223,25 @@ again in a neighboring system.
   same commit and neither reported anything. Page filenames are lowercase with a
   digest of the route appended, and the manifest carries the name so nothing has
   to re-derive it. `scripts/docs/routes.test.mjs` fails if either half is undone.
+- **A performance sink that crashed the frame it was measuring.**
+  `console.timeStamp` is not a function in the Node context a `GameEngine` test
+  runs in, and an unguarded call threw straight out of the frame loop — a crash
+  in a debugging aid, which is strictly worse than the aid being absent. The
+  trap underneath it is that two questions look like one: whether the method
+  _exists_ is a `typeof`, and whether it accepts the four custom-track arguments
+  is a Chromium extension with **no capability query at all**. Guarding the first
+  and assuming it answers the second is how Safari, Firefox and Node end up
+  paying a hot path for entries that land nowhere. The level is the gate for the
+  second; the `typeof` only covers the first.
+- **An inertness test that could not fail.** The obvious shape — attach a
+  recording sink, leave the level `off`, assert no entries arrive — is vacuous
+  by construction, because a sink _is_ what "on" means, so attaching one opens
+  every guard and the entries arrive correctly. The observable that means
+  something is the count of `performance.now` calls: exactly two a frame when
+  nothing is listening, which is what the frame loop read before any
+  instrumentation existed. Written as an equality rather than a bound, because
+  the claim is that the instrumented and uninstrumented builds do identical
+  work. `apps/game/src/engine/timingInert.test.ts`.
 - Terrain sampled in **inertial** rather than body-fixed axes: mountains stood
   still while the planet rotated under them.
 - **No ground contact at all**: a ship dropped from orbit flew through the
@@ -5835,6 +5854,130 @@ built-ins has.
 - **`[Invalid ShaderModule "fragment"]` is printed at boot on `main` as well.**
   Reproduced on `origin/main` at the same site before any of this landed. Nothing
   visible fails with it; it is a thread to pull separately.
+
+## The six instruments get the axis they were missing (30 Aug 2026)
+
+[ADR-0022](docs/adr/0022-the-timeline.md) and
+[the plan](docs/plans/the-timeline.md) carry the decisions. What belongs here is
+the measurements, and the three things the instrument found on the days it was
+built.
+
+**`performance.now()` in this app steps in exactly 100 µs, and it reshaped the
+design.** `crossOriginIsolated` is false — nothing sets COOP/COEP, and
+`frameMetrics.usedHeapMb` reading `performance.memory` is the other
+confirmation — so Chrome coarsens the clock. Two hundred thousand consecutive
+reads produced **two** distinct deltas, both 100.00 µs; a busy-wait of 40 µs
+reads back as 100 µs and so does one of 90 µs. Terrain selection is documented
+at 40–90 µs, so a span over it would have quantized to a single tick and lied by
+up to 2.5×.
+
+The answer was not to drop the span. It was **one clock read per boundary rather
+than a pair per span**, so the phases _tile_ the frame and the quantization
+error redistributes between neighbours instead of accumulating. Measured: the
+Engine phases sum to 271.4 ms against a frame total of 272.1 ms — 99.7% — and
+the four Terrain phases to 3.920 ms against `Engine/terrain` at 3.921 ms. The
+consequence to keep is that a short phase is honest **in the mean and not in the
+instant**: over a 240-frame window the rounding is unbiased and the mean is good
+to well under a microsecond, but one bar is not a reading.
+
+**Terrain selection is 40–90 µs from orbit and 2.7 ms on a summit.** Standing on
+Earth's summit site with a nine-level selection visiting 446 nodes,
+`terrain.select` was **2.733 ms of a 4.461 ms frame** — 61% of everything the
+engine did, and 30–68× the figure `terrainStreamer.ts` had carried since it was
+written. Both numbers are real; the comment now says which is which. This is the
+same lesson Earthrise taught about keep sets, arriving from a different
+direction: a figure measured at one operating point is a figure about that
+point.
+
+`terrain.request` and `terrain.evict` were briefly folded into one entry on the
+assumption they were sub-resolution bookkeeping. The summit measurement
+falsified it within the hour at 0.916 ms, and they are two entries again.
+
+**A heightfield waits 2.94 s in the queue and then runs for 83 ms.** On arrival
+at that summit, over 112 jobs: `queue` at 2937.75 ms mean and `run` at 83.45 ms,
+with `PoolStats` corroborating — 124 queued, four workers, none idle. The pool's
+header has always named the distinction ("slow tasks want optimization, a deep
+queue wants more workers or fewer requests"); both numbers existed and there was
+nowhere to see that one of them was three seconds. Per thread the four workers
+took 52 jobs each at 53.38, 53.58, 53.68 and 53.94 ms mean, which is a balanced
+pool and was also unstatable before.
+
+**The whole preload and warm-up census runs twice on a cold boot.** 1798 ms,
+then 920 ms 4.5 s later. Not StrictMode, which was the obvious guess and the
+wrong one: the log says `canvas never presented despite nudges; rebuilding the
+renderer`, and rebuilding the renderer re-runs the warm-up. It is the
+presentation watchdog's documented recovery path, and the timeline is the first
+instrument that could show it as a _shape_ — the panel does not exist yet at
+boot, and the log is two identical sentences four seconds apart with nothing
+relating them.
+
+**The entry costs, measured rather than taken from Chrome's documentation.**
+Against a 7.0 ns/iteration empty loop over 200,000 iterations, in Chrome, landed
+on Earth: `console.timeStamp(label, start, end, track, group, color)` at
+**46.5 ns** and `performance.measure` with a devtools detail at **988.5 ns**.
+Net of the loop, ~40 ns and ~981 ns. At the ~22 entries a frame this emits,
+`trace` costs 0.87 µs a frame — 0.005% of the 16.6 ms budget — and `full` costs
+21.6 µs, 0.13%. The 25:1 ratio is the whole argument for two levels. Measured
+with no DevTools recording active, which is the case that decides whether
+turning `trace` on costs anything; under a live recording it will be higher.
+
+**Retention is real and it is not only ours.** Three seconds at `full` retained
+8,394 of this project's entries — and **338,065 of React DevTools'** in the same
+timeline. That is why nothing here ever calls `performance.clearMarks()` or
+`clearMeasures()` bare, and why the drain clears by name and by kind: `clearMarks`
+does not remove a measure, so a drain calling one of them leaves half of what it
+emitted. The sink's own ceiling is 250,000, which at the measured ~2,800 entries
+a second is about ninety seconds — longer than any profile window, shorter than a
+session somebody walked away from.
+
+**A share of frame time is undefined for concurrent spans**, and it printed
+**58,767%** before that was noticed. Worker queue waits overlap each other and
+the frames they cross, so the ratio is arithmetically true and describes nothing.
+`summarizeProfile` now detects the overlap empirically, per span, and prints an
+em dash — empirically rather than by a list of track names, so a track added
+later classifies itself.
+
+**Two defects the tests found, both worth not reintroducing.**
+
+`console.timeStamp` is not a function in this Node context, and the sink threw
+through a `GameEngine` — a crash in a debugging aid, which is worse than the aid
+being absent. It is bound once behind a `typeof` now. The trap is that this
+guard and the _extension_ guard look like one question and are two: whether the
+method exists is a `typeof`, and whether it accepts the four track arguments has
+no query at all, which is why the level is the gate.
+
+`timingInert.test.ts` took two attempts to become non-vacuous, and the first
+attempt is the instructive one. Attaching a recording sink and leaving the level
+`off` proves nothing — a sink _is_ what `on` means, so attaching one opens every
+guard and the entries arrive correctly. The observable that means something is
+the count of `performance.now` calls: **exactly 240 over 120 frames**, which is
+the two reads `GameEngine.frame` already made before any of this existed. An
+equality rather than a bound, because the claim is that the instrumented build
+and the uninstrumented one do identical work. Checked against a clock read moved
+one line outside its guard: 1200 instead of 240.
+
+**What the trace event actually looks like**, because it is not guessable and
+the answer belongs somewhere findable. An extended `console.timeStamp` lands as
+a single _instant_ event carrying its own interval —
+`cat: 'devtools.timeline'`, `name: 'TimeStamp'`, `ph: 'I'`, with
+`args.data: { name, message, start, end, track, trackGroup, color }` — and
+`start`/`end` are **microseconds on the trace's monotonic clock**, not the page's
+`performance.now()` milliseconds. `performance.measure` lands separately under
+`blink.user_timing` as a `b`/`e` pair joined by `id2.local` with the payload in
+`args.detail` as a JSON string, which is where React's own tracks live.
+
+That trace also settled the one claim the page structurally cannot check. Two
+attempts to attach to a worker thread over CDP both hung; the trace answered it
+for free — the `Tasks` track appears on **four distinct `tid`s**, one per worker,
+while Engine, Terrain and Render share the main thread's. The level crossed the
+worker boundary, the worker's own sink attached, and each side timed and emitted
+against its own `timeOrigin`.
+
+Finally, a figure **not** to quote: the `navigation to first light` entry read
+8588 ms on the run that verified it. That is what the driver's occluded Chrome
+waits while the presentation watchdog gives up twice, on a Vite dev server
+transforming modules. The entry is verified; the number is about that window and
+not about a player.
 
 ## Known gaps
 

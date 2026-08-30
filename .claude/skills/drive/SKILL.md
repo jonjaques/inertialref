@@ -59,8 +59,16 @@ node scripts/drive.mjs --url http://localhost:5173/planetarium \
 node scripts/drive.mjs --js "ir.play('tng-intro')" --js "ir.pause()" \
     --js "ir.seekCutscene(1150)" --wait 2500 --shot beat-1150.jpg
 node scripts/drive.mjs --sample 240 --sample-js "ir.terrain()"  # per-frame, min..max
+node scripts/drive.mjs --js "(await ir.profile(2000)).text"     # why was that slow
 node scripts/drive.mjs --down                                   # when finished
 ```
+
+**`--trace` needs the level turned on and it is off by default.** Put
+`?timing=trace` on the `--url`, or `--js "ir.timing('trace')"` before it, or the
+recording carries a frame track and none of this project's own. `pnpm timing` reads
+the result; `pnpm timing --threads` is what separates the four worker threads from
+the main one. `ir.profile(ms)` is the same answer without a trace file, and it arms
+and disarms the level itself.
 
 Steps run in the order written, in one process and one session. Prefer one command with
 five steps to five commands.
@@ -73,6 +81,7 @@ five steps to five commands.
 | `--shot <path>` | a bare filename lands in `.data/drive/`; `.jpg` is the one to read      |
 | `--sample <n>`  | `n` consecutive rAF frames, with a min..max per field                   |
 | `--cast <n>`    | `n` **rendered** frames, differenced — the only step that sees a strobe |
+| `--trace <ms>`  | a Chrome trace; `pnpm timing` reads it back as a table and a verdict    |
 | `--logs`        | console output and page errors buffered so far                          |
 | `--reload`      | hard reload, then wait for the renderer                                 |
 

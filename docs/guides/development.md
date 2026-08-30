@@ -31,6 +31,9 @@ pnpm sim --self-test           # headless run plus the twelve capability checks
 pnpm vitest run <substring>    # a single test file
 
 pnpm drive --help              # drive Chrome over CDP: --js, --shot, --sample, --down
+pnpm drive --trace 3000        # record a Chrome trace, with ?timing=trace on the url
+pnpm timing --help             # read one back: per-track p50/p95 and which span was slow
+pnpm sim --profile             # the same report headlessly, over the worker pool
 
 # Vendored data. Everything under data/ is committed; these rebuild it.
 pnpm catalog:fetch             # download the star catalog sources into .data/raw
