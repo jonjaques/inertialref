@@ -34,6 +34,8 @@ telling you to read the one for the area you are touching **before** changing an
 | `0017` | the lens                        |
 | `0018` | the instrument                  |
 | `0019` | the geology                     |
+| `0020` | the face                        |
+| `0021` | the Astro shell                 |
 
 If one covers the ground, **you are not relitigating it** — you are either applying it, or
 writing a new ADR that supersedes it and says so explicitly.

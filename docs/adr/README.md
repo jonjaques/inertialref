@@ -1,7 +1,7 @@
 # Architectural decision records
 
-Twenty decisions that are expensive to reverse. Each records the **context**, the
-**decision**, the **alternatives that were rejected**, and the **consequences**
+Twenty-one decisions that are expensive to reverse. Each records the **context**,
+the **decision**, the **alternatives that were rejected**, and the **consequences**
 — including the ones that turned out to be costs.
 
 > These were written after the implementations, from the measurements those
@@ -25,11 +25,12 @@ Twenty decisions that are expensive to reverse. Each records the **context**, th
 | [0013](0013-measured-figures.md)            | Measured figures            | accepted     | A body gravity never rounded off carries its measured figure as a radius grid, and the generated case and the measured case are the same case.                                                                                                                                                                        |
 | [0014](0014-the-record-with-holes-in-it.md) | The record with holes in it | accepted     | A field nothing has measured is a row saying so, with the reason — written in the universe's voice, never the engine's.                                                                                                                                                                                               |
 | [0015](0015-terrain-level-of-detail.md)     | Terrain level of detail     | accepted     | A restricted, morphing quadtree over a detail floor measured from the field — and the morph closes one level, which is why the tree is restricted at all.                                                                                                                                                             |
-| [0016](0016-documentation-as-a-mode.md)     | Documentation as a mode     | accepted     | The docs are a mode of the application, rendered at build and fetched at runtime — TypeDoc's model drawn by our components, so the reference is one site with the rest.                                                                                                                                               |
+| [0016](0016-documentation-as-a-mode.md)     | Documentation as a mode     | accepted     | The docs are a mode of the application — TypeDoc's model drawn by our components, so the reference is one site with the rest. Amended by 0021: the article is the document.                                                                                                                                           |
 | [0017](0017-the-lens.md)                    | The lens                    | accepted     | The camera carries focal length, gauge, aperture, focus and gain; the field of view is derived. One producer, under the pose's own precedence.                                                                                                                                                                        |
 | [0018](0018-the-instrument.md)              | The instrument              | accepted     | The aim is an offset on the pose; compositions are one list with two placers; the keymap has one dispatcher and contexts that may share a chord; preferences are a registry with one storage call site.                                                                                                               |
 | [0019](0019-the-geology.md)                 | The geology                 | accepted     | Terrain is a grammar derived from body facts, a per-body sketch, and a band stack of shares that sum to one; `maxElevation` is a strength limit rather than a dial; craters are placed on a cubic lattice in ℝ³; one field at every level, because the morph is exact only if two patches evaluate the same function. |
 | [0020](0020-the-face.md)                    | The face                    | accepted     | The ground carries four bytes of cover a vertex for what a shader cannot derive; the palette is ratios against the body's own colour; a mapped body's terrain wears its published map and the invented channels switch off; deposits are layered rather than splatted, and everything shades in body-fixed axes.      |
+| [0021](0021-the-astro-shell.md)             | The Astro shell             | accepted     | The document is the shell and the renderer is a persisted island; every mode is a page; dialogs are a store over history; a documentation page is the HTML a reader is served.                                                                                                                                        |
 
 ---
 
@@ -57,6 +58,7 @@ flowchart TB
     A18["<b>0018</b><br/>the instrument"]
     A19["<b>0019</b><br/>the geology"]
     A20["<b>0020</b><br/>the face"]
+    A21["<b>0021</b><br/>the Astro shell"]
 
     A1 -->|"precision already solved,<br/>so frames are free to be<br/>about motion"| A2
     A1 -->|"canonical → GPU"| A3
@@ -82,6 +84,8 @@ flowchart TB
     A3 -->|"a patch rides the body's<br/>own compression"| A15
     A4 -->|"a patch is addressed<br/>before it exists"| A15
     A11 -->|"a fifth mode, over<br/>the same canvas"| A16
+    A11 -->|"the document is<br/>the shell"| A21
+    A16 -->|"the article is<br/>the document"| A21
     A11 -->|"the optics follow<br/>the pose's precedence"| A17
     A15 -->|"the refinement predicate<br/>was reading a guess"| A17
     A17 -->|"a lens nothing<br/>could operate"| A18
@@ -95,6 +99,8 @@ flowchart TB
     A17 -->|"the detail fades against<br/>the lens's pixel angle"| A20
     A13 -->|"the published map<br/>is not negotiable"| A20
 
+    style A21 fill:#0e7490,stroke:#155e75,color:#fff
+
     style A1 fill:#0369a1,stroke:#0c4a6e,color:#fff
     style A8 fill:#334155,stroke:#1e293b,color:#94a3b8,stroke-dasharray: 5 5
     style A9 fill:#0e7490,stroke:#155e75,color:#fff
@@ -105,7 +111,7 @@ flowchart TB
     style A17 fill:#0e7490,stroke:#155e75,color:#fff
 ```
 
-Four dependencies are worth noticing because they are not obvious:
+Five dependencies are worth noticing because they are not obvious:
 
 - **0001 → 0002.** Because coordinates are precise everywhere, frames did _not_
   have to be a precision mechanism, which is the opposite of how most engines at
@@ -122,6 +128,10 @@ Four dependencies are worth noticing because they are not obvious:
   eye that is not the ship's. Having built that seam, the planetarium was a
   _second producer of the same shape_ rather than a new mechanism — which is why
   a whole mode cost a nullable field and six lines of precedence.
+- **0011 + 0016 → 0021.** Both assumed one document served every path. The
+  canvas still lives outside every navigation that would rebuild it, and the
+  documentation is still a mode of the application; the shell that holds both
+  is now the HTML a crawler, a scraper and a reader are served.
 
 ---
 
