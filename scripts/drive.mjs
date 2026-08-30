@@ -48,6 +48,12 @@ import { parseArgs, promisify } from 'node:util'
 import { analyseFrames, differenceMap, reportFrames } from './frameDiff.mjs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+// The key table itself, not a copy of one of its values. Node strips the types
+// on the way in — `paths.ts` imports nothing at runtime — and `scripts/brand/`
+// already reaches into `apps/game/src` this way. A literal here is a twin of
+// `QUERY.presentation` that nothing holds to it, and the rename that broke it
+// would show up as a slow boot rather than as an error.
+import { QUERY } from '../apps/game/src/pages/paths.ts'
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url))
 const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
@@ -199,7 +205,7 @@ const PORT = Number(values.port)
  */
 const URL_ = (() => {
   const url = new URL(String(values.url))
-  url.searchParams.set('presentation', 'occluded')
+  url.searchParams.set(QUERY.presentation, 'occluded')
   return url.toString()
 })()
 const WIDTH = Number(values.width)

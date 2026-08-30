@@ -276,19 +276,18 @@ export const generateHeightfieldTask = defineTask<
 })
 
 /**
- * The five fields of a `SurfaceParameters` that cross a structured clone.
+ * The fields of a `SurfaceParameters` that cross a structured clone.
  *
- * The seed is hex, exactly as the heightfield request carries it, so the two
- * payloads describe a surface the same way and a worker parses it once.
+ * Derived from the heightfield request rather than retyped beside it, because
+ * "the two payloads describe a surface the same way" is the property that lets
+ * a worker parse it once — and retyped, that property is a sentence in a
+ * comment rather than something the compiler checks. Everything a *region*
+ * needs is what is subtracted.
  */
-export interface SurfaceDetailFloorRequest {
-  readonly surfaceSeed: string
-  readonly maxElevation: number
-  readonly roughness: number
-  readonly seaLevel: number | null
-  readonly grammar: SurfaceGrammar
-  readonly resolution: number
-}
+export type SurfaceDetailFloorRequest = Omit<
+  HeightfieldRequestPayload,
+  'region' | 'border'
+>
 
 export const surfaceDetailFloorTask = defineTask<
   SurfaceDetailFloorRequest,
