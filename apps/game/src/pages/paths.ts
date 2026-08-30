@@ -15,6 +15,9 @@
  * link has to behave like one.
  */
 
+import type { Stance } from '../engine/presentation.ts'
+import { MENU_FLARE_ARTIFACTS } from './menuFraming.ts'
+
 /* ------------------------------------------------------------------------- */
 /* Paths                                                                      */
 /* ------------------------------------------------------------------------- */
@@ -141,6 +144,39 @@ export function modeForPath(pathname: string): AppMode {
  */
 export function modeHasBootCover(mode: AppMode): boolean {
   return mode === 'flight' || mode === 'planetarium' || mode === 'cinema'
+}
+
+/**
+ * The presentation a path asks for, as a pure function of the URL.
+ *
+ * The persisted backdrop island reads this on `astro:page-load` so a
+ * navigation can re-aim the camera without remounting the renderer. Modes
+ * that drive the camera continuously — the planetarium — still push their
+ * own layer on top. Overlay paths answer like the menu, because a cold
+ * load of `/settings` is the dialog over the front door.
+ */
+export function stanceForPath(pathname: string): Stance {
+  switch (modeForPath(pathname)) {
+    case 'menu':
+      return {
+        showShip: false,
+        flareArtifacts: MENU_FLARE_ARTIFACTS,
+        observatory: true,
+      }
+    case 'docs':
+      return {
+        showShip: false,
+        showOrbits: false,
+        flareArtifacts: MENU_FLARE_ARTIFACTS,
+        observatory: true,
+      }
+    case 'planetarium':
+      return { observatory: true }
+    case 'cinema':
+      return { showShip: false, observatory: false }
+    case 'flight':
+      return { showShip: true, showOrbits: false, observatory: false }
+  }
 }
 
 const PLAY_MODES = ['solo', 'online', 'multiplayer'] as const
