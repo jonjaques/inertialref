@@ -189,6 +189,9 @@ importers:
       vite:
         specifier: ^8.2.0
         version: 8.2.1(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0)
+      webgpu:
+        specifier: 0.6.0
+        version: 0.6.0(supports-color@10.2.2)
 
   apps/headless:
     dependencies:
@@ -3622,6 +3625,9 @@ packages:
     resolution: {integrity: sha512-r0CEmvpH63r4T15ebFqeOjGqU4+EgTx4I510NtK35EMciSdcTxCw3Byy3JnBonz7iyIFZ0AbVo0bbFpEVuhCYA==}
     hasBin: true
 
+  webgpu@0.6.0:
+    resolution: {integrity: sha512-z44ZU/+ypPELgQrv+um3/5Eqcq7gOtVZAmaRfwujJMwGMRSa6+CmjIAvEWw7O68Y95cnEsywhbYlcChQTX+IQg==}
+
   why-is-node-running@2.3.0:
     resolution: {integrity: sha512-hUrmaWBdVDcxvYqnyh09zunKzROWjbZTiNy8dBEjkS7ehEDQibXJ7XvlmtbwuTclUiIyN+CyXQD4Vmko8fNm8w==}
     engines: {node: '>=8'}
@@ -6700,6 +6706,13 @@ snapshots:
   wawoff2@2.0.1:
     dependencies:
       argparse: 2.0.1
+
+  webgpu@0.6.0(supports-color@10.2.2):
+    dependencies:
+      '@webgpu/types': 0.1.72
+      debug: 4.4.3(supports-color@10.2.2)
+    transitivePeerDependencies:
+      - supports-color
 
   why-is-node-running@2.3.0:
     dependencies:

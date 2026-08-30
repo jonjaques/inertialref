@@ -1,5 +1,5 @@
 import { fileURLToPath } from 'node:url'
-import { defineConfig } from 'vitest/config'
+import { configDefaults, defineConfig } from 'vitest/config'
 
 // Tests live beside the code they cover, and every one of them must be runnable
 // in plain Node — that is the check that the simulation core stays free of DOM,
@@ -45,6 +45,14 @@ export default defineConfig({
       'apps/*/src/**/*.test.ts',
       'scripts/**/*.test.mjs',
     ],
+    /*
+     * The GPU suite is `apps/game/vitest.gpu.config.ts` and `pnpm test:gpu`.
+     * The app glob above would collect it, and on a machine with no GPU — CI's
+     * Linux runner, a cloud session — every one of those files fails at
+     * `requestAdapter` for a reason that has nothing to do with the change
+     * under test. Excluded here so `pnpm test` keeps the claim in the header.
+     */
+    exclude: [...configDefaults.exclude, '**/*.gpu.test.ts'],
     /*
      * 20 seconds, not vitest's default 5.
      *

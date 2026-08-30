@@ -20,6 +20,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:me": "vitest run --reporter=dot --reporter=vitest-nyancat-reporter",
+    "test:gpu": "vitest run --config apps/game/vitest.gpu.config.ts",
     "typecheck": "tsc -p tsconfig.json && tsc -p apps/game/tsconfig.json && tsc -p apps/headless/tsconfig.json && tsc -p apps/server/tsconfig.json && tsc -p apps/ingest/tsconfig.json",
     "lint": "oxlint",
     "graph": "node scripts/check-graph.mjs",
