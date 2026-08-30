@@ -10,6 +10,7 @@ import {
   wingFor,
 } from './docsNav.ts'
 import { searchDocs, tokenize } from './search.ts'
+import { docsParam, docsRoute } from './urls.ts'
 
 /*
  * The two pure halves of the reading room: where a route sits, and what a query
@@ -90,6 +91,34 @@ const MANIFEST: DocManifest = {
     exports: 1,
   },
 }
+
+describe('the URL a documentation page is served at', () => {
+  it('round-trips the index and a nested page', () => {
+    for (const route of [
+      '/docs',
+      '/docs/vision',
+      '/docs/concepts/frames',
+      '/docs/api/spatial/Sector',
+    ]) {
+      expect(docsRoute(docsParam(route))).toBe(route)
+    }
+  })
+
+  it('gives the index no rest param, so Astro can emit /docs not /docs/index', () => {
+    expect(docsParam('/docs')).toBeUndefined()
+    expect(docsRoute(undefined)).toBe('/docs')
+    expect(docsRoute('')).toBe('/docs')
+  })
+
+  it('keeps slashes inside the rest param, because [...route] is one string', () => {
+    expect(docsParam('/docs/api/spatial/Sector')).toBe('api/spatial/Sector')
+  })
+
+  it('refuses a path that is not a documentation route', () => {
+    expect(() => docsParam('/planetarium')).toThrow(/documentation route/)
+    expect(() => docsParam('/docsish')).toThrow(/documentation route/)
+  })
+})
 
 describe('where a route sits', () => {
   it('finds the wing that lists it', () => {
