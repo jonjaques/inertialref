@@ -247,6 +247,16 @@ export const QUERY = {
   at: 'at',
   /** Every mode: the world seed, which `GameEngine` already reads. */
   seed: 'seed',
+  /**
+   * Every mode: how much of itself the session describes on the timeline.
+   *
+   * The level by name — `off`, `trace`, `full` — never `=1`. The flag has three
+   * values and a boolean cannot select `full`, which is the one that retains
+   * entries anything can read back. `main.tsx` reads it at module scope,
+   * because boot is the most interesting thing on this timeline and boot is
+   * over before React mounts.
+   */
+  timing: 'timing',
 } as const
 
 /**

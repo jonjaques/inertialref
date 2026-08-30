@@ -1,4 +1,10 @@
-import { getLogger, LIGHT_YEAR, type Seconds } from '@inertialref/shared'
+import {
+  getLogger,
+  getTimer,
+  LIGHT_YEAR,
+  type Seconds,
+  type TimingDetail,
+} from '@inertialref/shared'
 import { formatSeed } from '@inertialref/procedural'
 import {
   orientationToRenderSpace,
@@ -60,6 +66,7 @@ import type { LoadedShip } from '../render/shipModels.ts'
 import { createBrowserWorkerPort, poolSize } from './browserWorker.ts'
 import type { Camera, Object3D } from 'three/webgpu'
 import { FrameMetrics, usedHeapMb } from './frameMetrics.ts'
+import { DROPPED_FRAME_MS } from './perfBudgets.ts'
 import { IndexedDbSaveStore } from './indexedDbStore.ts'
 import {
   createCutsceneSession,
@@ -88,6 +95,41 @@ import type { TerrainReport } from '@inertialref/devtools'
  */
 
 const log = getLogger('game.engine')
+
+/*
+ * The frame's own entry, and the two frozen details it can wear.
+ *
+ * `timer` is constructed at module scope and `main.tsx` attaches the sink in
+ * its own body — after every static import has been evaluated to completion —
+ * so `on` has to be a getter over the live hub rather than a boolean captured
+ * here. It is; see `packages/shared/src/timing.ts`.
+ *
+ * Two constants and a comparison rather than one detail built per frame: a
+ * track, a group and a colour are the same on every frame, and the only thing
+ * that varies is whether this frame was late. That keeps the cheap level
+ * allocation-free at the one call site that runs sixty times a second, which is
+ * the claim the whole flag rests on.
+ *
+ * `DROPPED_FRAME_MS` rather than `FRAME_BUDGET_MS`, and it is the same number
+ * the panel draws its warning line at — one definition of over-budget now
+ * colours the plot *and* the trace entry.
+ */
+const timer = getTimer('game.engine')
+
+const ENGINE_TRACK = 'Engine'
+const ENGINE_GROUP = 'InertialRef'
+
+const FRAME_DETAIL: TimingDetail = Object.freeze({
+  track: ENGINE_TRACK,
+  group: ENGINE_GROUP,
+  color: 'primary',
+})
+
+const FRAME_LATE: TimingDetail = Object.freeze({
+  track: ENGINE_TRACK,
+  group: ENGINE_GROUP,
+  color: 'error',
+})
 
 /**
  * The lens the game is flown behind — 18.84 mm on a 24 mm gauge, which is 65°.
@@ -769,6 +811,21 @@ export class GameEngine implements PresentationHost {
     const started = performance.now()
     this.#step(delta)
     const elapsed = performance.now() - started
+
+    /*
+     * The frame, on the timeline, from numbers this method already has.
+     *
+     * No new clock read at all, which is the pattern to reach for everywhere
+     * both ends of an interval already exist — and the reason the overhead
+     * question here is about the emit rather than about the measurement.
+     */
+    if (timer.on)
+      timer.measure(
+        'frame',
+        started,
+        started + elapsed,
+        elapsed > DROPPED_FRAME_MS ? FRAME_LATE : FRAME_DETAIL,
+      )
 
     this.#frameMs = this.#frameMs * 0.9 + elapsed * 0.1
     this.#fps = delta > 0 ? this.#fps * 0.9 + (1 / delta) * 0.1 : this.#fps
