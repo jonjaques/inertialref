@@ -213,6 +213,7 @@ export const WINGS = [
         pages: [
           ['docs/plans/headless-webgpu.md', 'Headless WebGPU'],
           ['docs/plans/the-timeline.md', 'The Timeline'],
+          ['docs/plans/perf.md', 'Performance'],
         ],
       },
       {
