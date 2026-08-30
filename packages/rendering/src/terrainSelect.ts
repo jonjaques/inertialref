@@ -664,30 +664,47 @@ function balance(
   },
 ): readonly Node[] {
   let current = nodes
+  /*
+   * The deepest selected level anywhere under each region, for every region
+   * that has one. A region absent from this is covered by something coarser,
+   * which can never be the finer half of a mismatch.
+   *
+   * Walked by halving `i` and `j` rather than through `regionParent`, which
+   * allocates a fresh address per ancestor per node, none of it read — the
+   * halving walk is the same arithmetic without the objects.
+   *
+   * **Carried across passes rather than rebuilt in each.** A summit selection
+   * takes seven passes to settle and the first is the only large one: measured
+   * on Earth's summit with a converged cache, the passes split 72, 29, 12, 10,
+   * 5, 2 and 0 nodes, so six of the seven rebuilt nine hundred ancestor chains
+   * to find at most twenty-nine splits. Depth is monotone — a pass replaces a
+   * node with its own children and keeps everything else, so no region's
+   * deepest descendant can ever get shallower — which is what makes carrying
+   * it exact. The one case that breaks monotonicity is a split whose children
+   * are *all* culled: the region empties and its entry is left too deep, so
+   * that pass asks for a rebuild instead.
+   */
+  let depth = new Map<number | string, number>()
+  let rebuild = true
+  const deepen = (region: RegionAddress): void => {
+    const { face } = region
+    let { level, i, j } = region
+    const deepest = level
+    while (level >= 0) {
+      const key = packed(face, level, i, j)
+      const held = depth.get(key)
+      if (held !== undefined && held >= deepest) break
+      depth.set(key, deepest)
+      level -= 1
+      i >>= 1
+      j >>= 1
+    }
+  }
   for (let pass = 0; pass <= context.maxLevel; pass += 1) {
-    /*
-     * The deepest selected level anywhere under each region, for every region
-     * that has one. A region absent from this is covered by something coarser,
-     * which can never be the finer half of a mismatch.
-     *
-     * Walked by halving `i` and `j` rather than through `regionParent`, which
-     * allocates a fresh address per ancestor per node per pass, none of it
-     * read — the halving walk is the same arithmetic without the objects.
-     */
-    const depth = new Map<number | string, number>()
-    for (const node of current) {
-      const { face } = node.region
-      let { level, i, j } = node.region
-      const deepest = level
-      while (level >= 0) {
-        const key = packed(face, level, i, j)
-        const held = depth.get(key)
-        if (held !== undefined && held >= deepest) break
-        depth.set(key, deepest)
-        level -= 1
-        i >>= 1
-        j >>= 1
-      }
+    if (rebuild) {
+      depth = new Map<number | string, number>()
+      for (const node of current) deepen(node.region)
+      rebuild = false
     }
 
     const next: Node[] = []
@@ -733,10 +750,32 @@ function balance(
         continue
       }
       split = true
+      let kept = 0
       for (const child of children) {
         const seen = context.consider(child)
-        if (seen !== null) next.push(seen)
+        if (seen === null) continue
+        kept += 1
+        next.push(seen)
+        deepen(seen.region)
       }
+      /*
+       * Every child beyond the horizon, which is the one way the carried map
+       * can lie: nothing is selected under this region any more, so the entry
+       * left by the *parent's* own `deepen` — one level too deep, and read by
+       * every ancestor — describes a subtree that no longer exists. A
+       * neighbour two levels coarser would take it for a mismatch it is not.
+       *
+       * Defensive rather than demonstrated. It happens: ten of the hundred and
+       * five eyes in the altitude sweep the 2:1 property walks reach it, at
+       * radius/2^9 and radius/2^10 on every body size tried. What could not be
+       * built is an eye where it *changes* the selection — patch counts and
+       * visit counts came out identical with and without this line, because a
+       * node only splits when its neighbourhood is already deep and a
+       * two-levels-coarser neighbour is not there to be misled. "Not
+       * observable in the eyes tried" is not "cannot be", and the map is
+       * carried on a claim of exactness, so the claim is kept exact.
+       */
+      if (kept === 0) rebuild = true
     }
     current = next
     if (!split) break
