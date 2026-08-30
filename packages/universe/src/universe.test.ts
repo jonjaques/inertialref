@@ -49,6 +49,7 @@ import {
   elevationAt,
   faceToDirection,
   generateHeightfield,
+  drawnElevation,
   groundElevation,
   HEIGHTFIELD_BORDER,
   HEIGHTFIELD_RESOLUTION,
@@ -374,10 +375,14 @@ describe('cube-sphere terrain', () => {
     expect(field.maxElevation).toBe(max)
 
     // And the ring is the field one step outside, not a clamp of the edge.
+    // `drawnElevation` rather than `groundElevation`, because a heightfield is
+    // the *drawn* field — the border row has to be exactly what the neighbouring
+    // patch generates for itself, tail included, or every patch boundary carries
+    // a one-sided difference of up to `drawnDivergence`.
     // `fround` because Float32Array storage is the only step between them.
     expect(heightfieldSample(field, -1, 4)).toBe(
       Math.fround(
-        groundElevation(planet.surface, regionDirection(region, 0.5, -1 / 8)),
+        drawnElevation(planet.surface, regionDirection(region, 0.5, -1 / 8)),
       ),
     )
   })
@@ -415,7 +420,7 @@ describe('where the field stops having anything to add', () => {
           level,
         )
         const at = (s: number, t: number): number =>
-          groundElevation(planet.surface, regionDirection(region, s, t))
+          drawnElevation(planet.surface, regionDirection(region, s, t))
         const corners =
           at(0.5 - half, 0.5 - half) +
           at(0.5 + half, 0.5 - half) +

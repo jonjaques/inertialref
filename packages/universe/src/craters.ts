@@ -117,6 +117,35 @@ export function craterFieldWithin(
   direction: Vec3,
   extra: number,
 ): Meters {
+  return ladderField(
+    sketch.latticeSeed,
+    sketch.craterLevels,
+    0,
+    grammar,
+    direction,
+    extra,
+  )
+}
+
+/**
+ * The same walk over any ladder, starting at any rung number.
+ *
+ * `firstIndex` is the rung's position in the body's *whole* ladder, and it is
+ * what the lattice hashes on — so a rung is the same rung whichever list it
+ * arrives in. `micro.ts` continues the ladder below the canonical wavelength
+ * floor and hands its rungs in with their real numbers; passing zero would give
+ * an 8 m crater the draws of the body's largest basin.
+ */
+export function ladderField(
+  latticeSeed: number,
+  levels: readonly CraterLevel[],
+  firstIndex: number,
+  grammar: SurfaceGrammar,
+  direction: Vec3,
+  extra: number,
+  chord: ChordForm = 'fast',
+): Meters {
+  if (levels.length === 0) return 0
   const radius = grammar.meanRadius
   /*
    * How radial each axis is here, how tangent, and how thick a cell is along
@@ -141,11 +170,11 @@ export function craterFieldWithin(
   )
   const slop = along.x + along.y + along.z
   let total = 0
-  for (let index = 0; index < sketch.craterLevels.length; index += 1) {
-    const level = sketch.craterLevels[index] as CraterLevel
+  for (let rung = 0; rung < levels.length; rung += 1) {
+    const level = levels[rung] as CraterLevel
     total += levelContribution(
-      sketch.latticeSeed,
-      index,
+      latticeSeed,
+      firstIndex + rung,
       level,
       grammar,
       direction,
@@ -154,10 +183,38 @@ export function craterFieldWithin(
       spread,
       slop,
       extra,
+      chord,
     )
   }
   return total
 }
+
+/**
+ * How the distance from a sample to a crater's center is computed.
+ *
+ * `2 − 2 cos θ` out of one dot product is the cheap form and it is what every
+ * canonical rung uses. It cancels: at the ladder's finest *canonical* level θ is
+ * about 2 × 10⁻⁴ and the subtraction costs seven significant figures, which
+ * leaves the profile exact to nine and the height to a nanometre.
+ *
+ * Three decades further down it is not fine. A one-metre crater on a
+ * 1,700 km body subtends 3 × 10⁻⁷, so `2 − 2 cos θ` is 4 × 10⁻¹⁴ against a
+ * float64 ulp of 2 × 10⁻¹⁶ — half a percent of the value, which is a millimetre
+ * on the crater's own depth and, worse, a millimetre that **differs between two
+ * patches that computed the same direction by different routes**. A cube face's
+ * gnomonic extension gives the neighbouring face's coordinate exactly in real
+ * arithmetic and to the last bit in floating point, and the ill-conditioned form
+ * turns that last bit into a visible-in-principle seam.
+ *
+ * So the presentational tail asks for `'exact'`: the same number as the sum of
+ * squared component differences, where each difference is between two nearby
+ * floats and is therefore exact. It costs two divides and three subtractions a
+ * crater. The canonical ladder keeps `'fast'` deliberately and not for the
+ * speed: changing it would move `elevationAt` in its last bits on every body,
+ * and the field the contact test integrates does not move outside a version
+ * bump.
+ */
+export type ChordForm = 'fast' | 'exact'
 
 function levelContribution(
   seed: number,
@@ -170,6 +227,7 @@ function levelContribution(
   spread: Vec3,
   slop: number,
   extra: number,
+  chord: ChordForm,
 ): number {
   const cells = level.cells
   const size = 1 / cells
@@ -317,10 +375,22 @@ function levelContribution(
          * about seven significant figures at the ladder's finest level, against
          * a profile that is read to three.
          */
-        const along =
-          (direction.x * jx + direction.y * jy + direction.z * jz) /
-          jitterLength
-        const away = 2 - 2 * along
+        let away: number
+        if (chord === 'exact') {
+          // The same number, as a sum of squared component differences. Each
+          // difference is between two nearby floats and is exact, so nothing
+          // cancels — see `ChordForm`.
+          const inverse = 1 / jitterLength
+          const ex = direction.x - jx * inverse
+          const ey = direction.y - jy * inverse
+          const ez = direction.z - jz * inverse
+          away = ex * ex + ey * ey + ez * ez
+        } else {
+          const along =
+            (direction.x * jx + direction.y * jy + direction.z * jz) /
+            jitterLength
+          away = 2 - 2 * along
+        }
         const reach = angularRadius * EJECTA_REACH
         if (away > reach * reach) continue
         const distance = Math.sqrt(Math.max(0, away))

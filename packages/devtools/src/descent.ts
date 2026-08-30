@@ -8,7 +8,7 @@ import {
   HEIGHTFIELD_RESOLUTION,
   type RegionAddress,
   surfaceDetailFloor,
-  surfaceRadius,
+  drawnSurfaceRadius,
   type SurveySite,
   surveySites,
 } from '@inertialref/universe'
@@ -394,7 +394,7 @@ export function simulateDescent(
     const latitude = clampLatitude(target.latitude + offset * 0.5)
     const longitude = target.longitude + offset
     const direction = geodeticDirection(latitude, longitude)
-    const distance = surfaceRadius(body, direction) + height
+    const distance = drawnSurfaceRadius(body, direction) + height
 
     const selection = selectTerrain(
       {

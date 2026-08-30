@@ -26,9 +26,9 @@ import {
   hasSolidSurface,
   parseAddress,
   findBody,
-  groundElevation,
+  drawnElevation,
+  drawnSurfaceRadius,
   type StarSystem,
-  surfaceRadius,
   type SurveySite,
   surveySites,
   systemFrameId,
@@ -1205,9 +1205,21 @@ export class Observatory {
       return null
     }
     const up = geodeticDirection(stance.latitude, stance.longitude)
+    /*
+     * The **drawn** radius, not the contact test's.
+     *
+     * A stance is a height above the ground the viewer can see, and since Phase
+     * 4 the ground the viewer can see carries a presentational tail the contact
+     * test does not — up to `drawnDivergence`, which is about two metres. Stood
+     * against `surfaceRadius` at a two-metre stance, the eye sits 0.4 m over the
+     * plain in one place and inside a crater rim in the next, which is the
+     * divergence made visible in exactly the picture the phase is judged from.
+     * The ship still lands on `surfaceRadius`: physics may not read a term the
+     * renderer is free to change.
+     */
     const { offset, orientation } = surfaceStancePose(
       up,
-      surfaceRadius(body, up),
+      drawnSurfaceRadius(body, up),
       stance,
     )
     return {
@@ -1221,10 +1233,12 @@ export class Observatory {
     const body = this.#body()
     if (stance === null || body === null) return null
     const up = geodeticDirection(stance.latitude, stance.longitude)
-    // One elevation sample, not two. `surfaceRadius` is `datumRadius +
-    // groundElevation`, so asking for both the radius and the elevation the way
+    // One elevation sample, not two. `drawnSurfaceRadius` is `datumRadius +
+    // drawnElevation`, so asking for both the radius and the elevation the way
     // they read is fourteen octaves of noise run twice, eight times a second.
-    const elevation = groundElevation(body.surface, up)
+    // The drawn one, because this is the number under the altitude readout and
+    // the stance above stands on it.
+    const elevation = drawnElevation(body.surface, up)
     return {
       stance,
       scrub: scrubForHeight(body.radius, stance.height),

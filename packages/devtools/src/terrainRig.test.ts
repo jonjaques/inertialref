@@ -8,6 +8,8 @@ import {
   parseAddress,
   SURFACE_ARCHETYPES,
   surfaceDetailFloor,
+  drawnDivergence,
+  drawnSurfaceRadius,
   surfaceRadius,
   systemId,
   systemsWithin,
@@ -366,7 +368,7 @@ describe('the observatory on the ground', () => {
   it('puts the eye exactly the stance height above the ground', () => {
     /*
      * The one assertion that ties the arithmetic to the terrain: the distance
-     * from the body's *center* to the camera has to be `surfaceRadius` at the
+     * from the body's *center* to the camera has to be `drawnSurfaceRadius` at the
      * stance plus the height. If the pose were composed against the orbital
      * `b:` frame instead of the rotating `bf:` one it would still be the right
      * distance — the frames share an origin — so the second half of the test is
@@ -393,11 +395,23 @@ describe('the observatory on the ground', () => {
     expect(stance).toBeDefined()
 
     const up = geodeticDirection(stance?.latitude ?? 0, stance?.longitude ?? 0)
-    const ground = surfaceRadius(body, up)
+    /*
+     * The **drawn** radius, because a stance is a height above the ground the
+     * viewer can see. The two differ by the presentational tail — up to
+     * `drawnDivergence`, about two metres — and standing against the contact
+     * test's radius instead would put the eye inside a crater rim at a
+     * two-metre stance. The ship still lands on `surfaceRadius`.
+     */
+    const ground = drawnSurfaceRadius(body, up)
     // A millimeter in a radius of hundreds of kilometers: the float64 offset
     // arithmetic resolves far better than that, so a looser bound would let a
     // datum error through.
     expect(Vec.length(offset)).toBeCloseTo(ground + 120, 3)
+    // And the two are not the same number, which is what makes the line above a
+    // choice rather than a coincidence.
+    expect(Math.abs(ground - surfaceRadius(body, up))).toBeLessThanOrEqual(
+      drawnDivergence(body.surface),
+    )
 
     /*
      * And it is standing on *that* point, not merely at that distance.

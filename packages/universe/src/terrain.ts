@@ -30,6 +30,7 @@ import {
   surfaceCover,
   unpackCover,
 } from './cover.ts'
+import { microRelief, microReliefBound } from './micro.ts'
 import { CANONICAL_AMPLITUDE_FLOOR, terrainSketch } from './sketch.ts'
 import type { Body, SurfaceParameters } from './system.ts'
 
@@ -363,12 +364,22 @@ function evaluate(
 }
 
 /**
- * The ground below a direction, with what it is made of written into `out`.
+ * The ground below a direction as it is **drawn**, with what it is made of
+ * written into `out`.
  *
  * The sea clamp applies to the height and not to the cover: an ocean is a
  * material the renderer decides on from the elevation it is handed, and the
  * seabed's own composition is what would show through a shallow one. See
  * `groundElevation` for why the clamp has exactly one owner.
+ *
+ * The micro tail goes in **before** the clamp rather than after it, and that is
+ * what keeps a shoreline continuous. Added afterwards it would rough up the
+ * open sea by two metres — the one surface in this model that is flat by
+ * definition — and a gate on "is this dry" would put a step at the waterline of
+ * the whole tail's height. Under the clamp, submarine grit is flattened by the
+ * same `max` that flattens the seabed, and ground that the tail lifts out of
+ * shallow water is an island, which is what an eight-metre crater rim standing
+ * in four metres of water is.
  */
 export function groundCoverAt(
   surface: SurfaceParameters,
@@ -376,9 +387,71 @@ export function groundCoverAt(
   out: Uint8Array,
   at: number,
 ): Meters {
+  const d = Vec.normalize(direction)
   const sea = seaDatumElevation(surface)
-  const elevation = evaluate(surface, Vec.normalize(direction), out, at)
+  const elevation = evaluate(surface, d, out, at) + tail(surface, d)
   return sea === null ? elevation : Math.max(elevation, sea)
+}
+
+/**
+ * The ground below a direction as it is drawn: the canonical landform plus the
+ * presentational tail, clamped up to any ocean.
+ *
+ * The counterpart of `groundElevation`, and the pair is the canonical/
+ * presentational split made mechanical. `groundElevation` is what a ship stands
+ * on; this is what the mesh, the material and the camera that composes a picture
+ * of it are made from, and the two differ by at most `drawnDivergence`.
+ *
+ * Every producer of drawn geometry goes through this or through `groundCoverAt`
+ * beside it, and every producer of canonical geometry goes through
+ * `groundElevation`. Anything reading the wrong one is a category error rather
+ * than a rounding difference: a contact test that read this would put physics
+ * behind a term the renderer is free to change, and a mesh that read the other
+ * would draw a plane at two metres.
+ */
+export function drawnElevation(
+  surface: SurfaceParameters,
+  direction: Vec3,
+): Meters {
+  const d = Vec.normalize(direction)
+  const sea = seaDatumElevation(surface)
+  const elevation = evaluate(surface, d, null, 0) + tail(surface, d)
+  return sea === null ? elevation : Math.max(elevation, sea)
+}
+
+/** The tail, or nothing on a body whose relief budget is zero. */
+function tail(surface: SurfaceParameters, d: Vec3): Meters {
+  if (surface.maxElevation <= 0) return 0
+  return microRelief(terrainSketch(surface), surface.grammar, d)
+}
+
+/**
+ * How far the drawn ground may sit from the ground the contact test integrates,
+ * meters. See `micro.ts`.
+ */
+export function drawnDivergence(surface: SurfaceParameters): Meters {
+  if (surface.maxElevation <= 0) return 0
+  return microReliefBound(terrainSketch(surface), surface.grammar)
+}
+
+/**
+ * The radius of the surface as it is drawn, including elevation and any ocean.
+ *
+ * `surfaceRadius`'s presentational twin, and the one a camera that has to stand
+ * two metres above the ground the viewer can see must use. Standing against
+ * `surfaceRadius` on a body whose tail lifts the ground by 1.6 m puts the eye
+ * 0.4 m over the drawn plain in one place and inside a crater rim in the next,
+ * which is the divergence made visible in the one picture this phase is judged
+ * from.
+ *
+ * The contact test keeps `surfaceRadius`. Physics may not depend on a term the
+ * renderer is free to change.
+ */
+export function drawnSurfaceRadius(
+  body: Body,
+  direction: BodyFixedDirection,
+): Meters {
+  return datumRadius(body, direction) + drawnElevation(body.surface, direction)
 }
 
 /** The cover at a direction, as a record. The readable form, for tests. */
@@ -475,6 +548,17 @@ const detailFloorCache = new WeakMap<SurfaceParameters, Map<string, number>>()
  * identical to the last bit of a float; at the band stack it would stop two
  * levels above the finest crater rim.
  *
+ * **It measures the field the mesh is made of, which is the drawn one.** That is
+ * `drawnElevation` and not `groundElevation`, and the distinction decides how
+ * deep a landing streams: the canonical field stops at eight metres of
+ * wavelength, so measured against it the search reports a floor whose cells are
+ * one to seven metres across and the ground under a standing camera is a plane.
+ * The presentational tail carries an eight-metre crater at 1.6 m of depth, which
+ * is over the tolerance and therefore moves the answer — two to three levels
+ * across the zoo. A tail bounded by the tolerance instead could not have moved
+ * it by one, however fine its wavelength, because the tolerance *is* the
+ * amplitude floor and the search would call every level of it quiet.
+ *
  * So the floor is measured rather than assumed, and measured from the field
  * rather than from a model of it: at each level, take one grid cell of a patch
  * at that level, and compare the middle of the cell against the bilinear
@@ -565,7 +649,7 @@ export function surfaceDetailFloor(
         level,
       )
       const at = (s: number, t: number): number => {
-        const ground = groundElevation(surface, regionDirection(region, s, t))
+        const ground = drawnElevation(surface, regionDirection(region, s, t))
         if (sea !== null && ground > sea) ashore = true
         return ground
       }
@@ -811,7 +895,7 @@ export function generateHeightfield(
       // next patch draws. The cover is the patch's too, for the same reason and
       // one more — it is a vertex attribute, and the border has no vertices.
       if (row < 0 || col < 0 || row >= resolution || col >= resolution) {
-        elevations[index] = groundElevation(surface, direction)
+        elevations[index] = drawnElevation(surface, direction)
         continue
       }
       elevations[index] = groundCoverAt(
