@@ -176,7 +176,30 @@ if (values.help === true) {
 }
 
 const PORT = Number(values.port)
-const URL_ = String(values.url)
+/*
+ * The asked-for URL, plus the one thing this rig has to tell the page about
+ * itself.
+ *
+ * This Chrome is occluded — it is behind whatever the human is doing — and
+ * focus emulation is what makes it run animation frames anyway. The side
+ * effect is that `document.visibilityState` reports `visible` for a window
+ * that never composites, so the presentation watchdog's pixel readback comes
+ * back transparent black for a renderer that is fine, climbs its whole
+ * recovery ladder, and rebuilds the canvas: a second full preload and warm-up
+ * census 4.5 s after the first, roughly 6.5 s of every boot here, and an
+ * uncaught dispose from inside Three on the remount. No player pays it, and
+ * every boot figure taken from this rig did.
+ *
+ * `?presentation=occluded` tells the page the probe is unreadable rather than
+ * black — `QUERY.presentation` in `apps/game/src/pages/paths.ts` carries the
+ * argument. It is added to whatever `--url` asks for, and the attach check
+ * below compares asked-for keys only, so it does not disturb the match.
+ */
+const URL_ = (() => {
+  const url = new URL(String(values.url))
+  url.searchParams.set('presentation', 'occluded')
+  return url.toString()
+})()
 const WIDTH = Number(values.width)
 const HEIGHT = Number(values.height)
 const DPR = Number(values.dpr)

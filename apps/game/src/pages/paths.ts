@@ -257,6 +257,39 @@ export const QUERY = {
    * over before React mounts.
    */
   timing: 'timing',
+  /**
+   * Every mode: `occluded`, when the page's own pixels cannot be sampled.
+   *
+   * For an automated window, and it exists because the presentation watchdog
+   * has one signal and a driver breaks it. That watchdog decides whether the
+   * canvas has ever presented by reading the bitmap back, and it skips the
+   * check while `document.visibilityState` is not `visible` — because an
+   * occluded window legitimately never presents and climbing the recovery
+   * ladder there would rebuild a healthy renderer.
+   *
+   * CDP's focus emulation, which is what makes an occluded Chrome run its
+   * animation frames at all, reports `visible` for a window that is still
+   * behind everything else. So the gate opens, the readback is pure
+   * transparent black because nothing was ever composited, the ladder
+   * exhausts, and the renderer is rebuilt — measured on every driver boot as a
+   * second full preload and warm-up census 4.5 s after the first, about 6.5 s
+   * of a 10.2 s `navigation to first light`, plus an uncaught dispose from
+   * inside Three on the remount. No player pays any of it.
+   *
+   * This says so: treat the probe as unreadable, stand down without climbing,
+   * and release the boot cover — which is exactly what the ladder's exhausted
+   * rung already does, minus the four samples, two nudges and the remount.
+   */
+  presentation: 'presentation',
+  /**
+   * How many terrain workers to spawn, overriding what the machine suggests.
+   *
+   * A diagnostic rather than a preference, and it is here because the ceiling
+   * in `engine/browserWorker.ts` is a measured number and the next person to
+   * doubt it needs the same experiment rather than an argument. Bounded at
+   * sixteen there: this is a URL, and an unbounded one spawns whatever it says.
+   */
+  workers: 'workers',
 } as const
 
 /**
