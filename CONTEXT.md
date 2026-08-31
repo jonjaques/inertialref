@@ -6157,11 +6157,20 @@ with a photograph hid it. The boot warm-up compiles the ground against the
 stand-in, so `compiling the ground` was warming a pipeline that could not
 build — and `warmCompile` swallows exactly that rejection. The fix is two
 filter assignments on the stand-in; the same two go on the atmosphere's and
-the planet's stand-ins, where the consequence was quieter: a nearest stand-in
-reads with `textureLoad` and a real map with `textureSample`, which is a
-different program, so those warm-ups compiled variants no real body draws
-with. `materials.gpu.test.ts` now holds each stand-in and a real map to one
-program, and the rule is in `AGENTS.md`.
+the planet's stand-ins, where the consequence is quieter and not what it first
+looked like. A nearest stand-in reads with `textureLoad` and a real map with
+`textureSample` — two programs — and **the swap does not choose between them**:
+a TSL `texture()` node's value assignment changes the binding, no cache key
+observes it, and the WGSL is not rebuilt. Measured on the device: a node built
+over a nearest 1×1 compiles `textureLoad` with no sampler, and after assigning
+a linear map the fragment shader is byte-identical. `Bodies.tsx` warm-compiles
+each body's visual against the live camera and scene at build-ahead time,
+before `setTextures` runs, so every photographed body was reading its 8K
+albedo at mip 0, point sampled, with the anisotropy `planetTextures.ts` sets
+doing nothing. The filter assignments are a visible change to those bodies,
+not only a warm-up saving. `materials.gpu.test.ts` now holds each stand-in and
+a real map to one program — the ground, the atmosphere, the planet, the clouds
+and the rings — and the rule is in `AGENTS.md`.
 
 Four traps the harness owns, each measured rather than read:
 

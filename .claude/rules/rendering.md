@@ -47,10 +47,12 @@ Reasoning: `AGENTS.md` § "The rules that actually matter",
   load reproduced only at `devicePixelRatio` 2, and nothing in Node observes presentation.
 - **A stand-in `DataTexture` is filtered like the map it stands in for.** The constructor
   defaults to nearest; the WGSL builder reads a nearest texture with `textureLoad` and no
-  sampler, and the gradient sample has no such path — so the ground's white pixel
-  referenced a sampler that was never declared, Tint refused the module, and every
-  mapless body's ground was a black frame. `materials.gpu.test.ts` holds each stand-in
-  and a real map to one program.
+  sampler. **A value swap does not rebuild the program**, so whatever the stand-in
+  compiled is what the real map is then read with — point sampled at mip 0. The gradient
+  sample has no `textureLoad` path at all, so the ground's white pixel referenced a
+  sampler that was never declared, Tint refused the module, and every mapless body's
+  ground was a black frame. `materials.gpu.test.ts` holds each stand-in and a real map to
+  one program.
 - **Terrain is sampled in body-fixed axes** — see `.claude/rules/determinism.md`.
 - **Compile-ahead goes through `render/warmup.ts`.** `warmCompile` owns the visibility
   toggle (`compileAsync` skips invisible objects, silently), the `WebGPURenderer` cast and

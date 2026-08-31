@@ -3,13 +3,12 @@
 A plan to compile and run this project's shaders on the real GPU from the Node
 test suite, in milliseconds, without a browser.
 
-> **The premise this replaces is measured, not argued.** The claim that a TSL
-> node graph cannot be evaluated in Node is false, and
-> [`docs/guides/testing.md`](../guides/testing.md) and
-> [`.claude/rules/rendering.md`](../../.claude/rules/rendering.md) now say the
-> reverse: Chrome's own WebGPU implementation ships as a Node addon, and on
+> **A TSL node graph is evaluable in Node, and that is measured rather than
+> argued.** Chrome's own WebGPU implementation ships as a Node addon, and on
 > this machine it reports `vendor: apple`, `architecture: metal-3`,
 > `device: apple-m5` — the physical GPU, from a process with no window.
+> [`docs/guides/testing.md`](../guides/testing.md) and
+> [`.claude/rules/rendering.md`](../../.claude/rules/rendering.md) say so too.
 
 Measured on an Apple M5 (10-core GPU), macOS 26.6.2 (build 25G83), Node 26.5.0,
 `three` r182, vitest 4.1.10, `webgpu` 0.6.0. Every figure below is from that

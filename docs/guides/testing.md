@@ -360,6 +360,9 @@ otherwise assert in prose.
 pnpm test                       # everything that runs on any Node
 pnpm test:gpu                   # the shader suite, on the real GPU — not in check
 pnpm vitest run world.test      # one file
+# One GPU file. The root config excludes the suffix, so the plain form above
+# answers "No test files found" for anything named *.gpu.test.ts.
+pnpm vitest run --config apps/game/vitest.gpu.config.ts materials.gpu
 pnpm vitest                     # watch
 pnpm check                      # graph, brand, presets, format, lint, typecheck, test, build
 ```

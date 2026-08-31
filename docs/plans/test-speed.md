@@ -78,9 +78,11 @@ construction: a stale entry is impossible unless the version key is wrong,
 which the golden vectors already guard. A test that replays a landing against
 a warm cache pays the streamer and the contact test and nothing for the field.
 The win is across runs, not within one: the baseline descent on Gliese 1061 d
-makes 37,854 requests of which 35,883 are unique, so an in-run cache saves five
-percent (the figure `CONTEXT.md` records as "< 5% on a tracked descent"), and a
-second run against a warm disk serves all 35,883 without generating any.
+makes 37,854 requests of which 35,883 are unique, so an unbounded in-run cache
+saves 5.2% — near the bounded figure `CONTEXT.md` records beside it for a
+different operating point ("< 5%" for a 64-entry LRU on a tracked descent),
+and for the same reason, which is that the working set is hundreds. A second
+run against a warm disk serves all 35,883 without generating any.
 
 This is not a change to the test alone. It wants a `HeightfieldSource` port the
 inline worker can be handed, which is a seam `packages/workers` already has the

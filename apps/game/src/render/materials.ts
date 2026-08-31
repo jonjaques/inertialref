@@ -209,10 +209,11 @@ const MIE_G = 0.76
  * Filtered like the tables they stand in for, or the graph is not identical
  * where it counts: `DataTexture` defaults to nearest, the WGSL builder reads a
  * nearest texture with `textureLoad` and no sampler, and the baked tables are
- * linear and read with `textureSample`. Two different programs, so the shell
- * the boot warm-up compiles against these is not the pipeline a real sky
- * draws with. The terrain stand-in has the sharper version of the same trap —
- * see `BLANK` in `terrain.ts`.
+ * linear and read with `textureSample`. Two different programs — and the one
+ * the shell is first compiled with is the one it keeps, because a value swap
+ * rebuilds no WGSL, so a nearest stand-in leaves the real tables read at mip
+ * 0 with no interpolation between their entries. The terrain stand-in has the
+ * sharper version of the same trap — see `BLANK` in `terrain.ts`.
  */
 function lutPixel(r: number, g: number, b: number): DataTexture {
   const map = new DataTexture(new Uint8Array([r, g, b, 255]), 1, 1, RGBAFormat)
