@@ -95,7 +95,7 @@ flowchart TB
     BALANCE --> DRAW["the draw set"]
     WALK --> AHEAD["the same walk from where<br/>the eye will be in 2 s"]
     AHEAD --> QUEUE["queue the pyramid under it,<br/>coarsest first, 24 a frame"]
-    QUEUE --> JOB["worker: bordered heightfield<br/>+ unbordered surface cover"]
+    QUEUE --> JOB["the producer: bordered heightfield<br/>+ unbordered surface cover<br/><i>GPU tile kernel, or a worker</i>"]
     JOB --> CACHE["cache both"]
     CACHE --> MESH["build geometry, 4 a frame"]
 
@@ -289,6 +289,33 @@ camera co-moves with the body at its orbital velocity — 47 km/s at Mercury —
 so a universe-frame drift pushed two seconds ahead aims the request set ~94 km
 along the orbit rather than along the camera's track over the ground.
 
+### Where the heightfields come from
+
+The streamer asks a `HeightfieldSource` and gets back the same
+`HeightfieldResponse` either way — the bordered elevations, the cover, the
+extremes — and there are two. The worker pool runs `generateHeightfield`
+itself, which is the canonical field: 22 to 50 ms a patch across the zoo on one
+core, and a pool of eight does not divide a landing's nine hundred patches far
+enough. The GPU tile producer (`apps/game/src/render/terrainProducer.ts`) runs
+`terrainKernel.ts`, a TSL port of `drawnElevation` and the cover, one
+invocation per bordered sample: sixteen tiles a dispatch, one dispatch in
+flight at a time, one body per batch, and a readback that is a copy — measured
+through Dawn on an M5, a batch of sixteen Luna tiles at the detail floor is
+10 ms from dispatch to readback against 806 ms for the same sixteen on this
+thread. [ADR-0023](../adr/0023-the-gpu-producer.md) is the record.
+
+The producer outranks the pool while it can answer, and only for the
+heightfields: the level floor is `surfaceDetailFloorTask` on the pool whichever
+draws the ground, because it is the canonical field's own measurement. A
+producer that stops — a kernel Tint refused at boot, a lost device — reports
+itself unavailable, its window rejects with `producer unavailable`, and the next
+request goes to the pool; `ir.terrain().producer` names where the next one goes.
+The GPU tile is held to the CPU tile by `terrainKernel.gpu.test.ts`: within
+3 × 10⁻⁵ of the budget plus eight sample offsets, which is under 4 cm on Earth
+from level 12 down and 1.21 m at level 0, where a sample's own position is held
+in float32 across a quarter of a face. Nothing canonical is affected: the
+contact test integrates `elevationAt` on the CPU, always.
+
 **Twenty-four requests go out a frame**, because that ladder is strictly serial:
 a level cannot refine until all four children of every node on it have arrived,
 so a frame that under-asks is a frame the next level waits for, and with the
@@ -385,10 +412,12 @@ instead of a memory-management one.
 
 ## Two things worth knowing
 
-**No pool means no terrain.** `TerrainStreamer` returns early without one, so a
-browser that cannot construct module workers gets main-thread starfield surveys
-and no streamed ground at all. That is the real degradation path; there is no
-inline-worker fallback in the browser.
+**No source means no terrain.** `TerrainStreamer` asks the GPU tile producer
+if it has one and the pool otherwise, and returns early with neither — so a
+browser that cannot construct module workers gets main-thread starfield surveys,
+and streamed ground only if it is a WebGPU page, with the level floor measured
+on the main thread once per body. There is no inline-worker fallback in the
+browser.
 
 **Rebasing is handled in one place.** A patch records the origin generation it
 was built against and `#ensure` rebuilds it when that goes stale — for the ~9

@@ -120,7 +120,7 @@ the right home for the two claims Phase 5 of `TERRAIN-PLAN.md` will make
 (a GPU tile matches a CPU tile within a stated tolerance; a lattice hash is
 bit-identical everywhere), and both of those would otherwise have been written
 as browser checks at six seconds a question. `terrainKernels.gpu.test.ts` is the
-seed. When the GPU producer exists, the descent in `gameEngine.test.ts` stays a
+seed. The GPU producer exists, and the descent in `gameEngine.test.ts` stays a
 CPU descent — the canonical field is the CPU one — so item 1 or 2 above is
 still needed; the producer moves the browser's cost, not the suite's.
 

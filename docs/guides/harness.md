@@ -323,7 +323,7 @@ pnpm timing --track Tasks --threads   # one row per worker
 ```js
 ir.zoo() // one body per surface archetype, found rather than listed
 ir.descend(address?, { site, steps }) // fly a descent on paper
-ir.terrain() // what the live streamer holds this frame, rocks included
+ir.terrain() // what the live streamer holds this frame, rocks included, and who produces it
 ir.terrainBaseline() // the zoo, its descents, and measured patch cost
 ir.dossier(address) // the record, whose Geology card is the surface grammar
 ```
@@ -352,6 +352,13 @@ total since the streamer was made, so two reads a second apart that differ by
 sixty are a selection recomputed every frame and two that agree are the memo
 holding. Read it beside the rest or `visited: 446` will describe a frame that
 walked nothing.
+
+`ir.terrain().producer` is where the _next_ heightfield request goes — `gpu`
+for the tile producer, `pool` for the worker pool, `none` headlessly — rather
+than where the ground on screen came from, because a producer can stop mid
+session and the fields already held came from wherever they came from.
+`?producer=cpu` on the URL keeps the pool on a WebGPU page, which is the A/B
+every GPU figure was taken against.
 
 **The first frame on a body reports zeros for a reason that is not the relief
 gate.** The subdivision floor is a worker answer, so a body the streamer has

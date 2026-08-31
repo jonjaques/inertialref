@@ -287,7 +287,12 @@ reason. Run it during shader work, and before shipping any change under
 **Do not write a scalar mirror of a shader and test that instead.** That rule
 matters more now, not less: the mirror can pass while the graph it claims to
 describe drifts, and the remedy is to test the graph itself.
-`terrainKernels.gpu.test.ts` is the shape — a TSL port of `faceToDirection`
+`terrainKernel.gpu.test.ts` is the whole of it: the GPU tile producer's kernel
+against `generateHeightfield` on every zoo body and three Sol bodies at seven
+levels each, held to a bound stated as arithmetic about the kernel's two
+limits, and `terrainBands.gpu.test.ts` holds each of the eight bands to its own
+figure so a red whole names its band. `terrainKernels.gpu.test.ts` is the
+seed those grew from — a TSL port of `faceToDirection`
 and of the `pcg3d` lattice hash, each run on the GPU and compared with the CPU
 function, the float one to a named f32 bound and the integer one bit for bit.
 

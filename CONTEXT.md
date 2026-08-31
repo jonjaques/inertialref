@@ -21,7 +21,8 @@ Milestone 1 — the vertical architectural proof — is **complete**: 12/12 capa
 deferred to a later phase; only the seams exist (ADR-0008).
 
 Verified in Chrome, in **both dev and the production build**: the harness on
-`window.ir`, terrain streamed from a worker pool, landing on a generated
+`window.ir`, terrain heightfields produced on the GPU with the worker pool as
+canon and fallback, landing on a generated
 surface, a sphere-of-influence frame transition mid-flight, and a save
 round-tripping through IndexedDB to an identical state hash. With the preview
 server **stopped**, the page still loads from the service worker and passes
@@ -6209,6 +6210,61 @@ measured on the same idle machine: 102.9 s for `pnpm test`, 10.0 s without
 `gameEngine.test.ts`, whose `beforeAll` streams one landing through the inline
 worker for 101.5 s. Nothing is changed on that page; the four levers it names
 are each a decision about what the gate promises.
+
+## The GPU produces the heightfield the CPU defines (30 Aug 2026)
+
+Phase 5 of [the terrain plan](TERRAIN-PLAN.md) lands as
+[ADR-0023](docs/adr/0023-the-gpu-producer.md). Heightfield tiles are a TSL
+compute kernel — `apps/game/src/render/terrainKernel.ts`, one thread a sample,
+sixteen tiles a dispatch — fed by `packages/universe/src/terrainKernel.ts`,
+which packs a surface into 112 words and a tile into a float64-computed
+per-rung integer frame. The streamer asks a `HeightfieldSource` port for its
+tiles; the pool implements it and so does `createTileProducer`, installed at
+renderer ready once its pipeline has compiled behind the boot cover. Every
+band's shape table is exported from the band's own file and read by both
+paths; the CPU function's `'exact'` chord test adopts the kernel's integer slab
+test, presentational and unversioned.
+
+Measured. In the harness, sixteen tiles in **10.0 ms** on the GPU against
+805.6 ms for the same sixteen on the CPU; a batch is bit-identical to the same
+tiles produced singly. In the browser, a two-meter stance on Luna at 1600×900
+converges in **4.4 s** at eight builds a frame (8.2 s at four, 3.5 s at
+sixteen) against 25.5–32.7 s from the pool at any of them, and at 1920×1200 on
+a 2× ratio in 7.5 s against 61.4 s — where both producers stop at level 7 and
+954 patches, identically, which is a question about selection at display
+pixels and not about production. `BUILDS_PER_FRAME` is eight: the main-thread
+build is the queue now. Tolerance holds on every zoo body and on Luna, Earth
+and Mercury at levels 0 through the drawn floor to
+`3e-5 · maxElevation + halfWidth · 2⁻²¹`, and per band with each band's own
+bound, under `pnpm test:gpu`.
+
+What the port found, each on the device rather than in a mirror:
+
+- **A float32 sphere test flips at the lattice boundaries.** Coarse levels
+  over-counted craters by 44 m on Luna and 190 m on Earth, and the tail was
+  wrong by its own amplitude, because `Σ m² ≤ cells²` in float32 admits cells
+  the CPU rejects. The test is done in 48-bit integers on the frame-relative
+  chord against packed `floor(cells²)` and `ceil(cells²)`; the CPU's
+  `'exact'` path does the same, which is what removed Miranda's level-0 spikes
+  at rational directions — float64 rounding on integer-`cells` tail rungs, the
+  same defect from the other side.
+- **Metal's `tanh` underflows.** `tanh(v / 1e12)` is 0 on the device where
+  the arithmetic says otherwise; the per-rung diagnostic returned zeros until
+  it used real ceilings, and the kernel's `tanh` is a WGSL function.
+- **Three parser facts of r182's `wgslFn`.** A leading `//` comment before
+  `fn` is "not a WGSL code"; `from` is reserved; nested `Loop`s must be named
+  or every level is `i`.
+- **Isolating a band means zeroing its share, not dropping its rung.**
+  Dropping crater levels from the list shifts every frame after them, and a
+  tail diagnostic walked the wrong rungs until the levels stayed and
+  `CRATER_LIMIT` went to zero instead.
+- **A routing test does not need a field.** The streamer's source-routing
+  test took 10.6 s with a real heightfield fixture and takes 104 ms with a
+  flat one; [test-speed](docs/plans/test-speed.md) has the rest.
+
+Left open, named in the ADR: normal tiles and the mesh stay on the main
+thread at 0.25 ms a patch; the kernel's level-0 offset term is the
+`halfWidth · 2⁻²¹` in the bound; the retina level-7 stop is unexplained.
 
 ## The black boot was two defects, and the watchdog could see neither (30 Aug 2026)
 

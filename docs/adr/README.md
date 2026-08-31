@@ -1,6 +1,6 @@
 # Architectural decision records
 
-Twenty-two decisions that are expensive to reverse. Each records the **context**, the
+Twenty-three decisions that are expensive to reverse. Each records the **context**, the
 **decision**, the **alternatives that were rejected**, and the **consequences**
 — including the ones that turned out to be costs.
 
@@ -32,6 +32,7 @@ Twenty-two decisions that are expensive to reverse. Each records the **context**
 | [0020](0020-the-face.md)                    | The face                    | accepted     | The ground carries four bytes of cover a vertex for what a shader cannot derive; the palette is ratios against the body's own colour; a mapped body's terrain wears its published map and the invented channels switch off; deposits are layered rather than splatted, and everything shades in body-fixed axes.             |
 | [0021](0021-the-ground.md)                  | The ground                  | accepted     | The drawn field is the canonical one plus a presentational tail, 1.25 m at worst; the tail's amplitude is above the refinement tolerance, which is the only reason the detail floor moves; a rock is an address, and it wears the ground's own material.                                                                     |
 | [0022](0022-the-timeline.md)                | The timeline                | accepted     | Canonical code emits to a timeline and cannot read one — `Span.end` returns void; the host capability is a port and one file names the platform APIs; two APIs behind a three-valued level, off by default because feature detection cannot be a `typeof`; the phases tile the engine step from one clock read per boundary. |
+| [0023](0023-the-gpu-producer.md)            | The GPU producer            | accepted     | The GPU produces the drawn heightfield tiles and the CPU function stays canon and fallback; the precision lives in a float64-packed per-tile frame, not in the float; a source is a port the pool also implements; the tolerance is a test on the physical adapter, per body and per band.                                   |
 
 ---
 
@@ -61,6 +62,7 @@ flowchart TB
     A20["<b>0020</b><br/>the face"]
     A21["<b>0021</b><br/>the ground"]
     A22["<b>0022</b><br/>the timeline"]
+    A23["<b>0023</b><br/>the GPU producer"]
 
     A1 -->|"precision already solved,<br/>so frames are free to be<br/>about motion"| A2
     A1 -->|"canonical → GPU"| A3
@@ -104,6 +106,9 @@ flowchart TB
     A6 -->|"the wall clock may be<br/>written to, never read"| A22
     A12 -->|"one definition of<br/>over budget, two consumers"| A22
     A15 -->|"the streamer is what<br/>the frame is made of"| A22
+    A19 -->|"the band stack gets<br/>a second producer"| A23
+    A21 -->|"the drawn field is made<br/>where it is drawn; the<br/>canon stays on the CPU"| A23
+    A22 -->|"gpu heightfields<br/>on the Terrain track"| A23
 
     style A1 fill:#0369a1,stroke:#0c4a6e,color:#fff
     style A8 fill:#334155,stroke:#1e293b,color:#94a3b8,stroke-dasharray: 5 5

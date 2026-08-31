@@ -94,6 +94,19 @@ Reasoning: `AGENTS.md` § "The rules that actually matter",
   triangle: a fade measured that way steps per polygon, where distance times the lens's
   pixel angle does not. ADR-0020.
 
+- **Never take a fine lattice coordinate from an absolute float32 direction, and never
+  take a lattice decision in a float.** `render/terrainKernel.ts` is a port of
+  `drawnElevation` held to a measured bound. A float32 unit vector resolves 6e-8 of a
+  radian and a one-meter crater on Luna subtends 3e-7, so every crater rung and grit
+  octave reads its tile's frame — the cell and fraction the patch center falls in, from
+  float64 — plus the sample's offset, never `direction · cells`. And a cell holding a
+  crater is a step: the sphere test compares 48-bit integer sums against
+  `floor(cells²)` packed per rung, and existence compares a hash against a `u32`
+  threshold, never `toUnit(hash) < density`. Taken in float32, rung 10 counted a crater
+  the CPU did not — 44 m on Luna — and the tail was wrong by its own amplitude.
+  `terrainKernel.gpu.test.ts` holds the whole field, `terrainBands.gpu.test.ts` each
+  band. ADR-0023.
+
 - **Never give two attribute names one `BufferAttribute` object.** Two vertex-rate
   attributes sharing one object is a pipeline that does not build — reported as
   `[Invalid ShaderModule "fragment"] … due to a previous error`, with the real message on

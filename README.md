@@ -429,9 +429,10 @@ Stated plainly, because discovering these by surprise is worse than reading them
   for. Cold load to interactive is still unmeasured.
 - **The graphics are primitives.** The renderer is WebGPU and TSL and the HDR
   output path is real, but what it draws is spheres, radius-grid bodies, cones
-  and boxes. Compute terrain, GPU-driven instancing and Bruneton atmosphere LUTs
-  are the [migration's](docs/design/technical.md#the-webgpu-migration) remaining
-  half.
+  and boxes. GPU-driven instancing and Bruneton atmosphere LUTs are the
+  [migration's](docs/design/technical.md#the-webgpu-migration) remaining half;
+  terrain tiles are the half that is built, a TSL compute kernel held to the
+  CPU field by a stated bound.
 - **The atmosphere is an analytic shell, not scattering.** Uniform density and a
   path length, standing in for the precomputed LUTs that
   [spike 2](docs/spikes.md#2--tsl-and-the-atmosphere-integral) made a requirement.

@@ -1221,14 +1221,18 @@ under it in the mean and up to 0.70 m at the worst cell on the coarsest body;
 the cover, which is the same change the deposits want. **And scatter has no
 collision**, which is [on foot](docs/design/onfoot.md)'s, exactly as § 7 says.
 
-**Phase 5 — the GPU producer.** TSL compute tile production (heightfield +
-normal tiles into a texture-array cache, Proland's shape in WebGPU terms),
-CPU workers retained as canon and as the WebGL2 path, tolerance test in the
-browser checks. The condition is met and then some, and it is now a wall clock
-rather than a projection: a patch is 22 to 50 ms, a two-meter stance on Luna
-wants nine hundred to eleven hundred of them, and reaching that state on a retina
-window takes one to three minutes. The CPU worker path is the binding
-constraint.
+**Phase 5 — the GPU producer.** Landed as
+[ADR-0023](docs/adr/0023-the-gpu-producer.md). Heightfield tiles are a TSL
+compute kernel — a port of the band stack, sixteen tiles a dispatch, the
+precision carried in a float64-packed per-tile frame rather than in the
+float — behind a `HeightfieldSource` port that the worker pool also
+implements. The CPU workers stay canon and the WebGL 2 path; the tolerance is
+`pnpm test:gpu` on the physical adapter, per body and per band. Measured: a
+converged two-meter stance on Luna in 4.4 s against 25–33 s from the pool, and
+7.5 s against 61.4 s on a retina window. Normal tiles and the mesh stay on the
+main thread at 0.25 ms a patch — the texture-array half of Proland's shape is
+the seam left open, and with the build now the queue it is the next
+measurement's subject.
 
 **Phase 6 — named seams, not scheduled work.** Hydrology graphs (Génevaux)
 for valley networks; the density-overlay cave/overhang layer with Transvoxel
@@ -1245,7 +1249,9 @@ mapped-body carve-out; CBT if draw submission ever dominates.
   stack is plausibly 3–5× that. Amplitude floors and early-outs are the lever;
   the baseline is what makes the regression visible. This moves Phase 5 from
   "adopt only if the measurements say so" to a condition the measurements have
-  already met once, and it is still not a reason to thin the geology. It is 22 to
+  already met once — Phase 5 has landed on it, sixteen tiles in 10.0 ms on the
+  GPU against 805.6 ms on the CPU (ADR-0023), so the per-patch figure below is
+  now the fallback's — and it is still not a reason to thin the geology. It is 22 to
   50 ms a patch across the zoo, against 9 to 37 for the canonical field on its
   own, and the crater walk is most of it — five cells an axis rather than three, because a crater the walk
   cannot see arrives as a cliff rather than not at all. The two levers left

@@ -113,11 +113,11 @@ The most visible shallowness, and the milestone in progress —
 
 ```mermaid
 flowchart TB
-    NOW["<b>today</b><br/>a geology with a face,<br/>meter-scale ground,<br/>and rocks lying on it"]
-    F["<b>the GPU producer</b><br/>TSL compute tiles"]
+    NOW["<b>today</b><br/>a geology with a face,<br/>meter-scale ground,<br/>rocks lying on it, and<br/>heightfields from the GPU"]
+    F["<b>the mesh off the main thread</b><br/>normals and the LOD morph<br/>where the heightfield already is"]
     D["<b>the albedo bake</b><br/>a generated body's sphere<br/>shows its own maria"]
 
-    NOW -->|"generation is the<br/>binding constraint"| F
+    NOW -->|"the build is the<br/>queue now"| F
     NOW --> D
 
     style NOW fill:#334155,stroke:#1e293b,color:#fff
@@ -278,17 +278,17 @@ The principle is _design for these, measure before optimising_
 ([vision](vision.md#measure-before-optimizing)). The design admits all of them;
 almost none are applied, and almost nothing is measured.
 
-| Technique            | Status | Where it would go first                                                                                                                            |
-| -------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Typed arrays         | ✅     | Heightfields, vertex buffers                                                                                                                       |
-| Transferable buffers | ✅     | Worker results                                                                                                                                     |
-| Worker pools         | ✅     |                                                                                                                                                    |
-| Instanced rendering  | 🟡     | Star field is instanced sprites — WebGPU has no point size; rock scatter is four instanced meshes in the terrain's own material. Asteroids are not |
-| Object pooling       | ⬜     | `Vec3` allocation in the flight inner loop                                                                                                         |
-| Spatial indexes      | ⬜     | Interest queries                                                                                                                                   |
-| WASM                 | ⬜     | Noise generation, if profiling justifies it                                                                                                        |
-| WebGPU               | 🟡     | `WebGPURenderer` + TSL shipped, WebGL 2 retained as fallback. Compute shaders, storage buffers and indirect draw are not used yet                  |
-| `SharedArrayBuffer`  | ⬜     | Requires cross-origin isolation; nothing needs it yet                                                                                              |
+| Technique            | Status | Where it would go first                                                                                                                                                 |
+| -------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Typed arrays         | ✅     | Heightfields, vertex buffers                                                                                                                                            |
+| Transferable buffers | ✅     | Worker results                                                                                                                                                          |
+| Worker pools         | ✅     |                                                                                                                                                                         |
+| Instanced rendering  | 🟡     | Star field is instanced sprites — WebGPU has no point size; rock scatter is four instanced meshes in the terrain's own material. Asteroids are not                      |
+| Object pooling       | ⬜     | `Vec3` allocation in the flight inner loop                                                                                                                              |
+| Spatial indexes      | ⬜     | Interest queries                                                                                                                                                        |
+| WASM                 | ⬜     | Noise generation, if profiling justifies it                                                                                                                             |
+| WebGPU               | 🟡     | `WebGPURenderer` + TSL shipped, WebGL 2 retained as fallback. The heightfield producer is a compute pass over storage buffers (ADR-0023); indirect draw is not used yet |
+| `SharedArrayBuffer`  | ⬜     | Requires cross-origin isolation; nothing needs it yet                                                                                                                   |
 
 **What is measured today:** simulation throughput (~100–105k ticks/s headless,
 ~1.25M ticks/s browser for one entity), worker queue latency and execution time,
