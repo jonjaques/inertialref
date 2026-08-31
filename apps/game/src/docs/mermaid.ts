@@ -96,13 +96,12 @@ const CONFIG = {
      permits the `<b>` and `<br/>` these diagrams use in their labels. */
   securityLevel: 'strict' as const,
   theme: 'base' as const,
-  fontFamily:
-    "'Instrument Sans Variable', ui-sans-serif, system-ui, sans-serif",
+  fontFamily: "'IBM Plex Sans Variable', ui-sans-serif, system-ui, sans-serif",
   themeVariables: {
     darkMode: true,
     background: 'transparent',
     fontFamily:
-      "'Instrument Sans Variable', ui-sans-serif, system-ui, sans-serif",
+      "'IBM Plex Sans Variable', ui-sans-serif, system-ui, sans-serif",
     fontSize: '13px',
 
     primaryColor: '#0f172a' /* slate-900 — a node's ground */,

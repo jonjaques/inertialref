@@ -7,7 +7,7 @@
 @import 'tw-animate-css';
 
 /*
- * The three faces, self-hosted.
+ * The three faces and the two symbol fallbacks, self-hosted.
  *
  * `@fontsource`, not a Google Fonts `<link>`, and that is a hard requirement
  * rather than a preference: offline is the base case here — the service worker
@@ -17,25 +17,71 @@
  * them content-hashed under `/assets`, which is exactly the cache-first branch
  * in `public/sw.js`. Nothing extra to precache and nothing that can go stale.
  *
- * `standard.css` rather than `index.css` on the two variable faces: the default
- * export registers the weight axis alone, and both of these carry a *width*
- * axis this system leans on — Martian Mono runs at 87.5% everywhere so a
- * readout fits a 19rem column, and Instrument Sans narrows for a dense label.
- * `font-stretch` is how CSS drives `wdth`, and it only works if the `@font-face`
- * declares the range.
+ * `standard.css` rather than `index.css` on Archivo: the default export
+ * registers the weight axis alone, and this system drives Archivo's *width*
+ * axis hard — 70% for the name, 78% for every uppercase label. `font-stretch`
+ * is how CSS drives `wdth`, and it only works if the `@font-face` declares
+ * the range. One variable file covers four of the ten type steps.
  *
- * Archivo is imported the same way and for the same reason: `standard.css`
- * carries `wght 100–900` *and* `wdth 62–125%` in one file, and this system
- * drives the width axis hard — 70% for the name, 78% for every uppercase label.
- * One variable file covers four of the nine type steps.
+ * IBM Plex Sans loads its italic file alongside the upright, because the
+ * reading room italicizes constantly and a face with no loaded italic is a
+ * browser-sheared upright — every `em` in a hundred and twenty thousand words
+ * rendered as a synthetic oblique. Plex Mono is a static family, so the three
+ * weights the steps actually set are the three files loaded; readouts never
+ * italicize, and its italics stay on the shelf.
+ *
+ * The two Notos are glyph coverage, not a fourth voice. The two vendored Plex
+ * subsets below carry the mathematical operators in the faces' own voice; the
+ * Notos carry only what no text family draws — the solar and planetary sigils
+ * in `M☉` and `R⊕`, and the mono's Greek. Every symbol file here is
+ * `unicode-range`-gated to its blocks, so it downloads the first time such a
+ * glyph is actually drawn and never otherwise.
  *
  * The Cyrillic subsets ride along in the same files and cost nothing: they are
  * `unicode-range`-gated, so a Latin interface never fetches them and the worker
  * never caches them.
  */
 @import '@fontsource-variable/archivo/standard.css';
-@import '@fontsource-variable/instrument-sans/standard.css';
-@import '@fontsource-variable/martian-mono/standard.css';
+@import '@fontsource-variable/ibm-plex-sans/standard.css';
+@import '@fontsource-variable/ibm-plex-sans/standard-italic.css';
+@import '@fontsource/ibm-plex-mono/400.css';
+@import '@fontsource/ibm-plex-mono/500.css';
+@import '@fontsource/ibm-plex-mono/600.css';
+@import '@fontsource/noto-sans-math/index.css';
+@import '@fontsource/noto-sans-symbols/index.css';
+
+/*
+ * The operators, in Plex's own voice.
+ *
+ * Fontsource's builds are sliced by script, and the mathematical operators
+ * belong to no script — so `≈`, `→`, `∞`, `≤`, the primes of parallax and the
+ * Greek of an orbital element are in the desktop Plex families and in none of
+ * their web builds. These two files are cut from IBM's released TTFs
+ * (github.com/IBM/plex, SIL OFL 1.1) with pyftsubset, down to the arrow,
+ * operator, technical and superscript blocks — 4 KB for the mono, 12 KB for
+ * the sans with its Greek. Declared under the *same family name* with a
+ * `unicode-range`, they merge into the faces above: a readout that prints
+ * `Δv ≈ 2.1` never changes voice mid-figure.
+ */
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url('./assets/fonts/ibm-plex-mono-symbols.woff2') format('woff2');
+  unicode-range:
+    U+2032-2033, U+2070-209F, U+2190-21FF, U+2200-22FF, U+2300-23FF;
+}
+
+@font-face {
+  font-family: 'IBM Plex Sans Variable';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url('./assets/fonts/ibm-plex-sans-symbols.woff2') format('woff2');
+  unicode-range:
+    U+0370-03FF, U+2032-2033, U+2070-209F, U+2190-21FF, U+2200-22FF, U+2300-23FF;
+}
 
 /*
  * shadcn/ui's design tokens, pointed at the instrument.
@@ -103,45 +149,55 @@
 
 @theme {
   /*
-   * Three faces, one job each. `docs/design/type.md` has the argument; the
-   * short version is that this interface has always had three *registers* of
-   * language — the product charter names them — and until now all three were
-   * drawn in one face, so the only thing separating a heading from a number
-   * was capitalisation.
+   * Three faces, one job each. This interface has always had three *registers*
+   * of language — the product charter names them — and each register gets the
+   * face whose whole career is that job.
    *
    *   display  Archivo (condensed)  the name, a place, and every label
-   *   sans     Instrument Sans      prose, and the words on a control
-   *   mono     Martian Mono         instrument: every value the simulation knows
+   *   sans     IBM Plex Sans        prose, and the words on a control
+   *   mono     IBM Plex Mono        instrument: every value the simulation knows
    *
    * **A condensed grotesque, and no serif at all.** Two serifs were tried in
-   * this slot and both were the same mistake in different clothes: Instrument
-   * Serif read as a title page from 1780 over a live render of the Milky Way,
-   * and Spectral — lower contrast, more technical — still put a *book* voice on
-   * an instrument. What this interface has always been is signage: a legend on
-   * a console, a name stencilled on a hull, a heading over a column of
-   * readings. That is a condensed grotesque's whole job.
+   * the display slot and both were the same mistake in different clothes: a
+   * hairline-contrast serif read as a title page from 1780 over a live render
+   * of the Milky Way, and a lower-contrast one still put a *book* voice on an
+   * instrument. What this interface has always been is signage: a legend on a
+   * console, a name stencilled on a hull, a heading over a column of readings.
+   * That is a condensed grotesque's whole job, and Archivo's real width axis
+   * is what lets one file cover four type steps — condensed at 78% the
+   * uppercase labels fit more characters in a 19rem column and hold their
+   * counters at 11px over a starfield. A more characterful display grotesque
+   * was tried in this slot and reverted the same day: it changed the site's
+   * character, which is exactly what the display face of an instrument must
+   * not do.
    *
-   * Archivo carries four of the nine steps, because the same argument runs all
-   * the way down. The uppercase micro-labels were set in Instrument Sans — a
-   * humanist face with generous sidebearings — so at 10px with 0.15em of
-   * tracking they came out loose and soft. Condensed at 78% they fit more
-   * characters in a 19rem column, hold their counters at 11px over a starfield,
-   * and read as *stencilled* rather than merely small.
+   * **The sans and the mono are a matched pair.** Plex was drawn as one
+   * program — the sans and the mono share x-height, stroke logic and vertical
+   * rhythm — so a row's sans label and its mono value sit on the same optical
+   * line instead of merely near it, and the register change reads as a change
+   * of *voice* rather than a change of font. Plex Sans spans 100–700 with true
+   * italics, which is the depth the reading room needs; Plex Mono's squared,
+   * open forms hold their counters at 11px over a moving scene, which is the
+   * standing test every face here is judged on.
    *
-   * The fallbacks are the platform stacks each face is closest to, so a first
-   * paint before the woff2 lands is the same *shape* of interface rather than
-   * a different one. `font-display: swap` in Fontsource's own CSS makes that a
-   * real state on a cold, slow load rather than a hypothetical.
+   * The Notos sit in every stack for one reason: a symbol must not change
+   * shape between a label and a readout, so all three faces fall back to the
+   * same glyph source before any platform font gets a vote.
+   *
+   * The platform stacks close each list so a first paint before the woff2
+   * lands is the same *shape* of interface rather than a different one.
+   * `font-display: swap` in Fontsource's own CSS makes that a real state on a
+   * cold, slow load rather than a hypothetical.
    */
   --font-display:
-    'Archivo Variable', ui-sans-serif, 'Arial Narrow', 'Helvetica Neue',
-    system-ui, sans-serif;
+    'Archivo Variable', 'Noto Sans Math', 'Noto Sans Symbols', ui-sans-serif,
+    'Arial Narrow', 'Helvetica Neue', system-ui, sans-serif;
   --font-sans:
-    'Instrument Sans Variable', ui-sans-serif, system-ui, -apple-system,
-    'Segoe UI', sans-serif;
+    'IBM Plex Sans Variable', 'Noto Sans Math', 'Noto Sans Symbols',
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono:
-    'Martian Mono Variable', ui-monospace, SFMono-Regular, Menlo, Monaco,
-    Consolas, monospace;
+    'IBM Plex Mono', 'Noto Sans Math', 'Noto Sans Symbols', ui-monospace,
+    SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 @theme inline {
@@ -175,7 +231,7 @@
 /* ------------------------------------------------------------------------- */
 
 /*
- * Nine steps, each with exactly one job, and every one of them names its face,
+ * Ten steps, each with exactly one job, and every one of them names its face,
  * size, weight, tracking and figure style together.
  *
  * They exist because the alternative is what this interface had: `text-[10px]
@@ -185,38 +241,34 @@
  * at the call site because *which grade of ink* is a per-element judgement —
  * these carry everything except color.
  *
- * The optical sizing is the part worth stating, and every one of these three
- * faces is driven off its natural width.
+ * Archivo runs at **70% for the name and 78% for the two label steps**, and
+ * the narrower setting is what lets both fit *more* characters per column
+ * while holding a pixel more size. Tracking is 0.08em and 0.1em, not the
+ * 0.13–0.15em a humanist face needs — those values compensate for
+ * sidebearings a condensed grotesque does not have, and at them the words
+ * come apart into letters.
  *
- * Martian Mono is genuinely wide: at `wdth 100` an eleven-character readout
- * does not fit the label column of a 19rem panel. It runs at 87.5% everywhere,
- * the width at which it matches the advance of a normal mono while keeping the
- * squared terminals that make it legible at 10px over a moving starfield.
- *
- * Archivo runs at **70% for the name and 78% for the two label steps**, and the
- * narrower setting is what let both of them grow a pixel: `type-heading` went
- * 11 → 12 and `type-label` 10 → 11 while still fitting *more* characters per
- * column than the Instrument Sans they replaced. Tracking came down with the
- * width — 0.13em and 0.15em on a humanist face were compensating for
- * sidebearings a condensed grotesque does not have, and at those values the
- * words came apart into letters. 0.08em and 0.1em is what uppercase actually
- * needs here.
- *
- * Instrument Sans has a large x-height for its em, so the sans steps sit a
- * point *above* the mono steps they align with — 12px sans reads the same size
- * as 11px mono, and setting both to 11 makes the sans look shrunken beside it.
+ * The sans steps sit a point *above* the mono steps they pair with, and with a
+ * matched pair that is a grade rather than an optical correction: the two Plex
+ * faces share their x-height, so the point of difference reads as exactly one
+ * step of hierarchy between a label and the value beside it. Plex Mono needs
+ * no width or tracking games — its advance already fits an eleven-character
+ * reading in a 19rem panel's value column.
  */
 
 /**
  * The name, and nothing else. Condensed, heavy, large, never under 20px.
  *
  * 700 at 70% width: a grotesque set at a text weight and a text width reads
- * *loose* at 76px, which is the failure every display setting of a non-display
- * face runs into. Weight and width together are what give it presence, and they
- * are also what make it read as signage rather than as a headline — the name
- * stencilled on something, which is what a wordmark over a planet should be.
- * Tracking stays near neutral: a condensed face has already closed the
- * wordspace that a negative track would otherwise be closing.
+ * *loose* at 76px, which is the failure every display setting of a
+ * non-display face runs into. Weight and width together are what give it
+ * presence, and they are also what make it read as signage rather than as a
+ * headline — the name stencilled on something, which is what a wordmark over
+ * a planet should be. Tracking stays near neutral: a condensed face has
+ * already closed the wordspace that a negative track would otherwise be
+ * closing. What tracking cannot do is kern — it is uniform by definition —
+ * so the one string set at poster size is hand-kerned at its call site
+ * (`pages/HomePage.tsx`).
  */
 @utility type-display {
   font-family: var(--font-display);
@@ -299,9 +351,8 @@
 @utility type-readout {
   font-family: var(--font-mono);
   font-size: 0.6875rem; /* 11px */
-  font-stretch: 87.5%;
   font-weight: 400;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   line-height: 1.55;
   font-variant-numeric: tabular-nums;
 }
@@ -310,10 +361,25 @@
 @utility type-figure {
   font-family: var(--font-mono);
   font-size: 0.78125rem; /* 12.5px */
-  font-stretch: 87.5%;
   font-weight: 500;
-  letter-spacing: -0.015em;
+  letter-spacing: 0;
   line-height: 1.45;
+  font-variant-numeric: tabular-nums;
+}
+
+/**
+ * A headline figure on a poster surface: the front door's spec row, the docs
+ * masthead's counts. The Instrument register at display scale — a measurement
+ * big enough to be the thing the eye lands on and heavy enough to hold a line
+ * against a display title, and still tabular, so three of them read as one
+ * ruled instrument cluster rather than three sizes of number.
+ */
+@utility type-stat {
+  font-family: var(--font-mono);
+  font-size: 1.0625rem; /* 17px */
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
   font-variant-numeric: tabular-nums;
 }
 
@@ -321,9 +387,8 @@
 @utility type-micro {
   font-family: var(--font-mono);
   font-size: 0.625rem; /* 10px */
-  font-stretch: 87.5%;
   font-weight: 400;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   line-height: 1.5;
   font-variant-numeric: tabular-nums;
 }
@@ -1001,6 +1066,10 @@ a {
 
 .doc-prose h2 {
   font-size: 1.5rem; /* 24px */
+  /* A step heavier than the shared 600: at 24px over four thousand words a
+     600 heading reads as a pause, and a scan of the page needs it to read as
+     a section. */
+  font-weight: 650;
   font-stretch: 82%;
   line-height: 1.25;
   letter-spacing: 0.002em;
@@ -1193,19 +1262,18 @@ a {
 /* --- Code ---------------------------------------------------------------- */
 
 /*
- * Inline code is the Instrument register at prose scale: Martian Mono, run at
- * the same 87.5% width it is everywhere else, on a recessed wash with a
- * hairline. It is `slate-200` rather than the accent, because a paragraph here
- * can carry six identifiers and the accent is already spoken for by the link
- * in the same sentence.
+ * Inline code is the Instrument register at prose scale: the mono on a
+ * recessed wash with a hairline. It is `slate-200` rather than the accent,
+ * because a paragraph here can carry six identifiers and the accent is
+ * already spoken for by the link in the same sentence.
  *
- * `0.86em` rather than a fixed size, so a `<code>` inside an `<h3>` is sized
- * against the heading. Martian Mono runs large for its em.
+ * `0.92em` rather than a fixed size, so a `<code>` inside an `<h3>` is sized
+ * against the heading. The two Plex faces share their x-height, so an
+ * identifier needs only a small step down to sit level in its sentence.
  */
 .doc-prose code {
   font-family: var(--font-mono);
-  font-size: 0.86em;
-  font-stretch: 87.5%;
+  font-size: 0.92em;
   font-variant-numeric: tabular-nums;
   color: var(--color-slate-200);
   background: rgb(30 41 59 / 0.6);
@@ -1237,7 +1305,6 @@ a {
   background: none !important;
   font-family: var(--font-mono);
   font-size: 0.75rem; /* 12px */
-  font-stretch: 87.5%;
   line-height: 1.65;
   tab-size: 2;
 }
@@ -1271,8 +1338,7 @@ a {
   right: 0.6rem;
   font-family: var(--font-mono);
   font-size: 0.625rem;
-  font-stretch: 87.5%;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   color: var(--color-slate-400);
   pointer-events: none;
   transition: opacity 150ms;
@@ -1359,7 +1425,6 @@ a {
   text-align: left;
   font-family: var(--font-mono);
   font-size: 0.6875rem;
-  font-stretch: 87.5%;
   line-height: 1.6;
   color: var(--color-slate-400);
 }
@@ -1414,9 +1479,8 @@ a {
   overflow-x: auto;
   font-family: var(--font-mono);
   font-size: 0.78125rem; /* 12.5px */
-  font-stretch: 87.5%;
   line-height: 1.7;
-  letter-spacing: -0.015em;
+  letter-spacing: 0;
   white-space: pre-wrap;
   color: var(--color-slate-300);
 }
@@ -1517,8 +1581,7 @@ a.t-link:hover {
 .api-row-name {
   font-family: var(--font-mono);
   font-size: 0.78125rem;
-  font-stretch: 87.5%;
-  letter-spacing: -0.015em;
+  letter-spacing: 0;
   color: var(--color-sky-300);
   overflow-wrap: anywhere;
 }
@@ -1562,8 +1625,7 @@ a.t-link:hover {
 .api-member > h3 {
   font-family: var(--font-mono) !important;
   font-size: 0.9375rem !important;
-  font-stretch: 87.5%;
-  letter-spacing: -0.015em;
+  letter-spacing: 0;
   display: flex;
   align-items: baseline;
   gap: 0.5rem;
@@ -1590,7 +1652,6 @@ a.t-link:hover {
   margin-bottom: 1.25rem;
   font-family: var(--font-mono);
   font-size: 0.625rem;
-  font-stretch: 87.5%;
   color: var(--color-slate-400) !important;
   text-decoration-color: rgb(51 65 85 / 0.8) !important;
 }
@@ -1618,7 +1679,6 @@ a.t-link:hover {
   gap: 0.5rem;
   font-family: var(--font-mono);
   font-size: 0.6875rem;
-  font-stretch: 87.5%;
 }
 
 .api-param dd {
@@ -1650,7 +1710,6 @@ a.t-link:hover {
   margin-bottom: 1.25rem;
   font-family: var(--font-mono);
   font-size: 0.6875rem;
-  font-stretch: 87.5%;
 }
 
 /*

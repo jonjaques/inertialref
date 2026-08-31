@@ -92,7 +92,7 @@ export function DocsMasthead({
               [counts.exports.toLocaleString('en-US'), 'Exports'],
             ].map(([figure, what]) => (
               <div key={what} className="flex items-baseline gap-2">
-                <dt className="type-figure text-sky-200">{figure}</dt>
+                <dt className="type-stat text-sky-200">{figure}</dt>
                 <dd className="type-label text-slate-400">{what}</dd>
               </div>
             ))}
