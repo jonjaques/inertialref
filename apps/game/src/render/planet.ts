@@ -97,10 +97,12 @@ function pixel(r: number, g: number, b: number, a: number): Texture {
   const data = new Uint8Array([r, g, b, a])
   const map = new DataTexture(data, 1, 1, RGBAFormat)
   // Linear, like the maps these stand in for. A nearest `DataTexture` — the
-  // constructor's default — is read with `textureLoad` and no sampler, which
-  // is a different program from the one a loaded map draws with, and the
-  // warm-up would be compiling that one. `lutPixel` in `materials.ts` and
-  // `BLANK` in `terrain.ts` say the rest.
+  // constructor's default — is read with `textureLoad` and no sampler, and
+  // swapping the real map in does not rebuild the program: the body would go
+  // on reading its 8K albedo point-sampled at mip 0, with the anisotropy
+  // `planetTextures.ts` sets doing nothing. `BLANK` in `terrain.ts` has the
+  // sharper version, where there is no `textureLoad` path and the module is
+  // refused outright.
   map.magFilter = LinearFilter
   map.minFilter = LinearFilter
   map.needsUpdate = true
@@ -122,6 +124,10 @@ const WHITE = pixel(255, 255, 255, 255)
 const BLACK = pixel(0, 0, 0, 255)
 const FLAT_NORMAL = pixel(128, 128, 0, 255)
 const CLEAR = pixel(255, 255, 255, 0)
+/* The same white as `WHITE`, deliberately not the same object — see `ringMap`
+ * in `createPlanetMaterial`: two nodes holding one texture share one binding,
+ * and the layout that shares is the layout the warm-up freezes. */
+const RING_WHITE = pixel(255, 255, 255, 255)
 
 export interface PlanetMaterial {
   readonly material: MeshBasicNodeMaterial
@@ -211,11 +217,20 @@ export function createPlanetMaterial(): PlanetMaterial {
   const normalMap = texture(FLAT_NORMAL)
   const nightMap = texture(BLACK)
   const cloudMap = texture(CLEAR)
-  // Opaque white, not CLEAR: a ring with no strip is a uniform slab, and the
-  // shadow term multiplies by the sampled alpha — a clear fallback would
-  // silently disable the shadow for every mapless ring. Ringless bodies are
-  // already excluded by `ringOpacity` and zero radii.
-  const ringMap = texture(WHITE)
+  /*
+   * Opaque white, not CLEAR: a ring with no strip is a uniform slab, and the
+   * shadow term multiplies by the sampled alpha — a clear fallback would
+   * silently disable the shadow for every mapless ring. Ringless bodies are
+   * already excluded by `ringOpacity` and zero radii.
+   *
+   * Its **own** white pixel, not the albedo's. The builder shares one binding
+   * between two nodes holding the same texture object, and the program is
+   * frozen at the first compile — the build-ahead in `Bodies.tsx`, before
+   * `setTextures` has run — so one shared stand-in warms a four-binding
+   * layout that a body with both an albedo and a ring strip needs five of.
+   * Two 1×1 textures cost nothing and keep the warmed layout the drawn one.
+   */
+  const ringMap = texture(RING_WHITE)
 
   const sunDirection = uniform(new Vector3(1, 0, 0))
   const sunColour = uniform(new Color(1, 1, 1))
@@ -521,7 +536,7 @@ export function createPlanetMaterial(): PlanetMaterial {
       normalMap.value = maps.normal ?? FLAT_NORMAL
       nightMap.value = maps.night ?? BLACK
       cloudMap.value = maps.clouds ?? CLEAR
-      ringMap.value = maps.ring ?? WHITE
+      ringMap.value = maps.ring ?? RING_WHITE
     },
   }
   return handle

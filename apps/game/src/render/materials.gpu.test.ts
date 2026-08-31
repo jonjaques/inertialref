@@ -181,16 +181,37 @@ describe('every production material compiles', () => {
  * material instances never share one.
  */
 function textureSignature(fragmentShader: string): string {
-  const reads = (
-    fragmentShader.match(/texture(?:Sample|SampleGrad|SampleLevel|Load)\(/g) ??
-    []
-  ).sort()
-  const samplers = (fragmentShader.match(/: sampler;/g) ?? []).length
-  const textures = (fragmentShader.match(/texture_2d<f32>/g) ?? []).length
-  // Whether every binding got a sampler, not how many bindings there are: the
-  // builder shares one binding between two uses of the same texture object,
-  // and the stand-ins reuse one white pixel where the real maps are distinct.
-  return `${samplers === textures ? 'sampled' : 'unsampled'}: ${reads.join(' ')}`
+  const reads = (fragmentShader.match(/texture\w*\(/g) ?? [])
+    .filter((call) => !/^texture(Dimensions|NumLevels|NumLayers)\(/.test(call))
+    .sort()
+  const samplers = (fragmentShader.match(/:\s*sampler\s*;/g) ?? []).length
+  const textures = (fragmentShader.match(/texture_2d\s*<\s*f32\s*>/g) ?? [])
+    .length
+  /*
+   * Vacuity is the failure mode to guard, not a missed read. Every part of
+   * this is a formatting detail of `WGSLNodeBuilder.getUniforms`, and a three
+   * upgrade that respells any of them drives both counts to zero on the
+   * stand-in *and* on the real map — `0 === 0` reads as `sampled`, both
+   * signatures collapse to the same empty string, and the one test written to
+   * catch a nearest `DataTexture` passes against nothing. So the shape is
+   * asserted before it is compared.
+   */
+  if (reads.length === 0 || textures === 0) {
+    throw new Error(
+      `textureSignature: matched ${reads.length} reads and ${textures} bindings — the patterns no longer describe this WGSL, so any comparison built on them is vacuous`,
+    )
+  }
+  /*
+   * The binding count is part of the signature, not waved away. The builder
+   * shares one binding between two nodes holding the same texture object, so
+   * a material whose stand-ins reuse one white pixel warms a layout with
+   * fewer bindings than the one a body with distinct maps needs — and a
+   * pipeline is keyed on its bind group layout, so that is a second pipeline
+   * built on the frame it was warmed to avoid. Every stand-in gets its own
+   * object for this reason; `RING_WHITE` in `planet.ts` is the one that had
+   * to be split out.
+   */
+  return `${textures} bound, ${samplers === textures ? 'sampled' : 'unsampled'}: ${reads.join(' ')}`
 }
 
 /** A 1×1 map loaded the way `TextureLoader` loads one: linear both ways. */
@@ -210,17 +231,23 @@ function linearPixel(): DataTexture {
 describe('a stand-in texture compiles the program the real one draws with', () => {
   /*
    * Every material here runs one graph whether or not its maps have arrived,
-   * on the strength of a 1×1 stand-in — and the boot warm-up compiles against
-   * those stand-ins. The graph being identical is not enough: the WGSL builder
-   * reads a nearest-filtered texture with `textureLoad` and no sampler, and a
-   * linear one with `textureSample` and one, so a stand-in left at
-   * `DataTexture`'s nearest default warms a program no real body draws with.
-   * The ground's version is worse — its gradient sample has no `textureLoad`
-   * path at all, so against a nearest stand-in it references a sampler that
-   * was never declared and Tint refuses the module. Measured in the browser
-   * before the stand-ins were made linear: standing on Gliese 1061 d streamed
-   * 706 patches and drew a black frame, with `[Invalid ShaderModule
-   * "fragment"]` on the console.
+   * on the strength of a 1×1 stand-in, and the program is built the first time
+   * the object is compiled — which is the build-ahead in `Bodies.tsx`, against
+   * the live camera and scene, before `setTextures` has ever run.
+   *
+   * **The program is then frozen, and the real map is bound into it.** A TSL
+   * `texture()` node's value swap changes the binding and nothing else: no
+   * cache key observes it, so no WGSL is rebuilt. Measured on the device — a
+   * node built over a nearest 1×1 compiles `textureLoad` with no sampler, and
+   * after assigning a linear map the fragment shader is byte-identical. So a
+   * stand-in left at `DataTexture`'s nearest default is not a warm-up that
+   * misses; it is the filtering every mapped body then draws its 8K albedo
+   * with — mip 0, point sampled, no anisotropy. The ground's version has no
+   * `textureLoad` path at all: its gradient sample names a sampler that was
+   * never declared, Tint refuses the module, and the frame is black.
+   *
+   * Holding the two programs to one signature is what keeps the stand-in
+   * honest, whichever of the two consequences a given material has.
    */
 
   it('the ground', async () => {
@@ -275,6 +302,39 @@ describe('a stand-in texture compiles the program the real one draws with', () =
       textureSignature(withMaps.fragmentShader),
     )
   })
+
+  /*
+   * The other two `setTexture` materials. Both bind `planet.ts`'s `WHITE`
+   * until a map arrives, and both are on the boot warm-up's list, so both
+   * freeze whatever program their stand-in compiled. The rings are the case
+   * with a live way back in: `proceduralRings` generates its strip, and a
+   * generated strip is a texture somebody can decide should be nearest.
+   */
+  it('the clouds', async () => {
+    const standIn = createCloudMaterial()
+    const real = createCloudMaterial()
+    real.setTexture(linearPixel())
+    const a = new Mesh(new SphereGeometry(1, 8, 8), standIn.material)
+    const b = new Mesh(new SphereGeometry(1, 8, 8), real.material)
+    const withStandIn = await gpu.shader(a, camera, staged(a))
+    const withMap = await gpu.shader(b, camera, staged(b))
+    expect(textureSignature(withStandIn.fragmentShader)).toBe(
+      textureSignature(withMap.fragmentShader),
+    )
+  })
+
+  it('the rings', async () => {
+    const standIn = createRingMaterial()
+    const real = createRingMaterial()
+    real.setTexture(linearPixel())
+    const a = new Mesh(new RingGeometry(0.5, 1, 32), standIn.material)
+    const b = new Mesh(new RingGeometry(0.5, 1, 32), real.material)
+    const withStandIn = await gpu.shader(a, camera, staged(a))
+    const withMap = await gpu.shader(b, camera, staged(b))
+    expect(textureSignature(withStandIn.fragmentShader)).toBe(
+      textureSignature(withMap.fragmentShader),
+    )
+  })
 })
 
 describe('what the WGSL contains', () => {
@@ -306,7 +366,11 @@ describe('what the WGSL contains', () => {
       'terrainCover',
       'terrainMorphCover',
     ]) {
-      expect(vertexShader).toContain(name)
+      // Word-bounded, because `terrainMorph` is a prefix of two of the others:
+      // a plain `toContain` for it is satisfied by `terrainMorphNormal`, so
+      // dropping the morph position — the read whose absence cracks every LOD
+      // switch — would leave this green.
+      expect(vertexShader).toMatch(new RegExp(`\\b${name}\\b`))
     }
   })
 })
@@ -342,7 +406,9 @@ describe('a patch mesh supplies every attribute its material reads', () => {
       .warnings()
       .filter((entry) => /not found on geometry/.test(entry.message))
       .map((entry) => entry.message)
-    expect(missing.some((message) => message.includes('terrainMorph'))).toBe(
+    // Word-bounded for the same reason as the vertex-stage assertion above:
+    // a warning naming only `terrainMorphNormal` contains `terrainMorph`.
+    expect(missing.some((message) => /\bterrainMorph\b/.test(message))).toBe(
       true,
     )
   })
