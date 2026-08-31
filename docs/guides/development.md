@@ -176,11 +176,15 @@ attaching to a pull request and is optional, skipped rather than fatal when abse
 `brew install imagemagick ffmpeg`.
 
 **Three typefaces**, self-hosted from `@fontsource`: Archivo Variable
-(condensed display), Instrument Sans Variable (structure and prose), Martian
-Mono Variable (every reading). There is no serif. They are imported in
-`src/index.css`, which also defines the nine `type-*` utilities. Do not write
-a size, a weight, and a tracking at a call site — use a named step. A Google
-Fonts `<link>` would break offline, which is the base case.
+(condensed display), IBM Plex Sans Variable (prose and controls, upright and
+italic), IBM Plex Mono (every reading, static 400/500/600). There is no
+serif. Symbol coverage is self-hosted beside them: two subsets cut from the
+desktop Plex TTFs carry the mathematical operators under the same family
+names (`src/assets/fonts/`), and two Noto subsets carry the solar and
+planetary sigils no text family draws. All are imported in `src/index.css`,
+which also defines the ten `type-*` utilities. Do not write a size, a weight,
+and a tracking at a call site — use a named step. A Google Fonts `<link>`
+would break offline, which is the base case.
 
 **React DnD 16** drives dockable panels, and only the gesture. What a drop
 means is arithmetic in `apps/game/src/dock/layout.ts` and `dock/floating.ts`.

@@ -6323,6 +6323,36 @@ ladder had rebuilt the renderer before the capture. The ladder itself stays —
 the wedge it was built for is a different animal from a NaN projection, and
 the in-frame sample can now tell the two apart.
 
+## The interface learns to spell its own units (31 Aug 2026)
+
+The prose and instrument faces are the IBM Plex pair now, the display face
+stays Archivo, and the scale has a tenth step — `type-stat`, 17px/600 mono for
+the poster figures on the front door and the docs masthead.
+[ADR-0024](docs/adr/0024-the-type-system.md) has the decision and the
+alternatives; what belongs here is the finding that drove it and the trap
+worth not re-springing.
+
+The finding: **a web font's coverage is not the family's coverage.**
+Fontsource's builds are sliced by script, the mathematical operators belong to
+no script, and so every operator the interface prints — `M☉`, `R⊕`, `″` of
+parallax, `auto → webgpu`, the lens panel's `∞` — was falling through to a
+per-OS platform font, silently, mid-figure. A census counted the damage across
+app, packages and docs: `°` 432, `×` 551, `−` 318, `²` 164, `µ` 54, `≈` 50,
+`☉` 21, `⊕` 14. The proof is a probe of the served woff2's cmap (fonttools
+over the files in `node_modules/@fontsource*/files/`), never the foundry's
+spec sheet — the desktop family had every operator and the web build had none
+of them. The fix is 16 KB: two pyftsubset cuts of IBM's TTFs declared under
+the same family names with a `unicode-range`, plus two Noto subsets for the
+sigils no text family draws.
+
+Tried and reverted the same day: Bricolage Grotesque in the display slot,
+picked for its display cut and kerning after the brief asked for a more
+revered face. It rendered well and read wrong — the site's character lives in
+that condensed stencil more than anywhere else. The kerning complaint it was
+meant to answer is answered at the one call site set at poster size instead:
+the wordmark is hand-kerned around the `r`–`t` pair and the `l`→`Ref` seam,
+because tracking is uniform by definition and a kern table is tuned for text.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

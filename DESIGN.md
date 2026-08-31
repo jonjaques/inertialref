@@ -1,6 +1,6 @@
 ---
 name: InertialRef
-description: An observatory console at night — a condensed grotesque for names and labels, a humanist sans for prose, a wide mono for readings, held at standard range over a live simulation of the Milky Way.
+description: An observatory console at night — a condensed grotesque for names and labels, the IBM Plex pair for prose and readings, held at standard range over a live simulation of the Milky Way.
 colors:
   instrument-blue-200: 'oklch(90.1% 0.058 230.902)'
   instrument-blue-300: 'oklch(82.8% 0.111 230.318)'
@@ -49,35 +49,41 @@ typography:
     lineHeight: 1.4
     letterSpacing: '0.1em'
   body:
-    fontFamily: "'Instrument Sans Variable', ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "'IBM Plex Sans Variable', 'Noto Sans Math', 'Noto Sans Symbols', ui-sans-serif, system-ui, sans-serif"
     fontSize: '0.8125rem'
     fontWeight: 400
     lineHeight: 1.55
     letterSpacing: '0'
   ui:
-    fontFamily: "'Instrument Sans Variable', ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "'IBM Plex Sans Variable', 'Noto Sans Math', 'Noto Sans Symbols', ui-sans-serif, system-ui, sans-serif"
     fontSize: '0.75rem'
     fontWeight: 500
     lineHeight: 1.4
     letterSpacing: '0.005em'
   readout:
-    fontFamily: "'Martian Mono Variable', ui-monospace, SFMono-Regular, Menlo, monospace"
+    fontFamily: "'IBM Plex Mono', 'Noto Sans Math', 'Noto Sans Symbols', ui-monospace, SFMono-Regular, Menlo, monospace"
     fontSize: '0.6875rem'
     fontWeight: 400
     lineHeight: 1.55
-    letterSpacing: '-0.01em'
+    letterSpacing: '0'
   figure:
-    fontFamily: "'Martian Mono Variable', ui-monospace, SFMono-Regular, Menlo, monospace"
+    fontFamily: "'IBM Plex Mono', 'Noto Sans Math', 'Noto Sans Symbols', ui-monospace, SFMono-Regular, Menlo, monospace"
     fontSize: '0.78125rem'
     fontWeight: 500
     lineHeight: 1.45
-    letterSpacing: '-0.015em'
+    letterSpacing: '0'
+  stat:
+    fontFamily: "'IBM Plex Mono', 'Noto Sans Math', 'Noto Sans Symbols', ui-monospace, SFMono-Regular, Menlo, monospace"
+    fontSize: '1.0625rem'
+    fontWeight: 600
+    lineHeight: 1.2
+    letterSpacing: '-0.01em'
   micro:
-    fontFamily: "'Martian Mono Variable', ui-monospace, SFMono-Regular, Menlo, monospace"
+    fontFamily: "'IBM Plex Mono', 'Noto Sans Math', 'Noto Sans Symbols', ui-monospace, SFMono-Regular, Menlo, monospace"
     fontSize: '0.625rem'
     fontWeight: 400
     lineHeight: 1.5
-    letterSpacing: '-0.01em'
+    letterSpacing: '0'
 rounded:
   control: '0.25rem'
   panel: '0.5rem'
@@ -167,7 +173,7 @@ defined by what it commits to, not by what it refuses.
 **Key Characteristics:**
 
 - Three faces, three registers: a condensed grotesque names places and labels,
-  a humanist sans carries prose, a wide mono carries every reading
+  the Plex sans carries prose, the Plex mono carries every reading
 - A workspace, not a dock: two panes at the edges, panels that float, and one
   menu at the bottom center that says what is on screen
 - Near-black translucent panels; the center of the frame stays empty
@@ -268,9 +274,16 @@ anything and the problem is the screen, not the palette.
 **Display / Label Font:** **Archivo Variable** (`wght` 100–900, `wdth`
 62–125%), run condensed — 70% for the name, 80% for a title, 78% for the two
 uppercase label steps.
-**Prose Font:** **Instrument Sans Variable** (`wght` 400–700, `wdth` 75–100).
-**Instrument Font:** **Martian Mono Variable** (`wght` 100–800, `wdth`
-75–112.5), run at `font-stretch: 87.5%` everywhere.
+**Prose Font:** **IBM Plex Sans Variable** (`wght` 100–700), loaded upright
+_and italic_ — the reading room italicizes constantly, and an unloaded italic
+is a browser-sheared upright.
+**Instrument Font:** **IBM Plex Mono** (static, the 400/500/600 the steps
+set). Readouts never italicize, so its italics stay unloaded.
+**Symbol coverage:** two vendored subsets of the desktop Plex families carry
+the mathematical operators (`≈`, `→`, `∞`, the primes of parallax, the sans's
+Greek) under the same family names, and two Noto subsets carry what no text
+family draws — the solar and planetary sigils in `M☉` and `R⊕`. All four are
+`unicode-range`-gated, downloading only when such a glyph is drawn.
 
 **A condensed grotesque, and deliberately not a serif.** Two serifs were tried
 in this slot and both were the same mistake in different clothes. Instrument
@@ -295,7 +308,13 @@ those values the words came apart into letters.
 All three are self-hosted from `@fontsource` and bundled by Vite into
 content-hashed `/assets` files. That is a requirement rather than a preference:
 offline is the base case here, and a stylesheet on `fonts.googleapis.com` is a
-render-blocking request to a host that is not there.
+render-blocking request to a host that is not there. The symbol coverage is
+self-hosted the same way, because fontsource's web builds are sliced by
+script and the mathematical operators belong to no script — they are in the
+desktop Plex families and in none of their web builds. Two files cut from
+IBM's released TTFs (SIL OFL 1.1, `src/assets/fonts/`) restore them under the
+same family names, so a readout that prints `Δv ≈ 2.1` never changes voice
+mid-figure.
 
 **Three faces, because the product already had three registers.** The charter
 names them — **Instrument** text is monospace, uppercase, abbreviated;
@@ -307,17 +326,20 @@ capitalisation. The faces map onto them almost exactly:
 | Face                | Register                | What it sets                      |
 | ------------------- | ----------------------- | --------------------------------- |
 | Archivo (condensed) | structure               | the name, a place, every label    |
-| Instrument Sans     | Correspondence / Record | prose, and the words on a control |
-| Martian Mono        | Instrument              | every value the simulation knows  |
+| IBM Plex Sans       | Correspondence / Record | prose, and the words on a control |
+| IBM Plex Mono       | Instrument              | every value the simulation knows  |
 
 **Character:** a console legend beside a printed log. Archivo is the stencil on
 the equipment — it names things, it never explains them, and it is uppercase
 everywhere except a title, where the thing being named is a proper noun and
-uppercasing it would throw away the one signal that says so. Martian Mono is
-deliberately low-contrast and squared, so it survives a bright background better
-than a conventional mono, which is the standing test this whole system is judged
-on. Figures are tabular wherever a number changes, so a readout updating in
-place never reflows and never makes you re-find the digit you were watching.
+uppercasing it would throw away the one signal that says so. The Plex pair is
+one program — sans and mono share x-height and stroke logic — so a label and
+its value sit on the same optical line, and the register change reads as a
+change of _voice_ rather than a change of font. Plex Mono's squared, open
+counters hold at 11px over a bright moving scene, which is the standing test
+this whole system is judged on. Figures are tabular wherever a number changes,
+so a readout updating in place never reflows and never makes you re-find the
+digit you were watching.
 
 **Case is typography, not content.** Every string in the source is written in
 title case and the `text-transform` on the step decides what is shouted. That is
@@ -327,7 +349,7 @@ written into a constant is a shout none of them can turn off.
 
 ### Hierarchy
 
-Nine steps, each defined once as a `@utility` in `apps/game/src/index.css` and
+Ten steps, each defined once as a `@utility` in `apps/game/src/index.css` and
 named at the call site. They exist because the alternative is what this
 interface had: `text-[10px] tracking-widest uppercase text-sky-400/80` written
 out at ninety call sites, four of them subtly disagreeing, with no way to change
@@ -344,14 +366,18 @@ because which grade of ink is a per-element judgement; everything else is here.
 | `type-ui`      | sans  | 12px    | 500    | a control's label, a row's label, a list title |
 | `type-readout` | mono  | 11px    | 400    | any value the simulation knows                 |
 | `type-figure`  | mono  | 12.5px  | 500    | the flight strip, and a headline number        |
+| `type-stat`    | mono  | 17px    | 600    | a poster figure: the spec row, the docs counts |
 | `type-micro`   | mono  | 10px    | 400    | a chart axis, a unit, a timecode               |
 
-Two facts about the sizes are worth stating because they look like mistakes.
-The sans steps sit a point _above_ the mono steps they align with — Instrument
-Sans has a large x-height for its em, so 12px sans reads the same size as 11px
-mono and setting both to 11 makes the sans look shrunken. And Martian Mono runs
-at 87.5% width everywhere, because at its natural width an eleven-character
-readout does not fit the label column of a 19rem panel.
+Two facts about the settings are worth stating because they look like
+mistakes. The sans steps sit a point _above_ the mono steps they pair with,
+and with a matched pair that is a grade rather than an optical correction —
+the two Plex faces share their x-height, so the point of difference reads as
+exactly one step of hierarchy between a label and the value beside it. And the
+one string set at poster size — the name on the front door — is hand-kerned at
+its call site (`pages/HomePage.tsx`): tracking is uniform by definition, and
+Archivo's kern table still leaves the `r`'s arm hanging over the `t`'s
+crossbar at 76px.
 
 ### Named Rules
 
