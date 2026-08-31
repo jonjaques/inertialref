@@ -6132,7 +6132,8 @@ is Dawn as a Node addon, `render/gpuSetup.ts` installs the three globals
 over it, and `pnpm test:gpu` runs the `*.gpu.test.ts` suite — every production
 material compiled to a Metal pipeline, structural assertions on the WGSL, a
 pixel ramp on both target types, and two compute kernels checked against the
-CPU functions they port. Twenty-four tests in **620 ms** on an idle M5; the
+CPU functions they port. Twenty-four tests in **620 ms** of test time inside a
+0.9 s command on an idle M5; the
 root suite excludes the suffix and `pnpm check` does not run it, because a
 physical adapter is a claim about the machine rather than the code. The
 91 MB the addon costs in `node_modules` is the price, and it is `allowBuilds:
@@ -6334,12 +6335,12 @@ Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md
   window. The target is a 2023-class laptop at 1920×1080 — roughly three times
   the pixels on a much weaker GPU — so these establish that the instrument works,
   not that the budget is met.
-- The tone curve has no test. It is a TSL node graph, there is no CPU backend to
-  evaluate one in Node, and a scalar mirror of the same arithmetic would pass
-  while the graph drifted — which is the failure the terrain-normals test is
-  remembered for. It is verified on a GPU or not at all, and the benchmark
-  harness `docs/design/technical.md` already calls an M2 prerequisite is what
-  would do it.
+- The tone curve has no test. It is a TSL node graph, and a scalar mirror of
+  the same arithmetic would pass while the graph drifted — which is the
+  failure the terrain-normals test is remembered for. Its home is a
+  `*.gpu.test.ts` under `pnpm test:gpu`, where `drawGraph` on a float target
+  returns the curve's own output for comparison against the published formula;
+  none is written yet.
 - `World.updateInterest` is the core's own system-streaming policy and has no
   production caller: both apps load one system and never stream another, and the
   client runs a separate starfield survey with its own radius and hysteresis.

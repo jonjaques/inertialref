@@ -318,12 +318,12 @@ export async function openGpu(
         const material = new MeshBasicNodeMaterial()
         material.fragmentNode = graph
         quad.material = material
-        const rt = target(options)
+        const rt = options.into ?? target(options)
         renderer.setRenderTarget(rt)
         renderer.render(quadScene, quadCamera)
         const pixels = await readback(rt)
         renderer.setRenderTarget(null)
-        rt.dispose()
+        if (options.into === undefined) rt.dispose()
         material.dispose()
         return pixels
       })

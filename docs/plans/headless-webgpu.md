@@ -3,13 +3,13 @@
 A plan to compile and run this project's shaders on the real GPU from the Node
 test suite, in milliseconds, without a browser.
 
-> **The premise this replaces is measured, not argued.**
+> **The premise this replaces is measured, not argued.** The claim that a TSL
+> node graph cannot be evaluated in Node is false, and
 > [`docs/guides/testing.md`](../guides/testing.md) and
-> [`.claude/rules/rendering.md`](../../.claude/rules/rendering.md) both state
-> that a TSL node graph cannot be evaluated in Node. It can. Chrome's own WebGPU
-> implementation ships as a Node addon, and on this machine it reports
-> `vendor: apple`, `architecture: metal-3`, `device: apple-m5` — the physical
-> GPU, from a process with no window.
+> [`.claude/rules/rendering.md`](../../.claude/rules/rendering.md) now say the
+> reverse: Chrome's own WebGPU implementation ships as a Node addon, and on
+> this machine it reports `vendor: apple`, `architecture: metal-3`,
+> `device: apple-m5` — the physical GPU, from a process with no window.
 
 Measured on an Apple M5 (10-core GPU), macOS 26.6.2 (build 25G83), Node 26.5.0,
 `three` r182, vitest 4.1.10, `webgpu` 0.6.0. Every figure below is from that
@@ -233,12 +233,12 @@ Two facilities make these assertions possible:
 Landing this makes four passages false. All four are corrections to a present
 claim, not history, so they are rewritten in place rather than annotated.
 
-| File                                                             | What changes                                                                                                                 |
-| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| [`docs/guides/testing.md`](../guides/testing.md)                 | § "Shader behavior needs a real GPU" — the graph is evaluable; the scalar-mirror ban and the `devicePixelRatio` 2 limit stay |
-| [`docs/guides/testing.md`](../guides/testing.md)                 | § "What is not covered yet" — the "Shader behavior in the Node suite" row                                                    |
-| [`.claude/rules/rendering.md`](../../.claude/rules/rendering.md) | the bullet asserting a TSL graph cannot be evaluated in Node                                                                 |
-| [`scripts/drive.mjs`](../../scripts/drive.mjs)                   | the header's software-adapter claim — see below                                                                              |
+| File                                                             | What it says                                                                                                                                            |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`docs/guides/testing.md`](../guides/testing.md)                 | § "Shader behavior runs on the real GPU, from Node" — the suite, its verbs and its traps; the scalar-mirror ban and the `devicePixelRatio` 2 limit stay |
+| [`docs/guides/testing.md`](../guides/testing.md)                 | § "What is not covered yet" — the gap is CI, not Node                                                                                                   |
+| [`.claude/rules/rendering.md`](../../.claude/rules/rendering.md) | the bullet naming `pnpm test:gpu` as where a graph is verified                                                                                          |
+| [`scripts/drive.mjs`](../../scripts/drive.mjs)                   | the header gives `--cast` as the reason for a window, not the adapter — see below                                                                       |
 
 ---
 

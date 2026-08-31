@@ -1176,7 +1176,7 @@ const SKY_FRACTION = 0.33
  * `textureLoad`. The gradient sample `sampled` emits has no such path — it
  * names `<texture>_sampler` unconditionally — so against the default stand-in
  * the fragment stage references a binding that was never declared, Tint
- * refuses the module, and the ground of every mapless body streams 700 patches
+ * refuses the module, and the ground of every mapless body streams 706 patches
  * into a black frame. A published map is loaded linear, which is why mapped
  * bodies never showed it, and why the boot warm-up — which compiles against
  * this stand-in — was compiling a pipeline that could not build.

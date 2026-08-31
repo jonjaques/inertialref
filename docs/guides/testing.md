@@ -275,7 +275,7 @@ storage buffer back from a kernel). The suite is `*.gpu.test.ts`, its config
 is `apps/game/vitest.gpu.config.ts`, and the whole of it — every production
 material compiled to a Metal pipeline, structural assertions on the WGSL, a
 pixel ramp, two compute kernels checked against their CPU originals — runs in
-about **1.2 s** on an idle M5, most of it Dawn's boot. The reasoning and the
+about **0.9 s** on an idle M5, most of it Dawn's boot. The reasoning and the
 measurements are [the headless WebGPU plan](../plans/headless-webgpu.md).
 
 It is a separate command rather than part of `pnpm test` because it makes a

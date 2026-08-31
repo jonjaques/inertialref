@@ -41,9 +41,9 @@ already using eight-plus cores (826% CPU over the ten-second run).
 
 The Stop gate runs `pnpm test` after every turn that touches a source file, so
 the descent is paid once per turn — about a minute and a half of a gate whose
-other three stages cost five seconds together. `.claude/hooks/gate.mjs` states
-58 s for the test stage; that figure is from before the geology and the cover
-made the field deeper, and it is now 103.
+other three stages cost five seconds together. `.claude/hooks/gate.mjs` carries
+the same 103 s in its header, and says to re-measure it rather than read it off,
+because the figure moves whenever the field gets deeper.
 
 ---
 
@@ -77,9 +77,10 @@ a content-addressed cache of `generateHeightfield` results on disk is safe by
 construction: a stale entry is impossible unless the version key is wrong,
 which the golden vectors already guard. A test that replays a landing against
 a warm cache pays the streamer and the contact test and nothing for the field.
-Measured elsewhere in this repository, the worker pool caches 31,766 of 37,854
-requests in one baseline descent; the same ratio on disk turns the second run
-of the file into seconds.
+The win is across runs, not within one: the baseline descent on Gliese 1061 d
+makes 37,854 requests of which 35,883 are unique, so an in-run cache saves five
+percent (the figure `CONTEXT.md` records as "< 5% on a tracked descent"), and a
+second run against a warm disk serves all 35,883 without generating any.
 
 This is not a change to the test alone. It wants a `HeightfieldSource` port the
 inline worker can be handed, which is a seam `packages/workers` already has the

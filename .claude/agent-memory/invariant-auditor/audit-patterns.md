@@ -608,3 +608,75 @@ immediately before writing and drop what the tree already fixes.** What the docs
 reliably does _not_ sweep: `.claude/rules/*` and Mermaid diagrams. `streaming.md` gained
 three new paragraphs about the detail-floor gate and the selection memo while its
 flowchart still shows one gate straight into `WALK`.
+
+## Two counters off one rig line, combined into a ratio that does not exist
+
+Richest finding on `feat/headless-webgpu`, and the shape generalizes to every
+"measured elsewhere in this repository" citation. `docs/plans/test-speed.md`
+argues for a heightfield disk cache with "the worker pool caches **31,766 of
+37,854** requests in one baseline descent". Both numbers are real and neither
+means that: `pnpm sim --terrain-baseline` prints, for `rocky-airless — Gliese
+1061 d`, `37854 requests / 35883 unique / 31766 cache hits`. The dedup rate is
+1,971/37,854 = **5.2%**, which is what `CONTEXT.md`'s own baseline table already
+records ("Cache hit rate, 64 heightfields: **< 5%** on a tracked descent"). The
+rig's output refutes the reading on its face — `cache hits` **exceeds**
+`requests` on three of the four bodies (43,396 > 23,632; 52,546 > 21,697;
+60,503 > 10,432) — so it cannot be a subset of them.
+
+**The check:** when a doc cites a figure with no `rg` hit anywhere else, run the
+rig and read the whole line. Two adjacent counters with different populations is
+the commonest way a plan acquires an 84% where the tree records 5%.
+
+## Same measurement, three numbers, one of them nobody's
+
+`pnpm test:gpu` is "620 ms" (CONTEXT.md), "0.9 s" (`docs/plans/test-speed.md`
+table and prose) and "**1.2 s**" (`docs/guides/testing.md`), all attributed to
+"an idle M5". Measured three times idle: vitest `Duration` 566/591/647 ms, wall
+`real` 0.86/0.88/0.94 s. So 620 ms is the vitest line, 0.9 s is wall, and 1.2 s
+is neither. **Vitest prints two times and a doc that quotes one without saying
+which is not comparable to the table row beside it** — test-speed.md's other
+rows are wall clock.
+
+## `CONTEXT.md` § "Known gaps" is present tense and the docs pass never sweeps it
+
+`feat/headless-webgpu` inserted its new section immediately above `## Known
+gaps` and left the gap that says the tone curve "is verified on a GPU or not at
+all… there is no CPU backend to evaluate one in Node, and the benchmark harness
+`docs/design/technical.md` already calls an M2 prerequisite is what would do
+it" — while the same branch's `output.test.ts` comment correctly names
+`*.gpu.test.ts` as the home. Everything below `## Known gaps` in CONTEXT.md is a
+claim about now; everything above it is dated history and is fine.
+
+## A plan document's premise block asserts the present content of files it retires
+
+`docs/plans/headless-webgpu.md:6-12` opens "`docs/guides/testing.md` and
+`.claude/rules/rendering.md` **both state** that a TSL node graph cannot be
+evaluated in Node" — and § 7's table lists the four passages "that become
+wrong". The branch rewrote all four. The **body** of a plan is intent and may
+stay; a blockquote asserting what two files in the tree say right now is not.
+Grep a shipped plan for present-tense claims about other files.
+
+## The method that proves a shader regression test is armed, without touching the tree
+
+`git archive HEAD | tar -x` into scratch, symlink `node_modules` and
+`apps/game/node_modules`, revert the fix in the copy, and run
+`node node_modules/vitest/vitest.mjs run --config apps/game/vitest.gpu.config.ts`
+from the copy's root. **`node_modules/.bin/vitest` is a shell shim and dies with
+`SyntaxError` under `node`** — go to `vitest.mjs` directly. The gpu config's
+`include` and `setupFiles` are root-relative, so running from the copy's root
+picks up the copy's files.
+
+Result on `feat/headless-webgpu`: all three stand-in reverts go red, and for
+distinct reasons — the ground's is a device error
+(`unresolved value 'nodeUniform17_sampler'` at
+`CreateShaderModule([ShaderModuleDescriptor "fragment"])`), the atmosphere's and
+the planet's are signature mismatches
+(`unsampled: textureLoad(…)` vs `sampled: textureSample(…)`).
+
+## `isUnfilterable` in r182 is exactly two filters, so mip settings do not fork the program
+
+`WGSLNodeBuilder.js:603`: unfilterable iff `minFilter === NearestFilter &&
+magFilter === NearestFilter`. So a test fixture using `LinearFilter` both ways
+is a valid stand-in for a real map loaded `LinearMipmapLinearFilter` +
+`anisotropy` (`planetTextures.ts:151`) — the mip and wrap settings never reach
+the generated WGSL. Do not file that as a fixture-mismatch finding.

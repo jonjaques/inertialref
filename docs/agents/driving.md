@@ -94,7 +94,7 @@ rather than authored, so they survive regeneration.
 
 ---
 
-## The browser, when only a GPU will do
+## The browser, when only a compositor will do
 
 [`scripts/drive.mjs`](../../scripts/drive.mjs) is the one way in. It speaks the
 Chrome DevTools Protocol to a Chrome it launches itself, on its own profile and

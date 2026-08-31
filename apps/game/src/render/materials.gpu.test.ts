@@ -125,11 +125,8 @@ describe('every production material compiles', () => {
   const sphere = () => new SphereGeometry(1, 16, 12)
 
   it('the star', async () => {
-    await gpu.compile(
-      new Mesh(sphere(), createStarMaterial().material),
-      camera,
-      staged(new Scene()),
-    )
+    const star = new Mesh(sphere(), createStarMaterial().material)
+    await gpu.compile(star, camera, staged(star))
   })
 
   it('the atmosphere', async () => {
