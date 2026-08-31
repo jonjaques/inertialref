@@ -128,6 +128,95 @@ export const HYPSOMETRY_MARGIN = PLATE_MARGIN
 export const BELT_MARGIN = 0.1
 export const ARC_MARGIN = 0.06
 
+/*
+ * The numbers each band is written in, named once and exported.
+ *
+ * `apps/game/src/render/terrainKernel.ts` is a TSL port of this file that
+ * evaluates the same stack on the GPU, and a port carrying its own copy of `9`
+ * and `11.3` is right until one side moves. Every literal below is read here
+ * and there; `terrainProducer.gpu.test.ts` holds the two evaluations to a
+ * stated tolerance, which is what catches a number one of them stopped reading.
+ * The margins above are the same kind of thing and predate the table.
+ */
+
+/** The continental swell: cycles per unit direction, its octave cap, and its share. */
+export const HYPSOMETRY_SHAPE = {
+  cycles: 1.6,
+  octaves: 5,
+  swell: 0.35,
+} as const
+
+/**
+ * The belts: the ridged field's scale, and how a range reads on each crust
+ * under each motion. `lid*` is the stagnant-lid scarp field,
+ * `(1 − ranges)^power · gain + offset`.
+ */
+export const BELT_SHAPE = {
+  cycles: 9,
+  octaves: 7,
+  oceanicUplift: -0.9,
+  continentalOpening: -0.7,
+  oceanicOpening: 0.55,
+  scarp: 0.35,
+  lidPower: 3,
+  lidGain: 2,
+  lidOffset: -0.1,
+} as const
+
+/** Arc cones over a convergent margin: `edge · continental · across · cones^power · gain`. */
+export const ARC_SHAPE = {
+  cycles: 60,
+  octaves: 4,
+  offset: 11.3,
+  power: 3,
+  gain: 1.6,
+} as const
+
+/** A hotspot shield: the flank's concavity and how deep the caldera notches it. */
+export const SHIELD_SHAPE = { flankPower: 0.7, calderaDepth: 0.4 } as const
+
+/** Chaos terrain: block size on the ground, the wall's width, and the gate. */
+export const CHAOS_SHAPE = {
+  blockMeters: 10_000,
+  wall: 0.35,
+  floor: 0.05,
+} as const
+
+/** Sulci: grooves at `cycles`, compressed `stretch`-fold along x. */
+export const SULCI_SHAPE = {
+  cycles: 24,
+  stretch: 5,
+  octaves: 5,
+  gain: 0.5,
+  floor: 0.05,
+} as const
+
+/** A tiger stripe's double ridge, in multiples of its own offset. */
+export const STRIPE_SHAPE = {
+  shoulder: 0.7,
+  reach: 3,
+  shoulderWidth: 2,
+} as const
+
+/** The relief tail: its scale from `roughness`, the warp that bends it. */
+export const RELIEF_SHAPE = {
+  cyclesPerRoughness: 2.2,
+  roughnessFloor: 0.5,
+  octaves: 12,
+  warpCycles: 0.5,
+  warpOctaves: 2,
+  warpAmount: 0.1,
+} as const
+
+/** Dunes: a ridged field at `cycles` times the relief's, compressed along x. */
+export const DUNE_SHAPE = {
+  floor: 0.02,
+  cycles: 40,
+  stretch: 0.15,
+  octaves: 3,
+  gain: 0.18,
+} as const
+
 /**
  * The plate work every band shares, done once per sample.
  *
@@ -207,20 +296,27 @@ export function hypsometryBand(
   direction: Vec3,
   peak: Meters,
 ): number {
-  const swellCycles = 1.6
+  const swellCycles = HYPSOMETRY_SHAPE.cycles
   const swell = fbm3(
     sketch.seeds.hypsometry,
     direction.x * swellCycles,
     direction.y * swellCycles,
     direction.z * swellCycles,
-    { octaves: octavesFor(grammar.meanRadius, swellCycles, 5, peak * 0.35) },
+    {
+      octaves: octavesFor(
+        grammar.meanRadius,
+        swellCycles,
+        HYPSOMETRY_SHAPE.octaves,
+        peak * HYPSOMETRY_SHAPE.swell,
+      ),
+    },
   )
 
   const sample = plates.sample
   if (sample === null) return clamp(swell, -1, 1)
 
   const base = plateProperty(sample, (plate) => plate.base, HYPSOMETRY_MARGIN)
-  return clamp(base + swell * 0.35, -1, 1)
+  return clamp(base + swell * HYPSOMETRY_SHAPE.swell, -1, 1)
 }
 
 /**
@@ -259,9 +355,9 @@ export function beltBand(
     sample === null ? 0 : 1 - smoothstep(0, BELT_MARGIN, sample.boundary)
   if (sample !== null && edge <= 0) return 0
 
-  const cycles = 9
+  const cycles = BELT_SHAPE.cycles
   const options = {
-    octaves: octavesFor(grammar.meanRadius, cycles, 7, peak),
+    octaves: octavesFor(grammar.meanRadius, cycles, BELT_SHAPE.octaves, peak),
     damping: grammar.erosion,
   }
   // The analytic-derivative form only where the damping consumes the gradient.
@@ -299,7 +395,12 @@ export function beltBand(
      * Unclamped it was a 1.9 that turned a few percent of the surface into a
      * uniform pedestal over the whole of it.
      */
-    return clamp((1 - ranges) ** 3 * 2 - 0.1, -1, 1)
+    return clamp(
+      (1 - ranges) ** BELT_SHAPE.lidPower * BELT_SHAPE.lidGain +
+        BELT_SHAPE.lidOffset,
+      -1,
+      1,
+    )
   }
 
   const across = plates.across
@@ -325,9 +426,16 @@ export function beltBand(
   )
   const step = plateProperty(sample, (plate) => plate.step, BELT_MARGIN)
 
-  const uplift = converging * mix(-0.9 * ranges, ranges, continental)
-  const opening = diverging * mix(0.55 * ranges, -0.7 * ranges, continental)
-  const scarp = sliding * 0.35 * step * ranges
+  const uplift =
+    converging * mix(BELT_SHAPE.oceanicUplift * ranges, ranges, continental)
+  const opening =
+    diverging *
+    mix(
+      BELT_SHAPE.oceanicOpening * ranges,
+      BELT_SHAPE.continentalOpening * ranges,
+      continental,
+    )
+  const scarp = sliding * BELT_SHAPE.scarp * step * ranges
   return clamp(edge * (uplift + opening + scarp), -1, 1)
 }
 
@@ -382,18 +490,26 @@ export function volcanicBand(
     if (continental > 0) {
       // The arc's own margin, not the belts'. See `plateContext`.
       const across = Math.max(0, convergence(sample, direction, ARC_MARGIN))
-      const cycles = 60
+      const cycles = ARC_SHAPE.cycles
       const cones =
         ridged3(
           sketch.seeds.belts,
-          direction.x * cycles + 11.3,
+          direction.x * cycles + ARC_SHAPE.offset,
           direction.y * cycles,
           direction.z * cycles,
-          { octaves: octavesFor(grammar.meanRadius, cycles, 4, peak) },
+          {
+            octaves: octavesFor(
+              grammar.meanRadius,
+              cycles,
+              ARC_SHAPE.octaves,
+              peak,
+            ),
+          },
         ) *
           0.5 +
         0.5
-      height += edge * continental * across * cones ** 3 * 1.6
+      height +=
+        edge * continental * across * cones ** ARC_SHAPE.power * ARC_SHAPE.gain
     }
   }
   return clamp(height, -1, 1)
@@ -408,10 +524,12 @@ function shieldProfile(hotspot: Hotspot, direction: Vec3): number {
   const distance = Math.sqrt(ex * ex + ey * ey + ez * ez)
   const t = distance / hotspot.radius
   if (t >= 1) return 0
-  const flank = hotspot.strength * falloff(t) ** 0.7
+  const flank = hotspot.strength * falloff(t) ** SHIELD_SHAPE.flankPower
   const caldera =
     t < hotspot.caldera
-      ? hotspot.strength * 0.4 * falloff(t / hotspot.caldera)
+      ? hotspot.strength *
+        SHIELD_SHAPE.calderaDepth *
+        falloff(t / hotspot.caldera)
       : 0
   return flank - caldera
 }
@@ -436,22 +554,29 @@ export function iceBand(
 ): number {
   let height = 0
 
-  if (grammar.chaos > 0.05) {
+  if (grammar.chaos > CHAOS_SHAPE.floor) {
     // ~10 km blocks, which is the scale Europa's chaos regions break into.
-    const cells = grammar.meanRadius / 10_000
+    const cells = grammar.meanRadius / CHAOS_SHAPE.blockMeters
     height += grammar.chaos * blockField(sketch.seeds.chaos, direction, cells)
   }
 
-  if (grammar.sulci > 0.05) {
-    const cycles = 24
+  if (grammar.sulci > SULCI_SHAPE.floor) {
+    const cycles = SULCI_SHAPE.cycles
     const sulci = ridged3(
       sketch.seeds.sulci,
-      direction.x * cycles * 5,
+      direction.x * cycles * SULCI_SHAPE.stretch,
       direction.y * cycles,
       direction.z * cycles,
-      { octaves: octavesFor(grammar.meanRadius, cycles * 5, 5, peak) },
+      {
+        octaves: octavesFor(
+          grammar.meanRadius,
+          cycles * SULCI_SHAPE.stretch,
+          SULCI_SHAPE.octaves,
+          peak,
+        ),
+      },
     )
-    height += grammar.sulci * 0.5 * sulci
+    height += grammar.sulci * SULCI_SHAPE.gain * sulci
   }
 
   for (const stripe of sketch.stripes) {
@@ -475,13 +600,19 @@ function stripeProfile(stripe: StripeAxis, direction: Vec3): number {
       direction.y * stripe.pole.y +
       direction.z * stripe.pole.z,
   )
-  const reach = stripe.halfWidth + stripe.offset * 3
+  const reach = stripe.halfWidth + stripe.offset * STRIPE_SHAPE.reach
   if (away > reach) return 0
   const trough = -falloff(Math.min(1, away / stripe.halfWidth))
   const shoulderCenter = stripe.halfWidth + stripe.offset
   const shoulder =
-    0.7 *
-    falloff(Math.min(1, Math.abs(away - shoulderCenter) / (stripe.offset * 2)))
+    STRIPE_SHAPE.shoulder *
+    falloff(
+      Math.min(
+        1,
+        Math.abs(away - shoulderCenter) /
+          (stripe.offset * STRIPE_SHAPE.shoulderWidth),
+      ),
+    )
   return trough + shoulder
 }
 
@@ -538,7 +669,7 @@ function blockField(seed: Seed, direction: Vec3, cells: number): number {
   }
   if (!Number.isFinite(second)) return 0
   const wall = (Math.sqrt(second) - Math.sqrt(nearest)) / size
-  return (toUnit(winner) * 2 - 1) * smoothstep(0, 0.35, wall)
+  return (toUnit(winner) * 2 - 1) * smoothstep(0, CHAOS_SHAPE.wall, wall)
 }
 
 /**
@@ -559,16 +690,23 @@ export function reliefBand(
   direction: Vec3,
   peak: Meters,
 ): number {
-  const cycles = Math.max(0.5, roughness) * 2.2
-  const octaves = octavesFor(grammar.meanRadius, cycles, 12, peak)
+  const cycles =
+    Math.max(RELIEF_SHAPE.roughnessFloor, roughness) *
+    RELIEF_SHAPE.cyclesPerRoughness
+  const octaves = octavesFor(
+    grammar.meanRadius,
+    cycles,
+    RELIEF_SHAPE.octaves,
+    peak,
+  )
 
   /*
    * The warp is two octaves and a tenth of a cell, which is enough to bend a
    * ridge and not enough to fold the field over itself. A warp that large stops
    * being a landscape and starts being marble.
    */
-  const warpCycles = cycles * 0.5
-  const warpOptions = { octaves: 2 } as const
+  const warpCycles = cycles * RELIEF_SHAPE.warpCycles
+  const warpOptions = { octaves: RELIEF_SHAPE.warpOctaves } as const
   const wx = fbm3(
     sketch.seeds.warpX,
     direction.x * warpCycles,
@@ -590,7 +728,7 @@ export function reliefBand(
     direction.z * warpCycles,
     warpOptions,
   )
-  const amount = 0.1 / cycles
+  const amount = RELIEF_SHAPE.warpAmount / cycles
 
   const options = { octaves, damping: grammar.erosion }
   const relief =
@@ -610,7 +748,7 @@ export function reliefBand(
           options,
         )
 
-  if (grammar.dunes <= 0.02) return clamp(relief, -1, 1)
+  if (grammar.dunes <= DUNE_SHAPE.floor) return clamp(relief, -1, 1)
 
   /*
    * A dune sea is anisotropic by definition — the wind has a direction — and
@@ -619,13 +757,20 @@ export function reliefBand(
    * prevailing wind, which is the thing this owes the phase that gives the
    * grammar a circulation.
    */
-  const duneCycles = cycles * 40
+  const duneCycles = cycles * DUNE_SHAPE.cycles
   const dunes = ridged3(
     sketch.seeds.dunes,
-    direction.x * duneCycles * 0.15,
+    direction.x * duneCycles * DUNE_SHAPE.stretch,
     direction.y * duneCycles,
     direction.z * duneCycles,
-    { octaves: octavesFor(grammar.meanRadius, duneCycles, 3, peak) },
+    {
+      octaves: octavesFor(
+        grammar.meanRadius,
+        duneCycles,
+        DUNE_SHAPE.octaves,
+        peak,
+      ),
+    },
   )
-  return clamp(relief + grammar.dunes * 0.18 * dunes, -1, 1)
+  return clamp(relief + grammar.dunes * DUNE_SHAPE.gain * dunes, -1, 1)
 }

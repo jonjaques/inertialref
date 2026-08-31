@@ -294,7 +294,7 @@ export function plateAt(
  * spending all along. What the partition changes is the interior seams and the
  * triple junctions, and nothing else.
  */
-const plateWeight = (excess: number, width: number): number => {
+export const plateWeight = (excess: number, width: number): number => {
   const s = smoothstep(0, width, excess)
   return (1 - s) / (1 + s)
 }

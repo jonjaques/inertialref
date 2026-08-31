@@ -73,8 +73,14 @@ import type { CraterLevel, TerrainSketch } from './sketch.ts'
  */
 const { falloff, pcg4d, ring, smoothstep, toUnit } = procedural
 
+/*
+ * The numbers this band is written in are exported, and `bands.ts` says why:
+ * the TSL port in `apps/game/src/render/terrainKernel.ts` reads the same
+ * constants, and a tolerance test holds the two evaluations together.
+ */
+
 /** How far past its own rim a crater's ejecta reaches, in crater radii. */
-const EJECTA_REACH = 2.6
+export const EJECTA_REACH = 2.6
 
 /**
  * Where the rim crest sits and how far the raised rim spreads, in crater radii.
@@ -84,8 +90,32 @@ const EJECTA_REACH = 2.6
  * rim radius and the flank out to about 1.5, which is where the continuous
  * ejecta deposit starts.
  */
-const RIM_INNER = 0.7
-const RIM_OUTER = 1.5
+export const RIM_INNER = 0.7
+export const RIM_OUTER = 1.5
+
+/**
+ * One crater's profile, as the proportions `craterProfile` is drawn from.
+ *
+ * `sizeFloor` is the smallest crater a level places as a fraction of its
+ * largest — diameters run over one octave inside a level. `relaxSpan` is how
+ * many transition diameters the palimpsest ramp spans. Everything else is a
+ * measured lunar proportion, named where `craterProfile` spends it.
+ */
+export const CRATER_SHAPE = {
+  sizeFloor: 0.5,
+  flatFloor: 0.45,
+  peakChance: 0.55,
+  peakHeight: 0.22,
+  peakWidth: 0.2,
+  rimHeight: 0.2,
+  apron: 0.12,
+  apronBase: 0.6,
+  apronSpread: 0.8,
+  apronFade: 1.8,
+  relaxSpan: 8,
+  rimAge: 1.5,
+  floorAge: 0.55,
+} as const
 
 /**
  * The crater field's contribution at a direction, meters.
@@ -347,7 +377,10 @@ function levelContribution(
          * paid for. Diameters run over one octave inside a level, so the
          * ladder's halving covers every size continuously rather than in bands.
          */
-        const diameter = level.diameter * (0.5 + (0.5 * draw) / level.density)
+        const diameter =
+          level.diameter *
+          (CRATER_SHAPE.sizeFloor +
+            ((1 - CRATER_SHAPE.sizeFloor) * draw) / level.density)
         const angularRadius = diameter / (2 * radius)
 
         // Jitter the center inside its own cell. It is *not* normalized: the
@@ -445,14 +478,14 @@ function craterProfile(
           age *
           smoothstep(
             grammar.complexDiameter,
-            grammar.complexDiameter * 8,
+            grammar.complexDiameter * CRATER_SHAPE.relaxSpan,
             diameter,
           )
 
   // Rims decay faster than cavities: a crater loses its raised rim to
   // micrometeorites and downslope creep long before its bowl fills in.
-  const rimLife = (1 - age) ** 1.5 * relaxed
-  const floorLife = (1 - 0.55 * age) * relaxed
+  const rimLife = (1 - age) ** CRATER_SHAPE.rimAge * relaxed
+  const floorLife = (1 - CRATER_SHAPE.floorAge * age) * relaxed
 
   let height = 0
 
@@ -462,7 +495,7 @@ function craterProfile(
      * one. The flat fraction is what "the floor collapses" means as a shape:
      * past the transition the walls slump inward and the middle is a plain.
      */
-    const flat = complex ? 0.45 : 0
+    const flat = complex ? CRATER_SHAPE.flatFloor : 0
     const u = t <= flat ? 0 : (t - flat) / (1 - flat)
     height -= depth * floorLife * (1 - u * u)
 
@@ -472,14 +505,18 @@ function craterProfile(
      * half of them do. The peak is a fifth of the cavity depth and a fifth of
      * its radius, which is the measured lunar proportion.
      */
-    if (complex && peakDraw < 0.55) {
-      height += depth * 0.22 * floorLife * falloff(Math.min(1, t / 0.2))
+    if (complex && peakDraw < CRATER_SHAPE.peakChance) {
+      height +=
+        depth *
+        CRATER_SHAPE.peakHeight *
+        floorLife *
+        falloff(Math.min(1, t / CRATER_SHAPE.peakWidth))
     }
   }
 
   // The raised rim, from 0.7 to 1.5 crater radii, crest at the rim itself.
   if (t > RIM_INNER && t < RIM_OUTER) {
-    const rimHeight = 0.2 * depth
+    const rimHeight = CRATER_SHAPE.rimHeight * depth
     height +=
       rimHeight *
       rimLife *
@@ -524,8 +561,13 @@ function craterProfile(
     const apron =
       (1 / (r * r * r)) *
       smoothstep(1, RIM_OUTER, t) *
-      (1 - smoothstep(1.8, EJECTA_REACH, t))
-    height += 0.12 * depth * rimLife * (0.6 + 0.8 * typeDraw) * apron
+      (1 - smoothstep(CRATER_SHAPE.apronFade, EJECTA_REACH, t))
+    height +=
+      CRATER_SHAPE.apron *
+      depth *
+      rimLife *
+      (CRATER_SHAPE.apronBase + CRATER_SHAPE.apronSpread * typeDraw) *
+      apron
   }
 
   return height
@@ -610,7 +652,7 @@ export interface RayCrater {
  * system reaches roughly that, and a reach measured in radii means the same
  * number serves a 90 km crater on Luna and a 900 km one on Iapetus.
  */
-const RAY_REACH = 16
+export const RAY_REACH = 16
 
 /**
  * The finest lattice rays are drawn from, in cells per unit of direction space.
@@ -634,7 +676,7 @@ const RAY_REACH = 16
 const RAY_LATTICE_CELLS = 24
 
 /** Craters older than this have lost their rays to space weathering. */
-const RAY_AGE = 0.22
+export const RAY_AGE = 0.22
 
 /**
  * Where the filaments begin, in crater radii.
@@ -644,10 +686,27 @@ const RAY_AGE = 0.22
  * is also a cheap early-out, and the term it gates is faded in across it for
  * the reason `radial` gives: a gate a term does not reach zero at is a step.
  */
-const RAY_ONSET = 1.2
+export const RAY_ONSET = 1.2
 
 /** The most a body carries. See the loop's own note on why there is a cap. */
-const MAX_RAY_CRATERS = 16
+export const MAX_RAY_CRATERS = 16
+
+/**
+ * How a ray system is drawn from its harmonics, as `rayBrightness` spends
+ * them: the halo's strength, the filaments', the threshold that carves them
+ * and how it climbs with distance, the onset fade, the outer fade, and the
+ * exponent the ejecta thins with.
+ */
+export const RAY_SHAPE = {
+  halo: 0.85,
+  filament: 5.2,
+  cutBase: 0.1,
+  cutSlope: 0.62,
+  cutWidth: 0.28,
+  onsetWidth: 0.4,
+  fadeStart: 0.55,
+  thinning: 1.6,
+} as const
 
 /**
  * Azimuthal harmonics of the ray pattern, as integer frequencies.
@@ -659,7 +718,7 @@ const MAX_RAY_CRATERS = 16
  * rather than looking irregular — these produce a pattern that does not repeat
  * anywhere on the circle.
  */
-const RAY_HARMONICS = [7, 11, 17, 23, 31, 43] as const
+export const RAY_HARMONICS = [7, 11, 17, 23, 31, 43] as const
 
 /**
  * Hoisted, because the loop it bounds runs per harmonic per crater per sample.
@@ -756,7 +815,10 @@ export function rayCraters(
             iy,
             iz,
             index,
-            diameter: level.diameter * (0.5 + (0.5 * draw) / level.density),
+            diameter:
+              level.diameter *
+              (CRATER_SHAPE.sizeFloor +
+                ((1 - CRATER_SHAPE.sizeFloor) * draw) / level.density),
             age,
             jx,
             jy,
@@ -866,7 +928,8 @@ export function rayBrightness(
     // The continuous deposit. Brightest just outside the rim, where the
     // blanket is thickest, and gone by the time the apron is.
     let value =
-      0.85 * (1 - smoothstep(RIM_INNER, EJECTA_REACH, Math.max(t, RIM_INNER)))
+      RAY_SHAPE.halo *
+      (1 - smoothstep(RIM_INNER, EJECTA_REACH, Math.max(t, RIM_INNER)))
 
     if (t > RAY_ONSET) {
       const px =
@@ -897,8 +960,12 @@ export function rayBrightness(
        * threshold cannot produce.
        */
       const reach = t / RAY_REACH
-      const cut = 0.1 + 0.62 * reach
-      const filament = smoothstep(cut, Math.min(1, cut + 0.28), wave)
+      const cut = RAY_SHAPE.cutBase + RAY_SHAPE.cutSlope * reach
+      const filament = smoothstep(
+        cut,
+        Math.min(1, cut + RAY_SHAPE.cutWidth),
+        wave,
+      )
       /*
        * Ejecta thins as it flies: r^-1.6 over the tangent plane, faded to
        * nothing at the reach so a ray ends rather than being truncated — and
@@ -915,10 +982,10 @@ export function rayBrightness(
        * ejecta blanket's own entry step, which `craterProfile` above records.
        */
       const radial =
-        (smoothstep(RAY_ONSET, RAY_ONSET + 0.4, t) *
-          (1 - smoothstep(0.55, 1, reach))) /
-        t ** 1.6
-      value += 5.2 * filament * radial
+        (smoothstep(RAY_ONSET, RAY_ONSET + RAY_SHAPE.onsetWidth, t) *
+          (1 - smoothstep(RAY_SHAPE.fadeStart, 1, reach))) /
+        t ** RAY_SHAPE.thinning
+      value += RAY_SHAPE.filament * filament * radial
     }
 
     total += value * fresh

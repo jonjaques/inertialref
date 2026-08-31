@@ -124,11 +124,21 @@ const GRIT_FLOOR: Meters = 4
  * so the ratio alone counts the gaps between octaves rather than the octaves.
  * Without it this returned two for a floor of two meters and stopped at 3.9.
  */
-const GRIT_OCTAVES =
+export const GRIT_OCTAVES =
   Math.max(
     0,
     Math.ceil(Math.log(CANONICAL_DETAIL_FLOOR / GRIT_FLOOR) / Math.log(2.03)),
   ) + 1
+
+/**
+ * Cycles per unit of direction space the grit is evaluated at, on this body.
+ *
+ * Exported beside `GRIT_OCTAVES` because the two are what a port of
+ * `microRelief` has to agree with `fbm3` about, and the arithmetic below is
+ * the one place the conversion is written.
+ */
+export const gritCycles = (grammar: SurfaceGrammar): number =>
+  grammar.meanRadius / CANONICAL_DETAIL_FLOOR
 
 /**
  * The presentational tail at a direction, meters.
@@ -166,7 +176,7 @@ export function microRelief(
      * ground on both. It is the same conversion `craterLadder` makes for a
      * cell, through the same `meanRadius`.
      */
-    const cycles = grammar.meanRadius / CANONICAL_DETAIL_FLOOR
+    const cycles = gritCycles(grammar)
     height +=
       grit *
       fbm3(
