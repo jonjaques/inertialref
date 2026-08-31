@@ -9,6 +9,7 @@ import {
   HEIGHTFIELD_RESOLUTION,
   type RegionAddress,
   regionForDirection,
+  regionSize,
   SOL,
   walkBodies,
 } from '@inertialref/universe'
@@ -141,9 +142,11 @@ describe('the tile producer', () => {
 
   it('carries each body’s own records across an interleaved queue', async () => {
     /*
-     * Luna, Earth, Luna, Earth in one queue. A batch is one body, so this is
-     * four batches and three uploads, and every tile has to match its own
-     * body's CPU tile — not the body the buffer held a moment ago.
+     * Luna, Earth, Luna, Earth in one queue. A batch is one body and `pump`
+     * gathers every queued request for the head's body, so this is two
+     * batches and one upload — the Luna pair, then the Earth pair — and
+     * every tile has to match its own body's CPU tile, not the body the
+     * buffer held a moment ago.
      */
     const luna = solBody('Luna')
     const earth = solBody('Earth')
@@ -183,8 +186,7 @@ describe('the tile producer', () => {
       }
       // The kernel's own bound at level 9, from `terrainKernel.gpu.test.ts`:
       // 3e-5 of the budget and eight sample offsets.
-      const halfWidth =
-        ((Math.PI / 4) * body.surface.grammar.meanRadius) / 2 ** level
+      const halfWidth = regionSize(body.surface.grammar.meanRadius, level) / 2
       expect(worst).toBeLessThan(
         3e-5 * body.surface.maxElevation + halfWidth * 2 ** -21,
       )

@@ -21,6 +21,7 @@ import {
 import {
   COVER_CHANNELS,
   HEIGHTFIELD_BORDER,
+  heightfieldStride,
   regionAddress,
 } from '@inertialref/universe'
 import type { Seconds } from '@inertialref/shared'
@@ -278,7 +279,10 @@ describe('the terrain streamer', () => {
          * of the gate spent on a number the test never reads.
          */
         const border = payload.border ?? HEIGHTFIELD_BORDER
-        const stride = payload.resolution + 2 * border
+        const stride = heightfieldStride({
+          resolution: payload.resolution,
+          border,
+        })
         const field: HeightfieldResponse = {
           region: regionAddress(
             payload.region.face,
@@ -378,6 +382,47 @@ describe('the terrain streamer', () => {
     expect(
       pool.stats().completed + pool.stats().active + pool.queued,
     ).toBeGreaterThan(1)
+
+    streamer.clear()
+    session.dispose()
+  })
+
+  it('asks nobody for a region deeper than the ceiling when there is no pool', async () => {
+    const registry = createTaskRegistry()
+    const session = openSession({
+      seed: 'inertialref',
+      workers: () => createInlineWorker(registry),
+    })
+    const view = groundView(session)
+    // No pool at all: the source is the only producer there is, and a region
+    // it will not take has nowhere else to go. What must not happen is the
+    // refusal loop — the same region submitted to the same source every
+    // frame — so the source must see nothing, and the walk must still happen.
+    const streamer = new TerrainStreamer(null)
+    let asked = 0
+    const source: HeightfieldSource = {
+      kind: 'fake',
+      available: true,
+      maxLevel: -1,
+      submit() {
+        asked += 1
+        throw new Error('a deeper tile reached the source')
+      },
+    }
+    streamer.source = source
+
+    const frames = await walkOnce(streamer, session, view)
+    expect(frames).toBeGreaterThan(0)
+    for (let i = 0; i < 3; i += 1) {
+      streamer.update(
+        session.world,
+        view.renderTime,
+        view.camera,
+        view.origin,
+        view.body,
+      )
+    }
+    expect(asked).toBe(0)
 
     streamer.clear()
     session.dispose()

@@ -12,6 +12,7 @@ import {
   gritRelief,
   HEIGHTFIELD_BORDER,
   HEIGHTFIELD_RESOLUTION,
+  heightfieldStride,
   hypsometryBand,
   iceBand,
   ladderField,
@@ -21,6 +22,7 @@ import {
   type RegionAddress,
   regionDirection,
   regionForDirection,
+  regionSize,
   reliefBand,
   SCALAR,
   SCALARS_AT,
@@ -254,7 +256,10 @@ async function worstGap(
   isolate(body, band)
   const region = regionForDirection(vec3(0.3, 0.8, 0.5), level)
   const got = await gpuTile(body, region)
-  const stride = HEIGHTFIELD_RESOLUTION + 2 * HEIGHTFIELD_BORDER
+  const stride = heightfieldStride({
+    resolution: HEIGHTFIELD_RESOLUTION,
+    border: HEIGHTFIELD_BORDER,
+  })
   const step = HEIGHTFIELD_RESOLUTION - 1
   let worst = 0
   for (
@@ -279,7 +284,7 @@ async function worstGap(
 
 /** Half a region's side on the ground, meters. See `terrainKernel.gpu.test.ts`. */
 const halfWidth = (body: Body, level: number): number =>
-  ((Math.PI / 4) * body.surface.grammar.meanRadius) / 2 ** level
+  regionSize(body.surface.grammar.meanRadius, level) / 2
 
 /**
  * Each band's bound, named from the measurement that set it.

@@ -49,7 +49,7 @@ export interface RendererHandle {
  * the union is there for the react-native entry point, which this app does not
  * use.
  */
-interface CanvasProps {
+export interface CanvasProps {
   readonly canvas: HTMLCanvasElement | EventTarget
 }
 

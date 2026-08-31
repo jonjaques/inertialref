@@ -1434,12 +1434,14 @@ export class TerrainStreamer {
       // A source names the deepest level it produces — the kernel's tile
       // frame is exact through 23 — and a deeper tile goes to the pool. Not
       // to a refusal: a refused region is re-asked next frame of the same
-      // source, every frame, and is never produced.
-      const to =
-        region.level > (source.maxLevel ?? Number.POSITIVE_INFINITY) &&
-        this.#poolSource !== null
-          ? this.#poolSource
-          : source
+      // source, every frame, and is never produced. With no pool to send it
+      // to, nobody produces it and asking is that same loop, so it is not
+      // asked: the parent stays drawn, and counted as starved.
+      const pool = this.#poolSource
+      const deeper =
+        region.level > (source.maxLevel ?? Number.POSITIVE_INFINITY)
+      if (deeper && pool === null) continue
+      const to = deeper && pool !== null ? pool : source
       const handle = to.submit({
         surfaceSeed: formatSeed(body.surface.seed),
         maxElevation: body.surface.maxElevation,

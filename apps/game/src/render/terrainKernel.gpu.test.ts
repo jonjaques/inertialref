@@ -10,6 +10,7 @@ import {
   parseAddress,
   type RegionAddress,
   regionForDirection,
+  regionSize,
   SOL,
   surfaceDetailFloor,
   surfaceKernel,
@@ -150,7 +151,7 @@ function compare(body: Body, region: RegionAddress, got: GpuTile): Gap {
  * is `2^level` of them to a side.
  */
 const halfWidth = (body: Body, level: number): number =>
-  ((Math.PI / 4) * body.surface.grammar.meanRadius) / 2 ** level
+  regionSize(body.surface.grammar.meanRadius, level) / 2
 
 /**
  * The bound, as arithmetic about the two limits the kernel has.

@@ -40,6 +40,7 @@ import { DEFAULT_FBM } from '@inertialref/procedural'
 import {
   ARC_MARGIN,
   ARC_SHAPE,
+  BARE_COVER,
   BELT_MARGIN,
   BELT_SHAPE,
   CHAOS_SHAPE,
@@ -52,6 +53,7 @@ import {
   GATE_LO,
   GRIT_FRAMES_AT,
   GRIT_OCTAVES,
+  heightfieldStride,
   HOTSPOT_STRIDE,
   HOTSPOTS_AT,
   HYPSOMETRY_MARGIN,
@@ -63,6 +65,7 @@ import {
   LEVELS_AT,
   MARE_CYCLES,
   MINERAL_CYCLES,
+  packCover,
   PLATE_MARGIN,
   PLATE_STRIDE,
   PLATES_AT,
@@ -681,8 +684,17 @@ const mixF = (a: F, b: F, t: F): F => a.add(b.sub(a).mul(t))
 
 /** `packCover`'s byte: `Math.round(clamp01(x) · 255)`. */
 const packByteNode = (value: F): U => uint(round(saturate(value).mul(255)))
-const packByte = (value: number): number =>
-  Math.round(Math.min(1, Math.max(0, value)) * 255)
+
+/**
+ * `BARE_COVER` as one little-endian word: the four bytes `packCover` writes
+ * for it, so the ground of a body with no budget is the same constant on
+ * both processors rather than a second reading of the same four numbers.
+ */
+const BARE_WORD = ((): number => {
+  const bytes = new Uint8Array(4)
+  packCover(BARE_COVER, bytes, 0)
+  return new DataView(bytes.buffer).getUint32(0, true)
+})()
 
 /**
  * `faceRaw`: `faceToDirection` before the normalize, and with `one` at zero
@@ -747,7 +759,7 @@ export function createTerrainKernel(
   layout: TerrainKernelLayout,
 ): TerrainKernel {
   const { resolution, border, maxTiles } = layout
-  const stride = resolution + 2 * border
+  const stride = heightfieldStride(layout)
   const samples = tileSamples(resolution, border)
   const interior = resolution * resolution
   const step = resolution - 1
@@ -1127,12 +1139,12 @@ export function createTerrainKernel(
            * `cells²` is `Σ m² > floor(cells²)` for the corner indices `m`
            * themselves. See `SLAB_AT`.
            */
-          const limitAt = uint(SLAB_AT).add(rung.mul(uint(4)))
-          const nearLimit = uvec2(wordAt(limitAt), wordAt(limitAt.add(uint(1))))
-          const farLimit = uvec2(
-            wordAt(limitAt.add(uint(2))),
-            wordAt(limitAt.add(uint(3))),
-          )
+          // One slot a rung: `SLAB_AT` is a `uvec4` boundary and a rung's
+          // four words are one `uvec4`, so the limits are a single load
+          // rather than four lane selects.
+          const limits = words.element(uint(SLAB_AT / 4).add(rung))
+          const nearLimit = uvec2(asU(limits.x), asU(limits.y))
+          const farLimit = uvec2(asU(limits.z), asU(limits.w))
           const nearCorner = (c: I): I =>
             asI(
               c
@@ -1315,8 +1327,7 @@ export function createTerrainKernel(
       const budget = scalar(SCALAR.BUDGET)
 
       If(budget.lessThanEqual(0), () => {
-        // `BARE_COVER`, packed: bright 0, dark 0, mineral 0.5, ice 0.
-        coverWord.assign(uint(packByte(0.5)).shiftLeft(uint(16)))
+        coverWord.assign(uint(BARE_WORD))
       }).Else(() => {
         const radius = scalar(SCALAR.MEAN_RADIUS)
         const hasPlates = word(WORD.PLATES).greaterThanEqual(uint(2))

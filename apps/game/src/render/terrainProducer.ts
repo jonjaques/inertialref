@@ -5,8 +5,8 @@ import type { JobId } from '@inertialref/protocol'
 import {
   HEIGHTFIELD_BORDER,
   HEIGHTFIELD_RESOLUTION,
+  heightfieldStride,
   MAX_TILE_LEVEL,
-  regionAddress,
   type SurfaceParameters,
   surfaceKernel,
   TILE_STRIDE,
@@ -17,6 +17,7 @@ import type {
   HeightfieldResponse,
   HeightfieldSource,
 } from '@inertialref/workers'
+import { timingDetailed } from '../engine/browserTiming.ts'
 import { QUERY } from '../pages/paths.ts'
 import { createTerrainKernel, type TerrainKernel } from './terrainKernel.ts'
 
@@ -114,16 +115,11 @@ export interface TileProducer extends HeightfieldSource {
 }
 
 interface Queued {
-  readonly id: JobId
   readonly payload: HeightfieldRequestPayload
   readonly key: string
   readonly resolve: (response: HeightfieldResponse) => void
   readonly reject: (cause: Error) => void
   cancelled: boolean
-}
-
-interface Held {
-  readonly surface: SurfaceParameters
 }
 
 /**
@@ -155,13 +151,19 @@ export function createTileProducer(
    * and the body's facts, so two requests that agree on the four agree on
    * all of it.
    */
-  const held = new Map<string, Held>()
+  const held = new Map<string, SurfaceParameters>()
   let uploaded: string | null = null
+  /*
+   * The one switch. `fail` turns it off for a device that stopped answering
+   * and `dispose` for a producer that is being retired, and every guard
+   * below reads it alone; `disposed` only keeps the retirement from running
+   * twice.
+   */
   let available = true
-  let busy = false
   let scheduled = false
   let disposed = false
   let nextId: JobId = 1
+  /** Tiles in the batch on the GPU, which is also whether one is there. */
   let inFlight = 0
   let batches = 0
   let tiles = 0
@@ -173,7 +175,7 @@ export function createTileProducer(
   const surfaceOf = (payload: HeightfieldRequestPayload): SurfaceParameters => {
     const key = keyOf(payload)
     const known = held.get(key)
-    if (known !== undefined) return known.surface
+    if (known !== undefined) return known
     const surface: SurfaceParameters = {
       seed: parseSeed(payload.surfaceSeed),
       maxElevation: payload.maxElevation,
@@ -187,7 +189,7 @@ export function createTileProducer(
       const oldest = held.keys().next().value
       if (oldest !== undefined) held.delete(oldest)
     }
-    held.set(key, { surface })
+    held.set(key, surface)
     return surface
   }
 
@@ -205,7 +207,7 @@ export function createTileProducer(
   /** Take the next batch, dispatch it, read it back, deliver it. */
   async function pump(): Promise<void> {
     scheduled = false
-    if (busy || disposed || !available) return
+    if (inFlight > 0 || !available) return
     // Drop what was cancelled while queued; a batch of nothing is no batch.
     while (queue.length > 0 && (queue[0] as Queued).cancelled) queue.shift()
     if (queue.length === 0) return
@@ -225,7 +227,6 @@ export function createTileProducer(
       taken.push(job)
       queue.splice(cursor, 1)
     }
-    busy = true
     inFlight = taken.length
     const started = performance.now()
     try {
@@ -240,33 +241,42 @@ export function createTileProducer(
       }
       const frames = kernel.tiles.array as Float32Array
       taken.forEach((job, i) => {
-        const { region } = job.payload
-        writeTileFrame(
-          packed,
-          regionAddress(region.face, region.level, region.i, region.j),
-          frames,
-          i * TILE_STRIDE * 4,
-        )
+        writeTileFrame(packed, job.payload.region, frames, i * TILE_STRIDE * 4)
       })
       kernel.tiles.needsUpdate = true
       kernel.total.value = taken.length * kernel.samples
       renderer.compute(kernel.compute, taken.length * kernel.samples)
-      const elevations = new Float32Array(
-        await renderer.getArrayBufferAsync(kernel.elevations),
-      )
-      const cover = new Uint8Array(
-        await renderer.getArrayBufferAsync(kernel.cover),
-      )
+      // Both copies on the queue before either is waited for: each readback
+      // is its own staging buffer and command buffer, so issued together they
+      // share one fence, and issued in turn the cover's copy is not even
+      // encoded until the elevations' map has resolved — two round trips
+      // where one covers both.
+      const [elevationBytes, coverBytes] = await Promise.all([
+        renderer.getArrayBufferAsync(kernel.elevations),
+        renderer.getArrayBufferAsync(kernel.cover),
+      ])
+      const elevations = new Float32Array(elevationBytes)
+      const cover = new Uint8Array(coverBytes)
       const finished = performance.now()
       batches += 1
       tiles += taken.length
       batchMs.push(finished - started)
       if (batchMs.length > 32) batchMs.shift()
+      // The properties behind `timingDetailed()` as well as `timer.on`: they
+      // exist only at `full`, and a string built for a level that discards
+      // it is a string built for nothing, once a batch.
       if (timer.on) {
-        timer.measure('gpu heightfields', started, finished, {
-          ...BATCH_DETAIL,
-          properties: [['tiles', String(taken.length)]],
-        })
+        timer.measure(
+          'gpu heightfields',
+          started,
+          finished,
+          timingDetailed()
+            ? {
+                ...BATCH_DETAIL,
+                properties: [['tiles', String(taken.length)]],
+              }
+            : BATCH_DETAIL,
+        )
       }
       taken.forEach((job, i) => {
         if (job.cancelled) {
@@ -285,14 +295,13 @@ export function createTileProducer(
       fail(cause)
       for (const job of taken) job.reject(new Error('producer unavailable'))
     } finally {
-      busy = false
       inFlight = 0
     }
     schedule()
   }
 
   function schedule(): void {
-    if (scheduled || busy || disposed || !available) return
+    if (scheduled || inFlight > 0 || !available) return
     scheduled = true
     void Promise.resolve().then(pump)
   }
@@ -310,7 +319,7 @@ export function createTileProducer(
     cover: Uint8Array,
   ): HeightfieldResponse {
     const { resolution, border } = kernel.layout
-    const stride = resolution + 2 * border
+    const stride = heightfieldStride(kernel.layout)
     let min = Infinity
     let max = -Infinity
     for (let row = 0; row < resolution; row += 1) {
@@ -321,9 +330,8 @@ export function createTileProducer(
         if (elevation > max) max = elevation
       }
     }
-    const { region } = payload
     return {
-      region: regionAddress(region.face, region.level, region.i, region.j),
+      region: payload.region,
       resolution,
       border,
       elevations,
@@ -337,7 +345,7 @@ export function createTileProducer(
     kind: 'gpu',
     maxLevel: MAX_TILE_LEVEL,
     get available() {
-      return available && !disposed
+      return available
     },
     submit(payload) {
       const id = nextId++
@@ -348,7 +356,6 @@ export function createTileProducer(
         reject = rej
       })
       const job: Queued = {
-        id,
         payload,
         key: keyOf(payload),
         resolve,
@@ -361,7 +368,6 @@ export function createTileProducer(
       // deeper tile should not arrive here at all.
       if (
         !available ||
-        disposed ||
         payload.resolution !== kernel.layout.resolution ||
         (payload.border ?? HEIGHTFIELD_BORDER) !== kernel.layout.border ||
         payload.region.level > MAX_TILE_LEVEL
@@ -391,7 +397,7 @@ export function createTileProducer(
       let total = 0
       for (const ms of batchMs) total += ms
       return {
-        available: available && !disposed,
+        available,
         queued: queue.length,
         inFlight,
         batches,
@@ -400,28 +406,52 @@ export function createTileProducer(
       }
     },
     async warm() {
-      if (disposed || !available) return false
+      if (!available) return false
       /*
        * An empty dispatch: the pipeline is built and nothing is written. The
        * validation scope is what turns a kernel Tint refuses into a `false`
        * here rather than a silent broken pipeline — the backend reports the
        * failure through its console sink and marks the pipeline, and a later
        * dispatch would produce nothing and reject nothing.
+       *
+       * Pushed and popped in one task, around the dispatch alone. Error
+       * scopes are one stack on the device, and the frame loop shares the
+       * device: three brackets an async render pipeline in a scope of its
+       * own that it pops only once the pipeline resolves, so a scope held
+       * here across the readback's await would interleave with it — this
+       * pop taking the frame's scope, and a kernel Tint refused passing as
+       * built, or the frame's pop taking this one and a material's error
+       * retiring the ground producer. `compute` builds the pipeline and
+       * submits synchronously, so its error is in the scope before the pop
+       * is asked for, and the readback that follows needs no scope: it is
+       * the wait for the compile, not a test of it.
        */
       const device = (renderer.backend as { device?: GPUDevice }).device
       device?.pushErrorScope('validation')
+      let dispatched = false
       try {
         kernel.total.value = 0
         renderer.compute(kernel.compute, WORKGROUP)
-        await renderer.getArrayBufferAsync(kernel.elevations)
+        dispatched = true
       } catch (cause) {
-        await device?.popErrorScope().catch(() => null)
         fail(cause)
+      }
+      const scoped = device?.popErrorScope() ?? Promise.resolve(null)
+      if (!dispatched) {
+        await scoped.catch(() => null)
         return false
       }
-      const scoped = await device?.popErrorScope()
-      if (scoped !== null && scoped !== undefined) {
-        fail(scoped.message)
+      try {
+        const [error] = await Promise.all([
+          scoped,
+          renderer.getArrayBufferAsync(kernel.elevations),
+        ])
+        if (error !== null) {
+          fail(error.message)
+          return false
+        }
+      } catch (cause) {
+        fail(cause)
         return false
       }
       return true
@@ -429,6 +459,11 @@ export function createTileProducer(
     dispose() {
       if (disposed) return
       disposed = true
+      // Unavailable before anything else. The retirement runs ahead of a
+      // renderer rebuild, whose first act destroys this device, and a batch
+      // in flight on it rejects into `pump`'s catch — which then reaches
+      // `fail`'s early return rather than logging that the producer stopped.
+      available = false
       for (const job of queue.splice(0)) {
         job.reject(new Error('producer unavailable'))
       }

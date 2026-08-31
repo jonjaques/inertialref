@@ -1492,6 +1492,12 @@ export class GameEngine implements PresentationHost {
     // returns the same instance and the browser never reaches here at all —
     // this is the tests' path, and the one a second host would take.
     this.#releaseTiming()
+    // The ground before the session. A producer the host installed is the
+    // host's to dispose, but the reference is this engine's, and so is the
+    // window in flight on it: a job that lands after the pool is gone is an
+    // answer into a cache nothing reads.
+    this.#terrain.source = null
+    this.#terrain.clear()
     this.session.dispose()
   }
 }

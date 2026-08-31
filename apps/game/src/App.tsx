@@ -44,6 +44,7 @@ import {
 } from './render/terrainProducer.ts'
 import { warmAtMount } from './render/warmup.ts'
 import {
+  type CanvasProps,
   commitToneCurve,
   createRenderer,
   type RendererHandle,
@@ -339,10 +340,15 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
   /*
    * The GPU tile producer for this renderer build.
    *
-   * Retired in the same callback that adopts the renderer, because it holds
-   * buffers on the old device and dies with it: the engine goes back on the
-   * pool *before* the new renderer exists, so a build that fails to warm
-   * leaves the pool in place rather than a producer on a dead device.
+   * Retired from the `gl` factory, ahead of the build it starts, because the
+   * build's first act is to release the previous renderer — which destroys
+   * its device — and the producer holds buffers on that device with, as
+   * often as not, a readback in flight. Retired there, the engine is back on
+   * the pool before the device goes and the batch in flight rejects quietly;
+   * retired from `onReady` it would outlive its device by the whole build,
+   * one to six seconds, and the first readback to fail would log that the
+   * producer stopped. R3F re-invokes the factory while a build is pending,
+   * and a retirement then is of nothing.
    *
    * Made from the effect that begins the warm-up, not from that callback,
    * because the session it registers with does not exist yet there:
@@ -355,49 +361,19 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    * the engine only once its pipeline has proven it builds — `warm` is a
    * dispatch of nothing inside a validation scope.
    *
-   * The effect runs twice under StrictMode and again on every renderer
-   * build; `adoptedFor` is what makes a second run for the same renderer a
-   * no-op rather than a second producer on the same device. The check
-   * against `producer.current` inside the warm-up keeps a late resolution
-   * from installing a producer that was already retired.
+   * That effect runs twice under StrictMode and again on every renderer
+   * build, and a producer already in hand is what makes a second run do
+   * nothing: the retirement empties the ref ahead of every build, so "one
+   * exists" is exactly "this build has one" — the owner of the state, not a
+   * latch beside it. The check against `producer.current` inside the
+   * warm-up keeps a late resolution from installing a producer that was
+   * already retired.
    */
-  const adoptedFor = useRef<RendererHandle | null>(null)
   const retireProducer = (): void => {
     producer.current?.dispose()
     producer.current = null
-    adoptedFor.current = null
     engine.setHeightfieldSource(null)
   }
-  const adoptProducer = useCallback(
-    (handle: RendererHandle): void => {
-      if (adoptedFor.current === handle) return
-      adoptedFor.current = handle
-      if (
-        handle.description.backend !== 'webgpu' ||
-        producerPreference(window.location.search) === 'cpu'
-      ) {
-        return
-      }
-      const next = createTileProducer(handle.renderer)
-      producer.current = next
-      warmAtMount({
-        label: 'compiling the ground producer',
-        units: 1,
-        run: async (done) => {
-          const ready = await next.warm()
-          done()
-          if (producer.current !== next) return
-          if (ready) {
-            engine.setHeightfieldSource(next)
-            return
-          }
-          next.dispose()
-          producer.current = null
-        },
-      })
-    },
-    [engine],
-  )
 
   /*
    * Which ceiling the drawing buffer gets. Deliberately *not* in the key above:
@@ -449,8 +425,32 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
     if (handle === null) return
     void warmScene(handle, engine, firstLight.progress).then(firstLight.warmed)
     // After `warmScene`, which is what opens the session this registers with.
-    adoptProducer(handle)
-  }, [output, engine, firstLight, adoptProducer])
+    // See the note at `retireProducer`.
+    if (producer.current !== null) return
+    if (
+      handle.description.backend !== 'webgpu' ||
+      producerPreference(window.location.search) === 'cpu'
+    ) {
+      return
+    }
+    const next = createTileProducer(handle.renderer)
+    producer.current = next
+    warmAtMount({
+      label: 'compiling the ground producer',
+      units: 1,
+      run: async (done) => {
+        const ready = await next.warm()
+        done()
+        if (producer.current !== next) return
+        if (ready) {
+          engine.setHeightfieldSource(next)
+          return
+        }
+        next.dispose()
+        producer.current = null
+      },
+    })
+  }, [output, engine, firstLight])
 
   // Bake atmosphere tables for systems that load mid-session, off the frame
   // loop, so a jump's first look costs a cache hit. See `render/preload.ts`.
@@ -683,14 +683,18 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
         // what the browser can output, builds a `WebGPURenderer` around the
         // answer and awaits `init()`; R3F awaits the promise, so nothing draws
         // against a half-built backend. See `render/createRenderer.ts`.
-        gl={createRenderer(hdr, aaAntialias(aa), (handle) => {
-          renderer.current = handle
-          engine.gl = handle
+        gl={(props: CanvasProps) => {
+          // Ahead of the build, whose first act releases the previous
+          // renderer; see `retireProducer`.
           retireProducer()
-          setOutput(handle.description)
-          // The measurement replay that follows a renderer build is
-          // `firstLight.watch`'s, fired from the effect that reads `output`.
-        })}
+          return createRenderer(hdr, aaAntialias(aa), (handle) => {
+            renderer.current = handle
+            engine.gl = handle
+            setOutput(handle.description)
+            // The measurement replay that follows a renderer build is
+            // `firstLight.watch`'s, fired from the effect that reads `output`.
+          })(props)
+        }}
         // A logarithmic depth buffer makes this range workable; a linear one
         // would have no usable precision anywhere in it. The flag itself moved
         // into the factory, because it is a constructor parameter there.
