@@ -6210,6 +6210,63 @@ measured on the same idle machine: 102.9 s for `pnpm test`, 10.0 s without
 worker for 101.5 s. Nothing is changed on that page; the four levers it names
 are each a decision about what the gate promises.
 
+## The black boot was two defects, and the watchdog could see neither (30 Aug 2026)
+
+A dev boot comes up black under a live HUD, the CPU lights up, the frame
+strobes, and Earthrise arrives about ten seconds in. Reproduced in headless
+Chrome, where nothing can occlude the window, so every reading below is a
+composited screenshot or an in-frame readback and not a rig artefact. The
+reading that named it: 789,603 triangles and 1,728 lines submitted a frame,
+the canvas opaque black inside the frame, and `camera.aspect === 0` on the
+camera being rendered with, while the R3F store held `size 1600×900` and a
+viewport aspect of 1.78.
+
+**The first defect is R3F's, and the rig now owns the aspect.** R3F 9.7 builds
+its camera as `new PerspectiveCamera(75, 0, …)` and corrects the aspect only
+from a store subscription that fires on a size or pixel-ratio _change_, using
+whichever camera is in the store at that moment. Its async `configure()` reads
+a state snapshot taken before it awaits the `gl` factory — here a renderer
+build of one to six seconds in dev — and `<Canvas>` calls `configure()` again
+on every re-render while it waits. Each queued call finds no camera in its
+stale snapshot and builds one; the last one built lands after the size is in
+the store, its `setSize` is a no-op, and the subscription never fires for it.
+A zero aspect is a NaN projection: every draw is submitted and rasterizes to
+nothing. Three headless dev boots of three came up that way. `CameraRig`
+writes the aspect from `state.size` beside the field of view it already owns,
+one compare a frame.
+
+**The second is the watchdog's probe, and it was blind on every boot.** The
+ladder in `render/presentationWatchdog.ts` sampled the canvas with `drawImage`
+from a timer, and between frames a WebGPU canvas has no readable image: Chrome
+hands the drawn texture to the compositor when the frame's task ends, and the
+readback is transparent black whether the canvas presented or not — the fact
+the plate-capture rig met from the other side ("a WebGPU canvas reads back
+blank", above). So a healthy boot read as "never presented" and climbed the
+whole ladder — replay at 2.9 s, nudges at 3.8 and 4.7, a renderer rebuild at
+5.5 with its second preload census, replay, nudges, "giving up" at 9.5 — and
+the cover came off at first light around 12 s. That is the ten seconds, the
+strobe and the CPU. The rebuild cured the first defect about half the time,
+which is how the ladder masked it and why the picture arrived at all. The
+sample is now taken from a `requestAnimationFrame` callback registered by that
+timer, which runs after R3F's loop (its next frame is always already queued)
+and reads the texture the loop has just drawn: measured on one lit canvas,
+8192 of 8192 pixels opaque and 4,202 lit inside the frame, 0 of 8192 a
+`setTimeout(0)` later.
+
+After: a headless dev boot with the watchdog live logs no rung — `renderer
+ready` at 0.6 s, `first light` at 7.6 s on `warm-up complete`, cover off and
+the picture lit at 9.2 s; the warm-up is the whole wait. The in-frame sample
+reads under the driver's focus emulation too — 57 lit of 8192 opaque on an
+Earthrise strip through `drive.mjs` — so `?presentation=occluded` is not what
+prevents a false negative any more; it stays because a driven boot is a
+measurement and a ladder run is what it must never contain. Neither a bisect
+nor the rig could have found this: the rig's window sits at x=2400 and
+composites only while nothing covers it, so a shot ten seconds after a reload
+measures the desk as much as the page, and #41 read as lit only because its
+ladder had rebuilt the renderer before the capture. The ladder itself stays —
+the wedge it was built for is a different animal from a NaN projection, and
+the in-frame sample can now tell the two apart.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).

@@ -127,22 +127,24 @@ three; they are here because they explain what it is doing:
    `engine.gl` null, which looks like a rendering bug and is not one.
 4. **A wedged Chrome needs `--down` and a fresh start.** Reloading is not always
    enough to recover its GPU state.
-5. **The page is told its own pixels are unreadable, with `?presentation=occluded`,
-   and the driver adds it to every URL.** The presentation watchdog decides
-   whether the canvas has ever presented by reading the bitmap back, and skips
-   the check while `document.visibilityState` is not `visible` — because an
-   occluded window legitimately never presents. Focus emulation, which is what
-   makes trap 1 work, reports `visible` for a window that is still behind
-   everything else, so the gate opened on a readback that is transparent black
-   for a perfectly healthy renderer. The ladder then exhausted and remounted
-   the canvas on **every** automated boot: a second full preload and warm-up
-   census 4.5 s after the first — about 6.5 s of a 10.2 s `navigation to first
-light` — an uncaught dispose from inside Three on the way, and a drawing
-   buffer that came back at 3200×1800 for a rig asking for 1600×900 at DPR 1,
-   because `useDevicePixelRatio`'s media query does not re-fire under
-   emulation. **Every terrain figure taken after a rebuild in this rig was a
-   retina figure**, which is the trap below arriving without being asked for.
-   Boot from this rig is now one census and ~4.3 s to first light.
+5. **The page is told its own pixels are not to be sampled, with
+   `?presentation=occluded`, and the driver adds it to every URL.** The
+   presentation watchdog decides whether the canvas has presented by reading
+   the bitmap back from inside an animation frame, and skips the check while
+   `document.visibilityState` is not `visible` — because an occluded window
+   legitimately never presents. Focus emulation, which is what makes trap 1
+   work, reports `visible` for a window that is still behind everything else;
+   the in-frame sample reads the drawn texture rather than the composited one,
+   so it reads correctly there, but a driven boot is a measurement and a ladder
+   run is what it must never contain. Exhausted, the ladder remounts the
+   canvas: a second full preload and warm-up census 4.5 s after the first —
+   about 6.5 s of a 10.2 s `navigation to first light` — an uncaught dispose
+   from inside Three on the way, and a drawing buffer that comes back at
+   3200×1800 for a rig asking for 1600×900 at DPR 1, because
+   `useDevicePixelRatio`'s media query does not re-fire under emulation.
+   **Every terrain figure taken after a rebuild in this rig is a retina
+   figure**, which is the trap below arriving without being asked for. Boot
+   from this rig is one census and ~4.3 s to first light.
 6. **Chrome left running is contention the test suite feels.** The driver keeps
    it up on purpose, and a full `pnpm test` beside it has timed out on a
    different unrelated file each run and passed clean once `--down` had run.

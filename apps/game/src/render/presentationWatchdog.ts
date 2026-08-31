@@ -9,9 +9,20 @@ import { QUERY } from '../pages/paths.ts'
  * harness answers, and `renderer.info` reports the full scene — 16 draw
  * calls, 800k triangles, every frame — while the canvas never presents a
  * pixel. `renderer.info` is therefore *useless* as a detector, which is why
- * this watchdog reads the actual canvas bitmap: `drawImage` of a WebGPU
- * canvas yields its last presented frame, and a canvas that has never
- * presented samples as pure transparent black.
+ * this watchdog reads the actual canvas bitmap.
+ *
+ * It reads it *inside an animation frame*, and that is the whole trick.
+ * Between frames a WebGPU canvas has no readable image: Chrome hands the drawn
+ * texture to the compositor when the frame's task ends, and `drawImage`
+ * afterwards yields transparent black whether the canvas presented or not — a
+ * sample taken from a timer says "never presented" about every canvas there
+ * is, and the ladder below then runs to exhaustion on a healthy boot, nudging
+ * and rebuilding a renderer that was fine. A `requestAnimationFrame` callback
+ * registered from that timer runs after R3F's loop, whose next frame is
+ * always already queued, so it reads the texture the loop has just drawn and
+ * is about to present: opaque, and lit if anything is in view. Measured
+ * headless on the dev build: the same lit canvas reads 8192 of 8192 opaque
+ * pixels inside the frame and 0 of 8192 a `setTimeout(0)` later.
  *
  * Recovery is a ladder, because the wedge has layers and each earlier rung is
  * cheaper than the next:
@@ -42,14 +53,17 @@ import { QUERY } from '../pages/paths.ts'
 const log = getLogger('game.presentation')
 
 /**
- * Whether this document has told us its own pixels cannot be read back.
+ * Whether this document has told us its own pixels are not to be sampled.
  *
- * The one thing `visibilityState` is a proxy for is "the compositor is
- * presenting this window", and a driver breaks the proxy: CDP focus emulation
- * makes an occluded Chrome run its animation frames *and* report `visible`, so
- * the gate below opens on a window that has never composited and the readback
- * is transparent black for a renderer that is perfectly healthy. `QUERY.presentation`
- * carries the argument and the measured cost.
+ * A driven window: CDP focus emulation makes an occluded Chrome run its
+ * animation frames *and* report `visible`, so the gate below opens on a window
+ * whose compositor may be doing nothing at all. The in-frame sample reads the
+ * drawn texture rather than the composited one, so it does read there —
+ * measured through the rig, 57 lit of 8192 opaque pixels on an Earthrise
+ * strip — but a driven boot is a measurement, and the declaration keeps it
+ * from ever depending on what a frame happened to hold: stand down, release
+ * the cover, climb nothing. `QUERY.presentation` carries the cost a ladder run
+ * puts on a boot figure.
  *
  * Read from the URL at each check rather than latched, because it costs
  * nothing and a latch would need a place to live. A page with no `location` —
@@ -95,9 +109,12 @@ const STRIPS: readonly { x: number; y: number }[] = [
  * to black, is a false positive that would make the watchdog "fix" a perfectly
  * healthy sky by rebuilding the renderer under it.
  *
- * `probe` is a 2D context to sample through: `drawImage` of a WebGPU canvas
- * yields its last presented frame, and one that has never presented reads back
- * pure transparent black.
+ * `probe` is a 2D context to sample through. Call it from inside an animation
+ * frame, after the renderer has drawn: that is the only moment `drawImage` of
+ * a WebGPU canvas yields the frame rather than transparent black — see the
+ * header. A drawn frame with nothing in view reads opaque black, which this
+ * counts as unlit on purpose: a NaN projection submits every draw and shades
+ * none of them, and the ladder is the right answer to that too.
  */
 export function hasLitPixels(
   canvas: { readonly width: number; readonly height: number },
@@ -197,6 +214,7 @@ export function watchPresentation(
   let cancelled = false
   let attempts = 0
   let timer = 0
+  let frame = 0
   let deferralLogged = false
 
   const probeCanvas = document.createElement('canvas')
@@ -222,7 +240,20 @@ export function watchPresentation(
     canvas.width = width
   }
 
+  /**
+   * Every sample is taken from inside an animation frame — see the header for
+   * why a timer's own callback reads nothing. The timer only asks for the
+   * frame; `inspect` does the reading. One frame in flight at a time, so a
+   * visibility change that re-arms the timer cannot leave an earlier request
+   * to fire a second inspection and count the same black twice.
+   */
   const check = (): void => {
+    if (cancelled) return
+    window.cancelAnimationFrame(frame)
+    frame = window.requestAnimationFrame(inspect)
+  }
+
+  const inspect = (): void => {
     if (cancelled) return
     /*
      * The two ways there is nothing to read, before anything that could read.
@@ -309,6 +340,7 @@ export function watchPresentation(
   /** Stop watching: this instance has nothing left to do, either way. */
   const standDown = (): void => {
     window.clearTimeout(timer)
+    window.cancelAnimationFrame(frame)
     document.removeEventListener('visibilitychange', onVisible)
   }
 
