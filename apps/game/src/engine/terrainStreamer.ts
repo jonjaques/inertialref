@@ -196,18 +196,26 @@ function pyramid(leaves: readonly SelectedPatch[]): readonly RegionAddress[] {
  *
  * This is main-thread work inside the frame — 4,761 directions and two normal
  * passes — so it is the one part of streaming that shows up as a hitch rather
- * than as latency. It is **0.25 ms** a patch, so four of them is a millisecond,
- * and a cold whole-disk selection of 450 fills in about 110 frames — which is
- * roughly what the worker pool takes to generate them anyway.
+ * than as latency. It is **0.25 ms** a patch, so eight of them is two
+ * milliseconds: the terrain line of the frame budget in
+ * `docs/design/technical.md`, and nothing else's.
  *
- * It was 6.26 ms a patch before the mesh loops were written in scalars, which
- * is six frames of terrain budget for one patch and the reason this constant
- * was 2. Moving the build into the worker entirely is the next step and is a
- * payload change rather than an algorithm one; it is not free, because
- * `packages/workers` and `packages/rendering` are the same layer and the mesh
- * arithmetic would have to move down to `packages/universe` first.
+ * Eight rather than four because the GPU producer moves the floor. With
+ * heightfields arriving sixteen to a dispatch the build is the queue, and the
+ * time to a converged 2 m stance on Luna is this constant's curve: 8.2 s at
+ * four a frame, 4.4 s at eight, 3.5 s at sixteen, against 25–33 s from the
+ * worker pool at any of them. Sixteen buys 0.9 s for another 2 ms of frame,
+ * and a hitch is what this constant exists to bound.
+ *
+ * The mesh loops are written in scalars; as vector-object arithmetic the same
+ * build is 6.26 ms a patch, six frames of terrain budget for one, and the
+ * constant would have to be 2. Moving the build into the worker entirely is
+ * the next step and is a payload change rather than an algorithm one; it is
+ * not free, because `packages/workers` and `packages/rendering` are the same
+ * layer and the mesh arithmetic would have to move down to
+ * `packages/universe` first.
  */
-const BUILDS_PER_FRAME = 4
+const BUILDS_PER_FRAME = 8
 
 /**
  * How many pixels a body's relief must cover before terrain is drawn at all.
