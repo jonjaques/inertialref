@@ -38,6 +38,12 @@ import { EXTENDED_RANGE_QUERY, watchDynamicRange } from './render/capability.ts'
 import { warmScene, watchSystemAtmospheres } from './render/preload.ts'
 import { createFirstLight } from './render/firstLight.ts'
 import {
+  createTileProducer,
+  producerPreference,
+  type TileProducer,
+} from './render/terrainProducer.ts'
+import { warmAtMount } from './render/warmup.ts'
+import {
   commitToneCurve,
   createRenderer,
   type RendererHandle,
@@ -247,6 +253,11 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
   // The renderer itself, for the one thing that has to happen to it after R3F
   // has finished configuring it. Not state: nothing renders differently for it.
   const renderer = useRef<RendererHandle | null>(null)
+  /**
+   * The GPU tile producer, which follows the renderer: one per build, gone
+   * when the build is. A ref rather than state for the reason `renderer` is.
+   */
+  const producer = useRef<TileProducer | null>(null)
   /** Guards save and load against each other. See `commands.save`. */
   const storageBusy = useRef(false)
   /*
@@ -324,6 +335,54 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
   // only changes the drawing-buffer scale, which R3F applies live via `dpr`.
   // The watchdog epoch joins it so the last recovery rung can rebuild.
   const canvasKey = `${rendererKey(hdr, dynamicRangeHigh)}:${aaAntialias(aa) ? 'msaa' : 'raw'}:${canvasEpoch}`
+
+  /*
+   * The GPU tile producer for this renderer build.
+   *
+   * Made in the same callback that adopts the renderer, because it holds
+   * buffers on that renderer's device and dies with it: the previous one is
+   * disposed and the engine put back on the pool *before* the new one exists,
+   * so a build that fails to warm leaves the pool in place rather than a
+   * producer on a dead device. It reaches the engine only once its pipeline
+   * has proven it builds — `warm` is a dispatch of nothing inside a
+   * validation scope — and the warm-up is registered with boot, which is
+   * what keeps the cover up for the compile.
+   *
+   * StrictMode invokes the factory twice and both invocations resolve to one
+   * renderer; the second adoption disposes a producer that had just been made
+   * for the same device and makes it again, which costs one more warm-up on
+   * the same pipeline cache. The check against `producer.current` inside the
+   * warm-up is what keeps the first one's late resolution from installing a
+   * producer that was already disposed.
+   */
+  const adoptProducer = (handle: RendererHandle): void => {
+    producer.current?.dispose()
+    producer.current = null
+    engine.setHeightfieldSource(null)
+    if (
+      handle.description.backend !== 'webgpu' ||
+      producerPreference(window.location.search) === 'cpu'
+    ) {
+      return
+    }
+    const next = createTileProducer(handle.renderer)
+    producer.current = next
+    warmAtMount({
+      label: 'compiling the ground producer',
+      units: 1,
+      run: async (done) => {
+        const ready = await next.warm()
+        done()
+        if (producer.current !== next) return
+        if (ready) {
+          engine.setHeightfieldSource(next)
+          return
+        }
+        next.dispose()
+        producer.current = null
+      },
+    })
+  }
 
   /*
    * Which ceiling the drawing buffer gets. Deliberately *not* in the key above:
@@ -610,6 +669,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
         gl={createRenderer(hdr, aaAntialias(aa), (handle) => {
           renderer.current = handle
           engine.gl = handle
+          adoptProducer(handle)
           setOutput(handle.description)
           // The measurement replay that follows a renderer build is
           // `firstLight.watch`'s, fired from the effect that reads `output`.

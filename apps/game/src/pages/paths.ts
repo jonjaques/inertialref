@@ -290,6 +290,16 @@ export const QUERY = {
    * sixteen there: this is a URL, and an unbounded one spawns whatever it says.
    */
   workers: 'workers',
+  /**
+   * Which heightfield producer to use: `cpu` keeps the worker pool on a
+   * WebGPU page.
+   *
+   * A diagnostic, like `workers`, and the A/B every GPU figure in
+   * `CONTEXT.md` was taken against: the same page, the same descent, one
+   * flag apart. Anything else, or nothing, is the GPU producer where the
+   * renderer can offer one.
+   */
+  producer: 'producer',
 } as const
 
 /**

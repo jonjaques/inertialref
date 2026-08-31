@@ -47,8 +47,9 @@ import {
   terrainPatchKey,
 } from '@inertialref/rendering'
 import {
-  generateHeightfieldTask,
+  type HeightfieldSource,
   type JobHandle,
+  poolHeightfieldSource,
   surfaceDetailFloorTask,
   type WorkerPool,
 } from '@inertialref/workers'
@@ -439,6 +440,24 @@ export interface TerrainState {
 
 export class TerrainStreamer {
   readonly #pool: WorkerPool | null
+  /** The pool as a heightfield source: the canonical field, on a worker. */
+  readonly #poolSource: HeightfieldSource | null
+  /**
+   * A producer that outranks the pool for heightfields while it can answer.
+   *
+   * The GPU tile producer, when the renderer is WebGPU and its kernel built.
+   * A presentation input like `lensView`, written by the host once the
+   * renderer exists, which is after this streamer does. Only the heightfields
+   * go through it: the level floor is `surfaceDetailFloorTask` on the pool
+   * whichever source draws the ground, because it is the canonical field's
+   * own measurement and a producer's port is held to a tolerance of it.
+   *
+   * Checked per request rather than once, because a producer can stop mid
+   * session — a lost device — and `available` is how it says so. The pool is
+   * what the next request goes to; the ones in flight reject with
+   * `producer unavailable` and are re-asked on the following frame.
+   */
+  source: HeightfieldSource | null = null
   readonly #scatter = new ScatterField()
   /*
    * Keyed by `regionKey` — packed arithmetic, no body in it — because the
@@ -637,6 +656,14 @@ export class TerrainStreamer {
 
   constructor(pool: WorkerPool | null) {
     this.#pool = pool
+    this.#poolSource = pool === null ? null : poolHeightfieldSource(pool)
+  }
+
+  /** Where the next heightfield request goes, or nowhere. */
+  #heightfields(): HeightfieldSource | null {
+    const source = this.source
+    if (source !== null && source.available) return source
+    return this.#poolSource
   }
 
   /**
@@ -663,6 +690,7 @@ export class TerrainStreamer {
     readonly saturated: boolean
     readonly selections: number
     readonly lens: LensView | null
+    readonly producer: string
     readonly scatter: {
       readonly regions: number
       readonly resolving: number
@@ -702,6 +730,10 @@ export class TerrainStreamer {
       // visible as this number standing still while the frame count climbs.
       selections: this.#selections,
       lens: this.#lensView,
+      // What the *next* request would go to, which is the only honest answer
+      // once a producer has stopped: the fields already held came from
+      // wherever they came from.
+      producer: this.#heightfields()?.kind ?? 'none',
       scatter: this.#scatter.summary(),
     }
   }
@@ -1357,7 +1389,8 @@ export class TerrainStreamer {
    * dissolve exactly that grouping, so this only filters and takes.
    */
   #request(wanted: readonly RegionAddress[], body: Body): void {
-    if (this.#pool === null) return
+    const source = this.#heightfields()
+    if (source === null) return
     /*
      * The budget before the filter, and the early exit is the point.
      *
@@ -1389,7 +1422,7 @@ export class TerrainStreamer {
       // rather than cached, because the key alone cannot tell a new seed's
       // s:SOL/b:2 from the old one's.
       const epoch = this.#epoch
-      const handle = this.#pool.submit(generateHeightfieldTask, {
+      const handle = source.submit({
         surfaceSeed: formatSeed(body.surface.seed),
         maxElevation: body.surface.maxElevation,
         roughness: body.surface.roughness,
@@ -1417,8 +1450,15 @@ export class TerrainStreamer {
           // A cancellation is this streamer's own decision arriving back at
           // it, not a failure: `clear()` cancels the whole window on a
           // retarget, so a warning here would be a hundred and twenty lines of
-          // log for one keystroke.
-          if (cause instanceof Error && cause.message === 'cancelled') return
+          // log for one keystroke. A producer that stopped has already said
+          // why, once, and its window is re-asked of the pool next frame.
+          if (
+            cause instanceof Error &&
+            (cause.message === 'cancelled' ||
+              cause.message === 'producer unavailable')
+          ) {
+            return
+          }
           log.warn('terrain patch failed', { key, cause: String(cause) })
         })
         .finally(() => {

@@ -233,6 +233,16 @@ export interface TerrainReport {
    */
   readonly selections: number
   /**
+   * Where the next heightfield request goes: `gpu`, `pool`, or `none`.
+   *
+   * The GPU tile producer when the renderer is WebGPU and its kernel built,
+   * the worker pool otherwise, and `none` on a host with neither — which is
+   * the headless runner. It reports the *next* request's route rather than
+   * the fields already held, because a producer can stop mid session and the
+   * ground on screen came from wherever it came from.
+   */
+  readonly producer: string
+  /**
    * The rocks lying on it.
    *
    * Part of the terrain report rather than a verb of its own, because a scatter
