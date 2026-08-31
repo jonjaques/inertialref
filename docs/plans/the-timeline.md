@@ -474,7 +474,7 @@ flowchart LR
 | Span      | Cited cost                                      | Source               |
 | --------- | ----------------------------------------------- | -------------------- |
 | `select`  | 40–90 µs whole disk; 0.11–0.31 ms               | `terrainStreamer.ts` |
-| `build`   | 0.25 ms a patch, four a frame                   | `terrainStreamer.ts` |
+| `build`   | 0.25 ms a patch, eight a frame                  | `terrainStreamer.ts` |
 | `scatter` | 128 slots a frame — 0.31–0.72 ms across the zoo | `scatterField.ts`    |
 | `request` | queue submission                                | —                    |
 | `evict`   | —                                               | —                    |

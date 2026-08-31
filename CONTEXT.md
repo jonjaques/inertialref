@@ -6440,8 +6440,8 @@ Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md
 - The atmosphere is an analytic shell — exponential density and a twilight
   ring as of 21 Aug, but still geometry rather than scattering. The Bruneton
   LUTs spike 2 made a requirement remain the specified replacement.
-- No compute passes, storage buffers or indirect draw yet: the WebGPU migration
-  delivered the renderer and the HDR path, not GPU-driven terrain or culling.
+- No indirect draw or GPU-driven culling yet: the heightfield producer is the one
+  compute pass (ADR-0023); selection and the mesh are CPU-side.
 - Cold load to interactive is still unmeasured, and it is the budget most likely
   to be missed: the bundle is **663.3 KB gzip — 511.0 KB brotli — in a single
   chunk** with no code splitting and no `React.lazy` anywhere in `src`, of which

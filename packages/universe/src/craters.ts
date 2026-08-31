@@ -249,13 +249,16 @@ export function ladderField(
  * is inside the unit sphere and its farthest outside, and the corners are
  * `m/cells` for integer `m` — so the test is `Σ m² > cells²`, an integer against
  * a float, and `Σ (m/cells)²` in float64 lands on either side of `1` by
- * rounding whenever the two are equal. They are equal on every tail rung of
- * every Sol body: the tail's `cells` is `meanRadius / 8`, `/ 4`, `/ 2`, `/ 1`,
- * a published radius is a round number, and an integer sphere has lattice
- * points on it — hundreds of thousands at Luna's radius in cells, a crater in
- * a million, each decided by which way a product rounded. The integer form
- * decides them exactly, and it is what the GPU port evaluates, so the tail is
- * the same tail on both processors. The canonical ladder cannot land there: its
+ * rounding whenever the two are equal. They are equal on every tail rung whose
+ * `cells` is a whole number — `meanRadius / 8`, `/ 4`, `/ 2`, `/ 1` over a
+ * published radius that is one, which is 46 of Sol's 128 tail-bearing bodies
+ * and every airless moon with a round radius — and an integer sphere has
+ * lattice points on it: hundreds of thousands at Luna's radius in cells, a
+ * crater in a million, each decided by which way a product rounded. The
+ * integer form decides them exactly, and it is what the GPU port evaluates, so
+ * the tail is the same tail on both processors. Measured against the float
+ * form over Sol: 167 of ~540k samples move, 0.63 m at most (Miranda), on the
+ * 17 bodies with such a rung and on none without. The canonical ladder cannot land there: its
  * `cells` is `meanRadius / (largestCrater / 2ᵏ)` over a float largest crater,
  * so `cells²` is never an integer and no corner sits on the sphere.
  */

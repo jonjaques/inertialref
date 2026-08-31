@@ -296,6 +296,12 @@ export interface HeightfieldSource {
   /** `'pool'`, `'gpu'` — what `ir.terrain().producer` reports. */
   readonly kind: string
   readonly available: boolean
+  /**
+   * The deepest region level this source produces; a request deeper than it
+   * goes to the pool instead. Absent means every level — the pool's own
+   * answer, and the default for a source that does not say.
+   */
+  readonly maxLevel?: number
   submit(payload: HeightfieldRequestPayload): JobHandle<HeightfieldResponse>
 }
 

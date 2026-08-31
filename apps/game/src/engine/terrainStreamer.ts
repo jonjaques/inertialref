@@ -197,8 +197,9 @@ function pyramid(leaves: readonly SelectedPatch[]): readonly RegionAddress[] {
  * This is main-thread work inside the frame — 4,761 directions and two normal
  * passes — so it is the one part of streaming that shows up as a hitch rather
  * than as latency. It is **0.25 ms** a patch, so eight of them is two
- * milliseconds: the terrain line of the frame budget in
- * `docs/design/technical.md`, and nothing else's.
+ * milliseconds — twice the terrain line of the frame budget in
+ * `docs/design/technical.md`, for the seconds a convergence takes and
+ * nothing once it has.
  *
  * Eight rather than four because the GPU producer moves the floor. With
  * heightfields arriving sixteen to a dispatch the build is the queue, and the
@@ -1127,7 +1128,7 @@ export class TerrainStreamer {
       [...drawn.patches.map((patch) => patch.region), ...starvedChildren],
       surface,
     )
-    // Main-thread vertex work: 0.25 ms a patch, four a frame by budget. The one
+    // Main-thread vertex work: 0.25 ms a patch, eight a frame by budget. The one
     // phase here that clears the clock's resolution comfortably.
     this.#phases.step('terrain.build', TERRAIN_PHASE)
     /*
@@ -1430,7 +1431,16 @@ export class TerrainStreamer {
       // rather than cached, because the key alone cannot tell a new seed's
       // s:SOL/b:2 from the old one's.
       const epoch = this.#epoch
-      const handle = source.submit({
+      // A source names the deepest level it produces — the kernel's tile
+      // frame is exact through 23 — and a deeper tile goes to the pool. Not
+      // to a refusal: a refused region is re-asked next frame of the same
+      // source, every frame, and is never produced.
+      const to =
+        region.level > (source.maxLevel ?? Number.POSITIVE_INFINITY) &&
+        this.#poolSource !== null
+          ? this.#poolSource
+          : source
+      const handle = to.submit({
         surfaceSeed: formatSeed(body.surface.seed),
         maxElevation: body.surface.maxElevation,
         roughness: body.surface.roughness,

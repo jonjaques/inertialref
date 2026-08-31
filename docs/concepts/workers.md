@@ -169,8 +169,9 @@ failure, so the rejection is matched on and not logged.
 ## A source is a port over the pool
 
 The streamer does not ask the pool for heightfields. It asks a
-`HeightfieldSource` — `kind`, `available`, `submit(payload) → JobHandle` —
-and `poolHeightfieldSource(pool)` is the pool wearing that interface. The
+`HeightfieldSource` — `kind`, `available`, an optional `maxLevel`,
+`submit(payload) → JobHandle` — and `poolHeightfieldSource(pool)` is the pool
+wearing that interface. The
 other implementation is `createTileProducer(renderer)` in
 `apps/game/src/render/terrainProducer.ts`: a TSL compute kernel that produces
 sixteen tiles a dispatch on the GPU, installed by `App` once the renderer is

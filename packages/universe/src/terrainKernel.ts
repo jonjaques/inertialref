@@ -69,6 +69,15 @@ export const MAX_KERNEL_HOTSPOTS = 14
 export const MAX_KERNEL_STRIPES = 4
 export const MAX_KERNEL_LEVELS = MAX_CRATER_LEVELS + 4
 export const MAX_KERNEL_RAYS = MAX_RAY_CRATERS
+/**
+ * The deepest region level a tile frame is exact at. A face coordinate at
+ * level `n` is a multiple of `2⁻ⁿ`, and `writeTileFrame` carries the corner
+ * and the sample step as float32 fractions of the cell; past 23 the step is
+ * below the mantissa and the frame would round. A source that produces tiles
+ * from the kernel says so through `HeightfieldSource.maxLevel`, and the
+ * streamer sends anything deeper to the pool.
+ */
+export const MAX_TILE_LEVEL = 23
 
 /*
  * The float records, in `vec4` slots. Every list is a run of fixed-size
@@ -528,8 +537,8 @@ export function writeTileFrame(
   at: number,
 ): void {
   invariant(
-    region.level <= 23,
-    `A tile frame's face coordinates are exact through level 23; got ${region.level}`,
+    region.level <= MAX_TILE_LEVEL,
+    `A tile frame's face coordinates are exact through level ${MAX_TILE_LEVEL}; got ${region.level}`,
   )
   const centre = regionDirection(region, 0.5, 0.5)
   out[at] = region.face

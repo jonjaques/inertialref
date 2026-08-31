@@ -193,8 +193,9 @@ Violating one of these is a rewrite later, not a refactor.
   arm that only produces a camera when the cutscene arm is null — and the flight
   lens is the fallback.
   The field of view is _derived_ from focal length, gauge and zoom and is never
-  stored beside them; `CameraRig` writes `camera.fov` and nothing else does,
-  never `filmGauge` or `setFocalLength`, because Three's gauge is the sensor's
+  stored beside them; `CameraRig` writes `camera.fov` and nothing else does —
+  the aspect it writes beside it is the viewport's, not the lens's — never
+  `filmGauge` or `setFocalLength`, because Three's gauge is the sensor's
   long side divided by the aspect ratio and a lens whose angle moved on a resize
   would move the terrain selection, the observatory's standoff and every
   composed shot with it. A consumer that cannot see the lens is a bug, not a

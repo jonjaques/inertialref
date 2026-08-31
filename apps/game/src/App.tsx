@@ -339,50 +339,65 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
   /*
    * The GPU tile producer for this renderer build.
    *
-   * Made in the same callback that adopts the renderer, because it holds
-   * buffers on that renderer's device and dies with it: the previous one is
-   * disposed and the engine put back on the pool *before* the new one exists,
-   * so a build that fails to warm leaves the pool in place rather than a
-   * producer on a dead device. It reaches the engine only once its pipeline
-   * has proven it builds — `warm` is a dispatch of nothing inside a
-   * validation scope — and the warm-up is registered with boot, which is
-   * what keeps the cover up for the compile.
+   * Retired in the same callback that adopts the renderer, because it holds
+   * buffers on the old device and dies with it: the engine goes back on the
+   * pool *before* the new renderer exists, so a build that fails to warm
+   * leaves the pool in place rather than a producer on a dead device.
    *
-   * StrictMode invokes the factory twice and both invocations resolve to one
-   * renderer; the second adoption disposes a producer that had just been made
-   * for the same device and makes it again, which costs one more warm-up on
-   * the same pipeline cache. The check against `producer.current` inside the
-   * warm-up is what keeps the first one's late resolution from installing a
-   * producer that was already disposed.
+   * Made from the effect that begins the warm-up, not from that callback,
+   * because the session it registers with does not exist yet there:
+   * `warmScene` is what calls `beginWarmup`, and it runs from the effect on
+   * `output`, which the callback sets *after* it returns. A registration
+   * made before the session runs detached — `warmAtMount` starts it on its
+   * own, the census never counts it, and the cover can lift before the
+   * kernel's pipeline exists. Registered once the session is open, the
+   * compile is one census unit behind the cover, and the producer reaches
+   * the engine only once its pipeline has proven it builds — `warm` is a
+   * dispatch of nothing inside a validation scope.
+   *
+   * The effect runs twice under StrictMode and again on every renderer
+   * build; `adoptedFor` is what makes a second run for the same renderer a
+   * no-op rather than a second producer on the same device. The check
+   * against `producer.current` inside the warm-up keeps a late resolution
+   * from installing a producer that was already retired.
    */
-  const adoptProducer = (handle: RendererHandle): void => {
+  const adoptedFor = useRef<RendererHandle | null>(null)
+  const retireProducer = (): void => {
     producer.current?.dispose()
     producer.current = null
+    adoptedFor.current = null
     engine.setHeightfieldSource(null)
-    if (
-      handle.description.backend !== 'webgpu' ||
-      producerPreference(window.location.search) === 'cpu'
-    ) {
-      return
-    }
-    const next = createTileProducer(handle.renderer)
-    producer.current = next
-    warmAtMount({
-      label: 'compiling the ground producer',
-      units: 1,
-      run: async (done) => {
-        const ready = await next.warm()
-        done()
-        if (producer.current !== next) return
-        if (ready) {
-          engine.setHeightfieldSource(next)
-          return
-        }
-        next.dispose()
-        producer.current = null
-      },
-    })
   }
+  const adoptProducer = useCallback(
+    (handle: RendererHandle): void => {
+      if (adoptedFor.current === handle) return
+      adoptedFor.current = handle
+      if (
+        handle.description.backend !== 'webgpu' ||
+        producerPreference(window.location.search) === 'cpu'
+      ) {
+        return
+      }
+      const next = createTileProducer(handle.renderer)
+      producer.current = next
+      warmAtMount({
+        label: 'compiling the ground producer',
+        units: 1,
+        run: async (done) => {
+          const ready = await next.warm()
+          done()
+          if (producer.current !== next) return
+          if (ready) {
+            engine.setHeightfieldSource(next)
+            return
+          }
+          next.dispose()
+          producer.current = null
+        },
+      })
+    },
+    [engine],
+  )
 
   /*
    * Which ceiling the drawing buffer gets. Deliberately *not* in the key above:
@@ -433,7 +448,9 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
     const handle = renderer.current
     if (handle === null) return
     void warmScene(handle, engine, firstLight.progress).then(firstLight.warmed)
-  }, [output, engine, firstLight])
+    // After `warmScene`, which is what opens the session this registers with.
+    adoptProducer(handle)
+  }, [output, engine, firstLight, adoptProducer])
 
   // Bake atmosphere tables for systems that load mid-session, off the frame
   // loop, so a jump's first look costs a cache hit. See `render/preload.ts`.
@@ -669,7 +686,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
         gl={createRenderer(hdr, aaAntialias(aa), (handle) => {
           renderer.current = handle
           engine.gl = handle
-          adoptProducer(handle)
+          retireProducer()
           setOutput(handle.description)
           // The measurement replay that follows a renderer build is
           // `firstLight.watch`'s, fired from the effect that reads `output`.

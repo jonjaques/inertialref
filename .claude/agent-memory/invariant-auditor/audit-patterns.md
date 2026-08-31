@@ -686,10 +686,10 @@ the generated WGSL. Do not file that as a fixture-mismatch finding.
 `feat/the-gpu-producer` took `BUILDS_PER_FRAME` 4 → 8 and rewrote its docstring, and
 `terrainStreamer.ts:1130` — the same file — still reads "0.25 ms a patch, **four a
 frame** by budget". Plus `docs/concepts/streaming.md:100` (a Mermaid node, one line
-below a node the same commit *did* edit), `streaming.md:440`, `docs/roadmap.md:187` and
+below a node the same commit _did_ edit), `streaming.md:440`, `docs/roadmap.md:187` and
 `docs/plans/the-timeline.md:477`. streaming.md and roadmap.md were both in the diff.
 
-**The check on any diff that changes a numeric constant:** `rg` the retired *word form*
+**The check on any diff that changes a numeric constant:** `rg` the retired _word form_
 ("four a frame", "twice", "a fifth of") as well as the digit, and grep the constant's own
 file top to bottom — the docstring is edited, the call-site comment is not.
 
@@ -737,7 +737,7 @@ every body, one loop. Any docstring that says "every body" is one loop from bein
 `App.tsx:348` + ADR-0023's consequence list both claim the boot cover waits for it. It
 cannot: `warmup.ts`'s module `session` is set only by `beginWarmup()`, called only from
 `warmScene()` in `preload.ts:165`, called only from the `App` effect keyed on `output` —
-and `output` is set by `setOutput(handle.description)` on the line *after*
+and `output` is set by `setOutput(handle.description)` on the line _after_
 `adoptProducer(handle)`. So `session === null` at the first call and settled at every
 later one; `warmAtMount` takes its detached `producer.run(() => {})` branch every time.
 
@@ -745,11 +745,11 @@ later one; `warmAtMount` takes its detached `producer.run(() => {})` branch ever
 whether that has run yet at the call site. A `useEffect`-mounted component is fine; a
 renderer-ready callback is not.
 
-## The concurrent docs pass now lands mid-audit as *uncommitted* working-tree edits
+## The concurrent docs pass now lands mid-audit as _uncommitted_ working-tree edits
 
 Fourth branch running, and this time it fixed `.claude/rules/browser.md` (the watchdog's
 stated mechanism, which the in-frame `requestAnimationFrame` sample invalidates) and
-`docs/adr/0017-the-lens.md` (`camera.fov` → "the only *lens* field") while I was reading.
+`docs/adr/0017-the-lens.md` (`camera.fov` → "the only _lens_ field") while I was reading.
 Both would have been findings. What it still did **not** sweep: `AGENTS.md:196` and
 `.claude/rules/rendering.md:66`, which carry the same `camera.fov` claim the ADR just
 qualified. **The pass reaches ADRs and prose docs; it does not reach `AGENTS.md` or the

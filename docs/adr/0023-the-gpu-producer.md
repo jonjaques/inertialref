@@ -105,10 +105,15 @@ adapter.**
 - Two producers agree only to the tolerance. A screenshot from the GPU and one
   from `?producer=cpu` differ at the sub-meter tail, and a figure about the
   drawn ground names its producer (`ir.terrain().producer`).
-- `writeTileFrame` refuses level 24 and beyond; the drawn floor is well below.
-- The producer's `warm()` is a synchronous pipeline compile inside
-  `warmAtMount`, one census unit; a device lost mid-session is a fallback to
-  the pool, not a rebuild.
+- A tile frame is exact through level 23 and `writeTileFrame` refuses deeper.
+  The producer says so through `HeightfieldSource.maxLevel`, and the streamer
+  sends a deeper region to the pool — not to a refusal, which it would re-ask
+  of the same source every frame. The drawn floor is well below in any case.
+- The producer's `warm()` is a pipeline compile registered as one census unit
+  behind the boot cover — registered from the effect that opens the warm-up
+  session, because a registration from the renderer's `onReady` precedes the
+  session and runs detached, uncounted. A device lost mid-session is a
+  fallback to the pool, not a rebuild.
 - Known and unexplained: the kernel's level-0 offset term, which is the
   `halfWidth · 2⁻²¹` in the bound; and at 1920×1200 on a 2× ratio both
   producers converge at level 7 and 954 patches, identically, which is a

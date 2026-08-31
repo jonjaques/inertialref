@@ -97,7 +97,7 @@ flowchart TB
     AHEAD --> QUEUE["queue the pyramid under it,<br/>coarsest first, 24 a frame"]
     QUEUE --> JOB["the producer: bordered heightfield<br/>+ unbordered surface cover<br/><i>GPU tile kernel, or a worker</i>"]
     JOB --> CACHE["cache both"]
-    CACHE --> MESH["build geometry, 4 a frame"]
+    CACHE --> MESH["build geometry, 8 a frame"]
 
     style JOB fill:#065f46,stroke:#064e3b,color:#fff
     style BALANCE fill:#0369a1,stroke:#0c4a6e,color:#fff
@@ -437,7 +437,7 @@ gone.
 | The selection is not frustum-culled              | A whole disk is generated, of which the renderer draws about a third                                                              | [roadmap](../roadmap.md#terrain)             |
 | Vertex attributes are float32                    | 237 KB a patch, so a whole-disk selection is 113–255 MB at the flight lens                                                        | [roadmap](../roadmap.md#terrain)             |
 | Scatter resolves on the main thread              | A candidate slot is a field sample, so a 1,024-slot region is 8.5 ms and cannot land inside a frame; 128 slots go out a frame     | [roadmap](../roadmap.md#terrain)             |
-| The mesh is built on the main thread             | 0.25 ms a patch, budgeted at four a frame; the worker already has the field                                                       | [roadmap](../roadmap.md#terrain)             |
+| The mesh is built on the main thread             | 0.25 ms a patch, budgeted at eight a frame; the producer already has the field                                                    | [roadmap](../roadmap.md#terrain)             |
 | A generated body's sphere is a flat tint         | Its ground has maria, rays and caps below the eight-pixel gate, and none above it                                                 | [roadmap](../roadmap.md#terrain)             |
 | Deposits are chosen from the mesh, not the field | Two patches at different levels report different slopes for the same ground, so a deposit weight steps by ~4% at a level boundary | [roadmap](../roadmap.md#terrain)             |
 

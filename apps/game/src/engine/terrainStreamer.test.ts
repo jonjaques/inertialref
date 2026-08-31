@@ -343,4 +343,43 @@ describe('the terrain streamer', () => {
     streamer.clear()
     session.dispose()
   })
+
+  it('sends a region deeper than the ceiling a source names to the pool', async () => {
+    const registry = createTaskRegistry()
+    const session = openSession({
+      seed: 'inertialref',
+      workers: () => createInlineWorker(registry),
+    })
+    const pool = session.pool()
+    if (pool === null) throw new Error('no pool')
+    const view = groundView(session)
+    const streamer = new TerrainStreamer(pool)
+
+    // A ceiling below every level there is: the source is installed and
+    // available, and nothing may reach it. What must not happen is the
+    // alternative — a refusal the streamer re-asks every frame, so the
+    // region is never produced by anyone.
+    let asked = 0
+    const source: HeightfieldSource = {
+      kind: 'fake',
+      available: true,
+      maxLevel: -1,
+      submit() {
+        asked += 1
+        throw new Error('a deeper tile reached the source')
+      },
+    }
+    streamer.source = source
+
+    const frames = await walkOnce(streamer, session, view)
+    expect(frames).toBeGreaterThan(0)
+    expect(asked).toBe(0)
+    // The pool has the ground jobs beside its level-floor job.
+    expect(
+      pool.stats().completed + pool.stats().active + pool.queued,
+    ).toBeGreaterThan(1)
+
+    streamer.clear()
+    session.dispose()
+  })
 })

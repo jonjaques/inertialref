@@ -5,6 +5,7 @@ import type { JobId } from '@inertialref/protocol'
 import {
   HEIGHTFIELD_BORDER,
   HEIGHTFIELD_RESOLUTION,
+  MAX_TILE_LEVEL,
   regionAddress,
   type SurfaceParameters,
   surfaceKernel,
@@ -96,6 +97,8 @@ export interface TileProducerStats {
 
 export interface TileProducer extends HeightfieldSource {
   readonly kind: 'gpu'
+  /** `MAX_TILE_LEVEL`: the frame is exact through 23, and deeper is the pool's. */
+  readonly maxLevel: number
   stats(): TileProducerStats
   /**
    * Build the pipeline now, so no frame has to.
@@ -332,6 +335,7 @@ export function createTileProducer(
 
   return {
     kind: 'gpu',
+    maxLevel: MAX_TILE_LEVEL,
     get available() {
       return available && !disposed
     },
@@ -351,11 +355,16 @@ export function createTileProducer(
         reject,
         cancelled: false,
       }
+      // A refused request is this request's alone: it never reaches `pump`,
+      // whose failure path retires the producer for the session. The level
+      // refusal is belt and braces — the streamer routes on `maxLevel` and a
+      // deeper tile should not arrive here at all.
       if (
         !available ||
         disposed ||
         payload.resolution !== kernel.layout.resolution ||
-        (payload.border ?? HEIGHTFIELD_BORDER) !== kernel.layout.border
+        (payload.border ?? HEIGHTFIELD_BORDER) !== kernel.layout.border ||
+        payload.region.level > MAX_TILE_LEVEL
       ) {
         reject(new Error('producer unavailable'))
         return { id, result, cancel() {} }

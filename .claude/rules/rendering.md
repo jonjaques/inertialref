@@ -64,7 +64,8 @@ Reasoning: `AGENTS.md` § "The rules that actually matter",
   one — and every consumer reads it. Focal length, gauge and zoom are canonical; the angle
   is one line of arithmetic from them, and an angle cannot carry the aperture, focus and
   exposure `docs/design/art.md` commits to. `CameraRig` writes `camera.fov` and nothing
-  else does — never `filmGauge`/`setFocalLength`, whose angle moves on a resize. The
+  else does — the aspect beside it is the viewport's, not the lens's — never
+  `filmGauge`/`setFocalLength`, whose angle moves on a resize. The
   terrain predicate takes the lens in **display** pixels, with supersampling divided out.
   ADR-0017.
 - **Render compression is radial about the eye, never about the origin.** `placeAt` and
