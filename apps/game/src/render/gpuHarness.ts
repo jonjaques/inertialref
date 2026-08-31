@@ -242,6 +242,19 @@ function unpad(
     height,
     data,
     at(x, y) {
+      /*
+       * Bounds-checked, because the flat index wraps instead of failing:
+       * `at(width, 0)` is `at(0, 1)`, a real and plausible RGBA tuple, so a
+       * loop written `x <= width` or an assertion about the right-hand column
+       * reads the next row's left edge and passes for the wrong reason. Past
+       * the last row the reads are `undefined` behind an `as number` cast and
+       * the arithmetic downstream quietly becomes NaN.
+       */
+      if (x < 0 || x >= width || y < 0 || y >= height) {
+        throw new RangeError(
+          `gpuHarness: (${x}, ${y}) is outside a ${width}×${height} readback`,
+        )
+      }
       const i = (y * width + x) * channels
       return [
         data[i] as number,
