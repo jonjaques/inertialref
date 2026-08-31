@@ -229,14 +229,16 @@ handles the first three — they are here because they explain what it is doing.
    to recover its GPU state.
 5. **`?presentation=occluded` is on every URL the driver navigates to**, and it is what
    stops the rig measuring itself. The presentation watchdog reads the canvas bitmap
-   back to decide whether it has ever presented, and defers while `visibilityState` is
-   not `visible`. Focus emulation — trap 1 — reports `visible` for a window that is
-   still behind everything else, so the gate opened on a readback that is transparent
-   black for a healthy renderer, the ladder exhausted, and the canvas was remounted on
-   every boot: a second full preload 4.5 s after the first, an uncaught Three dispose,
-   and a drawing buffer that came back **3200×1800 for a rig asking for 1600×900 at
-   DPR 1**. Every terrain figure taken after a rebuild here was a retina figure. The
-   flag says "unreadable, not black"; the watchdog stands down and lifts the cover.
+   back from inside an animation frame to decide whether it has presented, and defers
+   while `visibilityState` is not `visible`. Focus emulation — trap 1 — reports
+   `visible` for a window that is still behind everything else; the in-frame sample
+   reads the drawn texture rather than the composited one, so it reads correctly
+   there, but a driven boot is a measurement and a ladder run is what it must never
+   contain. Exhausted, the ladder remounts the canvas: a second full preload 4.5 s
+   after the first, an uncaught Three dispose, and a drawing buffer that comes back
+   **3200×1800 for a rig asking for 1600×900 at DPR 1**. Every terrain figure taken
+   after a rebuild here is a retina figure. The flag says "not to be sampled"; the
+   watchdog stands down and lifts the cover.
 6. **The default rig is 1600×900 at DPR 1, and that is not what anyone is looking at.**
    Terrain selection is measured in _display pixels_, so the streamer at a retina window
    asks for four times the patches and behaves like a different subsystem: the geometry
@@ -298,6 +300,12 @@ reached an ADR before an audit caught it.
 `engine/browserWorker.ts` was chosen: land, converge twenty seconds, and read `jobs/s`,
 `averageRunMs` and `ir.terrain().level` _together_ — throughput alone hides the per-job
 dilation, and the drawn level is the number a player actually watches.
+
+**`?producer=cpu`** keeps the worker pool producing the heightfields on a WebGPU page,
+where the GPU tile kernel otherwise answers. It is the A/B every GPU figure is taken
+against — the same page, the same descent, one flag apart — and `ir.terrain().producer`
+names the source the _next_ request goes to, so a figure about the drawn ground says
+which one made it.
 
 **`ir.terrain()`'s `visited`, `culled`, `starved` and `level` are from the last frame
 that walked, not from this one.** A converged stance walks on none of them. `selections`

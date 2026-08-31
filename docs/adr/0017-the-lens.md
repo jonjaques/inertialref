@@ -140,8 +140,9 @@ are all functions of the aperture, and an angle has none. Rejected.
 **Three's `filmGauge` and `setFocalLength`.** They exist, and they encode a film
 convention this camera is not: the gauge is the long side, so the angle they
 produce is a function of the aspect ratio. Every consumer would then see the
-field change on a window resize. Rejected; `camera.fov` is the only field
-`CameraRig` writes.
+field change on a window resize. Rejected; `camera.fov` is the only lens field
+`CameraRig` writes — the aspect it writes beside it is the viewport's, not the
+lens's.
 
 **Rounding to tidy focal lengths** — 19 mm and 29 mm. `tng-intro`'s beats are
 solved frame by frame against a frame-analyzed reference and its criteria are

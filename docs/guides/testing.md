@@ -274,8 +274,11 @@ verbs: `compile`, `shader` (the generated WGSL), `drawGraph` and `draw`
 storage buffer back from a kernel). The suite is `*.gpu.test.ts`, its config
 is `apps/game/vitest.gpu.config.ts`, and the whole of it — every production
 material compiled to a Metal pipeline, structural assertions on the WGSL, a
-pixel ramp, two compute kernels checked against their CPU originals — runs in
-about **0.9 s** on an idle M5, most of it Dawn's boot. The reasoning and the
+pixel ramp, the terrain kernels against their CPU originals — runs in about
+**16 s** on an M5. One test is fifteen of them: `terrainKernel.gpu.test.ts`
+holding the tile kernel to `generateHeightfield` across the zoo and the levels.
+The bands are 2.4 s and the producer 1.2 s beside it, and the rest of the
+suite, Dawn's boot included, is under half a second. The reasoning and the
 measurements are [the headless WebGPU plan](../plans/headless-webgpu.md).
 
 It is a separate command rather than part of `pnpm test` because it makes a

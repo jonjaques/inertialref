@@ -275,9 +275,13 @@ flowchart TB
         SW[("Cache Storage<br/><i>app shell</i>")]
     end
 
+    GPU["GPU<br/><i>heightfield tiles, WebGPU only</i>"]
+
     ENGINE --> WORLD
     ENGINE -->|"typed jobs"| POOL
     POOL -->|"transferable buffers"| ENGINE
+    ENGINE -->|"sixteen tiles a dispatch"| GPU
+    GPU -->|"read back"| ENGINE
     REACT -->|"reads scene"| ENGINE
     HARNESS --> WORLD
     HARNESS --> ENGINE
@@ -288,8 +292,14 @@ flowchart TB
     style POOL fill:#065f46,stroke:#064e3b,color:#fff
 ```
 
-- **Workers** run terrain generation and galaxy surveys. One module constructs a
-  `Worker`; everything else talks to a port. [Workers](concepts/workers.md)
+- **Workers** run galaxy surveys, the terrain detail floor, and the canonical
+  heightfield — the fallback, and the whole of the ground on WebGL 2. On a
+  WebGPU page the drawn tiles come from a TSL compute kernel on the **GPU**,
+  sixteen a dispatch, held to the workers' field by a measured bound. One
+  module constructs a `Worker`; everything else talks to a port, and the
+  streamer asks a `HeightfieldSource` that both implement.
+  [Workers](concepts/workers.md) ·
+  [Streaming](concepts/streaming.md#where-the-heightfields-come-from)
 - **The harness** is the same object the headless runner uses, so a bug
   reproduced in Chrome replays in a test. [Harness](guides/harness.md)
 - **The service worker** caches the app shell. With the server stopped the game

@@ -195,7 +195,9 @@ terrain invisible.
 generation it was built for.
 
 **Heightfield** — 65×65 elevation samples for a region. Cached across rebases;
-the mesh is not.
+the mesh is not. Produced by the GPU tile kernel on a WebGPU page and by the
+worker pool otherwise; the pool's is the canonical field, and the kernel is held
+to it by a measured bound.
 
 **Datum radius** — the surface a ship contacts, before terrain. `radius` for a
 spheroid; the measured ellipsoid for a body with a figure. Not the shape model —
@@ -210,7 +212,7 @@ body fills the frame. The mirror of a star stopping down as it fills the frame.
 ## Infrastructure
 
 **Port** — an interface a lower-layer package declares so a host can supply a
-capability it must not depend on. `WorkerPort`, `SaveStore`.
+capability it must not depend on. `WorkerPort`, `SaveStore`, `HeightfieldSource`.
 → [workers](concepts/workers.md#the-port-pattern)
 
 **Task** — a named, versioned function with a declared payload and result, run

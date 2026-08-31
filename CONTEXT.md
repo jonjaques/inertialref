@@ -30,22 +30,22 @@ server **stopped**, the page still loads from the service worker and passes
 ~1.25M simulation ticks/s for one entity; the headless runner does ~100–105k ticks/s
 including frame resolution.
 
-| Package         | Layer | State                                                                                                                         |
-| --------------- | ----- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `shared`        | 0     | done — units, brands, invariants, structured logging, the timing port (ADR-0022)                                              |
-| `spatial`       | 1     | done — UniverseVector, frame graph, floating origin                                                                           |
-| `procedural`    | 1     | done — PRNG, hierarchical seeds, noise, algorithm versions                                                                    |
-| `physics`       | 2     | done — Kepler, rigid body, atmosphere, thrusters                                                                              |
-| `universe`      | 3     | done — addressing, star catalog, generation, terrain, frames                                                                  |
-| `simulation`    | 4     | done — clock, entities, flight, streaming, snapshots                                                                          |
-| `protocol`      | 4     | done — validation combinators, wire and save schemas                                                                          |
-| `workers`       | 5     | done — typed tasks, ports, pool, four tasks                                                                                   |
-| `persistence`   | 5     | done — save/restore, migration chain, store port                                                                              |
-| `net`           | 5     | done — authority port, local authority; remote + channel are H4                                                               |
-| `rendering`     | 5     | done — LOD, depth compression, terrain meshing                                                                                |
-| `devtools`      | 6     | done — inspection, twelve capability checks, harness, `openSession`                                                           |
-| `apps/game`     | —     | done — React + R3F client on `WebGPURenderer`/TSL, worker pool, IndexedDB saves; `/docs` is the documentation site (ADR-0016) |
-| `apps/headless` | —     | done — Node runner, ~100–105k ticks/s, `pnpm sim --self-test`                                                                 |
+| Package         | Layer | State                                                                                                                                                |
+| --------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `shared`        | 0     | done — units, brands, invariants, structured logging, the timing port (ADR-0022)                                                                     |
+| `spatial`       | 1     | done — UniverseVector, frame graph, floating origin                                                                                                  |
+| `procedural`    | 1     | done — PRNG, hierarchical seeds, noise, algorithm versions                                                                                           |
+| `physics`       | 2     | done — Kepler, rigid body, atmosphere, thrusters                                                                                                     |
+| `universe`      | 3     | done — addressing, star catalog, generation, terrain, frames                                                                                         |
+| `simulation`    | 4     | done — clock, entities, flight, streaming, snapshots                                                                                                 |
+| `protocol`      | 4     | done — validation combinators, wire and save schemas                                                                                                 |
+| `workers`       | 5     | done — typed tasks, ports, pool, five tasks, the `HeightfieldSource` port the pool implements (ADR-0023)                                             |
+| `persistence`   | 5     | done — save/restore, migration chain, store port                                                                                                     |
+| `net`           | 5     | done — authority port, local authority; remote + channel are H4                                                                                      |
+| `rendering`     | 5     | done — LOD, depth compression, terrain meshing                                                                                                       |
+| `devtools`      | 6     | done — inspection, twelve capability checks, harness, `openSession`                                                                                  |
+| `apps/game`     | —     | done — React + R3F client on `WebGPURenderer`/TSL, the GPU tile producer, worker pool, IndexedDB saves; `/docs` is the documentation site (ADR-0016) |
+| `apps/headless` | —     | done — Node runner, ~100–105k ticks/s, `pnpm sim --self-test`                                                                                        |
 
 ## Decisions that are expensive to reverse
 

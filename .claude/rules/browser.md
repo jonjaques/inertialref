@@ -22,10 +22,12 @@ Reasoning and the full card: [`.claude/skills/drive/SKILL.md`](../skills/drive/S
   you set up. `--down` at the end.
 
 - **The rig must not measure itself.** The driver sets `?presentation=occluded` on every
-  URL: focus emulation reports `visible` for a window that never composites, so without
-  it the watchdog rebuilds a healthy canvas on every boot — a doubled preload census and
-  a 3200×1800 buffer for a rig asking for DPR 1. A terrain figure taken through one of
-  those rebuilds is retina. Measure on a quiet machine; the card has the rest.
+  URL: a driven boot is a measurement, and the watchdog's ladder — a doubled preload
+  census and a 3200×1800 buffer for a rig asking for DPR 1 — must never be inside one.
+  Focus emulation reports `visible` for a window the compositor may not be presenting,
+  so without the flag the verdict depends on what the sampled frame held, and a terrain
+  figure taken through a rebuild is retina. Measure on a quiet machine; the card has
+  the rest.
 
 - **A still cannot show a strobe and neither can `--shot`** — it draws its own frame.
   `--cast <n>` records what the compositor presented; `scripts/traceFrames.mjs` reads

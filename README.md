@@ -186,8 +186,11 @@ pnpm sim --help                # all flags
 - A debug spacecraft with **6-DoF flight**, patched-conic gravity, atmospheric
   drag, sphere-of-influence frame transitions, and landing.
 - **Streamed cube-sphere terrain** — a restricted, morphing quadtree covering
-  the whole disk, seamless from orbit to standing height, generated in a worker
-  pool, and shaded from the body's own geology: six deposits laid down in order
+  the whole disk, seamless from orbit to standing height, generated on the GPU
+  by a compute kernel held to the CPU's canonical field — `pnpm test:gpu` on a
+  physical adapter is what proves that bound; the twelve checks prove the pool —
+  with the worker pool as fallback, and shaded from the body's own geology: six
+  deposits laid down in order
   over an ocean, crater rays, and the archive's published photograph on the
   bodies that have one. It refines to cells of a third of a meter, with boulders
   addressed as `o:` objects lying on it — and the ground the ship lands on and
@@ -196,8 +199,8 @@ pnpm sim --help                # all flags
 - **Save and load to IndexedDB in under 800 bytes**, because a save is a reference
   and not a copy.
 - **Genuinely offline** — a service worker caches the app, and with the server
-  stopped the game still loads, streams terrain from its workers, and passes all
-  twelve capability checks.
+  stopped the game still loads, streams terrain from its own GPU and workers, and
+  passes all twelve capability checks.
 - **Dockable panels** in the browser — the catalog, the object record, the
   camera and the presets in the planetarium, and the author's `controls`,
   `telemetry`, `perf` and `graphics` behind a disclosure — that call the harness
@@ -378,7 +381,7 @@ The markdown in this repository is the source; the site has no copy of its own.
 | [Vision and scope](docs/vision.md)                | What this is for, and the principles behind it                           |
 | [Architecture](docs/architecture.md)              | The system in one sitting                                                |
 | [Concepts](docs/README.md#concepts)               | How each mechanism works, and why                                        |
-| [ADRs](docs/adr/README.md)                        | Twenty-two decisions that are expensive to reverse                       |
+| [ADRs](docs/adr/README.md)                        | Twenty-three decisions that are expensive to reverse                     |
 | [Development](docs/guides/development.md)         | Commands, toolchain, conventions                                         |
 | [The harness](docs/guides/harness.md)             | The scriptable API, in full                                              |
 | [Testing](docs/guides/testing.md)                 | Property tests, golden vectors, state hashes                             |
@@ -414,12 +417,13 @@ Stated plainly, because discovering these by surprise is worse than reading them
   across the zoo — 22 on a world young enough to have no crater population, 50 on
   a battered icy one — against a documented ≤ 8 ms budget, and a whole-disk
   selection peaks at 1,077 patches, which is 255 MB of vertex buffers at the
-  flight lens. **Generation is what binds now**: a two-meter stance on Luna
-  settles in one to three minutes on a retina window, because 1,562 patches at
-  43 ms is 67 s of single-core work and a pool of four does not divide it far
-  enough. That figure is measured at the old ceiling of four workers; the pool
-  takes eight now, which moves a Mars landing three drawn levels in the same
-  twenty seconds, and Luna has not been re-measured.
+  flight lens. **That cost binds only where the pool draws the ground.** On a
+  WebGPU page the tiles come from a TSL compute kernel
+  ([ADR-0023](docs/adr/0023-the-gpu-producer.md)), and a two-meter stance on
+  Luna converges in 4.4 s at 1600×900 and 7.5 s on a retina window, against
+  25–33 s and 61 s from a pool of eight on the same descents; what binds there
+  is the main-thread mesh build at eight patches a frame. WebGL 2 has no
+  producer but the pool and pays its figure in full.
   `pnpm sim --terrain-baseline` prints all of it; the
   [roadmap](docs/roadmap.md#terrain) has the seams.
 - **Almost nothing is measured on the target machine.** The dev dock's perf panel
@@ -432,7 +436,8 @@ Stated plainly, because discovering these by surprise is worse than reading them
   and boxes. GPU-driven instancing and Bruneton atmosphere LUTs are the
   [migration's](docs/design/technical.md#the-webgpu-migration) remaining half;
   terrain tiles are the half that is built, a TSL compute kernel held to the
-  CPU field by a stated bound.
+  CPU field by a stated bound — measured by `pnpm test:gpu` on a physical
+  adapter, which CI does not have.
 - **The atmosphere is an analytic shell, not scattering.** Uniform density and a
   path length, standing in for the precomputed LUTs that
   [spike 2](docs/spikes.md#2--tsl-and-the-atmosphere-integral) made a requirement.

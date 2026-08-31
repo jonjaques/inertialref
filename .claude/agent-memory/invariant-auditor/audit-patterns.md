@@ -680,3 +680,78 @@ magFilter === NearestFilter`. So a test fixture using `LinearFilter` both ways
 is a valid stand-in for a real map loaded `LinearMipmapLinearFilter` +
 `anisotropy` (`planetTextures.ts:151`) — the mip and wrap settings never reach
 the generated WGSL. Do not file that as a fixture-mismatch finding.
+
+## A constant moves and its own file keeps the retired figure 900 lines down
+
+`feat/the-gpu-producer` took `BUILDS_PER_FRAME` 4 → 8 and rewrote its docstring, and
+`terrainStreamer.ts:1130` — the same file — still reads "0.25 ms a patch, **four a
+frame** by budget". Plus `docs/concepts/streaming.md:100` (a Mermaid node, one line
+below a node the same commit *did* edit), `streaming.md:440`, `docs/roadmap.md:187` and
+`docs/plans/the-timeline.md:477`. streaming.md and roadmap.md were both in the diff.
+
+**The check on any diff that changes a numeric constant:** `rg` the retired *word form*
+("four a frame", "twice", "a fifth of") as well as the digit, and grep the constant's own
+file top to bottom — the docstring is edited, the call-site comment is not.
+
+Same branch, adjacent shape: the new docstring cited the budget doc and got it backwards.
+`terrainStreamer.ts:199` says eight builds is "two milliseconds: the terrain line of the
+frame budget in `docs/design/technical.md`, and nothing else's", while
+`technical.md:156` — edited by the same branch — reads "1.0 ms … 2 ms, **twice this
+line**". When a comment names a document and a number, open the document.
+
+## The GPU-port branch: what came back clean and the two-line proof
+
+Worth not re-deriving. `git archive origin/main | tar -x`, symlink `node_modules` **and
+each `packages/*/node_modules`** (workspace links live there, not at the root — the root
+symlink alone fails with `Cannot find package '@inertialref/shared'`), then import both
+`terrain.ts` by absolute path.
+
+- `elevationAt` and `drawnElevation`: **bit-identical**, 15,480 samples × 129 Sol bodies.
+- `surfaceCoverAt`: identical, 7,740 samples.
+- `generateHeightfield`: **167 of ~540k samples move, max 0.63 m on Miranda** — the
+  `ChordForm` `'exact'` integer slab test. It moves exactly the 17 bodies with at least
+  one tail rung whose `cells²` is an exact integer, and no body with none. Presentational,
+  unversioned, correct.
+
+The `'exact'` change is reachable only from `micro.ts:166` → `microRelief` →
+`drawnElevation`. `craterField`/`ladderField` default to `'fast'`, so `elevationAt`
+never takes it. That is the whole version-discipline question and the grep that settles
+it is `rg "'exact'" packages/universe/src`.
+
+## A justification whose premise is a claim about the generator — measure the generator
+
+`craters.ts`'s `ChordForm` docstring argues the integer slab test with "They are equal on
+every tail rung of every Sol body: … a published radius is a round number, and an integer
+sphere has lattice points on it." Measured over `walkBodies(SOL)` + `terrainSketch`:
+**29 of 128 bodies have an integer `cells²` at every tail rung, 17 at some, and 82 at
+none** — Earth (796375.086…), Mars (423690.025…), Ceres, Phobos, Deimos among them. The
+code is right; the reason given is false for two thirds of the population it names. Same
+family as the `cover.ts` "Europa is ice at the equator" finding.
+
+**The probe:** `Number.isInteger(level.cells * level.cells)` across every tail rung of
+every body, one loop. Any docstring that says "every body" is one loop from being settled.
+
+## `warmAtMount` from a renderer callback is never a census unit
+
+`App.tsx:370` registers the GPU producer's pipeline compile with `warmAtMount`, and
+`App.tsx:348` + ADR-0023's consequence list both claim the boot cover waits for it. It
+cannot: `warmup.ts`'s module `session` is set only by `beginWarmup()`, called only from
+`warmScene()` in `preload.ts:165`, called only from the `App` effect keyed on `output` —
+and `output` is set by `setOutput(handle.description)` on the line *after*
+`adoptProducer(handle)`. So `session === null` at the first call and settled at every
+later one; `warmAtMount` takes its detached `producer.run(() => {})` branch every time.
+
+**The check for any new `warmAtMount` caller:** trace who sets the module `session` and
+whether that has run yet at the call site. A `useEffect`-mounted component is fine; a
+renderer-ready callback is not.
+
+## The concurrent docs pass now lands mid-audit as *uncommitted* working-tree edits
+
+Fourth branch running, and this time it fixed `.claude/rules/browser.md` (the watchdog's
+stated mechanism, which the in-frame `requestAnimationFrame` sample invalidates) and
+`docs/adr/0017-the-lens.md` (`camera.fov` → "the only *lens* field") while I was reading.
+Both would have been findings. What it still did **not** sweep: `AGENTS.md:196` and
+`.claude/rules/rendering.md:66`, which carry the same `camera.fov` claim the ADR just
+qualified. **The pass reaches ADRs and prose docs; it does not reach `AGENTS.md` or the
+path-scoped mirrors.** Grep the canonical file for the sentence the ADR was just softened
+on.

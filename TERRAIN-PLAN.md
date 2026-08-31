@@ -53,14 +53,14 @@ The foundations are real and none of them move.
 | Foundation                                                | Where                                                                   | Keep because                                                                                                                                    |
 | --------------------------------------------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | Cube-sphere quadtree addressing, levels 0–24              | `packages/universe/src/terrain.ts` (`RegionAddress`, `regionDirection`) | A stable integer address for every patch of ground at every LOD — streaming, seeds and scatter all hang off it                                  |
-| Elevation as a pure function of (seed, direction)         | `terrain.ts:165` `elevationAt`                                          | The whole determinism regime; also the only thing that makes planetary scale storable at all (§ 4)                                              |
-| `BodyFixedDirection` brand                                | `terrain.ts:49`                                                         | Sampling in inertial axes has shipped twice as a bug                                                                                            |
+| Elevation as a pure function of (seed, direction)         | `terrain.ts` `elevationAt`                                              | The whole determinism regime; also the only thing that makes planetary scale storable at all (§ 4)                                              |
+| `BodyFixedDirection` brand                                | `terrain.ts`                                                            | Sampling in inertial axes has shipped twice as a bug                                                                                            |
 | One owner of the sea clamp                                | `terrain.ts` `groundElevation` / `drawnElevation`                       | Physics and mesh agree on where the ocean is, and part company above it by at most `drawnDivergence`                                            |
-| Worker-generated heightfields, transferred not copied     | `packages/workers/src/tasks.ts:199`                                     | Capability check 10 proves worker ≡ main thread. The cost is **22 to 50 ms/patch** across the zoo, not the ≤ 8 ms the budget claimed — see § 12 |
+| Worker-generated heightfields, transferred not copied     | `packages/workers/src/tasks.ts` `generateHeightfieldTask`               | Capability check 10 proves worker ≡ main thread. The cost is **22 to 50 ms/patch** across the zoo, not the ≤ 8 ms the budget claimed — see § 12 |
 | Reconciling streamer, heightfield cache across rebases    | `apps/game/src/engine/terrainStreamer.ts`                               | Loading is an ordinary operation, not a mode                                                                                                    |
-| Body-fixed, anchor-relative patch vertices                | `packages/rendering/src/terrainMesh.ts:62`                              | Baking pose into vertices was ~865 m/frame of ground slide                                                                                      |
-| Eye-relative log compression, angular size exact          | `packages/rendering/src/placement.ts:115`                               | Measured from anywhere else, small bodies vibrate                                                                                               |
-| LOD tiers by angular size                                 | `packages/rendering/src/lod.ts:36`                                      | A gas giant at 1e9 m and a boulder at 10 m deserve the same treatment                                                                           |
+| Body-fixed, anchor-relative patch vertices                | `packages/rendering/src/terrainMesh.ts` `buildPatch`                    | Baking pose into vertices was ~865 m/frame of ground slide                                                                                      |
+| Eye-relative log compression, angular size exact          | `packages/rendering/src/placement.ts` `compressDistance`                | Measured from anywhere else, small bodies vibrate                                                                                               |
+| LOD tiers by angular size                                 | `packages/rendering/src/lod.ts` `selectLod`                             | A gas giant at 1e9 m and a boulder at 10 m deserve the same treatment                                                                           |
 | `renderTime`, never `clock.time`, for anything in a frame | [ADR-0006](docs/adr/0006-simulation-clock.md)                           | The streamer already learned this the hard way                                                                                                  |
 
 And the layering: quadtree arithmetic and patch building stay in
@@ -176,7 +176,7 @@ flowchart LR
     GRAMMAR --> SKETCH["<b>terrainSketch</b><br/>plates · hotspots · crater stats<br/><i>~KB, derived once, cached</i>"]
     SKETCH --> SAMPLE["<b>elevationAt(surface, sketch, d̂)</b><br/>band stack, pure per-sample"]
     SAMPLE --> PHYS["contact test<br/><i>canonical, CPU</i>"]
-    SAMPLE --> PATCH["heightfield patches<br/><i>workers now, TSL compute later</i>"]
+    SAMPLE --> PATCH["heightfield patches<br/><i>the GPU tile kernel, or a worker</i>"]
 
     style GRAMMAR fill:#0369a1,stroke:#0c4a6e,color:#fff
     style SAMPLE fill:#065f46,stroke:#064e3b,color:#fff
