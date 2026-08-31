@@ -243,6 +243,21 @@ export function ladderField(
  * speed: changing it would move `elevationAt` in its last bits on every body,
  * and the field the contact test integrates does not move outside a version
  * bump.
+ *
+ * **`'exact'` also takes the sphere test in integers**, and that is a second
+ * cancellation rather than a tidiness. A cell is walked when its nearest corner
+ * is inside the unit sphere and its farthest outside, and the corners are
+ * `m/cells` for integer `m` — so the test is `Σ m² > cells²`, an integer against
+ * a float, and `Σ (m/cells)²` in float64 lands on either side of `1` by
+ * rounding whenever the two are equal. They are equal on every tail rung of
+ * every Sol body: the tail's `cells` is `meanRadius / 8`, `/ 4`, `/ 2`, `/ 1`,
+ * a published radius is a round number, and an integer sphere has lattice
+ * points on it — hundreds of thousands at Luna's radius in cells, a crater in
+ * a million, each decided by which way a product rounded. The integer form
+ * decides them exactly, and it is what the GPU port evaluates, so the tail is
+ * the same tail on both processors. The canonical ladder cannot land there: its
+ * `cells` is `meanRadius / (largestCrater / 2ᵏ)` over a float largest crater,
+ * so `cells²` is never an integer and no corner sits on the sphere.
  */
 export type ChordForm = 'fast' | 'exact'
 
@@ -311,6 +326,10 @@ function levelContribution(
   const fromZ = Math.floor(direction.z * cells - spanZ)
   const toZ = Math.floor(direction.z * cells + spanZ)
   let total = 0
+  // The sphere test's unit: one over squared direction-space distances, or
+  // `cells²` over squared cell indices. See `ChordForm`.
+  const exact = chord === 'exact'
+  const limit = exact ? cells * cells : 1
 
   for (let ix = fromX; ix <= toX; ix += 1) {
     const loX = ix * size
@@ -319,7 +338,13 @@ function levelContribution(
     // cell intersects the unit sphere exactly when the nearest is inside it and
     // the farthest is outside — which is a tighter test than the cell's
     // bounding sphere and rejects a third of them.
-    const nearX = loX > 0 ? loX * loX : hiX < 0 ? hiX * hiX : 0
+    const nearX = exact
+      ? squareOfNearest(ix)
+      : loX > 0
+        ? loX * loX
+        : hiX < 0
+          ? hiX * hiX
+          : 0
     /*
      * The same rejection, partially summed, and left early where it can be.
      *
@@ -331,30 +356,44 @@ function levelContribution(
      * origin rather than toward it, so the tail of a row can be abandoned
      * rather than scanned.
      */
-    if (nearX > 1) {
+    if (nearX > limit) {
       if (ix >= 0) break
       continue
     }
-    const farX = Math.max(loX * loX, hiX * hiX)
+    const farX = exact ? squareOfFarthest(ix) : Math.max(loX * loX, hiX * hiX)
     for (let iy = fromY; iy <= toY; iy += 1) {
       const loY = iy * size
       const hiY = loY + size
-      const nearY = loY > 0 ? loY * loY : hiY < 0 ? hiY * hiY : 0
-      if (nearX + nearY > 1) {
+      const nearY = exact
+        ? squareOfNearest(iy)
+        : loY > 0
+          ? loY * loY
+          : hiY < 0
+            ? hiY * hiY
+            : 0
+      if (nearX + nearY > limit) {
         if (iy >= 0) break
         continue
       }
-      const farY = Math.max(loY * loY, hiY * hiY)
+      const farY = exact ? squareOfFarthest(iy) : Math.max(loY * loY, hiY * hiY)
       const acrossXY = nearX + nearY
       for (let iz = fromZ; iz <= toZ; iz += 1) {
         const loZ = iz * size
         const hiZ = loZ + size
-        const nearZ = loZ > 0 ? loZ * loZ : hiZ < 0 ? hiZ * hiZ : 0
-        if (acrossXY + nearZ > 1) {
+        const nearZ = exact
+          ? squareOfNearest(iz)
+          : loZ > 0
+            ? loZ * loZ
+            : hiZ < 0
+              ? hiZ * hiZ
+              : 0
+        if (acrossXY + nearZ > limit) {
           if (iz >= 0) break
           continue
         }
-        const farZ = Math.max(loZ * loZ, hiZ * hiZ)
+        const farZ = exact
+          ? squareOfFarthest(iz)
+          : Math.max(loZ * loZ, hiZ * hiZ)
         /*
          * A cell wholly inside the sphere. There is no early exit at this end
          * and the obvious one is wrong: `farZ` bottoms out in the middle of the
@@ -362,7 +401,7 @@ function levelContribution(
          * with shell on both sides of it. Breaking here dropped 18 km of crater
          * on Luna, all of it on the far side of the band.
          */
-        if (farX + farY + farZ < 1) continue
+        if (farX + farY + farZ < limit) continue
 
         const hash = pcg4d(ix ^ seed, iy, iz, index)
         const draw = toUnit(hash.x)
@@ -443,6 +482,21 @@ function levelContribution(
     }
   }
   return total
+}
+
+/*
+ * The slab test's integer corners: a cell `[m, m + 1]` along one axis has its
+ * nearest corner at `m` past zero, at `m + 1` before it, and straddles zero
+ * otherwise; its farthest is whichever end is larger in magnitude. Squared,
+ * these are exact in float64 up to 2⁵³, which is every rung in scope.
+ */
+const squareOfNearest = (m: number): number => {
+  const nearest = m > 0 ? m : m + 1 < 0 ? m + 1 : 0
+  return nearest * nearest
+}
+const squareOfFarthest = (m: number): number => {
+  const farthest = Math.max(Math.abs(m), Math.abs(m + 1))
+  return farthest * farthest
 }
 
 /**

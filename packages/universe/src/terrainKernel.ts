@@ -179,8 +179,43 @@ export const WORD = {
   ERODED: 29,
 } as const
 
+/**
+ * Where each rung's existence threshold sits in the words, one `u32` per rung
+ * in walk order, on a `uvec4` boundary past `WORD`.
+ *
+ * `levelContribution` places a crater where `toUnit(hash.x) < density`, and
+ * `toUnit` is `hash / 2³²` exactly in float64 — so the test is `hash <
+ * density · 2³²` in real arithmetic, which for an integer `hash` is
+ * `hash <= ceil(density · 2³²) − 1`. That last number is what is stored, and
+ * the kernel compares integers. Taken in float32 instead, a hash within one
+ * part in ten million of the line lands on a different side of it than the
+ * CPU put it, and that is a crater that exists on one processor and not the
+ * other.
+ */
+export const LEVEL_DRAW_AT = 32
+
+/**
+ * Where each rung's sphere-intersection limits sit, four words per rung in
+ * walk order: `floor(cells²)` and `ceil(cells²)`, each as a high and a low
+ * `u32` of a 48-bit integer.
+ *
+ * `levelContribution` rejects a lattice cell that misses the unit sphere with
+ * `Σ (m/cells)² > 1` over the cell's nearest corner and `< 1` over its
+ * farthest, and that is a *decision*: a cell holds a crater or it does not.
+ * The corner coordinates are integers over one float, so successive cells'
+ * values sit `1/cells²` apart — 2 × 10⁻⁷ at a rung of 2,300 cells and 10⁻¹²
+ * across the tail — and a float32 evaluation of the same test lands on the
+ * wrong side of it wherever that spacing is under its own resolution, which
+ * is a whole crater present on one processor and absent on the other.
+ * `Σ m² > cells²` in exact integers is the same decision, so the kernel
+ * compares 48-bit sums against these. Real arithmetic and the CPU's float64
+ * can still disagree on a cell whose sum is within a part in 10¹⁵ of the
+ * limit; across the tail's rungs that is a cell in about 10¹³.
+ */
+export const SLAB_AT = 48
+
 /** Words in a body's record, padded to whole `uvec4`s. */
-export const KERNEL_WORDS = 32
+export const KERNEL_WORDS = SLAB_AT + 4 * MAX_KERNEL_LEVELS + 4
 
 /** Where the tail's grit octaves start in a tile's rung frames. */
 export const GRIT_FRAMES_AT = MAX_KERNEL_LEVELS
@@ -342,6 +377,28 @@ function pack(surface: SurfaceParameters): KernelSurface {
       level.density,
       rung,
     )
+    // A ladder never carries a zero density — `craterLadder` and
+    // `microLadder` both return nothing rather than a rung nothing lands on —
+    // so the ceiling is at least one and the threshold at least zero.
+    invariant(level.density > 0, `rung ${i} has no density`)
+    words[LEVEL_DRAW_AT + i] = Math.min(
+      2 ** 32 - 1,
+      Math.ceil(level.density * 2 ** 32) - 1,
+    )
+    /*
+     * The sphere test's limits, exact: `cells²` is under 2⁴⁶ on every body in
+     * scope and float64 holds integers to 2⁵³, so the split into two words
+     * loses nothing.
+     */
+    const squared = level.cells * level.cells
+    invariant(squared < 2 ** 48, `rung ${i} at ${level.cells} cells overflows`)
+    const split = (value: number, at: number): void => {
+      const high = Math.floor(value / 2 ** 32)
+      words[at] = high
+      words[at + 1] = value - high * 2 ** 32
+    }
+    split(Math.floor(squared), SLAB_AT + i * 4)
+    split(Math.ceil(squared), SLAB_AT + i * 4 + 2)
   })
   sketch.rayCraters.forEach((crater, i) => {
     const at = slot(RAYS_AT + i * RAY_STRIDE)
