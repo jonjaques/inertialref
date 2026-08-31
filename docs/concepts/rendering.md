@@ -309,10 +309,12 @@ four bytes, and it indexes off the patch's own grid rather than the bordered
 one — the cover carries no border, because the border rows exist to be
 differenced against and nothing differences the cover.
 
-A TSL node graph cannot be evaluated in Node, so the arithmetic lives here and
-the shader's whole share of it is one `mix` between two attributes — and the
-endpoint is a claim about two `Float32Array`s that `terrainPatch.test.ts` checks
-directly.
+The arithmetic lives here rather than in the shader so that the claim needs no
+GPU: the shader's whole share of it is one `mix` between two attributes, and
+the endpoint is a claim about two `Float32Array`s that `terrainPatch.test.ts`
+checks on any Node. The graph itself is compiled and run on the real GPU by
+`pnpm test:gpu` ([testing](../guides/testing.md)), which is where the
+attribute set a patch has to supply is held.
 
 ### Two things a couple of hundred patches made matter
 

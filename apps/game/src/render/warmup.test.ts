@@ -11,13 +11,12 @@ import {
  * The warm-up plan, in Node.
  *
  * None of this needs a GPU: the recipe is a visibility toggle around one
- * method call, and the census is arithmetic. What *cannot* be tested here is
- * whether a compiled pipeline is the one a frame draws with — a TSL graph
- * cannot be evaluated in Node, so that half stays GPU-verified (see
- * `.claude/rules/rendering.md`). The half that shipped bugs is this one: a
- * compile against an invisible object walks nothing at all, and a progress
- * total that excluded the most expensive producer said "compiling the sky…"
- * while the 88 ms of work had not started.
+ * method call, and the census is arithmetic. Whether a compiled pipeline is
+ * the one a frame draws with is the other half, and it is answered on the
+ * real device by `warmup.gpu.test.ts` under `pnpm test:gpu`. The half that
+ * shipped bugs is this one: a compile against an invisible object walks
+ * nothing at all, and a progress total that excluded the most expensive
+ * producer said "compiling the sky…" while the 88 ms of work had not started.
  */
 
 /** Enough of an `Object3D` for the recipe, which reads exactly one field. */

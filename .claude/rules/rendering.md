@@ -37,12 +37,22 @@ Reasoning: `AGENTS.md` § "The rules that actually matter",
 - **`packages/rendering` may not import Three.js at all.** It is arithmetic: camera
   routes, LOD, placement, easings, composition solvers. `pnpm graph` enforces this half.
   That split is the whole reason any of it is testable in Node.
-- **A TSL node graph cannot be evaluated in Node, so shader code is verified on a GPU or
-  not at all.** Do not write a scalar mirror of a shader and test that instead — it passes
-  while the graph it claims to describe drifts. The terrain-normals test asserted normals
-  were unit length, which a radial normal also is, so it passed before _and_ after the fix.
+- **A TSL node graph is compiled and run on the real GPU by `pnpm test:gpu`.** Write a
+  `*.gpu.test.ts` against `render/gpuHarness.ts` — compile it, read its WGSL, draw it,
+  or run it as a compute kernel against the CPU function it ports. Do not write a scalar
+  mirror of a shader and test that instead — it passes while the graph it claims to
+  describe drifts. The terrain-normals test asserted normals were unit length, which a
+  radial normal also is, so it passed before _and_ after the fix.
 - **A headless GPU check is not a real one.** The renderer bug that killed a tab on every
-  load reproduced only at `devicePixelRatio` 2.
+  load reproduced only at `devicePixelRatio` 2, and nothing in Node observes presentation.
+- **A stand-in `DataTexture` is filtered like the map it stands in for.** The constructor
+  defaults to nearest; the WGSL builder reads a nearest texture with `textureLoad` and no
+  sampler. **A value swap does not rebuild the program**, so whatever the stand-in
+  compiled is what the real map is then read with — point sampled at mip 0. The gradient
+  sample has no `textureLoad` path at all, so the ground's white pixel referenced a
+  sampler that was never declared, Tint refused the module, and every mapless body's
+  ground was a black frame. `materials.gpu.test.ts` holds each stand-in and a real map to
+  one program.
 - **Terrain is sampled in body-fixed axes** — see `.claude/rules/determinism.md`.
 - **Compile-ahead goes through `render/warmup.ts`.** `warmCompile` owns the visibility
   toggle (`compileAsync` skips invisible objects, silently), the `WebGPURenderer` cast and

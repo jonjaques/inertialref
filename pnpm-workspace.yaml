@@ -16,6 +16,14 @@ allowBuilds:
   esbuild: true
   oxlint: true
   workerd: true
+  # webgpu is Dawn as a Node addon — `pnpm test:gpu`'s device. It ships the
+  # binary prebuilt, and its postinstall does one thing: strip the macOS
+  # quarantine attribute from `dawn.node`. A registry fetch never sets that
+  # attribute (only a browser download does), so the script has nothing to do
+  # here and is refused rather than allowed. If the addon ever fails to load
+  # with a Gatekeeper message, the fix is `xattr -d com.apple.quarantine` on
+  # that file, not flipping this to true.
+  webgpu: false
 
 # wrangler moves fast enough to trip the release-age gate. Recorded rather than
 # waived globally, so the exception is visible and dated with the lockfile.

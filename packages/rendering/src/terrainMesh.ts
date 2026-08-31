@@ -40,9 +40,8 @@ import { regionSpacing } from './terrainSelect.ts'
  * the position the parent's coarser grid holds for it, arriving exactly as the
  * parent takes over, so the switch has nothing left to pop. The arithmetic is
  * here rather than in the shader because the endpoint is a claim that can be
- * tested — a fully morphed child *equals* its parent, vertex for vertex — and a
- * TSL graph cannot be evaluated in Node. The shader's whole share of it is one
- * `mix`.
+ * tested on any Node, with no GPU — a fully morphed child *equals* its parent,
+ * vertex for vertex. The shader's whole share of it is one `mix`.
  */
 
 export interface PatchInput {

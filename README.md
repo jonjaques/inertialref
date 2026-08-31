@@ -304,6 +304,7 @@ in `packages/*`.
 | `pnpm dev:server`             | Just `wrangler dev`                                                               |
 | `pnpm preview`                | Build, then serve it through the real Worker on :8787                             |
 | `pnpm test`                   | Vitest, Node environment only — no DOM is ever registered                         |
+| `pnpm test:gpu`               | The shader suite, on the real GPU through Dawn — not in `pnpm check`              |
 | `pnpm typecheck`              | Five independent tsconfig projects; see below                                     |
 | `pnpm lint`                   | **oxlint**, not eslint (`oxlint --fix` applies autofixes)                         |
 | `pnpm graph`                  | Dependency layering + cycle check, and prints the graph                           |

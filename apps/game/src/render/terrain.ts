@@ -1,6 +1,7 @@
 import {
   Color,
   DataTexture,
+  LinearFilter,
   MeshBasicNodeMaterial,
   RGBAFormat,
   type Texture,
@@ -1168,6 +1169,18 @@ const SKY_FRACTION = 0.33
  * The alternative is a branch on whether a texture exists, which is a second
  * pipeline for the same material — and a whole-disk selection is several
  * hundred patches through one of them.
+ *
+ * **Filtered, and that is load-bearing.** `DataTexture` defaults to
+ * `NearestFilter` both ways, and the WGSL builder treats nearest-both-ways as
+ * *unfilterable*: it binds the texture with no sampler and reads it with
+ * `textureLoad`. The gradient sample `sampled` emits has no such path — it
+ * names `<texture>_sampler` unconditionally — so against the default stand-in
+ * the fragment stage references a binding that was never declared, Tint
+ * refuses the module, and the ground of every mapless body streams 706 patches
+ * into a black frame. A published map is loaded linear, which is why mapped
+ * bodies never showed it, and why the boot warm-up — which compiles against
+ * this stand-in — was compiling a pipeline that could not build.
+ * `materials.gpu.test.ts` holds the stand-in and a real map to the same WGSL.
  */
 const BLANK = /*@__PURE__*/ (() => {
   const map = new DataTexture(
@@ -1176,6 +1189,8 @@ const BLANK = /*@__PURE__*/ (() => {
     1,
     RGBAFormat,
   )
+  map.magFilter = LinearFilter
+  map.minFilter = LinearFilter
   map.needsUpdate = true
   return map
 })()

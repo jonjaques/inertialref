@@ -67,6 +67,7 @@ not diligence; it is twenty minutes and a full build spent confirming a paragrap
 | Prose that states a number, a command or an API                                             | ...plus the one command that proves the claim, and `docs-curator` if it is a behavior page |
 | Config and tooling — `.github/**`, `package.json`, a tsconfig, a linter or formatter config | `pnpm check`. No browser, no self-test                                                     |
 | Any `.ts` / `.tsx` under `packages/` or `apps/`                                             | The whole of step 3                                                                        |
+| ...and it touches `apps/game/src/render/` or a shader                                       | ...and `pnpm test:gpu`, which `pnpm check` and CI leave out                                |
 | ...and it touches rendering, the HUD, the dock or a cutscene                                | ...and step 4, with a picture                                                              |
 
 The rows are about **evidence, not effort**. A documentation change is verified by
@@ -110,7 +111,8 @@ Both of these subagents are read-only and neither is optional when its trigger f
 ## 4. Verify what CI cannot — in a real browser
 
 CI already runs `pnpm check` and `pnpm sim --self-test`; repeating those proves nothing
-new. What is missing is everything that needs a GPU, a browser, or an eye. Drive it with
+new. What is missing is the shader suite — `pnpm test:gpu`, which needs an adapter CI's
+runner does not have — and everything that needs a compositor or an eye. Drive it with
 [`scripts/drive.mjs`](../../../scripts/drive.mjs) — never the Claude-in-Chrome
 extension, which drives the human's own browser. `/drive` is the full card.
 

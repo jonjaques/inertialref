@@ -24,8 +24,12 @@ patches per zoo body, at 22 to 50 ms each. Its request pattern is the
 deterministic half and costs nothing, which is what a caller that passes no clock
 gets.
 
-Use the browser only for what only a GPU can prove: shading, LOD, framing, a
-cutscene, presentation.
+A shader question has a rung of its own between these and the browser:
+`pnpm test:gpu` compiles and runs a TSL graph on the physical GPU from a
+`*.gpu.test.ts`, in about a second for the whole suite
+([testing](../guides/testing.md)). Use the browser only for what only a
+compositor can prove: LOD at real display pixels, framing, a cutscene,
+presentation, a strobe.
 
 ```js
 ir.help()
@@ -90,7 +94,7 @@ rather than authored, so they survive regeneration.
 
 ---
 
-## The browser, when only a GPU will do
+## The browser, when only a compositor will do
 
 [`scripts/drive.mjs`](../../scripts/drive.mjs) is the one way in. It speaks the
 Chrome DevTools Protocol to a Chrome it launches itself, on its own profile and

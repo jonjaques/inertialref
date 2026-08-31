@@ -10,9 +10,10 @@ Reasoning and the full card: [`.claude/skills/drive/SKILL.md`](../skills/drive/S
   `localhost:5173` are indistinguishable to it. The driver launches its own Chrome on its
   own profile and port and needs no focus.
 
-- **Ask headlessly first.** `pnpm sim`, `pnpm vitest run <file>`, or a throwaway script
-  against `openSession` in `.scratch/`. The browser is for what only a GPU can prove:
-  shading, LOD, framing, the cutscene, presentation.
+- **Ask headlessly first.** `pnpm sim`, `pnpm vitest run <file>`, a throwaway script
+  against `openSession` in `.scratch/`, or `pnpm test:gpu` for a shader — the graph
+  on the real GPU in a second. The browser is for what only a compositor can prove:
+  LOD at display pixels, framing, the cutscene, presentation, a strobe.
 
 - **One invocation carries the setup and the measurement.** Steps run in the order
   written — `--js … --wait … --cast …` in one call, not one call each. Boot is paid

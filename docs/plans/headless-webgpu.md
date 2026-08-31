@@ -3,13 +3,12 @@
 A plan to compile and run this project's shaders on the real GPU from the Node
 test suite, in milliseconds, without a browser.
 
-> **The premise this replaces is measured, not argued.**
+> **A TSL node graph is evaluable in Node, and that is measured rather than
+> argued.** Chrome's own WebGPU implementation ships as a Node addon, and on
+> this machine it reports `vendor: apple`, `architecture: metal-3`,
+> `device: apple-m5` — the physical GPU, from a process with no window.
 > [`docs/guides/testing.md`](../guides/testing.md) and
-> [`.claude/rules/rendering.md`](../../.claude/rules/rendering.md) both state
-> that a TSL node graph cannot be evaluated in Node. It can. Chrome's own WebGPU
-> implementation ships as a Node addon, and on this machine it reports
-> `vendor: apple`, `architecture: metal-3`, `device: apple-m5` — the physical
-> GPU, from a process with no window.
+> [`.claude/rules/rendering.md`](../../.claude/rules/rendering.md) say so too.
 
 Measured on an Apple M5 (10-core GPU), macOS 26.6.2 (build 25G83), Node 26.5.0,
 `three` r182, vitest 4.1.10, `webgpu` 0.6.0. Every figure below is from that
@@ -130,25 +129,37 @@ tree-shaken out of the client bundle.
 /**
  * A `WebGPURenderer` on the real GPU, in Node.
  *
- * `installGpuGlobals` runs from a vitest setup file rather than from here,
- * because `three/webgpu` reads `self` at import time and a function cannot run
+ * The globals live in a vitest setup file rather than here, because
+ * `three/webgpu` reads `self` at import time and a function cannot run
  * before its own module's imports.
  */
 export async function openGpu(width = 64, height = 64) {
-  const { WebGPURenderer } = await import('three/webgpu')
   const renderer = new WebGPURenderer({
     antialias: false,
-    forceWebGPU: true,
     canvas: canvasStub(width, height),
   })
   renderer.setSize(width, height, false)
   await renderer.init()
+  // There is no `forceWebGPU` parameter: the renderer takes WebGPU when
+  // `navigator.gpu` answers and WebGL 2 when it does not, so the fallback is
+  // what the setup file not having run looks like. Name it here rather than
+  // let it fail later on the `document` this process does not have.
+  if (!renderer.backend.isWebGPUBackend) throw new Error('WebGL fallback')
   // Nothing here waits for a frame; every frame is an explicit `render()`.
   // A test that waits for a rAF tick is a test that hangs.
   renderer.setAnimationLoop(null)
   return renderer
 }
 ```
+
+The file adds five verbs over that — `compile`, `shader`, `drawGraph`, `draw`,
+`compute`/`readBuffer` — and owns four traps the sketch above does not show:
+the 256-byte row padding on a pixel readback, the validation scope that turns
+a refused shader module into a rejection, the index guard a compute kernel
+needs against its rounded-up dispatch, and the filter a stand-in texture needs
+to compile the same program as the map it replaces. Each is stated where it
+bites, in [testing](../guides/testing.md) § "Shader behavior runs on the real
+GPU".
 
 ### 3 · The setup file
 
@@ -221,12 +232,12 @@ Two facilities make these assertions possible:
 Landing this makes four passages false. All four are corrections to a present
 claim, not history, so they are rewritten in place rather than annotated.
 
-| File                                                             | What changes                                                                                                                 |
-| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| [`docs/guides/testing.md`](../guides/testing.md)                 | § "Shader behavior needs a real GPU" — the graph is evaluable; the scalar-mirror ban and the `devicePixelRatio` 2 limit stay |
-| [`docs/guides/testing.md`](../guides/testing.md)                 | § "What is not covered yet" — the "Shader behavior in the Node suite" row                                                    |
-| [`.claude/rules/rendering.md`](../../.claude/rules/rendering.md) | the bullet asserting a TSL graph cannot be evaluated in Node                                                                 |
-| [`scripts/drive.mjs`](../../scripts/drive.mjs)                   | the header's software-adapter claim — see below                                                                              |
+| File                                                             | What it says                                                                                                                                            |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`docs/guides/testing.md`](../guides/testing.md)                 | § "Shader behavior runs on the real GPU, from Node" — the suite, its verbs and its traps; the scalar-mirror ban and the `devicePixelRatio` 2 limit stay |
+| [`docs/guides/testing.md`](../guides/testing.md)                 | § "What is not covered yet" — the gap is CI, not Node                                                                                                   |
+| [`.claude/rules/rendering.md`](../../.claude/rules/rendering.md) | the bullet naming `pnpm test:gpu` as where a graph is verified                                                                                          |
+| [`scripts/drive.mjs`](../../scripts/drive.mjs)                   | the header gives `--cast` as the reason for a window, not the adapter — see below                                                                       |
 
 ---
 
@@ -320,7 +331,9 @@ changing.
   wrong.
 - **`renderer.backend.adapter` is not a public path** and is `undefined` on
   r182. A test that wants to prove it is on hardware should call
-  `navigator.gpu.requestAdapter()` and read `info` from that.
+  `navigator.gpu.requestAdapter()` and read `info` from that — `vendor` and
+  `architecture`, which a software adapter leaves empty. `isFallbackAdapter`
+  is not on `GPUAdapter` in the typings this app carries.
 
 ---
 

@@ -17,6 +17,7 @@ pnpm install
 pnpm dev              # Vite on 5173 and wrangler on 8787
 pnpm preview          # production build, served by the real Worker on 8787
 pnpm test             # Vitest, Node environment only
+pnpm test:gpu         # the shader suite on the real GPU via Dawn; not in check
 pnpm typecheck        # five tsconfig projects
 pnpm lint             # oxlint, not eslint
 pnpm graph            # dependency layering and cycle check

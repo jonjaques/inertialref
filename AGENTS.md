@@ -335,6 +335,22 @@ error`, with the real message on a channel the page console does not carry
   mechanism is unexplained and the rule is deliberately the wider claim. Two
   attribute objects over one array is a few bytes and one fewer trap.
   [ADR-0021](docs/adr/0021-the-ground.md).
+- **Never leave a stand-in `DataTexture` at its nearest default.** Every
+  material here runs one graph whether or not its maps have arrived, on the
+  strength of a 1×1 stand-in, and the boot warm-up compiles the object the
+  first time it exists — before `setTextures` has run. **That program is then
+  frozen and the real map is bound into it:** a TSL `texture()` node's value
+  swap changes the binding and nothing else, no cache key observes it, and no
+  WGSL is rebuilt. Measured on the device — a node built over a nearest 1×1
+  compiles `textureLoad` with no sampler, and after assigning a linear map the
+  fragment shader is byte-identical. So a nearest stand-in is not a warm-up
+  that misses; it is the filtering the body then draws its 8K albedo with, at
+  mip 0, point sampled, with no anisotropy. The ground's version has no
+  `textureLoad` path at all: the gradient sample names a sampler that was
+  never declared, Tint refuses the module, and standing on a mapless body
+  streams 706 patches into a black frame with `[Invalid ShaderModule
+"fragment"]` on the console. Set both filters linear;
+  `materials.gpu.test.ts` holds each stand-in and a real map to one program.
 - **Never add a shading term to the ground without adding it to the sphere.**
   `render/terrain.ts` and `render/planet.ts` draw the same body on either side
   of the eight-pixel relief gate — the streamed ground below it, the archive's

@@ -58,9 +58,11 @@ the fix. Report that you did this and what the failure looked like. A regression
 passes in both worlds is worse than none, because it is believed: the terrain-normals test
 asserted that normals were unit length, which a radial normal also is.
 
-Do not write a scalar mirror of a shader and test that instead. A TSL node graph cannot be
-evaluated in Node, so shader code is verified on a GPU or not at all — a mirror passes
-while the graph it claims to describe drifts.
+Do not write a scalar mirror of a shader and test that instead — a mirror passes while the
+graph it claims to describe drifts. A TSL graph runs on the real GPU from a
+`*.gpu.test.ts` against `render/gpuHarness.ts`; run those with
+`pnpm vitest run --config apps/game/vitest.gpu.config.ts <substring>`, because the root
+config excludes the suffix.
 
 ## Finish
 

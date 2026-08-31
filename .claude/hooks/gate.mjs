@@ -5,9 +5,9 @@
 // The rule it enforces is the one already written down: a change is not finished
 // because the browser renders something, it is finished when the layering holds, the
 // types check and the tests pass. Enforcing it here rather than trusting a checklist
-// costs about a minute:
+// costs about two minutes:
 //
-//     graph 0.21s -> lint 0.23s -> typecheck 4.89s -> test 58s
+//     graph 0.21s -> lint 0.23s -> typecheck 4.89s -> test 103s
 //
 // Three of those four are free and the fourth is the whole cost. `pnpm test` is what it
 // is because one test in `gameEngine.test.ts` generates a landing's worth of ground
@@ -65,7 +65,7 @@ const MAX_REPORT_CHARS = 6000
  *  Each carries its own `timeout`, because one budget for all four has to be sized for
  *  the slowest and is then no guard at all on the other three. A stage that reaches its
  *  timeout is *hung* — the numbers in the header are the honest cost and every budget
- *  here is a large multiple of one. `test` gets ten minutes against a measured 58 s,
+ *  here is a large multiple of one. `test` gets ten minutes against a measured 103 s,
  *  because the suite's cost sits almost entirely in one terrain descent whose own
  *  runtime moves by a factor of two with how busy the machine is; a budget that is
  *  merely comfortable on an idle machine turns every parallel build into a false red. */
