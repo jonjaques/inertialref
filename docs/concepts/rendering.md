@@ -247,13 +247,13 @@ two fields have to be two.
 ```mermaid
 sequenceDiagram
     participant S as TerrainStreamer
-    participant P as worker pool
+    participant P as the producer<br/>(GPU tile kernel, or a worker)
     participant B as buildPatch()
     participant G as GPU
 
-    S->>P: generateHeightfield(region, 65×65 + 2 border)
-    Note right of P: 4,761 samples ×<br/>six bands and a crater ladder
-    P-->>S: Float32Array + Uint8Array cover<br/>(transferred, not copied)
+    S->>P: heightfield(region, 65×65 + 2 border)
+    Note right of P: 4,761 samples ×<br/>six bands and a crater ladder —<br/>sixteen tiles a dispatch on the GPU,<br/>one patch a job on a worker
+    P-->>S: Float32Array + Uint8Array cover<br/>(read back, or transferred)
     S->>B: heightfield + cover + body radius
     B->>B: positions, anchor-relative
     B->>B: <b>central-difference normals, everywhere</b>

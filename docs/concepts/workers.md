@@ -166,6 +166,34 @@ failure, so the rejection is matched on and not logged.
 
 ---
 
+## A source is a port over the pool
+
+The streamer does not ask the pool for heightfields. It asks a
+`HeightfieldSource` — `kind`, `available`, an optional `maxLevel`,
+`submit(payload) → JobHandle` — and `poolHeightfieldSource(pool)` is the pool
+wearing that interface. The
+other implementation is `createTileProducer(renderer)` in
+`apps/game/src/render/terrainProducer.ts`: a TSL compute kernel that produces
+sixteen tiles a dispatch on the GPU, installed by `App` once the renderer is
+ready and its pipeline has compiled behind the boot cover
+([ADR-0023](../adr/0023-the-gpu-producer.md)).
+
+The port is what makes the two interchangeable in the one place that
+matters. `submit` returns the same `JobHandle` either way, so `clear()`
+cancels a GPU batch's queue exactly as it cancels the pool's, and the epoch
+discards a late answer from either. A source that fails — a lost device, a
+pipeline that will not build — sets `available = false`, the streamer's next
+request goes to the pool, and the session continues on the canon.
+`?producer=cpu` refuses the GPU source outright, which is how the pool's own
+figures are re-measured; `ir.terrain().producer` says which one answered.
+
+The interface lives here, in `packages/workers`, rather than beside the
+renderer, because the pool implements it and this layer cannot see the one
+above. Nothing in it names a renderer, a device or a buffer: a payload in, a
+handle out, the same envelope the worker task already speaks.
+
+---
+
 ## What is deliberately not here
 
 | Not used                                     | Why                                                                                                                                                                                                                                                                 |

@@ -274,8 +274,11 @@ verbs: `compile`, `shader` (the generated WGSL), `drawGraph` and `draw`
 storage buffer back from a kernel). The suite is `*.gpu.test.ts`, its config
 is `apps/game/vitest.gpu.config.ts`, and the whole of it — every production
 material compiled to a Metal pipeline, structural assertions on the WGSL, a
-pixel ramp, two compute kernels checked against their CPU originals — runs in
-about **0.9 s** on an idle M5, most of it Dawn's boot. The reasoning and the
+pixel ramp, the terrain kernels against their CPU originals — runs in about
+**16 s** on an M5. One test is fifteen of them: `terrainKernel.gpu.test.ts`
+holding the tile kernel to `generateHeightfield` across the zoo and the levels.
+The bands are 2.4 s and the producer 1.2 s beside it, and the rest of the
+suite, Dawn's boot included, is under half a second. The reasoning and the
 measurements are [the headless WebGPU plan](../plans/headless-webgpu.md).
 
 It is a separate command rather than part of `pnpm test` because it makes a
@@ -287,7 +290,12 @@ reason. Run it during shader work, and before shipping any change under
 **Do not write a scalar mirror of a shader and test that instead.** That rule
 matters more now, not less: the mirror can pass while the graph it claims to
 describe drifts, and the remedy is to test the graph itself.
-`terrainKernels.gpu.test.ts` is the shape — a TSL port of `faceToDirection`
+`terrainKernel.gpu.test.ts` is the whole of it: the GPU tile producer's kernel
+against `generateHeightfield` on every zoo body and three Sol bodies at seven
+levels each, held to a bound stated as arithmetic about the kernel's two
+limits, and `terrainBands.gpu.test.ts` holds each of the eight bands to its own
+figure so a red whole names its band. `terrainKernels.gpu.test.ts` is the
+seed those grew from — a TSL port of `faceToDirection`
 and of the `pcg3d` lattice hash, each run on the GPU and compared with the CPU
 function, the float one to a named f32 bound and the integer one bit for bit.
 

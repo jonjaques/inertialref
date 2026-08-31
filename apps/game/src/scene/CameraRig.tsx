@@ -103,6 +103,7 @@ const STAGE_FILL_INTENSITY = 1.6
 /** Drives the real camera from the ship's canonical state, once per frame. */
 export function CameraRig({ engine }: { engine: GameEngine }) {
   const camera = useThree((state) => state.camera)
+  const size = useThree((state) => state.size)
   const light = useRef<PointLight>(null)
   const fill = useRef<DirectionalLight>(null)
 
@@ -153,11 +154,35 @@ export function CameraRig({ engine }: { engine: GameEngine }) {
      * changes on a resize — which would move the terrain selection, the
      * observatory's standoff and every composed shot with it. `fov` is the
      * vertical field and aspect-independent, which is what the lens states.
+     *
+     * The aspect ratio too, from the store's own size, because R3F cannot be
+     * relied on to have set it on the camera it ends up with. R3F 9.7 builds
+     * its camera as `new PerspectiveCamera(75, 0, …)` — aspect zero — and
+     * corrects it only from a store subscription that fires on a size or
+     * pixel-ratio *change*. Its async `configure()` reads a state snapshot
+     * taken before it awaits the `gl` factory, which here is a renderer build
+     * of one to six seconds, and `<Canvas>` calls `configure()` again on every
+     * re-render while it waits: a boot status line, the measured size, the
+     * output description. Each queued call then finds no camera in its stale
+     * snapshot and builds one; the last one built lands after the size is
+     * already in the store, its `setSize` is a no-op, and the subscription
+     * never fires for it. A zero aspect is a NaN projection: every draw is
+     * submitted and rasterizes to nothing — 790k triangles a frame, opaque
+     * black under a healthy HUD — and a remount cures it only because a
+     * resolved renderer memo leaves fewer calls queued. Measured headless on
+     * the dev build: three boots of three black, `camera.aspect === 0` with
+     * the store at 1600×900. One compare a frame is the whole cost.
      */
-    const fov = verticalFovDegrees(engine.lens)
     const perspective = camera as PerspectiveCamera
-    if (perspective.isPerspectiveCamera && perspective.fov !== fov) {
+    const fov = verticalFovDegrees(engine.lens)
+    const aspect =
+      size.height > 0 ? size.width / size.height : perspective.aspect
+    if (
+      perspective.isPerspectiveCamera &&
+      (perspective.fov !== fov || perspective.aspect !== aspect)
+    ) {
       perspective.fov = fov
+      perspective.aspect = aspect
       perspective.updateProjectionMatrix()
     }
 

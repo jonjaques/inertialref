@@ -113,11 +113,11 @@ The most visible shallowness, and the milestone in progress —
 
 ```mermaid
 flowchart TB
-    NOW["<b>today</b><br/>a geology with a face,<br/>meter-scale ground,<br/>and rocks lying on it"]
-    F["<b>the GPU producer</b><br/>TSL compute tiles"]
+    NOW["<b>today</b><br/>a geology with a face,<br/>meter-scale ground,<br/>rocks lying on it, and<br/>heightfields from the GPU"]
+    F["<b>the mesh off the main thread</b><br/>normals and the LOD morph<br/>where the heightfield already is"]
     D["<b>the albedo bake</b><br/>a generated body's sphere<br/>shows its own maria"]
 
-    NOW -->|"generation is the<br/>binding constraint"| F
+    NOW -->|"the build is the<br/>queue now"| F
     NOW --> D
 
     style NOW fill:#334155,stroke:#1e293b,color:#fff
@@ -184,7 +184,7 @@ strength limit rather than a dial, and terrain moved to algorithm version 2.
 | A rock reads the field, not the mesh        | Its foot is 3–9 cm off the triangle under it in the mean and up to 0.70 m at the worst cell on the coarsest body; `MESH_SEAT` buries it 12 cm             | More channels on the cover, which is the same change the deposits want                                                                                            |
 | Scatter has no collision                    | A rock is presentational; the contact test does not know it exists                                                                                        | [On foot](design/onfoot.md), where the canonical floor drops as well                                                                                              |
 | The canonical crater ladder stops at eleven | A body whose largest basin is 2,170 km has craters down to 2.1 km and then nothing until the presentational tail starts at 8 m                            | `MAX_CRATER_LEVELS`; fourteen moves the detail floor 0–2 levels at 13% a patch, and it is terrain algorithm v3                                                    |
-| The mesh is built on the main thread        | 0.25 ms a patch, four a frame                                                                                                                             | The worker already has the field; the mesh arithmetic has to move to `packages/universe` first, for the layer rule                                                |
+| The mesh is built on the main thread        | 0.25 ms a patch, eight a frame — the queue, now that the heightfield is 10 ms for sixteen                                                                 | The worker already has the field; the mesh arithmetic has to move to `packages/universe` first, for the layer rule                                                |
 | Patch generation is over its budget         | 21.6 to 49.8 ms per bordered 65×65 patch across the zoo, against a documented ≤ 8 ms — and a landing now wants 700 to 1,077 of them                       | `pnpm sim --terrain-baseline` is the measurement; the crater neighborhood is most of it, and its radial bound, `EJECTA_REACH` and the GPU producer are the levers |
 | A coarse patch costs more than a fine one   | Consecutive samples of a coarse patch land in different noise lattice cells                                                                               | A whole-disk selection pays it on the shell; per-level merging would amortize it                                                                                  |
 
@@ -278,17 +278,17 @@ The principle is _design for these, measure before optimising_
 ([vision](vision.md#measure-before-optimizing)). The design admits all of them;
 almost none are applied, and almost nothing is measured.
 
-| Technique            | Status | Where it would go first                                                                                                                            |
-| -------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Typed arrays         | ✅     | Heightfields, vertex buffers                                                                                                                       |
-| Transferable buffers | ✅     | Worker results                                                                                                                                     |
-| Worker pools         | ✅     |                                                                                                                                                    |
-| Instanced rendering  | 🟡     | Star field is instanced sprites — WebGPU has no point size; rock scatter is four instanced meshes in the terrain's own material. Asteroids are not |
-| Object pooling       | ⬜     | `Vec3` allocation in the flight inner loop                                                                                                         |
-| Spatial indexes      | ⬜     | Interest queries                                                                                                                                   |
-| WASM                 | ⬜     | Noise generation, if profiling justifies it                                                                                                        |
-| WebGPU               | 🟡     | `WebGPURenderer` + TSL shipped, WebGL 2 retained as fallback. Compute shaders, storage buffers and indirect draw are not used yet                  |
-| `SharedArrayBuffer`  | ⬜     | Requires cross-origin isolation; nothing needs it yet                                                                                              |
+| Technique            | Status | Where it would go first                                                                                                                                                 |
+| -------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Typed arrays         | ✅     | Heightfields, vertex buffers                                                                                                                                            |
+| Transferable buffers | ✅     | Worker results                                                                                                                                                          |
+| Worker pools         | ✅     |                                                                                                                                                                         |
+| Instanced rendering  | 🟡     | Star field is instanced sprites — WebGPU has no point size; rock scatter is four instanced meshes in the terrain's own material. Asteroids are not                      |
+| Object pooling       | ⬜     | `Vec3` allocation in the flight inner loop                                                                                                                              |
+| Spatial indexes      | ⬜     | Interest queries                                                                                                                                                        |
+| WASM                 | ⬜     | Noise generation, if profiling justifies it                                                                                                                             |
+| WebGPU               | 🟡     | `WebGPURenderer` + TSL shipped, WebGL 2 retained as fallback. The heightfield producer is a compute pass over storage buffers (ADR-0023); indirect draw is not used yet |
+| `SharedArrayBuffer`  | ⬜     | Requires cross-origin isolation; nothing needs it yet                                                                                                                   |
 
 **What is measured today:** simulation throughput (~100–105k ticks/s headless,
 ~1.25M ticks/s browser for one entity), worker queue latency and execution time,

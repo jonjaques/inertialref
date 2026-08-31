@@ -82,7 +82,7 @@ The complete game, with no network of any kind.
 | **Cost to run**               | Zero, forever                                                                  |
 
 **Already proven.** With the server stopped, the app loads from its service
-worker, streams terrain from its worker pool, and passes 12/12 capability checks
+worker, streams terrain from its own GPU and worker pool, and passes 12/12 capability checks
 — demonstrated rather than asserted, in both dev and a production build.
 
 **What is still needed:** an explicit **offline preparation** step. The brief

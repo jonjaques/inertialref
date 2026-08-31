@@ -23,6 +23,7 @@ import {
   walkBodies,
 } from '@inertialref/universe'
 import { UV } from '@inertialref/spatial'
+import type { JobHandle, WorkerPool } from './pool.ts'
 import { defineTask, TaskRegistry } from './task.ts'
 
 /*
@@ -273,6 +274,42 @@ export const generateHeightfieldTask = defineTask<
     // BufferAttribute and the worker has no further use for it.
     return [response.elevations.buffer, response.cover.buffer]
   },
+})
+
+/**
+ * Something that turns a heightfield request into a heightfield.
+ *
+ * The pool is one — `poolHeightfieldSource` below — and a GPU tile producer
+ * is another, and the streamer asks whichever it holds without knowing which.
+ * The response is the same shape either way: the bordered elevations, the
+ * cover, the extremes. What differs is where the arithmetic ran and whether
+ * it is the canonical field — the pool's is `generateHeightfield` itself,
+ * and a producer's is a port of it held to a stated tolerance.
+ *
+ * `available` is how a producer says it can no longer answer — a kernel that
+ * would not build, a device that was lost — so the streamer routes the next
+ * request to the pool rather than queueing behind something that will reject
+ * it. A source that is unavailable rejects with `producer unavailable`, which
+ * the streamer treats like a cancellation: the producer has already said why.
+ */
+export interface HeightfieldSource {
+  /** `'pool'`, `'gpu'` — what `ir.terrain().producer` reports. */
+  readonly kind: string
+  readonly available: boolean
+  /**
+   * The deepest region level this source produces; a request deeper than it
+   * goes to the pool instead. Absent means every level — the pool's own
+   * answer, and the default for a source that does not say.
+   */
+  readonly maxLevel?: number
+  submit(payload: HeightfieldRequestPayload): JobHandle<HeightfieldResponse>
+}
+
+/** The pool, as a source: `generateHeightfieldTask` on a worker. */
+export const poolHeightfieldSource = (pool: WorkerPool): HeightfieldSource => ({
+  kind: 'pool',
+  available: true,
+  submit: (payload) => pool.submit(generateHeightfieldTask, payload),
 })
 
 /**

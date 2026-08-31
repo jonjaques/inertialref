@@ -21,7 +21,8 @@ Milestone 1 — the vertical architectural proof — is **complete**: 12/12 capa
 deferred to a later phase; only the seams exist (ADR-0008).
 
 Verified in Chrome, in **both dev and the production build**: the harness on
-`window.ir`, terrain streamed from a worker pool, landing on a generated
+`window.ir`, terrain heightfields produced on the GPU with the worker pool as
+canon and fallback, landing on a generated
 surface, a sphere-of-influence frame transition mid-flight, and a save
 round-tripping through IndexedDB to an identical state hash. With the preview
 server **stopped**, the page still loads from the service worker and passes
@@ -29,22 +30,22 @@ server **stopped**, the page still loads from the service worker and passes
 ~1.25M simulation ticks/s for one entity; the headless runner does ~100–105k ticks/s
 including frame resolution.
 
-| Package         | Layer | State                                                                                                                         |
-| --------------- | ----- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `shared`        | 0     | done — units, brands, invariants, structured logging, the timing port (ADR-0022)                                              |
-| `spatial`       | 1     | done — UniverseVector, frame graph, floating origin                                                                           |
-| `procedural`    | 1     | done — PRNG, hierarchical seeds, noise, algorithm versions                                                                    |
-| `physics`       | 2     | done — Kepler, rigid body, atmosphere, thrusters                                                                              |
-| `universe`      | 3     | done — addressing, star catalog, generation, terrain, frames                                                                  |
-| `simulation`    | 4     | done — clock, entities, flight, streaming, snapshots                                                                          |
-| `protocol`      | 4     | done — validation combinators, wire and save schemas                                                                          |
-| `workers`       | 5     | done — typed tasks, ports, pool, four tasks                                                                                   |
-| `persistence`   | 5     | done — save/restore, migration chain, store port                                                                              |
-| `net`           | 5     | done — authority port, local authority; remote + channel are H4                                                               |
-| `rendering`     | 5     | done — LOD, depth compression, terrain meshing                                                                                |
-| `devtools`      | 6     | done — inspection, twelve capability checks, harness, `openSession`                                                           |
-| `apps/game`     | —     | done — React + R3F client on `WebGPURenderer`/TSL, worker pool, IndexedDB saves; `/docs` is the documentation site (ADR-0016) |
-| `apps/headless` | —     | done — Node runner, ~100–105k ticks/s, `pnpm sim --self-test`                                                                 |
+| Package         | Layer | State                                                                                                                                                |
+| --------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `shared`        | 0     | done — units, brands, invariants, structured logging, the timing port (ADR-0022)                                                                     |
+| `spatial`       | 1     | done — UniverseVector, frame graph, floating origin                                                                                                  |
+| `procedural`    | 1     | done — PRNG, hierarchical seeds, noise, algorithm versions                                                                                           |
+| `physics`       | 2     | done — Kepler, rigid body, atmosphere, thrusters                                                                                                     |
+| `universe`      | 3     | done — addressing, star catalog, generation, terrain, frames                                                                                         |
+| `simulation`    | 4     | done — clock, entities, flight, streaming, snapshots                                                                                                 |
+| `protocol`      | 4     | done — validation combinators, wire and save schemas                                                                                                 |
+| `workers`       | 5     | done — typed tasks, ports, pool, five tasks, the `HeightfieldSource` port the pool implements (ADR-0023)                                             |
+| `persistence`   | 5     | done — save/restore, migration chain, store port                                                                                                     |
+| `net`           | 5     | done — authority port, local authority; remote + channel are H4                                                                                      |
+| `rendering`     | 5     | done — LOD, depth compression, terrain meshing                                                                                                       |
+| `devtools`      | 6     | done — inspection, twelve capability checks, harness, `openSession`                                                                                  |
+| `apps/game`     | —     | done — React + R3F client on `WebGPURenderer`/TSL, the GPU tile producer, worker pool, IndexedDB saves; `/docs` is the documentation site (ADR-0016) |
+| `apps/headless` | —     | done — Node runner, ~100–105k ticks/s, `pnpm sim --self-test`                                                                                        |
 
 ## Decisions that are expensive to reverse
 
@@ -6210,6 +6211,118 @@ measured on the same idle machine: 102.9 s for `pnpm test`, 10.0 s without
 worker for 101.5 s. Nothing is changed on that page; the four levers it names
 are each a decision about what the gate promises.
 
+## The GPU produces the heightfield the CPU defines (30 Aug 2026)
+
+Phase 5 of [the terrain plan](TERRAIN-PLAN.md) lands as
+[ADR-0023](docs/adr/0023-the-gpu-producer.md). Heightfield tiles are a TSL
+compute kernel — `apps/game/src/render/terrainKernel.ts`, one thread a sample,
+sixteen tiles a dispatch — fed by `packages/universe/src/terrainKernel.ts`,
+which packs a surface into 112 words and a tile into a float64-computed
+per-rung integer frame. The streamer asks a `HeightfieldSource` port for its
+tiles; the pool implements it and so does `createTileProducer`, installed at
+renderer ready once its pipeline has compiled behind the boot cover. Every
+band's shape table is exported from the band's own file and read by both
+paths; the CPU function's `'exact'` chord test adopts the kernel's integer slab
+test, presentational and unversioned.
+
+Measured. In the harness, sixteen tiles in **10.0 ms** on the GPU against
+805.6 ms for the same sixteen on the CPU; a batch is bit-identical to the same
+tiles produced singly. In the browser, a two-meter stance on Luna at 1600×900
+converges in **4.4 s** at eight builds a frame (8.2 s at four, 3.5 s at
+sixteen) against 25.5–32.7 s from the pool at any of them, and at 1920×1200 on
+a 2× ratio in 7.5 s against 61.4 s — where both producers stop at level 7 and
+954 patches, identically, which is a question about selection at display
+pixels and not about production. `BUILDS_PER_FRAME` is eight: the main-thread
+build is the queue now. Tolerance holds on every zoo body and on Luna, Earth
+and Mercury at levels 0 through the drawn floor to
+`3e-5 · maxElevation + halfWidth · 2⁻²¹`, and per band with each band's own
+bound, under `pnpm test:gpu`.
+
+What the port found, each on the device rather than in a mirror:
+
+- **A float32 sphere test flips at the lattice boundaries.** Coarse levels
+  over-counted craters by 44 m on Luna and 190 m on Earth, and the tail was
+  wrong by its own amplitude, because `Σ m² ≤ cells²` in float32 admits cells
+  the CPU rejects. The test is done in 48-bit integers on the frame-relative
+  chord against packed `floor(cells²)` and `ceil(cells²)`; the CPU's
+  `'exact'` path does the same, which is what removed Miranda's level-0 spikes
+  at rational directions — float64 rounding on integer-`cells` tail rungs, the
+  same defect from the other side.
+- **Metal's `tanh` underflows.** `tanh(v / 1e12)` is 0 on the device where
+  the arithmetic says otherwise; the per-rung diagnostic returned zeros until
+  it used real ceilings, and the kernel's `tanh` is a WGSL function.
+- **Three parser facts of r182's `wgslFn`.** A leading `//` comment before
+  `fn` is "not a WGSL code"; `from` is reserved; nested `Loop`s must be named
+  or every level is `i`.
+- **Isolating a band means zeroing its share, not dropping its rung.**
+  Dropping crater levels from the list shifts every frame after them, and a
+  tail diagnostic walked the wrong rungs until the levels stayed and
+  `CRATER_LIMIT` went to zero instead.
+- **A routing test does not need a field.** The streamer's source-routing
+  test took 10.6 s with a real heightfield fixture and takes 104 ms with a
+  flat one; [test-speed](docs/plans/test-speed.md) has the rest.
+
+Left open, named in the ADR: normal tiles and the mesh stay on the main
+thread at 0.25 ms a patch; the kernel's level-0 offset term is the
+`halfWidth · 2⁻²¹` in the bound; the retina level-7 stop is unexplained.
+
+## The black boot was two defects, and the watchdog could see neither (30 Aug 2026)
+
+A dev boot comes up black under a live HUD, the CPU lights up, the frame
+strobes, and Earthrise arrives about ten seconds in. Reproduced in headless
+Chrome, where nothing can occlude the window, so every reading below is a
+composited screenshot or an in-frame readback and not a rig artefact. The
+reading that named it: 789,603 triangles and 1,728 lines submitted a frame,
+the canvas opaque black inside the frame, and `camera.aspect === 0` on the
+camera being rendered with, while the R3F store held `size 1600×900` and a
+viewport aspect of 1.78.
+
+**The first defect is R3F's, and the rig now owns the aspect.** R3F 9.7 builds
+its camera as `new PerspectiveCamera(75, 0, …)` and corrects the aspect only
+from a store subscription that fires on a size or pixel-ratio _change_, using
+whichever camera is in the store at that moment. Its async `configure()` reads
+a state snapshot taken before it awaits the `gl` factory — here a renderer
+build of one to six seconds in dev — and `<Canvas>` calls `configure()` again
+on every re-render while it waits. Each queued call finds no camera in its
+stale snapshot and builds one; the last one built lands after the size is in
+the store, its `setSize` is a no-op, and the subscription never fires for it.
+A zero aspect is a NaN projection: every draw is submitted and rasterizes to
+nothing. Three headless dev boots of three came up that way. `CameraRig`
+writes the aspect from `state.size` beside the field of view it already owns,
+one compare a frame.
+
+**The second is the watchdog's probe, and it was blind on every boot.** The
+ladder in `render/presentationWatchdog.ts` sampled the canvas with `drawImage`
+from a timer, and between frames a WebGPU canvas has no readable image: Chrome
+hands the drawn texture to the compositor when the frame's task ends, and the
+readback is transparent black whether the canvas presented or not — the fact
+the plate-capture rig met from the other side ("a WebGPU canvas reads back
+blank", above). So a healthy boot read as "never presented" and climbed the
+whole ladder — replay at 2.9 s, nudges at 3.8 and 4.7, a renderer rebuild at
+5.5 with its second preload census, replay, nudges, "giving up" at 9.5 — and
+the cover came off at first light around 12 s. That is the ten seconds, the
+strobe and the CPU. The rebuild cured the first defect about half the time,
+which is how the ladder masked it and why the picture arrived at all. The
+sample is now taken from a `requestAnimationFrame` callback registered by that
+timer, which runs after R3F's loop (its next frame is always already queued)
+and reads the texture the loop has just drawn: measured on one lit canvas,
+8192 of 8192 pixels opaque and 4,202 lit inside the frame, 0 of 8192 a
+`setTimeout(0)` later.
+
+After: a headless dev boot with the watchdog live logs no rung — `renderer
+ready` at 0.6 s, `first light` at 7.6 s on `warm-up complete`, cover off and
+the picture lit at 9.2 s; the warm-up is the whole wait. The in-frame sample
+reads under the driver's focus emulation too — 57 lit of 8192 opaque on an
+Earthrise strip through `drive.mjs` — so `?presentation=occluded` is not what
+prevents a false negative any more; it stays because a driven boot is a
+measurement and a ladder run is what it must never contain. Neither a bisect
+nor the rig could have found this: the rig's window sits at x=2400 and
+composites only while nothing covers it, so a shot ten seconds after a reload
+measures the desk as much as the page, and #41 read as lit only because its
+ladder had rebuilt the renderer before the capture. The ladder itself stays —
+the wedge it was built for is a different animal from a NaN projection, and
+the in-frame sample can now tell the two apart.
+
 ## Known gaps
 
 Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md).
@@ -6327,8 +6440,8 @@ Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md
 - The atmosphere is an analytic shell — exponential density and a twilight
   ring as of 21 Aug, but still geometry rather than scattering. The Bruneton
   LUTs spike 2 made a requirement remain the specified replacement.
-- No compute passes, storage buffers or indirect draw yet: the WebGPU migration
-  delivered the renderer and the HDR path, not GPU-driven terrain or culling.
+- No indirect draw or GPU-driven culling yet: the heightfield producer is the one
+  compute pass (ADR-0023); selection and the mesh are CPU-side.
 - Cold load to interactive is still unmeasured, and it is the budget most likely
   to be missed: the bundle is **663.3 KB gzip — 511.0 KB brotli — in a single
   chunk** with no code splitting and no `React.lazy` anywhere in `src`, of which

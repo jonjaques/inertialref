@@ -193,8 +193,9 @@ Violating one of these is a rewrite later, not a refactor.
   arm that only produces a camera when the cutscene arm is null — and the flight
   lens is the fallback.
   The field of view is _derived_ from focal length, gauge and zoom and is never
-  stored beside them; `CameraRig` writes `camera.fov` and nothing else does,
-  never `filmGauge` or `setFocalLength`, because Three's gauge is the sensor's
+  stored beside them; `CameraRig` writes `camera.fov` and nothing else does —
+  the aspect it writes beside it is the viewport's, not the lens's — never
+  `filmGauge` or `setFocalLength`, because Three's gauge is the sensor's
   long side divided by the aspect ratio and a lens whose angle moved on a resize
   would move the terrain selection, the observatory's standoff and every
   composed shot with it. A consumer that cannot see the lens is a bug, not a
@@ -351,6 +352,24 @@ error`, with the real message on a channel the page console does not carry
   streams 706 patches into a black frame with `[Invalid ShaderModule
 "fragment"]` on the console. Set both filters linear;
   `materials.gpu.test.ts` holds each stand-in and a real map to one program.
+- **Never take a fine lattice coordinate from an absolute float32 direction,
+  and never take a lattice decision in a float.** The GPU tile producer is a
+  port of `drawnElevation`, held to a measured bound; two things make that
+  bound small and both are easy to undo. A float32 unit vector resolves
+  6 × 10⁻⁸ of a radian and the tail's one-meter crater on Luna subtends
+  3 × 10⁻⁷, so `direction · cells` from an absolute direction quantizes every
+  fine rung to a fifth of a crater and does so differently on either side of
+  every patch edge — a rung reads its tile's _frame_, the cell and fraction the
+  patch center falls in from float64 (`writeTileFrame`), plus the sample's own
+  offset. And whether a cell holds a crater is a step: the sphere test's inputs
+  are integers over one float, so successive cells sit `1/cells²` apart —
+  2 × 10⁻⁷ at 2,300 cells, 10⁻¹² across the tail — and a float32 comparison
+  lands on the wrong side wherever that is under its resolution, which was a
+  whole crater on one processor and not the other, 44 m on Luna. The test is
+  `Σ m² > floor(cells²)` in 48-bit integers on the GPU and in exact float64 on
+  the tail's CPU path (`ChordForm`), and a crater exists when its hash is under
+  a `u32` threshold, never when `toUnit(hash) < density`.
+  [ADR-0023](docs/adr/0023-the-gpu-producer.md).
 - **Never add a shading term to the ground without adding it to the sphere.**
   `render/terrain.ts` and `render/planet.ts` draw the same body on either side
   of the eight-pixel relief gate — the streamed ground below it, the archive's

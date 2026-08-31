@@ -174,6 +174,16 @@ Convergence to the deepened floor (level 15-19 since the drawn tail landed)
 is ~1,000 patches; at 41.6 jobs/s that is ~24 s of ground sharpening after an
 arrival, which is the number a player actually sees.
 
+**The GPU producer retires the queue** ([ADR-0023](../adr/0023-the-gpu-producer.md)).
+Sixteen tiles a dispatch in **10.0 ms** on the same M5's GPU against 805.6 ms
+for the same sixteen on the CPU, measured in `terrainProducer.gpu.test.ts`.
+In the browser, a two-meter stance on Luna at 1600×900 converges in **4.4 s**
+against 25.5–32.7 s from the pool, and at 1920×1200 on a 2× ratio in 7.5 s
+against 61.4 s. What is left is the main-thread build, 0.25 ms a patch, and
+`BUILDS_PER_FRAME` is its curve: 8.2 s at four a frame, 4.4 at eight, 3.5 at
+sixteen — eight is the setting, 2 ms of the frame. The pool's figures above
+are the fallback's now, and `?producer=cpu` re-runs them.
+
 ### A worker's runs are 5-10× the Node baseline, and nobody knows why
 
 `generateHeightfield` on Mars in the browser pool: **129 ms mean at four

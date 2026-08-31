@@ -47,8 +47,9 @@ import {
   terrainPatchKey,
 } from '@inertialref/rendering'
 import {
-  generateHeightfieldTask,
+  type HeightfieldSource,
   type JobHandle,
+  poolHeightfieldSource,
   surfaceDetailFloorTask,
   type WorkerPool,
 } from '@inertialref/workers'
@@ -195,18 +196,27 @@ function pyramid(leaves: readonly SelectedPatch[]): readonly RegionAddress[] {
  *
  * This is main-thread work inside the frame — 4,761 directions and two normal
  * passes — so it is the one part of streaming that shows up as a hitch rather
- * than as latency. It is **0.25 ms** a patch, so four of them is a millisecond,
- * and a cold whole-disk selection of 450 fills in about 110 frames — which is
- * roughly what the worker pool takes to generate them anyway.
+ * than as latency. It is **0.25 ms** a patch, so eight of them is two
+ * milliseconds — twice the terrain line of the frame budget in
+ * `docs/design/technical.md`, for the seconds a convergence takes and
+ * nothing once it has.
  *
- * It was 6.26 ms a patch before the mesh loops were written in scalars, which
- * is six frames of terrain budget for one patch and the reason this constant
- * was 2. Moving the build into the worker entirely is the next step and is a
- * payload change rather than an algorithm one; it is not free, because
- * `packages/workers` and `packages/rendering` are the same layer and the mesh
- * arithmetic would have to move down to `packages/universe` first.
+ * Eight rather than four because the GPU producer moves the floor. With
+ * heightfields arriving sixteen to a dispatch the build is the queue, and the
+ * time to a converged 2 m stance on Luna is this constant's curve: 8.2 s at
+ * four a frame, 4.4 s at eight, 3.5 s at sixteen, against 25–33 s from the
+ * worker pool at any of them. Sixteen buys 0.9 s for another 2 ms of frame,
+ * and a hitch is what this constant exists to bound.
+ *
+ * The mesh loops are written in scalars; as vector-object arithmetic the same
+ * build is 6.26 ms a patch, six frames of terrain budget for one, and the
+ * constant would have to be 2. Moving the build into the worker entirely is
+ * the next step and is a payload change rather than an algorithm one; it is
+ * not free, because `packages/workers` and `packages/rendering` are the same
+ * layer and the mesh arithmetic would have to move down to
+ * `packages/universe` first.
  */
-const BUILDS_PER_FRAME = 4
+const BUILDS_PER_FRAME = 8
 
 /**
  * How many pixels a body's relief must cover before terrain is drawn at all.
@@ -439,6 +449,24 @@ export interface TerrainState {
 
 export class TerrainStreamer {
   readonly #pool: WorkerPool | null
+  /** The pool as a heightfield source: the canonical field, on a worker. */
+  readonly #poolSource: HeightfieldSource | null
+  /**
+   * A producer that outranks the pool for heightfields while it can answer.
+   *
+   * The GPU tile producer, when the renderer is WebGPU and its kernel built.
+   * A presentation input like `lensView`, written by the host once the
+   * renderer exists, which is after this streamer does. Only the heightfields
+   * go through it: the level floor is `surfaceDetailFloorTask` on the pool
+   * whichever source draws the ground, because it is the canonical field's
+   * own measurement and a producer's port is held to a tolerance of it.
+   *
+   * Checked per request rather than once, because a producer can stop mid
+   * session — a lost device — and `available` is how it says so. The pool is
+   * what the next request goes to; the ones in flight reject with
+   * `producer unavailable` and are re-asked on the following frame.
+   */
+  source: HeightfieldSource | null = null
   readonly #scatter = new ScatterField()
   /*
    * Keyed by `regionKey` — packed arithmetic, no body in it — because the
@@ -637,6 +665,14 @@ export class TerrainStreamer {
 
   constructor(pool: WorkerPool | null) {
     this.#pool = pool
+    this.#poolSource = pool === null ? null : poolHeightfieldSource(pool)
+  }
+
+  /** Where the next heightfield request goes, or nowhere. */
+  #heightfields(): HeightfieldSource | null {
+    const source = this.source
+    if (source !== null && source.available) return source
+    return this.#poolSource
   }
 
   /**
@@ -663,6 +699,7 @@ export class TerrainStreamer {
     readonly saturated: boolean
     readonly selections: number
     readonly lens: LensView | null
+    readonly producer: string
     readonly scatter: {
       readonly regions: number
       readonly resolving: number
@@ -702,6 +739,10 @@ export class TerrainStreamer {
       // visible as this number standing still while the frame count climbs.
       selections: this.#selections,
       lens: this.#lensView,
+      // What the *next* request would go to, which is the only honest answer
+      // once a producer has stopped: the fields already held came from
+      // wherever they came from.
+      producer: this.#heightfields()?.kind ?? 'none',
       scatter: this.#scatter.summary(),
     }
   }
@@ -1087,7 +1128,7 @@ export class TerrainStreamer {
       [...drawn.patches.map((patch) => patch.region), ...starvedChildren],
       surface,
     )
-    // Main-thread vertex work: 0.25 ms a patch, four a frame by budget. The one
+    // Main-thread vertex work: 0.25 ms a patch, eight a frame by budget. The one
     // phase here that clears the clock's resolution comfortably.
     this.#phases.step('terrain.build', TERRAIN_PHASE)
     /*
@@ -1357,7 +1398,8 @@ export class TerrainStreamer {
    * dissolve exactly that grouping, so this only filters and takes.
    */
   #request(wanted: readonly RegionAddress[], body: Body): void {
-    if (this.#pool === null) return
+    const source = this.#heightfields()
+    if (source === null) return
     /*
      * The budget before the filter, and the early exit is the point.
      *
@@ -1389,7 +1431,16 @@ export class TerrainStreamer {
       // rather than cached, because the key alone cannot tell a new seed's
       // s:SOL/b:2 from the old one's.
       const epoch = this.#epoch
-      const handle = this.#pool.submit(generateHeightfieldTask, {
+      // A source names the deepest level it produces — the kernel's tile
+      // frame is exact through 23 — and a deeper tile goes to the pool. Not
+      // to a refusal: a refused region is re-asked next frame of the same
+      // source, every frame, and is never produced.
+      const to =
+        region.level > (source.maxLevel ?? Number.POSITIVE_INFINITY) &&
+        this.#poolSource !== null
+          ? this.#poolSource
+          : source
+      const handle = to.submit({
         surfaceSeed: formatSeed(body.surface.seed),
         maxElevation: body.surface.maxElevation,
         roughness: body.surface.roughness,
@@ -1417,8 +1468,15 @@ export class TerrainStreamer {
           // A cancellation is this streamer's own decision arriving back at
           // it, not a failure: `clear()` cancels the whole window on a
           // retarget, so a warning here would be a hundred and twenty lines of
-          // log for one keystroke.
-          if (cause instanceof Error && cause.message === 'cancelled') return
+          // log for one keystroke. A producer that stopped has already said
+          // why, once, and its window is re-asked of the pool next frame.
+          if (
+            cause instanceof Error &&
+            (cause.message === 'cancelled' ||
+              cause.message === 'producer unavailable')
+          ) {
+            return
+          }
           log.warn('terrain patch failed', { key, cause: String(cause) })
         })
         .finally(() => {

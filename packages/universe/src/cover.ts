@@ -80,10 +80,40 @@ export const BARE_COVER: SurfaceCover = {
  * explanation is crustal thickness varying on the scale of the body itself —
  * one and a half cycles across the sphere is that scale.
  */
-const MARE_CYCLES = 1.5
+export const MARE_CYCLES = 1.5
 
 /** And for the compositional ramp, which varies on the scale of a province. */
-const MINERAL_CYCLES = 4.5
+export const MINERAL_CYCLES = 4.5
+
+/*
+ * Exported, like every other number in this file, for the reason `bands.ts`
+ * gives: the TSL port in `apps/game/src/render/terrainKernel.ts` reads the
+ * same constants and a tolerance test holds the two evaluations together.
+ */
+
+/**
+ * The rest of what the four channels are written in, named where each is
+ * spent. `basinShallow` and `basinDeep` are in multiples of the crater band's
+ * own ceiling; `airSupply` is the column mass, kg/m², at which an atmosphere
+ * fully supplies condensables; `shellStart` and `shellSpan` turn `grammar.icy`
+ * into an ice shell.
+ */
+export const COVER_SHAPE = {
+  meltGain: 6,
+  basinShallow: -2,
+  basinDeep: -5,
+  mareNoise: 0.55,
+  provinceGain: 0.3,
+  felsicGain: 0.34,
+  frostCycles: 9,
+  frostRagged: 12,
+  capWarm: 22,
+  capCold: -12,
+  zenithFloor: 0.02,
+  airSupply: 100,
+  shellStart: 0.35,
+  shellSpan: 0.4,
+} as const
 
 /**
  * Where the mare gate opens and closes, on a lobe that runs −1.55 to 1.55.
@@ -95,8 +125,8 @@ const MINERAL_CYCLES = 4.5
  * maria — and no threshold on the basin depth produces the asymmetry, because
  * the basins are not asymmetric. The flooding is.
  */
-const GATE_LO = 0.1
-const GATE_HI = 0.45
+export const GATE_LO = 0.1
+export const GATE_HI = 0.45
 
 /**
  * Where water ice stops subliming away in vacuum, Kelvin.
@@ -108,7 +138,7 @@ const GATE_HI = 0.45
  * is why Mercury's poles hold ice at 1,600 K of subsolar heat: the floors of
  * their polar craters never see the sun.
  */
-const FROST_POINT = 170
+export const FROST_POINT = 170
 
 /**
  * What the ground at a direction is made of.
@@ -155,7 +185,8 @@ function mareCover(
    * the equivalent process is cryovolcanic resurfacing and produces bright
    * plains rather than dark ones — that is `ice`'s business, not this one's.
    */
-  const melt = clamp01(grammar.bands.volcanism * 6) * (1 - grammar.icy)
+  const melt =
+    clamp01(grammar.bands.volcanism * COVER_SHAPE.meltGain) * (1 - grammar.icy)
   if (melt <= 0 || craterLimit <= 0) return 0
 
   /*
@@ -169,7 +200,11 @@ function mareCover(
    * once the hemispheric gate has taken half of it. Read off the soft-limited
    * sum instead, every one of those numbers is −1.
    */
-  const basin = smoothstep(-2 * craterLimit, -5 * craterLimit, craters)
+  const basin = smoothstep(
+    COVER_SHAPE.basinShallow * craterLimit,
+    COVER_SHAPE.basinDeep * craterLimit,
+    craters,
+  )
   if (basin <= 0) return 0
 
   /*
@@ -182,7 +217,7 @@ function mareCover(
     direction.z * sketch.mareAxis.z
   const gate =
     dipole +
-    0.55 *
+    COVER_SHAPE.mareNoise *
       noise3(
         sketch.seeds.mare,
         direction.x * MARE_CYCLES,
@@ -223,7 +258,11 @@ function mineralCover(
           (plate) => (plate.continental ? 1 : 0),
           PLATE_MARGIN,
         )
-  return clamp01(0.5 + 0.3 * province + 0.34 * (felsic - 0.5))
+  return clamp01(
+    0.5 +
+      COVER_SHAPE.provinceGain * province +
+      COVER_SHAPE.felsicGain * (felsic - 0.5),
+  )
 }
 
 /**
@@ -248,7 +287,9 @@ function iceCover(
   grammar: SurfaceGrammar,
   direction: Vec3,
 ): number {
-  const shell = clamp01((grammar.icy - 0.35) / 0.4)
+  const shell = clamp01(
+    (grammar.icy - COVER_SHAPE.shellStart) / COVER_SHAPE.shellSpan,
+  )
   /*
    * Cold is not enough: there has to be something to condense.
    *
@@ -259,7 +300,10 @@ function iceCover(
    * do work at the surface are an atmosphere that carries condensables and a
    * body made of ice to begin with.
    */
-  const supply = Math.max(shell, clamp01(grammar.airMass / 100))
+  const supply = Math.max(
+    shell,
+    clamp01(grammar.airMass / COVER_SHAPE.airSupply),
+  )
   if (supply <= 0) return 0
 
   /*
@@ -267,18 +311,25 @@ function iceCover(
    * in body-fixed axes and the spin axis is +Y, which is the convention
    * `datumRadius` divides `polarRadius` into.
    */
-  const cosZenith = Math.max(0.02, Math.sqrt(Math.max(0, 1 - direction.y ** 2)))
+  const cosZenith = Math.max(
+    COVER_SHAPE.zenithFloor,
+    Math.sqrt(Math.max(0, 1 - direction.y ** 2)),
+  )
   const local = grammar.groundTemperature * cosZenith ** 0.25
   // Ragged, because a cap edge is weather rather than a parallel. One octave:
   // the shape of a cap margin at any finer scale is seasonal and this is not.
   const ragged =
     noise3(
       sketch.seeds.frost,
-      direction.x * 9,
-      direction.y * 9,
-      direction.z * 9,
-    ) * 12
-  const cap = smoothstep(FROST_POINT + 22, FROST_POINT - 12, local + ragged)
+      direction.x * COVER_SHAPE.frostCycles,
+      direction.y * COVER_SHAPE.frostCycles,
+      direction.z * COVER_SHAPE.frostCycles,
+    ) * COVER_SHAPE.frostRagged
+  const cap = smoothstep(
+    FROST_POINT + COVER_SHAPE.capWarm,
+    FROST_POINT + COVER_SHAPE.capCold,
+    local + ragged,
+  )
   /*
    * The shell rides inside `supply`, not around the whole expression.
    *

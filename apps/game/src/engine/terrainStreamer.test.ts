@@ -12,7 +12,17 @@ import {
   vec3,
   type RenderOrigin,
 } from '@inertialref/spatial'
-import { createInlineWorker, createTaskRegistry } from '@inertialref/workers'
+import {
+  createInlineWorker,
+  createTaskRegistry,
+  type HeightfieldResponse,
+  type HeightfieldSource,
+} from '@inertialref/workers'
+import {
+  COVER_CHANNELS,
+  HEIGHTFIELD_BORDER,
+  regionAddress,
+} from '@inertialref/universe'
 import type { Seconds } from '@inertialref/shared'
 import { TerrainStreamer } from './terrainStreamer.ts'
 
@@ -228,6 +238,148 @@ describe('the terrain streamer', () => {
     }
     expect(streamer.summary().cached).toBe(0)
 
+    session.dispose()
+  })
+
+  /*
+   * The heightfield source seam, from the outside.
+   *
+   * The GPU tile producer is a `HeightfieldSource` that outranks the pool
+   * while it can answer, and a producer can stop mid session. What is asserted
+   * is the routing — that an installed source is what the requests go to,
+   * that `producer` names it, and that one which has stopped hands the next
+   * request to the pool — with a source built from `generateHeightfield`, so
+   * the answers are the canonical field and the test needs no GPU.
+   */
+  it('asks an installed source for heightfields, and the pool once it stops', async () => {
+    const registry = createTaskRegistry()
+    const session = openSession({
+      seed: 'inertialref',
+      workers: () => createInlineWorker(registry),
+    })
+    const pool = session.pool()
+    if (pool === null) throw new Error('no pool')
+    const view = groundView(session)
+    const streamer = new TerrainStreamer(pool)
+
+    let asked = 0
+    let available = true
+    const source: HeightfieldSource = {
+      kind: 'fake',
+      get available() {
+        return available
+      },
+      submit(payload) {
+        asked += 1
+        /*
+         * A flat field, not the real one. The claims here are about where a
+         * request goes and what the report says, and a fixture that ran the
+         * band stack for every tile of a whole-disk selection was ten seconds
+         * of the gate spent on a number the test never reads.
+         */
+        const border = payload.border ?? HEIGHTFIELD_BORDER
+        const stride = payload.resolution + 2 * border
+        const field: HeightfieldResponse = {
+          region: regionAddress(
+            payload.region.face,
+            payload.region.level,
+            payload.region.i,
+            payload.region.j,
+          ),
+          resolution: payload.resolution,
+          border,
+          elevations: new Float32Array(stride * stride),
+          cover: new Uint8Array(
+            payload.resolution * payload.resolution * COVER_CHANNELS,
+          ),
+          minElevation: 0,
+          maxElevation: 0,
+        }
+        return { id: asked, result: Promise.resolve(field), cancel() {} }
+      },
+    }
+    streamer.source = source
+
+    const frames = await walkOnce(streamer, session, view)
+    expect(frames).toBeGreaterThan(0)
+    expect(streamer.summary().producer).toBe('fake')
+    // The first walk requested through the source and nothing reached the
+    // pool for ground — its only job so far is the level floor.
+    expect(asked).toBeGreaterThan(0)
+    expect(pool.stats().completed + pool.stats().active + pool.queued).toBe(1)
+
+    // Answers from the source are the cache the next frames build from.
+    for (let i = 0; i < 6; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 5))
+      streamer.update(
+        session.world,
+        view.renderTime,
+        view.camera,
+        view.origin,
+        view.body,
+      )
+    }
+    expect(streamer.summary().cached).toBeGreaterThan(0)
+
+    // The source stops. The very next request goes to the pool, and the
+    // report says so before any answer has come back from it.
+    available = false
+    const askedBefore = asked
+    const queuedBefore =
+      pool.stats().completed + pool.stats().active + pool.queued
+    streamer.update(
+      session.world,
+      view.renderTime,
+      UV.translate(view.camera, vec3(50, 0, 0)),
+      view.origin,
+      view.body,
+    )
+    expect(streamer.summary().producer).toBe('pool')
+    expect(asked).toBe(askedBefore)
+    expect(
+      pool.stats().completed + pool.stats().active + pool.queued,
+    ).toBeGreaterThan(queuedBefore)
+
+    streamer.clear()
+    session.dispose()
+  })
+
+  it('sends a region deeper than the ceiling a source names to the pool', async () => {
+    const registry = createTaskRegistry()
+    const session = openSession({
+      seed: 'inertialref',
+      workers: () => createInlineWorker(registry),
+    })
+    const pool = session.pool()
+    if (pool === null) throw new Error('no pool')
+    const view = groundView(session)
+    const streamer = new TerrainStreamer(pool)
+
+    // A ceiling below every level there is: the source is installed and
+    // available, and nothing may reach it. What must not happen is the
+    // alternative — a refusal the streamer re-asks every frame, so the
+    // region is never produced by anyone.
+    let asked = 0
+    const source: HeightfieldSource = {
+      kind: 'fake',
+      available: true,
+      maxLevel: -1,
+      submit() {
+        asked += 1
+        throw new Error('a deeper tile reached the source')
+      },
+    }
+    streamer.source = source
+
+    const frames = await walkOnce(streamer, session, view)
+    expect(frames).toBeGreaterThan(0)
+    expect(asked).toBe(0)
+    // The pool has the ground jobs beside its level-floor job.
+    expect(
+      pool.stats().completed + pool.stats().active + pool.queued,
+    ).toBeGreaterThan(1)
+
+    streamer.clear()
     session.dispose()
   })
 })

@@ -54,3 +54,6 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", ADR-0001..0009.
   nowhere else. Units are SI — meters, seconds, kilograms, radians.
 - **If you add a field to canonical state, add it to `world.stateHash()`.** The fields it
   omitted were exactly the ones a shipped bug lived in.
+- **A lattice decision is never taken in a float.** The crater ladder's `'exact'` slab test
+  in `craters.ts` and the per-tile frame in `terrainKernel.ts` are integers so the CPU and
+  the GPU walk the same cells — `rendering.md` carries the invariant, ADR-0023 the reason.

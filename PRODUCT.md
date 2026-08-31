@@ -135,7 +135,7 @@ must therefore name the browser: "full 6-DoF axis binding with no emulation
 layer, in Chrome and Edge."
 
 **Offline is real.** A service worker caches the app; with the server stopped
-the game still loads, streams terrain from its workers, and passes all twelve
+the game still loads, streams terrain from its own GPU and workers, and passes all twelve
 checks.
 
 **One environmental gotcha:** Chrome throttles `requestAnimationFrame` in

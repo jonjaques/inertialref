@@ -44,6 +44,7 @@ import {
   type Viewport,
 } from '@inertialref/rendering'
 import {
+  type HeightfieldSource,
   surveyRegionTask,
   type WorkerFactory,
   WorkerPool,
@@ -787,6 +788,18 @@ export class GameEngine implements PresentationHost {
 
   pool(): WorkerPool | null {
     return this.session.pool()
+  }
+
+  /**
+   * Install the heightfield producer the renderer offers, or take it away.
+   *
+   * The GPU tile producer follows the renderer, which arrives after this
+   * engine is built and is rebuilt when the HDR preference remounts the
+   * canvas — so it is a setter rather than a constructor option, like `gl`.
+   * `null` puts the pool back.
+   */
+  setHeightfieldSource(source: HeightfieldSource | null): void {
+    this.#terrain.source = source
   }
 
   get starField(): StarField {

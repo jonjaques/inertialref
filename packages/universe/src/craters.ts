@@ -73,8 +73,14 @@ import type { CraterLevel, TerrainSketch } from './sketch.ts'
  */
 const { falloff, pcg4d, ring, smoothstep, toUnit } = procedural
 
+/*
+ * The numbers this band is written in are exported, and `bands.ts` says why:
+ * the TSL port in `apps/game/src/render/terrainKernel.ts` reads the same
+ * constants, and a tolerance test holds the two evaluations together.
+ */
+
 /** How far past its own rim a crater's ejecta reaches, in crater radii. */
-const EJECTA_REACH = 2.6
+export const EJECTA_REACH = 2.6
 
 /**
  * Where the rim crest sits and how far the raised rim spreads, in crater radii.
@@ -84,8 +90,32 @@ const EJECTA_REACH = 2.6
  * rim radius and the flank out to about 1.5, which is where the continuous
  * ejecta deposit starts.
  */
-const RIM_INNER = 0.7
-const RIM_OUTER = 1.5
+export const RIM_INNER = 0.7
+export const RIM_OUTER = 1.5
+
+/**
+ * One crater's profile, as the proportions `craterProfile` is drawn from.
+ *
+ * `sizeFloor` is the smallest crater a level places as a fraction of its
+ * largest — diameters run over one octave inside a level. `relaxSpan` is how
+ * many transition diameters the palimpsest ramp spans. Everything else is a
+ * measured lunar proportion, named where `craterProfile` spends it.
+ */
+export const CRATER_SHAPE = {
+  sizeFloor: 0.5,
+  flatFloor: 0.45,
+  peakChance: 0.55,
+  peakHeight: 0.22,
+  peakWidth: 0.2,
+  rimHeight: 0.2,
+  apron: 0.12,
+  apronBase: 0.6,
+  apronSpread: 0.8,
+  apronFade: 1.8,
+  relaxSpan: 8,
+  rimAge: 1.5,
+  floorAge: 0.55,
+} as const
 
 /**
  * The crater field's contribution at a direction, meters.
@@ -213,6 +243,24 @@ export function ladderField(
  * speed: changing it would move `elevationAt` in its last bits on every body,
  * and the field the contact test integrates does not move outside a version
  * bump.
+ *
+ * **`'exact'` also takes the sphere test in integers**, and that is a second
+ * cancellation rather than a tidiness. A cell is walked when its nearest corner
+ * is inside the unit sphere and its farthest outside, and the corners are
+ * `m/cells` for integer `m` — so the test is `Σ m² > cells²`, an integer against
+ * a float, and `Σ (m/cells)²` in float64 lands on either side of `1` by
+ * rounding whenever the two are equal. They are equal on every tail rung whose
+ * `cells` is a whole number — `meanRadius / 8`, `/ 4`, `/ 2`, `/ 1` over a
+ * published radius that is one, which is 46 of Sol's 128 tail-bearing bodies
+ * and every airless moon with a round radius — and an integer sphere has
+ * lattice points on it: hundreds of thousands at Luna's radius in cells, a
+ * crater in a million, each decided by which way a product rounded. The
+ * integer form decides them exactly, and it is what the GPU port evaluates, so
+ * the tail is the same tail on both processors. Measured against the float
+ * form over Sol: 167 of ~540k samples move, 0.63 m at most (Miranda), on the
+ * 17 bodies with such a rung and on none without. The canonical ladder cannot land there: its
+ * `cells` is `meanRadius / (largestCrater / 2ᵏ)` over a float largest crater,
+ * so `cells²` is never an integer and no corner sits on the sphere.
  */
 export type ChordForm = 'fast' | 'exact'
 
@@ -281,6 +329,10 @@ function levelContribution(
   const fromZ = Math.floor(direction.z * cells - spanZ)
   const toZ = Math.floor(direction.z * cells + spanZ)
   let total = 0
+  // The sphere test's unit: one over squared direction-space distances, or
+  // `cells²` over squared cell indices. See `ChordForm`.
+  const exact = chord === 'exact'
+  const limit = exact ? cells * cells : 1
 
   for (let ix = fromX; ix <= toX; ix += 1) {
     const loX = ix * size
@@ -289,7 +341,13 @@ function levelContribution(
     // cell intersects the unit sphere exactly when the nearest is inside it and
     // the farthest is outside — which is a tighter test than the cell's
     // bounding sphere and rejects a third of them.
-    const nearX = loX > 0 ? loX * loX : hiX < 0 ? hiX * hiX : 0
+    const nearX = exact
+      ? squareOfNearest(ix)
+      : loX > 0
+        ? loX * loX
+        : hiX < 0
+          ? hiX * hiX
+          : 0
     /*
      * The same rejection, partially summed, and left early where it can be.
      *
@@ -301,30 +359,44 @@ function levelContribution(
      * origin rather than toward it, so the tail of a row can be abandoned
      * rather than scanned.
      */
-    if (nearX > 1) {
+    if (nearX > limit) {
       if (ix >= 0) break
       continue
     }
-    const farX = Math.max(loX * loX, hiX * hiX)
+    const farX = exact ? squareOfFarthest(ix) : Math.max(loX * loX, hiX * hiX)
     for (let iy = fromY; iy <= toY; iy += 1) {
       const loY = iy * size
       const hiY = loY + size
-      const nearY = loY > 0 ? loY * loY : hiY < 0 ? hiY * hiY : 0
-      if (nearX + nearY > 1) {
+      const nearY = exact
+        ? squareOfNearest(iy)
+        : loY > 0
+          ? loY * loY
+          : hiY < 0
+            ? hiY * hiY
+            : 0
+      if (nearX + nearY > limit) {
         if (iy >= 0) break
         continue
       }
-      const farY = Math.max(loY * loY, hiY * hiY)
+      const farY = exact ? squareOfFarthest(iy) : Math.max(loY * loY, hiY * hiY)
       const acrossXY = nearX + nearY
       for (let iz = fromZ; iz <= toZ; iz += 1) {
         const loZ = iz * size
         const hiZ = loZ + size
-        const nearZ = loZ > 0 ? loZ * loZ : hiZ < 0 ? hiZ * hiZ : 0
-        if (acrossXY + nearZ > 1) {
+        const nearZ = exact
+          ? squareOfNearest(iz)
+          : loZ > 0
+            ? loZ * loZ
+            : hiZ < 0
+              ? hiZ * hiZ
+              : 0
+        if (acrossXY + nearZ > limit) {
           if (iz >= 0) break
           continue
         }
-        const farZ = Math.max(loZ * loZ, hiZ * hiZ)
+        const farZ = exact
+          ? squareOfFarthest(iz)
+          : Math.max(loZ * loZ, hiZ * hiZ)
         /*
          * A cell wholly inside the sphere. There is no early exit at this end
          * and the obvious one is wrong: `farZ` bottoms out in the middle of the
@@ -332,7 +404,7 @@ function levelContribution(
          * with shell on both sides of it. Breaking here dropped 18 km of crater
          * on Luna, all of it on the far side of the band.
          */
-        if (farX + farY + farZ < 1) continue
+        if (farX + farY + farZ < limit) continue
 
         const hash = pcg4d(ix ^ seed, iy, iz, index)
         const draw = toUnit(hash.x)
@@ -347,7 +419,10 @@ function levelContribution(
          * paid for. Diameters run over one octave inside a level, so the
          * ladder's halving covers every size continuously rather than in bands.
          */
-        const diameter = level.diameter * (0.5 + (0.5 * draw) / level.density)
+        const diameter =
+          level.diameter *
+          (CRATER_SHAPE.sizeFloor +
+            ((1 - CRATER_SHAPE.sizeFloor) * draw) / level.density)
         const angularRadius = diameter / (2 * radius)
 
         // Jitter the center inside its own cell. It is *not* normalized: the
@@ -412,6 +487,21 @@ function levelContribution(
   return total
 }
 
+/*
+ * The slab test's integer corners: a cell `[m, m + 1]` along one axis has its
+ * nearest corner at `m` past zero, at `m + 1` before it, and straddles zero
+ * otherwise; its farthest is whichever end is larger in magnitude. Squared,
+ * these are exact in float64 up to 2⁵³, which is every rung in scope.
+ */
+const squareOfNearest = (m: number): number => {
+  const nearest = m > 0 ? m : m + 1 < 0 ? m + 1 : 0
+  return nearest * nearest
+}
+const squareOfFarthest = (m: number): number => {
+  const farthest = Math.max(Math.abs(m), Math.abs(m + 1))
+  return farthest * farthest
+}
+
 /**
  * One crater's radial profile, meters.
  *
@@ -445,14 +535,14 @@ function craterProfile(
           age *
           smoothstep(
             grammar.complexDiameter,
-            grammar.complexDiameter * 8,
+            grammar.complexDiameter * CRATER_SHAPE.relaxSpan,
             diameter,
           )
 
   // Rims decay faster than cavities: a crater loses its raised rim to
   // micrometeorites and downslope creep long before its bowl fills in.
-  const rimLife = (1 - age) ** 1.5 * relaxed
-  const floorLife = (1 - 0.55 * age) * relaxed
+  const rimLife = (1 - age) ** CRATER_SHAPE.rimAge * relaxed
+  const floorLife = (1 - CRATER_SHAPE.floorAge * age) * relaxed
 
   let height = 0
 
@@ -462,7 +552,7 @@ function craterProfile(
      * one. The flat fraction is what "the floor collapses" means as a shape:
      * past the transition the walls slump inward and the middle is a plain.
      */
-    const flat = complex ? 0.45 : 0
+    const flat = complex ? CRATER_SHAPE.flatFloor : 0
     const u = t <= flat ? 0 : (t - flat) / (1 - flat)
     height -= depth * floorLife * (1 - u * u)
 
@@ -472,14 +562,18 @@ function craterProfile(
      * half of them do. The peak is a fifth of the cavity depth and a fifth of
      * its radius, which is the measured lunar proportion.
      */
-    if (complex && peakDraw < 0.55) {
-      height += depth * 0.22 * floorLife * falloff(Math.min(1, t / 0.2))
+    if (complex && peakDraw < CRATER_SHAPE.peakChance) {
+      height +=
+        depth *
+        CRATER_SHAPE.peakHeight *
+        floorLife *
+        falloff(Math.min(1, t / CRATER_SHAPE.peakWidth))
     }
   }
 
   // The raised rim, from 0.7 to 1.5 crater radii, crest at the rim itself.
   if (t > RIM_INNER && t < RIM_OUTER) {
-    const rimHeight = 0.2 * depth
+    const rimHeight = CRATER_SHAPE.rimHeight * depth
     height +=
       rimHeight *
       rimLife *
@@ -524,8 +618,13 @@ function craterProfile(
     const apron =
       (1 / (r * r * r)) *
       smoothstep(1, RIM_OUTER, t) *
-      (1 - smoothstep(1.8, EJECTA_REACH, t))
-    height += 0.12 * depth * rimLife * (0.6 + 0.8 * typeDraw) * apron
+      (1 - smoothstep(CRATER_SHAPE.apronFade, EJECTA_REACH, t))
+    height +=
+      CRATER_SHAPE.apron *
+      depth *
+      rimLife *
+      (CRATER_SHAPE.apronBase + CRATER_SHAPE.apronSpread * typeDraw) *
+      apron
   }
 
   return height
@@ -610,7 +709,7 @@ export interface RayCrater {
  * system reaches roughly that, and a reach measured in radii means the same
  * number serves a 90 km crater on Luna and a 900 km one on Iapetus.
  */
-const RAY_REACH = 16
+export const RAY_REACH = 16
 
 /**
  * The finest lattice rays are drawn from, in cells per unit of direction space.
@@ -634,7 +733,7 @@ const RAY_REACH = 16
 const RAY_LATTICE_CELLS = 24
 
 /** Craters older than this have lost their rays to space weathering. */
-const RAY_AGE = 0.22
+export const RAY_AGE = 0.22
 
 /**
  * Where the filaments begin, in crater radii.
@@ -644,10 +743,27 @@ const RAY_AGE = 0.22
  * is also a cheap early-out, and the term it gates is faded in across it for
  * the reason `radial` gives: a gate a term does not reach zero at is a step.
  */
-const RAY_ONSET = 1.2
+export const RAY_ONSET = 1.2
 
 /** The most a body carries. See the loop's own note on why there is a cap. */
-const MAX_RAY_CRATERS = 16
+export const MAX_RAY_CRATERS = 16
+
+/**
+ * How a ray system is drawn from its harmonics, as `rayBrightness` spends
+ * them: the halo's strength, the filaments', the threshold that carves them
+ * and how it climbs with distance, the onset fade, the outer fade, and the
+ * exponent the ejecta thins with.
+ */
+export const RAY_SHAPE = {
+  halo: 0.85,
+  filament: 5.2,
+  cutBase: 0.1,
+  cutSlope: 0.62,
+  cutWidth: 0.28,
+  onsetWidth: 0.4,
+  fadeStart: 0.55,
+  thinning: 1.6,
+} as const
 
 /**
  * Azimuthal harmonics of the ray pattern, as integer frequencies.
@@ -659,7 +775,7 @@ const MAX_RAY_CRATERS = 16
  * rather than looking irregular — these produce a pattern that does not repeat
  * anywhere on the circle.
  */
-const RAY_HARMONICS = [7, 11, 17, 23, 31, 43] as const
+export const RAY_HARMONICS = [7, 11, 17, 23, 31, 43] as const
 
 /**
  * Hoisted, because the loop it bounds runs per harmonic per crater per sample.
@@ -756,7 +872,10 @@ export function rayCraters(
             iy,
             iz,
             index,
-            diameter: level.diameter * (0.5 + (0.5 * draw) / level.density),
+            diameter:
+              level.diameter *
+              (CRATER_SHAPE.sizeFloor +
+                ((1 - CRATER_SHAPE.sizeFloor) * draw) / level.density),
             age,
             jx,
             jy,
@@ -866,7 +985,8 @@ export function rayBrightness(
     // The continuous deposit. Brightest just outside the rim, where the
     // blanket is thickest, and gone by the time the apron is.
     let value =
-      0.85 * (1 - smoothstep(RIM_INNER, EJECTA_REACH, Math.max(t, RIM_INNER)))
+      RAY_SHAPE.halo *
+      (1 - smoothstep(RIM_INNER, EJECTA_REACH, Math.max(t, RIM_INNER)))
 
     if (t > RAY_ONSET) {
       const px =
@@ -897,8 +1017,12 @@ export function rayBrightness(
        * threshold cannot produce.
        */
       const reach = t / RAY_REACH
-      const cut = 0.1 + 0.62 * reach
-      const filament = smoothstep(cut, Math.min(1, cut + 0.28), wave)
+      const cut = RAY_SHAPE.cutBase + RAY_SHAPE.cutSlope * reach
+      const filament = smoothstep(
+        cut,
+        Math.min(1, cut + RAY_SHAPE.cutWidth),
+        wave,
+      )
       /*
        * Ejecta thins as it flies: r^-1.6 over the tangent plane, faded to
        * nothing at the reach so a ray ends rather than being truncated — and
@@ -915,10 +1039,10 @@ export function rayBrightness(
        * ejecta blanket's own entry step, which `craterProfile` above records.
        */
       const radial =
-        (smoothstep(RAY_ONSET, RAY_ONSET + 0.4, t) *
-          (1 - smoothstep(0.55, 1, reach))) /
-        t ** 1.6
-      value += 5.2 * filament * radial
+        (smoothstep(RAY_ONSET, RAY_ONSET + RAY_SHAPE.onsetWidth, t) *
+          (1 - smoothstep(RAY_SHAPE.fadeStart, 1, reach))) /
+        t ** RAY_SHAPE.thinning
+      value += RAY_SHAPE.filament * filament * radial
     }
 
     total += value * fresh
