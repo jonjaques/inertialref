@@ -47,11 +47,25 @@ Object.defineProperty(globalThis.navigator, 'gpu', {
  */
 const noFrame = (): number => 0
 const noCancel = (): void => {}
+/*
+ * Two statements, because they do two things and one of them is a hazard.
+ * The frame functions go on the global scope itself — `self` is an alias for
+ * it, not a separate object — so **anything under test that calls a bare
+ * `requestAnimationFrame` gets a callback that never fires**. `firstLight.ts`
+ * is exactly that shape; a `.gpu.test.ts` whose import graph reaches it waits
+ * out its timeout with no mention of frames. Writing it as one expression
+ * hides that: a later edit dropping the `self` alias drops the stubs with it.
+ */
+Object.assign(globalThis, {
+  requestAnimationFrame: noFrame,
+  cancelAnimationFrame: noCancel,
+})
 Object.defineProperty(globalThis, 'self', {
-  value: Object.assign(globalThis, {
-    requestAnimationFrame: noFrame,
-    cancelAnimationFrame: noCancel,
-  }),
+  value: globalThis,
+  // Writable, because the default is not: a dependency assigning
+  // `globalThis.self` would otherwise throw in strict mode — which every
+  // module is — rather than overwrite a stub that exists only for three.
+  writable: true,
   configurable: true,
 })
 

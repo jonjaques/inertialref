@@ -32,10 +32,13 @@ import {
  *    `RenderTarget`. A test that waits for a rAF tick is a test that hangs.
  *  - **A pixel readback is padded.** `readRenderTargetPixelsAsync` returns the
  *    mapped staging buffer as-is, and WebGPU aligns every row of it to 256
- *    bytes — so a 64-wide RGBA8 target reads back with the second row starting
- *    at element 256, not 256 bytes in. `Pixels` unpacks that, and puts row 0
- *    at the **top**, which is where WebGPU's texture origin is and the
- *    opposite of what `gl.readPixels` trained everyone to expect.
+ *    bytes — so an 8-wide RGBA8 target, whose rows are 32 bytes, reads back
+ *    with the second row starting at element 256. Only a width whose row is
+ *    already a multiple of 256 escapes it, which the 64-wide default happens
+ *    to be, so the default size is the one that proves nothing. `Pixels`
+ *    unpacks the padding, and puts row 0 at the **top**, which is where
+ *    WebGPU's texture origin is and the opposite of what `gl.readPixels`
+ *    trained everyone to expect.
  *  - **A pipeline that will not build does not reject, on either path.** A
  *    draw builds pipelines synchronously inside the backend's own validation
  *    scope and reports the failure through three's console sink;
@@ -51,9 +54,18 @@ import {
  *    either channel is a red test with the compiler's message in it.
  *  - **`compileAsync` and `getShaderAsync` take their arguments in opposite
  *    orders** — `(object, camera, scene)` and `(scene, camera, object)`. Both
- *    are wrapped here in the `WarmRenderer` order, so a `GpuSession`'s
- *    `renderer` satisfies `warmup.ts` structurally and a warm-up can be
- *    exercised against the real backend.
+ *    verbs here take the `WarmRenderer` order, so one call site cannot mean
+ *    two things.
+ *  - **A compile that walked nothing still resolves.** `compileAsync` skips an
+ *    invisible object, and it frustum-culls against a module-level `Frustum`
+ *    that only `render()` ever fills in — so on a renderer that has not drawn,
+ *    every object whose bounding sphere sits at negative x is culled and the
+ *    compile builds no pipeline at all. Measured: a sphere at the origin
+ *    builds one, the same sphere at x = −500 builds none, and both resolve.
+ *    `compile` refuses an invisible object and turns culling off for the walk.
+ *    A pipeline count cannot stand in for either, because three caches a
+ *    pipeline across material instances: the second identical compile in a
+ *    file legitimately builds none.
  */
 
 /** One line three routed through its console sink while a verb ran. */
@@ -82,10 +94,16 @@ export interface DrawOptions {
    */
   readonly float?: boolean
   /**
-   * Draw into this target rather than a fresh one, and leave it alone after.
-   * A pipeline is keyed on the attachment it draws into as well as on the
+   * Draw into this target rather than a fresh one, and leave it alone after —
+   * undisposed, and still the renderer's target if it was before the call. A
+   * pipeline is keyed on the attachment it draws into as well as on the
    * material, so a test about *which* pipeline a frame uses has to hold the
-   * target still between a compile and a draw.
+   * target still between a compile and a draw, and a verb that reset the
+   * renderer to the swap chain on its way out would break exactly that.
+   *
+   * Only `RGBA8` and `RGBA32F` come back readable: `unpad` reads the element
+   * type off the staging buffer and rejects anything else rather than
+   * truncating it into a plausible-looking `Uint8Array`.
    */
   readonly into?: RenderTarget
 }
@@ -94,7 +112,7 @@ export interface GpuSession {
   readonly renderer: WebGPURenderer
   /**
    * Draw `graph` as the fragment of a screen-filling quad and read it back.
-   * The graph is written to the target verbatim — no tone curve, no colour
+   * The graph is written to the target verbatim — no tone curve, no color
    * space transform — so what comes back is the graph's own value, and `uv()`
    * runs 0 → 1 across it with `v` up.
    */
@@ -117,12 +135,21 @@ export interface GpuSession {
   /** Copy a storage buffer back; a fresh `ArrayBuffer`, not a mapped one. */
   readBuffer(buffer: StorageBufferAttribute): Promise<ArrayBuffer>
   /**
-   * Everything three warned about since the last call, drained. A warning is
-   * not a failure here — the node builder warns about a missing attribute and
-   * compiles anyway — but a test about attributes wants to assert on exactly
-   * that, and an unread warning is a silent one.
+   * Everything three warned about since the last call, drained — and only the
+   * warnings. A warning is not a failure here — the node builder warns about a
+   * missing attribute and compiles anyway — but a test about attributes wants
+   * to assert on exactly that, and an unread warning is a silent one. Errors
+   * are left where they are, because the next verb is what fails on them.
    */
   warnings(): GpuMessage[]
+  /**
+   * Render pipelines built at the device since the session opened.
+   *
+   * The one observation that separates "compiled everything" from "walked
+   * nothing", and the one place `backend.device` is reached for, so a test
+   * about a warm-up does not have to reach for it too.
+   */
+  pipelinesBuilt(): number
   dispose(): void
 }
 
@@ -175,11 +202,34 @@ function unpad(
   width: number,
   height: number,
 ): Pixels {
+  /*
+   * Both assumptions are checked rather than trusted. `bytesPerTexel` is
+   * four channels of whatever the staging buffer's element is, which is true
+   * of `rgba8unorm` and `rgba32float` and of nothing else three can hand back:
+   * a `HalfFloatType` target arrives as a `Uint16Array` and would be copied
+   * element-wise into a `Uint8Array`, truncating every value mod 256 into
+   * numbers that look like pixels. The length check catches the rest — a
+   * single-channel target, where `bytesPerTexel` is four times the real row.
+   */
+  // Widened deliberately: the declared type says two, and the point of the
+  // check is the third that three can actually hand back.
+  const kind = (raw as ArrayBufferView).constructor.name
+  if (!(raw instanceof Float32Array) && !(raw instanceof Uint8Array)) {
+    throw new Error(
+      `gpuHarness: a readback came back as ${kind} — only an UnsignedByteType or FloatType RGBA target reads back here`,
+    )
+  }
   const channels = 4
   const bytesPerTexel = raw.BYTES_PER_ELEMENT * channels
   const bytesPerRow = Math.ceil((width * bytesPerTexel) / 256) * 256
   const stride = bytesPerRow / raw.BYTES_PER_ELEMENT
   const tight = width * channels
+  const expected = (height - 1) * stride + tight
+  if (raw.length !== expected) {
+    throw new Error(
+      `gpuHarness: a ${width}×${height} readback is ${raw.length} elements where a padded RGBA one is ${expected} — the target is not RGBA`,
+    )
+  }
   const data =
     raw instanceof Float32Array
       ? new Float32Array(tight * height)
@@ -209,36 +259,85 @@ export async function openGpu(
   width = DEFAULT_SIZE,
   height = DEFAULT_SIZE,
 ): Promise<GpuSession> {
+  /*
+   * Before the renderer, because after it is too late. There is no
+   * `forceWebGPU`: the renderer takes WebGPU when `navigator.gpu` answers and
+   * WebGL 2 when it does not, and the WebGL backend dies inside `init()` on
+   * the canvas stub — `Cannot read properties of null (reading
+   * 'getSupportedExtensions')`, an error about extensions thrown by a call
+   * about devices. A check after `init()` never runs. The only thing that
+   * makes `navigator.gpu` absent here is `gpuSetup.ts` not having run before
+   * `three/webgpu` was imported, so that is what the message says.
+   */
+  if (globalThis.navigator?.gpu === undefined) {
+    throw new Error(
+      'gpuHarness: navigator.gpu is absent, so gpuSetup.ts did not run before three/webgpu was imported — this file is reachable only from a *.gpu.test.ts under `pnpm test:gpu`',
+    )
+  }
+
   const messages: GpuMessage[] = []
-  setConsoleFunction((type, message) => {
-    messages.push({ type, message: String(message) })
+  // Every argument, not just the first: three's sink is
+  // `(type, 'THREE.' + head, ...rest)` and the backend routinely puts the
+  // value in `rest` — `error('WebGPURenderer: Invalid blending: ', blending)`.
+  // Keeping only `head` turns a failure that names a number into one that
+  // names a category.
+  setConsoleFunction((type, ...parts) => {
+    messages.push({ type, message: parts.map(String).join(' ') })
   })
 
   const renderer = new WebGPURenderer({
     antialias: false,
     canvas: canvasStub(width, height),
+    /*
+     * The game's renderer sets this (`createRenderer.ts`), and it is not a
+     * property of the frame: `NodeMaterial.setupDepth` writes
+     * `viewZToLogarithmicDepth` into the fragment stage of every material
+     * that declares no `depthNode`, so a harness without it compiles a
+     * program with no `frag_depth` where the game compiles one with it.
+     * Measured: `createStarMaterial`'s fragment shader carries `frag_depth`
+     * only with this set. A suite that says "every production material
+     * compiles" has to compile the production program.
+     */
+    logarithmicDepthBuffer: true,
   })
   renderer.setSize(width, height, false)
   await renderer.init()
-  /*
-   * There is no `forceWebGPU`; the renderer takes WebGPU when `navigator.gpu`
-   * answers and falls back to WebGL 2 when it does not. The fallback here
-   * would mean the setup file did not run, and it would fail later and worse —
-   * on a `document` this process deliberately does not have — so it is named
-   * now instead.
-   */
   const backend = renderer.backend as {
     isWebGPUBackend?: boolean
     device?: GPUDevice
   }
+  // The belt to the brace above: `navigator.gpu` answering is not the same as
+  // the backend having a device, and everything below reads one.
   if (backend.isWebGPUBackend !== true || backend.device === undefined) {
     throw new Error(
-      'gpuHarness: the renderer took the WebGL fallback — navigator.gpu is absent, so gpuSetup.ts did not run before three/webgpu was imported',
+      'gpuHarness: the renderer did not come up on the WebGPU backend, so there is no device to run a verb against',
     )
   }
-  // Not a public path, and the one thing read off it is the error scope —
-  // the only place a refused shader module is reported at all.
+  // Not a public path, and it is read for two things nothing public exposes:
+  // the error scope, which is the only place a refused shader module is
+  // reported at all, and the pipeline constructors, which are the only place
+  // "this compile built nothing" can be observed.
   const device = backend.device
+
+  /*
+   * Pipelines built since the session opened.
+   *
+   * Counted at the device because that is the one place a pipeline cannot be
+   * built without passing through — and because a compile that walked nothing
+   * resolves exactly like one that walked everything. The constructors are
+   * replaced once, here, so no test has to reach for `backend.device` itself.
+   */
+  let pipelines = 0
+  const createSync = device.createRenderPipeline.bind(device)
+  const createAsync = device.createRenderPipelineAsync.bind(device)
+  device.createRenderPipeline = (descriptor) => {
+    pipelines += 1
+    return createSync(descriptor)
+  }
+  device.createRenderPipelineAsync = (descriptor) => {
+    pipelines += 1
+    return createAsync(descriptor)
+  }
 
   /*
    * The quad `drawGraph` fills the target with: a plane two units wide in
@@ -272,16 +371,38 @@ export async function openGpu(
      * The scope is outermost: the backend pushes and pops its own inside
      * `createRenderPipeline`, and scopes nest, so what reaches this one is
      * everything the backend did not claim — `createShaderModule` above all,
-     * which it never brackets. Popped after the work settles rather than in a
-     * `finally`, because an unbalanced pop on a device that threw is a second
-     * error hiding the first.
+     * which it never brackets.
+     *
+     * Popped on both paths and popped exactly once — which is why the two
+     * pops are written out rather than shared in a `finally`: only the
+     * succeeding one has an error worth reading, so a device that threw still
+     * reports its own failure instead of the scope's. Skipping the pop on the
+     * throwing path is what unbalances the stack: the scope outlives the verb,
+     * sits under every later one, and quietly captures every error raised
+     * *between* verbs — the silent channel this whole wrapper exists to close.
      */
     device.pushErrorScope('validation')
-    const result = await work()
+    let result: T
+    try {
+      result = await work()
+    } catch (failure) {
+      await device.popErrorScope().catch(() => null)
+      throw failure
+    }
     const scoped = await device.popErrorScope()
     if (scoped !== null) {
       throw new Error(`gpuHarness: the device reported: ${scoped.message}`)
     }
+    /*
+     * Since this verb began, and not since the last one looked. A refused
+     * shader module is reported twice — once as the module, once as the
+     * pipeline that would have used it, a turn later — so a window that
+     * reached backwards would fail the *next* verb with the fallout of a
+     * rejection a test already caught. The cost of the narrow window is that
+     * work run outside a verb reports to nobody: `warmCompile` swallows its
+     * rejection by design, so a test that warms through it asserts on the
+     * frame instead (`warmup.gpu.test.ts`).
+     */
     const failure = messages.slice(from).find((entry) => entry.type === 'error')
     if (failure !== undefined) {
       throw new Error(`gpuHarness: the backend reported: ${failure.message}`)
@@ -307,6 +428,35 @@ export async function openGpu(
     return unpad(raw, rt.width, rt.height)
   }
 
+  /**
+   * Draw into a target and read it back, restoring what was there before.
+   *
+   * The restore and the dispose are in a `finally` because the alternative is
+   * silent: a rejected readback would leave the renderer pointing at a target
+   * it also leaked, and `compileAsync` and `getShaderAsync` both key their
+   * render context — and therefore the pipeline — on `renderer._renderTarget`.
+   * One failed draw would change what every later verb in the file measures,
+   * and the file would still be green. The previous target is restored rather
+   * than nulled so that `into` means what it says: a caller holding a target
+   * still across a compile and a draw gets to keep it.
+   */
+  async function renderInto(
+    scene: Scene,
+    camera: Camera,
+    options: DrawOptions,
+  ): Promise<Pixels> {
+    const previous = renderer.getRenderTarget()
+    const rt = options.into ?? target(options)
+    try {
+      renderer.setRenderTarget(rt)
+      renderer.render(scene, camera)
+      return await readback(rt)
+    } finally {
+      renderer.setRenderTarget(previous)
+      if (options.into === undefined) rt.dispose()
+    }
+  }
+
   return {
     renderer,
 
@@ -318,32 +468,54 @@ export async function openGpu(
         const material = new MeshBasicNodeMaterial()
         material.fragmentNode = graph
         quad.material = material
-        const rt = options.into ?? target(options)
-        renderer.setRenderTarget(rt)
-        renderer.render(quadScene, quadCamera)
-        const pixels = await readback(rt)
-        renderer.setRenderTarget(null)
-        if (options.into === undefined) rt.dispose()
-        material.dispose()
-        return pixels
+        try {
+          return await renderInto(quadScene, quadCamera, options)
+        } finally {
+          material.dispose()
+        }
       })
     },
 
     draw(scene, camera, options = {}) {
-      return watched(async () => {
-        const rt = options.into ?? target(options)
-        renderer.setRenderTarget(rt)
-        renderer.render(scene, camera)
-        const pixels = await readback(rt)
-        renderer.setRenderTarget(null)
-        if (options.into === undefined) rt.dispose()
-        return pixels
-      })
+      return watched(() => renderInto(scene, camera, options))
     },
 
     compile(object, camera, scene) {
       return watched(async () => {
-        await renderer.compileAsync(object, camera, scene)
+        /*
+         * A compile that walked nothing resolves exactly like one that walked
+         * everything, and there are two ways to walk nothing.
+         *
+         * **Invisible** is the one `warmCompile` exists to own, and here it is
+         * a mistake rather than a state to toggle around: a test that means to
+         * compile something says so.
+         *
+         * **Culled** is the one nothing warns about. `_projectObject` tests
+         * `frustum.intersectsObject`, but `compileAsync` — unlike `_render` —
+         * never calls `setFromProjectionMatrix`, so the module-level `Frustum`
+         * it reads is whatever the last draw left, and six default planes on a
+         * renderer that has not drawn. Measured: a sphere at the origin builds
+         * a pipeline, the same sphere at x = −500 builds none, and both
+         * resolve. Culling is off for the walk and restored after, because a
+         * compile is a question about the program and not about where the
+         * object is standing.
+         */
+        if (!object.visible) {
+          throw new Error(
+            'gpuHarness: the object is invisible, and `compileAsync` walks straight past it — make it visible, the way `warmCompile` does',
+          )
+        }
+        const restore: Object3D[] = []
+        object.traverse((node) => {
+          if (!node.frustumCulled) return
+          node.frustumCulled = false
+          restore.push(node)
+        })
+        try {
+          await renderer.compileAsync(object, camera, scene)
+        } finally {
+          for (const node of restore) node.frustumCulled = true
+        }
       })
     },
 
@@ -351,11 +523,18 @@ export async function openGpu(
       return watched(async () => {
         const { vertexShader, fragmentShader } =
           await renderer.debug.getShaderAsync(scene, camera, object)
-        // Null is "no program was built", which for a mesh in a scene means
-        // the object was culled or invisible — a question, not a shader.
-        if (vertexShader === null || fragmentShader === null) {
+        /*
+         * Emptiness as well as null, and emptiness is the one that happens.
+         * `getShaderAsync` reaches past the render list —
+         * `_objects.get(...).getNodeBuilderState()` builds the state whether
+         * or not the object survived culling — so it answers for an invisible
+         * object as readily as a drawn one, and the null the types allow is
+         * not a case r182 produces. What it cannot do is answer for an object
+         * whose material built no program.
+         */
+        if (!vertexShader || !fragmentShader) {
           throw new Error(
-            'gpuHarness: no shader was built for the object — is it visible, in the scene, and in front of the camera?',
+            'gpuHarness: the object built an empty program — does its material have a graph on it?',
           )
         }
         return { vertexShader, fragmentShader }
@@ -371,12 +550,32 @@ export async function openGpu(
     },
 
     warnings() {
-      const drained = messages.filter((entry) => entry.type === 'warn')
+      /*
+       * Warnings only. Clearing the whole log took `error` entries with it,
+       * including one the backend had just reported and no verb had read yet
+       * — and the caller cannot tell, because a drained error looks exactly
+       * like a compile that went well.
+       */
+      const drained: GpuMessage[] = []
+      const kept: GpuMessage[] = []
+      for (const entry of messages) {
+        ;(entry.type === 'warn' ? drained : kept).push(entry)
+      }
       messages.length = 0
+      for (const entry of kept) messages.push(entry)
       return drained
     },
 
+    pipelinesBuilt() {
+      return pipelines
+    },
+
     dispose() {
+      // The quad is the session's, so the session ends it: `renderer.dispose`
+      // releases the backend and nothing else, and a geometry left undisposed
+      // is a device buffer the fork carries to exit.
+      quad.geometry.dispose()
+      if (!Array.isArray(quad.material)) quad.material.dispose()
       renderer.dispose()
       setConsoleFunction(
         null as unknown as Parameters<typeof setConsoleFunction>[0],

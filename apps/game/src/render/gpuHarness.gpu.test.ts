@@ -4,9 +4,11 @@ import { StorageBufferAttribute, MeshBasicNodeMaterial } from 'three/webgpu'
 import {
   float,
   Fn,
+  If,
   instanceIndex,
   sin,
   storage,
+  uint,
   uv,
   vec4,
   wgslFn,
@@ -46,10 +48,20 @@ describe('the device', () => {
     const adapter = await navigator.gpu.requestAdapter()
     expect(adapter).not.toBeNull()
     const info = adapter!.info
-    // Dawn names the hardware here — `apple` / `metal-3` on this machine —
-    // and a software adapter has nothing to put in either field.
-    expect(info.vendor).not.toBe('')
-    expect(info.architecture).not.toBe('')
+    /*
+     * Dawn names the hardware here — `apple` / `metal-3` on this machine.
+     * `.not.toBe('')` is not the assertion: it is satisfied by `undefined`,
+     * which is what a renamed field reads as, and the fields are accessors so
+     * a typo enumerates as nothing. And a software adapter is not blank —
+     * lavapipe says `mesa` / `llvmpipe`, WARP says `microsoft` — so the named
+     * ones are excluded by name rather than by emptiness.
+     */
+    expect(info.vendor).toMatch(/\S/)
+    expect(info.architecture).toMatch(/\S/)
+    const software = /mesa|llvmpipe|swiftshader|warp|microsoft basic/i
+    expect(`${info.vendor} ${info.architecture} ${info.device}`).not.toMatch(
+      software,
+    )
   })
 
   it('refuses to draw anywhere but a render target', () => {
@@ -157,10 +169,15 @@ describe('a compute kernel', () => {
     const out = new StorageBufferAttribute(new Float32Array(count), 1)
     const cells = storage(out, 'float', count)
     const kernel = Fn(() => {
-      const x = float(instanceIndex)
-        .div(count)
-        .mul(Math.PI * 2)
-      cells.element(instanceIndex).assign(sin(x))
+      // Guarded, though 256 is four whole workgroups and could not show it.
+      // This is the kernel a tile producer gets copied from, and the guard is
+      // the part that is invisible until the count stops dividing by 64.
+      If(instanceIndex.lessThan(uint(count)), () => {
+        const x = float(instanceIndex)
+          .div(count)
+          .mul(Math.PI * 2)
+        cells.element(instanceIndex).assign(sin(x))
+      })
     })().compute(count)
 
     await gpu.compute(kernel)

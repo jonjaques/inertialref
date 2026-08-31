@@ -23,28 +23,16 @@ import { warmCompile } from './warmup.ts'
  */
 
 let gpu: GpuSession
-let created = 0
+
+/*
+ * The count is taken at the device, which is the one place a pipeline cannot
+ * be built without passing through — and `backend.device` is not a public
+ * path, so the session owns the one cast and hands the number over.
+ */
+const created = (): number => gpu.pipelinesBuilt()
 
 beforeAll(async () => {
   gpu = await openGpu()
-  /*
-   * The count is taken at the device, which is the one place a pipeline
-   * cannot be built without passing through. `backend.device` is not a
-   * public path; wrapping its two constructors is the smallest observation
-   * that answers the question, and it is confined to this file.
-   */
-  const device = (gpu.renderer.backend as unknown as { device: GPUDevice })
-    .device
-  const sync = device.createRenderPipeline.bind(device)
-  const async = device.createRenderPipelineAsync.bind(device)
-  device.createRenderPipeline = (descriptor) => {
-    created += 1
-    return sync(descriptor)
-  }
-  device.createRenderPipelineAsync = (descriptor) => {
-    created += 1
-    return async(descriptor)
-  }
 })
 
 afterAll(() => {
@@ -83,15 +71,23 @@ describe('warmCompile', () => {
     const target = new RenderTarget(16, 16)
     gpu.renderer.setRenderTarget(target)
 
-    const before = created
+    const before = created()
     await warmCompile(gpu.renderer, { object: mesh, camera, scene })
-    expect(created).toBeGreaterThan(before)
+    expect(created()).toBeGreaterThan(before)
 
-    const warmed = created
+    const warmed = created()
     mesh.visible = true
-    gpu.renderer.setRenderTarget(target)
-    await gpu.draw(scene, camera, { into: target })
-    expect(created).toBe(warmed)
+    const pixels = await gpu.draw(scene, camera, { into: target })
+    expect(created()).toBe(warmed)
+    /*
+     * And the frame is a frame. `warmCompile` swallows its rejection by
+     * design and the backend's draw returns early on a pipeline it marked
+     * broken, so a material Tint refused would warm, draw nothing, and build
+     * no second pipeline — passing the count assertion above on a black
+     * frame. The star fills the middle of a 16×16 target; asking whether
+     * anything reached it is what makes that assertion falsifiable.
+     */
+    expect(pixels.data.some((value) => value !== 0)).toBe(true)
     target.dispose()
   })
 
@@ -106,14 +102,13 @@ describe('warmCompile', () => {
     const target = new RenderTarget(16, 16)
     gpu.renderer.setRenderTarget(target)
 
-    const before = created
+    const before = created()
     await gpu.renderer.compileAsync(mesh, camera, scene)
-    expect(created).toBe(before)
+    expect(created()).toBe(before)
 
     mesh.visible = true
-    gpu.renderer.setRenderTarget(target)
     await gpu.draw(scene, camera, { into: target })
-    expect(created).toBeGreaterThan(before)
+    expect(created()).toBeGreaterThan(before)
     target.dispose()
   })
 })
