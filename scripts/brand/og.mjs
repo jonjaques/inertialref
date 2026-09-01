@@ -106,7 +106,7 @@ export async function composeOgCard() {
   const first = await outline('Inertial', display)
   const second = await outline('Ref', display)
 
-  /* `type-body` at poster scale: Instrument Sans, regular, no tracking. */
+  /* `type-body` at poster scale: IBM Plex Sans, regular, no tracking. */
   const lead = { role: 'sans', size: 25, wght: 400 }
   const leadOne = await outline(
     'A spaceflight simulator, built in the open.',
@@ -116,8 +116,12 @@ export async function composeOgCard() {
 
   /*
    * The three figures from the front door's `SPEC`, in the registers it uses
-   * them in: the number is Instrument (Martian Mono at 87.5%, because it is a
-   * measurement) and the label is structure (Archivo caps at 78%).
+   * them in: the number is Instrument (`type-stat` — Plex Mono at 600, because
+   * it is a measurement) and the label is structure (Archivo caps at 78%).
+   *
+   * The number carries no width: Plex Mono has no width axis, and per ADR-0024
+   * it needs none — its advance sets the same reading at natural width that
+   * Martian Mono only reached compressed to 87.5%.
    *
    * The captions are uppercased *here*, at the draw, for the same reason
    * `type-label` does it in CSS: the strings stay title case wherever they are
@@ -134,9 +138,8 @@ export async function composeOgCard() {
     const number = await outline(value, {
       role: 'mono',
       size: 27,
-      wdth: 87.5,
-      wght: 500,
-      tracking: -0.015,
+      wght: 600,
+      tracking: -0.01,
     })
     const caption = await outline(label.toUpperCase(), {
       role: 'display',
@@ -152,7 +155,6 @@ export async function composeOgCard() {
   const host = await outline(SITE.host, {
     role: 'mono',
     size: 17,
-    wdth: 87.5,
     wght: 400,
   })
 
