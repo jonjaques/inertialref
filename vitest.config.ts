@@ -87,7 +87,7 @@ export default defineConfig({
      * The figure is still not the whole story, because the render layer's
      * tests are `pnpm test:gpu`, which this config excludes by suffix and which
      * writes its own report. Nine modules under `apps/game/src/render` read 0%
-     * here and 46-100% there. `docs/plans/complexity.md` carries the merged
+     * here and 46-100% there. `design/reports/complexity.md` carries the merged
      * numbers and the commands that produce them.
      */
     coverage: {
