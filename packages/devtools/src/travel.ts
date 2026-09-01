@@ -456,7 +456,7 @@ function describeBody(body: Body): string {
    * kilometer across, so a fixed `/1000` rounded every one of them to `0 km` —
    * Apophis, Bennu, Ryugu and Itokawa each described as a body with no size, in
    * the one string that is supposed to tell two rows apart. Apophis reads
-   * `185 m` now and Earth still reads `6,378 km`.
+   * `225 m` now and Earth still reads `6,378 km`.
    */
   const radius = formatReading(body.radius)
   // Moons orbit at a few hundred thousand kilometers, which the AU form renders
