@@ -47,7 +47,11 @@ export const DESCENT_RUNGS: readonly DescentRung[] = [
   },
   { label: '120 m', height: 120, why: 'above the rocks, below the ridgeline' },
   { label: '2 km', height: 2_000, why: 'a low pass over a mountain range' },
-  { label: '40 km', height: 40_000, why: 'high enough that the horizon curves' },
+  {
+    label: '40 km',
+    height: 40_000,
+    why: 'high enough that the horizon curves',
+  },
   {
     label: 'Top',
     height: null,

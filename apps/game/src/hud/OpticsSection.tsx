@@ -79,10 +79,7 @@ export function OpticsSection({ camera }: { camera: CameraState }) {
       />
       {/* What one pixel spans, against what the glass can actually separate.
           Two numbers, so the reader can see which of the two is the limit. */}
-      <Row
-        label="Per pixel"
-        value={`${view.pixelAngleMrad.toFixed(2)} mrad`}
-      />
+      <Row label="Per pixel" value={`${view.pixelAngleMrad.toFixed(2)} mrad`} />
       <Row
         label="Resolving power"
         value={`${view.angularResolutionMrad.toFixed(2)} mrad`}
