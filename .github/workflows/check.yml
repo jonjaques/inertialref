@@ -62,7 +62,8 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      # graph → brand → format → lint → typecheck → test → build, failing fast.
+      # graph → brand → presets → format → lint → typecheck → test → build,
+      # failing fast.
       - name: Check
         run: pnpm check
 

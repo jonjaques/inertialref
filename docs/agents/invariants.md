@@ -64,6 +64,7 @@ table is one of those three, not drift.
 | Do not latch a "run once" effect with a ref                                                   | [Client](../guides/client.md)                                                                                          |
 | Dock moves go through `layout.ts`                                                             | [Client](../guides/client.md) · [ADR-0012](../adr/0012-dockable-panels.md)                                             |
 | A new document under `docs/` goes in a wing                                                   | [Development](../guides/development.md) · [ADR-0016](../adr/0016-documentation-as-a-mode.md)                           |
+| A plan goes in `design/`, never under `docs/`                                                 | [Development](../guides/development.md) · [ADR-0016](../adr/0016-documentation-as-a-mode.md)                           |
 | One component per file                                                                        | [Development](../guides/development.md)                                                                                |
 | Do not hand-roll a registry control                                                           | [Development](../guides/development.md) · [`DESIGN.md`](../../DESIGN.md)                                               |
 | Cinematic effects are staging, not scripts                                                    | [Cinematics](../guides/cinematics.md)                                                                                  |

@@ -311,9 +311,10 @@ which one made it.
 that walked, not from this one.** A converged stance walks on none of them. `selections`
 is the total that says whether a frame walked at all; read it beside the rest.
 
-**A panel registered with `defaultOpen: false` is collapsed, not missing.** Perf is one,
-so a fresh profile shows Catalog, Time, Object and Camera and nothing else, and a DOM
-probe for it comes back empty. Open it from the dock, or write the layout the mode keeps:
+**A panel registered with `defaultOpen: false` is collapsed, not missing.** Perf is one
+and the planetarium's View is the other, so a fresh profile shows Catalog, Time, Object,
+Camera and Presets and nothing else, and a DOM probe for either comes back empty. Open it
+from the dock, or write the layout the mode keeps:
 
 ```js
 localStorage.setItem('ir.hud.debug.on', 'true')
