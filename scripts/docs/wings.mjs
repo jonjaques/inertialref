@@ -219,6 +219,7 @@ export const WINGS = [
           ['docs/plans/perf.md', 'Performance'],
           ['docs/plans/perf-2.md', 'Performance, Second Pass'],
           ['docs/plans/the-shell.md', 'The Shell'],
+          ['docs/plans/complexity.md', 'Complexity and Coverage'],
         ],
       },
       {
