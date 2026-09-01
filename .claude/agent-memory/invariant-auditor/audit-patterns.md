@@ -755,3 +755,128 @@ Both would have been findings. What it still did **not** sweep: `AGENTS.md:196` 
 qualified. **The pass reaches ADRs and prose docs; it does not reach `AGENTS.md` or the
 path-scoped mirrors.** Grep the canonical file for the sentence the ADR was just softened
 on.
+
+## A font stack is a claim you can resolve mechanically, and the sigils were wrong
+
+Richest finding on `design` (the Plex/type branch) and the method generalizes to any
+`unicode-range` work. **Do not read the prose; resolve the codepoints.** Parse every
+`@font-face` in `index.css` _and_ in each `@fontsource` package's shipped CSS into
+(family, ranges, file), then for each symbol walk the stack, filter by `unicode-range`,
+and — this is the half that finds the bug — open the file with `fontkit` and ask whether
+the glyph is actually **in** it. `unicode-range` is a download hint; a declared range over
+a file that lacks the glyph falls through silently.
+
+Measured on `design`: `☉` (U+2609) and `⊕` (U+2295) — the two sigils ADR-0024, DESIGN.md,
+`index.css`, `adr/README.md` and `development.md` all name as the motivating case — resolve
+to **no declared face**. Noto Sans Symbols' fontsource `symbols` subset begins at U+260A,
+and its ranges list U+2299 and U+22C4-22C6 but skip U+2295. The vendored Plex subsets
+declare `U+2200-22FF` and contain neither. `@fontsource/noto-sans-symbols-2` has U+2609
+(and was already in the pnpm store, unlisted — someone tried it).
+
+Second half, same branch: the **mono has no Greek at all**. The vendored mono subset has
+0 Greek codepoints (the sans one has 73), `@fontsource/ibm-plex-mono` ships no greek
+subset, `noto-sans-math` ships **latin only**, `noto-sans-symbols` declares no Greek range.
+`docs/concepts/rendering.md:361`'s `μ₀` in a code block draws `₀` from the vendored Plex
+file and `μ` from `ui-monospace` — two faces in one token, which is the exact failure the
+comment above the stack claims to have closed.
+
+The one-liner that finds all of it lives in the scratchpad recipe: build the face list,
+`hasGlyph(file, cp)` via `fontkit.openSync(...).characterSet`, print the winning family per
+codepoint per stack. Ten minutes, and it settles five prose sites at once.
+
+Adjacent: check the ADR's stated `pyftsubset --unicodes=` recipe against the shipped
+`unicode-range`. On `design` the recipe adds `U+2044,U+2113,U+2126`, the files contain all
+three, and the `@font-face` omits them — glyphs that can never be selected.
+
+## The new `:coverage` / instrument script is the one nobody re-runs
+
+`design` added `pnpm test:coverage`, a `coverage:` block in `vitest.config.ts` whose
+docstring argues the denominator at length, and `design/reports/complexity.md` — 481 lines
+where every number comes from that command. **The command does not complete.** Two runs:
+4 and 6 tests time out at the config's own `testTimeout: 20_000` (v8 instrumentation is
+~4× per test), 96 s and 112 s against a claimed **31 s**, exit 1, and no `coverage/`
+directory is written — so the report's stated input `coverage/coverage-final.json` cannot
+be regenerated. The report acknowledges `hookTimeout` for the descent suite and not
+`testTimeout` for `cover.test.ts`, `geology.test.ts`, `scatter.test.ts`,
+`devtools.test.ts`, `terrainStreamer.test.ts`.
+
+**Just run the new script.** A report document is a very strong signal that its own
+command has been run exactly once, by hand, before the last three commits landed.
+
+## `pnpm test` now has three numbers again, and the gate carries the low one
+
+Same shape as the `test:gpu` 620 ms / 0.9 s / 1.2 s finding, one layer up.
+`.claude/hooks/gate.mjs:10` says `test 6.5s` and "about twelve seconds";
+`design/plans/test-speed.md` says **10.0 s** and "about 15 s"; `complexity.md:418` says
+"the 31 s of `pnpm test`", which is its own table's figure for `test:coverage`. Measured
+warm twice: 10.62 / 10.48 s vitest `Duration`, 10.9 / 10.8 s wall; cold 21.0 s.
+Re-measure the gate header on any branch that changes what the suite runs.
+
+## `describe.skip` as a cost decision: honest, documented, and still a hole in CI
+
+`design` skipped `gameEngine.test.ts`'s one-descent suite (4 `it`s) to buy the Stop gate
+ninety seconds. The docstring is exemplary — it names the price, names the fix, cites
+`design/plans/test-speed.md` § 1. It is still true that `pnpm check` and CI run `pnpm test`,
+so **"the ship lands on the ground it drew" is now proved nowhere**. `pnpm test` reports
+`4 skipped`, which is the grep. Any diff that skips a suite in the _shared_ config has
+removed it from CI, not just from the per-turn gate; the second-project shape
+(`vitest.gpu.config.ts`) is the fix and it already exists.
+
+## Commented-out code kept alive by `@ts-expect-error` is a suppressed dead-code signal
+
+`apps/game/vite.config.ts:74-96`: the analytics build-log line is commented out, its two
+locals are now unread, and they are held past `noUnusedLocals` by
+`/* eslint-disable no-unused-vars */` plus two bare `// @ts-expect-error`. `pnpm lint` and
+`pnpm typecheck` are green _because of_ the directives — the compiler was telling the truth
+and was silenced. The docstring above is untouched and still present tense: "this is so the
+build log answers it instead." **A bare `@ts-expect-error` with no description in a diff is
+worth reading the line under it; here it absorbed the one diagnostic that says the function
+is dead.**
+
+## Labels walked back from title case, with the rule left standing in four places
+
+`AGENTS.md:307`, `DESIGN.md:345` and `:792`, `.claude/rules/react-shell.md:127` and the
+invariants row all say labels are title case in source. `design` converted
+`'Focal Length'→'Focal length'`, `"Free Look"→"Free look"`, `"Minor Bodies"→"Minor bodies"`,
+`"Orbit Paths"→"Orbit paths"` and added eight more sentence-case ones, amending none of the
+five statements. ~11 sentence-case labels predate it, so the rule was already leaking — the
+new thing is a change that walks it back on purpose. Grep:
+`rg -n "label[=:] ?['\"\`][A-Z][a-z]+ [a-z]" apps/game/src -g '!_.test._'`, then subtract
+the `aria-label`s (sentences, never displayed) and diff against `origin/main`.
+
+## A branch that adds an invariant violates it once, in a file the sweep did not reach
+
+`design` added "Never write a plan under `docs/`. Plans, working reviews and tooling
+reports go in `design/`" and moved five plans — while checking in
+`apps/game/.impeccable/critique/2026-08-31T22-19-32Z__src-app-tsx.md`, a working review,
+under `apps/game/`. The final `docs:` commit swept `docs/plans/` and not this. It also
+makes `.impeccable/` a tracked directory the machine's hook writes into every turn, with
+nothing gitignoring the rest. **When a diff adds a "X lives in Y" rule, `git diff --name-status`
+for every other X in the same branch.**
+
+## What the concurrent docs pass fixed on `design`, mid-audit
+
+Fifth branch running. Three commits landed while I read (`c4604c9`, `33beef3`, `9626ad4`)
+and one of them added the `docs/agents/invariants.md` row for the new plan invariant —
+which would have been a finding. It did **not** reach `DESIGN.md:298-306`, a past-tense
+paragraph naming Instrument Sans whose parallel in `index.css` the same branch rewrote to
+present tense. The pass reaches ADRs, guides, `CONTEXT.md` and now `invariants.md`; it
+still does not reach `DESIGN.md`'s older prose or `.claude/rules/`.
+
+## Cheap things that came back clean on `design`, worth not re-deriving
+
+- `pnpm graph`, no `three` in `packages/*`, no bare `three` in `apps/game`, no new
+  `Math.random`/`Date.now`/`performance.now`/`localStorage`, no `text-slate-500`.
+- `formatReading`'s ladder is byte-for-byte `formatDistance`'s; the `group()` separator is
+  hand-rolled for the `dossier.ts` locale reason and handles the U+2212 sign.
+- `surveySites`'s renamed site keeps its `corner` **id** and says so; `regionDirection` is
+  still the producer.
+- Dock: `defaultOpen: false` reaches `normalizeLayout` only through `layoutOf`, so it
+  places a first-time panel and reopening still reads the definition's `zone`
+  (`dock/panels.ts:91-105`). The registry comment is true.
+- `FOCUS_MAX` 1000 → 10_000 only widens `isLens`'s accepted set, and the 4.47 km telephoto
+  hyperfocal it is sized against matches `packages/rendering/src/lens.ts:349-352`.
+- ADR index discipline complete for the first time in these notes: table row, Mermaid node,
+  an incoming edge, and both count words moved to twenty-four.
+- `lint`, `typecheck`, `format:check`, `brand:check`, `presets:check`, `docs:build`,
+  `fta:check` all green; `knip` reports the 5 unused files the report claims.

@@ -60,7 +60,7 @@ const slug = (text: string): string =>
   text.replace(/[^A-Za-z0-9._-]+/g, '-').slice(0, 40)
 
 /**
- * One line in the build log saying whether this build can measure anything.
+ * One line in the build log when a production build cannot measure anything.
  *
  * `VITE_GA_MEASUREMENT_ID` is a Workers Builds *build variable* and is
  * deliberately not in the repository (`src/analytics.ts`), which means the one
@@ -72,7 +72,13 @@ const slug = (text: string): string =>
  * The id is not printed. It is public, but a build log is a bad habit to start.
  */
 function reportAnalytics(mode: string): void {
-  /* eslint-disable no-unused-vars */
+  /*
+   * Only production, and only the failing case. A build that measures nothing
+   * is the correct outcome everywhere else — a fork, and every `pnpm dev` — so
+   * announcing the healthy one printed a line on every build for a fault that
+   * fires once. Silence here means the id resolved.
+   */
+  if (mode !== 'production') return
   /*
    * Through `loadEnv`, not `process.env`, because the two sources are the whole
    * point: CI sets a real environment variable and a developer's machine has a
@@ -80,20 +86,16 @@ function reportAnalytics(mode: string): void {
    * a local build whose bundle does contain the id, which is a diagnostic that
    * lies in the direction that wastes the most time.
    */
-  // @ts-expect-error
-  const fromEnvironment = (process.env['VITE_GA_MEASUREMENT_ID'] ?? '') !== ''
-  // @ts-expect-error
   const resolved =
     loadEnv(mode, fileURLToPath(new URL('.', import.meta.url)), 'VITE_')[
       'VITE_GA_MEASUREMENT_ID'
     ] ?? ''
-  // console.log(
-  //   resolved === ''
-  //     ? `analytics: VITE_GA_MEASUREMENT_ID is NOT set — this build measures ` +
-  //         `nothing, which is correct for a fork and wrong for production (${mode})`
-  //     : `analytics: VITE_GA_MEASUREMENT_ID is set from ` +
-  //         `${fromEnvironment ? 'the environment' : 'a .env file'} (${mode})`,
-  // )
+  if (resolved === '')
+    console.warn(
+      'analytics: VITE_GA_MEASUREMENT_ID is not set — this production build ' +
+        'measures nothing. It is a Workers Builds build variable, not a ' +
+        'repository file.',
+    )
 }
 
 /**

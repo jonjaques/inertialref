@@ -202,8 +202,9 @@ attaching to a pull request and is optional, skipped rather than fatal when abse
 italic), IBM Plex Mono (every reading, static 400/500/600). There is no
 serif. Symbol coverage is self-hosted beside them: two subsets cut from the
 desktop Plex TTFs carry the mathematical operators under the same family
-names (`src/assets/fonts/`), and two Noto subsets carry the solar and
-planetary sigils no text family draws. All are imported in `src/index.css`,
+names (`src/assets/fonts/`), and two Noto subsets carry the planetary sigils no
+text family draws — `☉` and `⊕` are not among them, and
+`design/plans/type-coverage.md` says why. All are imported in `src/index.css`,
 which also defines the ten `type-*` utilities. Do not write a size, a weight,
 and a tracking at a call site — use a named step. A Google Fonts `<link>`
 would break offline, which is the base case.

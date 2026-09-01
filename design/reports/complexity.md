@@ -25,7 +25,7 @@ its own.
 
 | Instrument                                 | Command                                                  | Cost                       |
 | ------------------------------------------ | -------------------------------------------------------- | -------------------------- |
-| `fta-cli` 3.0.1                            | `pnpm fta`                                               | 434 files in **0.09 s**    |
+| `fta-cli` 3.0.1                            | `pnpm fta`                                               | 436 files in **0.09 s**    |
 | `knip` 6.33.0                              | `pnpm knip`                                              | 16 workspaces in **0.7 s** |
 | `vitest` 4.1.10 with `@vitest/coverage-v8` | `pnpm test:coverage`                                     | **31 s**                   |
 | the GPU suite, instrumented                | `pnpm test:gpu --coverage --coverage.reportsDirectory=…` | **85 s**                   |
@@ -391,14 +391,14 @@ of code; `system.ts` is 2,026 and 1,081. Neither difference moves the ranking.
 `brand` / `brand:check` and `presets` / `presets:check` pattern:
 
 ```
-pnpm fta          # the report: 434 files, worst 25, 0.09 s
+pnpm fta          # the report: 436 files, worst 25, 0.09 s
 pnpm fta:check    # the same, exiting 1 if anything exceeds 91
 ```
 
 The config is three settings and each is a decision:
 
 - `output_limit: 25` — the table is a ranked list to act on, not an inventory.
-  The default prints all 434 rows.
+  The default prints all 436 rows.
 - `exclude_under: 25` — below that a file cannot approach the cap and only
   crowds the table. Default is 6.
 - `extensions: [".mjs"]` — added to the defaults, not replacing them. Without it
@@ -415,8 +415,8 @@ which is what the fta docs recommend for an existing project. It is a ratchet
 against new concentration, not a target.
 
 `pnpm fta:check` is **not** in `pnpm check` or the Stop gate. Adding it costs
-0.09 s, which is nothing next to the 31 s of `pnpm test`, but it is a policy
-change: it means a change that pushes any file past 91 fails CI, and the
+0.09 s, which is nothing next to the 31 s of `pnpm test:coverage`, but it is a
+policy change: it means a change that pushes any file past 91 fails CI, and the
 declarative files in [What is not a finding](#what-is-not-a-finding) are the
 ones nearest the line. That is a decision to make deliberately.
 

@@ -305,7 +305,7 @@ Violating one of these is a rewrite later, not a refactor.
   share the knot: change one and change the other.
   [Cinematics](docs/guides/cinematics.md).
 - **Never write a label in the case you want to see it in.** Source strings
-  are title case; `text-transform` on the type step decides what is shouted.
+  are sentence case; `text-transform` on the type step decides what is shouted.
 - **Never subtract two planetary radii from each other in a shader, and never take a
   screen-space derivative of a planetary position.** At Earth's radius one float32
   step is half a meter, so `length(anchor + local) − radius` arrives quantized to

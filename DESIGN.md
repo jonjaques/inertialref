@@ -281,9 +281,11 @@ is a browser-sheared upright.
 set). Readouts never italicize, so its italics stay unloaded.
 **Symbol coverage:** two vendored subsets of the desktop Plex families carry
 the mathematical operators (`≈`, `→`, `∞`, the primes of parallax, the sans's
-Greek) under the same family names, and two Noto subsets carry what no text
-family draws — the solar and planetary sigils in `M☉` and `R⊕`. All four are
-`unicode-range`-gated, downloading only when such a glyph is drawn.
+Greek) under the same family names, and two Noto subsets carry the planetary
+sigils no text family draws. All four are `unicode-range`-gated, downloading
+only when such a glyph is drawn. `☉` and `⊕` are the two the set does not
+reach — a declared range over a glyph the subset file does not hold is silent,
+not a tofu — and `design/plans/type-coverage.md` carries the cut for them.
 
 **A condensed grotesque, and deliberately not a serif.** Two serifs were tried
 in this slot and both were the same mistake in different clothes. Instrument
@@ -295,15 +297,15 @@ hull, a heading over a column of readings. That is a condensed grotesque's whole
 job, and Archivo is a functional one with a real width axis, which is what makes
 one variable file cover four type steps.
 
-**It carries the labels too, and that is the larger half of the change.** The
-uppercase micro-labels were set in Instrument Sans — a humanist face with
-generous sidebearings — so at 10px with 0.15em of tracking they came out loose
-and soft, which is precisely how "a bit small and a bit ugly" happens to an
-interface made almost entirely of labels. Condensed at 78%, both steps grew a
-pixel (`type-heading` 11 → 12, `type-label` 10 → 11) while still fitting _more_
-characters per column, and the tracking came down with the width: 0.13em and
-0.15em were compensating for sidebearings a condensed face does not have, and at
-those values the words came apart into letters.
+**It carries the labels too, and that is the larger half of its job.** The
+uppercase micro-labels are condensed at 78%, which is what lets `type-heading`
+sit at 12px and `type-label` at 11px while still fitting _more_ characters per
+column than a humanist face fits at 11 and 10. The tracking comes down with the
+width — 0.08em and 0.1em rather than the 0.13–0.15em a humanist face needs —
+because those larger values compensate for sidebearings a condensed grotesque
+does not have, and at them the words come apart into letters. An interface made
+almost entirely of labels is where a face with generous sidebearings reads loose
+and soft, which is precisely how "a bit small and a bit ugly" happens.
 
 All three are self-hosted from `@fontsource` and bundled by Vite into
 content-hashed `/assets` files. That is a requirement rather than a preference:
@@ -342,8 +344,8 @@ so a readout updating in place never reflows and never makes you re-find the
 digit you were watching.
 
 **Case is typography, not content.** Every string in the source is written in
-title case and the `text-transform` on the step decides what is shouted. That is
-not a style rule — a label is read in four places the CSS never reaches (a
+sentence case and the `text-transform` on the step decides what is shouted. That
+is not a style rule — a label is read in four places the CSS never reaches (a
 `title`, an `aria-label`, a screen reader, a copied string), and `'PLAYABLE'`
 written into a constant is a shout none of them can turn off.
 
@@ -789,7 +791,7 @@ addressable, and both Escape and the browser's back button leave it.
   information. The exception is a control that is _also_ a readout — the time
   panel's `1×` is both the rate and the way back to it, and disabling it at 1×
   hid the number in order to gray out a no-op.
-- **Do** write every label in title case and let the step's `text-transform`
+- **Do** write every label in sentence case and let the step's `text-transform`
   decide the case on screen. A label is read in four places the CSS never
   reaches: a `title`, an `aria-label`, a screen reader, and a copied string.
 - **Do** anchor new chrome to an edge or corner at the `0.75rem` inset, and

@@ -32,10 +32,17 @@
  *
  * The two Notos are glyph coverage, not a fourth voice. The two vendored Plex
  * subsets below carry the mathematical operators in the faces' own voice; the
- * Notos carry only what no text family draws — the solar and planetary sigils
- * in `M☉` and `R⊕`, and the mono's Greek. Every symbol file here is
- * `unicode-range`-gated to its blocks, so it downloads the first time such a
+ * Notos carry the planetary sigils no text family draws. Every symbol file here
+ * is `unicode-range`-gated to its blocks, so it downloads the first time such a
  * glyph is actually drawn and never otherwise.
+ *
+ * Two glyphs are still uncovered, and nothing here shows it: `☉` U+2609 and
+ * `⊕` U+2295, which `dossier.ts` prints in `M☉` and `R⊕`. Noto Sans Symbols'
+ * U+2600 block begins at U+260A — one codepoint above the sun — and carries no
+ * U+2295; Noto Sans Math holds both, but Fontsource declares only its `latin`
+ * range and a browser never selects a face for a codepoint outside the range,
+ * however many glyphs the file has. The mono's Greek is absent the same way.
+ * `design/plans/type-coverage.md` has the cut that closes both.
  *
  * The Cyrillic subsets ride along in the same files and cost nothing: they are
  * `unicode-range`-gated, so a Latin interface never fetches them and the worker

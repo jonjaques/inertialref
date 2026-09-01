@@ -6424,6 +6424,21 @@ purpose, which is the invariant that keeps the simulation core runnable in Node.
 Counting `pnpm test:gpu`, which covers nine render modules the main suite reports
 at 0%, the merged figure is 65.9%.
 
+**A declared `unicode-range` over a glyph the subset file does not hold is
+silent.** ADR-0024 closed the operator gap and its census — `°` 432, `×` 551,
+`☉` 21, `⊕` 14 — was taken per _codepoint printed_ against the _families_.
+That is one join short. What decides the face is the specific subset file the
+range routes a codepoint to, and two of the census's own entries route to a
+file without the glyph: Noto Sans Symbols begins its U+2600 block at **U+260A**,
+one codepoint above `☉` U+2609, and carries no `⊕` U+2295; Noto Sans Math holds
+both and is declared over a `latin` range containing neither. The vendored Plex
+subsets declare `U+2200-22FF`, which _contains_ U+2295, and do not carry it —
+the worst of the three shapes, because it looks covered. So `M☉` and `R⊕`, the
+two units the object record states most often, still reach a platform font.
+Checking a family, a spec sheet or a declared range all report success; only
+`fontkit`'s `characterSet` on the served file answers it.
+`design/plans/type-coverage.md` has the cut.
+
 A defect the instruments could not see, because it was arithmetic rather than
 shape: **`describeBody` divided by a thousand and rounded**, so every one of
 Sol's sixty-six asteroids and comets under a kilometer across described itself

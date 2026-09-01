@@ -135,10 +135,18 @@ export function formatDistance(m: Meters, digits = 3): string {
  * `formatDistance` carries three decimals at every magnitude, which is right
  * for a log line and wrong on screen: a camera 20,780 km out reads
  * "20779.659 km", where the last four digits move every frame and none of them
- * is a fact anyone is using. Three significant figures is what the reading is
- * worth, and the thousands separator is what makes five digits scannable at a
- * glance — the difference between "20780" and "20,780" is the difference
- * between counting and reading.
+ * is a fact anyone is using. The rule is decimals by magnitude within the unit
+ * band — none at 100 and above, one above 10, two below — so what prints is
+ * never finer than about a thousandth of the reading itself, which is the
+ * resolution at which a digit stops moving every frame. It is not a
+ * significant-figure rule and does not read as one at the top of a band:
+ * `123,456,789 m` is `123,457 km`, six figures, because the band runs to
+ * an AU and cutting it to three would round a camera position to the nearest
+ * thousand kilometers.
+ *
+ * The thousands separator is what makes five digits scannable at a glance —
+ * the difference between "20780" and "20,780" is the difference between
+ * counting and reading.
  *
  * Grouped by hand rather than through `toLocaleString`, for the reason
  * `dossier.ts` states: the browser's locale would choose the decimal separator,

@@ -43,7 +43,13 @@ coverage ships with the faces instead of being left to the platform.**
 - The solar and planetary sigils (`☉`, `⊕`, `♃`, …) exist in no text family;
   two Noto subsets close each stack before any platform font gets a vote.
   Every symbol file is `unicode-range`-gated and downloads the first time
-  such a glyph is drawn, never otherwise.
+  such a glyph is drawn, never otherwise. Two of them are not closed by those
+  subsets and still reach a platform font — `☉` U+2609 and `⊕` U+2295, the two
+  this record's own census counts at 21 and 14. Noto Sans Symbols begins its
+  U+2600 block at U+260A and carries no U+2295; Noto Sans Math holds both and
+  is declared over a range containing neither.
+  [`design/plans/type-coverage.md`](../../design/plans/type-coverage.md) carries
+  the cut and the reason a census over families could not see it.
 - The mono steps drop the width and tracking compensation Martian Mono
   needed; Plex Mono's advance fits the same eleven-character reading at its
   natural width.
@@ -84,14 +90,15 @@ one string set at poster size.
 
 ## Consequences
 
-Prose gains true italics and 100–700 of weight; every operator and sigil the
-simulation prints renders in a declared face on every platform; the poster
-figures read as an instrument cluster instead of a fourth line of readout.
+Prose gains true italics and 100–700 of weight; every operator the simulation
+prints renders in a declared face on every platform, and every sigil but `☉`
+and `⊕`; the poster figures read as an instrument cluster instead of a fourth
+line of readout.
 
 **Plex Mono is static.** A fourth weight is a new file rather than a number,
 and the vendored operator subsets are generated artifacts: regenerating one
 needs IBM's released TTFs and
-`pyftsubset --flavor=woff2 --layout-features='*' --unicodes=U+2032-2033,U+2044,U+2070-209F,U+2113,U+2126,U+2190-21FF,U+2200-22FF,U+2300-23FF`
+`pyftsubset --flavor=woff2 --layout-features='*' --unicodes=U+2032-2033,U+2070-209F,U+2190-21FF,U+2200-22FF,U+2300-23FF`
 (the sans subset adds `U+0370-03FF` for Greek), so a glyph the census did not
 include is a rebuild of those files rather than an edit.
 
