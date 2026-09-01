@@ -2708,7 +2708,7 @@ The docs were rewritten so a human and an agent are not reading the same file
 for different jobs.
 
 - **Technical writing** lives under `docs/` — vision, architecture, concepts,
-  ADRs, guides, the design bible. House voice is [`docs/STYLE.md`](STYLE.md):
+  ADRs, guides, the design bible. House voice is [`STYLE.md`](STYLE.md):
   American English, present tense, the fact first, session diary kept out.
 - **Agents** have a handbook at [`docs/agents/`](docs/agents/README.md).
   [`AGENTS.md`](AGENTS.md) is the auto-loaded working card (invariants and
@@ -2790,16 +2790,16 @@ British spelling in user-facing copy, labels, comments, and documentation is
 now American: _color_, _center_, _meter_, _catalog_, _behavior_, _license_,
 _gray_, _artifact_, _toward_. Identifiers, panel ids (`catalogue`), JSON keys
 (`licence`), enum values (`centre`), and filenames (`catalogue.md`) were left
-alone for a later programmatic rename. [`docs/STYLE.md`](STYLE.md)
+alone for a later programmatic rename. [`STYLE.md`](STYLE.md)
 already stated the policy; this pass applies it to the rest of the tree.
 
 ## Twelve shallow modules, deepened (23 Aug 2026)
 
-[`REVIEW.md`](design/plans/arch-review.md) is the plan; this is what implementing it found. The
-thread through all twelve is the same: a module was shallow because its
-interface was `Env`, or a component, or a convention nobody owned — so the
-behavior behind it could only be reached by running the whole application, and
-every bug in it shipped.
+[The architecture review](design/plans/arch-review.md) is the plan; this is what
+implementing it found. The thread through all twelve is the same: a module was
+shallow because its interface was `Env`, or a component, or a convention nobody
+owned — so the behavior behind it could only be reached by running the whole
+application, and every bug in it shipped.
 
 **The Worker's media path had four fix commits and no test file.** Not for want
 of trying: `media()` took `env: Env`, a whole workerd binding object, so nothing
@@ -3359,7 +3359,7 @@ if a rewrite dropped the planet, the terminator mask or the streak.
 ## The title sequence measured again, and the ship flies straight lines (23 Aug 2026)
 
 Planning the next fidelity pass over `tng-intro` produced three findings worth
-more than the plan itself ([`TNG-PLAN.md`](design/plans/tng-intro.md)).
+more than the plan itself ([the tng-intro plan](design/plans/tng-intro.md)).
 
 **The committed diff is the current diff.** The shot names in
 `analysis/render-diff.csv` predate the last re-cut (`veil`, `eclipse-in/out`),
@@ -3396,10 +3396,10 @@ should be.
 
 ## The plan met the frames, and half of it was wrong (23 Aug 2026)
 
-[`TNG-PLAN.md`](design/plans/tng-intro.md) was written from measurements and then implemented
-against the same frames. Its timings and its structure held. A good deal of its
-_causation_ did not, and the corrections are worth more than the work they
-interrupted — they are collected in the plan's own §10 and summarized here.
+[The tng-intro plan](design/plans/tng-intro.md) was written from measurements and
+then implemented against the same frames. Its timings and its structure held. A
+good deal of its _causation_ did not, and the corrections are worth more than
+the work they interrupted — they are summarized here.
 
 **The instrument was reading the wrong thing, in three separate places.**
 `compare_render.py`'s subject box is truncated wherever it touches a frame edge,
@@ -3424,7 +3424,7 @@ is now derived — fix the star's mark and the disk's and the phase follows — 
 its orientation error fell from 50.3° to 12.7°, its limb from 0.056 to 0.013,
 with the star inside 0.010 of its measured mark where it used to be off-frame.
 
-**And §4's line fits were fits to the script's own beats.** Refitting them
+**And the plan's line fits were fits to the script's own beats.** Refitting them
 against the reference gives a cruise path of ~730 m rather than 4.0 km at a 9.5%
 residual, a descent of ~800 m rather than 6.9 km at 5.0% and strictly monotone,
 a wipe of ~9.5 km at **0.13%** — and a skim that is not measurable at all, 217
@@ -4148,7 +4148,7 @@ scoped rules for the same reason: they are in context for every session,
 including the ones that only answer a question.
 
 These two mirror `docs/agents/working.md` § "Starting work" and
-[`docs/STYLE.md`](STYLE.md) rather than `AGENTS.md`, because what they
+[`STYLE.md`](STYLE.md) rather than `AGENTS.md`, because what they
 carry is not a property of the code. `AGENTS.md` stays canonical for the code
 invariants, and `docs/agents/invariants.md` maps those to their technical
 pages; process rules are deliberately not in that table.
@@ -4163,7 +4163,7 @@ Between them they found five things a green `pnpm check` cannot see, because
 none of them is a link, a type or a test.
 
 The one worth remembering is **reparenting by insertion**. `### Avoid` was a
-subsection of `## Voice` in `docs/STYLE.md`. Three new `##` sections landed
+subsection of `## Voice` in `STYLE.md`. Three new `##` sections landed
 between them, and nesting alone moved that block under `## Commit messages` —
 so a code invariant ("interface copy is title case in source; CSS decides what
 is shouted") ended up filed under commit-message guidance. **Not one line of the
@@ -4339,7 +4339,7 @@ projection pass, not by `GameEngine.#step`.
 
 ## The terrain rig, and the three defects it found on its first run (26 Aug 2026)
 
-Phase 0 of [`TERRAIN-PLAN.md`](design/plans/terrain.md) § 10: the instrument every later
+Phase 0 of [the terrain plan](design/plans/terrain.md): the instrument every later
 phase is judged through, built before any of them so the phase that triples the
 per-sample cost has something to be a regression against. No generator changes.
 
@@ -4498,7 +4498,7 @@ headless runner. Attach Browser is Chrome on 9222.
 
 ## The quadtree covers the disk, and three things it had to learn first (27 Aug 2026)
 
-Phase 1 of [`TERRAIN-PLAN.md`](design/plans/terrain.md) § 10. A 3×3 window at one level
+Phase 1 of [the terrain plan](design/plans/terrain.md). A 3×3 window at one level
 becomes a restricted, morphing quadtree walked from the six cube faces.
 [ADR-0015](docs/adr/0015-terrain-level-of-detail.md) is the decision record.
 
@@ -4988,7 +4988,7 @@ is the mode whose whole subject is looking, and its controls for looking were on
 three surfaces, two behind the author's disclosure. The aperture, the focus and
 the exposure were behind the console key.
 
-Phase 1.6 of [`TERRAIN-PLAN.md`](design/plans/terrain.md) § 9, in full.
+Phase 1.6 of [the terrain plan](design/plans/terrain.md), in full.
 [ADR-0018](docs/adr/0018-the-instrument.md) is the record.
 
 **Two grep-able claims, and they are the point.** One
@@ -5029,8 +5029,8 @@ Earth is 1.90° across from Luna and Mars is 42.39° from Phobos, so the lens is
 part of the picture rather than a setting beside it. `riseFov` clamps to the
 slider's 20–110°, which is doing real work at the long end: Earthrise wants
 11.4° and gets 20°, because that is where the terrain predicate saturates
-(§ 8). The captured plate is right otherwise — Earth over the lunar limb from
-110 km, horizon on the lower-third line.
+(§ 2 of the plan). The captured plate is right otherwise — Earth over the
+lunar limb from 110 km, horizon on the lower-third line.
 
 **Three of sixteen compositions were ship-only, and the reason was one line.**
 `observerPose` is `lookAlong(−offset, up)` — the target's center, always — so
@@ -5094,7 +5094,7 @@ the test is that the same CSS window drags at one rate at 1×, 1.5× and 2×.
 
 ## The ground stops being noise and becomes a geology (28 Aug 2026)
 
-Phase 2 of [`TERRAIN-PLAN.md`](design/plans/terrain.md), in full.
+Phase 2 of [the terrain plan](design/plans/terrain.md), in full.
 [ADR-0019](docs/adr/0019-the-geology.md) is the record.
 
 Three bands of noise is the smallest number that reads as a planet and the
@@ -5510,7 +5510,7 @@ that ended the search — pinned at exactly 1,152, which is the signature
 
 ## The ground stops being a color and becomes a face (29 Aug 2026)
 
-Phase 3 of [TERRAIN-PLAN](design/plans/terrain.md), recorded in
+Phase 3 of [the terrain plan](design/plans/terrain.md), recorded in
 [ADR-0020](docs/adr/0020-the-face.md). Terrain had one flat color under the
 scene's ambient light — survivable while the streamed set was nine patches, and
 not survivable once the quadtree draws the whole disk, because the ground is
@@ -5658,7 +5658,7 @@ drawn a different planet through an identical heightfield. It compares all
   one half that does not agree. A mapped body has no such gap. It needs a worker
   task, a cube texture with a slot allocator, and a second consumer in
   `render/planet.ts`.
-- **No hex-tiling and no triplanar**, which § 7 of the plan specifies. Both
+- **No hex-tiling and no triplanar**, which § 2 of the plan specifies. Both
   answer questions an authored material set asks — a period to break, a
   projection to choose — and there are no authored textures. The detail is
   gradient noise on the body-fixed position, which has neither. The seam is the
@@ -5679,7 +5679,7 @@ drawn a different planet through an identical heightfield. It compares all
 
 ## The ground goes below the field the ship lands on (30 Aug 2026)
 
-Phase 4 of [TERRAIN-PLAN](design/plans/terrain.md), recorded in
+Phase 4 of [the terrain plan](design/plans/terrain.md), recorded in
 [ADR-0021](docs/adr/0021-the-ground.md). The ground at a two-meter stance was a
 plane, and the reason is arithmetic rather than taste.
 
@@ -6005,9 +6005,9 @@ not about a player.
 
 ## The frame stops rebuilding what has not moved (30 Aug 2026)
 
-The verifying pass over [perf and perf-2](design/plans/perf.md), since consolidated into one. Both plans now carry a status per entry and the
-numbers below; what is worth keeping here is what the fixes had in common and
-the two instruments that were lying.
+The verifying pass over [perf and perf-2](design/plans/perf.md), since
+consolidated into one plan of what is left. What is worth keeping here is what
+the fixes had in common and the two instruments that were lying.
 
 **Four of the five frame fixes are one shape: a rebuild key that mixes two
 invalidation sources, so the cheap half pays the expensive half's cadence.**
@@ -6351,6 +6351,85 @@ that condensed stencil more than anywhere else. The kerning complaint it was
 meant to answer is answered at the one call site set at poster size instead:
 the wordmark is hand-kerned around the `r`–`t` pair and the `l`→`Ref` seam,
 because tracking is uniform by definition and a kern table is tuned for text.
+
+## The plans leave the published tree, and the gate stops paying for a landing (1 Sep 2026)
+
+`docs/` is published at `/docs`, and a reader who reaches a page there expects
+the system to already behave the way it says. A plan promises the opposite. The
+seven under `docs/plans/` were therefore seven pages of the documentation site
+describing things that do not exist, and nothing said so — the division was
+written down only in `wings.mjs`, so the next plan would have landed in `docs/`
+and failed `docs:build` with a message suggesting a wing. Plans now live in
+`design/`, outside the published tree, and the rule is an invariant rather than
+a build error.
+
+The cut that followed is the part worth remembering: **6,010 lines to 1,913,
+verified against the tree rather than against each plan's own status line.** A
+phase with an ADR closing it and code in the tree is not work that is left, and
+a status line is written once and never revisited. What survives is what a plan
+is for — open work, live risks, measured figures with the operating point they
+were taken at, and every constraint saying why the obvious thing does not work.
+Those constraints are not history; they are the most expensive thing in the
+document to rediscover. The pare-down also inverted two claims, which are
+corrected rather than repointed: `docs/guides/testing.md` sent the reader to the
+headless WebGPU plan for measurements the plan now sends back, and ADR-0021
+cited a perf section whose table lives in `browserWorker.ts`.
+
+**One `beforeAll` was ninety percent of the per-turn gate.** `gameEngine.test.ts`
+generates a landing's worth of ground through an inline worker: 103 s of a 109 s
+`pnpm test`, and `pnpm test` is the whole of the Stop hook, so every turn that
+touched a `.ts` file paid it. Skipped, the four stages sum to 12 s and the suite
+runs in 7.2 s wall. The skip is a cost decision and the file says so, because
+`describe.skip` under a long design comment reads as an abandoned red test to
+whoever finds it next. What it costs is exact: `pnpm check` and CI lose the one
+place "the ship lands on the ground it drew" is proved, so the comment names the
+change that should drop the skip and run the file by hand. The gate keeps its
+ten-minute budget for the `test` stage — that budget is sized for the descent,
+whose runtime moves by a factor of two with how busy the machine is, and sizing
+it to 12 s would make every parallel build a false red the moment the skip comes
+off.
+
+**Severity in a config file applies to the report, not just the gate.** This bit
+twice, once for `fta.json` and once for `knip.jsonc`, and it is the reason
+neither carries `score_cap` or `rules`: put the threshold in the config and the
+reporting verb inherits it, so `pnpm knip` becomes something that exits 1 while
+printing the answer, which is not a report. The split lives on the command line
+instead — `pnpm fta` reads and `pnpm fta:check` gates at 91, one above the
+measured worst; `pnpm knip` reports everything and exits 0 while `pnpm
+knip:check` narrows to four unambiguous classes. An unused _export_ is
+deliberately not one of them, and `knip:check` is red today.
+
+knip's defaults are wrong here twice over, both reading as dozens of false
+"unused file" reports: tests are entry points and its vitest plugin only finds
+them in the workspace holding the vitest config, of which this repository has
+exactly one covering all sixteen; and `packages/*` publishes nothing, so
+`exports` points at `./src/index.ts` with no build step and no `dist`. One
+false positive survives and is worth recognising rather than re-diagnosing:
+`tngIntro.ts` declares a local helper named `require` that looks a body up by
+name, so knip reads `require('Earth')` as a CommonJS import and reports Earth,
+Mars, Jupiter and Saturn as unlisted dependencies.
+
+**Neither instrument alone ranks anything.** The worst-scoring file in the
+repository, `dossier.ts` at 90.30, is also one of the best covered at 95%, while
+`apps/ingest` scores mid-table and executes 7.6% of its statements. Score times
+uncovered fraction is what separates them, and what it finds first is
+`apps/ingest/src/build.ts` — 441 lines at cyclo 55 with **0 of 122 branches**
+ever taken, in code whose own header says the middle two pipeline steps are
+where an ingest goes quietly wrong. It is already pure, so it needs a fixture
+rather than a refactor. Two things that look like neglect are not: the data
+tables score in the worst five on size alone (`smallBodies.ts` is 1,729 lines at
+cyclo **7**, and fta cannot tell a catalog from a thicket), and 127 files in
+`apps/game` sit at 0% because `vitest.config.ts` registers no browser on
+purpose, which is the invariant that keeps the simulation core runnable in Node.
+Counting `pnpm test:gpu`, which covers nine render modules the main suite reports
+at 0%, the merged figure is 65.9%.
+
+A defect the instruments could not see, because it was arithmetic rather than
+shape: **`describeBody` divided by a thousand and rounded**, so every one of
+Sol's sixty-six asteroids and comets under a kilometer across described itself
+as `asteroid · 0 km · 0.922 AU` — in the one string a catalog row has to tell
+itself apart by. `formatReading` picks the unit, so Apophis reads `225 m` and
+Earth still reads `6,378 km`.
 
 ## Known gaps
 
