@@ -76,6 +76,18 @@ export function planetariumPanels(
       // seeing rather than about optics.
       icon: Eye,
       zone: 'right',
+      /*
+       * Closed on arrival, and it is the only one of the mode's own panels that
+       * is.
+       *
+       * Five switches, every one of them persisted and every one already at the
+       * setting a first view wants — names on, paths on, minor bodies and the
+       * ship off. A panel nobody has to touch is a panel that spends a quarter
+       * of the right pane on arrival and pushes the presets off the bottom of
+       * it. Reopening still puts it back in this pane, which is what
+       * `defaultOpen` buys over `zone: 'hidden'`.
+       */
+      defaultOpen: false,
       hint: 'Names, orbit paths and the ship',
       render: () => <ViewPanel {...context} />,
     },
