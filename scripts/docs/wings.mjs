@@ -218,6 +218,7 @@ export const WINGS = [
           ['docs/plans/the-timeline.md', 'The Timeline'],
           ['docs/plans/perf.md', 'Performance'],
           ['docs/plans/perf-2.md', 'Performance, Second Pass'],
+          ['docs/plans/the-shell.md', 'The Shell'],
         ],
       },
       {
