@@ -129,6 +129,54 @@ export function formatDistance(m: Meters, digits = 3): string {
   return `${(m * 1e3).toFixed(digits)} mm`
 }
 
+/**
+ * The same distance, written the way a panel is read rather than logged.
+ *
+ * `formatDistance` carries three decimals at every magnitude, which is right
+ * for a log line and wrong on screen: a camera 20,780 km out reads
+ * "20779.659 km", where the last four digits move every frame and none of them
+ * is a fact anyone is using. Three significant figures is what the reading is
+ * worth, and the thousands separator is what makes five digits scannable at a
+ * glance — the difference between "20780" and "20,780" is the difference
+ * between counting and reading.
+ *
+ * Grouped by hand rather than through `toLocaleString`, for the reason
+ * `dossier.ts` states: the browser's locale would choose the decimal separator,
+ * so the same body would render "6.371,0 km" on one machine and "6,371.0 km" on
+ * another. Every readout in this interface is an instrument reading, and
+ * instruments do not translate.
+ */
+export function formatReading(m: Meters): string {
+  if (!Number.isFinite(m)) return '—'
+  const [value, unit] = scaled(m)
+  const a = Math.abs(value)
+  return `${group(value.toFixed(a >= 100 ? 0 : a >= 10 ? 1 : 2))} ${unit}`
+}
+
+/** The same unit ladder `formatDistance` walks, without the formatting. */
+function scaled(m: Meters): readonly [number, string] {
+  const a = Math.abs(m)
+  if (a >= 1e3 * PARSEC) return [m / (1e3 * PARSEC), 'kpc']
+  if (a >= 0.05 * LIGHT_YEAR) return [metersToLightYears(m), 'ly']
+  if (a >= 0.001 * AU) return [metersToAu(m), 'AU']
+  if (a >= 1e5) return [metersToKilometers(m), 'km']
+  if (a >= 1) return [m, 'm']
+  if (a >= 0.01) return [metersToInches(m), 'in']
+  return [m * 1e3, 'mm']
+}
+
+/** Thousands separators, on the integer part only. */
+function group(fixed: string): string {
+  const sign = fixed.startsWith('-') ? '−' : ''
+  const [digits = '', fraction] = (sign === '' ? fixed : fixed.slice(1)).split(
+    '.',
+  )
+  const grouped = digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+  return fraction === undefined
+    ? `${sign}${grouped}`
+    : `${sign}${grouped}.${fraction}`
+}
+
 /*
  * What the simulation clock's zero actually is.
  *

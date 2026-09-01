@@ -41,4 +41,16 @@ export const isLabelDensity = oneOf(LABEL_DENSITIES)
 /** See `engine/presentation.ts` § `OrbitScope` for what the two mean. */
 export const ORBIT_SCOPES: readonly OrbitScope[] = ['context', 'all']
 
+/**
+ * What the two scopes are called on a chip.
+ *
+ * `context` is the field's name for "the subject's own family" and it is not a
+ * word anybody reads that way in two syllables on a 24 px control. The stored
+ * value stays the id, so rewording this is not a migration.
+ */
+export const SCOPE_LABELS: Readonly<Record<OrbitScope, string>> = {
+  context: 'Nearby',
+  all: 'All',
+}
+
 export const isOrbitScope = oneOf(ORBIT_SCOPES)

@@ -27,6 +27,7 @@ export function OptionGroup<T extends string>({
   label,
   value,
   values,
+  labels,
   onChange,
   className = '',
 }: {
@@ -34,6 +35,15 @@ export function OptionGroup<T extends string>({
   label: string
   value: T
   values: readonly T[]
+  /**
+   * What each option is called, where the stored id is not a word.
+   *
+   * `off · 2× · 4×` and `sparse · normal · dense` are already the words; an
+   * orbit scope is `context` and `all`, which are the names the presentation
+   * field goes by and not a choice anybody recognizes on a chip. The id stays
+   * the value — a stored preference must not change when a label is reworded.
+   */
+  labels?: Readonly<Record<string, string>>
   onChange: (value: T) => void
   className?: string
 }) {
@@ -60,7 +70,7 @@ export function OptionGroup<T extends string>({
           // taller than every other control in these panels.
           className={`type-label h-6 min-w-6 border-slate-700 px-2 data-[state=off]:text-slate-400 data-[state=on]:bg-sky-500/15 data-[state=on]:text-sky-200 ${FOCUS_RING}`}
         >
-          {option}
+          {labels?.[option] ?? option}
         </ToggleGroupItem>
       ))}
     </ToggleGroup>

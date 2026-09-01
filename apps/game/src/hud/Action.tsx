@@ -34,12 +34,15 @@ export function Action({
   disabled = false,
   title,
   tone = 'normal',
+  className = '',
 }: {
   label: string
   onClick: () => void
   disabled?: boolean
   title?: string
   tone?: keyof typeof TONE
+  /** Placement in whatever row it sits in, which is the caller's business. */
+  className?: string
 }) {
   return (
     <Button
@@ -82,7 +85,7 @@ export function Action({
        * of every disabled state as well. `PresetsPanel`'s phase row states the
        * same list for the same reason.
        */
-      className={`type-ui min-h-6 min-w-6 rounded border px-1.5 py-0.5 font-normal whitespace-nowrap shadow-none transition-[color,border-color,background-color,box-shadow,scale] active:scale-[0.96] disabled:opacity-35 ${FOCUS_RING} ${TONE[tone]}`}
+      className={`type-ui min-h-6 min-w-6 rounded border px-1.5 py-0.5 font-normal whitespace-nowrap shadow-none transition-[color,border-color,background-color,box-shadow,scale] active:scale-[0.96] disabled:opacity-35 ${FOCUS_RING} ${TONE[tone]} ${className}`}
     >
       {label}
     </Button>

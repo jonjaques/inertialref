@@ -511,7 +511,7 @@ describe('the observatory on the ground', () => {
      * nobody chose, the bug class `presentation.ts` exists to make
      * unrepresentable.
      *
-     * The Surface panel's site buttons take exactly this path: they call
+     * The Ground section's site buttons take exactly this path: they call
      * `visit(undefined, …)`, which resolves to the address already held.
      */
     const session = live()
@@ -637,7 +637,7 @@ describe('the observatory on the ground', () => {
   })
 
   it('moves between sites without resetting the heading or the tilt', () => {
-    // What the Surface panel's site buttons take once the camera is already
+    // What the Ground section's site buttons take once the camera is already
     // down: `stand` reads an absent heading as north and an absent pitch as the
     // horizon, so going through it would overwrite the two controls beside it.
     const session = live()
@@ -660,7 +660,7 @@ describe('the terrain verbs on a body with no ground', () => {
   it('list no sites and refuse a descent on a gas giant', () => {
     /*
      * `surveySites` derives from `body.surface`, which every body carries —
-     * Saturn included. Without the predicate at this boundary the Surface panel
+     * Saturn included. Without the predicate at this boundary the Ground section
      * draws six clickable cards for ground `visit` refuses, and the panel's own
      * "pick a solid body" empty state is unreachable for the bodies it is for.
      */

@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { effectiveFocalLength } from '@inertialref/rendering'
 import { DEFAULT_FOV_DEG, DEFAULT_LENS } from '../engine/GameEngine.ts'
 import { Action } from './Action.tsx'
@@ -21,7 +22,21 @@ import { Section } from './Section.tsx'
  * sliders write `engine.flightLens`; `CameraRig` applies it, so the value
  * survives the canvas remounting under an HDR change.
  */
-export function LensSection({ camera }: { camera: CameraState }) {
+export function LensSection({
+  camera,
+  children,
+}: {
+  camera: CameraState
+  /**
+   * A fifth row, in the same three columns.
+   *
+   * The planetarium's glare is one: an aperture's own artifact, so it is a
+   * lens channel rather than a section of its own — and it is not on
+   * `/settings/camera`, because a preference page that offered it would be
+   * offering a second writer of a value only the planetarium holds.
+   */
+  children?: ReactNode
+}) {
   return (
     <Section
       id="camera.lens"
@@ -31,25 +46,39 @@ export function LensSection({ camera }: { camera: CameraState }) {
       // 19 mm beside an 8.5° field, which is two lenses on one panel.
       trailing={`${effectiveFocalLength(camera.lens).toFixed(0)} mm`}
     >
+      {/*
+       * Label and reading on one line, the travel on the next.
+       *
+       * Three columns on one line is the arrangement every settings page uses
+       * and it is the wrong one here. A 19 rem panel minus a 5 rem label and a
+       * 7 rem reading leaves the slider about 110 px — a hundred and ten
+       * positions for a logarithmic travel from 8.4 to 68 mm, where one pixel
+       * is most of a stop. These are the mode's precise controls; the travel is
+       * what wants the width, and a label and its reading are two short strings
+       * that read perfectly well at opposite ends of a line.
+       *
+       * It also lets both of them be as long as they need to be. "Focal length"
+       * fitted a 5 rem column with nothing to spare, and "31.3 mm · 42°" is
+       * within one character of overflowing a 7 rem one.
+       */}
       {(['focal', 'zoom', 'aperture', 'focus'] as const).map((channel) => (
-        <div key={channel} className="flex items-center gap-2">
-          <span className="type-ui w-20 shrink-0 text-slate-400">
-            {LENS_CHANNELS[channel].label}
-          </span>
+        <div key={channel} className="flex flex-col">
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="type-ui shrink-0 text-slate-400">
+              {LENS_CHANNELS[channel].label}
+            </span>
+            <span className="type-readout truncate text-right text-slate-300">
+              {LENS_CHANNELS[channel].format(camera.lens)}
+            </span>
+          </div>
           <LensSlider channel={channel} camera={camera} />
-          <span className="type-readout w-28 shrink-0 text-right text-slate-300">
-            {LENS_CHANNELS[channel].format(camera.lens)}
-          </span>
         </div>
       ))}
-      <div className="mt-1 flex items-center justify-between gap-2">
-        <span className="text-pretty text-slate-400">
-          Narrow reads like a telephoto photograph; wide is for flying. The
-          compositions were solved at {DEFAULT_FOV_DEG.toFixed(0)}°.
-        </span>
+      {children}
+      <div className="mt-1 flex items-center justify-end gap-2">
         <Action
-          label="Reset"
-          title={`Back to the ${DEFAULT_FOV_DEG.toFixed(0)}° flying default`}
+          label="Reset lens"
+          title={`Back to the ${DEFAULT_FOV_DEG.toFixed(0)}° default — ${DEFAULT_LENS.focalLength.toFixed(1)} mm, no zoom, f/${DEFAULT_LENS.fStop.toFixed(1)}, focused at infinity`}
           disabled={
             camera.lens.focalLength === DEFAULT_LENS.focalLength &&
             camera.lens.zoom === DEFAULT_LENS.zoom &&

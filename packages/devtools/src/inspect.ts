@@ -1,8 +1,4 @@
-import {
-  formatDistance,
-  formatDuration,
-  type Meters,
-} from '@inertialref/shared'
+import { formatDuration, formatReading, type Meters } from '@inertialref/shared'
 import { formatSeed } from '@inertialref/procedural'
 import { UV, Vec } from '@inertialref/spatial'
 import type { World } from '@inertialref/simulation'
@@ -139,7 +135,7 @@ export function inspectEntity(
     localSpeed: Vec.length(view.localVelocity),
     localSpeedText: `${Vec.length(view.localVelocity).toFixed(1)} m/s`,
     altitude,
-    altitudeText: altitude === null ? null : formatDistance(altitude),
+    altitudeText: altitude === null ? null : formatReading(altitude),
     landed: view.landed,
     // Derived by `universe`, not open-coded here — see partitionForFrames.
     partition: partitionForFrames(world.galaxy, view.frameChain, view.position),
@@ -204,7 +200,7 @@ export function inspectRender(scene: RenderScene): RenderInspection {
         name: body.name,
         tier: body.placement.tier,
         distance: body.placement.distance,
-        distanceText: formatDistance(body.placement.distance),
+        distanceText: formatReading(body.placement.distance),
         compressed: body.placement.compressed,
       })),
     starCount: scene.stars.length,

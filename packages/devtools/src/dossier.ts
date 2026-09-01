@@ -289,7 +289,7 @@ function starDossier(world: World, system: StarSystem): Dossier {
         : { note: 'visual, at 10 pc' }),
     },
     {
-      label: 'Colour index',
+      label: 'Color index',
       value:
         cataloged?.physical.colourIndex == null
           ? null
@@ -835,7 +835,7 @@ function rotationGroup(body: Body, year: Seconds): FactGroup {
  * this panel may not make.
  */
 const RELIEF_REASON: Readonly<Record<ReliefSource, string>> = {
-  measured: 'measured from orbit; the archive outranks the model',
+  measured: 'measured from orbit rather than derived',
   ceiling: 'at the ceiling nothing measured anywhere exceeds',
   size: 'limited by the size of the body',
   strength: 'limited by what the crust can hold up',
@@ -890,7 +890,7 @@ function geologyGroup(body: Body): FactGroup | null {
           : g.craterDensity > 0.35
             ? 'Heavy'
             : 'Sparse',
-      note: `largest basin ${kilometres(g.largestCrater)} across; floors flatten past ${kilometres(g.complexDiameter)}`,
+      note: `largest basin ${kilometres(g.largestCrater)} across; craters gain flat floors past ${kilometres(g.complexDiameter)}`,
     })
   } else {
     facts.push({
@@ -1349,13 +1349,23 @@ function starSummary(
 
 function bodySummary(star: Star, body: Body, primary: Body | null): string {
   const around = primary === null ? star.name : primary.name
+  /*
+   * Earth is the ruler in both directions, and the two halves of that read
+   * differently. Above one Earth it is a multiple — "2.5× Earth’s radius" — and
+   * below one a percentage, because "0.34× Earth’s radius" is a number a reader
+   * has to convert and "34% of Earth’s radius" is one they already have.
+   *
+   * The multiple carries `×` rather than the words it used to: "at 1.00 Earth
+   * radii" is a plural over a value of one, and `at` is a preposition for a
+   * place rather than for a size.
+   */
   const size =
     body.radius >= EARTH_RADIUS
-      ? `${significant(body.radius / EARTH_RADIUS)} Earth radii`
+      ? `${significant(body.radius / EARTH_RADIUS)}× Earth’s radius`
       : `${round((body.radius / EARTH_RADIUS) * 100, 1)}% of Earth’s radius`
   const air =
-    body.atmosphere === null ? 'It has no atmosphere' : 'It holds an atmosphere'
-  return `${KIND_NOUN[body.kind]} at ${size}, going round ${around} once every ${period(body.orbitalPeriod)}. ${air}.`
+    body.atmosphere === null ? 'It has no atmosphere' : 'It has an atmosphere'
+  return `${KIND_NOUN[body.kind]}, ${size}, orbiting ${around} once every ${period(body.orbitalPeriod)}. ${air}.`
 }
 
 /* ------------------------------------------------------------------------- */

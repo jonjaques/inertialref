@@ -589,6 +589,42 @@ a {
 }
 
 /*
+ * A panel that has more in it than it is showing, saying so.
+ *
+ * The scrollbar above is the affordance in principle and is not one in
+ * practice: macOS hides an overlay scrollbar until something scrolls, so a
+ * docked panel capped at 60dvh presents a sentence cut in half at the bottom
+ * edge with nothing to suggest there is a rest of it. The Camera panel's lens
+ * copy and the whole of the presets' composition grid were both below that
+ * line, and both read as a rendering fault.
+ *
+ * The two `local` gradients scroll *with* the content and mask the two
+ * `scroll` shadows, which do not — so a shadow appears only at an end there is
+ * more content past, and both are gone when everything fits. No JavaScript, no
+ * resize observer, and nothing to keep in sync with the cap.
+ *
+ * The cover color is the panel's own ground. It is painted over a surface that
+ * already carries it at 85%, so the 10 px ramp reads as the panel rather than
+ * as a band — at full strength it would be a visible dark edge above the
+ * rounded corner.
+ */
+.scroll-cue {
+  background:
+    linear-gradient(rgb(2 6 23 / 0.85), rgb(2 6 23 / 0)) top / 100% 10px
+      no-repeat local,
+    linear-gradient(rgb(2 6 23 / 0), rgb(2 6 23 / 0.85)) bottom / 100% 10px
+      no-repeat local,
+    radial-gradient(farthest-side at 50% 0, rgb(0 0 0 / 0.55), rgb(0 0 0 / 0))
+      top / 100% 8px no-repeat scroll,
+    radial-gradient(
+        farthest-side at 50% 100%,
+        rgb(0 0 0 / 0.55),
+        rgb(0 0 0 / 0)
+      )
+      bottom / 100% 8px no-repeat scroll;
+}
+
+/*
  * Everything drawn over the scene, held at standard range.
  *
  * On the extended path the canvas carries values above diffuse white, and the

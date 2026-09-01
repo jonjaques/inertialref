@@ -213,7 +213,9 @@ export const SURFACE_ARCHETYPES: readonly SurfaceArchetype[] = [
 /** How the archetypes read in a panel and in a zoo listing. */
 const ARCHETYPE_NAMES: Readonly<Record<SurfaceArchetype, string>> = {
   'rocky-airless': 'Rocky, airless',
-  'rocky-atmosphered': 'Rocky, atmosphered',
+  // "with air", not "atmosphered" — the id is a key and the value is read
+  // under a heading in a reading room.
+  'rocky-atmosphered': 'Rocky, with air',
   'icy-dead': 'Icy, dead',
   'icy-active': 'Icy, active',
 }

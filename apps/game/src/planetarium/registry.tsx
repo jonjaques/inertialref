@@ -1,4 +1,4 @@
-import { Aperture, Eye, Image, Mountain, Sun } from 'lucide-react'
+import { Aperture, Eye, Image, Sun } from 'lucide-react'
 import type { DockPanelDefinition } from '../dock/panels.ts'
 import { Neighbourhood, StarBody } from '../icons/index.tsx'
 import type { PlanetariumContext } from './context.ts'
@@ -6,7 +6,6 @@ import { CameraPanel } from './CameraPanel.tsx'
 import { CataloguePanel } from './CataloguePanel.tsx'
 import { ObjectPanel } from './ObjectPanel.tsx'
 import { PresetsPanel } from './PresetsPanel.tsx'
-import { SurfacePanel } from './SurfacePanel.tsx'
 import { TimePanel } from './TimePanel.tsx'
 import { ViewPanel } from './ViewPanel.tsx'
 
@@ -38,7 +37,7 @@ export function planetariumPanels(
       // they do each other's job.
       icon: Neighbourhood,
       zone: 'left',
-      hint: 'what is within reach — fold it, filter it, fly to it',
+      hint: 'Everything within reach — fold it, filter it, look at it',
       render: () => <CataloguePanel {...context} />,
     },
     {
@@ -49,7 +48,7 @@ export function planetariumPanels(
       // the Camera instrument — it is the record of a thing in the sky now.
       icon: StarBody,
       zone: 'right',
-      hint: 'the record: mass, orbit, air, light',
+      hint: 'The record — mass, orbit, air, light',
       render: () => <ObjectPanel {...context} />,
     },
     {
@@ -66,7 +65,7 @@ export function planetariumPanels(
        */
       icon: Aperture,
       zone: 'right',
-      hint: 'the eye: where it looks, how far, and through what',
+      hint: 'The eye — where it looks from, and through what',
       render: () => <CameraPanel {...context} />,
     },
     {
@@ -77,7 +76,7 @@ export function planetariumPanels(
       // seeing rather than about optics.
       icon: Eye,
       zone: 'right',
-      hint: 'names, orbit traces and the ship',
+      hint: 'Names, orbit paths and the ship',
       render: () => <ViewPanel {...context} />,
     },
     {
@@ -88,26 +87,15 @@ export function planetariumPanels(
       // was compositions alone and says nothing about a fixture.
       icon: Image,
       zone: 'right',
-      hint: 'seven pictures, sixteen compositions, the light and the way out',
+      hint: 'Pictures, compositions, the light and the way out',
       render: () => <PresetsPanel {...context} />,
-    },
-    {
-      id: 'surface',
-      title: 'Surface',
-      // A mountain, because that is what the panel is for: the arm below the
-      // orbit clamp exists so terrain can be looked at, and terrain only exists
-      // down there.
-      icon: Mountain,
-      zone: 'right',
-      hint: 'stand on it — named sites, a descent from orbit to two meters',
-      render: () => <SurfacePanel {...context} />,
     },
     {
       id: 'time',
       title: 'Time',
       icon: Sun,
       zone: 'left',
-      hint: 'pause, warp and the simulated clock',
+      hint: 'The clock — pause it, warp it, read it',
       render: () => <TimePanel {...context} />,
     },
   ]

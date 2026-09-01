@@ -302,7 +302,7 @@ describe('the author’s instruments', () => {
     // All four channels are drawn, not just the focal length: an aperture the
     // depth-of-field readout depends on and no control for it is a readout
     // nobody can move.
-    for (const channel of ['Focal Length', 'Zoom', 'Aperture', 'Focus'])
+    for (const channel of ['Focal length', 'Zoom', 'Aperture', 'Focus'])
       expect(camera).toContain(channel)
     // The travel is the scrub, not the value — a logarithmic slider whose
     // `aria` range was the millimeters would announce a position it does not

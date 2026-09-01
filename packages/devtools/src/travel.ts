@@ -1,9 +1,4 @@
-import {
-  AU,
-  formatDistance,
-  LIGHT_YEAR,
-  type Meters,
-} from '@inertialref/shared'
+import { AU, formatReading, LIGHT_YEAR, type Meters } from '@inertialref/shared'
 import { UV, type UniverseVector } from '@inertialref/spatial'
 import type { World } from '@inertialref/simulation'
 import {
@@ -328,7 +323,7 @@ export function travelTargets(
       depth: 0,
       detail: star.detail,
       distance,
-      distanceText: formatDistance(distance),
+      distanceText: formatReading(distance),
       landable: false,
       loaded: system !== undefined,
       provenance: star.provenance,
@@ -361,7 +356,7 @@ export function travelTargets(
         depth: body.address.kind === 'body' ? body.address.body.length : 1,
         detail: describeBody(body),
         distance: bodyDistance,
-        distanceText: formatDistance(bodyDistance),
+        distanceText: formatReading(bodyDistance),
         landable: isLandable(body),
         loaded: true,
         // The body's own, not its system's: Sol is observed and Ganymede is
@@ -435,7 +430,7 @@ export function searchTargets(
           ? `${formatSpectralType(star.spectralType)} · ${star.physical.solarMasses.toFixed(2)} M☉`
           : `${system.star.spectralType} · ${planetCount(system)} planets`,
       distance,
-      distanceText: formatDistance(distance),
+      distanceText: formatReading(distance),
       landable: false,
       loaded: system !== undefined,
       // Everything the catalog holds is a star somebody has observed. That is

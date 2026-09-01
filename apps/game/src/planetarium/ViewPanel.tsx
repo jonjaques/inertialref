@@ -3,7 +3,7 @@ import { OptionGroup } from '../hud/OptionGroup.tsx'
 import { Section } from '../hud/Section.tsx'
 import { SwitchRow } from '../hud/SwitchRow.tsx'
 import { Asteroid } from '../icons/index.tsx'
-import { LABEL_DENSITIES, ORBIT_SCOPES } from './layers.ts'
+import { LABEL_DENSITIES, ORBIT_SCOPES, SCOPE_LABELS } from './layers.ts'
 import type { PlanetariumContext } from './context.ts'
 
 /*
@@ -26,9 +26,7 @@ import type { PlanetariumContext } from './context.ts'
  *
  * **A layer, and nothing else.** The split against the Camera panel is by what
  * a control changes: a layer changes pixels the scene does not own — names,
- * traces, the ship — and the camera changes the picture itself. The lens sat
- * here beside the toggles, under a title that is a claim about what is drawn
- * *over* the sky, which is the opposite of what a lens does.
+ * traces, the ship — and the camera changes the picture itself.
  */
 export function ViewPanel({
   labels,
@@ -63,25 +61,29 @@ export function ViewPanel({
         <SwitchRow
           icon={Tag}
           label="Names"
-          detail="draw a name against everything in view"
+          detail="Label what is in view."
           on={labels}
           onChange={onLabels}
         />
         {labels && (
           <div className="mb-1 ml-6 flex flex-col gap-1.5 border-l border-slate-800 pl-2.5">
-            <div className="flex items-center justify-between gap-2">
-              <span className="type-ui text-slate-400">Density</span>
+            {/* Label above the group rather than beside it: three options this
+                wide leave a two-word label no room, and "How many" wrapped
+                across two lines to sit next to a control it fitted under. */}
+            <div className="flex flex-col gap-1">
+              <span className="type-ui text-slate-400">How many</span>
               <OptionGroup
-                label="Label density"
+                label="How many names at once"
                 value={labelDensity}
                 values={LABEL_DENSITIES}
+                className="self-start"
                 onChange={onLabelDensity}
               />
             </div>
             <SwitchRow
               icon={Asteroid}
-              label="Minor Bodies"
-              detail="let asteroids and comets take a name slot"
+              label="Minor bodies"
+              detail="Name asteroids and comets too."
               on={labelMinor}
               onChange={onLabelMinor}
             />
@@ -90,34 +92,39 @@ export function ViewPanel({
 
         <SwitchRow
           icon={Orbit}
-          label="Orbit Paths"
-          detail="trace each body's path around its primary"
+          label="Orbit paths"
+          detail="Draw the path each body takes around its primary."
           on={orbits}
           onChange={onOrbits}
         />
         {orbits && (
           <div className="mb-1 ml-6 flex flex-col gap-1.5 border-l border-slate-800 pl-2.5">
-            <div className="flex items-center justify-between gap-2">
-              <span className="type-ui text-slate-400">Scope</span>
+            <div className="flex flex-col gap-1">
+              <span className="type-ui text-slate-400">Which ones</span>
+              {/* `context` and `all` are the presentation field's own values
+                  and neither is a word a reader recognizes on a 24 px chip.
+                  The id stays the stored value; only the caption changes. */}
               <OptionGroup
-                label="Which orbits are traced"
+                label="Which orbits are drawn"
                 value={orbitScope}
                 values={ORBIT_SCOPES}
+                labels={SCOPE_LABELS}
+                className="self-start"
                 onChange={onOrbitScope}
               />
             </div>
             <p className="type-ui text-pretty text-slate-400">
               {orbitScope === 'context'
-                ? 'the subject’s siblings and whatever goes round it'
-                : 'every orbit in the system — the architecture, from outside'}
+                ? 'The subject, what it orbits, and what orbits it.'
+                : 'Every orbit in the system.'}
             </p>
           </div>
         )}
 
         <SwitchRow
           icon={Rocket}
-          label="Show the Ship"
-          detail="the hull the flight modes fly, where it actually is"
+          label="Ship"
+          detail="Draw the hull the flight modes fly, where it actually is."
           on={ship}
           onChange={onShip}
         />

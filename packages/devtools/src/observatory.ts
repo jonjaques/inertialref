@@ -1,5 +1,6 @@
 import {
   formatDistance,
+  formatReading,
   getLogger,
   type Meters,
   type Radians,
@@ -1073,7 +1074,7 @@ export class Observatory {
       // Standing, the reader wants the height above the ground under their feet
       // — not the distance from a datum the orbit arm was last left at.
       altitude: surface?.stance.height ?? altitude,
-      altitudeText: formatDistance(surface?.stance.height ?? altitude),
+      altitudeText: formatReading(surface?.stance.height ?? altitude),
       fill,
       surface,
     }
@@ -1250,7 +1251,7 @@ export class Observatory {
        * `body.radius` folds the figure offset into a number the panel prints as
        * a terrain elevation. On Phobos that is about −3.5 km of "elevation" on a
        * body with a kilometer of relief; on Haumea it reaches −513 km. Worse, the
-       * Surface panel prints it directly under site buttons showing
+       * Ground section prints it directly under site buttons showing
        * `SurveySite.elevation`, which is the same quantity — the same place,
        * two numbers, kilometers apart.
        *
@@ -1262,7 +1263,7 @@ export class Observatory {
        */
       groundElevation: elevation,
       radius: datumRadius(body, up) + elevation + stance.height,
-      heightText: formatDistance(stance.height),
+      heightText: formatReading(stance.height),
       site: this.#site,
     }
   }
@@ -1339,7 +1340,7 @@ export class Observatory {
       system: resolved.system,
       frame: bodyFrameId(address),
       radius: body.radius,
-      detail: `${body.kind} · ${body.provenance} · ${formatDistance(
+      detail: `${body.kind} · ${body.provenance} · ${formatReading(
         body.elements.semiMajorAxis,
       )}`,
     }

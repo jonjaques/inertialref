@@ -30,7 +30,7 @@ export type SurveySiteRow = ReturnType<GameEngine['harness']['sites']>[number]
  *
  * `null` and `[]` are different answers and the panel draws different things
  * for them. The effect runs after paint, so on the render where the target
- * changes there is no list yet — returning `[]` there made the Surface panel
+ * changes there is no list yet — returning `[]` there made the Ground section
  * replace itself with "no ground here yet — pick a solid body" for one frame on
  * *every* body switch, including switches to bodies that have six sites. That
  * is the same distinction `Fact.value` makes between "none" and "not measured",

@@ -299,7 +299,7 @@ export function CataloguePanel({
           title={
             narrowed
               ? `Filters — showing ${classes.length} of ${OBJECT_CLASSES.length} classes`
-              : 'Filter by class, and set how far the survey reaches'
+              : 'Filter by class, and set how far the list reaches'
           }
           onClick={(event) => {
             releaseFocus(event)
@@ -381,7 +381,7 @@ export function CataloguePanel({
                   key={option}
                   value={option}
                   onClick={releaseFocus}
-                  title={`Sweep ${option} light years around the camera`}
+                  title={`List everything within ${option} light years of the camera`}
                   className={`type-label h-6 min-w-8 border-slate-700 px-1.5 data-[state=off]:text-slate-400 data-[state=on]:bg-sky-500/15 data-[state=on]:text-sky-200 ${FOCUS_RING}`}
                 >
                   {option}
@@ -390,8 +390,8 @@ export function CataloguePanel({
             </ToggleGroup>
           </div>
           <p className="type-ui text-pretty text-slate-400">
-            A search reaches the whole catalog whatever this says — the radius
-            is the sweep that answers “what is near me”.
+            Search always covers the whole catalog. The radius only sets how far
+            the list below reaches.
           </p>
         </div>
       )}
@@ -477,12 +477,12 @@ export function CataloguePanel({
            */
           <li className="type-ui px-1 py-2 text-pretty text-slate-400">
             {failure !== null
-              ? `the survey did not answer: ${failure}`
+              ? `The survey did not answer: ${failure}`
               : !ready
-                ? 'surveying…'
+                ? 'Surveying…'
                 : searching
-                  ? 'no charted star is called that'
-                  : `nothing within ${lightYears} ly`}
+                  ? 'Nothing in the catalog is called that.'
+                  : `Nothing within ${lightYears} ly.`}
           </li>
         )}
       </ul>
@@ -498,7 +498,9 @@ export function CataloguePanel({
       {verbs === 'travel' && (
         <div className="min-h-[2.75rem] shrink-0 rounded border border-slate-800/80 bg-slate-900/40 px-2 py-1">
           {chosen === null ? (
-            <span className="type-ui text-slate-400">pick somewhere to go</span>
+            <span className="type-ui text-slate-400">
+              Pick somewhere to go.
+            </span>
           ) : (
             <>
               <div
@@ -526,8 +528,8 @@ export function CataloguePanel({
       {groups.length > 0 && (
         <p className="type-micro shrink-0 text-slate-400 tabular-nums">
           {shown} shown
-          {hidden > 0 && ` · ${hidden} filtered`}
-          {beyondCap > 0 && ` · ${beyondCap} further out, by name`}
+          {hidden > 0 && ` · ${hidden} hidden by filters`}
+          {beyondCap > 0 && ` · ${beyondCap} further out — search by name`}
         </p>
       )}
     </div>
