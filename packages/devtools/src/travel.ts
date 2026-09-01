@@ -449,15 +449,24 @@ export function searchTargets(
 }
 
 function describeBody(body: Body): string {
-  const radiusKm = `${(body.radius / 1000).toFixed(0)} km`
-  // Moons orbit at a few hundred thousand kilometers, which `formatDistance`
-  // renders as "0.003 AU" — technically right, useless for telling two moons
-  // apart. Planets are the other way round.
+  /*
+   * `formatReading`, which picks the unit, rather than kilometers always.
+   *
+   * Sol carries sixty-six asteroids and comets and most of them are under a
+   * kilometer across, so a fixed `/1000` rounded every one of them to `0 km` —
+   * Apophis, Bennu, Ryugu and Itokawa each described as a body with no size, in
+   * the one string that is supposed to tell two rows apart. Apophis reads
+   * `185 m` now and Earth still reads `6,378 km`.
+   */
+  const radius = formatReading(body.radius)
+  // Moons orbit at a few hundred thousand kilometers, which the AU form renders
+  // as "0.003 AU" — technically right, useless for telling two moons apart.
+  // Planets are the other way round.
   const orbit =
     body.kind === 'moon'
       ? `${(body.elements.semiMajorAxis / 1000).toFixed(0)} km`
       : `${(body.elements.semiMajorAxis / AU).toFixed(3)} AU`
-  return `${body.kind} · ${radiusKm} · ${orbit}`
+  return `${body.kind} · ${radius} · ${orbit}`
 }
 
 /* ------------------------------------------------------------------------- */

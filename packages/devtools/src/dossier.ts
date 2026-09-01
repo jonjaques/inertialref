@@ -652,10 +652,22 @@ function orbitGroup(world: World, body: Body, primary: Body | null): FactGroup {
       ? `${round(elements.semiMajorAxis / AU, 6)} AU`
       : kilometres(elements.semiMajorAxis),
   })
+  /*
+   * The gloss is days, and only where the value is not already days.
+   *
+   * `period` picks the unit — hours for Phobos, days for Earth, years for
+   * Neptune — so on every body between about two days and two years the row
+   * read "365.25 d" against a gloss of "365.251 d": the same quantity in the
+   * same unit at one more decimal, which is the one thing a second scale may
+   * not be. The gloss exists so a 165-year orbit and a 7.6-hour one can be
+   * compared in one unit, and that is exactly when it is not a repeat.
+   */
+  const days = round(body.orbitalPeriod / SECONDS_PER_DAY, 3)
+  const inDays = period(body.orbitalPeriod).endsWith(' d')
   facts.push({
     label: 'Orbital period',
     value: period(body.orbitalPeriod),
-    note: `${round(body.orbitalPeriod / SECONDS_PER_DAY, 3)} d`,
+    ...(inDays ? {} : { note: `${days} d` }),
   })
   facts.push({
     label: 'Eccentricity',
@@ -1081,7 +1093,7 @@ function insolationGroup(
         note: `${significant(flux / 1361)}× Earth`,
       },
       {
-        label: 'Equilibrium temp.',
+        label: 'Equilibrium temperature',
         value: `${round(published ?? equilibrium, 0)} K`,
         note: `${round((published ?? equilibrium) - 273.15, 0)} °C${
           published === null ? ' · from the geometric albedo' : ' · published'
@@ -1504,7 +1516,12 @@ const SUN_FROM_EARTH = 9.3e-3
 
 function group(text: string): string {
   const [whole = '', fraction] = text.split('.')
-  const sign = whole.startsWith('-') ? '-' : ''
+  // U+2212, not the hyphen `toFixed` produces. In a tabular column a hyphen is
+  // two thirds the width of a digit and sits above the numerals' midline, so a
+  // negative reading is visibly narrower than the positive one under it — and
+  // `formatReading` and `elevationText` already print the real minus, so a
+  // hyphen here is two glyphs for one sign in one panel.
+  const sign = whole.startsWith('-') ? '−' : ''
   const digits = sign === '' ? whole : whole.slice(1)
   const grouped = digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
   return fraction === undefined

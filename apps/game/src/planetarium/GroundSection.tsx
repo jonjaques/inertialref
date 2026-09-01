@@ -189,7 +189,19 @@ export function GroundSection({
                 if (next !== undefined) onPitch((next * Math.PI) / 180)
               }}
               onClick={releaseFocus}
-              className="min-w-0 flex-1 py-2.5 [&_[data-slot=slider-thumb]]:size-3.5 [&_[data-slot=slider-track]]:h-1.5"
+              /*
+               * The filled range is switched off on this one slider, and only
+               * on this one.
+               *
+               * Every other travel in these panels starts at a floor that means
+               * something — no glare, no zoom, the ground — so a bar from the
+               * left end to the thumb is a reading. Tilt runs −88° to +88° and
+               * its floor is straight down, so level ground drew a bar over 53%
+               * of the track under a readout saying 0°. A bipolar control has
+               * no amount to fill; the thumb's position on a plain groove is
+               * the whole of what it has to say.
+               */
+              className="min-w-0 flex-1 py-2.5 [&_[data-slot=slider-range]]:bg-transparent [&_[data-slot=slider-thumb]]:size-3.5 [&_[data-slot=slider-track]]:h-1.5"
             />
             <div className="flex flex-wrap gap-1">
               <Action

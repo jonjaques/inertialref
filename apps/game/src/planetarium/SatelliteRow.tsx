@@ -1,3 +1,4 @@
+import { formatReading } from '@inertialref/shared'
 import type { Satellite } from '@inertialref/devtools'
 import { FOCUS_RING, releaseFocus } from '../hud/focus.ts'
 import { iconForKind } from './kinds.ts'
@@ -32,8 +33,12 @@ export function SatelliteRow({
       >
         <Glyph aria-hidden className="size-3.5 shrink-0 text-slate-400" />
         <span className="type-ui min-w-0 flex-1 truncate">{moon.name}</span>
+        {/* `formatReading`, the same formatter every other radius in this
+            panel goes through: a bare `/1000` printed Luna as "1737 km" beside
+            an Earth reading of "6,378 km", and rounded every sub-kilometer
+            shepherd moon to "0 km". */}
         <span className="type-micro shrink-0 text-slate-400 tabular-nums">
-          {Math.round(moon.radius / 1000)} km
+          {formatReading(moon.radius)}
         </span>
       </button>
     </li>
