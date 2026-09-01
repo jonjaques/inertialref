@@ -1,0 +1,5 @@
+{
+  "output_limit": 25,
+  "exclude_under": 25,
+  "extensions": [".mjs"]
+}

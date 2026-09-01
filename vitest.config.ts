@@ -73,5 +73,28 @@ export default defineConfig({
      */
     testTimeout: 20_000,
     reporters: ['dot'],
+    /*
+     * `pnpm test:coverage`. Off unless asked for — the v8 provider costs about
+     * a third of the run.
+     *
+     * `include` is the whole source tree, and that is the entire point of the
+     * block. Vitest reports only the files a test *loaded* unless the globs say
+     * otherwise, so the default denominator is "the code that has tests" and
+     * the number it prints is a statement about nothing: 85.9% measured that
+     * way, 57.2% over the tree it is measuring. A file no test imports has to
+     * count as zero or the figure rewards deleting the test.
+     *
+     * The figure is still not the whole story, because the render layer's
+     * tests are `pnpm test:gpu`, which this config excludes by suffix and which
+     * writes its own report. Nine modules under `apps/game/src/render` read 0%
+     * here and 46-100% there. `docs/plans/complexity.md` carries the merged
+     * numbers and the commands that produce them.
+     */
+    coverage: {
+      provider: 'v8',
+      reporter: ['text-summary', 'json'],
+      include: ['packages/*/src/**/*.ts', 'apps/*/src/**/*.{ts,tsx}'],
+      exclude: ['**/*.test.{ts,tsx}', '**/*.gpu.test.ts', '**/*.d.ts'],
+    },
   },
 })
