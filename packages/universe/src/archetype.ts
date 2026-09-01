@@ -234,7 +234,7 @@ export const archetypeName = (archetype: SurfaceArchetype): string =>
  *
  * It says nothing about the body's *terrain*, which has always been seeded on
  * every body in the game including the mapped ones — see the note in
- * `TERRAIN-PLAN.md` § 1 about what the version bump moves.
+ * `design/plans/terrain.md` § 1 about what the version bump moves.
  */
 export const isMappedSurface = (body: Body): boolean =>
   body.appearance.texture !== null

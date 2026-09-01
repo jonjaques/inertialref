@@ -126,11 +126,11 @@ runs in CI. `IR_SKIP_GATE=1` disables the hook when you must.
 
 - **Code comments** explain why, and specifically why the obvious thing does
   not work. Do not restate the code, and do not narrate what the file said
-  before. [`docs/STYLE.md`](../STYLE.md) § "Code comments".
+  before. [`STYLE.md`](../../STYLE.md) § "Code comments".
 - **Everything written is written in the present tense.** The code is what the
   product does now; a comment, a guide, a plan or a pull request body describes
   it as it stands, never as the version it replaced.
-  [`docs/STYLE.md`](../STYLE.md) § "Look forward, not back".
+  [`STYLE.md`](../../STYLE.md) § "Look forward, not back".
 - **Technical docs** update when the page would otherwise describe a previous
   version. See the [docs curator](../../.claude/agents/docs-curator.md).
 - **`CONTEXT.md`** gets a dated entry when you decided something, measured
@@ -156,7 +156,7 @@ bisectable. Commit each coherent piece once the Stop gate is green.
 Every commit gets a subject that is a declarative claim behind a conventional
 prefix, and an extended body saying **why** — specifically why the obvious
 approach did not work, with the numbers that settled it.
-[`docs/STYLE.md`](../STYLE.md) § "Commit messages" is the specification;
+[`STYLE.md`](../../STYLE.md) § "Commit messages" is the specification;
 `git log --oneline -20` is the calibration.
 
 A commit message is the one place a backward glance is correct, because a commit

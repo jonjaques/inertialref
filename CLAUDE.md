@@ -17,7 +17,7 @@ on this machine.
 | [`AGENTS.md`](AGENTS.md)                | Invariants and definition of done. Read first.                   |
 | [`docs/agents/`](docs/agents/README.md) | How to work here as an agent.                                    |
 | [`docs/`](docs/README.md)               | Vision, architecture, concepts, ADRs, guides, design bible.      |
-| [`docs/STYLE.md`](docs/STYLE.md)        | House voice — docs, comments, commits. American English.         |
+| [`STYLE.md`](STYLE.md)                  | House voice — docs, comments, commits. American English.         |
 | [`CONTEXT.md`](CONTEXT.md)              | Build log. Read on demand; do not treat it as the working guide. |
 | [`README.md`](README.md)                | Project overview and the twelve proven capabilities.             |
 | [`.claude/`](.claude/rules/README.md)   | Rules, skills, agents, hooks. Path-scoped rules load themselves. |
@@ -115,7 +115,7 @@ import.
   which was true, mine, and thirty seconds of noise for both of us. Land the
   experiment first, or launch the audit after.
 - Write documentation, comments and commit messages in the voice in
-  [`docs/STYLE.md`](docs/STYLE.md), and write all of them in the present tense.
+  [`STYLE.md`](STYLE.md), and write all of them in the present tense.
   The code is what the product does now; nothing describes the version it
   replaced. History has three homes — `CONTEXT.md`, an ADR, and the commit
   message of the change itself.

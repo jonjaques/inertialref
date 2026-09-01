@@ -61,10 +61,10 @@ Reasoning: [ADR-0022](../../docs/adr/0022-the-timeline.md).
   scope, so an interval measured on one thread and emitted on another lands wrong. The
   level crosses as a protocol message, never as a query on the worker's URL.
 
-- **Read the two passes before optimizing anything, and measure on a quiet
-  machine.** [perf](../../docs/plans/perf.md) and
-  [perf-2](../../docs/plans/perf-2.md) carry every figure, what was declined and
-  why, and which numbers are stale — including the ones the rig was lying about.
+- **Read the performance plan before optimizing anything, and measure on a quiet
+  machine.** [perf](../../design/plans/perf.md) carries every open figure, what
+  was declined and why, and which numbers are stale — including the ones the rig
+  was lying about.
   The commonest shape is a rebuild key mixing two invalidation sources, so the
   cheap half pays the expensive half's cadence. A build running beside a
   measurement takes worker runs from 45 ms to 285.

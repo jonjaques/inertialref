@@ -44,7 +44,7 @@ const OPTIONS = {
   targets: { type: 'boolean', default: false },
   'self-test': { type: 'boolean', default: false },
   /**
-   * Walk the terrain zoo and print what a descent costs. See TERRAIN-PLAN § 9.
+   * Walk the terrain zoo and print what a descent costs. See docs/guides/harness.md.
    *
    * Off by default because it generates systems and a few hundred heightfields
    * — a couple of seconds, against the twenty milliseconds an ordinary run

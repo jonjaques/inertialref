@@ -22,9 +22,9 @@ import type { Seed } from './seed.ts'
  * and this is the one JavaScript spelling of them that cannot drift.
  *
  * The GPU half of that promise is the reason to prefer these over anything
- * cleverer: `TERRAIN-PLAN.md` § 4 makes structural decisions — which crater
- * exists, which cell holds a plate nucleus — bit-identical everywhere, while
- * float arithmetic is allowed to differ. Integer hashing is how that line is
+ * cleverer: `docs/adr/0023-the-gpu-producer.md` keeps structural decisions —
+ * which crater exists, which cell holds a plate nucleus — bit-identical
+ * everywhere, while float arithmetic is allowed to differ. Integer hashing is how that line is
  * drawn, so every *placement* question goes through this file and only
  * amplitudes go through floats.
  */

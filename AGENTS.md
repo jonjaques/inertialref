@@ -34,7 +34,7 @@ session, because the first commit, the commit message and the choice of a browse
 tool all happen before any glob would fire. They govern process, prose and tooling
 rather than the code, so they mirror
 [`docs/agents/working.md`](docs/agents/working.md),
-[`docs/STYLE.md`](docs/STYLE.md) — the writing rules for every comment, document
+[`STYLE.md`](STYLE.md) — the writing rules for every comment, document
 and commit message here — and the
 [`drive` skill](.claude/skills/drive/SKILL.md), and are deliberately absent from
 the invariant map.
@@ -276,6 +276,13 @@ Violating one of these is a rewrite later, not a refactor.
   caught its own author: the record arguing for the documentation site was the
   one page the site would not publish.
   [ADR-0016](docs/adr/0016-documentation-as-a-mode.md).
+- **Never write a plan under `docs/`.** Plans, working reviews and tooling
+  reports go in `design/`, which is outside the published tree. `docs/` is the
+  finished account of what the system does; a reader who reaches a
+  documentation page expects the system to already behave that way, and a plan
+  promises the opposite. Once a plan's phase lands, the decision it settled
+  belongs in an ADR and the plan loses the section — the ADR is what the code
+  and the guides then cite.
 - **Never let a cinematic effect fire off a script.** An effect is staging.
   It belongs in `CinematicEffects`, where a shot turns it on, and it is 0
   everywhere else. [Cinematics](docs/guides/cinematics.md).

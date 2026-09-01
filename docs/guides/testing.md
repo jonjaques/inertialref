@@ -9,9 +9,11 @@ means something.
 >
 > That now includes the client. `vitest.config.ts` covers `apps/*` as well as
 > `packages/*`, and `apps/game/src/engine/gameEngine.test.ts` drives the real
-> frame loop, origin rebasing, save/load and derived-state invalidation under
-> Node — because `GameEngine` takes its worker factory and save store as
-> arguments instead of constructing a browser `Worker` and IndexedDB itself.
+> frame loop, lens resolution, observatory framing, save/load and
+> derived-state invalidation under Node — because `GameEngine` takes its worker
+> factory and save store as arguments instead of constructing a browser
+> `Worker` and IndexedDB itself. Its terrain descent is the one part of that
+> file the suite does not currently run; see below.
 
 ---
 
@@ -204,6 +206,19 @@ four landings is nearly seven minutes where one is a hundred — and because an
 before it. What brings the number down is the GPU tile producer or a pool with
 real worker threads in it, not a shorter landing.
 
+**That descent carries `describe.skip`, so the suite does not currently run
+it.** One file is ninety percent of `pnpm test`'s wall clock, and all of that
+file is this `beforeAll` — so the skip buys the Stop gate its ninety seconds
+back and costs `pnpm check` and CI the one place "the ship lands on the ground
+it drew" is proved. It is a trade rather than a fix, and the version that keeps
+both puts any test that streams a landing in a second vitest project the
+per-turn gate does not run: `apps/game/vitest.gpu.config.ts` is already that
+shape, a project selected by a file suffix the root config excludes. Until
+then, a change under `engine/terrainStreamer.ts` or the terrain path is
+unproven by the gate — drop the `.skip` and run the file before shipping one.
+[Test speed](../../design/plans/test-speed.md) carries the measurements and the
+options.
+
 **The figure moves with the field, which is why it is not a budget.** A bordered
 65×65 patch costs 22 to 50 ms across the zoo, and every level the detail floor
 gains is another ring of them paid here at full serial cost; the browser has a
@@ -278,8 +293,12 @@ pixel ramp, the terrain kernels against their CPU originals — runs in about
 **16 s** on an M5. One test is fifteen of them: `terrainKernel.gpu.test.ts`
 holding the tile kernel to `generateHeightfield` across the zoo and the levels.
 The bands are 2.4 s and the producer 1.2 s beside it, and the rest of the
-suite, Dawn's boot included, is under half a second. The reasoning and the
-measurements are [the headless WebGPU plan](../plans/headless-webgpu.md).
+suite, Dawn's boot included, is under half a second. Why that config exists and
+why it sits outside `pnpm check` is its own header,
+[`apps/game/vitest.gpu.config.ts`](../../apps/game/vitest.gpu.config.ts); what
+is still open — whether a hosted macOS runner gives Dawn a Metal adapter, and
+the two limits on how far these answers travel — is
+[the headless WebGPU plan](../../design/plans/headless-webgpu.md).
 
 It is a separate command rather than part of `pnpm test` because it makes a
 different portability claim: the rest of the suite runs on any Node, and this
@@ -353,12 +372,12 @@ otherwise assert in prose.
 
 ## What is not covered yet
 
-| Gap                                                                                                                              | Roadmap                                            |
-| -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| A fixture captured from a released build, for real compatibility testing (the v0 shape is covered, but from an inline literal)   | [roadmap](../roadmap.md#persistent-mutations)      |
-| Recorded input replay                                                                                                            | [roadmap](../roadmap.md#replay-and-reconciliation) |
-| Performance regression benchmarks                                                                                                | [roadmap](../roadmap.md#performance-work)          |
-| Shader behavior in CI — `pnpm test:gpu` needs a physical adapter, and whether a hosted macOS runner gives Dawn one is unmeasured | [headless WebGPU](../plans/headless-webgpu.md)     |
+| Gap                                                                                                                              | Roadmap                                                  |
+| -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| A fixture captured from a released build, for real compatibility testing (the v0 shape is covered, but from an inline literal)   | [roadmap](../roadmap.md#persistent-mutations)            |
+| Recorded input replay                                                                                                            | [roadmap](../roadmap.md#replay-and-reconciliation)       |
+| Performance regression benchmarks                                                                                                | [roadmap](../roadmap.md#performance-work)                |
+| Shader behavior in CI — `pnpm test:gpu` needs a physical adapter, and whether a hosted macOS runner gives Dawn one is unmeasured | [headless WebGPU](../../design/plans/headless-webgpu.md) |
 
 ---
 
@@ -367,6 +386,7 @@ otherwise assert in prose.
 ```bash
 pnpm test                       # everything that runs on any Node
 pnpm test:gpu                   # the shader suite, on the real GPU — not in check
+pnpm test:coverage              # the same suite, plus coverage/coverage-final.json
 pnpm vitest run world.test      # one file
 # One GPU file. The root config excludes the suffix, so the plain form above
 # answers "No test files found" for anything named *.gpu.test.ts.

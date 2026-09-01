@@ -14,6 +14,11 @@
  * only way a new document can be added without silently ending up nowhere —
  * `build.mjs` fails on an unlisted file rather than guessing a wing for it.
  *
+ * The plans are deliberately not here. They live in `design/`, outside the
+ * published tree, because a plan describes what is not built yet and a reader
+ * who reaches a documentation site expects the system to already behave the way
+ * the page says. `docs/` is the finished account; `design/` is the working one.
+ *
  * ## The masthead is looking at something real
  *
  * Each wing carries a framing: an address in the live simulation, the phase
@@ -78,7 +83,7 @@ export const WINGS = [
     id: 'concepts',
     label: 'Concepts',
     blurb:
-      'The ten mechanisms that carry the architecture, and the seventeen decisions underneath them.',
+      'The ten mechanisms that carry the architecture, and the twenty-four decisions underneath them.',
     framing: { address: 's:SOL/b:5', phase: -122, tilt: -26, fill: 1.5 },
     groups: [
       {
@@ -208,21 +213,6 @@ export const WINGS = [
         ],
       },
       {
-        /* A plan describes what is not built yet, so it is not a guide — a
-           reader who follows a guide expects the system to already behave that
-           way. Filed beside them because the audience is the same one. */
-        label: 'Plans',
-        pages: [
-          ['docs/plans/headless-webgpu.md', 'Headless WebGPU'],
-          ['docs/plans/test-speed.md', 'Test Speed'],
-          ['docs/plans/the-timeline.md', 'The Timeline'],
-          ['docs/plans/perf.md', 'Performance'],
-          ['docs/plans/perf-2.md', 'Performance, Second Pass'],
-          ['docs/plans/the-shell.md', 'The Shell'],
-          ['docs/plans/complexity.md', 'Complexity and Coverage'],
-        ],
-      },
-      {
         label: 'For Agents',
         pages: [
           ['AGENTS.md', 'The Working Card'],
@@ -230,7 +220,7 @@ export const WINGS = [
           ['docs/agents/working.md', 'Working in the Repository'],
           ['docs/agents/invariants.md', 'Invariant Map'],
           ['docs/agents/driving.md', 'Driving the Simulation'],
-          ['docs/STYLE.md', 'House Style'],
+          ['STYLE.md', 'House Style'],
         ],
       },
     ],

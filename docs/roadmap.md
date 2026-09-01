@@ -109,7 +109,7 @@ yet.
 ## Terrain
 
 The most visible shallowness, and the milestone in progress —
-[TERRAIN-PLAN](../TERRAIN-PLAN.md) sequences it.
+[The terrain plan](../design/plans/terrain.md) sequences it.
 
 ```mermaid
 flowchart TB

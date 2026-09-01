@@ -577,8 +577,8 @@ export const MICRO_DETAIL_FLOOR: Meters = 1
 /**
  * The shortest ground wavelength the canonical field carries, meters.
  *
- * `TERRAIN-PLAN.md` § 5 names the canonical floor as roughly 0.5 m of amplitude
- * at ~8 m of wavelength, and this is the wavelength half of it. Below it,
+ * `docs/adr/0019-the-geology.md` names the canonical floor as roughly 0.5 m of
+ * amplitude at ~8 m of wavelength, and this is the wavelength half of it. Below it,
  * detail is synthesized at render time and may differ between backends by
  * design — the divergence is bounded, named and measured rather than denied.
  * A landing ship spans tens of meters, so ground that is right to within this

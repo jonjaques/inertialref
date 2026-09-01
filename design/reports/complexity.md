@@ -1,10 +1,18 @@
 # Complexity and coverage
 
-Two instruments over the whole tree, and the places they disagree. `fta` scores
-every file for size, vocabulary and branching. `@vitest/coverage-v8` says which
-of those branches a test has ever taken. Neither is worth much alone — the
-worst-scoring file in the repository is also one of the best covered, and the
-worst-covered app scores mid-table — and the pairing is what this page is for.
+Three instruments over the whole tree, and the places they disagree. `fta`
+scores every file for size, vocabulary and branching. `@vitest/coverage-v8` says
+which of those branches a test has ever taken. `knip` asks a question neither of
+them can: whether the code needs to exist. None is worth much alone — the
+worst-scoring file in the repository is also one of the best covered, the
+worst-covered app scores mid-table, and a file nothing imports scores and covers
+like any other — and the pairing is what this page is for.
+
+The third instrument earns its place by inverting the other two. `fta` and
+coverage both grade code on the assumption that it runs; they rank a dead file
+and count its unexecuted statements exactly as they would a live one. So the
+cheapest simplification available — deletion — is the one thing the pair is
+structurally blind to.
 
 Findings only. Nothing below is changed except the tool wiring in
 [The wiring](#the-wiring), because each finding is a decision about shape or
@@ -15,11 +23,12 @@ its own.
 
 ## Where the numbers come from
 
-| Instrument                                 | Command                                                  | Cost                    |
-| ------------------------------------------ | -------------------------------------------------------- | ----------------------- |
-| `fta-cli` 3.0.1                            | `pnpm fta`                                               | 434 files in **0.09 s** |
-| `vitest` 4.1.10 with `@vitest/coverage-v8` | `pnpm test:coverage`                                     | **31 s**                |
-| the GPU suite, instrumented                | `pnpm test:gpu --coverage --coverage.reportsDirectory=…` | **85 s**                |
+| Instrument                                 | Command                                                  | Cost                       |
+| ------------------------------------------ | -------------------------------------------------------- | -------------------------- |
+| `fta-cli` 3.0.1                            | `pnpm fta`                                               | 434 files in **0.09 s**    |
+| `knip` 6.33.0                              | `pnpm knip`                                              | 16 workspaces in **0.7 s** |
+| `vitest` 4.1.10 with `@vitest/coverage-v8` | `pnpm test:coverage`                                     | **31 s**                   |
+| the GPU suite, instrumented                | `pnpm test:gpu --coverage --coverage.reportsDirectory=…` | **85 s**                   |
 
 Node 26.5.0, macOS 26.6, Apple M5. Complexity and coverage percentages are
 properties of the tree and reproduce anywhere; the durations are not.
@@ -31,17 +40,17 @@ gitignored.
 **One block is outside the measurement, and cannot be brought inside it
 cheaply.** `apps/game/src/engine/gameEngine.test.ts`'s descent suite streams a
 whole disk of 65×65 heightfields serially in its `beforeAll` — 101 s
-uninstrumented ([test speed](test-speed.md)), and past vitest's 300 s
+uninstrumented ([test speed](../plans/test-speed.md)), and past vitest's 300 s
 `hookTimeout` with the v8 provider attached, where it fails the run rather than
 reporting. So every figure here excludes that suite, and the descent path is
 understated by an unknown amount: `engine/GameEngine.ts` reads 75% and
 `engine/terrainStreamer.ts` 85% without it. Raising `hookTimeout` buys the
 number for eight minutes a run, which is the wrong trade; the worker pool that
-[test speed](test-speed.md) proposes buys it for nothing.
+[test speed](../plans/test-speed.md) proposes buys it for nothing.
 
 ---
 
-## Reading the two instruments
+## Reading the three instruments
 
 **fta counts code, not lines.** `dossier.ts` is 1,676 lines on disk and fta
 calls it 1,155. The difference is comments, which `include_comments` leaves out
@@ -65,6 +74,19 @@ loads. Against the source tree it reads **57.2%** over 354 — because 147 sourc
 files never execute a statement and the default omits them entirely, which means
 the figure improves when a test is deleted. `vitest.config.ts` now carries the
 globs; the honest number is the one below.
+
+**knip's default entry set accuses, just as badly, and in the same shape.** Run
+cold it reports **48 unused files**, of which 38 are tests. Its vitest plugin
+looks for a vitest config in the workspace it is scanning, and this repository
+has exactly one, at the root, covering all sixteen — which `vitest.config.ts`
+explains as a deliberate choice, one Node environment for the whole tree. So
+every test under `apps/game` reads as a file nothing imports. `packages/*`
+compounds it: nothing there is built, `exports` points straight at
+`./src/index.ts`, and a default that expects `dist` finds no entry at all. With
+the entry globs declared in `knip.jsonc` the same run reports **5**. Both
+instruments have a denominator you must state before the number means anything;
+coverage's flatters and knip's accuses, and the failure mode of each is that the
+default looks like an answer.
 
 **The render layer's coverage lives in a second suite.** The root config
 excludes `*.gpu.test.ts` on purpose, so `pnpm test` reports nine modules under
@@ -121,8 +143,11 @@ The gap is two apps, and only one of them for a reason.
 
 ## Findings
 
-Ranked by `fta_score × uncovered fraction` — a file that is complex _and_
-unexercised, rather than either alone.
+One to seven are ranked by `fta_score × uncovered fraction` — a file that is
+complex _and_ unexercised, rather than either alone. Eight to eleven come from
+knip and do not belong on that scale at all: they are not about code that is
+hard or unrun, but about code that does not need to be there, which no ranking
+of complexity against coverage can order.
 
 ### 1. `apps/ingest` is 7.6% covered and nothing structural stops it
 
@@ -166,6 +191,16 @@ call the pure transform → write_ and the transform takes text and returns
 records, is what makes them testable against a checked-in fixture. It drops
 both cyclo numbers as a side effect, since the branching is almost all in the
 parse half.
+
+**knip finishes the thought.** It reports `tableRows` and `firstNumber` as
+unused exports — both are called inside `solarReference.ts` and imported by
+nothing, anywhere. So the seam is not half-built; it is built, and nothing
+crosses it. The `export` keyword on those two functions exists for a test that
+was never written, which is why the file reads 0% with a pure parser already
+sitting exported at the top of it. That is the whole finding in one line, and it
+takes all three instruments to see: `fta` says the file is complex, coverage
+says it is unrun, and knip says the door someone cut for the test is still
+shut.
 
 ### 3. `GameHarness` has 31 of 93 functions that nothing enters
 
@@ -251,6 +286,75 @@ above 79%. It imports six things from `descent.ts` and three from the terrain
 zoo, all of which are covered — so this is a thin uncovered layer over a tested
 one, which is the cheap kind to close.
 
+### 8. A local `const require` makes every static analyzer wrong about the graph
+
+`packages/devtools/src/cutscenes/tngIntro.ts:1039` declares a helper named
+`require` — `const require = (name: string): Body => …` — and calls it four
+times with the names of planets. knip reports the result as four **unlisted
+dependencies**: `Earth`, `Mars`, `Jupiter`, `Saturn`.
+
+The tool is not confused so much as correct about the wrong thing. `require(…)`
+with a string literal is a module request to every bundler, linter and analyzer
+that reads this tree, and a shadowing binding is resolved after the graph is
+built, not before. The file is ESM, so the name is free — which is exactly why
+nothing has complained until something walked the graph. It is a one-word rename
+with no callers outside those four lines, and it is the only reason
+`pnpm knip:check` cannot go into `pnpm check` today.
+
+### 9. Five files that nothing imports, 274 lines
+
+| File                                          | Lines | Why it is here                  |
+| --------------------------------------------- | ----- | ------------------------------- |
+| `apps/game/src/components/ui/tabs.tsx`        | 89    | shadcn/ui, generated and unused |
+| `apps/game/src/hud/AddressForm.tsx`           | 59    | HUD component, never mounted    |
+| `apps/game/src/components/ui/scroll-area.tsx` | 56    | shadcn/ui, generated and unused |
+| `apps/game/src/hud/NavFailure.tsx`            | 47    | HUD component, never mounted    |
+| `apps/game/src/hud/ConnectionPip.tsx`         | 23    | HUD component, never mounted    |
+
+The two `components/ui` files are shadcn output: the generator writes a
+component per primitive whether or not a screen wants it, and deleting them is
+free — the CLI rewrites them on demand. The three `hud` components are not the
+same thing. They are hand-written, they compile, and they read as parts staged
+ahead of the screen that mounts them, which is a legitimate state for a file to
+be in and an illegitimate one for it to stay in indefinitely. They are also
+invisible to the other two instruments in the most misleading possible way: all
+three sit in the 127 files `apps/game` reports at 0%, indistinguishable from the
+React surface that the Node-only test environment explains.
+
+### 10. Sixty-nine unused exports, and 81% of them are in one app
+
+46 unused exports and 23 unused exported types. `apps/game` holds 56 of the 69,
+`apps/ingest` 11, and `packages/*` exactly one — `walkSmallBodies`, in the
+1,729-line catalog that already scores second worst in the repository.
+
+Most of the `apps/game` set is one pattern repeated: paired bound constants that
+a test asserts against and nothing imports — `FOV_MIN`/`FOV_MAX`,
+`ZOOM_MIN`/`ZOOM_MAX`, `F_STOP_MIN`/`F_STOP_MAX`, `FOCUS_MIN`/`FOCUS_MAX` in
+`hud/controls.ts` alone. That is not dead code and the export is not a mistake;
+it is the visible cost of testing a module through its constants instead of its
+behavior, and it is why `exports` is a warning here rather than an error.
+
+The `apps/ingest` eleven are a different matter, because they sit inside the two
+files findings 1 and 2 are about. `tableRows`, `firstNumber`, `rawDirectory`,
+`PlanetRecord`, `SatelliteRecord`, `SmallBodyRecord`, `ShapeEntry`,
+`TextureEntry`, `Licence` — an app at 7.6% coverage exporting eleven names that
+nothing outside it reads. Every one of them is a seam cut for a test that does
+not exist.
+
+### 11. One cycle, and two exports that mean the same thing
+
+`packages/universe/src/solar/system.ts → packages/universe/src/system.ts →
+packages/universe/src/solar/system.ts`. The only cycle in sixteen workspaces,
+and it is inside the package `pnpm graph` polices — that gate enforces layering
+_between_ packages, so a loop within one is exactly the shape it cannot see.
+
+Two names are also exported twice from one place each:
+`PANE_ZONES`/`DROP_ZONES` in `apps/game/src/dock/layout.ts`, and
+`MAX_KERNEL_LEVELS`/`GRIT_FRAMES_AT` in `packages/universe/src/terrainKernel.ts`.
+An alias is fine when a rename is in progress and a liability when it is not,
+because the second name is where a caller finds a value the first name's
+documentation describes.
+
 ---
 
 ## What is not a finding
@@ -280,6 +384,8 @@ of code; `system.ts` is 2,026 and 1,081. Neither difference moves the ranking.
 ---
 
 ## The wiring
+
+### fta
 
 `fta.json` at the repository root, and two scripts that follow the
 `brand` / `brand:check` and `presets` / `presets:check` pattern:
@@ -314,6 +420,43 @@ change: it means a change that pushes any file past 91 fails CI, and the
 declarative files in [What is not a finding](#what-is-not-a-finding) are the
 ones nearest the line. That is a decision to make deliberately.
 
+### knip
+
+`knip.jsonc` at the repository root, and the same two-script split:
+
+```
+pnpm knip          # the whole report, always exit 0
+pnpm knip:check    # files, dependencies, unlisted, unresolved — exits 1 on any
+```
+
+**The split is the same decision `fta.json` makes about `score_cap`, for the
+same reason.** knip takes severities in the config, but a severity there applies
+to the report too, which turns `pnpm knip` into something that exits 1 while
+printing the answer. So `knip.jsonc` carries no `rules` and the two commands
+differ only in `--include`.
+
+What `knip:check` includes is the argument. Files, dependencies, unlisted and
+unresolved are unambiguous — a file nothing reaches and a dependency nothing
+imports are both dead weight in the install, and a `pnpm install` that fetches
+`@inertialref/physics` for `apps/game` is doing work for nobody. An unused
+**export** is not in that class, per finding 10: this tree exports named
+constants for a test to assert against, and a component can be finished before
+the screen that mounts it. Promoting `exports` to an error would make finding 10
+a build failure, which is a different decision from noticing it.
+
+Everything else in the config is entry globs, and finding 8 is the reason
+`pnpm knip:check` is **not** in `pnpm check` yet: it is red today, on four
+phantom dependencies named after planets, three staged HUD components and three
+workspace dependencies nothing imports. Green it first, then wire it — a ratchet
+installed while it is already failing teaches people to pass `--no-exit-code`.
+
+The one config entry that is neither a ratchet nor an entry glob is
+`ignoreUnresolved` on `apps/game`, and it records a genuine disagreement rather
+than a waiver: `vitest.gpu.config.ts` writes its `setupFiles` path from the
+repository root, because vitest resolves that option against its `root` — the
+working directory — while knip resolves a workspace config against the
+workspace. One of the two has to be told twice.
+
 ---
 
 ## Reproduce
@@ -321,6 +464,9 @@ ones nearest the line. That is a decision to make deliberately.
 ```bash
 pnpm fta                                    # the ranked table
 pnpm fta --json > .scratch/fta.json         # every metric, per file
+pnpm knip                                   # the whole report
+pnpm knip --reporter json                   # the same, per file
+pnpm knip --cycles                          # circular imports (finding 11)
 pnpm test:coverage                          # summary + coverage/coverage-final.json
 
 # the GPU suite's half, which pnpm test excludes by suffix

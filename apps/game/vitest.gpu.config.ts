@@ -14,8 +14,9 @@ import { defineConfig } from 'vitest/config'
  *
  * What it buys is the one feedback loop the browser rig cannot give: a TSL
  * graph compiled to a Metal pipeline, its WGSL read back, and its pixels
- * asserted against arithmetic — in milliseconds, from a test file. The
- * reasoning and the measurements are `docs/plans/headless-webgpu.md`.
+ * asserted against arithmetic — in milliseconds, from a test file. How to write
+ * a bound that survives that pipeline is `docs/guides/testing.md`; what is still
+ * unanswered about running it in CI is `design/plans/headless-webgpu.md`.
  */
 export default defineConfig({
   // The same `define` and alias the root config carries, and for the same

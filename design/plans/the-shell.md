@@ -2,10 +2,10 @@
 
 A review of the app shell — `apps/game/src/App.tsx`, the two route tables, the
 ten type steps in `index.css`, and how the five modes cohere as one interface.
-Findings only. **Nothing below is fixed**, and several entries are policy
-decisions rather than defects: what the compact layout is for, whether the boot
-cover persuades, and how much of the author's instruments a visitor should meet.
-Those are not decisions a measurement makes on its own.
+Every finding below is open. Several are policy decisions rather than defects:
+what the compact layout is for, whether the boot cover persuades, and how much
+of the author's instruments a visitor should meet. Those are not decisions a
+measurement makes on its own.
 
 > **The standing test is answered.**
 > [`PRODUCT.md`](../../PRODUCT.md) sets it — "would this still be readable with
@@ -86,12 +86,14 @@ border-sky-300/40`, and its `size-1.5` twin at
   already specifies.
 - **Navigation icons in the reading mode** — `docs/DocFooter.tsx:46,66` and
   `docs/DocsRailGroup.tsx:53` at `text-slate-600`, 2.2–2.6:1, below the 3:1
-  non-text floor. `pages/ModeRow.tsx:31` is `slate-500` for the same reason.
+  non-text floor. `pages/ModeRow.tsx:31` is `slate-500` for the same reason —
+  the icon, not the label beside it, which that file's own comment already
+  argues down to the 400 floor.
 
 **Caveat, because the point matters more than the figure.** These numbers
 describe chrome with a bright scene _beside_ it. The cockpit HUD specified in
-[`docs/design/ux.md`](../design/ux.md) is projected on the canopy — over the
-subject, by construction — so none of this transfers to it. The Edge Rule is
+[`docs/design/ux.md`](../../docs/design/ux.md) is projected on the canopy — over
+the subject, by construction — so none of this transfers to it. The Edge Rule is
 carrying at least as much of the result as the translucency is.
 
 ---
@@ -242,38 +244,14 @@ status line, driven by the ratio the string already parses to.
 | `pages/FooterLink.tsx:18`            | `min-h-6` — 24px tap targets, measured 105×24, 66×24 and 53×24 at 390×844, in a build that sets 44px as the thumb minimum                                                                                                                                                                                                                                                                                                                      |
 | `planetarium/CataloguePanel.tsx`     | 138 rows at 324×28 inside the compact sheet: 151 of 161 targets there are under 44×44. The compact bar itself is 3 targets and 0 undersized                                                                                                                                                                                                                                                                                                    |
 | `planetarium/CataloguePanel.tsx:265` | The search placeholder names the field (`Name or address`); `hud/AddressForm.tsx:42` teaches the syntax and lives behind the instruments disclosure                                                                                                                                                                                                                                                                                            |
-| Orbit path layer                     | Defaults to `NORMAL`, and at `s:SOL` that is thirty-odd chords crossing the frame including the subject — the ellipses are edge-on at these distances, so it reads as wireframe debris. The loudest element in the product, on by default                                                                                                                                                                                                      |
+| Orbit traces                         | `planetarium.orbits` is `initial: true` and `planetarium.orbitScope` is `context`, so at `s:SOL` the first frame carries thirty-odd chords crossing the subject — the ellipses are edge-on at these distances, so it reads as wireframe debris. The loudest element in the product, on by default                                                                                                                                              |
 | `pages/KeysPage.tsx`                 | Two rows render invisible key caps — a backtick and a comma at 11px `slate-400` — and the sheet clips mid-row with no scroll affordance                                                                                                                                                                                                                                                                                                        |
 | `cinema/CinemaLibrary.tsx`           | `type-display` on a mode name, where the type table reserves that step for the product name on the front door and gives a mode `type-title`                                                                                                                                                                                                                                                                                                    |
 | Settings tab                         | A filled chip, where `DESIGN.md` specifies a `border-sky-400` underline for Instrument Blue 400                                                                                                                                                                                                                                                                                                                                                |
 | `type-micro` carrying prose          | Twelve sites set sentences in the 10px mono step, which the type table assigns to a chart axis, a unit or a timecode. Prose is `type-body`                                                                                                                                                                                                                                                                                                     |
 | Reduced motion                       | Honored properly — `MotionConfig reducedMotion="user"` at `main.tsx:187` covers all nine `motion/react` sites, and `index.css:992` kills the only `@keyframes`. Four transforms are ungated: `animate-spin` in `BootOverlay.tsx:60`, `animate-in`/`animate-out` in `tooltip.tsx:85-86`, `hover:scale-125` in `NeighbourhoodRail.tsx:83`, and the front door's raw-rAF camera orbit at 1.8°/s, which is the largest-field motion in the product |
-| `body`                               | Carries `transition: width` on every route                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `body`                               | Computes `transition: width` on every route. Nothing in `index.css` sets it, so the source is whatever injects it, and that is the first thing to find                                                                                                                                                                                                                                                                                         |
 | `/docs` diagrams                     | Mermaid node and edge labels sit at the low end of the ramp and are close to illegible. 87 diagrams                                                                                                                                                                                                                                                                                                                                            |
-
----
-
-## What holds
-
-- **The panel material survives the design case**, and now at two operating
-  points that differ in the variable the claim is about.
-- **Zero console errors and zero warnings** on a cold load of all five routes,
-  for an application booting a WebGPU renderer, a worker pool, a service worker
-  and a catalog. Each boot emits 136–145 `info` lines from the engine's own
-  logging.
-- **The mechanical scan finds nothing.** 177 files across ten trees: four
-  findings, all four false positives — three are Radix `data-[state=…]` class
-  strings whose off-state gray and on-state fill never co-occur in the DOM, and
-  one is an `aria-current` marker read as a decorative card accent. Re-running
-  with the design system disabled produces the identical four, so nothing is
-  being suppressed.
-- **The compact layout is a better interface than the desktop one**, by its own
-  measurements, for a reason the code already states.
-- **The guarded disclosure is the right shape for the scaffolding principle.**
-  `hud/registry.tsx` puts the author's panels in one group behind one glyph,
-  every one `defaultOpen: false`, so the instruments say they exist without
-  filling both panes — and the planetarium's product panels are a separate,
-  unguarded registry.
 
 ---
 
@@ -282,6 +260,5 @@ status line, driven by the ratio the string already parses to.
 `body()` in [`scripts/drive.mjs`](../../scripts/drive.mjs) treats any `--js` or
 `--file` payload containing a `;` or a newline as a function body, so an IIFE,
 or any multi-line file without a top-level `return`, evaluates and returns
-`null` with no diagnostic. Two independent passes lost invocations to it before
-reading the source. A warning when the completion value is `undefined` and the
-payload contains no `return` would cost one line.
+`null` with no diagnostic. A warning when the completion value is `undefined`
+and the payload contains no `return` would cost one line.

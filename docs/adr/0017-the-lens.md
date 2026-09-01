@@ -28,7 +28,7 @@ the terrain refinement predicate's only source of optics, and it is a guess:
 anything the field-of-view slider's 20–110° passes through except in transit.
 A node refines while `distance < spacing · scale` where `scale` goes as
 `pixelsPerRadian`, so the guess sets how much terrain exists — every patch count
-in [the terrain plan](../../TERRAIN-PLAN.md), the `maxPatches` cap, and the level
+in [the terrain plan](../../design/plans/terrain.md), the `maxPatches` cap, and the level
 the horizon settles at.
 
 [Phase 1](0015-terrain-level-of-detail.md) made that predicate live. Phase 2 is
@@ -233,4 +233,4 @@ flying session does not know it exists.
 - [ADR-0010](0010-cinematic-director.md) — the other camera the lens has to serve
 - [Art](../design/art.md#photo-mode) — the sensor fiction this implements
 - [Planetarium](../design/planetarium.md#the-camera) — zoom, dolly and framing, as three controls
-- [TERRAIN-PLAN § 8](../../TERRAIN-PLAN.md) — the phase this is, in full
+- [The terrain plan](../../design/plans/terrain.md) — the milestone this serves

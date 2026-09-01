@@ -384,13 +384,16 @@ describe('tng-intro ship choreography', () => {
 
 describe('tng-intro flight dynamics', () => {
   /*
-   * TNG-PLAN §7.4's properties, against the script's *sampled output*.
+   * The flight-dynamics properties, against the script's *sampled output*:
+   * the nose on its own chord, the swing bounded, the range monotone, the
+   * mirrored wipe exact.
    *
    * The straight passes are not `LinePath`s yet. Each one's facing is a
    * constant fitted direction composed through `lookAlong` + `withAttitude`,
-   * which is `orientationAlong` for a straight line — so the questions the
-   * plan asks are answerable anyway, and answering them here rather than
-   * against a path object is what keeps them true after §5.1 lands.
+   * which is `orientationAlong` for a straight line — so the questions are
+   * answerable anyway, and answering them here rather than against a path
+   * object is what keeps them true after `design/plans/tng-intro.md` §3.1's
+   * `linePath` staging lands.
    *
    * Every window a *heading* is taken over is inside one shot. Measured on
    * the sample, the camera holds to the bit across all of them — 0 m and 0°
@@ -485,9 +488,9 @@ describe('tng-intro flight dynamics', () => {
     /*
      * The descent passes at 14.16° against its own 15.0°, which is inside the
      * fit and only just: the authored beats' chord and the direction they were
-     * fitted to are not the same line. TNG-PLAN §5.3 — project the fitted line
-     * back to the screen beats and assert the residual — is the check that
-     * would tighten this, and it does not exist yet.
+     * fitted to are not the same line. `design/plans/tng-intro.md` §3.3 —
+     * project the fitted line back to the screen beats and assert the residual
+     * — is the check that would tighten this, and it does not exist yet.
      */
     expect(
       degreesBetween(noseOf(at(1800)!), heading(at, 1800, 280)),
@@ -575,8 +578,9 @@ describe('tng-intro flight dynamics', () => {
      *    frame's width between f2065 and f2075 (0.483 → 0.357) where the refit
      *    splices the box channel to the Bussard-cap channel. No straight line
      *    contains that, and the heading swings 82.0° off the nose at f2068.
-     *    That is TNG-PLAN §3(b)'s late-descent refit, not a property failure —
-     *    when it lands, widen this window to f2080 and the bound should hold.
+     *    That is `design/plans/tng-intro.md` §2's late-descent refit, not a
+     *    property failure — when it lands, widen this window to f2080 and the
+     *    bound should hold.
      */
     const CRUISE_FRAME_DEG = 20
     const DESCENT_FRAME_DEG = 30
@@ -604,8 +608,8 @@ describe('tng-intro flight dynamics', () => {
   it('never swings the hull faster than 2°/frame outside an authored maneuver', () => {
     const { at } = playing()
     /*
-     * TNG-PLAN §9's orientation criterion, in the channel a screen measurement
-     * would read it in: the angle between one frame's hull attitude and the
+     * The orientation criterion, in the channel a screen measurement would
+     * read it in: the angle between one frame's hull attitude and the
      * next's, in camera axes, which is what the principal-axis channel sees.
      * The whole quaternion, not a component — a swing about the sight line and
      * a swing across it are the same failure and only one of them shows up in

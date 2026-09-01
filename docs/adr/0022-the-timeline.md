@@ -189,7 +189,7 @@ never composites, so the presentation watchdog rebuilt a healthy renderer, which
 census. What the numbers above are kept for is the shape of the argument: each
 was a claim no existing instrument could have made, and the first is still the
 worked example of a figure measured at one operating point being a figure about
-that point. [`docs/plans/perf.md`](../plans/perf.md) carries the current ones.
+that point. [`design/plans/perf.md`](../../design/plans/perf.md) carries the current ones.
 
 **Over-budget now has one definition and three consumers.** `FRAME_BUDGET_MS`,
 `DROPPED_FRAME_MS`, `ENGINE_BUDGET_MS` and `DRAW_CALL_BUDGET` move from
@@ -240,4 +240,5 @@ does show is the worker pool, on any run that dispatches jobs.
 - [Determinism](../concepts/determinism.md) — the rule the `void` return preserves
 - [ADR-0006](0006-simulation-clock.md) — the one call wall clock enters at
 - [Workers](../concepts/workers.md) — the pool this instruments on both sides
-- [The Timeline](../plans/the-timeline.md) — the plan this implements
+- [The Timeline](../../design/plans/the-timeline.md) — the two things the
+  instrument still cannot see

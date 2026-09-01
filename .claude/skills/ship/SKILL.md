@@ -159,7 +159,7 @@ match what `git branch -a` shows. See `.claude/rules/branching.md`.
 
 Commit in house style: a conventional prefix and then a declarative claim, and an
 extended body saying **why**, specifically why the obvious thing did not work, with the
-numbers that settled it. `docs/STYLE.md` § "Commit messages" is the specification; `git
+numbers that settled it. `STYLE.md` § "Commit messages" is the specification; `git
 log --oneline -20` is the calibration.
 
 Several coherent commits beat one lump, and the squash setting keeps them: the repository

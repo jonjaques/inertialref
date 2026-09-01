@@ -7,13 +7,13 @@ Status: accepted · 30 Aug 2026
 A bordered 65×65 heightfield is 4,761 samples of the band stack — hypsometry,
 belts, volcanism, relief, ice, the crater ladder, the presentational tail and
 the grit — and costs 22 to 50 ms a patch on an M5 in Node, 45 to 187 ms in a
-browser worker with the frame beside it ([perf](../plans/perf.md)). A
+browser worker with the frame beside it ([perf](../../design/plans/perf.md)). A
 two-meter stance on Luna wants 777 to 1,100 of them. At the pool's measured
 ceiling of 41.6 jobs a second on eight workers, the ground sharpens for ~24 s
 after an arrival, and on a retina window for over a minute. The plan's
 condition for this phase — adopt the GPU only if the measurements say so — is
 met, and it is a wall clock rather than a projection
-([TERRAIN-PLAN](../../TERRAIN-PLAN.md) § 11, § 12).
+([the terrain plan](../../design/plans/terrain.md) § 4).
 
 The other half of the context is the invariant the plan was written around.
 `elevationAt` in `packages/universe` is float64, deterministic and versioned,
@@ -126,5 +126,5 @@ adapter.**
   band stack and the drawn tail the kernel ports.
 - [ADR-0022](0022-the-timeline.md) — `gpu heightfields` on the Terrain track.
 - [Streaming](../concepts/streaming.md) § "Where the heightfields come from",
-  [Workers](../concepts/workers.md), [TERRAIN-PLAN](../../TERRAIN-PLAN.md)
+  [Workers](../concepts/workers.md), [the terrain plan](../../design/plans/terrain.md)
   § 11 Phase 5.

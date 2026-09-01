@@ -284,7 +284,8 @@ packages/
   rendering          canonical→render bridge, LOD, terrain meshing   (5)
   devtools           inspection, capability checks, harness          (6)
 data/catalog/        the packed star catalog, committed, CC BY-SA 4.0
-docs/                concepts, ADRs, guides, and the design bible
+docs/                concepts, ADRs, guides, and the design bible — published
+design/              the working half: plans, tooling reports, brand sources
 scripts/             the graph check, the dev orchestrator, the browser driver,
                      the brand build, the media sync and the documentation build
 ```
@@ -367,7 +368,7 @@ Read it before changing anything. Agents should continue in
 ## Documentation
 
 [`docs/`](docs/README.md) is the map. Voice and where each audience should look
-are in [`docs/STYLE.md`](docs/STYLE.md).
+are in [`STYLE.md`](STYLE.md).
 
 Every page below is also readable at
 [`/docs`](https://inertialref.jonjaques.com/docs) — the same markdown, rendered
@@ -381,7 +382,7 @@ The markdown in this repository is the source; the site has no copy of its own.
 | [Vision and scope](docs/vision.md)                | What this is for, and the principles behind it                           |
 | [Architecture](docs/architecture.md)              | The system in one sitting                                                |
 | [Concepts](docs/README.md#concepts)               | How each mechanism works, and why                                        |
-| [ADRs](docs/adr/README.md)                        | Twenty-three decisions that are expensive to reverse                     |
+| [ADRs](docs/adr/README.md)                        | Twenty-four decisions that are expensive to reverse                      |
 | [Development](docs/guides/development.md)         | Commands, toolchain, conventions                                         |
 | [The harness](docs/guides/harness.md)             | The scriptable API, in full                                              |
 | [Testing](docs/guides/testing.md)                 | Property tests, golden vectors, state hashes                             |

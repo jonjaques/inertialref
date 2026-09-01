@@ -28,14 +28,23 @@ describe('the route a file gets', () => {
   })
 
   it('lowercases, because a URL is typed and read aloud', () => {
-    expect(routeFor('docs/STYLE.md')).toBe(`${DOCS}/style`)
+    expect(routeFor('docs/GUIDES/Testing.md')).toBe(`${DOCS}/guides/testing`)
   })
 
-  it('adopts the working card and nothing else outside docs/', () => {
+  it('adopts the working card and the style guide, and nothing else', () => {
     expect(routeFor('AGENTS.md')).toBe(`${DOCS}/working-card`)
+    expect(routeFor('STYLE.md')).toBe(`${DOCS}/style`)
     expect(routeFor('CONTEXT.md')).toBeNull()
     expect(routeFor('README.md')).toBeNull()
     expect(routeFor('packages/spatial/src/index.ts')).toBeNull()
+  })
+
+  /* The plans are working documents, not the finished account, so they sit in
+     `design/` outside the published tree. A route for one is a page nobody
+     wrote for a reader. */
+  it('does not publish the plans', () => {
+    expect(routeFor('design/plans/terrain.md')).toBeNull()
+    expect(routeFor('design/reports/complexity.md')).toBeNull()
   })
 })
 

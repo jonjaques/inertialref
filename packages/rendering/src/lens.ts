@@ -295,7 +295,7 @@ export const CINEMATIC_FOV = 45
  * outside the shell solve against the same range: `riseStance`'s lens, which
  * clamps at the long end and says so, and the terrain predicate, whose
  * saturation at 20° is the reason the long end is where it is
- * (`TERRAIN-PLAN.md` § 8).
+ * (`docs/adr/0017-the-lens.md`).
  */
 export const FOV_MIN = 20
 export const FOV_MAX = 110

@@ -48,7 +48,7 @@ if so it belongs here too.
 `AGENTS.md` is canonical for the code invariants. The unscoped rules mirror other
 pages instead, because what they carry is not a property of the code:
 `branching.md` mirrors [`docs/agents/working.md`](../../docs/agents/working.md)
-§ "Starting work", `writing.md` mirrors [`docs/STYLE.md`](../../docs/STYLE.md), and
+§ "Starting work", `writing.md` mirrors [`STYLE.md`](../../STYLE.md), and
 `browser.md` mirrors the [`drive` skill](../skills/drive/SKILL.md). The contract is
 identical — reasoning there, imperative here.
 
@@ -75,5 +75,5 @@ every touch of its directory, and the thing it is competing with for attention i
 | `server.md`      | the Worker, net, protocol or persistence                              |
 | `testing.md`     | any `*.test.ts`                                                       |
 | `site.md`        | the document head, `public/`, the brand pipeline, analytics           |
-| `documents.md`   | any markdown under `docs/`, or the documentation build                |
+| `documents.md`   | markdown under `docs/` or `design/`, `STYLE.md`, the docs build       |
 | `timing.md`      | the timing seam, the sink, the budgets or the profile report          |

@@ -2708,7 +2708,7 @@ The docs were rewritten so a human and an agent are not reading the same file
 for different jobs.
 
 - **Technical writing** lives under `docs/` — vision, architecture, concepts,
-  ADRs, guides, the design bible. House voice is [`docs/STYLE.md`](docs/STYLE.md):
+  ADRs, guides, the design bible. House voice is [`docs/STYLE.md`](STYLE.md):
   American English, present tense, the fact first, session diary kept out.
 - **Agents** have a handbook at [`docs/agents/`](docs/agents/README.md).
   [`AGENTS.md`](AGENTS.md) is the auto-loaded working card (invariants and
@@ -2790,12 +2790,12 @@ British spelling in user-facing copy, labels, comments, and documentation is
 now American: _color_, _center_, _meter_, _catalog_, _behavior_, _license_,
 _gray_, _artifact_, _toward_. Identifiers, panel ids (`catalogue`), JSON keys
 (`licence`), enum values (`centre`), and filenames (`catalogue.md`) were left
-alone for a later programmatic rename. [`docs/STYLE.md`](docs/STYLE.md)
+alone for a later programmatic rename. [`docs/STYLE.md`](STYLE.md)
 already stated the policy; this pass applies it to the rest of the tree.
 
 ## Twelve shallow modules, deepened (23 Aug 2026)
 
-[`REVIEW.md`](REVIEW.md) is the plan; this is what implementing it found. The
+[`REVIEW.md`](design/plans/arch-review.md) is the plan; this is what implementing it found. The
 thread through all twelve is the same: a module was shallow because its
 interface was `Env`, or a component, or a convention nobody owned — so the
 behavior behind it could only be reached by running the whole application, and
@@ -3359,7 +3359,7 @@ if a rewrite dropped the planet, the terminator mask or the streak.
 ## The title sequence measured again, and the ship flies straight lines (23 Aug 2026)
 
 Planning the next fidelity pass over `tng-intro` produced three findings worth
-more than the plan itself ([`TNG-PLAN.md`](TNG-PLAN.md)).
+more than the plan itself ([`TNG-PLAN.md`](design/plans/tng-intro.md)).
 
 **The committed diff is the current diff.** The shot names in
 `analysis/render-diff.csv` predate the last re-cut (`veil`, `eclipse-in/out`),
@@ -3396,7 +3396,7 @@ should be.
 
 ## The plan met the frames, and half of it was wrong (23 Aug 2026)
 
-[`TNG-PLAN.md`](TNG-PLAN.md) was written from measurements and then implemented
+[`TNG-PLAN.md`](design/plans/tng-intro.md) was written from measurements and then implemented
 against the same frames. Its timings and its structure held. A good deal of its
 _causation_ did not, and the corrections are worth more than the work they
 interrupted — they are collected in the plan's own §10 and summarized here.
@@ -4148,7 +4148,7 @@ scoped rules for the same reason: they are in context for every session,
 including the ones that only answer a question.
 
 These two mirror `docs/agents/working.md` § "Starting work" and
-[`docs/STYLE.md`](docs/STYLE.md) rather than `AGENTS.md`, because what they
+[`docs/STYLE.md`](STYLE.md) rather than `AGENTS.md`, because what they
 carry is not a property of the code. `AGENTS.md` stays canonical for the code
 invariants, and `docs/agents/invariants.md` maps those to their technical
 pages; process rules are deliberately not in that table.
@@ -4339,7 +4339,7 @@ projection pass, not by `GameEngine.#step`.
 
 ## The terrain rig, and the three defects it found on its first run (26 Aug 2026)
 
-Phase 0 of [`TERRAIN-PLAN.md`](TERRAIN-PLAN.md) § 10: the instrument every later
+Phase 0 of [`TERRAIN-PLAN.md`](design/plans/terrain.md) § 10: the instrument every later
 phase is judged through, built before any of them so the phase that triples the
 per-sample cost has something to be a regression against. No generator changes.
 
@@ -4498,7 +4498,7 @@ headless runner. Attach Browser is Chrome on 9222.
 
 ## The quadtree covers the disk, and three things it had to learn first (27 Aug 2026)
 
-Phase 1 of [`TERRAIN-PLAN.md`](TERRAIN-PLAN.md) § 10. A 3×3 window at one level
+Phase 1 of [`TERRAIN-PLAN.md`](design/plans/terrain.md) § 10. A 3×3 window at one level
 becomes a restricted, morphing quadtree walked from the six cube faces.
 [ADR-0015](docs/adr/0015-terrain-level-of-detail.md) is the decision record.
 
@@ -4988,7 +4988,7 @@ is the mode whose whole subject is looking, and its controls for looking were on
 three surfaces, two behind the author's disclosure. The aperture, the focus and
 the exposure were behind the console key.
 
-Phase 1.6 of [`TERRAIN-PLAN.md`](TERRAIN-PLAN.md) § 9, in full.
+Phase 1.6 of [`TERRAIN-PLAN.md`](design/plans/terrain.md) § 9, in full.
 [ADR-0018](docs/adr/0018-the-instrument.md) is the record.
 
 **Two grep-able claims, and they are the point.** One
@@ -5094,7 +5094,7 @@ the test is that the same CSS window drags at one rate at 1×, 1.5× and 2×.
 
 ## The ground stops being noise and becomes a geology (28 Aug 2026)
 
-Phase 2 of [`TERRAIN-PLAN.md`](TERRAIN-PLAN.md), in full.
+Phase 2 of [`TERRAIN-PLAN.md`](design/plans/terrain.md), in full.
 [ADR-0019](docs/adr/0019-the-geology.md) is the record.
 
 Three bands of noise is the smallest number that reads as a planet and the
@@ -5510,7 +5510,7 @@ that ended the search — pinned at exactly 1,152, which is the signature
 
 ## The ground stops being a color and becomes a face (29 Aug 2026)
 
-Phase 3 of [TERRAIN-PLAN](TERRAIN-PLAN.md), recorded in
+Phase 3 of [TERRAIN-PLAN](design/plans/terrain.md), recorded in
 [ADR-0020](docs/adr/0020-the-face.md). Terrain had one flat color under the
 scene's ambient light — survivable while the streamed set was nine patches, and
 not survivable once the quadtree draws the whole disk, because the ground is
@@ -5679,7 +5679,7 @@ drawn a different planet through an identical heightfield. It compares all
 
 ## The ground goes below the field the ship lands on (30 Aug 2026)
 
-Phase 4 of [TERRAIN-PLAN](TERRAIN-PLAN.md), recorded in
+Phase 4 of [TERRAIN-PLAN](design/plans/terrain.md), recorded in
 [ADR-0021](docs/adr/0021-the-ground.md). The ground at a two-meter stance was a
 plane, and the reason is arithmetic rather than taste.
 
@@ -5881,7 +5881,7 @@ built-ins has.
 ## The six instruments get the axis they were missing (30 Aug 2026)
 
 [ADR-0022](docs/adr/0022-the-timeline.md) and
-[the plan](docs/plans/the-timeline.md) carry the decisions. What belongs here is
+[the plan](design/plans/the-timeline.md) carry the decisions. What belongs here is
 the measurements, and the three things the instrument found on the days it was
 built.
 
@@ -6005,8 +6005,7 @@ not about a player.
 
 ## The frame stops rebuilding what has not moved (30 Aug 2026)
 
-The verifying pass over [perf](docs/plans/perf.md) and
-[perf-2](docs/plans/perf-2.md). Both plans now carry a status per entry and the
+The verifying pass over [perf and perf-2](design/plans/perf.md), since consolidated into one. Both plans now carry a status per entry and the
 numbers below; what is worth keeping here is what the fixes had in common and
 the two instruments that were lying.
 
@@ -6126,7 +6125,7 @@ a fine shift away and adding it after the difference does not.
 
 ## The shaders run in the Node suite, and the first thing they found was every mapless body's ground (30 Aug 2026)
 
-[The plan](docs/plans/headless-webgpu.md) is executed as written: `webgpu@0.6.0`
+[The plan](design/plans/headless-webgpu.md) is executed as written: `webgpu@0.6.0`
 is Dawn as a Node addon, `render/gpuSetup.ts` installs the three globals
 `three/webgpu` reads at import time, `render/gpuHarness.ts` hands a test a
 `WebGPURenderer` on the physical `apple` / `metal-3` adapter with five verbs
@@ -6205,7 +6204,7 @@ physical GPU on macOS — SwiftShader has no build there — so the reason
 `drive.mjs` launches a window is `--cast`, not the adapter; its header said the
 other thing and now says this.
 
-[Test speed](docs/plans/test-speed.md) records where the root suite's time goes,
+[Test speed](design/plans/test-speed.md) records where the root suite's time goes,
 measured on the same idle machine: 102.9 s for `pnpm test`, 10.0 s without
 `gameEngine.test.ts`, whose `beforeAll` streams one landing through the inline
 worker for 101.5 s. Nothing is changed on that page; the four levers it names
@@ -6213,7 +6212,7 @@ are each a decision about what the gate promises.
 
 ## The GPU produces the heightfield the CPU defines (30 Aug 2026)
 
-Phase 5 of [the terrain plan](TERRAIN-PLAN.md) lands as
+Phase 5 of [the terrain plan](design/plans/terrain.md) lands as
 [ADR-0023](docs/adr/0023-the-gpu-producer.md). Heightfield tiles are a TSL
 compute kernel — `apps/game/src/render/terrainKernel.ts`, one thread a sample,
 sixteen tiles a dispatch — fed by `packages/universe/src/terrainKernel.ts`,
@@ -6260,7 +6259,7 @@ What the port found, each on the device rather than in a mirror:
   `CRATER_LIMIT` went to zero instead.
 - **A routing test does not need a field.** The streamer's source-routing
   test took 10.6 s with a real heightfield fixture and takes 104 ms with a
-  flat one; [test-speed](docs/plans/test-speed.md) has the rest.
+  flat one; [test-speed](design/plans/test-speed.md) has the rest.
 
 Left open, named in the ADR: normal tiles and the mesh stay on the main
 thread at 0.25 ms a patch; the kernel's level-0 offset term is the
@@ -6362,7 +6361,7 @@ Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md
   unfinished — the simulation depends on the integer tick and wall clock enters
   at one call — but it means a bare `--ticks` loop has nothing to decompose and
   the headless half of the profile story is thinner than
-  [the plan](docs/plans/the-timeline.md) hoped. The seam for changing that is
+  [the plan](design/plans/the-timeline.md) hoped. The seam for changing that is
   ADR-0022's `void` return, which is what would keep a tick span from becoming a
   canonical read.
 - **A worker's entries are invisible to `ir.timing.drain()`.** They live on the

@@ -37,12 +37,23 @@ const BRANCH = 'main'
  * the building to read the one page the rest of them are about. Named after
  * what its own first line calls it.
  *
- * Nothing else joins it. `CONTEXT.md` is a dated build log written to itself,
+ * `STYLE.md` is the same case one directory up: six pages under `docs/` cite it
+ * as the specification for the voice they are written in, and it sits at the
+ * root beside the working card rather than inside `docs/` because it governs
+ * commit messages and code comments too, neither of which the site publishes.
+ * Its route is lowercased for the reason every other route is — a URL is read
+ * aloud and typed, and the shouted filename is the repository's convention
+ * rather than the address bar's.
+ *
+ * Nothing else joins them. `CONTEXT.md` is a dated build log written to itself,
  * `README.md` is the front door this site already is, and `PRODUCT.md` and
  * `DESIGN.md` are working artifacts rather than documents — all four are
  * one `linkFor` hop away on GitHub, which is where they read correctly.
  */
-const ADOPTED = new Map([['AGENTS.md', `${DOCS}/working-card`]])
+const ADOPTED = new Map([
+  ['AGENTS.md', `${DOCS}/working-card`],
+  ['STYLE.md', `${DOCS}/style`],
+])
 
 /**
  * The route for a repository path, or `null` when the file is not in the site.
@@ -67,10 +78,10 @@ export function routeFor(repoPath) {
   const slug = withoutIndex
     .split('/')
     .filter((part) => part.length > 0)
-    // `STYLE.md` is the one shouted filename in `docs/`, and a URL is read
-    // aloud and typed. Lowercasing here rather than renaming the file keeps the
-    // repository's own convention — a document about writing, named the way the
-    // repository names its own conventions — out of the address bar.
+    // A URL is read aloud and typed, so every route is lowercase whatever the
+    // file is called. Doing it here rather than by renaming files keeps the
+    // repository free to shout a filename — `STYLE.md`, and whatever joins it —
+    // without that convention reaching the address bar.
     .map((part) => part.toLowerCase())
     .join('/')
   return slug === '' ? DOCS : `${DOCS}/${slug}`
