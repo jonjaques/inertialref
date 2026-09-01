@@ -85,3 +85,7 @@ apps/game/public/doc-content/
 # Ignored as a directory, not as a filename: the next thing that has to arrive
 # this way should not need a second rule and a second thing to remember.
 apps/game/public/media/
+
+# `/impeccable` writes here every run; only a curated critique is checked in,
+# and it goes to `design/reports/` like every other working review.
+.impeccable/

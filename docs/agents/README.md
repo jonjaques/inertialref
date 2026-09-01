@@ -32,7 +32,7 @@ reading the technical docs is not walking through session instructions.
 | Author or change a cutscene         | [Cinematics](../guides/cinematics.md) · ADR-0010                        |
 | Add generated content or a task     | [Extending](../guides/extending.md)                                     |
 | Write a test                        | [Testing](../guides/testing.md)                                         |
-| Match the written voice             | [Style](../STYLE.md)                                                    |
+| Match the written voice             | [Style](../../STYLE.md)                                                 |
 
 Executable machinery — path-scoped rules, skills, hooks, subagents — lives in
 [`.claude/`](../../.claude/rules/README.md). Cursor's
@@ -47,6 +47,8 @@ in context when you open a matching file. The rule's reasoning stays in
 
 - Product vision, architecture, and concept pages — those are `docs/`.
 - Game design — that is `docs/design/`.
+- A plan, a working review, or a tooling report — that is `design/`, which is
+  outside the published tree because a plan describes what is not built yet.
 - A running diary of what landed — that is `CONTEXT.md`.
 - Vendor-specific Claude Code setup — that is [`CLAUDE.md`](../../CLAUDE.md).
 

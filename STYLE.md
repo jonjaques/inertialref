@@ -6,7 +6,7 @@ documentation pages, code comments, plans, pull request bodies, and commit
 messages. Follow it for new writing and when editing what is already here.
 
 The imperative half of this page is mirrored as
-[`.claude/rules/writing.md`](../.claude/rules/writing.md), which carries no
+[`.claude/rules/writing.md`](.claude/rules/writing.md), which carries no
 `paths:` and therefore loads at the start of every agent session. The rule has
 to be in context before the first comment is written, not after.
 
@@ -14,15 +14,21 @@ to be in context before the first comment is written, not after.
 
 ## Audiences and homes
 
-| Audience                          | Start here                                                      | What belongs there                                                                |
-| --------------------------------- | --------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| A person who just cloned the repo | [`README.md`](../README.md)                                     | What it is, how to run it, what is proven                                         |
-| A person learning the system      | [`docs/README.md`](README.md)                                   | Vision, architecture, concepts, ADRs, guides, the design bible                    |
-| A coding agent                    | [`AGENTS.md`](../AGENTS.md), then [`agents/`](agents/README.md) | Invariants, how to work, definition of done. Not product prose, not a build diary |
+| Audience                          | Start here                                                        | What belongs there                                                                |
+| --------------------------------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| A person who just cloned the repo | [`README.md`](README.md)                                          | What it is, how to run it, what is proven                                         |
+| A person learning the system      | [`docs/README.md`](docs/README.md)                                | Vision, architecture, concepts, ADRs, guides, the design bible                    |
+| A coding agent                    | [`AGENTS.md`](AGENTS.md), then [`agents/`](docs/agents/README.md) | Invariants, how to work, definition of done. Not product prose, not a build diary |
 
 Keep those piles apart. A concept page is not a session recap. An agent page is
-not a design essay. The build log ([`CONTEXT.md`](../CONTEXT.md)) is a diary on
+not a design essay. The build log ([`CONTEXT.md`](CONTEXT.md)) is a diary on
 purpose — it is not a substitute for either.
+
+A plan is a fourth pile and it lives in `design/`, outside the published tree.
+`docs/` is the finished account of what the system does, and a reader who
+reaches a page there is entitled to assume the system already behaves that way;
+a plan is the one document whose subject is that it does not. Plans are written
+in this voice like everything else.
 
 ---
 
@@ -42,7 +48,7 @@ the room.
   `UniverseVector`, do not call it a "universal vec" three paragraphs later.
 
 Bug history, rejected approaches, and "this must not come back" belong in
-[`CONTEXT.md`](../CONTEXT.md) or in an [ADR](adr/README.md). Working guides may
+[`CONTEXT.md`](CONTEXT.md) or in an [ADR](docs/adr/README.md). Working guides may
 cite those pages. They should not retell them.
 
 ### Avoid
@@ -54,7 +60,7 @@ cite those pages. They should not retell them.
 - Addressing "the next agent" or "the maintainer" as if they shared the chat
   that produced the file.
 - Writing a label in the case you want on screen. Interface copy is title case
-  in source; CSS decides what is shouted. See [`DESIGN.md`](../DESIGN.md).
+  in source; CSS decides what is shouted. See [`DESIGN.md`](DESIGN.md).
 
 ---
 
@@ -91,11 +97,11 @@ or what the file looked like the day before.
 
 History has three homes, and none of them is a comment:
 
-| What                                             | Where                                          |
-| ------------------------------------------------ | ---------------------------------------------- |
-| A bug that must not come back; what was measured | [`CONTEXT.md`](../CONTEXT.md) — `/context-log` |
-| A decision and the alternatives it beat          | An [ADR](adr/README.md) — `/adr`               |
-| What one change did, and why                     | That change's commit message                   |
+| What                                             | Where                                       |
+| ------------------------------------------------ | ------------------------------------------- |
+| A bug that must not come back; what was measured | [`CONTEXT.md`](CONTEXT.md) — `/context-log` |
+| A decision and the alternatives it beat          | An [ADR](docs/adr/README.md) — `/adr`       |
+| What one change did, and why                     | That change's commit message                |
 
 ---
 
@@ -142,7 +148,7 @@ constraint, a measurement, and a rejected alternative is what makes
 
 Pull request bodies follow the commit body, plus the invariants the change
 touches and what was verified. The template is
-[`.github/pull_request_template.md`](../.github/pull_request_template.md).
+[`.github/pull_request_template.md`](.github/pull_request_template.md).
 
 ---
 
@@ -176,6 +182,6 @@ as a playtest value in the design bible.
 
 ## Related
 
-- [`docs/README.md`](README.md) — the documentation map
-- [`docs/agents/README.md`](agents/README.md) — the agent handbook
-- [`DESIGN.md`](../DESIGN.md) — visual language, including the type scale
+- [`docs/README.md`](docs/README.md) — the documentation map
+- [`docs/agents/README.md`](docs/agents/README.md) — the agent handbook
+- [`DESIGN.md`](DESIGN.md) — visual language, including the type scale

@@ -109,7 +109,7 @@ meters and never notices. A walker does — 1.25 m is nearly three times the jum
 height in the table above, so a rim you can see and a rim you can stand on are a
 traversal decision apart. Closing it means carrying the tail into the canonical
 field, which is terrain algorithm v3 and the one version bump
-[TERRAIN-PLAN](../../TERRAIN-PLAN.md) § 5 reserves, because it moves the ground
+[the terrain plan](../../design/plans/terrain.md) § 3 reserves, because it moves the ground
 under every landed hull in every save.
 
 **Scatter has no collision**, for the same reason and with a cheaper fix. A rock

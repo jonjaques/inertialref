@@ -106,7 +106,7 @@ rungs of the crater walk. A whole-disk selection peaks at 1,077 patches against
 862, so `DEFAULT_MAX_PATCHES` is 1,280 and its corner case is 303 MB of vertex
 buffers — a patch is 237 KB, which is 203 KB of geometry and **two** four-byte
 cover attributes rather than one. Generation was already the binding constraint before this phase and is
-more so now, which is [TERRAIN-PLAN](../../TERRAIN-PLAN.md) § 11's Phase 5
+more so now, which is [ADR-0023](0023-the-gpu-producer.md)'s GPU producer
 stated as a measurement rather than a plan.
 
 **A stance holds still and a landing takes minutes.** Measured in the browser: a
@@ -119,7 +119,7 @@ between one and three minutes, because 1,562 patches at 43 ms is 67 s of
 single-core generation and a pool of four does not divide it far enough. That
 figure is taken at a ceiling of four workers; it is eight now — worth three
 drawn levels in twenty seconds on a Mars landing, and not re-measured here.
-[perf](../plans/perf.md) § "The heightfield queue" has the table.
+`apps/game/src/engine/browserWorker.ts` carries the measured pool-size table.
 
 **A rock's photometry is not settled.** Under a low sun a boulder reads as a
 solid, correctly lit rock; under a high one it reads as a black silhouette
@@ -176,8 +176,8 @@ the canonical floor would allow 16 to 19, so a body whose largest basin is
 meters. Measured, raising it to 14 moves the detail floor by 0 to 2 levels and
 costs 13% a patch — it works, and it moves the field the contact test
 integrates, which is terrain algorithm v3 and every save's landed hull.
-[TERRAIN-PLAN](../../TERRAIN-PLAN.md) § 5 says the ground moves under saves
-once; this is not the phase that spends it.
+[The terrain plan](../../design/plans/terrain.md) § 1 says the ground moves under
+saves once; this is not the phase that spends it.
 
 **Synthesize the tail per vertex only at deep levels.** Free detail control, and
 it breaks the morph: a fully morphed child is the child's own field at the
@@ -203,7 +203,6 @@ first the next time either was touched.
 - [ADR-0020](0020-the-face.md) — the material the grain band is added to
 - [ADR-0015](0015-terrain-level-of-detail.md) — the quadtree the floor sets the
   depth of
-- [TERRAIN-PLAN](../../TERRAIN-PLAN.md) § 5, § 7, § 11 — the plan this is
-  Phase 4 of
+- [The terrain plan](../../design/plans/terrain.md) — the milestone this serves
 - [On foot](../design/onfoot.md) — where the divergence stops being invisible
 - [Content § scatter](../design/content.md#scatter) — what the rocks are for

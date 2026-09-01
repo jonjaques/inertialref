@@ -784,7 +784,7 @@ interface FacingBeat {
   /**
    * Nose-down pitch relative to the derived frame, degrees.
    *
-   * The overlay `TNG-PLAN` §5.2 asks for, and it is needed because a fitted
+   * The overlay `design/plans/tng-intro.md` §3.2 asks for, and it is needed because a fitted
    * line gives the hull's **flight path**, not its attitude, and here the two
    * differ. The reference's hull climbs the frame through the cruise while the
    * camera plainly looks down on the saucer's top — lit window rows, nacelles

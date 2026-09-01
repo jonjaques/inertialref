@@ -29,7 +29,7 @@ export function flightPanels(
       title: 'Catalog',
       icon: Neighbourhood,
       zone: 'right',
-      hint: 'what is within reach — fold it, filter it, fly to it',
+      hint: 'Everything within reach — fold it, filter it, fly to it',
       render: () => (
         <CataloguePanel
           engine={engine}

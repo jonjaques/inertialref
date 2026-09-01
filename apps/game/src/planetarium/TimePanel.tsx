@@ -101,8 +101,12 @@ export function TimePanel({ engine }: PlanetariumContext) {
          * order to grey out an action that is a no-op anyway. A reset that is
          * already reset is a control asserting a state, not a dead one.
          */}
+        {/* Pushed to the far end, because it is a readout that happens to be
+            pressable and not a fourth transport key. Beside the other three it
+            read as one of them, in a row with 8 rem of empty panel after it. */}
         <Action
           label={`${world.timeScale}×`}
+          className="ml-auto"
           tone={normal ? 'normal' : 'primary'}
           title={
             normal

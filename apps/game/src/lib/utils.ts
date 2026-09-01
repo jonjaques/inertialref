@@ -14,7 +14,7 @@ import { extendTailwindMerge } from 'tailwind-merge'
  */
 
 /**
- * The nine type steps, declared as a class group so the merger can see them.
+ * The ten type steps, declared as a class group so the merger can see them.
  *
  * `type-readout` on an `Input` is meant to *replace* the registry base's
  * `text-base md:text-sm`, exactly as the per-site `text-[11px]` overrides it
@@ -43,6 +43,7 @@ const TYPE_STEPS = [
   'type-ui',
   'type-readout',
   'type-figure',
+  'type-stat',
   'type-micro',
 ]
 

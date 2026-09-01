@@ -258,8 +258,19 @@ export function HomePage({ engine }: { engine: GameEngine }) {
            * line, which is the same move the mark makes — one form, two tones,
            * the brighter one leading.
            */}
+          {/*
+           * Hand-kerned, because this is the one string in the product set at
+           * poster size, and a kern table is tuned for text. Letter-spacing is
+           * added *after* a glyph, so a span around a single letter closes the
+           * pair it opens: Archivo leaves the r's arm hanging over the t's
+           * crossbar at 76px, and the seam where the white half meets the
+           * accent half wants a hair of the same closing so "Ref" reads as the
+           * second half of one name rather than a second word.
+           */}
           <h1 className="type-display text-[clamp(3rem,7vw,4.75rem)] text-slate-50">
-            Inertial<span className="text-sky-400">Ref</span>
+            Ine<span className="tracking-[-0.03em]">r</span>tia
+            <span className="tracking-[-0.015em]">l</span>
+            <span className="text-sky-400">Ref</span>
           </h1>
           {/*
            * Two beats: what it is aiming at, then where it actually is.
@@ -290,7 +301,7 @@ export function HomePage({ engine }: { engine: GameEngine }) {
           <dl className="mt-5 flex max-w-[33rem] flex-wrap items-baseline gap-x-7 gap-y-2 border-t border-slate-800 pt-4">
             {SPEC.map(([figure, what]) => (
               <div key={what} className="flex items-baseline gap-2">
-                <dt className="type-figure text-sky-200">{figure}</dt>
+                <dt className="type-stat text-sky-200">{figure}</dt>
                 <dd className="type-label text-slate-400">{what}</dd>
               </div>
             ))}

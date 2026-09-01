@@ -19,10 +19,13 @@ import type { Workspace } from './useWorkspace.ts'
 export function DockPanel({
   definition,
   zone,
+  siblings,
   workspace,
 }: {
   definition: DockPanelDefinition
   zone: DockZone
+  /** How many other panels share the pane. Decides how tall this one may grow. */
+  siblings: number
   workspace: Workspace
 }) {
   const [{ dragging }, drag, preview] = useDrag<
@@ -59,10 +62,10 @@ export function DockPanel({
       onDock={() => workspace.dock(definition.id)}
       onHide={() => workspace.hide(definition.id)}
       /*
-       * A docked panel is as tall as its content, and never more than 60% of
-       * the frame.
+       * A docked panel is as tall as its content, and never so tall that it
+       * hides the panels under it.
        *
-       * Two failures, one number. Uncapped, a panel taller than the pane — the
+       * Two failures, one rule. Uncapped, a panel taller than the pane — the
        * catalog is seventy-five rows — runs past the bottom and is clipped
        * mid-row by the pane's own scroll, so the last thing on screen is half a
        * line of type with no rounded corner under it. Capped at the pane's
@@ -70,11 +73,29 @@ export function DockPanel({
        * off the bottom, where the menu still reports them open and nothing on
        * screen suggests scrolling.
        *
-       * 60vh leaves the next panel's header visible, which is the whole
-       * requirement: a stack you can see the shape of. The panel's own body
-       * scrolls, which is what every readout in here was already built to do.
+       * 60vh is the stack's answer: it leaves the next panel's header visible,
+       * which is the whole requirement — a stack you can see the shape of. The
+       * `100% - 2.75rem` per sibling beside it is the same claim expressed
+       * against the pane rather than the frame, and it is the one that binds on
+       * a short window.
+       *
+       * **A panel that is alone in its pane has no stack to leave room for**,
+       * and 60% of the frame applied to it is a number about somebody else's
+       * layout. It left the Camera panel's lens cut off with 400 px of empty
+       * pane beneath it. On its own the cap is the pane, which it still needs:
+       * a `shrink-0` flex item taller than a scrolling column is the
+       * clipped-mid-row failure above.
+       *
+       * The panel's own body scrolls in every case, which is what every readout
+       * in here was already built to do — and `scroll-cue` in `PanelChrome`
+       * says so when it is doing it.
        */
-      className="max-h-[60dvh]"
+      style={{
+        maxHeight:
+          siblings === 0
+            ? '100%'
+            : `min(60dvh, calc(100% - ${siblings * 2.75}rem))`,
+      }}
     >
       {definition.render()}
     </PanelChrome>

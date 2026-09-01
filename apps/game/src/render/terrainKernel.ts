@@ -114,8 +114,8 @@ import {
  * function.
  *
  * **Placement is integer and bit-identical; amplitude is float and bounded.**
- * That is the line `TERRAIN-PLAN.md` § 4 draws, and it is drawn here in two
- * ways. The hashes — `mix32`, `hash3`, `pcg4d` — are `u32` arithmetic that
+ * That is the line `docs/adr/0023-the-gpu-producer.md` draws, and it is drawn
+ * here in two ways. The hashes — `mix32`, `hash3`, `pcg4d` — are `u32` arithmetic that
  * wraps exactly as `Math.imul` and `>>> 0` do, so which crater a cell holds
  * and which corner gradient a lattice point gets are the same bits on every
  * device. And every *decision* a hash feeds is taken in integers: a crater

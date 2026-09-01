@@ -21,7 +21,7 @@ import { FLIGHT_FOV, findComposition } from '@inertialref/rendering'
  * The list is a judgment, and it is meant to be edited. Each is chosen from
  * what the renderer already does well today rather than from what the geology
  * will do later; a standing picture of terrain joins them when Phase 2 gives it
- * a geology to stand on, and the mechanism is the stance the Surface panel
+ * a geology to stand on, and the mechanism is the stance the Ground section
  * already produces.
  */
 

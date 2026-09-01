@@ -18,11 +18,11 @@ import { faceToDirection } from '@inertialref/universe'
 import { type GpuSession, openGpu } from './gpuHarness.ts'
 
 /*
- * The shape of Phase 5, with the tolerance test written first.
+ * The shape of the GPU producer, with the tolerance test written first.
  *
- * `TERRAIN-PLAN.md` § 11 puts tile production on the GPU — a TSL compute
- * kernel per cell, into a cache the material samples — and makes one promise
- * about it: a GPU tile matches a CPU tile within a stated tolerance, checked
+ * `docs/adr/0023-the-gpu-producer.md` puts tile production on the GPU — a TSL
+ * compute kernel per cell, into a cache the material samples — and makes one
+ * promise about it: a GPU tile matches a CPU tile within a stated tolerance, checked
  * in the browser because CI has no GPU. This file is that check's home before
  * there is a producer to check, on the two primitives every tile is built
  * from. Both are ports of the CPU function, and the port is the thing under

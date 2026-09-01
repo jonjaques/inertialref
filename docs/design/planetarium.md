@@ -209,25 +209,29 @@ Everything is a **panel**, and every panel is dockable — see
 | ----------- | ---------------------------------------------------------------------------- |
 | **Catalog** | Where can I go? Search the whole index, fold the systems, filter the classes |
 | **Object**  | What is this? The record — physical, orbit, rotation, air, light             |
-| **Camera**  | The eye: where it looks, how far off, and through what                       |
-| **View**    | What is drawn over the sky — names, orbit traces, the ship                   |
+| **Camera**  | The eye: where it looks from, where it stands, and what it looks through     |
+| **View**    | What is drawn over the sky — names, orbit paths, the ship                    |
 | **Presets** | Seven pictures, sixteen compositions, the light on its own, and the way out  |
-| **Surface** | What is it like down there? The named sites, the height scrub, and a compass |
 | **Time**    | Pause, warp, and what the clock is actually delivering                       |
 
 The split between **Camera** and **View** is by what a control _changes_. A
 layer changes pixels the scene does not own — names, traces, the ship — and the
-camera changes the picture itself. The lens sat on View for a while, under a
-title that is a claim about what is drawn _over_ the sky, which is the opposite
-of what a lens does.
+camera changes the picture itself. That is also why glare is a lens channel and
+not a layer: what an aperture does to a bright source is a property of the
+instrument, and at zero it is the sky with no optics in front of it.
 
 The camera's own readings — range, altitude, how much of the frame the subject
 fills, the two orbit angles — are **not** in the object panel. They are facts
 about where you are standing rather than about the thing being looked at, and on
 a page about Mars they read as a debugger. They are on the Camera panel, beside
-the lens they describe. The Surface panel is that rule applied once more:
-descending is a camera act, so it is a camera panel and not a section of the
-record — its question is _where can I stand_, and that is a list.
+the lens they describe.
+
+**The two arms are two sections of one panel, not two panels.** The camera is in
+exactly one of them at a time, so a panel per arm is a panel that is entirely
+disabled whenever the camera is in the other — nine dead controls under a
+heading reading "in orbit". Descending is a camera act either way: **Orbit**
+carries the pose above the floor, **Ground** carries the sites, the descent and
+the heading below it, and only one of the two is drawn.
 
 ### The catalog
 

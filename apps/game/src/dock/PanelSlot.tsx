@@ -9,17 +9,25 @@ export function PanelSlot({
   definition,
   zone,
   indicate,
+  siblings,
   workspace,
 }: {
   definition: DockPanelDefinition
   zone: PaneZone
   indicate: boolean
+  /** How many other panels are in this pane. See `DockPanel`'s height cap. */
+  siblings: number
   workspace: Workspace
 }) {
   return (
     <>
       {indicate && <DropLine />}
-      <DockPanel definition={definition} zone={zone} workspace={workspace} />
+      <DockPanel
+        definition={definition}
+        zone={zone}
+        siblings={siblings}
+        workspace={workspace}
+      />
     </>
   )
 }

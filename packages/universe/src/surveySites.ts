@@ -1,4 +1,4 @@
-import { formatDistance, type Meters, type Radians } from '@inertialref/shared'
+import { formatReading, type Meters, type Radians } from '@inertialref/shared'
 import { formatSeed } from '@inertialref/procedural'
 import { type RegionAddress, regionAddress } from './address.ts'
 import { directionToGeodetic } from './frames.ts'
@@ -212,8 +212,11 @@ function siteInDirection(
   return siteAt(id, name, detail, centreOf(body, region))
 }
 
+// `formatReading`, not `formatDistance`: this string is read under a button in
+// a panel, and three decimals on a summit — "4350.418 m above the datum" — is
+// four digits nobody uses in a sentence about a mountain.
 const relative = (elevation: Meters): string =>
-  `${formatDistance(Math.abs(elevation))} ${elevation < 0 ? 'below' : 'above'} the datum`
+  `${formatReading(Math.abs(elevation))} ${elevation < 0 ? 'below' : 'above'} the datum`
 
 /**
  * Relief around each seed cell, from the samples the grid already has.
@@ -306,7 +309,14 @@ function derive(body: Body): readonly SurveySite[] {
     siteAt(
       'basin',
       sea === null ? 'Basin' : 'Abyss',
-      `the lowest ground the survey found, ${relative(basin.ground)}`,
+      // Two sentences on a body with water, because the search and the reading
+      // disagree there and the disagreement is the interesting part: the score
+      // is the unclamped landform, so this really is the deepest seabed — but
+      // `groundElevation` flattens the ocean onto one value, so the elevation
+      // printed beside it is the sea surface standing over it.
+      sea === null
+        ? `the lowest ground the survey found, ${relative(basin.ground)}`
+        : `the deepest seabed the survey found — the reading is the sea surface above it, ${relative(basin.ground)}`,
       basin,
     ),
     siteAt(
@@ -326,8 +336,12 @@ function derive(body: Body): readonly SurveySite[] {
     siteInDirection(
       body,
       'corner',
-      'Face Corner',
-      'where three faces of the addressing cube meet — the hardest ground to stitch',
+      // "Map Seam", not "Face Corner". The id stays `corner` — scripts and
+      // saves name it — but the label is read under a button in a reading room
+      // for a galaxy, and `face` is the addressing cube's word for a sixth of
+      // a sphere, which is a fact about this build rather than about the place.
+      'Map Seam',
+      'where three faces of the map meet — the hardest ground to stitch',
       // Through `regionDirection`, not `faceToDirection`. Both are branded and
       // the second is what the first calls, but `AGENTS.md` enumerates exactly
       // three producers and that enumeration *is* the enforcement — a fourth

@@ -22,8 +22,8 @@ import { type GpuSession, openGpu } from './gpuHarness.ts'
 import { createTerrainKernel, type TerrainKernel } from './terrainKernel.ts'
 
 /*
- * The tolerance test `TERRAIN-PLAN.md` § 11 promised: a GPU tile matches a
- * CPU tile within a stated bound.
+ * The tolerance test `docs/adr/0023-the-gpu-producer.md` promises: a GPU tile
+ * matches a CPU tile within a stated bound.
  *
  * The whole band stack, on every archetype the zoo has and on three Sol
  * bodies, from level 0 down to each body's own detail floor — the bordered

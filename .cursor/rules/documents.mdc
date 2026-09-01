@@ -1,5 +1,5 @@
 ---
-globs: docs/**/*.md,scripts/docs/**,AGENTS.md
+globs: docs/**/*.md,design/plans/**,design/reports/**,scripts/docs/**,AGENTS.md,STYLE.md
 alwaysApply: false
 ---
 

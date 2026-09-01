@@ -124,7 +124,7 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", ADR-0011.
   whose _contents_ change every frame, so the compiler renders it once and shows that
   forever. `'use no memo'` is the opt-out; `hud/PerfPanel.tsx` is the worked example.
   (`useMemo` for a stable Three.js object is a different thing and is fine.)
-- **Labels are title case in the source; the type step decides the case.** `type-heading`
+- **Labels are sentence case in the source; the type step decides the case.** `type-heading`
   and `type-label` carry `text-transform: uppercase`. A label is also read where CSS is
   not — a `title`, an `aria-label`, a screen reader, a copied string — so `'PLAYABLE'` in a
   constant is a shout nothing can turn off.

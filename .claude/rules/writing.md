@@ -2,7 +2,7 @@
 
 No `paths:` — this loads at session start. It applies to every line of prose written
 here, and most of them are written in files no glob would predict.
-Reasoning and examples: [`docs/STYLE.md`](../../docs/STYLE.md).
+Reasoning and examples: [`STYLE.md`](../../STYLE.md).
 
 - **Write the present tense. The code is what the product does now.** A comment, a doc,
   a plan, a rule or a PR body describes the system as it stands, never the version it

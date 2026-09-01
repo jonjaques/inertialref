@@ -22,7 +22,7 @@ makes twelve capability claims that are supposed to be executable.
 | `README.md`                  | the twelve capability claims — `pnpm sim --self-test` |
 | `docs/roadmap.md`            | what is genuinely not built yet                       |
 | `docs/guides/development.md` | the commands and toolchain facts                      |
-| `docs/STYLE.md`              | still describes the voice the docs actually use       |
+| `STYLE.md`                   | still describes the voice the docs actually use       |
 
 ## The specific checks that catch real drift
 
@@ -42,7 +42,7 @@ makes twelve capability claims that are supposed to be executable.
 
 ## House style, which is not optional here
 
-Read [`docs/STYLE.md`](../../docs/STYLE.md) and the surrounding file before writing a line into it. The voice is consistent and
+Read [`STYLE.md`](../../STYLE.md) and the surrounding file before writing a line into it. The voice is consistent and
 deliberate:
 
 - **Comments and documents explain _why_, and specifically why the obvious thing does not
@@ -51,7 +51,7 @@ deliberate:
 - Things tried and rejected get written down, along with the reason.
 - `CONTEXT.md` headings carry the finding, not a summary — "The horizon gap (resolved
   20 Aug 2026 — it was the triangle winding)".
-- Prose is American English, in the voice in `docs/STYLE.md`.
+- Prose is American English, in the voice in `STYLE.md`.
 - Dates are absolute.
 - Never create a documentation file that was not asked for. Prefer editing the existing one.
 

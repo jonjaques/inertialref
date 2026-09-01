@@ -183,7 +183,11 @@ export function PanelChrome({
       </header>
 
       {!collapsed && (
-        <div className="min-h-0 flex-1 overflow-auto p-2">
+        // `scroll-cue` is the shadow pair in `index.css`: a docked panel is
+        // capped at 60dvh and an overlay scrollbar is invisible until it moves,
+        // so without it a capped panel's last line is cut with nothing saying
+        // there is more.
+        <div className="scroll-cue min-h-0 flex-1 overflow-auto p-2">
           {/*
            * The boundary is here, in the one chrome both arrangements share,
            * so a throw in a body costs the body and not the mode. Without it

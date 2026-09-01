@@ -235,9 +235,9 @@ from 17.5 ms to 28.3 while removing a step of up to 158 m from about 30% of
 directions. Two levers remain and both are deliberate not-yet: the radial bound
 is the cube's full width where the worst case measured over six bodies is 1.36
 of 1.73, and `EJECTA_REACH` is 2.6 where the published continuous ejecta deposit
-is often mapped to 2. This is well past the condition `TERRAIN-PLAN.md` § 12
-names for moving Phase 5's GPU producer from "adopt if the measurements say so"
-to a scheduled piece of work.
+is often mapped to 2. This is well past the condition for moving the GPU
+producer from "adopt if the measurements say so" to a scheduled piece of work
+([ADR-0023](0023-the-gpu-producer.md)).
 
 **`surfaceDetailFloor` moved from 7–10 to 10–16, and everything downstream moved
 with it.** Crater rims are sharp — a rim is about a seventh of its crater wide —

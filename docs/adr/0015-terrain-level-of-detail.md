@@ -185,4 +185,4 @@ across the switch and a generated one does not.
 - [ADR-0005](0005-procedural-seeds.md) — the versioning the detail floor answers to
 - [ADR-0017](0017-the-lens.md) — the lens the predicate reads, and every patch count above re-measured through it
 - [ADR-0020](0020-the-face.md) — the material the ground this selects is drawn with
-- [TERRAIN-PLAN](../../TERRAIN-PLAN.md) — the milestone this is Phase 1 of
+- [The terrain plan](../../design/plans/terrain.md) — the milestone this is Phase 1 of

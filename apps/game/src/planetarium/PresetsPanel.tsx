@@ -62,8 +62,23 @@ export function PresetsPanel({ engine, camera, onNotice }: PlanetariumContext) {
 
   return (
     <div className="flex flex-col gap-1">
-      <Section id="planetarium.presets.pictures" title="Pictures">
-        <div className="grid grid-cols-2 gap-1.5">
+      <Section
+        id="planetarium.presets.pictures"
+        title="Pictures"
+        trailing={`${engine.harness.presets().length}`}
+      >
+        {/*
+         * Three columns, the same rhythm the compositions under it use.
+         *
+         * Two columns give each plate a 3:2 card about 130 px wide, which is
+         * lovely and puts 500 px of thumbnails above the control anybody
+         * presses repeatedly — at that size the sixteen compositions are below
+         * the fold of a full-height panel. The compositions are read at this
+         * size, and these are simpler pictures than those: a disk, a crescent,
+         * a ring system. What the second column buys is scale on a gallery, and
+         * this is a control surface.
+         */}
+        <div className="grid grid-cols-3 gap-1.5">
           {engine.harness.presets().map((picture) => (
             <PictureCard
               key={picture.id}
@@ -94,8 +109,8 @@ export function PresetsPanel({ engine, camera, onNotice }: PlanetariumContext) {
             viewer has to be told once: a composition holds the lens and a
             picture names one. */}
         <p className="type-ui mt-1.5 text-pretty text-slate-400">
-          the same frame every time — an address, a framing and a lens. The
-          thumbnails are captures, not drawings.
+          A named body, a framing and a lens. Each one takes the same frame
+          every time.
         </p>
       </Section>
 
@@ -173,8 +188,7 @@ export function PresetsPanel({ engine, camera, onNotice }: PlanetariumContext) {
           // said once, here, rather than left for the reader to infer from
           // sixteen presses that all do the same thing.
           <p className="type-ui mt-1.5 text-pretty text-slate-400">
-            a star is always full — on one, a composition sets the framing and
-            nothing else
+            A star is always full, so on one of these only the distance changes.
           </p>
         )}
       </Section>
@@ -202,8 +216,8 @@ export function PresetsPanel({ engine, camera, onNotice }: PlanetariumContext) {
           {subject.isStar
             ? // A star has no phase: it is the light source. Saying so beats
               // five buttons that appear to do nothing.
-              'a star is the light — phase needs something it shines on'
-            : 'moves the camera round the terminator and leaves the framing alone'}
+              'A star is the light. Phase needs something it shines on.'
+            : 'Swings the camera around the terminator. The framing does not change.'}
         </p>
       </Section>
 
@@ -212,7 +226,7 @@ export function PresetsPanel({ engine, camera, onNotice }: PlanetariumContext) {
           <Action
             label="1 AU"
             disabled={disabled}
-            title="Back off to one astronomical unit — the subject among its neighbours"
+            title="Back off to one astronomical unit — the subject among its neighbors"
             onClick={() => observatory.setDistance(AU)}
           />
           <Action
@@ -227,8 +241,8 @@ export function PresetsPanel({ engine, camera, onNotice }: PlanetariumContext) {
             moon and at a star, and these are absolute. One AU from Jupiter is a
             planet in a frame; one AU from Sol is most of the inner system. */}
         <p className="type-ui mt-1.5 text-pretty text-slate-400">
-          absolute distances, not framings — the way out to where a system is a
-          point
+          Fixed distances, not framings. One AU from Jupiter is a planet in the
+          frame; one AU from Sol is most of the inner system.
         </p>
       </Section>
     </div>

@@ -579,8 +579,8 @@ export function surfaceGrammar(
  *
  * Fractions rather than meters, so the whole stack is bounded by
  * `maxElevation` by construction and no band can quietly grow past its share.
- * The shape of the division is the archetype table in `TERRAIN-PLAN.md` § 6,
- * written continuously: an airless world spends most of its budget on craters,
+ * The shape of the division is the archetypes in
+ * `docs/adr/0019-the-geology.md`, written continuously: an airless world spends most of its budget on craters,
  * an atmosphered one on hypsometry and mountain belts, a live icy one on the
  * ridges and rafts the tide is drawing.
  */

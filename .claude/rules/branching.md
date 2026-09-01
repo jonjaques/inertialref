@@ -21,7 +21,7 @@ Reasoning: [`docs/agents/working.md`](../../docs/agents/working.md) § "Starting
 - **Commit without asking.** A commit is reversible and costs nothing; a session that
   ends with forty files in one lump is not. Commit each coherent piece once the Stop
   gate is green, and write the extended body every time
-  ([`docs/STYLE.md`](../../docs/STYLE.md) § "Commit messages").
+  ([`STYLE.md`](../../STYLE.md) § "Commit messages").
 
 - **Rebase onto the target before pushing, never merge.** `main` enforces
   `required_linear_history` and takes squash merges only, so a merge commit cannot land:

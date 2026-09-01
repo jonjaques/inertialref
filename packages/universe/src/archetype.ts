@@ -213,7 +213,9 @@ export const SURFACE_ARCHETYPES: readonly SurfaceArchetype[] = [
 /** How the archetypes read in a panel and in a zoo listing. */
 const ARCHETYPE_NAMES: Readonly<Record<SurfaceArchetype, string>> = {
   'rocky-airless': 'Rocky, airless',
-  'rocky-atmosphered': 'Rocky, atmosphered',
+  // "with air", not "atmosphered" — the id is a key and the value is read
+  // under a heading in a reading room.
+  'rocky-atmosphered': 'Rocky, with air',
   'icy-dead': 'Icy, dead',
   'icy-active': 'Icy, active',
 }
@@ -232,7 +234,7 @@ export const archetypeName = (archetype: SurfaceArchetype): string =>
  *
  * It says nothing about the body's *terrain*, which has always been seeded on
  * every body in the game including the mapped ones — see the note in
- * `TERRAIN-PLAN.md` § 1 about what the version bump moves.
+ * `design/plans/terrain.md` § 1 about what the version bump moves.
  */
 export const isMappedSurface = (body: Body): boolean =>
   body.appearance.texture !== null

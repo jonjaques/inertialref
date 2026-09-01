@@ -2,7 +2,7 @@ import { MIN_STANCE_HEIGHT } from '@inertialref/rendering'
 import type { Meters } from '@inertialref/shared'
 
 /*
- * The Surface panel's vocabulary, in a `.ts` because its neighbor is a `.tsx`.
+ * The Ground section's vocabulary, in a `.ts` because its neighbor is a `.tsx`.
  *
  * `react/no-multi-comp` is an error here and a `.tsx` that exports anything but
  * components is a file Fast Refresh gives up on — which in this app means a full
@@ -23,30 +23,39 @@ export interface DescentRung {
 }
 
 /**
- * Five rungs, chosen by what is legible from each rather than by round numbers.
+ * Five rungs, labeled with the height each one is.
  *
- * The slider covers the whole band continuously; these are for arriving
- * somewhere specific in one press, and for a capture script that wants the same
- * five heights on every body. `Ground` is `MIN_STANCE_HEIGHT` — eye height, and
- * the bottom the terrain milestone has to hold up at.
+ * The slider covers the band continuously; these are for arriving somewhere
+ * specific in one press, and for a capture script that wants the same five
+ * heights on every body. They were named for what each one looks like —
+ * `Ground`, `Low`, `Pass`, `Approach`, `Top` — which is five words from five
+ * different vocabularies for one axis, and none of them says how far up it is.
+ * The height is the label and the view is the tooltip, which is the way round a
+ * reader can act on.
+ *
+ * `Top` keeps a word because it is the only rung with no number: the ceiling is
+ * the orbit arm's floor, so it is 3,186 km at Earth and 118 km at Miranda.
  */
 export const DESCENT_RUNGS: readonly DescentRung[] = [
   {
-    label: 'Ground',
+    label: `${MIN_STANCE_HEIGHT} m`,
     // The constant, not the number it currently is. `clampStanceHeight` lifts
     // anything below it silently, so a literal here would leave the rung
-    // labelled "the bottom of the range" naming something else the first time
-    // the near plane moves.
+    // labeled with something else the first time the near plane moves.
     height: MIN_STANCE_HEIGHT,
     why: 'eye height — the bottom of the range',
   },
-  { label: 'Low', height: 120, why: 'above the rocks, below the ridgeline' },
-  { label: 'Pass', height: 2_000, why: 'a low pass over a mountain range' },
-  { label: 'Approach', height: 40_000, why: 'the horizon curves' },
+  { label: '120 m', height: 120, why: 'above the rocks, below the ridgeline' },
+  { label: '2 km', height: 2_000, why: 'a low pass over a mountain range' },
+  {
+    label: '40 km',
+    height: 40_000,
+    why: 'high enough that the horizon curves',
+  },
   {
     label: 'Top',
     height: null,
-    why: 'as high as this arm goes — a disk again',
+    why: 'as high as this camera goes — a disk again',
   },
 ]
 

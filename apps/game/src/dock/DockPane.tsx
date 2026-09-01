@@ -168,6 +168,9 @@ export function DockPane({
                 definition={definition}
                 zone={zone}
                 indicate={over && indicator === index}
+                // How many other panels share this pane, which is what decides
+                // how tall this one may grow. See `DockPanel`.
+                siblings={panels.length - 1}
                 workspace={workspace}
               />
             ))}

@@ -61,7 +61,7 @@ in and nothing could list them, so nothing could export them, and a second
 machine started from the defaults.
 
 The forcing function is the next phase. Phase 2 of [the terrain
-plan](../../TERRAIN-PLAN.md) is the geology, and its acceptance criterion is a
+plan](../../design/plans/terrain.md) is the geology, and its acceptance criterion is a
 plate review — "reads as a Moon, not as noise". Plates are composed through
 these controls. A geology reviewed by dragging a camera that can only look at a
 body's center, with the aperture behind the console key, is judged through the
@@ -267,4 +267,4 @@ photograph's 11.4° asks for and the terrain predicate's saturation answers.
 - [ADR-0012](0012-dockable-panels.md) — the workspace the panels live in
 - [ADR-0007](0007-persistence.md) — what a save holds, and why preferences are not in one
 - [Planetarium](../design/planetarium.md) · [ux](../design/ux.md) — the surfaces
-- [TERRAIN-PLAN.md § 9](../../TERRAIN-PLAN.md) — the plan this implements
+- [The terrain plan](../../design/plans/terrain.md) — the milestone this serves

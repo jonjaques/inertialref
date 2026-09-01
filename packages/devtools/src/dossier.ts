@@ -289,7 +289,7 @@ function starDossier(world: World, system: StarSystem): Dossier {
         : { note: 'visual, at 10 pc' }),
     },
     {
-      label: 'Colour index',
+      label: 'Color index',
       value:
         cataloged?.physical.colourIndex == null
           ? null
@@ -652,10 +652,22 @@ function orbitGroup(world: World, body: Body, primary: Body | null): FactGroup {
       ? `${round(elements.semiMajorAxis / AU, 6)} AU`
       : kilometres(elements.semiMajorAxis),
   })
+  /*
+   * The gloss is days, and only where the value is not already days.
+   *
+   * `period` picks the unit — hours for Phobos, days for Earth, years for
+   * Neptune — so on every body between about two days and two years the row
+   * read "365.25 d" against a gloss of "365.251 d": the same quantity in the
+   * same unit at one more decimal, which is the one thing a second scale may
+   * not be. The gloss exists so a 165-year orbit and a 7.6-hour one can be
+   * compared in one unit, and that is exactly when it is not a repeat.
+   */
+  const days = round(body.orbitalPeriod / SECONDS_PER_DAY, 3)
+  const inDays = period(body.orbitalPeriod).endsWith(' d')
   facts.push({
     label: 'Orbital period',
     value: period(body.orbitalPeriod),
-    note: `${round(body.orbitalPeriod / SECONDS_PER_DAY, 3)} d`,
+    ...(inDays ? {} : { note: `${days} d` }),
   })
   facts.push({
     label: 'Eccentricity',
@@ -835,7 +847,7 @@ function rotationGroup(body: Body, year: Seconds): FactGroup {
  * this panel may not make.
  */
 const RELIEF_REASON: Readonly<Record<ReliefSource, string>> = {
-  measured: 'measured from orbit; the archive outranks the model',
+  measured: 'measured from orbit rather than derived',
   ceiling: 'at the ceiling nothing measured anywhere exceeds',
   size: 'limited by the size of the body',
   strength: 'limited by what the crust can hold up',
@@ -890,7 +902,7 @@ function geologyGroup(body: Body): FactGroup | null {
           : g.craterDensity > 0.35
             ? 'Heavy'
             : 'Sparse',
-      note: `largest basin ${kilometres(g.largestCrater)} across; floors flatten past ${kilometres(g.complexDiameter)}`,
+      note: `largest basin ${kilometres(g.largestCrater)} across; craters gain flat floors past ${kilometres(g.complexDiameter)}`,
     })
   } else {
     facts.push({
@@ -1081,7 +1093,7 @@ function insolationGroup(
         note: `${significant(flux / 1361)}× Earth`,
       },
       {
-        label: 'Equilibrium temp.',
+        label: 'Equilibrium temperature',
         value: `${round(published ?? equilibrium, 0)} K`,
         note: `${round((published ?? equilibrium) - 273.15, 0)} °C${
           published === null ? ' · from the geometric albedo' : ' · published'
@@ -1349,13 +1361,23 @@ function starSummary(
 
 function bodySummary(star: Star, body: Body, primary: Body | null): string {
   const around = primary === null ? star.name : primary.name
+  /*
+   * Earth is the ruler in both directions, and the two halves of that read
+   * differently. Above one Earth it is a multiple — "2.5× Earth’s radius" — and
+   * below one a percentage, because "0.34× Earth’s radius" is a number a reader
+   * has to convert and "34% of Earth’s radius" is one they already have.
+   *
+   * The multiple carries `×` rather than the words it used to: "at 1.00 Earth
+   * radii" is a plural over a value of one, and `at` is a preposition for a
+   * place rather than for a size.
+   */
   const size =
     body.radius >= EARTH_RADIUS
-      ? `${significant(body.radius / EARTH_RADIUS)} Earth radii`
+      ? `${significant(body.radius / EARTH_RADIUS)}× Earth’s radius`
       : `${round((body.radius / EARTH_RADIUS) * 100, 1)}% of Earth’s radius`
   const air =
-    body.atmosphere === null ? 'It has no atmosphere' : 'It holds an atmosphere'
-  return `${KIND_NOUN[body.kind]} at ${size}, going round ${around} once every ${period(body.orbitalPeriod)}. ${air}.`
+    body.atmosphere === null ? 'It has no atmosphere' : 'It has an atmosphere'
+  return `${KIND_NOUN[body.kind]}, ${size}, orbiting ${around} once every ${period(body.orbitalPeriod)}. ${air}.`
 }
 
 /* ------------------------------------------------------------------------- */
@@ -1494,7 +1516,12 @@ const SUN_FROM_EARTH = 9.3e-3
 
 function group(text: string): string {
   const [whole = '', fraction] = text.split('.')
-  const sign = whole.startsWith('-') ? '-' : ''
+  // U+2212, not the hyphen `toFixed` produces. In a tabular column a hyphen is
+  // two thirds the width of a digit and sits above the numerals' midline, so a
+  // negative reading is visibly narrower than the positive one under it — and
+  // `formatReading` and `elevationText` already print the real minus, so a
+  // hyphen here is two glyphs for one sign in one panel.
+  const sign = whole.startsWith('-') ? '−' : ''
   const digits = sign === '' ? whole : whole.slice(1)
   const grouped = digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
   return fraction === undefined

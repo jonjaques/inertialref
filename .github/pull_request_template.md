@@ -1,5 +1,5 @@
 <!--
-  House style: docs/STYLE.md. Write in the present tense about what the code does now,
+  House style: STYLE.md. Write in the present tense about what the code does now,
   and in the past tense only about the change itself. Keep the headings; delete the
   comments and any section that genuinely does not apply, saying so in a line rather
   than leaving it empty.

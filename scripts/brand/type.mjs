@@ -31,10 +31,7 @@ import { fileURLToPath } from 'node:url'
 import * as fontkit from 'fontkit'
 import { decompress } from 'wawoff2'
 
-const FONT_DIR = new URL(
-  '../../apps/game/node_modules/@fontsource-variable/',
-  import.meta.url,
-)
+const FONT_DIR = new URL('../../apps/game/node_modules/', import.meta.url)
 
 /**
  * The three faces, by the name `index.css` gives them.
@@ -42,30 +39,62 @@ const FONT_DIR = new URL(
  * `-latin-standard-normal` is the exact file `standard.css` serves to a Latin
  * page — see the `@import`s at the top of `index.css` and the note there about
  * why it is `standard.css` and not `index.css`.
+ *
+ * **Two of them are variable and the mono is not**, which is why the table is
+ * shaped this way rather than as three strings. Plex Mono ships one static file
+ * per weight and has no `fvar` at all, so asking fontkit to vary it throws
+ * instead of falling back — the weight has to be chosen by *filename*, at the
+ * three weights `index.css` imports. `@fontsource/`, not `@fontsource-variable/`,
+ * for the same reason.
  */
 const FILES = {
-  display: 'archivo/files/archivo-latin-standard-normal.woff2',
-  sans: 'instrument-sans/files/instrument-sans-latin-standard-normal.woff2',
-  mono: 'martian-mono/files/martian-mono-latin-standard-normal.woff2',
+  display:
+    '@fontsource-variable/archivo/files/archivo-latin-standard-normal.woff2',
+  sans: '@fontsource-variable/ibm-plex-sans/files/ibm-plex-sans-latin-standard-normal.woff2',
+  mono: {
+    400: '@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-400-normal.woff2',
+    500: '@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-500-normal.woff2',
+    600: '@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-600-normal.woff2',
+  },
+}
+
+/**
+ * The file a role and a weight name.
+ *
+ * A mono weight that is not one of the three imported is an error rather than a
+ * nearest match: the whole point of this module is that nothing silently
+ * renders in a face nobody chose, and 550 quietly served as 500 is that defect
+ * one step in.
+ */
+function fileFor(role, wght) {
+  if (role !== 'mono') return FILES[role]
+  const weight = wght ?? 400
+  const file = FILES.mono[weight]
+  if (file === undefined)
+    throw new Error(
+      `no mono file at weight ${weight} — index.css imports ${Object.keys(FILES.mono).join(', ')}`,
+    )
+  return file
 }
 
 /** Decompressed and parsed at most once each; a build asks for several strings. */
 const loaded = new Map()
 
-async function face(role) {
-  const cached = loaded.get(role)
+async function face(role, wght) {
+  const file = fileFor(role, wght)
+  const cached = loaded.get(file)
   if (cached !== undefined) return cached
-  const path = fileURLToPath(new URL(FILES[role], FONT_DIR))
+  const path = fileURLToPath(new URL(file, FONT_DIR))
   let sfnt
   try {
     sfnt = Buffer.from(await decompress(await readFile(path)))
   } catch (cause) {
     throw new Error(
-      `could not read ${FILES[role]} — run \`pnpm install\` first (${cause.message})`,
+      `could not read ${file} — run \`pnpm install\` first (${cause.message})`,
     )
   }
   const font = fontkit.create(sfnt)
-  loaded.set(role, font)
+  loaded.set(file, font)
   return font
 }
 
@@ -85,14 +114,17 @@ export async function outline(
   text,
   { role = 'display', size, wdth, wght, tracking = 0 },
 ) {
-  const base = await face(role)
+  const base = await face(role, wght)
+  // A static face carries its weight in the file it came from, so there is
+  // nothing left to vary and `getVariation` on one without an `fvar` throws.
+  const axes = Object.keys(base.variationAxes)
+  const settings = Object.fromEntries(
+    Object.entries({ wdth, wght }).filter(
+      ([axis, value]) => value !== undefined && axes.includes(axis),
+    ),
+  )
   const varied =
-    wdth === undefined && wght === undefined
-      ? base
-      : base.getVariation({
-          ...(wdth === undefined ? {} : { wdth }),
-          ...(wght === undefined ? {} : { wght }),
-        })
+    Object.keys(settings).length === 0 ? base : base.getVariation(settings)
 
   const scale = size / varied.unitsPerEm
   const step = tracking * varied.unitsPerEm

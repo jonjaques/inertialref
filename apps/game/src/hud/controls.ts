@@ -58,12 +58,17 @@ export const F_STOP_MAX = 22
 /**
  * The focus band, meters, with infinity at the top of the travel.
  *
- * Half a meter is closer than any camera in this game gets to anything; a
- * kilometer is past hyperfocal for every lens on the slider, so everything
- * beyond it is the same picture and the last position says so by being ∞.
+ * Half a meter is closer than any camera in this game gets to anything. The top
+ * is set by the **longest** lens rather than by a round number: hyperfocal is
+ * 5.4 m at the flying lens and 4.5 km at the telephoto end with the zoom racked
+ * out, so a band that stopped at a kilometer could not reach the one distance
+ * at which the telephoto is sharp to infinity — the control was unreachable
+ * exactly where it is the only one that matters. 10 km clears it with room, and
+ * everything past it is the same picture at every lens here, which is what the
+ * ∞ position at the top of the travel is for.
  */
 export const FOCUS_MIN = 0.5
-export const FOCUS_MAX = 1000
+export const FOCUS_MAX = 10_000
 
 /**
  * How many positions a lens slider has, and why the channels need to know.
@@ -121,7 +126,7 @@ export interface LensChannel {
  */
 export const LENS_CHANNELS = {
   focal: {
-    label: 'Focal Length',
+    label: 'Focal length',
     description: 'Focal length, millimeters',
     scrub: (lens) => scrubOf(lens.focalLength, FOCAL_MIN, FOCAL_MAX),
     at: (lens, scrub) => ({
@@ -181,10 +186,16 @@ export const LENS_CHANNELS = {
           ? Infinity
           : valueOf(scrub / FOCUS_FINITE_BAND, FOCUS_MIN, FOCUS_MAX),
     }),
+    // Meters up to a kilometer and kilometers past it, because the band now
+    // reaches 10 km and "10000 m" is a reading nobody parses at a glance.
     format: (lens) =>
-      Number.isFinite(lens.focus)
-        ? `${lens.focus < 10 ? lens.focus.toFixed(1) : lens.focus.toFixed(0)} m`
-        : '∞',
+      !Number.isFinite(lens.focus)
+        ? '∞'
+        : lens.focus >= 1000
+          ? `${(lens.focus / 1000).toFixed(2)} km`
+          : lens.focus < 10
+            ? `${lens.focus.toFixed(1)} m`
+            : `${lens.focus.toFixed(0)} m`,
   },
 } as const satisfies Record<string, LensChannel>
 

@@ -28,6 +28,12 @@ pnpm docs:build       # render docs/ and packages/* into the documentation site
 pnpm build            # optional media pull, docs, typecheck, then Vite build
 pnpm check            # graph, brand, presets, format, lint, typecheck, test, build
 
+# The four instruments. They read the tree; none of them gates it.
+pnpm fta              # complexity per file; fta:check exits 1 above a score of 91
+pnpm knip             # what nothing imports; knip:check narrows to the four hard classes
+pnpm spelling         # British spellings left in the source, graded by rename cost
+pnpm test:coverage    # the suite again, writing coverage/coverage-final.json
+
 pnpm sim --self-test           # headless run plus the twelve capability checks
 pnpm vitest run <substring>    # a single test file
 
@@ -81,6 +87,22 @@ built-in. After any change to `wrangler.jsonc`, regenerate
 `pnpm --filter @inertialref/server run types` and commit it.
 
 `pnpm check` is the gate. Do not report a task complete without it passing.
+
+**None of the four instruments is in it, and that is deliberate.**
+`fta` scores complexity and coverage counts what the suite executed; `knip`
+asks the question neither of them can, which is whether a file needs to exist
+at all, since something nothing imports scores and covers like anything else.
+`pnpm spelling` reads declarations through the TypeScript checker rather than a
+regex, because an identifier that also appears as a key in checked-in data is a
+rename with a second half the compiler cannot perform. `fta` and `knip` each
+pair a report that always exits 0 with a `:check` that exits 1, and the
+threshold lives on the command line rather than in `fta.json` or `knip.jsonc` —
+a severity in the config applies to the report too, which turns the report into
+something that exits 1 while printing the answer. `knip:check` is red today, and
+a ratchet installed while it already fails teaches people to pass
+`--no-exit-code`. The findings, and the case for wiring any of them into the
+gate, are [the complexity report](../../design/reports/complexity.md) and
+[the spelling plan](../../design/plans/british-english.md).
 
 None of the four data commands are needed to build or run the game — their
 outputs are committed. Run one when the upstream publishes; the diff is the news.
@@ -176,11 +198,16 @@ attaching to a pull request and is optional, skipped rather than fatal when abse
 `brew install imagemagick ffmpeg`.
 
 **Three typefaces**, self-hosted from `@fontsource`: Archivo Variable
-(condensed display), Instrument Sans Variable (structure and prose), Martian
-Mono Variable (every reading). There is no serif. They are imported in
-`src/index.css`, which also defines the nine `type-*` utilities. Do not write
-a size, a weight, and a tracking at a call site — use a named step. A Google
-Fonts `<link>` would break offline, which is the base case.
+(condensed display), IBM Plex Sans Variable (prose and controls, upright and
+italic), IBM Plex Mono (every reading, static 400/500/600). There is no
+serif. Symbol coverage is self-hosted beside them: two subsets cut from the
+desktop Plex TTFs carry the mathematical operators under the same family
+names (`src/assets/fonts/`), and two Noto subsets carry the planetary sigils no
+text family draws — `☉` and `⊕` are not among them, and
+`design/plans/type-coverage.md` says why. All are imported in `src/index.css`,
+which also defines the ten `type-*` utilities. Do not write a size, a weight,
+and a tracking at a call site — use a named step. A Google Fonts `<link>`
+would break offline, which is the base case.
 
 **React DnD 16** drives dockable panels, and only the gesture. What a drop
 means is arithmetic in `apps/game/src/dock/layout.ts` and `dock/floating.ts`.
@@ -219,8 +246,11 @@ produces now is the review itself. Recapture, and a diff in `git status` is the
 signal.
 
 **The documentation site** at `/docs` is generated. `pnpm docs:build` renders
-every markdown file under `docs/`, plus `AGENTS.md`, and every export of
-`packages/*` through TypeDoc, into `apps/game/public/doc-content/` — which is
+every markdown file under `docs/`, plus the two adopted from the root —
+`AGENTS.md` at `/docs/working-card` and `STYLE.md` at `/docs/style`, because
+the pages under `docs/` cite both and a site that answered those links with a
+hop to GitHub would send the reader out of the building — and every export of
+`packages/*` through TypeDoc, into `apps/game/public/doc-content/`, which is
 gitignored, staged by `pnpm build` before the client build, and fetched at
 runtime. Editing a page means editing the markdown; the site has no copy of
 its own. Two things it will refuse to do: a markdown file under `docs/` that
@@ -228,6 +258,16 @@ no wing in `scripts/docs/wings.mjs` lists fails the build rather than
 publishing nowhere, and a `{@link}` pointing at a renamed symbol fails it
 rather than rendering as words that link to nothing. `scripts/docs/build.mjs`
 carries the rest.
+
+**`design/` is the other half of that division, and it is not published.**
+Plans, working reviews and the complexity report live there; `docs/` is the
+finished account of what the system does and `design/` is the working one. A
+reader who reaches a documentation site expects the system to already behave
+the way the page says, and a plan is the one document that promises the
+opposite — so `routeFor` returns `null` for a path under `design/`, and a link
+from a published page into a plan resolves to GitHub rather than to a route
+that does not exist. Brand sources and the reference imagery are there for the
+same reason: they are inputs, not pages.
 
 **Site metadata** is duplicated on purpose: `src/site.ts` for the running
 client, `index.html` for scrapers that do not run JavaScript, and

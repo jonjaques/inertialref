@@ -161,8 +161,8 @@ describe('a shader that will not build', () => {
 describe('a compute kernel', () => {
   it('writes a storage buffer the test can read back', async () => {
     /*
-     * The shape Phase 5 of `TERRAIN-PLAN.md` needs — a kernel per cell into a
-     * buffer — with the arithmetic bound named for the same reason as the
+     * The shape `docs/adr/0023-the-gpu-producer.md` needs — a kernel per cell
+     * into a buffer — with the arithmetic bound named for the same reason as the
      * float target's above. Measured on the M5: 3.7e-7 over 256 samples.
      */
     const count = 256

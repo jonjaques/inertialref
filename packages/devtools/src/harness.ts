@@ -1391,7 +1391,7 @@ export class GameHarness {
    *
    * Empty on a giant, the same answer `Observatory.sites` gives. `surveySites`
    * derives from `body.surface`, which every body carries — Jupiter included —
-   * so without the filter here the Surface panel draws six clickable cards for
+   * so without the filter here the Ground section draws six clickable cards for
    * ground that `visit` refuses, and each of them throws out of an onClick.
    */
   sites(address?: string): readonly {
@@ -1406,7 +1406,7 @@ export class GameHarness {
     const body = this.#requireBody(address)
     // The observatory's own gate: a giant's SurfaceParameters run through the
     // survey without complaint, but every row would be a place `visit` refuses
-    // to stand — six clickable throws in the Surface panel. An empty list is
+    // to stand — six clickable throws in the Ground section. An empty list is
     // the answer the panel draws an honest empty state for.
     if (!hasSolidSurface(body)) return []
     return surveySites(body).map((site) => ({

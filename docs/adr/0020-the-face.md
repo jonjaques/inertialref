@@ -123,7 +123,7 @@ and because a per-vertex biome resolves boundaries at the mesh's resolution
 rather than the screen's — the ice line on a Martian scarp is a per-pixel fact.
 
 **Authored PBR material sets with hex-tiling and triplanar**, which is what
-[TERRAIN-PLAN](../../TERRAIN-PLAN.md) § 7 specifies. Both techniques answer
+[the terrain plan](../../design/plans/terrain.md) § 2 specifies. Both techniques answer
 questions an authored set asks: hex-tiling breaks the visible period of a tiled
 texture and triplanar chooses which way to project one onto a curved surface.
 The design bible's "few dozen authored assets" do not exist yet, so the detail
@@ -202,4 +202,4 @@ target, against 203 KB of geometry.
 - [ADR-0017](0017-the-lens.md) — the pixel angle the detail fades against
 - [Content § biomes](../design/content.md#biomes) — what it has to produce
 - [Art](../design/art.md) — the doctrine that the published map wins
-- [TERRAIN-PLAN](../../TERRAIN-PLAN.md) § 7 — the phase this closes
+- [The terrain plan](../../design/plans/terrain.md) — the milestone this serves

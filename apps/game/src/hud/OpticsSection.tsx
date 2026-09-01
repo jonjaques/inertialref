@@ -1,4 +1,4 @@
-import { formatDistance } from '@inertialref/shared'
+import { formatReading } from '@inertialref/shared'
 import { lensReadout } from '@inertialref/rendering'
 import { useEngine, useShallow } from '../state/engineStore.ts'
 import type { CameraState } from './controls.ts'
@@ -46,20 +46,20 @@ export function OpticsSection({ camera }: { camera: CameraState }) {
       trailing={`${view.verticalFovDegrees.toFixed(1)}°`}
     >
       <Row
-        label="Field"
-        value={`${view.verticalFovDegrees.toFixed(1)}° V · ${view.horizontalFovDegrees.toFixed(1)}° H`}
+        label="Field of view"
+        value={`${view.verticalFovDegrees.toFixed(1)}° × ${view.horizontalFovDegrees.toFixed(1)}°`}
       />
       <Row
-        label="Sharp from"
+        label="In focus"
         value={
           view.depthOfField.far === Infinity
-            ? `${formatDistance(view.depthOfField.near)} to ∞`
-            : `${formatDistance(view.depthOfField.near)} to ${formatDistance(view.depthOfField.far)}`
+            ? `${formatReading(view.depthOfField.near)} to ∞`
+            : `${formatReading(view.depthOfField.near)} to ${formatReading(view.depthOfField.far)}`
         }
       />
       <Row
         label="Hyperfocal"
-        value={formatDistance(view.depthOfField.hyperfocal)}
+        value={formatReading(view.depthOfField.hyperfocal)}
       />
       <Row
         label="Aperture"
@@ -77,9 +77,12 @@ export function OpticsSection({ camera }: { camera: CameraState }) {
         label="Airy disk"
         value={`${(view.airyDiameter * 1000).toFixed(1)} µm · past f/${view.diffractionLimit.toFixed(0)}`}
       />
+      {/* What one pixel spans, against what the glass can actually separate.
+          Two numbers, so the reader can see which of the two is the limit. */}
+      <Row label="Per pixel" value={`${view.pixelAngleMrad.toFixed(2)} mrad`} />
       <Row
-        label="Resolution"
-        value={`${view.pixelAngleMrad.toFixed(2)} · ${view.angularResolutionMrad.toFixed(2)} mrad`}
+        label="Resolving power"
+        value={`${view.angularResolutionMrad.toFixed(2)} mrad`}
       />
       <Row
         label="Exposure"
