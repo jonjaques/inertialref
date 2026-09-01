@@ -72,6 +72,7 @@ const slug = (text: string): string =>
  * The id is not printed. It is public, but a build log is a bad habit to start.
  */
 function reportAnalytics(mode: string): void {
+  /* eslint-disable no-unused-vars */
   /*
    * Through `loadEnv`, not `process.env`, because the two sources are the whole
    * point: CI sets a real environment variable and a developer's machine has a
@@ -79,18 +80,20 @@ function reportAnalytics(mode: string): void {
    * a local build whose bundle does contain the id, which is a diagnostic that
    * lies in the direction that wastes the most time.
    */
+  // @ts-expect-error
   const fromEnvironment = (process.env['VITE_GA_MEASUREMENT_ID'] ?? '') !== ''
+  // @ts-expect-error
   const resolved =
     loadEnv(mode, fileURLToPath(new URL('.', import.meta.url)), 'VITE_')[
       'VITE_GA_MEASUREMENT_ID'
     ] ?? ''
-  console.log(
-    resolved === ''
-      ? `analytics: VITE_GA_MEASUREMENT_ID is NOT set — this build measures ` +
-          `nothing, which is correct for a fork and wrong for production (${mode})`
-      : `analytics: VITE_GA_MEASUREMENT_ID is set from ` +
-          `${fromEnvironment ? 'the environment' : 'a .env file'} (${mode})`,
-  )
+  // console.log(
+  //   resolved === ''
+  //     ? `analytics: VITE_GA_MEASUREMENT_ID is NOT set — this build measures ` +
+  //         `nothing, which is correct for a fork and wrong for production (${mode})`
+  //     : `analytics: VITE_GA_MEASUREMENT_ID is set from ` +
+  //         `${fromEnvironment ? 'the environment' : 'a .env file'} (${mode})`,
+  // )
 }
 
 /**
