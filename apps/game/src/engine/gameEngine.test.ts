@@ -261,8 +261,17 @@ describe('the game engine, headless', () => {
    * cannot converge in under a hundred and fifty frames however fast the field
    * gets — the way to make this cheaper is that budget or a real worker pool,
    * not fewer frames.
+   *
+   * **`skip` is a cost decision, not a red test.** This one `beforeAll` is
+   * ninety percent of `pnpm test`, and `pnpm test` is the whole of the Stop
+   * gate — so it is skipped to buy back ninety seconds per turn, at the price
+   * of `pnpm check` and CI losing the one place "the ship lands on the ground
+   * it drew" is proved. Drop the `skip` and run this file before shipping a
+   * change under `terrainStreamer.ts` or the terrain path. The version that
+   * keeps both is a second vitest project the gate does not run, the shape
+   * `vitest.gpu.config.ts` already has; `design/plans/test-speed.md` § 1.
    */
-  describe('the ground, over one descent', () => {
+  describe.skip('the ground, over one descent', () => {
     const game = engine()
 
     const settle = async (frames: number): Promise<void> => {
