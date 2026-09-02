@@ -4,7 +4,6 @@ import {
   BufferAttribute,
   BufferGeometry,
   type Group,
-  InstancedBufferAttribute,
   InstancedMesh,
   Matrix4,
   type Scene,
@@ -17,9 +16,11 @@ import {
   ROCK_VARIANTS,
   rockMesh,
 } from '@inertialref/rendering'
+import { COVER_CHANNELS } from '@inertialref/universe'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { MAX_ROCKS, type ScatterBatch } from '../engine/scatterField.ts'
 import { grainWrap, type TerrainMaterial } from '../render/terrain.ts'
+import { attachCover, type CoverBuffers } from '../render/terrainAttributes.ts'
 import { warmAtMount, warmCompile, warmRenderer } from '../render/warmup.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
 
@@ -124,16 +125,10 @@ export function ScatterRocks({
       // scale is applied on top. Set rather than computed for the reason
       // `TerrainPatches` gives.
       geometry.boundingSphere = new Sphere(new Vector3(), 1)
-      const bytes = new Uint8Array(INSTANCE_CAPACITY * 4)
-      geometry.setAttribute(
-        'terrainCover',
-        new InstancedBufferAttribute(bytes, 4, true),
-      )
-      geometry.setAttribute(
-        'terrainMorphCover',
-        new InstancedBufferAttribute(bytes, 4, true),
-      )
+      const bytes = new Uint8Array(INSTANCE_CAPACITY * COVER_CHANNELS)
+      const buffers = attachCover(geometry, bytes, bytes, true)
       const mesh = new InstancedMesh(geometry, material, INSTANCE_CAPACITY)
+      mesh.userData.coverBuffers = buffers
       mesh.count = 0
       mesh.frustumCulled = false
       mesh.userData.eyeLocal = new Vector3()
@@ -176,15 +171,8 @@ export function ScatterRocks({
         geometry.setAttribute('normal', new BufferAttribute(ups, 3))
         geometry.setAttribute('terrainMorph', new BufferAttribute(points, 3))
         geometry.setAttribute('terrainMorphNormal', new BufferAttribute(ups, 3))
-        const bytes = new Uint8Array(4)
-        geometry.setAttribute(
-          'terrainCover',
-          new InstancedBufferAttribute(bytes, 4, true),
-        )
-        geometry.setAttribute(
-          'terrainMorphCover',
-          new InstancedBufferAttribute(bytes, 4, true),
-        )
+        const bytes = new Uint8Array(COVER_CHANNELS)
+        attachCover(geometry, bytes, bytes, true)
         geometry.setIndex([0, 1, 2])
         /*
          * At the real capacity, and drawn one instance deep.
@@ -304,20 +292,17 @@ export function ScatterRocks({
       mesh.instanceMatrix.clearUpdateRanges()
       mesh.instanceMatrix.addUpdateRange(0, count * 16)
       mesh.instanceMatrix.needsUpdate = true
-      // Both names are separate attribute objects over one array, so the write
-      // lands once and both are flagged.
-      const cover = mesh.geometry.getAttribute(
-        'terrainCover',
-      ) as InstancedBufferAttribute
-      const morphCover = mesh.geometry.getAttribute(
-        'terrainMorphCover',
-      ) as InstancedBufferAttribute
-      ;(cover.array as Uint8Array).set(batch.cover.subarray(0, count * 4))
+      // Both buffers are over one array, so the write lands once and both
+      // are flagged; the four attribute names are views on the two buffers.
+      const { cover, morphCover } = mesh.userData.coverBuffers as CoverBuffers
+      ;(cover.array as Uint8Array).set(
+        batch.cover.subarray(0, count * COVER_CHANNELS),
+      )
       cover.clearUpdateRanges()
-      cover.addUpdateRange(0, count * 4)
+      cover.addUpdateRange(0, count * COVER_CHANNELS)
       cover.needsUpdate = true
       morphCover.clearUpdateRanges()
-      morphCover.addUpdateRange(0, count * 4)
+      morphCover.addUpdateRange(0, count * COVER_CHANNELS)
       morphCover.needsUpdate = true
     }
   })

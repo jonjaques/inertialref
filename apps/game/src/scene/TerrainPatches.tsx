@@ -11,12 +11,13 @@ import {
   Vector3,
 } from 'three/webgpu'
 import { Quaternion as Q, Vec } from '@inertialref/spatial'
-import { HEIGHTFIELD_RESOLUTION } from '@inertialref/universe'
+import { COVER_CHANNELS, HEIGHTFIELD_RESOLUTION } from '@inertialref/universe'
 import { patchIndices, pixelAngle } from '@inertialref/rendering'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { GEOMETRY_CACHE } from '../engine/terrainStreamer.ts'
 import { texturesFor } from '../render/planetTextures.ts'
 import { grainWrap, type TerrainMaterial } from '../render/terrain.ts'
+import { attachCover } from '../render/terrainAttributes.ts'
 import { warmAtMount, warmCompile, warmRenderer } from '../render/warmup.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
 
@@ -92,15 +93,8 @@ export function TerrainPatches({
         geometry.setAttribute('normal', new BufferAttribute(up, 3))
         geometry.setAttribute('terrainMorph', new BufferAttribute(triangle, 3))
         geometry.setAttribute('terrainMorphNormal', new BufferAttribute(up, 3))
-        const cover = new Uint8Array(12)
-        geometry.setAttribute(
-          'terrainCover',
-          new BufferAttribute(cover, 4, true),
-        )
-        geometry.setAttribute(
-          'terrainMorphCover',
-          new BufferAttribute(cover, 4, true),
-        )
+        const cover = new Uint8Array(3 * COVER_CHANNELS)
+        attachCover(geometry, cover, cover)
         geometry.setIndex([0, 1, 2])
         const dummy = new Mesh(geometry, material)
         dummy.userData.eyeLocal = new Vector3()
@@ -229,20 +223,13 @@ export function TerrainPatches({
         /*
          * The cover, as normalized bytes rather than floats.
          *
-         * Four channels of a fraction, read through a splat weight — eight bits
+         * Six channels of a fraction, read through a splat weight — eight bits
          * resolves each to a four-hundredth, which is finer than anything
          * downstream of a mip chain can tell from a float, and it is a quarter
          * of the bandwidth. A whole-disk selection is several hundred patches
          * and vertex memory is already the streamer's largest number.
          */
-        geometry.setAttribute(
-          'terrainCover',
-          new BufferAttribute(patch.cover, 4, true),
-        )
-        geometry.setAttribute(
-          'terrainMorphCover',
-          new BufferAttribute(patch.morphCover, 4, true),
-        )
+        attachCover(geometry, patch.cover, patch.morphCover)
         geometry.setIndex(indices)
         /*
          * Set rather than computed. `computeBoundingSphere` walks the position

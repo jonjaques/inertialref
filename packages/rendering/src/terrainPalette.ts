@@ -2,6 +2,7 @@ import type { Meters } from '@inertialref/shared'
 import {
   type Body,
   type LinearRgb,
+  type LiquidAppearance,
   seaDatumElevation,
 } from '@inertialref/universe'
 
@@ -63,6 +64,19 @@ export interface TerrainPalette {
   readonly evaporite: SurfaceMaterial
   /** Condensed volatiles: caps, frost and an ice shell. */
   readonly ice: SurfaceMaterial
+  /**
+   * The seabed: silt and sand under the water, and what shows through it.
+   *
+   * Paler than the regolith, because a shelf is sorted fines rather than
+   * weathered rock, and it is what a shallow sea is turquoise *over*.
+   */
+  readonly seabed: SurfaceMaterial
+  /**
+   * What grows: the biosphere's pigment as a deposit, laid where the cover's
+   * `biota` channel says. Absolute rather than a ratio of the base, because
+   * chlorophyll is the same green on any rock.
+   */
+  readonly pigment: SurfaceMaterial
 
   /** Multiplicative tint at the two ends of the body's compositional ramp. */
   readonly mineralLow: LinearRgb
@@ -110,6 +124,20 @@ export interface TerrainPalette {
   readonly seaLevel: Meters | null
   /** What deep water looks like from above. */
   readonly oceanColour: LinearRgb
+  /**
+   * The liquid the sea sheet and the rivers are drawn in, or null where
+   * nothing runs. `oceanColour` is its deep colour where it exists; the
+   * absorption and the glow are the sheet's alone.
+   */
+  readonly liquid: LiquidAppearance | null
+  /**
+   * Whether the sea is drawn as a sheet over the seabed, 0..1.
+   *
+   * One on a mapless body with a sea; zero on a mapped one, whose sea is in
+   * the photograph — the same carve-out the invented cover follows, because
+   * the generated datum and the map disagree about where the land is.
+   */
+  readonly sheet: number
 
   /** What a low sun turns, and how much air there is to turn it. */
   readonly sunsetTint: LinearRgb
@@ -288,6 +316,24 @@ export function terminatorFor(
   )
 }
 
+/**
+ * The datum the sea sheet is built on for this body, meters, or null where
+ * no sheet is drawn.
+ *
+ * One function for the two readers that have to agree — the streamer, which
+ * builds the sheet into every patch the sea reaches, and the palette, which
+ * tells the ground material whether it is a seabed. A sheet exists where the
+ * generator's sea is the only sea there is: a dry world has none, a mapped
+ * one has a photograph, and a body whose grammar admits no liquid has a
+ * datum with nothing to stand at it.
+ */
+export function seaSheetDatum(body: Body): Meters | null {
+  if (body.appearance.texture !== null || body.appearance.liquid === null) {
+    return null
+  }
+  return seaDatumElevation(body.surface)
+}
+
 export function terrainPalette(body: Body): TerrainPalette {
   const grammar = body.surface.grammar
   const base = referenceReflectance(body)
@@ -388,6 +434,28 @@ export function terrainPalette(body: Body): TerrainPalette {
       grain: 0.06,
       bump: 0.25,
     },
+    /*
+     * Sorted fines under the water: brighter and paler than the shore, and
+     * smooth, because what a shelf shows through a meter of sea is sand.
+     */
+    seabed: {
+      albedo: scale(base, deposit(1.45), 0.55),
+      roughness: 0.85,
+      grain: 0.1,
+      bump: 0.3,
+    },
+    /*
+     * The pigment, mixed toward the body's own ground by how thin the air
+     * is: a canopy on a thick-aired world hides the soil under it, and a
+     * lichen crust on a thin-aired one does not. Rough and grainy, because
+     * a canopy has more texture at every scale than the ground it stands on.
+     */
+    pigment: {
+      albedo: mixToward(base, body.appearance.pigment, 0.55 + 0.4 * air),
+      roughness: 0.92,
+      grain: 0.5,
+      bump: 0.8,
+    },
 
     /*
      * The compositional ramp's two ends, as tints rather than colours, and
@@ -420,10 +488,16 @@ export function terrainPalette(body: Body): TerrainPalette {
     // mesh once disagreed about where an ocean was because two call sites each
     // typed the remap.
     seaLevel: seaDatumElevation(body.surface),
-    // Open-ocean reflectance in linear sRGB — a few percent, blue. The same
-    // number `render/planet.ts` uses, for the same reason: what a photograph
-    // from orbit shows is water, not the bathymetry underneath it.
-    oceanColour: { r: 0.012, g: 0.04, b: 0.13 },
+    // The liquid's own deep colour where a body has one; open-ocean blue
+    // otherwise, which is the number `render/planet.ts` draws a photographed
+    // sea in — what orbit shows is water, not the bathymetry underneath it.
+    oceanColour: body.appearance.liquid?.colour ?? {
+      r: 0.012,
+      g: 0.04,
+      b: 0.13,
+    },
+    liquid: body.appearance.liquid,
+    sheet: seaSheetDatum(body) === null ? 0 : 1,
 
     sunsetTint: body.appearance.haze?.limb ?? { r: 1, g: 1, b: 1 },
     airThickness: body.appearance.haze?.thickness ?? 0,

@@ -43,6 +43,7 @@ import {
   selectTerrain,
   type TerrainEye,
   type TerrainPalette,
+  seaSheetDatum,
   terrainPalette,
   terrainPatchKey,
 } from '@inertialref/rendering'
@@ -1383,6 +1384,9 @@ export class TerrainStreamer {
           elevations: field.elevations,
           cover: field.cover,
           bodyRadius: body.radius,
+          // The sheet's datum, where one is drawn at all — the same answer
+          // the palette gives the material, from the same function.
+          seaLevel: seaSheetDatum(body),
         }),
       )
       built += 1
