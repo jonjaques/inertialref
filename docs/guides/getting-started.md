@@ -159,7 +159,11 @@ ir.status().world.stateHash === a // → true
 pnpm sim --self-test
 ```
 
-The same core in Node — no DOM, no React, no WebGL — at ~110,000 ticks/s.
+The same core in Node — no DOM, no React, no WebGL. The 3,840 ticks it times
+are a ship in a 300 km orbit with its hands off, which coasts: the run reports
+tens of millions of ticks a second because the frame jumps them rather than
+integrating them ([ADR-0025](../adr/0025-the-rails.md)). `--scenario approach`
+puts it under thrust, which is what an integrated tick costs.
 
 ---
 

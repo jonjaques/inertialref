@@ -519,6 +519,162 @@ engine field that holds its reciprocal.
 - `stateHash`, saves, `surveySites` and `installSurfaceFrame` all still read the canonical
   field; `TerrainSketch` is derived and never persisted.
 
+## An identifier rename sweeps the canonical file and its mirror, and stops there
+
+New variant of the mirror-drift shape, and the _good_ half fired: `feat/a-coasting-ship-is-on-rails`
+split `SimulationClock.advance` into `plan`/`settle`, and a follow-up commit
+(`docs: the wall-clock invariant names the call that still takes a second`) correctly
+rewrote **both** `AGENTS.md` and `.claude/rules/determinism.md` to name `clock.plan`. Its own
+`--stat` is two files. What it did not reach: `docs/adr/0006-simulation-clock.md:20` — the ADR
+the invariant cites by name — plus `docs/hosting.md:669` and a code comment at
+`apps/game/src/pages/DataSection.tsx:48`, all three still reading "wall clock enters at exactly
+one call, `clock.advance`". `SimulationClock.advance` now has **no production caller** at all.
+
+**The check on any diff that renames a method an invariant names:** `rg` the old identifier
+across the whole tree after reading the fix commit's `--stat`. A two-file docs commit for a
+rule that is quoted in four places is the tell.
+
+## A derived per-entity cache that a _new_ movement path bypasses
+
+`World.#groundAhead` (`world.ts:178`) holds the contact test's post-step ground sample so the
+next tick reuses it, and its docstring says "anything else that moves an entity drops it, and a
+fresh sample is bit-identical to the reuse". `teleport`, `reframeEntity`, `#land`, `#liftOff`
+and a frame change all call `#forgetDerived`. The new rails path does not: `#coast` moves the
+entity for arbitrarily many ticks and `#leaveRails` (`world.ts:770`) clears `rails` and
+`#coasting` and leaves `#groundAhead` alone. Measured: eccentric Earth orbit, rails entered at
+130 km, `setControl` after 60,000 coasting ticks at 2,418 km — the integrator is handed the
+130 km number. Benign **only** because rails eligibility (`periapsis > radius + groundBand`)
+forces the stale value above the atmosphere ceiling, so the one branch that reads it takes the
+same side either way; the contact block recomputes. One line to fix, three steps to prove safe.
+
+**The check:** for each private `Map<EntityId, …>` in `World`, list every method that writes
+`entity.state` and confirm each appears in `#forgetDerived`'s caller set.
+
+## The method that settles a jump-vs-step equivalence claim, in ten minutes
+
+`world.runTicks(N)` jumps; a bare `for (…) world.step()` loop steps the same ticks. Same seed,
+same fixture, compare `stateHash()` and `Vec.distance` of the positions. Bit-identical over
+200k/300k/400k ticks on three conics (circular LEO, escape hyperbola, high ellipse) and across
+a real SOI departure — both worlds fired `left sphere of influence` on tick 59,200.
+
+To count _jumps_ rather than ticks, monkeypatch the instance: `clock.commitTicks = (n) => {…}`.
+A 100,000× 60 fps frame over a LEO coast is **one** jump of 106,666 ticks; 10⁷× is eight, the
+longest 8.86 h — which is the "bounded by Luna at about ten hours" figure ADR-0025 quotes.
+
+## A boundary-scheduled test converges regardless of its schedule — the argument, so you do not re-derive it
+
+`World`'s rails schedule (`nextCheckAfter`) worried me because a restored world rebuilds
+`nextCheck` as `nextBoundary(clock.tick)` while the original carries a `safeFor`-derived one, so
+the two test at different boundaries. It cannot diverge: `nextCheck = firstBoundary(safeHorizon)`
+and `safeHorizon ≤ crossingTick`, so `nextCheck ≤ firstBoundary(crossingTick)` at _every_ test,
+and the strictly-increasing sequence must land exactly on `firstBoundary(crossingTick)`. The
+detection tick is a function of the crossing instant alone, whatever the intermediate schedule.
+Any "sound bound + fixed boundaries" scheme has this property; check the two inequalities rather
+than hunting for a counterexample.
+
+## The ground band is empirical, and the measurement is one loop
+
+`groundBand = max(maxElevation, atmosphere.ceiling) + 108` replaced `binding.radius * 0.25` as the
+gate below which terrain is sampled, on the premise that the field never exceeds `maxElevation`.
+The band-share arithmetic argues it and `craters.ts`'s `softLimit` folds in on top, and
+`universe.test.ts:332` tolerates `1.2 ×`. Measured `max(surfaceRadius(body, d) − body.radius)` over
+6,000 directions × 129 Sol bodies and 3,000 × 362 generated bodies: the peak is **0.46 ×
+maxElevation** at worst (Alpha Centauri III), minimum slack 108 m, and `datumRadius ≤ body.radius`
+holds for every `figure` body because the half-extents arrive sorted. The gate is safe by ~2×.
+Worth not re-deriving; worth re-running if a band's share ever exceeds its allowance.
+
+## Same save, two numbers, again
+
+`docs/concepts/persistence.md:6` says the save is "**900** once the ship is coasting" while the
+same branch's `docs/design/technical.md:206` says **998** and `pnpm sim --self-test` capability 11
+prints "998 bytes". Both describe capability 11's save. Third instance of this shape in these
+notes. **Run the rig that prints the number** — `pnpm sim --self-test` takes seconds.
+
+## A modulo-reduction test that reduces the same way the function does
+
+`universal.test.ts`'s "holds a low orbit to the millimeter across a year of revolutions" compares
+`propagateTwoBody(from, mu, year − whole)` against `propagateTwoBody(from, mu, year)`, where the
+test computes `whole` from `2π√(r³/μ)` and the function reduces internally by
+`2π/(√μ·α·√α)`. Mathematically the same period, so the test is close to asking the function the
+same question twice; what saves it is that the two period expressions round differently and a
+`toBeCloseTo(r, 3)` on the radius is independent. Fine as shipped — but the generic check is:
+when a test asserts "the internal reduction is exact", make sure the expected side does not
+reproduce the reduction.
+
+## The bound is loosened to the exact value of the defect it guards
+
+Sharpest finding on `feat/a-coasting-ship-is-on-rails`'s tail two commits, and the
+cheapest to spot: `universal.test.ts`'s angular-momentum bound went 1e-9 → **5e-9**, and
+the comment above it says the step-exit Newton regression "reads **4.6 × 10⁻⁹** here".
+4.6 < 5. `CONTEXT.md` restates both numbers in one sentence. Measured over 4 × 180,000
+fast-check draws of the arbitrary's own domain: the step-exit variant exceeds 1e-9 on
+10–14 states per 180k (~1.8% detection at `numRuns: 300`) and 5e-9 on 0–2 (~0.2%), so the
+change is a 10× disarm. **When a bound is loosened, put the regression's own measured
+value beside the new number and subtract.**
+
+Same finding's second half: "5 × 10⁻⁹ is four times the worst this domain produces …
+worst is 1.2 × 10⁻⁹" is one seed. Four seeds: 1.8e-10, 9.4e-10, **6.26e-8**, 8.6e-10 —
+one in four exceeds the bound, so the shipped solver is flaky against it at about the
+rate it catches the regression. fast-check is **unseeded** here (no `fc.configureGlobal`,
+no setupFile), so "swept over N states" is a claim about one draw. Re-run it with three
+seeds before quoting it.
+
+The armed alternative exists and is one line: a _deterministic_ example. Hyperbola from
+400 km at 1.156 × escape, propagated 100 days to 5.4 × 10¹⁰ m, separates HEAD
+(4.8 × 10⁻¹²) from the step-exit variant (4.2 × 10⁻⁹) by 870×. The branch already found
+this shape for the bisection defect ("converges on a near-parabolic hyperbola") and did
+not for the step-exit one.
+
+**The rig, reusable in ten minutes:** `sed` the package's imports to absolute paths into
+scratch, `cp` it, patch the one line under test, and drive both copies from one loop
+importing `fast-check` from
+`node_modules/.pnpm/fast-check@4.9.0/node_modules/fast-check/lib/fast-check.js` (the root
+`node_modules/fast-check/lib/esm/` path does not exist). 180,000 runs is 18 s.
+
+## A "the row now reads 0×" honesty fix that arms a warning banner
+
+`clock.settle`'s `#asked` became nullable so a paused frame keeps its 0× instead of
+being read as the sub-tick "asked for nothing and delivered it" case. Correct — and
+`PerfPanel.tsx:164`'s amber line is `achievedTimeScale < timeScale * 0.99` with no
+`paused` term, so pausing at 100,000× now prints "capped — this frame could not deliver
+100000×". `world.paused` is on the same `WorldInspection` object, unused. The concurrent
+docs pass documented the 0× row in `docs/concepts/time.md` and did not notice the banner.
+**When a status value gains a new legitimate low reading, grep every predicate that
+compares it.**
+
+## `#railsCheck`'s lazy coast record and the tick stamp: both equivalent, do not re-derive
+
+`#enterRails` stopped constructing the `CoastRecord` and now only deletes it;
+`#coastRecord` rebuilds it at first use with `nextBoundary(this.clock.tick)`. Equivalent:
+every reader (`#coastable`, `step`, `#jump`) runs after `commitTick`, where `clock.tick`
+equals the `tick` the old call site passed, and `railsSpeedBound` reads only frame +
+epoch. Likewise `#record(..., tick - 1)` in `#railsCheck` matches the integrated path,
+which stamps `this.clock.tick` _before_ `commitTick`. And `nextCheckAfter(tick, …)` is
+the same value the old `this.clock.tick` gave. All three untested, all three correct.
+
+`considerFrameChange`'s `rebased` boolean → `travel/elapsed` reset is not just a rename:
+the old code kept `const travel` after calling `rebase`, so every child _after_ the
+rebase subtracted travel and elapsed a second time from already-rebased gaps. The new
+code zeroes them, which removes a double subtraction. Sound either way (the old one was
+over-conservative), and the crossing tick is unchanged because the honest test is exact.
+
+`coastState`'s `Q.integrate` swap is **bit-identical**: `Vec.length` is `Math.hypot` and
+so is `Q.integrate`'s internal omega, and `integrateBody` calls the same function.
+`visViva(mu, periapsis(e), a)` equals `sqrt(mu(1+e)/(a(1−e)))` in exact arithmetic;
+`orbitalPeriod(mu, 1/alpha)` equals `2π/(√μ·α√α)`. Both differ only in the last bits.
+
+The new bisection safeguard never exhausts: 250,000 propagations (Earth hyperbolas and
+ellipses, heliocentric ellipses to 50 revolutions) peak at **66** of the loop's 100
+iterations, 0 exhausted.
+
+## Two counts of the same population, one branch apart
+
+`docs/adr/0025-the-rails.md` says "sixty-seven children" of the Sun and
+`flight.ts:551` — written by the same branch's first commit — says "sixty-six in Sol".
+Measured `world.loadSystem(SOL).planets.length` = **67**. The ADR's "twelve" is right at
+a 30 km reach threshold (12 bodies; the next is Annefrank at 42 km) and wrong at the
+"twice that" 60 km one it argues in the same sentence (15).
+
 ## Resolved on earlier branches — do not re-report
 
 - `Observatory.stand` guards `focus` on `wanted.address !== this.#target?.address`.
@@ -527,6 +683,10 @@ engine field that holds its reciprocal.
   order-independence test was re-armed with `(33, 32.5)`.
 - `craterProfile`'s `if (t > 1)` ejecta step is fixed by `smoothstep(1, RIM_OUTER, t)`.
 - `rayCraters`'s sort is total; `morphCover`'s `evenRow/evenCol` cannot index the border.
+- The `clock.advance` → `clock.plan` rename is now swept everywhere: ADR-0006,
+  `docs/hosting.md`, `DataSection.tsx` and `.claude/rules/determinism.md` all name `plan`.
+- `World.#leaveRails` calls `#forgetDerived`; the stale `#groundAhead` finding is closed,
+  and `#step` now deletes the sample on a frame change and above the ground band.
 
 ## A memoized selection: check the memo key against what the _callee_ reads, not the caller
 

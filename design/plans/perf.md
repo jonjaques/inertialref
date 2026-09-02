@@ -38,8 +38,20 @@ stretch — `terrain.build` max 16.1 ms against a 0.25 ms × 8 budget,
 `terrainPatches` max 9.8 — which is the shape of a collector pause landing
 inside whichever span happens to be open.
 
-The named producers behind that allocation rate are cut, and **none of it has
-been re-measured _as GC_**. That is the open half: the rate is down by
+One producer is measured and gone: a ship integrated in the Sun's frame made
+5.5 KB of garbage a tick — poses and quaternions for twenty children's sphere
+tests — and the collector was 14% of that headless profile; on rails the tick
+allocates a state and nothing else, and the tests are skipped by a bound.
+
+**Re-measured as GC at the converged Earth summit stance**, dev build, a 5 s
+trace read for the main thread's top-level collector tasks (a `MajorGC` entry
+nests a `V8.GC_MARK_COMPACTOR`, a `MinorGC` a scavenger; count each once):
+**87 ms in 5,015 ms — 1.7% of wall, 6.8% of the thread's 1,268 ms of task
+time** — of which 51 ms is incremental marking, 19 ms major pauses and 17 ms
+scavenges. The thread is 25% busy at that stance. Marking dominating means a
+major cycle is always in progress, which is the allocation rate keeping the
+old generation moving rather than any one pause; the producers named in the
+memory section above are where the rate comes from. That is the open half: the rate is down by
 construction and nobody has recorded the collector's share since. One trace with
 attribution before believing any individual span's max. If scavenges still land
 inside frames, the next candidates are the selection's per-walk node objects and
@@ -173,26 +185,54 @@ or move the set to a GPU-compressed container so the decode disappears.
 
 ## Memory and the resident world
 
-### The tour ends at 906 MB of JS heap, against a ≤900 MB budget
+### The tour ends at 906 MB of JS heap, and the steady state does not leak
 
 `performance.memory` after the full tour — three systems, two landings, a stance
 on a generated world: **628 MB** at the Proxima summit, **906 MB** at the end.
 Two narrower readings: **488 MB** at a converged Earth summit with one system
 loaded, **770 MB** after a Mars landing plus a jump, with two.
 
-The budgets table in
+**Measured as live objects, it is flat.** Three operating points watched over
+CDP for two to four minutes with `HeapProfiler.collectGarbage` forced before
+every reading:
+
+| Operating point                                               | Live heap                  | Window |
+| ------------------------------------------------------------- | -------------------------- | ------ |
+| Flight start                                                  | 129.5 MB, flat within ±0.5 | 150 s  |
+| Earth summit stance, converged (1,134 fields, 403 geometries) | 524 MB, flat within ±2     | 240 s  |
+| Planetarium at Earth, 100,000×                                | 552–556 MB                 | 32 s¹  |
+
+¹ cut short by a source edit reloading the page; re-run before quoting.
+
+The sampling profile of what is _retained_ across each window totals under 6
+MB and names the travel survey's rows (`travelTargets`, 1.3 MB, replaced every
+second), the catalog rows, and the cutscene overlay's animation-frame closure.
+Nothing grows. **The unforced reading does not ramp either**: `usedJSHeapSize`
+read every two seconds at the same stance with no collection forced sits
+between **534 and 582 MB for 200 s**, a scavenge-sized sawtooth around the live
+set and no trend. So the tour's 906 MB is not steady-state growth — it is what
+the _transitions_ leave behind, three systems and three surveys and two
+landings' worth, and whether that is garbage a major collection has not yet
+taken or state something still holds is the measurement that has not been
+made: a heap snapshot on either side of one jump, diffed by constructor.
+
+The producers of that garbage at a stance, from the retained sites: the 8 Hz
+status sample — `inspectWorld` mapped every entity through `inspectEntity`,
+and `inspectEntity` built a whole world snapshot, 129 bodies with their poses,
+to read one entity, twice a sample — the 1 Hz travel survey, and the frame's
+own snapshot. The first is the cheap one to cut.
+
+Prime suspects for the _working set_ are unchanged: the geometry cache (450 MB
+at its documented full ceiling) plus the field cache (138 MB full), retained
+across operating-point changes on the same body by design, plus each resident
+world. `#evict` trims only above caps and `clear()` only fires on a body
+change, so a session that ends its last landing holds that landing's full
+working set indefinitely — which is a policy, not a leak. **A heap breakdown
+of the 524 MB stance comes before anyone tunes a cap**, and it gates the entry
+below. The budgets table in
 [`docs/design/technical.md`](../../docs/design/technical.md) still records
 **66–74 MB**, measured before streamed terrain existed. That row is stale
 either way.
-
-Prime suspects: the geometry cache (450 MB at its documented full ceiling) plus
-the field cache (138 MB full), retained across operating-point changes on the
-same body by design, plus each resident world. The question is whether anything
-ever _shrinks_ when the player leaves a body's surface for good — `#evict` trims
-only above caps and `clear()` only fires on a body change, so a session that
-ends its last landing holds that landing's full working set indefinitely.
-**A heap breakdown comes before anyone tunes a cap**, and it gates the entry
-below.
 
 ### Nothing unloads a system, and `snapshot()` scales with what is loaded
 
@@ -212,15 +252,72 @@ settled — saves pin references and the catalog regenerates deterministically, 
 a cache-not-save unload is allowed by the ADRs — but it wants the heap
 breakdown first.
 
-### Warp at 100,000× is untested past three loaded systems
+### Warp is delivered to 10⁷×, and the frame at warp is the snapshot and the starfield
 
-Three systems loaded: `Engine/advance` **3.95 ms mean, 10.4 max**, engine step
-4.5 mean / 6.5 p95 against its 2.0 ms budget line. One system, looking at Mars:
-advance 0.03 ms at 1×, 1.43 at 1,000×, **2.52 mean and 5.0 max at 100,000×**,
-engine step 2.80 / 5.3, `Engine/frame` still 16.67 — no dropped frames.
+Closed by [ADR-0025](../../docs/adr/0025-the-rails.md): a coasting ship is
+propagated from an epoch and a frame jumps the ticks nothing integrates, so
+the 1,920× ceiling is now the ceiling on _integration_ only. Measured after,
+occluded rig, 1600×900:
 
-The gap between those two readings is the loaded-system count, which is the
-entry above. Nothing has measured five to ten.
+| Operating point                     | Requested | Achieved | Ticks / frame | Engine mean / p95 | Period |
+| ----------------------------------- | --------- | -------- | ------------- | ----------------- | ------ |
+| Flight start, one system            | 100,000×  | 100,000× | 106,240       | 0.50 / 0.60 ms    | 16.67  |
+| Planetarium at Earth from 14,400 km | 100,000×  | 100,000× | 79,998        | 0.37 / 0.50 ms    | 16.67  |
+| the same                            | 10⁶×      | 10⁶×     | 826,693       | 0.36 / 0.50 ms    | 16.67  |
+| the same                            | 10⁷×      | 10⁷×     | 8,264,027     | 0.37 / 0.50 ms    | 16.66  |
+
+`Engine/advance` is 0.03–0.05 ms at every one of them: a 100,000× frame over a
+ship in low Earth orbit is one jump, because the sphere-of-influence bound
+binds on Luna at about ten hours of simulated time. Headlessly a coasting tick
+is 0.01–0.03 µs at every operating point, against 0.4–12.5 µs integrated.
+
+**Per tick, integrated, before** — the figures that made the case, 20,000
+ticks a point on a quiet M5: 0.40 µs at the spawn point, 1.06 µs at 36,000 km
+over Earth, **12.5 µs at 400 km** (two terrain samples a tick, gated at a
+quarter of the body's radius), 13.3 µs at 100 km over Luna, **12.5 µs at 1 AU
+in the Sun's frame** (twenty of the sixty-six children pass the band prune
+and each is a Kepler solve), 0.30 µs landed. The terrain gate is now the
+ground band and the post-step sample is reused; the children's tests are
+skipped by a triangle-inequality bound on both the coasting and the thrusting
+path.
+
+**Per tick, thrusting** — the figure the game pays at 1×, main drive lit,
+60,000 ticks, `origin/main` in a worktree against the branch, the two
+**interleaved** so any load lands on both:
+
+| Operating point, drive lit | `origin/main` | with the change |
+| -------------------------- | ------------- | --------------- |
+| 400 km over Earth          | 12.3–12.6 µs  | 0.43–0.51 µs    |
+| 1 AU in the Sun's frame    | 11.8–13.3 µs  | 0.56–0.60 µs    |
+
+The first is the crater ladder — `levelContribution` alone is 24% of a profile
+of it, sampled twice a tick for a ship 400 to 2,900 km up — and the second is
+the children's Kepler solves. On the branch `considerFrameChange` is 5% of the
+star-frame profile and the collector 4%.
+
+**Interleaved, and that is not fastidiousness.** The first attempt ran
+`origin/main` twice and then the branch twice, immediately after installing
+into a fresh worktree, and read 39–49 µs against 1.5–2.6 µs — both sides
+inflated three-fold by a cold module cache, in a ratio that happened to look
+plausible. Alternating the two costs nothing and is the only form of this
+measurement worth quoting.
+
+**What the engine's 0.4 ms is now.** `Engine/snapshot` at 0.28–0.39 ms — 129
+bodies' orbit and spin poses at the render instant, per frame, whether or not
+the body draws as more than a point — and nothing else over 0.05. The
+loaded-system scaling entry above is this line's future. Above the engine,
+`Render/starfield` is **0.62–0.79 ms a frame under warp**, 4–5% of the frame
+and the largest measured span: the shell's parallax budget binds on the
+system's own sun, which is in the survey and placed on the shell, so an eye
+moving 75,000 km a frame at 100,000× rewrites twenty thousand sprites every
+frame. Excluding the stars whose bodies are drawn from the budget — and from
+the shell — would make the budget bind on the nearest _other_ star, four light
+years out, and the rewrite an every-few-minutes event; it is a scene decision
+because the sun's sprite currently sits behind its disk.
+
+**The rig's late frames are not the engine's.** 3 of 240 frames over 25 ms in
+the 10⁷× profile, the largest span inside them the starfield at 0.9 ms. Same
+caveat as below.
 
 ---
 
@@ -230,12 +327,18 @@ entry above. Nothing has measured five to ten.
    thing left in a transition, and the fix shape is already written down.
 2. **Shipped-build mode switches and docs pages.** Every figure is dev React at
    about five times the real cost. Measure before acting.
-3. **Per-job heightfield time**, which is what fallback convergence is made of.
+3. **The starfield under warp**, 0.6–0.8 ms a frame rewriting a sky that has
+   not moved a pixel, because the budget binds on the sun. A scene decision
+   about the star whose body is drawn.
+4. **Per-job heightfield time**, which is what fallback convergence is made of.
    One worker's first patch against its tenth on the same body separates the
    cold per-body caches from the grammar and the scheduler.
-4. **A heap breakdown**, which gates both the cap tuning and system eviction.
-5. **Garbage collection**, re-measured as GC now that its named producers are
-   gone.
+5. **A heap breakdown of the 524 MB stance**, which gates both the cap tuning
+   and system eviction. The steady state is flat; what is left is what the
+   working set is made of.
+6. **The transitions' retention.** One jump, one heap snapshot either side,
+   diffed by constructor: that is where the tour's 906 MB lives, and neither
+   the stance nor the collector explains it.
 
 ## Caveats that shape these numbers
 
@@ -360,3 +463,18 @@ return {
 Retarget tours schedule `ir.look` calls the same way; the camera orbit is
 `observatory.setAngles((azimuth += 0.02), 0.25, false)` on a 16 ms interval;
 warp is `engine.world.clock.setTimeScale(n)`.
+
+Two more throwaways, recorded because their mechanics cost a round trip each.
+A **tick benchmark** opens a session through `openSession` with the headless
+catalog and an inline pool, puts the ship at an operating point with the
+harness's own verbs — `orbit(address, km)`, `land`, `goToSystem` — and times
+`harness.step(20_000)`; run it under `--cpu-prof` and bucket the profile's
+samples by `callFrame` for self time. Its figures are about the tick only on a
+quiet machine: the integrated tick read 1.5–2.0 µs beside a `pnpm test` run and
+0.55 quiet. A **heap watch** attaches to the driver's Chrome on port 9333
+through `/json/list`, enables `HeapProfiler`, calls `collectGarbage` before
+every `performance.memory` read so the trend is live objects, and brackets the
+window with `startSampling`/`stopSampling` — the profile's `selfSize` per node
+is what is _retained_ at the end, aggregated by `callFrame`. Editing a served
+source file mid-watch reloads the page and ends the measurement; the dev
+server's HMR is the reason the planetarium's warp reading above is 32 s long.

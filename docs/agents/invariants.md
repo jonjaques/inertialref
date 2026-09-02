@@ -35,6 +35,7 @@ table is one of those three, not drift.
 | No fine lattice coordinate from an absolute float32 direction, no lattice decision in a float | [ADR-0023](../adr/0023-the-gpu-producer.md) · [Rendering](../concepts/rendering.md#terrain-meshing)        |
 | Entity writes go through `World`                                                              | [Extending](../guides/extending.md)                                                                        |
 | Landedness is a consequence, never asserted                                                   | [Extending](../guides/extending.md)                                                                        |
+| A coasting entity's epoch does not survive a move it did not make                             | [Time](../concepts/time.md) · [ADR-0025](../adr/0025-the-rails.md)                                         |
 | Saves store references, not regenerable content                                               | [Persistence](../concepts/persistence.md) · [ADR-0007](../adr/0007-persistence.md)                         |
 | The star catalog is an argument, not a singleton                                              | [Galaxy](../design/galaxy.md) · [Catalog](../guides/catalogue.md)                                          |
 | Do not store what the catalog can derive                                                      | [Catalog](../guides/catalogue.md)                                                                          |

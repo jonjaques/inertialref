@@ -14,8 +14,10 @@ import {
 } from './codec.ts'
 import {
   decodeWireFrameState,
+  decodeWireRailsEpoch,
   decodeWireVec3,
   type WireFrameState,
+  type WireRailsEpoch,
   type WireVec3,
 } from './wire.ts'
 
@@ -60,6 +62,11 @@ export interface SaveEntity {
     readonly rotation: WireVec3
   }
   readonly flightAssist: boolean
+  /**
+   * The epoch the entity coasts from, or null while it is integrated. Part of
+   * canonical state for the reason `WireRailsEpoch` gives.
+   */
+  readonly rails: WireRailsEpoch | null
 }
 
 export const SAVE_MUTATION_KINDS = [
@@ -119,6 +126,13 @@ export const decodeSaveEntity: Decoder<SaveEntity> = decodeObject({
     { translation: [0, 0, 0] as WireVec3, rotation: [0, 0, 0] as WireVec3 },
   ),
   flightAssist: decodeOptional(decodeBoolean, true),
+  // Defaulted rather than versioned, like `control`: a save written before
+  // entities coasted has every entity integrated, which is what null means.
+  rails: decodeOptional(
+    (value, path) =>
+      value === null ? ok(null) : decodeWireRailsEpoch(value, path),
+    null,
+  ),
 })
 
 export const decodeSaveMutation: Decoder<SaveMutation> = decodeObject({

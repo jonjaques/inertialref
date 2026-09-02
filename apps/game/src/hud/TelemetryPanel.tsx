@@ -107,7 +107,9 @@ export function TelemetryPanel({
         <Section
           id="tel.player"
           title="Player"
-          trailing={player.landed ? 'landed' : 'flying'}
+          trailing={
+            player.landed ? 'landed' : player.coasting ? 'coasting' : 'flying'
+          }
         >
           <Row label="Entity" value={`${player.id} · ${player.name}`} />
           <Row label="Address" value={player.address ?? '(dynamic)'} />
@@ -124,7 +126,22 @@ export function TelemetryPanel({
             value={`${player.localSpeedText} local · ${player.speedText} universe`}
           />
           <Row label="Altitude" value={player.altitudeText ?? '—'} />
-          <Row label="State" value={player.landed ? 'landed' : 'flying'} />
+          {/*
+           * Three states, not two: a coasting ship is propagated from an
+           * epoch rather than integrated (ADR-0025), and it is the state the
+           * time-warp ladder is uncapped in — the one to look for when a
+           * detent reads as delivered or capped.
+           */}
+          <Row
+            label="State"
+            value={
+              player.landed
+                ? 'landed'
+                : player.coasting
+                  ? 'coasting on rails'
+                  : 'flying'
+            }
+          />
         </Section>
       )}
 

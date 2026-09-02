@@ -170,6 +170,16 @@ Descent is checked before ascent: being inside a moon's SOI is more specific
 than being inside its planet's, and checking children first gets that ordering
 right without a special case.
 
+**The test itself is skipped while it cannot say anything.** A child found some
+distance out of reach cannot come into reach until the entity's own travel plus
+the child's fastest approach has consumed that gap, which the triangle
+inequality settles without a Kepler solve — so the tick that once made twenty
+solves in the Sun's frame makes none until a gap runs out. A coasting ship
+([ADR-0025](../adr/0025-the-rails.md)) makes the surviving tests on fixed
+64-tick boundaries instead, so a stepped coast and a jumped one change frame on
+the same tick. A crossing is therefore noticed up to a second late, which is
+30 km into a sphere 900,000 km across and inside the 5% hysteresis above.
+
 Verified in the browser, mid-flight:
 
 ```

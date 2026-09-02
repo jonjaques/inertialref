@@ -16,7 +16,8 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", ADR-0001..0009.
   coordinate.
 - **Never call `Math.random()`, `Date.now()` or `performance.now()` in anything
   canonical.** Generation derives from seeds, simulation from the integer tick. Wall clock
-  enters at exactly one call: `clock.advance`.
+  enters at exactly one call: `clock.plan`, which `World.advance` hands the frame's
+  delta. `clock.settle` takes a count of ticks, not a second.
 - **Never make generation depend on order.** Derive the seed from the address, never draw
   from a shared stream. If generating a different object first changes this one's output,
   it is wrong.
@@ -25,6 +26,9 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", ADR-0001..0009.
   reset interpolation history and the landed set, and `update` does not.
 - **Never assert that something is landed.** Landedness is a consequence of the contact
   test, owned by `World.#land`.
+- **Never let a coasting entity keep its epoch through a move it did not make.** An
+  entity with `rails` set is propagated from the epoch, not the state; every world
+  method that moves one drops it, and the epoch is hashed and saved. ADR-0025.
 - **Never pass a bare `Vec3` to anything that samples terrain.** The argument is a
   `BodyFixedDirection`; the only producers are `bodyFixedDirection`, `geodeticDirection`
   and `regionDirection`. Sampling in inertial axes leaves the mountains behind as the

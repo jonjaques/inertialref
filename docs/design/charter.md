@@ -55,7 +55,7 @@ refactor.
 comparable titles are 100 GB downloads gated behind a store account. This is a
 link. That is not a small thing for a genre whose central pleasure — _look at
 this thing I found_ — is inherently social and inherently a thing you want to
-send someone. A 744-byte save means a coordinate **is** the share.
+send someone. A 998-byte save means a coordinate **is** the share.
 
 > 🎮 Designer's Note: The instinct will be to fight the browser and chase Star
 > Citizen's fidelity. Resist it. The browser is not the compromise this project

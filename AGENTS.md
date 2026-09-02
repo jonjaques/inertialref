@@ -50,7 +50,9 @@ Violating one of these is a rewrite later, not a refactor.
   coordinate.
 - **Never use `Math.random()`, `Date.now()`, or `performance.now()` in
   canonical code.** Generation derives from seeds. Simulation depends on the
-  integer tick. Wall clock enters at exactly one call, `clock.advance`.
+  integer tick. Wall clock enters at exactly one call, `clock.plan`, which
+  `World.advance` hands the frame's delta; `settle` takes a count of ticks run,
+  and nothing downstream of either sees a second.
 - **Never call `console.timeStamp`, `performance.mark` or `performance.measure`
   outside `engine/browserTiming.ts`,** and never name `performance.` in
   `packages/*` at all. Emit through a `Timer` from
@@ -107,6 +109,13 @@ Violating one of these is a rewrite later, not a refactor.
   set; `update` does not.
 - **Never assert that something is landed.** Landedness is a consequence of
   the contact test, owned by `World.#land`. `teleport` has no such flag.
+- **Never let a coasting entity keep its epoch through a move it did not
+  make.** An entity with `rails` set is propagated from that epoch, not from
+  its state, so a state written beside a stale epoch is a ship in two places at
+  once. `teleport`, `reframeEntity`, a non-neutral `setControl`, and a frame
+  change all drop it, and the epoch is in the state hash and the save because
+  two worlds that agree on a state and not on its epoch part in the low bits
+  on the next tick. [ADR-0025](docs/adr/0025-the-rails.md).
 - **Never persist anything regenerable.** A save stores references and
   mutations. Generated content belongs in a cache, not a save.
 - **Never make the star catalog ambient.** Pass it as an argument —

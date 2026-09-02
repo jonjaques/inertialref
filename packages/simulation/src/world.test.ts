@@ -18,6 +18,7 @@ import {
 } from '@inertialref/spatial'
 import {
   type Body,
+  type EntityId,
   bodyFixedDirection,
   bodyFixedFrameId,
   bodyFrameId,
@@ -27,13 +28,14 @@ import {
   walkBodies,
 } from '@inertialref/universe'
 import {
+  MAX_WARP_FRAME,
   MAX_WARP_RATE,
   MAX_WARP_STEPS,
   TICK_DURATION,
   TICK_RATE,
 } from './clock.ts'
 import { snapshot } from './snapshot.ts'
-import { World } from './world.ts'
+import { RAILS_CHUNK, World } from './world.ts'
 
 const SOL = systemId('SOL')
 
@@ -45,6 +47,29 @@ function solarWorld(seed = 'inertialref'): World {
   const world = new World({ seed })
   world.loadSystem(SOL)
   return world
+}
+
+/** A ship in a circular orbit at `radii` body radii, which coasts after one tick. */
+function coastingShip(world: World, radii = 3) {
+  const planet = landingTarget(world)
+  const radius = planet.radius * radii
+  const ship = world.spawnShip(
+    'coaster',
+    bodyFrameId(planet.address),
+    vec3(radius, 0, 0),
+  )
+  world.teleport(ship.id, {
+    ...ship.state,
+    velocity: vec3(0, 0, -circularSpeed(planet.mu, radius)),
+  })
+  return ship
+}
+
+/** The same orbit with the main drive lit, so every tick has to be integrated. */
+function thrustingShip(world: World) {
+  const ship = coastingShip(world)
+  world.setControl(ship.id, vec3(0, 0, 1), Vec.ZERO)
+  return ship
 }
 
 /** First planet with solid ground and an atmosphere — somewhere to land. */
@@ -214,7 +239,10 @@ describe('simulation clock', () => {
     // Exactly, not approximately: it is a ratio of ticks wanted to ticks run.
     expect(keepingUp.clock.status().achievedTimeScale).toBe(100)
 
+    // Under thrust, so the ship has to be integrated: the ceiling is about
+    // integration and a coasting ship is not subject to it (below).
     const capped = solarWorld()
+    thrustingShip(capped)
     capped.clock.setTimeScale(100_000)
     // The ceiling is a rate, so what a frame buys is the rate times the frame —
     // 2048 ticks at 60 fps. Stated that way rather than as the constant, because
@@ -250,6 +278,7 @@ describe('simulation clock', () => {
      */
     const rng = new Rng(rootSeed('warp-rate'))
     const world = solarWorld()
+    thrustingShip(world)
     world.clock.setTimeScale(100_000)
 
     let worst = 0
@@ -277,15 +306,43 @@ describe('simulation clock', () => {
     expect(worst).toBeLessThan(TICK_DURATION / (MAX_WARP_RATE * shortest))
   })
 
-  it('never runs more ticks in one frame than the ceiling allows', () => {
+  it('never integrates more ticks in one frame than the ceiling allows', () => {
     fc.assert(
       fc.property(
         fc.double({ min: 1, max: 1e6, noNaN: true }),
         fc.double({ min: 1 / 240, max: 1, noNaN: true }),
         (scale, delta) => {
           const world = solarWorld()
+          thrustingShip(world)
           world.clock.setTimeScale(scale)
           expect(world.advance(delta)).toBeLessThanOrEqual(MAX_WARP_STEPS)
+        },
+      ),
+      { numRuns: 40 },
+    )
+  })
+
+  it('never jumps a coast further than the requested rate over a stall', () => {
+    // A coasting frame is bounded by the *request* — the rate over at most
+    // `MAX_WARP_FRAME` of wall clock — rather than by the integration ceiling.
+    // A backgrounded minute at 100,000× therefore buys 640,000 ticks, which is
+    // ten thousand simulated seconds against the six million it asked for.
+    fc.assert(
+      fc.property(
+        fc.double({ min: 1, max: 1e6, noNaN: true }),
+        fc.double({ min: 1 / 240, max: 60, noNaN: true }),
+        (scale, delta) => {
+          const world = solarWorld()
+          coastingShip(world)
+          world.clock.setTimeScale(scale)
+          const ran = world.advance(delta)
+          const frame = Math.min(delta, MAX_WARP_FRAME)
+          expect(ran).toBeLessThanOrEqual(
+            Math.max(
+              MAX_WARP_STEPS,
+              Math.ceil((scale * frame) / TICK_DURATION),
+            ),
+          )
         },
       ),
       { numRuns: 40 },
@@ -299,6 +356,18 @@ describe('simulation clock', () => {
     expect(world.clock.tick).toBe(0)
     world.clock.setPaused(false)
     expect(world.advance(1 / 64)).toBe(1)
+  })
+
+  it('reports 0× delivered on a paused frame', () => {
+    // A paused frame asks for nothing, and "asked for nothing" is also the
+    // sub-tick frame that reads as delivered in full. The two must not share
+    // a reading: the panel's warp row is the only thing that tells a player
+    // the clock stopped.
+    const world = solarWorld()
+    world.clock.setTimeScale(100_000)
+    world.clock.setPaused(true)
+    world.advance(1 / 60)
+    expect(world.clock.status().achievedTimeScale).toBe(0)
   })
 })
 
@@ -520,6 +589,179 @@ describe('flight', () => {
     // Never below the surface.
     const altitude = world.altitudeOf(ship.id)
     expect(altitude === null || altitude > -50).toBe(true)
+  })
+})
+
+describe('rails', () => {
+  it('puts a coasting ship on rails and keeps a thrusting one off them', () => {
+    const world = solarWorld()
+    const coaster = coastingShip(world)
+    const burner = thrustingShip(world)
+    world.step()
+    expect(world.isCoasting(coaster.id)).toBe(true)
+    expect(world.isCoasting(burner.id)).toBe(false)
+    // An entity that does not exist is not on rails either.
+    expect(world.isCoasting('#999' as EntityId)).toBe(false)
+    // Releasing the drive is what puts it on: no input, no torque, a conic
+    // that clears the ground band.
+    world.setControl(burner.id, Vec.ZERO, Vec.ZERO)
+    world.step()
+    expect(world.isCoasting(burner.id)).toBe(true)
+    // Any input takes it straight back off, on the tick it arrives.
+    world.setControl(burner.id, vec3(0, 1, 0), Vec.ZERO)
+    expect(world.isCoasting(burner.id)).toBe(false)
+  })
+
+  it('refuses rails to anything whose conic reaches the ground or the air', () => {
+    const world = solarWorld()
+    const planet = landingTarget(world)
+    // Falling straight down from 30 m: a radial conic, periapsis zero.
+    const lander = world.spawnShip(
+      'lander',
+      bodyFrameId(planet.address),
+      vec3(groundRadius(world, planet) + 30, 0, 0),
+    )
+    world.teleport(lander.id, { ...lander.state, velocity: vec3(-2, 0, 0) })
+    // A high orbit whose periapsis dips into the atmosphere.
+    const apoapsis = planet.radius * 4
+    const periapsis = planet.radius + (planet.atmosphere?.ceiling ?? 0) / 2
+    const a = (apoapsis + periapsis) / 2
+    const speedAtApoapsis = Math.sqrt(planet.mu * (2 / apoapsis - 1 / a))
+    const skimmer = world.spawnShip(
+      'skimmer',
+      bodyFrameId(planet.address),
+      vec3(apoapsis, 0, 0),
+    )
+    world.teleport(skimmer.id, {
+      ...skimmer.state,
+      velocity: vec3(0, 0, -speedAtApoapsis),
+    })
+    for (let i = 0; i < 200; i += 1) {
+      world.step()
+      expect(world.isCoasting(lander.id)).toBe(false)
+      expect(world.isCoasting(skimmer.id)).toBe(false)
+    }
+  })
+
+  it('lands a jumped coast on the bits a stepped one lands on', () => {
+    /*
+     * The property the whole mechanism rests on. Three worlds run the same
+     * coasting ship to the same tick: one stepping every tick, one jumping in
+     * whatever runs `runTicks` chooses, and one driven by 100,000× frames of
+     * jittery wall clock. The state hash covers the epoch as well as the
+     * state, so agreement here is agreement about the future too.
+     */
+    const target = 20_000
+    const stepped = solarWorld()
+    coastingShip(stepped)
+    for (let i = 0; i < target; i += 1) stepped.step()
+
+    const jumped = solarWorld()
+    coastingShip(jumped)
+    jumped.runTicks(target)
+
+    const warped = solarWorld()
+    coastingShip(warped)
+    warped.clock.setTimeScale(100_000)
+    const rng = new Rng(rootSeed('rails-frames'))
+    while (warped.clock.tick < target) {
+      const room = target - warped.clock.tick
+      // A frame that would overshoot is trimmed to land exactly on the target.
+      warped.advance(Math.min(rng.range(0.005, 0.03), room / 100_000 / 64))
+    }
+    warped.runTicks(target - warped.clock.tick)
+
+    expect(jumped.clock.tick).toBe(target)
+    expect(jumped.stateHash()).toBe(stepped.stateHash())
+    expect(warped.stateHash()).toBe(stepped.stateHash())
+    expect(warped.clock.status().droppedTicks).toBe(0)
+  })
+
+  it('delivers the whole detent to a coasting ship', () => {
+    const world = solarWorld()
+    coastingShip(world)
+    world.clock.setTimeScale(100_000)
+    const frame = 1 / 60
+    let ticks = 0
+    for (let i = 0; i < 60; i += 1) ticks += world.advance(frame)
+    expect(Math.abs(ticks - 100_000 * TICK_RATE)).toBeLessThanOrEqual(1)
+    expect(world.clock.status().droppedTicks).toBe(0)
+    expect(world.clock.status().achievedTimeScale).toBe(100_000)
+  })
+
+  it('crosses into a sphere of influence on the same tick, stepped or jumped', () => {
+    /*
+     * The approach from the frame test, run twice: the crossing is the one
+     * event a coast has to notice, and it has to notice it at the same
+     * boundary whether the ticks were stepped or jumped.
+     */
+    const inbound = (): World => {
+      const world = solarWorld()
+      const planet = landingTarget(world)
+      const t = world.clock.time
+      const planetPose = world.frames.pose(bodyFrameId(planet.address), t)
+      const systemPose = world.frames.pose(systemFrameId(SOL), t)
+      const toPlanet = UV.difference(planetPose.position, systemPose.position)
+      // Ahead of the planet along its orbit rather than on the Sun's ray to
+      // it: a ship coming down that ray is on a radial conic about the Sun,
+      // which is a fall and not a coast. Across the ray the coast about the
+      // Sun is a hyperbola well clear of it.
+      const radial = Vec.normalize(toPlanet)
+      const tangent = Vec.normalize(Vec.cross(vec3(0, 1, 0), radial))
+      const start = Vec.add(
+        toPlanet,
+        Vec.scale(tangent, planet.sphereOfInfluence * 1.5),
+      )
+      const ship = world.spawnShip('inbound', systemFrameId(SOL), start)
+      // Aimed past the planet rather than at it, so the conic in the planet's
+      // frame has a periapsis and the coast can continue there.
+      const aim = Vec.add(
+        Vec.scale(tangent, -1),
+        Vec.scale(
+          radial,
+          (planet.radius * 3) / (planet.sphereOfInfluence * 1.5),
+        ),
+      )
+      world.teleport(ship.id, {
+        ...ship.state,
+        velocity: Vec.withLength(aim, 200_000),
+      })
+      return world
+    }
+    const stepped = inbound()
+    const jumped = inbound()
+    let crossedAt = -1
+    for (let i = 0; i < 400_000 && crossedAt < 0; i += 1) {
+      stepped.step()
+      if (stepped.events().some((e) => e.kind === 'frame-change'))
+        crossedAt = stepped.clock.tick
+    }
+    expect(crossedAt).toBeGreaterThan(0)
+    // On a boundary: the tests only run there.
+    expect(crossedAt % RAILS_CHUNK).toBe(0)
+    jumped.runTicks(crossedAt)
+    const crossing = (w: World) =>
+      w.events().find((e) => e.kind === 'frame-change')?.tick
+    // Stamped with the tick the crossing was found on, which is the integrated
+    // path's convention: that path records before the tick commits, the
+    // coasting path after, and the event must not say which.
+    expect(crossing(stepped)).toBe(crossedAt - 1)
+    expect(crossing(jumped)).toBe(crossedAt - 1)
+    expect(jumped.stateHash()).toBe(stepped.stateHash())
+    // Still on rails on the far side: the flyby clears the ground band.
+    const id = [...jumped.entities.all()][0]?.id
+    if (id === undefined) throw new Error('no ship')
+    expect(jumped.isCoasting(id)).toBe(true)
+  })
+
+  it('leaves a tiny sphere of influence alone at the chunk boundary', () => {
+    // A coast jumps up to the next boundary its bounds allow and never past
+    // one it could matter on. The bound is the triangle inequality, so a
+    // frame that runs a million ticks over an empty sky is one jump.
+    const world = solarWorld()
+    coastingShip(world, 30)
+    world.clock.setTimeScale(1e6)
+    expect(world.advance(0.1)).toBe(Math.ceil((1e6 * 0.1) / TICK_DURATION))
   })
 })
 

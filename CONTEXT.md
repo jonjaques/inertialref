@@ -27,17 +27,18 @@ surface, a sphere-of-influence frame transition mid-flight, and a save
 round-tripping through IndexedDB to an identical state hash. With the preview
 server **stopped**, the page still loads from the service worker and passes
 12/12 — offline-first demonstrated rather than asserted. The browser runs
-~1.25M simulation ticks/s for one entity; the headless runner does ~100–105k ticks/s
-including frame resolution.
+~1.25M simulation ticks/s for one integrated entity, and a coasting one is on
+rails: a 100,000× frame over it is one jump, and 10⁷× is delivered in the
+planetarium at 0.37 ms of engine (ADR-0025).
 
 | Package         | Layer | State                                                                                                                                                |
 | --------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `shared`        | 0     | done — units, brands, invariants, structured logging, the timing port (ADR-0022)                                                                     |
 | `spatial`       | 1     | done — UniverseVector, frame graph, floating origin                                                                                                  |
 | `procedural`    | 1     | done — PRNG, hierarchical seeds, noise, algorithm versions                                                                                           |
-| `physics`       | 2     | done — Kepler, rigid body, atmosphere, thrusters                                                                                                     |
+| `physics`       | 2     | done — Kepler, rigid body, atmosphere, thrusters, universal-variable propagation for any conic (ADR-0025)                                            |
 | `universe`      | 3     | done — addressing, star catalog, generation, terrain, frames                                                                                         |
-| `simulation`    | 4     | done — clock, entities, flight, streaming, snapshots                                                                                                 |
+| `simulation`    | 4     | done — clock, entities, flight, streaming, snapshots, rails for a coasting entity with a jumped frame (ADR-0025)                                     |
 | `protocol`      | 4     | done — validation combinators, wire and save schemas                                                                                                 |
 | `workers`       | 5     | done — typed tasks, ports, pool, five tasks, the `HeightfieldSource` port the pool implements (ADR-0023)                                             |
 | `persistence`   | 5     | done — save/restore, migration chain, store port                                                                                                     |
@@ -6445,6 +6446,138 @@ Sol's sixty-six asteroids and comets under a kilometer across described itself
 as `asteroid · 0 km · 0.922 AU` — in the one string a catalog row has to tell
 itself apart by. `formatReading` picks the unit, so Apophis reads `225 m` and
 Earth still reads `6,378 km`.
+
+## The ship stops paying for ticks it does not need, and the heap was never leaking (1 Sep 2026)
+
+Three questions from `design/plans/perf.md`, taken together because they had
+one answer between them: what a tick costs, why the top three warp detents were
+one speed, and whether the heap climbs at steady state.
+
+**What a tick cost, headlessly, before.** Per tick on an M5, 20,000 ticks per
+point, nothing else running: 0.40 µs at the spawn point, 1.06 µs at 36,000 km
+over Earth, **12.5 µs at 400 km**, 13.3 µs at 100 km over Luna, **12.5 µs at
+1 AU in the Sun's frame**, 0.30 µs landed. The low-orbit figure was two terrain
+samples a tick — fourteen octaves, pre-step for the atmosphere and post-step
+for contact — behind a gate of a quarter of the body's radius, 1,600 km on
+Earth, for an altitude the datum sphere already gave to nine kilometers. The
+star-frame figure was the sixty-six children's sphere-of-influence tests: the
+band prune admits every body whose orbit crosses 1 AU, which in Sol is twenty
+comets and near-Earth objects, and each admitted one is a Kepler solve and a
+pose composition. The collector was 14% of that profile on its own, 5.5 KB of
+garbage a tick.
+
+**The clock's 1,920× is the rate one ship can be integrated inside a frame,
+and nothing needed integrating.** A ship with no input, no spin under assist,
+and a periapsis above the ground band is on a conic — exactly the planets'
+situation, and they have been evaluated from elements since ADR-0006. So it is
+now propagated from a recorded epoch by the universal-variable formulation,
+which covers the hyperbola an escape leaves on as well as the ellipse, and a
+frame jumps every tick on which every entity coasts. ADR-0025 carries the
+decision and the alternatives; the things worth remembering from doing it:
+
+- **The epoch is canonical or the round-trip hash lies.** The first shape
+  re-anchored the epoch at every 64-tick boundary so nothing needed saving.
+  A world restored mid-chunk anchors on the restored state instead, and the
+  two part in the low bits by the next boundary — each propagating a
+  different rounding of the same conic. Five numbers in the save closed it.
+- **The eligibility test cannot look at the warp.** A ship integrated at 1×
+  and propagated at 100× would be two ships, and the hash would say so.
+- **`(−ω/dt)·dt` is exactly `−ω` because `dt` is a power of two.** Flight
+  assist's damping drives the spin to _exactly_ zero in one tick, which is
+  what lets "no spin under assist" be an equality rather than a tolerance.
+  ADR-0006's reason for 64 Hz paid a second time.
+- **The sphere tests are skipped by the triangle inequality, on both paths.**
+  A child found `g` meters out of reach cannot be in reach until the entity's
+  travel from where it was measured plus the child's periapsis speed times
+  the elapsed time has consumed `g`. On a coast the entity's own periapsis
+  speed makes that a _time_, and the time is how far a frame jumps: a ship in
+  low Earth orbit is bounded by Luna at about ten hours, so a 100,000× frame
+  is one jump. A thrusting ship has no speed bound and measures its actual
+  travel instead; the same record serves both.
+- **The post-step tests were asking at the wrong instant.** The integrated
+  state is the tick's end and the contact and frame tests asked the frame
+  graph about its start: 470 m of Earth's orbital motion at every sphere
+  crossing, seven meters of ground rotation under every landing. Both now ask
+  at `time + dt`, and the post-step ground sample at that instant is the next
+  tick's pre-step altitude, reused — bit-identical to sampling again, which is
+  what lets a restored world with nothing to remember continue on the same
+  hash.
+- **A radial fall is not a coast.** The first version of the crossing test
+  put the ship on the Sun's ray to the planet, heading outward, and it never
+  went on rails: its conic about the Sun has a periapsis inside the Sun.
+  Across the ray it is a hyperbola and coasts.
+- **A paused clock reported full warp.** `plan` sets the achieved scale to
+  0× on a paused or zero-delta frame, and `settle` ran on that frame too,
+  where "asked for nothing" is the sub-tick case that reads as delivered in
+  full — so the perf row said 100,000× delivered over a world that was not
+  moving. The asked count is now null between frames and for a frame that
+  bought nothing, and `settle` leaves the 0× standing. Not pinned by a test.
+- **Newton on the universal anomaly walks, on the hyperbolic side.** Staying
+  inside the bracket is not enough: there `F` grows like e^{χ√−α}, so from a
+  χ that is far too large every Newton step back is the same 1/√−α, and a
+  first step that overshot by 5 × 10⁶ needs a hundred and twenty of them; the
+  loop's cap returned the hundredth. A step is taken only while it at least
+  halves the one before, otherwise the bracket is bisected. Exit is on the
+  residual, never the step: a far propagation divides a large residual by a
+  large radius into a small step. Each defect is pinned by a deterministic
+  example, because the property's bound cannot be: a step-size exit reads
+  4.2 × 10⁻⁹ on the hundred-day case against 4.8 × 10⁻¹² fixed, and one that
+  never bisects reads 5 × 10¹³ on a near-parabolic escape the property draws
+  once in thirty thousand runs. The property's worst is seed-dependent —
+  2 × 10⁻¹⁰ to 1.2 × 10⁻⁹ over 180,000 states, and 6 × 10⁻⁸ on a near-radial
+  state from conditioning alone, which the arbitrary now excludes — so its
+  5e-9 is a smoke bound, and a bound written from one seed's sweep sat below
+  the defect it was named for.
+
+After, per tick: 0.01–0.03 µs at every coasting point, the integrated cases
+within noise of before (0.55 µs against 0.44 at the spawn point, quiet
+machine) — and the thrusting ones, which are what the game pays at 1×,
+**12.3–12.6 µs on `origin/main` against 0.43–0.51 µs** at 400 km over Earth and
+**11.8–13.3 against 0.56–0.60** at 1 AU in the Sun's frame — the first being the
+crater ladder sampled twice a tick under the old gate and the second the
+children's solves, and the ellipse-versus-elements property pinned the propagator's
+agreement to 0.3 m per revolution at e = 0.98 — which is the _element_
+solution's rounding, a period wrong by parts in 10¹³, and grows linearly.
+
+**In the browser.** Flight start at 100,000×: 106,240 ticks a frame, achieved
+100,000, the engine at 0.50 ms mean and 0.70 max, the period at 16.67 with
+none late, `Engine/advance` 0.05 ms. Planetarium at Earth: 100,000×, 10⁶× and
+10⁷× all achieved in full, 8.26 million ticks a frame at the top, the engine at
+0.37 ms. What the engine's 0.4 ms is now: the snapshot at 0.28–0.39 ms, which
+is 129 bodies' poses at the render instant, and nothing else over 0.05. Above
+the engine, the starfield is 0.62–0.79 ms a frame under warp because the eye
+moves past the shell's parallax budget every frame — the budget binds on the
+system's own sun, which is in the survey and drawn on the shell.
+
+**The measurement trap, twice.** The integrated tick read 1.5–2.0 µs while
+`pnpm test` ran in the background, against 0.55 quiet. The plan already says
+a figure taken beside a test run is a figure about the test run; it applies to
+a 40 ms benchmark exactly as much as to a worker pool. The second one is
+subtler and nearly shipped: benchmarking `origin/main` in a worktree
+_immediately after installing into it_, both sides in sequence rather than
+interleaved, read 39–49 µs against 1.5–2.6 µs — three times the true cost on
+both sides, in a ratio plausible enough to write down. Alternate the two
+builds; a comparison that runs one side to completion before starting the
+other is measuring the machine's mood as much as the code.
+
+**The heap does not leak at steady state.** Three operating points watched
+over CDP with a full collection forced before every reading: the flight start
+at 129.5 MB flat for 150 s, a converged Earth summit stance at 524 MB flat for
+240 s with 1,134 fields and 403 geometries resident, the planetarium at
+100,000× at 552–556 MB for the 32 s before an unrelated source edit reloaded
+the page. The sampling profile of what is _retained_ across the window is
+under 6 MB and names the travel survey's rows, the catalog rows and the
+cutscene overlay's animation-frame closure. The unforced reading does
+not ramp either: at the same stance `usedJSHeapSize` sits between 534 and 582
+MB for 200 s, a scavenge-sized sawtooth and no trend, so the 906 MB the tour
+ended on belongs to the transitions and not to any steady state — whether as
+garbage a major collection had not yet taken or as something still held is
+the snapshot-diff across one jump that has not been made. The collector at
+the stance is 87 ms in 5 s on the main thread, 1.7% of wall and 6.8% of task
+time, mostly incremental marking; the producers feeding it are the 8 Hz
+status sample — which built two whole world snapshots a sample to inspect one
+entity, and now builds none — the 1 Hz travel survey, and the frame's own
+snapshot.
 
 ## Known gaps
 

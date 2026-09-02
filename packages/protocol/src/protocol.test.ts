@@ -64,6 +64,7 @@ const sampleSave: SaveGame = {
       ballisticCoefficient: 320,
       control: { translation: [0, 0, 1], rotation: [0, 0, 0] },
       flightAssist: true,
+      rails: null,
     },
   ],
   playerEntity: '#0',

@@ -1,7 +1,12 @@
 import type { Kilograms, Seconds } from '@inertialref/shared'
 import type { ControlInput, ThrusterProfile } from '@inertialref/physics'
 import { NEUTRAL_CONTROL } from '@inertialref/physics'
-import { type FrameState, restState } from '@inertialref/spatial'
+import {
+  type FrameState,
+  type Quat,
+  restState,
+  type Vec3,
+} from '@inertialref/spatial'
 import type { EntityId, UniverseAddress } from '@inertialref/universe'
 
 /*
@@ -21,6 +26,35 @@ import type { EntityId, UniverseAddress } from '@inertialref/universe'
 
 export type EntityKind = 'ship' | 'probe' | 'debris' | 'marker'
 
+/**
+ * The instant a coasting entity is propagated from, in its own frame.
+ *
+ * An entity with one of these is *on rails* (ADR-0025): its state at any tick
+ * is the two-body propagation of this epoch by the elapsed time, a pure
+ * function that does not care whether the ticks between were stepped or
+ * jumped. That is what lets a frame run a hundred thousand ticks of a coast for
+ * the price of one, without giving up the bit-identity the fixed step promises.
+ *
+ * Canonical, hashed and saved, for a reason that is not obvious: two worlds
+ * that agree on an entity's *state* and disagree on its *epoch* agree about the
+ * present and disagree about the future in the low bits, because each is
+ * propagating a slightly different rounding of the same conic. A save that
+ * dropped the epoch and re-anchored on load would continue almost identically,
+ * and "almost" is exactly what `stateHash` exists to catch.
+ */
+export interface RailsEpoch {
+  /** Simulation time the epoch state is taken at. */
+  readonly time: Seconds
+  readonly position: Vec3
+  readonly velocity: Vec3
+  readonly orientation: Quat
+  /**
+   * Zero for a ship whose flight assist has settled it; otherwise the constant
+   * spin it carries, which the propagation applies analytically.
+   */
+  readonly angularVelocity: Vec3
+}
+
 export interface Entity {
   readonly id: EntityId
   readonly kind: EntityKind
@@ -39,6 +73,14 @@ export interface Entity {
   readonly address: UniverseAddress | null
   /** Tick the entity was created on; devtools sort by it. */
   readonly spawnedAt: Seconds
+  /**
+   * The epoch this entity coasts from, while it is coasting.
+   *
+   * Written by the world alone — entered when a tick finds the entity
+   * eligible, dropped by any input, teleport or frame change. Null while the
+   * entity is integrated tick by tick.
+   */
+  readonly rails: RailsEpoch | null
 }
 
 export interface EntityInit {
@@ -52,6 +94,8 @@ export interface EntityInit {
   readonly ballisticCoefficient?: number
   readonly address?: UniverseAddress | null
   readonly spawnedAt?: Seconds
+  /** Restored from a save; a fresh entity has none and earns one by coasting. */
+  readonly rails?: RailsEpoch | null
 }
 
 export function createEntity(init: EntityInit): Entity {
@@ -69,6 +113,7 @@ export function createEntity(init: EntityInit): Entity {
     ballisticCoefficient: init.ballisticCoefficient ?? 400,
     address: init.address ?? null,
     spawnedAt: init.spawnedAt ?? 0,
+    rails: init.rails ?? null,
   }
 }
 

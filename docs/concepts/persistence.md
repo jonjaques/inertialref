@@ -3,7 +3,10 @@
 > **The question:** what is worth storing, when the entire universe can be
 > regenerated from a seed?
 > **The answer:** the seed, the tick, and the handful of things that have no
-> address to regenerate from. About **750 bytes** for a flown session.
+> address to regenerate from. Under **a kilobyte** — 998 in the self-test's
+> save — of which the coasting ship's epoch is about 180, because the instant
+> it is propagated from is canonical too
+> ([ADR-0025](../adr/0025-the-rails.md)).
 >
 > Decision record: [ADR-0007](../adr/0007-persistence.md) ·
 > Code: `packages/persistence/`, `packages/protocol/src/save.ts`
@@ -36,6 +39,7 @@ travels. So a save contains:
 | simulation tick           | every star                |
 | algorithm versions        | any heightfield           |
 | dynamic entities (ships)  | any terrain mesh          |
+| a coasting ship's epoch   |                           |
 | which systems were loaded | anything with an address  |
 | mutations                 |                           |
 
@@ -71,6 +75,13 @@ what catches state that was restored but not restored _completely_.
 It caught exactly that: **control input** was missing from the save, so a save
 taken mid-burn resumed coasting. The hashes matched at rest and diverged 300
 ticks later. Control input is canonical state, not a UI detail.
+
+**A coasting ship's epoch is in the save for that same reason.** It is the
+instant the two-body propagation runs from ([ADR-0025](../adr/0025-the-rails.md)),
+and a world that dropped it and re-anchored on the restored state would follow a
+marginally different rounding of the same conic — identical at rest, apart in
+the low bits three hundred jumped ticks later. The second half of the test is
+what makes that a failure rather than a curiosity.
 
 ---
 

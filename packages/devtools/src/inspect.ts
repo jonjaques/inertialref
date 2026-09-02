@@ -2,7 +2,7 @@ import { formatDuration, formatReading, type Meters } from '@inertialref/shared'
 import { formatSeed } from '@inertialref/procedural'
 import { UV, Vec } from '@inertialref/spatial'
 import type { World } from '@inertialref/simulation'
-import { snapshot } from '@inertialref/simulation'
+import { entitySnapshot } from '@inertialref/simulation'
 import {
   type EntityId,
   formatAddress,
@@ -54,6 +54,8 @@ export interface EntityInspection {
   readonly altitude: Meters | null
   readonly altitudeText: string | null
   readonly landed: boolean
+  /** On rails: propagated from an epoch rather than integrated (ADR-0025). */
+  readonly coasting: boolean
   readonly partition: string
 }
 
@@ -107,9 +109,10 @@ export function inspectEntity(
 ): EntityInspection | null {
   const entity = world.entities.get(id)
   if (entity === undefined) return null
-  const shot = snapshot(world, 0)
-  const view = shot.entities.find((candidate) => candidate.id === id)
-  if (view === undefined) return null
+  // The one entity, at the tick. A whole world snapshot here — every body's
+  // orbit and spin pose, searched for one id — is paid twice a status sample:
+  // once for the player and once per entity in the list.
+  const view = entitySnapshot(world, entity, 0)
   const altitude = world.altitudeOf(id)
 
   return {
@@ -137,6 +140,7 @@ export function inspectEntity(
     altitude,
     altitudeText: altitude === null ? null : formatReading(altitude),
     landed: view.landed,
+    coasting: entity.rails !== null,
     // Derived by `universe`, not open-coded here — see partitionForFrames.
     partition: partitionForFrames(world.galaxy, view.frameChain, view.position),
   }
