@@ -133,6 +133,7 @@ export const WINGS = [
           ['docs/adr/0023-the-gpu-producer.md', 'The GPU Producer'],
           ['docs/adr/0024-the-type-system.md', 'The Type System'],
           ['docs/adr/0025-the-rails.md', 'The Rails'],
+          ['docs/adr/0026-the-liquid.md', 'The Liquid'],
         ],
       },
     ],

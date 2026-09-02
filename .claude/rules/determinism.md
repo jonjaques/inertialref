@@ -42,8 +42,10 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", ADR-0001..0009.
 - **Never read the drawn ground where the canonical one belongs, or the reverse.**
   `groundElevation`/`surfaceRadius` are what the contact test integrates and what a save
   records; `drawnElevation`/`drawnSurfaceRadius` are that plus the presentational tail
-  and are what the mesh, the material and a composing camera are made from. They differ
-  by at most `drawnDivergence` — 1.25 m. Physics reading the drawn one puts a landing
+  and are what the material and a composing camera are made from;
+  `drawnGroundElevation` is the same with the sea clamp off — the seabed, which is what
+  the mesh is built from under the sea's own sheet. The drawn fields differ from the
+  canonical one by at most `drawnDivergence` — 1.25 m. Physics reading the drawn one puts a landing
   behind a term the renderer may change; a mesh reading the canonical one draws a plane
   at two meters. ADR-0021.
 - **Never persist anything regenerable.** A save stores references and mutations. If you

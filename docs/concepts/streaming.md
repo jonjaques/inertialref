@@ -130,9 +130,11 @@ advance at all. The consequence for anyone reading the counters: `visited`,
 
 ### Two fields, and which one each reader gets
 
-The mesh, the detail floor, the material and the observatory's standing camera
-read `drawnElevation`. The contact test, the saves and the survey sites read
-`groundElevation`. The first is the second plus a presentational tail, and
+The detail floor and the observatory's standing camera read `drawnElevation`;
+the mesh reads `drawnGroundElevation`, which is the same field with the sea
+clamp left off — the seabed, over which the sea is drawn as a sheet of its own.
+The contact test, the saves and the survey sites read `groundElevation`. The
+drawn fields are the canonical one plus a presentational tail, and
 `drawnDivergence` publishes how far apart they may get: **1.25 m**.
 
 They are two functions rather than one because of a single line of arithmetic.

@@ -118,9 +118,11 @@ Reasoning: `AGENTS.md` § "The rules that actually matter",
 
 - **Never read the drawn ground where the canonical one belongs, or the reverse.**
   `groundElevation`/`surfaceRadius` are what the contact test integrates and what a save
-  records; `drawnElevation`/`drawnSurfaceRadius` are that plus the presentational tail and
-  are what the mesh, the material and a composing camera are made from — 1.25 m apart at
-  worst. The observatory's stance, `descent.ts` and the scatter field all choose here
+  records; `drawnElevation`/`drawnSurfaceRadius` are that plus the presentational tail
+  and are what the material and a composing camera are made from;
+  `drawnGroundElevation` is the same with the sea clamp off — the seabed, which is what
+  the mesh is built from under the sea's own sheet. Canonical and drawn are 1.25 m apart
+  at worst. The observatory's stance, `descent.ts` and the scatter field all choose here
   rather than in `packages/universe`, which is why this bullet is in two rules. ADR-0021.
 
 - **Never give a varying an attribute's name.** Both become identifiers in the generated

@@ -334,9 +334,12 @@ Violating one of these is a rewrite later, not a refactor.
   reverse.** `groundElevation` and `surfaceRadius` are the field the contact
   test integrates, the saves record and the survey sites name;
   `drawnElevation` and `drawnSurfaceRadius` are that field plus a
-  presentational tail, and they are what the mesh, the material and any camera
-  that composes a picture of them are made from. The two differ by at most
-  `drawnDivergence`, which is 1.25 m. Physics reading the drawn one puts a
+  presentational tail, and they are what the material and any camera that
+  composes a picture of them are made from; `drawnGroundElevation` is the
+  same with the sea clamp left off — the seabed — and is what the mesh is
+  made from, because the sea is a sheet drawn over it. The drawn fields
+  differ from the canonical one by at most `drawnDivergence`, which is
+  1.25 m. Physics reading the drawn one puts a
   landing behind a term the renderer is free to change; a mesh reading the
   canonical one draws a plane at two meters, because the tolerance a patch is
   refined against **is** the amplitude floor the canonical field stops at, so
