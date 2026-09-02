@@ -40,9 +40,9 @@ architecture.
 ```mermaid
 flowchart TB
     RAF["requestAnimationFrame delta<br/><i>varies: 4 ms … 60 ms … 3 minutes</i>"]
-    ADV["clock.advance(delta)"]
-    N["<b>n</b> — an integer number of ticks<br/><i>0, 1, 2 … up to the step budget</i>"]
-    STEP["world.step() × n<br/><i>each step identical, dt = 1/64 exactly</i>"]
+    ADV["world.advance(delta)<br/><i>clock.plan → run → clock.settle</i>"]
+    N["<b>n</b> — an integer number of ticks<br/><i>0, 1, 2 … the budget, or a whole jump</i>"]
+    STEP["world.step() × n, or one jump over the coast<br/><i>every tick identical, dt = 1/64 exactly</i>"]
     ALPHA["leftover → alpha ∈ [0, 1)<br/><i>presentation only</i>"]
 
     RAF --> ADV

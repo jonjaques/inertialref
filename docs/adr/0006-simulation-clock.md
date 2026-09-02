@@ -43,7 +43,11 @@ against 0.072 for the next worst and 0.0006 for Luna, and at 10,000× they
 vibrated by a full body width while every other moon held still. A frame longer
 than 100 ms is a stall rather than a slow frame and is capped there, so the rate
 stays honest down to 10 fps and a backgrounded tab still cannot buy the minute
-it was away.
+it was away. **The rate is the ceiling on _integration_**, which
+[ADR-0025](0025-the-rails.md) narrows it to: a tick that every entity coasts
+through is propagated from an epoch rather than stepped, the frame jumps it, and
+nothing here changes — the tick is still the unit and warped time is still
+bit-identical to real time run for longer.
 
 **Interpolation renders one tick in the past.** Entity states are lerped between
 the previous tick and the current one. Bodies are _not_ lerped: their frames are

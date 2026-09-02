@@ -212,10 +212,15 @@ world.stateHash() // 'f38e988a'
 ```
 
 A hash over the tick, the seed, and every entity's frame, position, velocity,
-orientation, angular velocity, control input, flight assist and landed state.
+orientation, angular velocity, control input, flight assist, landed state and
+rails epoch — the instant a coasting entity is propagated from
+([ADR-0025](../adr/0025-the-rails.md)). The epoch is in there for the same
+reason as the rest: two worlds that agree on a state and not on its epoch agree
+about the present and part in the low bits on the next tick, each propagating a
+slightly different rounding of the same conic.
 
-The last three were not always in it, and the docstring said "everything
-canonical" anyway — so two worlds that differed only in the fields `killRotation`
+Control input, flight assist and landedness were not always in it, and the
+docstring said "everything canonical" anyway — so two worlds that differed only in the fields `killRotation`
 and flight assist write hashed identically at the instant they diverged, and only
 drifted apart hundreds of ticks later once the difference had leaked into
 position. That is where a shipped bug had already lived: a save taken mid-burn
@@ -224,16 +229,19 @@ ticks. If you add a field to canonical state, add it here too.
 
 Every determinism test in the suite is an assertion about it:
 
-| Test                                      | Asserts                         |
-| ----------------------------------------- | ------------------------------- |
-| 60 Hz vs 144 Hz                           | same hash at the same tick      |
-| jittery frames (4–60 ms) vs steady        | same hash at the same tick      |
-| 1× for 100 s vs 100× for 1 s              | same hash, same simulated time  |
-| save → step → load                        | hash returns to the saved value |
-| worlds differing only in control input    | different hashes                |
-| worlds differing only in flight assist    | different hashes                |
-| worlds differing only in angular velocity | different hashes                |
-| replay with identical inputs              | same hash                       |
+| Test                                      | Asserts                                       |
+| ----------------------------------------- | --------------------------------------------- |
+| 60 Hz vs 144 Hz                           | same hash at the same tick                    |
+| jittery frames (4–60 ms) vs steady        | same hash at the same tick                    |
+| 1× for 100 s vs 100× for 1 s              | same hash, same simulated time                |
+| a coast stepped vs jumped vs 100,000×     | same hash at the same tick                    |
+| save → step → load                        | hash returns to the saved value               |
+| a coasting save → load → 300 ticks        | same hash, on the same conic                  |
+| a descent save → load → 400 ticks         | same hash — the reused ground sample is exact |
+| worlds differing only in control input    | different hashes                              |
+| worlds differing only in flight assist    | different hashes                              |
+| worlds differing only in angular velocity | different hashes                              |
+| replay with identical inputs              | same hash                                     |
 
 See [simulation time](time.md) for why the clock makes this possible.
 

@@ -133,11 +133,13 @@ sequenceDiagram
     TICK->>ENG: frame(delta)
     Note over TICK: a useFrame at priority −1<br/>so the tick precedes every reader
     Note over ENG,CLK: the only place wall clock enters
-    ENG->>CLK: advance(delta) → n
-    loop n fixed ticks (n may be 0)
-        ENG->>W: step()
-        Note right of W: gravity · thrust · drag<br/>integrate · frame transitions
+    ENG->>W: advance(delta) → n
+    W->>CLK: plan(delta) → wanted, budget
+    loop n fixed ticks (n may be 0, or millions)
+        W->>W: step(), or one jump over the ticks every entity coasts
+        Note right of W: gravity · thrust · drag<br/>integrate · frame transitions,<br/>or propagate from the epoch
     end
+    W->>CLK: settle(ran)
     ENG->>SNAP: snapshot(world)
     SNAP-->>ENG: immutable, structured-cloneable
     Note over ENG: - - - canonical above / presentation below - - -
@@ -155,10 +157,14 @@ Three properties of this loop are load-bearing:
    job is to step the simulation — the tick runs at an explicit R3F priority so
    that the components reading the result are not depending on JSX sibling
    order. [Simulation time](concepts/time.md)
-2. **`n` may be zero, or eight.** The loop is not "one tick per frame", and a
-   step budget inside the clock prevents a backgrounded tab from returning and
-   freezing the page. That budget lives in exactly one place: a second clamp in
-   the view changed nothing and corrupted the dropped-tick count the HUD shows.
+2. **`n` may be zero, or eight, or eight million.** The loop is not "one tick
+   per frame", and a step budget inside the clock prevents a backgrounded tab
+   from returning and freezing the page. That budget lives in exactly one
+   place: a second clamp in the view changed nothing and corrupted the
+   dropped-tick count the HUD shows. What it caps is _integration_ — a tick
+   every entity coasts through is propagated from an epoch rather than stepped,
+   so a frame at 100,000× over a coasting ship is a single jump.
+   [ADR-0025](adr/0025-the-rails.md)
 3. **The snapshot is a copy.** The renderer holding it cannot mutate the world,
    and the same structure crosses a worker boundary unchanged if the simulation
    ever moves off the main thread.

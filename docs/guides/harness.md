@@ -111,6 +111,18 @@ near each other.
 `step` is the deterministic one — it does not consult the clock at all, which is
 what makes scripted scenarios reproducible.
 
+**Every detent `timeWarp` accepts is delivered over a ship that is coasting,
+and the ceiling is on integration.** A ship with no control input, no spin under
+flight assist, and a periapsis above the ground band is propagated from an epoch
+rather than stepped, so the frame jumps ([ADR-0025](../adr/0025-the-rails.md));
+one that is thrusting or skimming an atmosphere is stepped through every tick
+and capped at 1,920 simulated seconds a second. Which of the two is happening is
+the difference between a warp that reads as delivered and one that reads as
+capped, so both `ir.summary()` and `ir.inspect()` say: the summary line appends
+`, coasting`, and the inspection carries a `coasting` boolean.
+`ir.status().world.achievedTimeScale` against `timeScale` is the same fact from
+the clock's side.
+
 ---
 
 ## Flying

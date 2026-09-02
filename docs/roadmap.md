@@ -204,8 +204,9 @@ DOM. Moving it to a Web Worker is therefore mechanical rather than
 architectural: the snapshot is already structured-cloneable and the renderer
 already only reads snapshots.
 
-Not done because nothing needs it yet. The single-entity simulation runs at
-~1.25M ticks/s in the browser. It becomes interesting when entity counts rise.
+Not done because nothing needs it yet. One integrated entity runs at ~1.25M
+ticks/s in the browser, and a coasting one is not integrated at all. It becomes
+interesting when entity counts rise.
 
 ---
 
@@ -290,8 +291,9 @@ almost none are applied, and almost nothing is measured.
 | WebGPU               | 🟡     | `WebGPURenderer` + TSL shipped, WebGL 2 retained as fallback. The heightfield producer is a compute pass over storage buffers (ADR-0023); indirect draw is not used yet |
 | `SharedArrayBuffer`  | ⬜     | Requires cross-origin isolation; nothing needs it yet                                                                                                                   |
 
-**What is measured today:** simulation throughput (~100–105k ticks/s headless,
-~1.25M ticks/s browser for one entity), worker queue latency and execution time,
+**What is measured today:** simulation throughput (~1.25M ticks/s in the browser
+for one _integrated_ entity; the headless run's own figure is a coasting ship, so
+it measures a jump), worker queue latency and execution time,
 frame time, engine time, draw calls, triangles, JS heap, and GPU milliseconds per
 frame — the last measured across a drained queue rather than from
 `renderer.info.render.timestamp`, which

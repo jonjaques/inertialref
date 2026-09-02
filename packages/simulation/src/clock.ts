@@ -36,7 +36,12 @@ export const timeOfTick = (tick: Tick): Seconds => tick / TICK_RATE
 export const DEFAULT_MAX_STEPS = 8
 
 /**
- * The ceiling on time warp, as simulated seconds per second of wall clock.
+ * The ceiling on *integration*, as simulated seconds per second of wall clock.
+ *
+ * Not the ceiling on time warp: a tick every entity coasts through is
+ * propagated from an epoch and jumped rather than stepped (ADR-0025), and there
+ * is no rate at which that can be too fast. What this bounds is the ticks a
+ * frame runs one at a time — a thrusting ship, a descent through air.
  *
  * A fixed budget of 8 ticks per frame is the right guard against a *stalled*
  * frame and the wrong one for a *deliberate* one, and for a long time this class
@@ -283,7 +288,8 @@ export class SimulationClock {
   }
 
   /**
-   * Ticks this frame may run.
+   * Ticks this frame may *integrate*. What it coasts through is not bounded
+   * here — that is `plan`'s `wanted`, and the world jumps it.
    *
    * At 1× this is the stall guard and nothing else — a count, unchanged, so a
    * backgrounded tab behaves exactly as it always has and the minute it was

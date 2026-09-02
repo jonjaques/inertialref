@@ -30,7 +30,7 @@ primitives; the point is what is underneath them.**
 The hard problems in a game at this scale are precision, determinism and
 identity, and all three are solved and demonstrated here rather than asserted. You
 can fly from the galactic center to a mountainside, resolve an inch, save the
-whole universe in under 800 bytes, and get the same answer twice.
+whole universe in under a kilobyte, and get the same answer twice.
 
 > **Status: pre-alpha, single maintainer, no release.** There is no gameplay yet.
 > [`docs/roadmap.md`](docs/roadmap.md) says what is deliberately not built and
@@ -196,7 +196,7 @@ pnpm sim --help                # all flags
   addressed as `o:` objects lying on it — and the ground the ship lands on and
   the ground you can see are two functions 1.25 m apart, measured and written
   down.
-- **Save and load to IndexedDB in under 800 bytes**, because a save is a reference
+- **Save and load to IndexedDB in under a kilobyte**, because a save is a reference
   and not a copy.
 - **Genuinely offline** — a service worker caches the app, and with the server
   stopped the game still loads, streams terrain from its own GPU and workers, and
@@ -225,8 +225,8 @@ PASS  7. Precision near the surface — 1 inch resolved to 9.4 µm, 8.18 kpc fro
 PASS  8. Meter-scale rendering — 1 m separation survives float32 at 8.18 kpc
 PASS  9. Origin rebasing — 500 rebases, 2560 km of origin travel, zero drift
 PASS 10. Worker task — 4761 elevations and 16900 cover bytes generated in a worker, identical to local generation
-PASS 11. Save round trip — 744 bytes restored to an identical state hash
-PASS 12. Frame-rate independence — identical state hash f38e988a at tick 513
+PASS 11. Save round trip — 998 bytes restored to an identical state hash
+PASS 12. Frame-rate independence — identical state hash ec3ff6d1 at tick 513
 ```
 
 CI runs this on every pull request, alongside `pnpm check`.
@@ -255,7 +255,9 @@ Five decisions carry most of the weight:
 3. **Seeds derive down a path of labels**, never along a shared stream, so
    generation order, worker count and load state cannot change the universe.
 4. **64 Hz fixed tick**, because 1/64 is exact in binary. Wall clock decides only
-   how many steps to run.
+   how many ticks to run — and a ship coasting through them is propagated from
+   an epoch rather than stepped, so the frame jumps and every warp detent
+   arrives.
 5. **A save is a reference, not a copy**: seed, tick, and the handful of things
    that could not be regenerated.
 
@@ -382,7 +384,7 @@ The markdown in this repository is the source; the site has no copy of its own.
 | [Vision and scope](docs/vision.md)                | What this is for, and the principles behind it                           |
 | [Architecture](docs/architecture.md)              | The system in one sitting                                                |
 | [Concepts](docs/README.md#concepts)               | How each mechanism works, and why                                        |
-| [ADRs](docs/adr/README.md)                        | Twenty-four decisions that are expensive to reverse                      |
+| [ADRs](docs/adr/README.md)                        | Twenty-five decisions that are expensive to reverse                      |
 | [Development](docs/guides/development.md)         | Commands, toolchain, conventions                                         |
 | [The harness](docs/guides/harness.md)             | The scriptable API, in full                                              |
 | [Testing](docs/guides/testing.md)                 | Property tests, golden vectors, state hashes                             |

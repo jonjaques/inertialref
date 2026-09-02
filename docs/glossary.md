@@ -146,11 +146,25 @@ Canonical state depends only on the integer tick count. → [time](concepts/time
 
 **State hash** — a hash over the tick, the seed, and every entity's frame,
 position, velocity, orientation, angular velocity, control input, flight-assist
-setting and landedness. The comparison every determinism test makes, and the
-natural desync check. Add a field to canonical state and it belongs here too.
+setting, landedness and rails epoch. The comparison every determinism test
+makes, and the natural desync check. Add a field to canonical state and it
+belongs here too.
 
-**Step budget** — the cap on ticks per frame (8). Prevents a backgrounded tab
-from freezing the page on return. Dropped ticks are counted and displayed.
+**Step budget** — the cap on ticks per frame (8 at 1×, a rate above it).
+Prevents a backgrounded tab from freezing the page on return. Dropped ticks are
+counted and displayed. It caps _integration_; a tick every entity coasts through
+is jumped, not stepped, and costs nothing.
+
+**Rails** — what a coasting entity is on: no control input, no spin under flight
+assist, and a conic whose periapsis clears the ground band, so its state at any
+tick is the two-body propagation of a recorded epoch rather than the result of
+integrating every tick between. The epoch is canonical — hashed and saved — and
+any input, teleport or frame change drops it.
+→ [ADR-0025](adr/0025-the-rails.md)
+
+**Ground band** — the altitude below which flight has to be integrated: the
+larger of the atmosphere's ceiling and the field's peak relief, plus a margin.
+Above it there is no drag, no contact, and the datum sphere is the altitude.
 
 **Alpha** — the interpolation fraction between the previous tick and the next.
 Presentation only.
