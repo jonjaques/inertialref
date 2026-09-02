@@ -51,7 +51,7 @@ import {
   walkBodies,
   planetCount,
 } from '@inertialref/universe'
-import type { OrbitalElements } from '@inertialref/physics'
+import { periapsis, visViva } from '@inertialref/physics'
 import type { FrameBinding } from './binding.ts'
 import { SimulationClock, TICK_DURATION, timeOfTick } from './clock.ts'
 import {
@@ -60,6 +60,7 @@ import {
   type Entity,
   type EntityInit,
   EntityStore,
+  type RailsEpoch,
 } from './entity.ts'
 import {
   coastState,
@@ -144,13 +145,6 @@ interface CoastRecord {
   nextCheck: number
   readonly speedBound: number
 }
-
-/** Periapsis speed on an orbit: the fastest a body on it ever moves. */
-const periapsisSpeed = (elements: OrbitalElements, mu: number): number =>
-  Math.sqrt(
-    (mu * (1 + elements.eccentricity)) /
-      (elements.semiMajorAxis * (1 - elements.eccentricity)),
-  )
 
 export class World implements FlightWorld {
   readonly seedText: string
@@ -283,7 +277,11 @@ export class World implements FlightWorld {
         atmosphere: body.atmosphere,
         // The same `G(M + m)` the orbit evaluator runs on, so the bound is the
         // speed the frame actually moves at rather than a hair under it.
-        maxSpeed: periapsisSpeed(body.elements, parentMu + body.mu),
+        maxSpeed: visViva(
+          parentMu + body.mu,
+          periapsis(body.elements),
+          body.elements.semiMajorAxis,
+        ),
         spinFrame: bodyFixedFrameId(body.address),
         parent,
         body,
@@ -385,7 +383,8 @@ export class World implements FlightWorld {
 
   /** Whether an entity is coasting on rails rather than being integrated. */
   isCoasting(id: EntityId): boolean {
-    return this.entities.get(id)?.rails !== null
+    // `?.rails !== null` alone says a missing entity coasts.
+    return (this.entities.get(id)?.rails ?? null) !== null
   }
 
   /**
@@ -544,7 +543,6 @@ export class World implements FlightWorld {
       else this.#soi.delete(entity.id)
 
       if (result.frameChange !== null) {
-        this.#groundAhead.delete(entity.id)
         this.#record(
           'frame-change',
           entity.id,
@@ -553,14 +551,12 @@ export class World implements FlightWorld {
       }
 
       if (result.touchdown) {
-        this.#groundAhead.delete(entity.id)
         this.entities.update(entity.id, { state: result.state })
         this.#land(entity.id, after, result.impactSpeed)
         continue
       }
 
       if (result.liftOff) {
-        this.#groundAhead.delete(entity.id)
         // Commit the unstick offset before re-framing, or the ship is handed
         // back to the inertial frame still sitting on the ground.
         this.entities.update(entity.id, { state: result.state })
@@ -568,15 +564,20 @@ export class World implements FlightWorld {
         continue
       }
 
+      // Only the contact test's own sample is worth carrying: a frame change
+      // moved the origin the number was measured from. Touchdown and lift-off
+      // drop it through `#forgetDerived` on their own paths above.
       if (result.frameChange === null && result.altitude !== null)
         this.#groundAhead.set(entity.id, result.altitude)
+      else this.#groundAhead.delete(entity.id)
       this.entities.update(entity.id, { state: result.state })
       // The ground and the frame settled, the tick may find nothing left to
       // integrate — in which case the next one coasts from here.
-      if (!this.#landed.has(entity.id)) this.#enterRails(entity.id, after, tick)
+      if (!this.#landed.has(entity.id)) this.#enterRails(entity.id, after)
     }
     this.clock.commitTick()
-    if (checks !== null) for (const id of checks) this.#railsCheck(id, after)
+    if (checks !== null)
+      for (const id of checks) this.#railsCheck(id, after, tick)
   }
 
   /** Run n ticks with no wall clock. Deterministic by construction. */
@@ -675,11 +676,12 @@ export class World implements FlightWorld {
       if (boundary && tick >= record.nextCheck) (checks ??= []).push(entity.id)
     }
     this.clock.commitTicks(count)
-    if (checks !== null) for (const id of checks) this.#railsCheck(id, time)
+    if (checks !== null)
+      for (const id of checks) this.#railsCheck(id, time, tick)
   }
 
   /** Put a coasting entity where its epoch says it is at `time`. */
-  #coast(entity: Entity, epoch: Entity['rails'] & object, time: Seconds): void {
+  #coast(entity: Entity, epoch: RailsEpoch, time: Seconds): void {
     const state = coastState(this, entity.state.frame, epoch, time)
     this.entities.update(entity.id, { state })
     const binding = this.binding(state.frame)
@@ -714,8 +716,12 @@ export class World implements FlightWorld {
    * coast put it here at this instant — and puts it back on rails in the new
    * frame if the new conic allows, from a fresh epoch. No crossing sets the
    * next boundary the tests could possibly matter on.
+   *
+   * Runs after the clock has committed `tick`, so `tick` is passed rather than
+   * read: the event a crossing records is stamped with the tick that was being
+   * stepped, the way the integrated path stamps its own before the commit.
    */
-  #railsCheck(id: EntityId, time: Seconds): void {
+  #railsCheck(id: EntityId, time: Seconds, tick: number): void {
     const entity = this.entities.require(id)
     const epoch = entity.rails
     if (epoch === null) return
@@ -736,7 +742,7 @@ export class World implements FlightWorld {
     )
     if (verdict.change === null) {
       this.#soi.set(id, verdict.watch)
-      record.nextCheck = nextCheckAfter(this.clock.tick, verdict.safeFor)
+      record.nextCheck = nextCheckAfter(tick, verdict.safeFor)
       return
     }
     const { state, change } = verdict.change
@@ -747,23 +753,23 @@ export class World implements FlightWorld {
       'frame-change',
       id,
       `${change.from} → ${change.to} (${change.reason})`,
+      tick - 1,
     )
-    this.#enterRails(id, time, this.clock.tick)
+    this.#enterRails(id, time)
   }
 
-  /** Put an entity on rails from `time`, at `tick`, if its state allows it. */
-  #enterRails(id: EntityId, time: Seconds, tick: number): void {
+  /**
+   * Put an entity on rails from `time`, if its state allows it.
+   *
+   * The coast record is not built here: `#coastRecord` rebuilds it from the
+   * epoch on first use, and the first use is after the tick commits, so the
+   * boundary it seeds is the same one either way. One construction site.
+   */
+  #enterRails(id: EntityId, time: Seconds): void {
     const entity = this.entities.require(id)
     const epoch = railsEpoch(this, entity, this.#landed.has(id), time)
-    if (epoch === null) {
-      this.#coasting.delete(id)
-      return
-    }
-    this.entities.update(id, { rails: epoch })
-    this.#coasting.set(id, {
-      nextCheck: nextBoundary(tick),
-      speedBound: railsSpeedBound(this, entity.state.frame, epoch),
-    })
+    this.#coasting.delete(id)
+    if (epoch !== null) this.entities.update(id, { rails: epoch })
   }
 
   /**
@@ -908,8 +914,9 @@ export class World implements FlightWorld {
     kind: WorldEvent['kind'],
     entity: EntityId | null,
     detail: string,
+    tick: Tick | number = this.clock.tick,
   ): void {
-    this.#events.push({ tick: this.clock.tick, kind, entity, detail })
+    this.#events.push({ tick: asTick(tick), kind, entity, detail })
     if (this.#events.length > 256) this.#events.shift()
   }
 

@@ -186,8 +186,9 @@ export function meanAnomalyAt(
  *
  * Memoized on the elements object: three axis-angle constructions and two
  * products per call, for an answer that depends on nothing that moves. A body's
- * elements are one immutable record for the life of the system, and this ran
- * once per body per frame resolution — a fifth of a star-frame tick, measured.
+ * elements are one immutable record for the life of the system, and unmemoized
+ * this runs once per body per frame resolution — a fifth of a star-frame tick,
+ * measured.
  */
 const orientations = new WeakMap<OrbitalElements, Q.Quat>()
 

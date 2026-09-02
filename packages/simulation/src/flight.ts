@@ -1,11 +1,13 @@
 import { invariant, type Meters, type Seconds } from '@inertialref/shared'
 import {
+  apoapsis,
   atmosphericDensity,
   type BodyState,
   conicOf,
   dampingTorque,
   dragAcceleration,
   integrateBody,
+  periapsis,
   pointMassAcceleration,
   propagateTwoBody,
   resolveThrust,
@@ -84,10 +86,10 @@ const GROUND_BAND_MARGIN: Meters = 100 + LANDING_CLEARANCE * 2
 /**
  * Altitude above the datum below which a body's ground has to be asked.
  *
- * The gate this replaces was a quarter of the body's radius — 1,600 km on an
- * Earth-sized world — so every tick of a 400 km orbit sampled fourteen octaves
- * of noise twice for an answer the datum sphere already gave to nine
- * kilometers. Measured: 12.5 µs a tick against 1 µs above the gate.
+ * A gate at a quarter of the body's radius — 1,600 km on an Earth-sized
+ * world — has every tick of a 400 km orbit sampling fourteen octaves of noise
+ * twice for an answer the datum sphere already gives to nine kilometers.
+ * Measured: 12.5 µs a tick sampling, against 1 µs on the datum.
  */
 export function groundBand(binding: FrameBinding): Meters {
   const relief = binding.body === null ? 0 : binding.body.surface.maxElevation
@@ -207,8 +209,11 @@ export interface StepFlightOptions {
  * Advance one entity by one tick.
  *
  * Pure with respect to the world: it reads frames and bindings and returns a
- * new state. Nothing here mutates, which is what lets the same function run in
- * a worker or on a server.
+ * new state, which is what lets the same function run in a worker or on a
+ * server. The one thing it writes is the `soi` watch it is handed — the
+ * bounds are re-based in place and the same object comes back in the result —
+ * so a watch belongs to exactly one sequence of calls, and a call whose result
+ * is discarded has still consumed the watch's gaps.
  */
 export function stepFlight(
   world: FlightWorld,
@@ -362,7 +367,7 @@ function groundAltitude(
     distance -
     surfaceRadius(
       binding.body,
-      groundDirectionOf(world, entity, binding, radius, time),
+      groundDirection(world, entity, binding, radius, time),
     )
   )
 }
@@ -375,22 +380,7 @@ function groundAltitude(
  * spin frame is not rotating, so its inertial and body-fixed axes coincide and
  * the brand is honest.
  */
-export function groundDirection(
-  world: FlightWorld,
-  entity: Entity,
-  binding: FrameBinding,
-  time: Seconds,
-): BodyFixedDirection {
-  return groundDirectionOf(
-    world,
-    entity,
-    binding,
-    radiusVector(world, entity.state, binding, time),
-    time,
-  )
-}
-
-function groundDirectionOf(
+function groundDirection(
   world: FlightWorld,
   entity: Entity,
   binding: FrameBinding,
@@ -600,9 +590,17 @@ export function considerFrameChange(
           origin: state.position,
           gaps: new Float64Array(children.length + 1).fill(-Infinity),
         }
-  const travel = inFrame ? Vec.distance(state.position, watch.origin) : 0
-  const elapsed = time - watch.at
+  // What the watch's gaps have to give up before they can be read: how far
+  // the entity has come from the origin, and how long the children have had
+  // to close in. Both go to zero once the watch is re-based on this instant.
+  let travel = inFrame ? Vec.distance(state.position, watch.origin) : 0
+  let elapsed = time - watch.at
   const gaps = watch.gaps
+  const rebaseHere = (): void => {
+    rebase(watch, children, state.position, time, travel, elapsed)
+    travel = 0
+    elapsed = 0
+  }
 
   // The entity's distance from the parent, for the band prune and the parent
   // boundary. In the frame it is a length; below it, the canonical route.
@@ -611,7 +609,6 @@ export function considerFrameChange(
     : Vec.length(radiusVector(world, state, binding, time))
 
   let universe: UniverseVector | null = null
-  let rebased = false
   let safeFor = Infinity
   const n = children.length
 
@@ -627,21 +624,12 @@ export function considerFrameChange(
 
     // This child has to be looked at. The whole watch is re-based on where
     // the entity is now, so the gaps below are measured from here.
-    if (!rebased) {
-      rebase(watch, children, state.position, time, travel, elapsed)
-      rebased = true
-    }
+    if (travel !== 0 || elapsed !== 0) rebaseHere()
 
     let gap: number
     const elements = child.body?.elements
-    const near =
-      elements === undefined
-        ? -Infinity
-        : elements.semiMajorAxis * (1 - elements.eccentricity)
-    const far =
-      elements === undefined
-        ? Infinity
-        : elements.semiMajorAxis * (1 + elements.eccentricity)
+    const near = elements === undefined ? -Infinity : periapsis(elements)
+    const far = elements === undefined ? Infinity : apoapsis(elements)
     if (parentDistance + reach < near) {
       gap = near - parentDistance - reach
     } else if (parentDistance - reach > far) {
@@ -691,16 +679,11 @@ export function considerFrameChange(
           safeFor: 0,
         }
       }
-      if (!rebased) {
-        rebase(watch, children, state.position, time, travel, elapsed)
-        rebased = true
-      }
+      if (travel !== 0 || elapsed !== 0) rebaseHere()
       gaps[n] = leaveAt - parentDistance
     }
-    if (speedBound !== null) {
-      const left = rebased ? (gaps[n] as number) : (gaps[n] as number) - travel
-      safeFor = Math.min(safeFor, left / speedBound)
-    }
+    if (speedBound !== null)
+      safeFor = Math.min(safeFor, ((gaps[n] as number) - travel) / speedBound)
   } else {
     gaps[n] = Infinity
   }
@@ -816,21 +799,13 @@ export function coastState(
   const mu = world.binding(frame)?.mu ?? 0
   const elapsed = time - epoch.time
   const { position, velocity } = propagateTwoBody(epoch, mu, elapsed)
-  const omega = Vec.length(epoch.angularVelocity)
-  const orientation =
-    omega === 0
-      ? epoch.orientation
-      : Q.normalize(
-          Q.multiply(
-            epoch.orientation,
-            Q.fromAxisAngle(epoch.angularVelocity, omega * elapsed),
-          ),
-        )
+  // The same exact axis-angle rotation the integrator applies per tick, over
+  // the whole elapsed time at once: a constant spin composes.
   return {
     frame,
     position,
     velocity,
-    orientation,
+    orientation: Q.integrate(epoch.orientation, epoch.angularVelocity, elapsed),
     angularVelocity: epoch.angularVelocity,
   }
 }

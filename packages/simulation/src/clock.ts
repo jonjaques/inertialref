@@ -235,8 +235,13 @@ export class SimulationClock {
     return steps
   }
 
-  /** Ticks the accumulator asked for on the frame being planned, for `settle`. */
-  #asked = 0
+  /**
+   * Ticks the accumulator asked for on the frame being planned, for `settle`.
+   * Null between frames and for a frame that bought nothing — paused, or no
+   * wall clock passed — so `settle` can tell "asked for nothing and ran it"
+   * (a sub-tick frame, delivered in full) from "not running at all".
+   */
+  #asked: number | null = null
 
   /**
    * Consume wall-clock time and say what this frame may do with it.
@@ -251,7 +256,7 @@ export class SimulationClock {
    */
   plan(realDelta: Seconds): FramePlan {
     if (this.#paused || realDelta <= 0) {
-      this.#asked = 0
+      this.#asked = null
       this.#achievedTimeScale = 0
       return { wanted: 0, budget: 0 }
     }
@@ -277,6 +282,10 @@ export class SimulationClock {
    */
   settle(ran: number): void {
     const asked = this.#asked
+    this.#asked = null
+    // A frame that bought nothing has nothing to settle, and its 0× stands:
+    // the `asked === 0` case below is a sub-tick frame, not a paused one.
+    if (asked === null) return
     this.#achievedTimeScale =
       asked === 0 ? this.#timeScale : (this.#timeScale * ran) / asked
     if (asked > ran) {
@@ -284,7 +293,6 @@ export class SimulationClock {
       this.#droppedTicks += asked - ran
     }
     this.#accumulator -= asked * TICK_DURATION
-    this.#asked = 0
   }
 
   /**

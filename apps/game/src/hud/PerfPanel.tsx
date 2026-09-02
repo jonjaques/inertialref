@@ -163,9 +163,9 @@ export function PerfPanel({ engine }: { engine: GameEngine }) {
         />
         {world !== null && world.achievedTimeScale < world.timeScale * 0.99 && (
           <div className="text-amber-400/90">
-            capped — something is integrating, and the clock cannot step{' '}
-            {world.timeScale}× at this frame rate; a coasting ship has no
-            ceiling
+            capped — this frame could not deliver {world.timeScale}×: a stall is
+            caught up only so far, and an integrating entity has a rate ceiling
+            a coasting ship does not
           </div>
         )}
         <Row
