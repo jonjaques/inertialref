@@ -21,10 +21,13 @@ import {
   type WorldSnapshot,
 } from '@inertialref/simulation'
 import {
+  type Body,
   type CatalogStar,
   cellKey,
   cellOf,
   type EntityId,
+  findBody,
+  parseAddress,
   type StarCatalog,
   type SystemId,
 } from '@inertialref/universe'
@@ -822,6 +825,25 @@ export class GameEngine implements PresentationHost {
 
   terrainState(): TerrainState {
     return this.#terrain.state()
+  }
+
+  /** Where a heightfield request goes this frame — the streamer's answer. */
+  heightfieldSource(): HeightfieldSource | null {
+    return this.#terrain.heightfields()
+  }
+
+  /**
+   * The body at an address, out of the loaded world, or null.
+   *
+   * For a reader holding a `RenderBody` — the scene's description, which
+   * carries the address and the appearance and not the surface — that needs
+   * the body itself: the orbital bake wants `surface`, and the scene is
+   * right not to carry a surface grammar per drawn body per frame.
+   */
+  bodyFor(address: string): Body | null {
+    const parsed = parseAddress(address)
+    if (parsed.kind !== 'body') return null
+    return findBody(this.world.loadSystem(parsed.system), parsed.body) ?? null
   }
 
   /**

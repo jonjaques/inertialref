@@ -8,11 +8,14 @@ import {
   type Scene,
   SphereGeometry,
   Vector3,
+  type WebGPURenderer,
 } from 'three/webgpu'
 import { getLogger } from '@inertialref/shared'
 import type { RenderBody } from '@inertialref/rendering'
 import { formatAddress, walkBodies } from '@inertialref/universe'
 import type { GameEngine } from '../engine/GameEngine.ts'
+import { createOrbitalBaker, type OrbitalBaker } from '../render/orbitalBake.ts'
+import type { TerrainMaterial } from '../render/terrain.ts'
 import { trackAtMount, warmCompile, warmRenderer } from '../render/warmup.ts'
 import {
   type AtmosphereMaterial,
@@ -316,7 +319,13 @@ interface WarmTask {
 }
 
 /** Planets, moons and stars, placed from the scene description. */
-export function Bodies({ engine }: { engine: GameEngine }) {
+export function Bodies({
+  engine,
+  terrain,
+}: {
+  engine: GameEngine
+  terrain: TerrainMaterial
+}) {
   const group = useRef<Group>(null)
   const visuals = useMemo(() => new Map<string, BodyVisual>(), [])
   const anisotropy = useThree(
@@ -347,6 +356,28 @@ export function Bodies({ engine }: { engine: GameEngine }) {
     [],
   )
   const rings = useMemo(ringGeometry, [])
+  /*
+   * The orbital bake, made against the renderer and the ground material and
+   * kept for the component's life. `gl` is the renderer R3F holds, which is
+   * the one the ground's pipeline was warmed on.
+   */
+  const baker = useMemo(
+    () =>
+      createOrbitalBaker({
+        renderer: gl as unknown as WebGPURenderer,
+        terrain,
+        bodyFor: (address) => engine.bodyFor(address),
+        heightfieldSource: () => engine.heightfieldSource(),
+      }),
+    [gl, terrain, engine],
+  )
+  useEffect(() => {
+    // Reachable from a driving script as `window.orbitalBaker`, beside
+    // `window.engine`: a bake is a picture, and the only way to ask what is
+    // in one is to read a face back.
+    ;(window as unknown as { orbitalBaker?: OrbitalBaker }).orbitalBaker = baker
+    return () => baker.dispose()
+  }, [baker])
 
   const scratch = useMemo(
     () => ({ axis: new Vector3(), sun: new Vector3(), centre: new Vector3() }),
@@ -592,6 +623,20 @@ export function Bodies({ engine }: { engine: GameEngine }) {
           appearance.colour.g,
           appearance.colour.b,
         )
+        /*
+         * A generated body wears its bake once one is ready, and asking is
+         * what starts it. Only where the archive has no photograph — a
+         * mapped body's sphere is its map — and only once the disk is worth
+         * looking at, because a bake is ninety-six tiles of the producer's
+         * time and a point of light does not need one.
+         */
+        const bake =
+          appearance.texture === null &&
+          !giantKind(body.kind) &&
+          placement.angularRadius > BAKE_ANGLE
+            ? baker.textureFor(body.address)
+            : null
+        planet.setBake(bake)
         planet.albedoScale.value = adaptationFor(body)
         planet.lunarLambert.value = tuning.lunarLambert
         planet.terminator.value = tuning.terminator
@@ -625,9 +670,10 @@ export function Bodies({ engine }: { engine: GameEngine }) {
           )
         }
         // Sun-glint needs an ocean to land on, and the mask that says where one
-        // is rides in the normal map's blue. No normal map, no ocean, no glint.
+        // is rides in the normal map's blue — or in the bake's alpha. No mask,
+        // no ocean, no glint.
         planet.specularStrength.value =
-          maps.normal === null ? 0 : tuning.specular
+          maps.normal === null && bake === null ? 0 : tuning.specular
         planet.nightStrength.value = maps.night === null ? 0 : tuning.night
         planet.cloudShadow.value = maps.clouds === null ? 0 : 0.55
         planet.cloudHeight.value =
@@ -925,6 +971,16 @@ export function Bodies({ engine }: { engine: GameEngine }) {
 
   return <group ref={group} />
 }
+
+/**
+ * How large a generated body's disk is, in radians of angular radius, before
+ * its bake is asked for. A hundredth is about twelve pixels of radius at the
+ * flight lens over the baseline viewport; below it the tint is the picture.
+ */
+const BAKE_ANGLE = 0.01
+
+const giantKind = (kind: string): boolean =>
+  kind === 'gas-giant' || kind === 'ice-giant'
 
 /** A star is drawn by `createStarMaterial`; none of this reaches it. */
 const STAR_APPEARANCE: RenderBody['appearance'] = {

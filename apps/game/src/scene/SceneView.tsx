@@ -78,7 +78,7 @@ export function SceneView({ engine }: { engine: GameEngine }) {
       <EngineTick engine={engine} />
       <CameraRig engine={engine} />
       <Starfield engine={engine} />
-      <Bodies engine={engine} />
+      <Bodies engine={engine} terrain={terrain} />
       <TerrainPatches engine={engine} terrain={terrain} />
       <WaterPatches engine={engine} water={water} />
       <ScatterRocks engine={engine} terrain={terrain} />

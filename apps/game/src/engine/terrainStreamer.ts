@@ -677,8 +677,14 @@ export class TerrainStreamer {
     this.#poolSource = pool === null ? null : poolHeightfieldSource(pool)
   }
 
-  /** Where the next heightfield request goes, or nowhere. */
-  #heightfields(): HeightfieldSource | null {
+  /**
+   * Where the next heightfield request goes, or nowhere.
+   *
+   * Public because the orbital bake asks the same source for the same tiles
+   * a patch is made of, and a second producer of "which source" would
+   * disagree with this one the frame the GPU one stood down.
+   */
+  heightfields(): HeightfieldSource | null {
     const source = this.source
     if (source !== null && source.available) return source
     return this.#poolSource
@@ -751,7 +757,7 @@ export class TerrainStreamer {
       // What the *next* request would go to, which is the only honest answer
       // once a producer has stopped: the fields already held came from
       // wherever they came from.
-      producer: this.#heightfields()?.kind ?? 'none',
+      producer: this.heightfields()?.kind ?? 'none',
       scatter: this.#scatter.summary(),
     }
   }
@@ -1411,7 +1417,7 @@ export class TerrainStreamer {
    * dissolve exactly that grouping, so this only filters and takes.
    */
   #request(wanted: readonly RegionAddress[], body: Body): void {
-    const source = this.#heightfields()
+    const source = this.heightfields()
     if (source === null) return
     /*
      * The budget before the filter, and the early exit is the point.

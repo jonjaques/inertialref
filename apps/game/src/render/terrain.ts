@@ -107,6 +107,12 @@ export interface TerrainMaterial {
   setAlbedoMap(map: Texture | null, hasMap: boolean): void
   /** The surface-quality lever. Compares before it writes. */
   setQuality(quality: SurfaceQuality): void
+  /**
+   * Bake mode: 0 draws the ground, 1 writes its reflectance, 2 writes the
+   * sea mask as a grey. On for the orbital bake's twelve draws and back to 0
+   * before the frame's own.
+   */
+  setBakeMode(mode: 0 | 1 | 2): void
 }
 
 /**
@@ -236,6 +242,15 @@ export function createTerrainMaterial(): TerrainMaterial {
    * the evaluation is the cost this exists to remove.
    */
   const detailBands = uniform(groundBandsFor(DEFAULT_SURFACE_QUALITY.ground))
+  /*
+   * Bake mode: the graph answers "what does this ground reflect, and is it
+   * sea" instead of "what colour is this pixel". One graph rather than a
+   * second material, so the sphere's picture of a body and the ground's are
+   * the same deposits, the same tints and the same rivers by construction —
+   * the one way the seam rule can hold for a bake without a second copy of
+   * the stack to keep in step.
+   */
+  const bakeMode = uniform(0)
   const skyColour = uniform(new Color(0, 0, 0))
   const hazeColour = uniform(new Color(0, 0, 0))
   const skyStrength = uniform(0)
@@ -1018,7 +1033,21 @@ export function createTerrainMaterial(): TerrainMaterial {
     // 0.68 for the reason the disk uses it: at 0.8 the whole thing goes milky
     // and the ocean loses its depth, where the photographs keep a saturated
     // blue mid-disk under the veil.
-    return mix(surface, veilColour, veil.mul(0.68))
+    const lit = mix(surface, veilColour, veil.mul(0.68))
+    /*
+     * The bake: mode 1 is the reflectance alone, mode 2 the sea mask as a
+     * grey. Two passes rather than the mask in the alpha lane, because an
+     * opaque node material writes an alpha of one whatever the opacity node
+     * says — measured as a mask of 1.0 over every face of the first bake,
+     * and a sphere that was all sea.
+     */
+    const seaMask = max(flat, river)
+    const baked = mix(
+      mix(ground, riverColour, river),
+      vec3(seaMask),
+      saturate(bakeMode.sub(1)),
+    )
+    return mix(lit, baked, saturate(bakeMode))
   })()
 
   return {
@@ -1069,6 +1098,9 @@ export function createTerrainMaterial(): TerrainMaterial {
     setQuality(quality) {
       const bands = groundBandsFor(quality.ground)
       if (detailBands.value !== bands) detailBands.value = bands
+    },
+    setBakeMode(mode) {
+      bakeMode.value = mode
     },
     setAlbedoMap(map, hasMap) {
       /*
