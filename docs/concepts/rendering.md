@@ -395,6 +395,14 @@ kilometers is a fraction of a degree — the map's standard deviation is 2.4 out
 and forbids the thing next door to it: the elevation is the published one and the
 terrain is where it really is; only how sharply it catches the light is turned up.
 
+A body with none of them is most of the galaxy, and it wears the ground. The
+orbital bake ([ADR-0026](../adr/0026-the-liquid.md)) draws the streamed ground
+material from the body's centre into six faces of reflectance and a sea mask,
+and the sphere samples them by direction, so what the sphere shows from orbit
+is the geology the descent arrives at rather than a base colour standing in for
+it. The bake carries no relief: the sphere is flat-shaded under the same
+photometry, and the eight-pixel gate is where the ground's own normals take over.
+
 ### Two shapes, and which one is not a rendering choice
 
 A body is drawn as an **oblate spheroid** or as a **measured figure**, and what
