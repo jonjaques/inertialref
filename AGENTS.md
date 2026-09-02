@@ -50,7 +50,9 @@ Violating one of these is a rewrite later, not a refactor.
   coordinate.
 - **Never use `Math.random()`, `Date.now()`, or `performance.now()` in
   canonical code.** Generation derives from seeds. Simulation depends on the
-  integer tick. Wall clock enters at exactly one call, `clock.advance`.
+  integer tick. Wall clock enters at exactly one call, `clock.plan`, which
+  `World.advance` hands the frame's delta; `settle` takes a count of ticks run,
+  and nothing downstream of either sees a second.
 - **Never call `console.timeStamp`, `performance.mark` or `performance.measure`
   outside `engine/browserTiming.ts`,** and never name `performance.` in
   `packages/*` at all. Emit through a `Timer` from

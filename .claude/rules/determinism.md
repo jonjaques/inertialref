@@ -16,7 +16,8 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", ADR-0001..0009.
   coordinate.
 - **Never call `Math.random()`, `Date.now()` or `performance.now()` in anything
   canonical.** Generation derives from seeds, simulation from the integer tick. Wall clock
-  enters at exactly one call: `clock.advance`.
+  enters at exactly one call: `clock.plan`, which `World.advance` hands the frame's
+  delta. `clock.settle` takes a count of ticks, not a second.
 - **Never make generation depend on order.** Derive the seed from the address, never draw
   from a shared stream. If generating a different object first changes this one's output,
   it is wrong.
