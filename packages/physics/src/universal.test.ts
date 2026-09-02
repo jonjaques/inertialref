@@ -155,29 +155,58 @@ describe('universal-variable propagation', () => {
               (Vec.lengthSquared(state.velocity) / 2),
           ).toBeLessThan(1e-9)
           /*
-           * 10⁻⁹ is twenty times the worst this domain produces, and the
+           * 5 × 10⁻⁹ is four times the worst this domain produces, and the
            * distance between those two numbers is the whole reason to say so.
            *
            * Angular momentum is the sensitive one: it is a cross product of a
            * position that grows by four orders of magnitude along a hyperbola
            * and a velocity that does not, so it loses digits where the energy
            * — a difference of two quantities that stay the same size — keeps
-           * all of them at 10⁻¹⁶. Swept over 20,000 states across this
-           * arbitrary's own range, the worst relative error is **4.9 × 10⁻¹¹**.
+           * all of them at 10⁻¹³. Swept over 180,000 states across this
+           * arbitrary's own range, the worst relative error is
+           * **1.2 × 10⁻⁹**, and one state in 180,000 is over 10⁻⁹.
            *
-           * It was 4.6 × 10⁻⁹ and this bound caught it, which is the only
-           * reason the bound is worth having: the universal anomaly's Newton
-           * iteration was exiting on the size of its *step* rather than on its
-           * residual, and a far propagation divides a large residual by a
-           * large radius into a small step. See `solveUniversal`.
+           * The bound is worth having because of what sits above it: a
+           * Newton iteration that exits on the size of its *step* rather than
+           * on its residual reads 4.6 × 10⁻⁹ here, since a far propagation
+           * divides a large residual by a large radius into a small step; and
+           * one that never bisects reads 5 × 10¹³ on the near-parabolic
+           * hyperbola the example below pins. See `solveUniversal`.
            */
           const h0 = Vec.cross(state.position, state.velocity)
           const h1 = Vec.cross(after.position, after.velocity)
-          expect(Vec.distance(h0, h1) / Vec.length(h0)).toBeLessThan(1e-9)
+          expect(Vec.distance(h0, h1) / Vec.length(h0)).toBeLessThan(5e-9)
         },
       ),
       { numRuns: 300 },
     )
+  })
+
+  it('converges on a near-parabolic hyperbola propagated a month', () => {
+    /*
+     * The state the conservation property draws once in thirty thousand
+     * runs: a hair over escape speed, low, outbound, and asked for 21 days.
+     * The hyperbolic starting guess comes back with the wrong sign, the
+     * bracket discards it, and the first Newton step from χ = 1 overshoots
+     * by 5 × 10⁶ — a place the solver can only walk back from by bisecting.
+     */
+    const r = 1.1 * EARTH_RADIUS
+    const v = escapeSpeed(EARTH_MU, r) * 1.001
+    const cos = (2649.9289062350463 * Math.sqrt(EARTH_MU)) / (r * v)
+    const state: StateVector = {
+      position: vec3(r, 0, 0),
+      velocity: vec3(v * cos, 0, v * Math.sqrt(1 - cos * cos)),
+    }
+    const after = propagateTwoBody(state, EARTH_MU, 1_847_944.6893912924)
+    const h0 = Vec.cross(state.position, state.velocity)
+    const h1 = Vec.cross(after.position, after.velocity)
+    expect(Vec.distance(h0, h1) / Vec.length(h0)).toBeLessThan(1e-9)
+    expect(
+      relative(
+        specificEnergy(after, EARTH_MU),
+        specificEnergy(state, EARTH_MU),
+      ),
+    ).toBeLessThan(1e-9)
   })
 
   it('composes: two legs land where one leg does (property)', () => {

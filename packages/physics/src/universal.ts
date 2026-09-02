@@ -5,7 +5,7 @@ import {
   type Seconds,
 } from '@inertialref/shared'
 import { Vec } from '@inertialref/spatial'
-import type { StateVector } from './kepler.ts'
+import { orbitalPeriod, type StateVector } from './kepler.ts'
 
 /*
  * Two-body propagation in universal variables.
@@ -95,12 +95,15 @@ export function propagateTwoBody(
 
   let t = dt
   if (alphaR > PARABOLIC) {
-    const period = (2 * Math.PI) / (sqrtMu * alpha * Math.sqrt(alpha))
+    // The element form's own period, so a whole number of revolutions means
+    // the same thing here as it does to `stateVectorAt`.
+    const period = orbitalPeriod(mu, 1 / alpha)
     t = dt - period * Math.floor(dt / period)
     if (t === 0) return state
   }
 
-  const chi = solveUniversal(t, alpha, alphaR, r0m, sigma, sqrtMu, r0, v0, mu)
+  const conic: Conic = { t, alpha, alphaR, r0m, sigma, sqrtMu }
+  const chi = solveUniversal(conic, initialGuess(conic, r0, v0, mu))
   const psi = chi * chi * alpha
   const { c2, c3 } = stumpff(psi)
   const r = chi * chi * c2 + sigma * chi * (1 - psi * c3) + r0m * (1 - psi * c2)
@@ -116,6 +119,22 @@ export function propagateTwoBody(
 }
 
 /**
+ * The scalars of one propagation, shared by the solver and its starting guess.
+ *
+ * `alphaR` is `alpha · r0m` and `sqrtMu` is `√μ`; carried rather than derived
+ * so the two are computed once, and named so that a call site cannot
+ * transpose two same-typed numbers the checker would wave through.
+ */
+interface Conic {
+  readonly t: Seconds
+  readonly alpha: number
+  readonly alphaR: number
+  readonly r0m: Meters
+  readonly sigma: number
+  readonly sqrtMu: number
+}
+
+/**
  * The universal anomaly χ that lands `t` seconds along the conic.
  *
  * Newton–Raphson from the starting guess for the conic's kind, bracketed. The
@@ -126,18 +145,9 @@ export function propagateTwoBody(
  * plain Newton iteration overshoots near the periapsis of a very eccentric
  * orbit, where `r` is small and the step `F/r` is not.
  */
-function solveUniversal(
-  t: Seconds,
-  alpha: number,
-  alphaR: number,
-  r0m: Meters,
-  sigma: number,
-  sqrtMu: number,
-  r0: StateVector['position'],
-  v0: StateVector['velocity'],
-  mu: Mu,
-): number {
-  let chi = initialGuess(t, alpha, alphaR, r0m, sigma, sqrtMu, r0, v0, mu)
+function solveUniversal(conic: Conic, guess: number): number {
+  const { t, alpha, alphaR, r0m, sigma, sqrtMu } = conic
+  let chi = guess
   // The root has the sign of t: χ is monotonic in time and zero at the epoch.
   let lo = t > 0 ? 0 : -Infinity
   let hi = t > 0 ? Infinity : 0
@@ -148,6 +158,8 @@ function solveUniversal(
     else lo = -(2 * Math.PI) / Math.sqrt(alpha)
   }
   if (!(chi > lo && chi < hi)) chi = bisect(lo, hi)
+  // The size of the last step taken, for the safeguard below.
+  let previous = Infinity
 
   for (let i = 0; i < 100; i += 1) {
     const psi = chi * chi * alpha
@@ -180,12 +192,33 @@ function solveUniversal(
      */
     const scale = Math.abs(sqrtMu * t) + r0m * Math.abs(chi)
     if (Math.abs(residual) <= 1e-15 * scale) return chi
-    const next = chi + residual / r
+    /*
+     * A Newton step is taken only while it stays in the bracket *and* is at
+     * least halving the step before it; otherwise the bracket is bisected.
+     *
+     * Staying in the bracket is not enough on the hyperbolic side. There `F`
+     * grows like e^{χ√−α}, so from a χ that is far too large every Newton
+     * step back is the same 1/√−α — 41,846 for an escape at a hair over
+     * parabolic from 1.1 Earth radii — and a first step that overshot by
+     * 5 × 10⁶ needs a hundred and twenty of them. The loop's cap returned the
+     * hundredth, a radius of 10¹⁵ Earth radii for a ship doing 477 m/s, and
+     * the property that caught it had one chance in thirty thousand of
+     * drawing the state. Halving the bracket instead reaches the root's own
+     * 1/√−α in a handful of iterations, and Newton is quadratic from there.
+     */
+    const newton = residual / r
+    const next = chi + newton
     const stepped =
-      Number.isFinite(next) && next > lo && next < hi ? next : bisect(lo, hi)
+      Number.isFinite(next) &&
+      next > lo &&
+      next < hi &&
+      Math.abs(newton) <= previous / 2
+        ? next
+        : bisect(lo, hi)
     // Nothing representable left to gain: the root lies between two adjacent
     // doubles, and iterating would return this same pair forever.
     if (stepped === chi) return chi
+    previous = Math.abs(stepped - chi)
     chi = stepped
     if (hi - lo <= 1e-15 * Math.max(1, Math.abs(chi))) return chi
   }
@@ -207,16 +240,12 @@ function bisect(lo: number, hi: number): number {
  * to the bracket, which the solver then bisects into.
  */
 function initialGuess(
-  t: Seconds,
-  alpha: number,
-  alphaR: number,
-  r0m: Meters,
-  sigma: number,
-  sqrtMu: number,
+  conic: Conic,
   r0: StateVector['position'],
   v0: StateVector['velocity'],
   mu: Mu,
 ): number {
+  const { t, alpha, alphaR, r0m, sigma, sqrtMu } = conic
   if (alphaR > PARABOLIC) return sqrtMu * t * alpha
   if (alphaR < -PARABOLIC) {
     const a = 1 / alpha
