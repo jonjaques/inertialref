@@ -282,14 +282,25 @@ skipped by a triangle-inequality bound on both the coasting and the thrusting
 path.
 
 **Per tick, thrusting** — the figure the game pays at 1×, main drive lit,
-60,000 ticks, `origin/main` in a worktree against the branch on the same quiet
-machine: **39–49 µs at 400 km over Earth on main, 1.7–2.6 µs on the branch**;
-**45 µs at 1 AU in the Sun's frame on main, 1.6–2.1 µs on the branch**. The
-first is the crater ladder — `levelContribution` alone was 24% of the profile,
-sampled twice a tick for a ship 400 to 2,900 km up — and the second is the
-children's Kepler solves, which a ship sweeping radii under thrust admits more
-of than one holding 1 AU. On the branch `considerFrameChange` is 5% of the
+60,000 ticks, `origin/main` in a worktree against the branch, the two
+**interleaved** so any load lands on both:
+
+| Operating point, drive lit | `origin/main` | with the change |
+| -------------------------- | ------------- | --------------- |
+| 400 km over Earth          | 12.3–12.6 µs  | 0.43–0.51 µs    |
+| 1 AU in the Sun's frame    | 11.8–13.3 µs  | 0.56–0.60 µs    |
+
+The first is the crater ladder — `levelContribution` alone is 24% of a profile
+of it, sampled twice a tick for a ship 400 to 2,900 km up — and the second is
+the children's Kepler solves. On the branch `considerFrameChange` is 5% of the
 star-frame profile and the collector 4%.
+
+**Interleaved, and that is not fastidiousness.** The first attempt ran
+`origin/main` twice and then the branch twice, immediately after installing
+into a fresh worktree, and read 39–49 µs against 1.5–2.6 µs — both sides
+inflated three-fold by a cold module cache, in a ratio that happened to look
+plausible. Alternating the two costs nothing and is the only form of this
+measurement worth quoting.
 
 **What the engine's 0.4 ms is now.** `Engine/snapshot` at 0.28–0.39 ms — 129
 bodies' orbit and spin poses at the render instant, per frame, whether or not

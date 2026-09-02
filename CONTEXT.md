@@ -6510,9 +6510,10 @@ decision and the alternatives; the things worth remembering from doing it:
 After, per tick: 0.01–0.03 µs at every coasting point, the integrated cases
 within noise of before (0.55 µs against 0.44 at the spawn point, quiet
 machine) — and the thrusting ones, which are what the game pays at 1×,
-**39–49 µs on `origin/main` against 1.5–2.6 µs on the branch** at 400 km over
-Earth and at 1 AU in the Sun's frame alike, the first being the crater ladder
-sampled twice a tick under the old gate and the second the children's solves, and the ellipse-versus-elements property pinned the propagator's
+**12.3–12.6 µs on `origin/main` against 0.43–0.51 µs** at 400 km over Earth and
+**11.8–13.3 against 0.56–0.60** at 1 AU in the Sun's frame — the first being the
+crater ladder sampled twice a tick under the old gate and the second the
+children's solves, and the ellipse-versus-elements property pinned the propagator's
 agreement to 0.3 m per revolution at e = 0.98 — which is the _element_
 solution's rounding, a period wrong by parts in 10¹³, and grows linearly.
 
@@ -6526,10 +6527,16 @@ the engine, the starfield is 0.62–0.79 ms a frame under warp because the eye
 moves past the shell's parallax budget every frame — the budget binds on the
 system's own sun, which is in the survey and drawn on the shell.
 
-**The measurement trap, again.** The integrated tick read 1.5–2.0 µs while
+**The measurement trap, twice.** The integrated tick read 1.5–2.0 µs while
 `pnpm test` ran in the background, against 0.55 quiet. The plan already says
 a figure taken beside a test run is a figure about the test run; it applies to
-a 40 ms benchmark exactly as much as to a worker pool.
+a 40 ms benchmark exactly as much as to a worker pool. The second one is
+subtler and nearly shipped: benchmarking `origin/main` in a worktree
+_immediately after installing into it_, both sides in sequence rather than
+interleaved, read 39–49 µs against 1.5–2.6 µs — three times the true cost on
+both sides, in a ratio plausible enough to write down. Alternate the two
+builds; a comparison that runs one side to completion before starting the
+other is measuring the machine's mood as much as the code.
 
 **The heap does not leak at steady state.** Three operating points watched
 over CDP with a full collection forced before every reading: the flight start
