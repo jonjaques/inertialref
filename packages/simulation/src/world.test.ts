@@ -324,8 +324,8 @@ describe('simulation clock', () => {
   it('never jumps a coast further than the requested rate over a stall', () => {
     // A coasting frame is bounded by the *request* — the rate over at most
     // `MAX_WARP_FRAME` of wall clock — rather than by the integration ceiling.
-    // A backgrounded minute at 100,000× still comes back as ten simulated
-    // seconds, not a hundred thousand.
+    // A backgrounded minute at 100,000× therefore buys 640,000 ticks, which is
+    // ten thousand simulated seconds against the six million it asked for.
     fc.assert(
       fc.property(
         fc.double({ min: 1, max: 1e6, noNaN: true }),

@@ -666,7 +666,7 @@ declares, which is the one duplication that could not be removed.
 It is already banned in canonical code by
 [ADR-0006](adr/0006-simulation-clock.md) — generation derives from seeds and
 simulation depends on the integer tick, and wall clock enters at exactly one
-call, `clock.advance`. **In a Worker it is also not what you think it is.** From
+call, `clock.plan`. **In a Worker it is also not what you think it is.** From
 Cloudflare's [security model](https://developers.cloudflare.com/workers/reference/security-model/):
 _"the time value returned is not the current time. `Date.now()` returns the time
 of the last I/O. It does not advance during code execution."_ That is a Spectre

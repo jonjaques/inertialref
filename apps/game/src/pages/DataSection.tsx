@@ -45,7 +45,7 @@ export function DataSection() {
      *
      * The determinism rule is about canonical code — generation from seeds,
      * simulation from the tick — and the one wall-clock call it allows is
-     * `clock.advance`. This is a filename and a line in a file a person reads,
+     * `clock.plan`. This is a filename and a line in a file a person reads,
      * which is exactly the case `simulationTime.ts` makes for `Intl`: a
      * timestamp is a property of whoever is looking.
      */

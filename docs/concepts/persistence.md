@@ -3,9 +3,10 @@
 > **The question:** what is worth storing, when the entire universe can be
 > regenerated from a seed?
 > **The answer:** the seed, the tick, and the handful of things that have no
-> address to regenerate from. About **750 bytes** for a flown session, and
-> **900** once the ship is coasting, because the epoch it is propagated from is
-> canonical too ([ADR-0025](../adr/0025-the-rails.md)).
+> address to regenerate from. Under **a kilobyte** — 998 in the self-test's
+> save — of which the coasting ship's epoch is about 180, because the instant
+> it is propagated from is canonical too
+> ([ADR-0025](../adr/0025-the-rails.md)).
 >
 > Decision record: [ADR-0007](../adr/0007-persistence.md) ·
 > Code: `packages/persistence/`, `packages/protocol/src/save.ts`

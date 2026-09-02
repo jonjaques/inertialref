@@ -766,12 +766,24 @@ export class World implements FlightWorld {
     })
   }
 
-  /** Take an entity off the rails; the next tick integrates it. */
+  /**
+   * Take an entity off the rails; the next tick integrates it.
+   *
+   * Through `#forgetDerived` rather than dropping the coast record alone,
+   * because a coast moves the entity and `#groundAhead` is a measurement under
+   * where it *was*. A ship that entered rails at a 130 km periapsis and
+   * coasted out to 2,418 km would otherwise hand the next integrated tick an
+   * altitude 2,288 km stale. Harmless today — every rails-eligible state is
+   * above the drag ceiling, so the one branch that reads the value takes the
+   * same side either way — and harmless by three steps of reasoning rather
+   * than by construction, which is the wrong kind of safe for a field whose
+   * docstring promises it is only ever the contact test's own sample.
+   */
   #leaveRails(id: EntityId): void {
     const entity = this.entities.get(id)
     if (entity === undefined || entity.rails === null) return
     this.entities.update(id, { rails: null })
-    this.#coasting.delete(id)
+    this.#forgetDerived(id)
   }
 
   /** Drop everything derived from an entity's motion that a move invalidates. */

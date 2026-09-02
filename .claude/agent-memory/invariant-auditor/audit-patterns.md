@@ -519,6 +519,88 @@ engine field that holds its reciprocal.
 - `stateHash`, saves, `surveySites` and `installSurfaceFrame` all still read the canonical
   field; `TerrainSketch` is derived and never persisted.
 
+## An identifier rename sweeps the canonical file and its mirror, and stops there
+
+New variant of the mirror-drift shape, and the _good_ half fired: `feat/a-coasting-ship-is-on-rails`
+split `SimulationClock.advance` into `plan`/`settle`, and a follow-up commit
+(`docs: the wall-clock invariant names the call that still takes a second`) correctly
+rewrote **both** `AGENTS.md` and `.claude/rules/determinism.md` to name `clock.plan`. Its own
+`--stat` is two files. What it did not reach: `docs/adr/0006-simulation-clock.md:20` — the ADR
+the invariant cites by name — plus `docs/hosting.md:669` and a code comment at
+`apps/game/src/pages/DataSection.tsx:48`, all three still reading "wall clock enters at exactly
+one call, `clock.advance`". `SimulationClock.advance` now has **no production caller** at all.
+
+**The check on any diff that renames a method an invariant names:** `rg` the old identifier
+across the whole tree after reading the fix commit's `--stat`. A two-file docs commit for a
+rule that is quoted in four places is the tell.
+
+## A derived per-entity cache that a _new_ movement path bypasses
+
+`World.#groundAhead` (`world.ts:178`) holds the contact test's post-step ground sample so the
+next tick reuses it, and its docstring says "anything else that moves an entity drops it, and a
+fresh sample is bit-identical to the reuse". `teleport`, `reframeEntity`, `#land`, `#liftOff`
+and a frame change all call `#forgetDerived`. The new rails path does not: `#coast` moves the
+entity for arbitrarily many ticks and `#leaveRails` (`world.ts:770`) clears `rails` and
+`#coasting` and leaves `#groundAhead` alone. Measured: eccentric Earth orbit, rails entered at
+130 km, `setControl` after 60,000 coasting ticks at 2,418 km — the integrator is handed the
+130 km number. Benign **only** because rails eligibility (`periapsis > radius + groundBand`)
+forces the stale value above the atmosphere ceiling, so the one branch that reads it takes the
+same side either way; the contact block recomputes. One line to fix, three steps to prove safe.
+
+**The check:** for each private `Map<EntityId, …>` in `World`, list every method that writes
+`entity.state` and confirm each appears in `#forgetDerived`'s caller set.
+
+## The method that settles a jump-vs-step equivalence claim, in ten minutes
+
+`world.runTicks(N)` jumps; a bare `for (…) world.step()` loop steps the same ticks. Same seed,
+same fixture, compare `stateHash()` and `Vec.distance` of the positions. Bit-identical over
+200k/300k/400k ticks on three conics (circular LEO, escape hyperbola, high ellipse) and across
+a real SOI departure — both worlds fired `left sphere of influence` on tick 59,200.
+
+To count _jumps_ rather than ticks, monkeypatch the instance: `clock.commitTicks = (n) => {…}`.
+A 100,000× 60 fps frame over a LEO coast is **one** jump of 106,666 ticks; 10⁷× is eight, the
+longest 8.86 h — which is the "bounded by Luna at about ten hours" figure ADR-0025 quotes.
+
+## A boundary-scheduled test converges regardless of its schedule — the argument, so you do not re-derive it
+
+`World`'s rails schedule (`nextCheckAfter`) worried me because a restored world rebuilds
+`nextCheck` as `nextBoundary(clock.tick)` while the original carries a `safeFor`-derived one, so
+the two test at different boundaries. It cannot diverge: `nextCheck = firstBoundary(safeHorizon)`
+and `safeHorizon ≤ crossingTick`, so `nextCheck ≤ firstBoundary(crossingTick)` at _every_ test,
+and the strictly-increasing sequence must land exactly on `firstBoundary(crossingTick)`. The
+detection tick is a function of the crossing instant alone, whatever the intermediate schedule.
+Any "sound bound + fixed boundaries" scheme has this property; check the two inequalities rather
+than hunting for a counterexample.
+
+## The ground band is empirical, and the measurement is one loop
+
+`groundBand = max(maxElevation, atmosphere.ceiling) + 108` replaced `binding.radius * 0.25` as the
+gate below which terrain is sampled, on the premise that the field never exceeds `maxElevation`.
+The band-share arithmetic argues it and `craters.ts`'s `softLimit` folds in on top, and
+`universe.test.ts:332` tolerates `1.2 ×`. Measured `max(surfaceRadius(body, d) − body.radius)` over
+6,000 directions × 129 Sol bodies and 3,000 × 362 generated bodies: the peak is **0.46 ×
+maxElevation** at worst (Alpha Centauri III), minimum slack 108 m, and `datumRadius ≤ body.radius`
+holds for every `figure` body because the half-extents arrive sorted. The gate is safe by ~2×.
+Worth not re-deriving; worth re-running if a band's share ever exceeds its allowance.
+
+## Same save, two numbers, again
+
+`docs/concepts/persistence.md:6` says the save is "**900** once the ship is coasting" while the
+same branch's `docs/design/technical.md:206` says **998** and `pnpm sim --self-test` capability 11
+prints "998 bytes". Both describe capability 11's save. Third instance of this shape in these
+notes. **Run the rig that prints the number** — `pnpm sim --self-test` takes seconds.
+
+## A modulo-reduction test that reduces the same way the function does
+
+`universal.test.ts`'s "holds a low orbit to the millimeter across a year of revolutions" compares
+`propagateTwoBody(from, mu, year − whole)` against `propagateTwoBody(from, mu, year)`, where the
+test computes `whole` from `2π√(r³/μ)` and the function reduces internally by
+`2π/(√μ·α·√α)`. Mathematically the same period, so the test is close to asking the function the
+same question twice; what saves it is that the two period expressions round differently and a
+`toBeCloseTo(r, 3)` on the radius is independent. Fine as shipped — but the generic check is:
+when a test asserts "the internal reduction is exact", make sure the expected side does not
+reproduce the reduction.
+
 ## Resolved on earlier branches — do not re-report
 
 - `Observatory.stand` guards `focus` on `wanted.address !== this.#target?.address`.

@@ -88,8 +88,8 @@ tick on which all entities coast.**
   unchanged: a backgrounded minute is eight ticks and a dropped count whether
   the ship coasts or not, so the world a player returns to is the one they
   left. Above 1× a coast is bounded by the request over at most
-  `MAX_WARP_FRAME`, so a stall at 100,000× is ten simulated seconds, not a
-  hundred thousand.
+  `MAX_WARP_FRAME`, so a stall at 100,000× buys 640,000 ticks — ten
+  thousand simulated seconds against the six million it asked for.
 - **The ground is sampled inside the band and reused across the tick.** The
   contact test samples the terrain under where the entity ended up, at the
   instant it got there; that is the next tick's starting point and instant, so
@@ -138,7 +138,7 @@ three conics without a branch.
 ## Consequences
 
 - The seven detents are seven speeds. Headlessly, a coasting tick costs 0.01 to
-  0.03 µs at every operating point measured, against 1 to 12.5 µs before, and a
+  0.03 µs at every operating point measured, against 0.30 to 13.3 µs before, and a
   100,000× frame over a coasting ship is one jump.
 - A save grows by one epoch per coasting entity, and `SaveEntity.rails` is
   defaulted rather than versioned: an older save reads as every entity

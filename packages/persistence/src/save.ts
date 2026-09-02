@@ -5,6 +5,7 @@ import {
   decodeFrameState,
   decodeRailsEpoch,
   describeDrift,
+  type RailsEpoch as WireRailsEpochShape,
   encodeFrameState,
   encodeRailsEpoch,
   encodeVec3,
@@ -18,6 +19,7 @@ import { type FrameId, vec3 } from '@inertialref/spatial'
 import {
   DEBUG_SHIP_THRUSTERS,
   type EntityKind,
+  type RailsEpoch as SimulationRailsEpoch,
   World,
 } from '@inertialref/simulation'
 import {
@@ -29,6 +31,37 @@ import {
   type SystemId,
 } from '@inertialref/universe'
 import { migrateSave } from './migrate.ts'
+
+/*
+ * The two `RailsEpoch` declarations, held to each other.
+ *
+ * `protocol` and `simulation` are both layer 4 and neither may import the
+ * other, so the wire form declares the epoch's shape structurally and the
+ * simulation's own type satisfies it by agreeing rather than by inheriting.
+ * Nothing checks that agreement at either end — this file is the lowest one
+ * that can see both.
+ *
+ * It is worth a line because of how the failure would present. A *required*
+ * field added on the simulation side fails to compile below, which is fine. An
+ * *optional* one compiles, `encodeRailsEpoch` silently drops it, and
+ * `stateHash` goes on counting it — so a save round trip returns a world that
+ * hashes differently, which reads as a determinism bug in the propagator
+ * rather than as a missing line in a codec.
+ */
+type SameKeys<A, B> = [keyof A] extends [keyof B]
+  ? [keyof B] extends [keyof A]
+    ? true
+    : never
+  : never
+type EpochsAgree = [
+  // Assignability alone is not enough: it tolerates an extra *optional*
+  // property on either side, which is exactly the droppable field above.
+  SameKeys<SimulationRailsEpoch, WireRailsEpochShape>,
+  SimulationRailsEpoch extends WireRailsEpochShape ? true : never,
+  WireRailsEpochShape extends SimulationRailsEpoch ? true : never,
+]
+const _epochsAgree: EpochsAgree = [true, true, true]
+void _epochsAgree
 
 /*
  * Turning a world into a save and back.
