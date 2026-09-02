@@ -161,12 +161,33 @@ function solveUniversal(
       r0m * chi * (1 - psi * c3)
     if (residual > 0) lo = Math.max(lo, chi)
     else hi = Math.min(hi, chi)
-    const step = residual / r
-    if (Math.abs(step) <= 1e-13 * Math.max(1, Math.abs(chi))) return chi
-    const next = chi + step
-    chi =
+    /*
+     * Converged when the *equation* is satisfied, never when the step is
+     * small.
+     *
+     * The Newton step is `residual / r`, and `r` is the radius the propagation
+     * lands at — 6 × 10¹⁰ m a hundred days along a hyperbola out of low Earth
+     * orbit. So a residual still worth 176 in the units this equation is
+     * written in divides down to a step of 2.9 × 10⁻⁹, slips under any
+     * tolerance scaled to `chi`, and returns an anomaly one iteration short.
+     * Measured on exactly that case: a relative residual of 8.8 × 10⁻¹³ where
+     * the times either side of it reach 10⁻¹⁷, and 4.6 × 10⁻⁹ of angular
+     * momentum quietly gone. A far propagation is both where this matters and
+     * where the step is least able to report it.
+     *
+     * The scale is what the residual is a difference *of*, so the test says
+     * "no significant digits left in it" rather than naming an epsilon.
+     */
+    const scale = Math.abs(sqrtMu * t) + r0m * Math.abs(chi)
+    if (Math.abs(residual) <= 1e-15 * scale) return chi
+    const next = chi + residual / r
+    const stepped =
       Number.isFinite(next) && next > lo && next < hi ? next : bisect(lo, hi)
-    if (hi - lo <= 1e-13 * Math.max(1, Math.abs(chi))) return chi
+    // Nothing representable left to gain: the root lies between two adjacent
+    // doubles, and iterating would return this same pair forever.
+    if (stepped === chi) return chi
+    chi = stepped
+    if (hi - lo <= 1e-15 * Math.max(1, Math.abs(chi))) return chi
   }
   return chi
 }
