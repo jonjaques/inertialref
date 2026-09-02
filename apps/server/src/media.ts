@@ -44,12 +44,42 @@ export interface MediaObject {
   readonly what: string
 }
 
+/**
+ * The objects served under `/media/`.
+ *
+ * **Two encodings of one track, and the m4a is the preferred one.** Safari is
+ * the reason. The overlay does not play the reference audio, it *chases* a
+ * clock with it — `currentTime` is written whenever the element drifts more
+ * than 80 ms from the frame — and MPEG audio has no sample-accurate index, so
+ * a seek lands on the nearest frame the decoder can resynchronise to. Chrome
+ * hides that; Safari does not, and an mp3 seek there is coarse enough that the
+ * correction lands outside tolerance and is issued again on the next frame, so
+ * the track stutters instead of playing. AAC in an MP4 carries a sample table,
+ * so a seek is exact.
+ *
+ * The two are the same audio and the same timeline: the m4a is transcoded from
+ * the mp3 at 192 kbit/s AAC-LC, 48 kHz stereo, with `+faststart` so the moov
+ * atom precedes the media data and playback can start on the first range
+ * rather than after the whole file. Cross-correlated against the mp3 at 8 kHz
+ * the best lag is 0 samples — the AAC encoder's priming delay is compensated
+ * by the edit list — so a frame maps to the same instant in either, and the
+ * client may pick whichever the browser can decode.
+ *
+ * `mediaFor` is an allow-list, so an entry here is what makes a name exist at
+ * all. A deployment may have one file, both, or neither; the overlay probes.
+ */
 export const MEDIA: readonly MediaObject[] = [
+  {
+    name: 'tng-intro.m4a',
+    key: 'dropbox/tng-intro.m4a',
+    type: 'audio/mp4',
+    what: 'the cutscene reference audio, AAC',
+  },
   {
     name: 'tng-intro.mp3',
     key: 'dropbox/tng-intro.mp3',
     type: 'audio/mpeg',
-    what: 'the cutscene reference audio',
+    what: 'the cutscene reference audio, MPEG',
   },
 ]
 
