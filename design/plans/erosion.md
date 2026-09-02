@@ -63,7 +63,7 @@ downhill.**
   its own spill level, which is a graph property, not a datum.
 - **Wet is a strip, not a flow.** `channelWetness` is the top 0.7% of the strip
   field, so every channel is the same thread of `wet` cover, painted on its
-  bed at one colour. The material has no flow direction to advect a wave
+  bed at one color. The material has no flow direction to advect a wave
   along, no width to draw a sheet across, and the `biota` band does not know
   a river is there — a riparian corridor is the most visible thing a river
   does from orbit and there is none.
@@ -87,7 +87,7 @@ Three tiers, each bounded, each a function of the seed.
 ### 2.1 The drainage graph is a generation product
 
 A body's rivers are a **graph**: nodes on a coarse sphere lattice, each with
-an elevation, a receiver (the neighbour it drains to), an upstream area, a
+an elevation, a receiver (the neighbor it drains to), an upstream area, a
 Strahler order and a spill level; segments between them carrying a floor
 elevation at each end that never rises downstream. It is built once per body
 from the macro landform — the plate, swell and hypsometry bands are cheap at
@@ -131,7 +131,7 @@ runs and a GPU's atomics do not order themselves:
    stream a walker stands beside is not on that lattice. Below the lattice the
    network is Gaillard et al.'s construction: at each level a grid twice as
    fine, a jittered key point per cell, level 0 joining each key point to the
-   neighbour that minimises the **control function** — which is the incised
+   neighbor that minimizes the **control function** — which is the incised
    lattice's own elevation, the case the paper's Figure 15 demonstrates from a
    16×16 downsample — and each finer level joining its key points to the
    nearest existing segment. A segment's slope is Flint's law, its junction
@@ -240,18 +240,18 @@ Each is a measured cost against a measured loss, and each names the condition
 under which it is worth revisiting. The frame is the ADR's table: 9.5 fps
 before, 18.0 with every octave off.
 
-| Tradeoff                                                    | Bought                                       | Cost                                                                                                                    | Revisit when                                                                            |
-| ----------------------------------------------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| Octaves cut: macro 3→2, micro 2→1, grain 3→2                | 11.9 → 16.3 fps                              | The micro's second octave was the meter-scale relief in the normal; ground at 3–30 m is smoother than the mesh under it | An authored material set arrives, or the `full` lever re-adds it for a measured machine |
-| The noise is RGBA8 with its gradient baked                  | Normals without screen derivatives; no moiré | 8-bit value and gradient — faceting is possible on flat ground at a grazing sun, unmeasured                             | A plate shows it; the fix is a two-texture split or RG16F for the near octave           |
-| One four-channel fetch per octave rather than one-channel   | The gradient                                 | A texel fetch at ~4× the cost of a one-channel one, whatever the texture's size                                         | A gradient-free far octave — screen derivatives are fine past the near ground           |
-| The sea refracts the frame through `viewportSharedTexture`  | Refraction, the shallows' colour             | A frame copy per frame at nine million pixels, ~1–2 ms, and a pass the harness cannot draw                              | The sea's `plain` lever is the switch; measure the copy alone with the timestamp query  |
-| Sea waves at two swell octaves and one chop                 | A moving surface                             | Static foam, no breaking wave at the shore, no wake                                                                     | Shore waves are a phase; the foam band is the seam                                      |
-| The sea reflects the sky, not the land                      | No screen-space search                       | A cliff is not mirrored under itself                                                                                    | Screen-space reflection is a pass of its own; the lever is `sea: full`                  |
-| The orbital bake is reflectance and a mask at 512 and 256   | The sphere wears the ground                  | A hitch of tens of milliseconds on the arrival frame, and no relief on the sphere                                       | The bake spreads across frames; the normal bake is § 4                                  |
-| Rocks with `frustumCulled` off                              | No per-frame bounds                          | ~12 ms of the 82 ms frame at 3 m over the shore, drawn whether in view or not                                           | Per-patch instance ranges, or a GPU cull; the `rocks` lever is blunt until then         |
-| 1,227 patches at level 17 at a 3 m stance                   | The refinement the lens asks for             | ~18 ms of extra patches behind and below the horizon                                                                    | A horizon and a back-facing test in the predicate; `terrain: coarse` is the lever now   |
-| The deposit stack, the veil, the sky shell and MSAA at 9 MP | The look                                     | 18.0 fps with every octave off — the base cost, and unattributed                                                        | First: a timestamp query per pass. This is the instrument the phase did not build       |
+| Tradeoff                                                    | Bought                                       | Cost                                                                                                                    | Revisit when                                                                                                                                        |
+| ----------------------------------------------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Octaves cut: macro 3→2, micro 2→1, grain 3→2                | 11.9 → 16.3 fps                              | The micro's second octave was the meter-scale relief in the normal; ground at 3–30 m is smoother than the mesh under it | An authored material set arrives, or the `full` lever re-adds it for a measured machine                                                             |
+| The noise is RGBA8 with its gradient baked                  | Normals without screen derivatives; no moiré | 8-bit value and gradient — faceting is possible on flat ground at a grazing sun, unmeasured                             | A plate shows it; the fix is a two-texture split or RG16F for the near octave                                                                       |
+| One four-channel fetch per octave rather than one-channel   | The gradient                                 | A texel fetch at ~4× the cost of a one-channel one, whatever the texture's size                                         | A gradient-free far octave — screen derivatives are fine past the near ground                                                                       |
+| The sea refracts the frame through `viewportSharedTexture`  | Refraction, the shallows' color              | A frame copy per frame at nine million pixels, ~1–2 ms, and a pass the harness cannot draw                              | `sea: plain` does not remove it — the copy runs in the node's `updateBefore` whatever the graph reads, so the switch is a second material, measured |
+| Sea waves at two swell octaves and one chop                 | A moving surface                             | Static foam, no breaking wave at the shore, no wake                                                                     | Shore waves are a phase; the foam band is the seam                                                                                                  |
+| The sea reflects the sky, not the land                      | No screen-space search                       | A cliff is not mirrored under itself                                                                                    | Screen-space reflection is a pass of its own; the lever is `sea: full`                                                                              |
+| The orbital bake is reflectance and a mask at 512 and 256   | The sphere wears the ground                  | A hitch of tens of milliseconds on the arrival frame, and no relief on the sphere                                       | The bake spreads across frames; the normal bake is § 4                                                                                              |
+| Rocks with `frustumCulled` off                              | No per-frame bounds                          | ~12 ms of the 82 ms frame at 3 m over the shore, drawn whether in view or not                                           | Per-patch instance ranges, or a GPU cull; the `rocks` lever is blunt until then                                                                     |
+| 1,227 patches at level 17 at a 3 m stance                   | The refinement the lens asks for             | ~18 ms of extra patches behind and below the horizon                                                                    | A horizon and a back-facing test in the predicate; `terrain: coarse` is the lever now                                                               |
+| The deposit stack, the veil, the sky shell and MSAA at 9 MP | The look                                     | 18.0 fps with every octave off — the base cost, and unattributed                                                        | First: a timestamp query per pass. This is the instrument the phase did not build                                                                   |
 
 Two tradeoffs are not in the table because they are not performance. The
 canonical field is untouched by any of them — every lever is presentational,
@@ -288,6 +288,25 @@ reference: the WebGPU frame is the one the target applies to.
 10. **Plate worlds carry the liquid with less shoreline variety.** The fixture
     lost its plate world, and the shore was judged on a stagnant lid. Measure
     at the most-plated body before believing the coast.
+11. **The macro band tiles.** Every detail octave is one baked texture, and
+    the macro band moved onto it with the others: it repeats every 32 cells,
+    about 20 km of ground, at full strength for any footprint under a
+    kilometer a pixel — sixteen identical tiles across a frame at 200 m/px —
+    and the bake evaluates it unfaded at 20 km a texel. Beside it, the
+    "four kilometers" `MACRO_METRES` names is 637 m in practice, a 2π the
+    period arithmetic never divided out. Either that one band goes back to
+    an aperiodic evaluation, or the period is fixed at a real 4 km cell and
+    the bake's detail bands are set flat; both change the look, so a plate
+    decides.
+12. **A lava sea glows on the ground and not on the sphere.** The sheet emits
+    the liquid's glow and the sphere has no emissive term, so a magma world
+    is red at the gate and dark from orbit at night. One uniform, and the
+    boot warm-up graph with it.
+13. **The bake's ninety-six tiles queue ahead of the streamer.** On the pool
+    path the source is a FIFO the two share, so a bake starting on a descent
+    delays the ground the descent is about to need. A priority lane in the
+    producer and the pool is the fix; residency stops the thrash, not the
+    ordering.
 
 ---
 
@@ -386,14 +405,14 @@ and a GPU that samples but never produces. Each entry carries a verdict.
 **Hydrology-first networks.** Génevaux, Galin, Guérin, Peytavie & Beneš 2013,
 _Terrain Generation Using Procedural Models Based on Hydrology_, ACM TOG
 32(4) ([PDF](https://www.cs.purdue.edu/cgvlab/www/resources/papers/Genevaux-ACM_Trans_Graph-2013-Terrain_Generation_Using_Procedural_Models_Based_on_Hydrology.pdf)).
-A grammar grows the network **upstream** from the mouths, parameterised by the
+A grammar grows the network **upstream** from the mouths, parameterized by the
 Horton–Strahler index, with three rules — continuation, symmetric junction,
 asymmetric junction — and one knob, ζ, between many equal basins and one
 dominant one; each node is admitted only under a Lipschitz slope bound. The
 terrain is then a blend of primitives with the rivers carved by a replace
 operator. 0.1–5 s for the graph over ~3,000 km²; the finished tree is
 per-point and order-independent, the growth is global. _Verdict: the right
-model for the per-body artefact — a compact vector graph the field closes
+model for the per-body artifact — a compact vector graph the field closes
 over — and it cannot make a delta, which is why § 2.3 adds a downstream
 rule._ The readable open implementation is
 [dandrino/terrain-erosion-3-ways](https://github.com/dandrino/terrain-erosion-3-ways).
@@ -415,7 +434,7 @@ Erosion_, ACM TOG 43(4)
 is the fully local formulation: flow routing `w = s^1.3 / Σ s^1.3` at one
 iteration a step, clamped stream power `ẽ = min(Sⁿ, S_maxⁿ)·min(Aᵐ, A_maxᵐ)`,
 erodibility `k(1 − ρ)` over a fractal hardness field, thermal
-`h += k_γ(α − β)` counting neighbours over a noisy critical slope, and a
+`h += k_γ(α − β)` counting neighbors over a noisy critical slope, and a
 deposition pass `d = min(t, k_d·φ)`; 0.06 ms an iteration at 128² on a 3080,
 5 ms at 4096², hundreds to thousands of iterations. _Verdict: the local
 stencil is admissible at one fixed lattice per body and nowhere per tile
@@ -452,7 +471,7 @@ per-pixel filters is small and the determinism cost is total._
 [DOI](https://doi.org/10.1145/3306131.3317020)). The field is the distance to
 a tree built locally: levels of grids each twice as fine, a jittered key
 point per cell (jitter ε ≤ 0.5, perturbation Δ ≤ 0.08, cubic splines), level 0
-joining each point to the neighbour in a 7×7 window that minimises a control
+joining each point to the neighbor in a 7×7 window that minimizes a control
 function, finer levels joining to the nearest existing segment in a 5×5
 window. Slope by Flint's law `S = ρ(2μ − 1)^(−0.6)`, junction angle by Howard
 1971 `cos α = S_m/S_n`, and the control function **can be a coarse
@@ -518,7 +537,7 @@ as its control function; the incised lattice as the macro band; hydraulic
 geometry from the graph's area for every width and depth; and the per-pixel
 filters for the look. Skipped, each for a named reason: droplets and pipes,
 gradient-domain authoring, a per-tile stencil in the canonical field, and any
-planet-wide metre grid.
+planet-wide meter grid.
 
 ## Related
 

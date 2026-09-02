@@ -153,8 +153,8 @@ Eight biomes, six of them airless or near-airless, is the right MVP set: it
 covers the great majority of landable real bodies, and it avoids the flora
 problem entirely until after launch. The three rows between them are what
 [ADR-0026](../adr/0026-the-liquid.md) added without geometry — a seabed, a
-riverbed and a pigment are colours the cover carries, and a temperate world
-reads as one from orbit before a single plant is modelled.
+riverbed and a pigment are colors the cover carries, and a temperate world
+reads as one from orbit before a single plant is modeled.
 
 **Materials are the art budget.** Each biome needs a PBR material set —
 albedo, roughness, normal, and a detail layer — and those are the few dozen

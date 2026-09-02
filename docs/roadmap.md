@@ -179,7 +179,7 @@ strength limit rather than a dial, and terrain moved to algorithm version 2.
 The liquid landed 2 Sep 2026: a sea read against its ground's temperature —
 water, hydrocarbon or magma — valleys cut into the landform and a coast
 remapped round the datum, the heightfield as the seabed with the sea a sheet
-over it, colour families for rock, ice, haze and pigment, every detail octave
+over it, color families for rock, ice, haze and pigment, every detail octave
 a fetch of one baked noise texture, four named surface levers, and the sphere
 of a generated body wearing six faces of its own ground.
 [ADR-0026](adr/0026-the-liquid.md) is the decision record. Terrain moved to
