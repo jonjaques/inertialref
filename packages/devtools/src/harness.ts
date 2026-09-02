@@ -378,7 +378,9 @@ export class GameHarness {
     return [
       `tick ${status.world.tick} (${status.world.timeText}, ${status.world.timeScale}x${status.world.paused ? ', paused' : ''})`,
       `hash ${status.world.stateHash}`,
-      player === null ? 'no player' : `${player.name} in ${player.frame}`,
+      player === null
+        ? 'no player'
+        : `${player.name} in ${player.frame}${player.coasting ? ', coasting' : ''}`,
       player === null
         ? ''
         : `${player.speedText}${player.altitudeText === null ? '' : ` alt ${player.altitudeText}`}`,

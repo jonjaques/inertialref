@@ -81,6 +81,24 @@ export const MAX_WARP_FRAME: Seconds = 0.1
 /** The absolute per-frame ceiling. Derived: the rate, over the longest frame. */
 export const MAX_WARP_STEPS = MAX_WARP_RATE * MAX_WARP_FRAME * TICK_RATE
 
+/**
+ * How a frame's wall clock is to be spent: what it bought, and how much of that
+ * may be integrated.
+ *
+ * Two numbers because two things cost differently. A tick that is integrated
+ * — a thrusting ship, a descent through air — costs a microsecond and is what
+ * the stall guard and the rate ceiling are about. A tick that every entity
+ * coasts over on rails (ADR-0025) costs nothing at all, and there is no reason
+ * to deliver fewer of them than the player asked for. So `wanted` is what the
+ * accumulator holds, bounded only by the stall guards, and `budget` is how many
+ * of those the world may take one at a time; the world runs the rest by
+ * jumping, or drops them.
+ */
+export interface FramePlan {
+  readonly wanted: number
+  readonly budget: number
+}
+
 export interface ClockStatus {
   readonly tick: Tick
   readonly time: Seconds
@@ -201,28 +219,67 @@ export class SimulationClock {
    * Consume wall-clock time and report how many fixed steps to run.
    *
    * The caller runs exactly that many; nothing about the simulation looks at
-   * `realDelta` again.
+   * `realDelta` again. `plan` and `settle` are the two halves of this for a
+   * caller that can jump — the world — and this is the pair composed for one
+   * that steps every tick it is given.
    */
   advance(realDelta: Seconds): number {
+    const { wanted, budget } = this.plan(realDelta)
+    const steps = Math.min(wanted, budget)
+    this.settle(steps)
+    return steps
+  }
+
+  /** Ticks the accumulator asked for on the frame being planned, for `settle`. */
+  #asked = 0
+
+  /**
+   * Consume wall-clock time and say what this frame may do with it.
+   *
+   * At 1× and below the stall guard is the whole story: a backgrounded minute
+   * comes back as eight ticks and a dropped count, whether the ship is coasting
+   * or not, so the world a player returns to is the one they left. Above 1×
+   * the player has asked for more simulation per frame, and `wanted` is what
+   * the frame bought at the requested rate over at most `MAX_WARP_FRAME` of
+   * it — never less than the integration budget, so a stall at 100× catches
+   * up exactly as it did when integration was the only way to run a tick.
+   */
+  plan(realDelta: Seconds): FramePlan {
     if (this.#paused || realDelta <= 0) {
+      this.#asked = 0
       this.#achievedTimeScale = 0
-      return 0
+      return { wanted: 0, budget: 0 }
     }
     this.#accumulator += realDelta * this.#timeScale
-    const wanted = Math.floor(this.#accumulator / TICK_DURATION)
-    const steps = Math.min(wanted, this.#stepBudget(realDelta))
-    // Ratio rather than a rate, so a frame that wanted one tick and ran one
-    // reports 1× and not 0.94× — the accumulator carries the remainder and a
-    // sampled rate would oscillate around the truth instead of stating it.
+    const asked = Math.floor(this.#accumulator / TICK_DURATION)
+    this.#asked = asked
+    const budget = this.#stepBudget(realDelta)
+    if (this.#timeScale <= 1) return { wanted: Math.min(asked, budget), budget }
+    const usable = Math.min(realDelta, MAX_WARP_FRAME)
+    const ceiling = Math.max(
+      1,
+      Math.ceil((this.#timeScale * usable) / TICK_DURATION),
+    )
+    return { wanted: Math.min(asked, Math.max(budget, ceiling)), budget }
+  }
+
+  /**
+   * Record how many of the planned ticks actually ran, and drop the rest.
+   *
+   * Ratio rather than a rate, so a frame that wanted one tick and ran one
+   * reports 1× and not 0.94× — the accumulator carries the remainder and a
+   * sampled rate would oscillate around the truth instead of stating it.
+   */
+  settle(ran: number): void {
+    const asked = this.#asked
     this.#achievedTimeScale =
-      wanted === 0 ? this.#timeScale : (this.#timeScale * steps) / wanted
-    if (wanted > steps) {
+      asked === 0 ? this.#timeScale : (this.#timeScale * ran) / asked
+    if (asked > ran) {
       // Drop the excess rather than letting the accumulator grow without bound.
-      this.#droppedTicks += wanted - steps
-      this.#accumulator -= (wanted - steps) * TICK_DURATION
+      this.#droppedTicks += asked - ran
     }
-    this.#accumulator -= steps * TICK_DURATION
-    return steps
+    this.#accumulator -= asked * TICK_DURATION
+    this.#asked = 0
   }
 
   /**
@@ -256,6 +313,16 @@ export class SimulationClock {
   /** Called by the world once per completed tick. */
   commitTick(): Tick {
     this.#tick = asTick(this.#tick + 1)
+    return this.#tick
+  }
+
+  /** Called by the world once per jump over a coast: `count` ticks at once. */
+  commitTicks(count: number): Tick {
+    invariant(
+      Number.isInteger(count) && count > 0,
+      `commitTicks needs a positive whole count, got ${count}`,
+    )
+    this.#tick = asTick(this.#tick + count)
     return this.#tick
   }
 

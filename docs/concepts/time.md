@@ -101,11 +101,26 @@ flowchart LR
 
 Because the tick duration never changes, a session played at 100× and the same
 session played at 1× reach identical state. The test runs one world at 100×
-until tick 3,200 — which takes 400 frames, not 32, because each 1/60 s frame
-_wants_ 106 ticks and the step budget caps it at 8 — and another with
-`runTicks(3_200)`, then compares the hash and the simulated time.
+until tick 3,200 and another with `runTicks(3_200)`, then compares the hash and
+the simulated time.
 
-Warp steps in the client are `1 → 5 → 25 → 100 → 1,000 → 10,000 → 100,000`.
+Warp steps in the client are `1 → 5 → 25 → 100 → 1,000 → 10,000 → 100,000`,
+and all seven are delivered. What pays for a tick is integration, and a ship
+that is not thrusting, not in air and not about to touch the ground has nothing
+to integrate: it is on a conic, exactly as the planet it orbits is, so its
+state at any tick is the two-body propagation of a recorded epoch and a frame
+_jumps_ every tick on which every entity coasts. The epoch is canonical — in the
+state hash and in the save — because a jumped coast and a stepped one have to
+land on the same bits, and they do only if both propagate from the same
+numbers. The tests that could change something on the way, entering a moon's
+sphere of influence or leaving a planet's, run on fixed tick boundaries and are
+skipped while a triangle-inequality bound says nothing can be in reach, which
+is what turns a 100,000× frame over a coasting ship into one jump.
+[ADR-0025](../adr/0025-the-rails.md) carries the decision. The ceiling of
+1,920× is still there and is the ceiling on _integration_: a thrusting ship, or
+one skimming an atmosphere, is stepped through every tick and capped at the
+rate one can be stepped at, and the perf panel's _requested against delivered_
+row says which is happening.
 
 That capping is also why `droppedTicks` is worth trusting now. The view used to
 clamp the frame delta to 0.25 s before handing it over, which changed nothing
@@ -179,24 +194,28 @@ Three consequences, all structural rather than cosmetic:
    momentum are conserved to 1e-12 over a full orbit because they are never
    integrated in the first place.
 
-The ship, which _is_ integrated, uses semi-implicit (symplectic) Euler —
+The ship, when it _is_ integrated, uses semi-implicit (symplectic) Euler —
 velocity first, then position from the new velocity. Explicit Euler pumps energy
 into every orbit, so a coasting ship would slowly climb out of a gravity well: a
-failure invisible for minutes and obvious after an hour of time warp.
+failure invisible for minutes and obvious after an hour of time warp. A ship
+that is only coasting is not integrated at all: it is propagated from an epoch
+by the same closed form the planets use, extended to the hyperbola an escape
+leaves on ([ADR-0025](../adr/0025-the-rails.md)).
 
 ---
 
 ## What is asserted
 
-| Property                   | How                                                             |
-| -------------------------- | --------------------------------------------------------------- |
-| Frame rate does not matter | 60 Hz and 144 Hz worlds compared by state hash at the same tick |
-| Jitter does not matter     | random 4–60 ms frames vs `runTicks`                             |
-| Warp does not matter       | 100× vs 1×                                                      |
-| Ticks convert exactly      | `clock.time === 3` after 192 ticks                              |
-| Stalls do not spiral       | 60 s delta runs ≤ 8 ticks and records the drops                 |
-| Pause does not drift       | 5 s while paused advances zero ticks                            |
-| Replay is exact            | identical scripted inputs → identical hash                      |
+| Property                   | How                                                              |
+| -------------------------- | ---------------------------------------------------------------- |
+| Frame rate does not matter | 60 Hz and 144 Hz worlds compared by state hash at the same tick  |
+| Jitter does not matter     | random 4–60 ms frames vs `runTicks`                              |
+| Warp does not matter       | 100× vs 1×                                                       |
+| Jumping does not matter    | a coast stepped, jumped, and driven by 100,000× frames, one hash |
+| Ticks convert exactly      | `clock.time === 3` after 192 ticks                               |
+| Stalls do not spiral       | 60 s delta runs ≤ 8 ticks and records the drops                  |
+| Pause does not drift       | 5 s while paused advances zero ticks                             |
+| Replay is exact            | identical scripted inputs → identical hash                       |
 
 ---
 

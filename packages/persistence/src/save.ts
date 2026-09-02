@@ -3,8 +3,10 @@ import {
   decodeSaveGame,
   decode,
   decodeFrameState,
+  decodeRailsEpoch,
   describeDrift,
   encodeFrameState,
+  encodeRailsEpoch,
   encodeVec3,
   SAVE_SCHEMA_VERSION,
   type SaveEntity,
@@ -65,6 +67,7 @@ export function captureSave(
       rotation: encodeVec3(entity.control.rotation),
     },
     flightAssist: entity.flightAssist,
+    rails: entity.rails === null ? null : encodeRailsEpoch(entity.rails),
   }))
 
   return {
@@ -165,6 +168,9 @@ export function restoreSave(
   for (const entity of save.entities) {
     const state = decode(decodeFrameState, entity.state)
     if (!state.ok) return err(`entity ${entity.id}: ${state.error}`)
+    const rails =
+      entity.rails === null ? ok(null) : decode(decodeRailsEpoch, entity.rails)
+    if (!rails.ok) return err(`entity ${entity.id} rails: ${rails.error}`)
     if (!world.ensureFrame(state.value.frame as FrameId)) {
       return err(
         `entity ${entity.id} refers to frame ${state.value.frame}, which does not exist`,
@@ -178,6 +184,7 @@ export function restoreSave(
       mass: entity.mass,
       thrusters: entity.hasThrusters ? DEBUG_SHIP_THRUSTERS : null,
       ballisticCoefficient: entity.ballisticCoefficient,
+      rails: rails.value,
     })
     world.entities.update(spawned.id, {
       control: {

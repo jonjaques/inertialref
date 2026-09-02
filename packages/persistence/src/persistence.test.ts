@@ -57,6 +57,28 @@ describe('save round trip', () => {
     expect(restored.world.stateHash()).toBe(world.stateHash())
   })
 
+  it('restores a coasting ship onto the same conic, to the bit', () => {
+    /*
+     * The epoch is canonical (ADR-0025): a world that dropped it and
+     * re-anchored on load would follow a marginally different rounding of the
+     * same orbit, and three hundred jumped ticks later the hashes would part.
+     */
+    const { world, ship } = flownWorld()
+    // Hands off, and the drive is the only thing keeping it off the rails.
+    world.setControl(ship.id, Vec.ZERO, Vec.ZERO)
+    world.runTicks(64)
+    expect(world.isCoasting(ship.id)).toBe(true)
+    const save = captureSave(world, ship.id)
+    expect(save.entities[0]?.rails).not.toBeNull()
+
+    const restored = unwrap(restoreSave(save), 'restore')
+    expect(restored.world.isCoasting(ship.id)).toBe(true)
+    expect(restored.world.stateHash()).toBe(world.stateHash())
+    world.runTicks(300)
+    restored.world.runTicks(300)
+    expect(restored.world.stateHash()).toBe(world.stateHash())
+  })
+
   it('stores a reference to the universe, not the universe', () => {
     const { world, ship } = flownWorld(60)
     const text = serializeSave(captureSave(world, ship.id))

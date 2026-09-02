@@ -2,10 +2,12 @@ import { invariant, type Meters, type Seconds } from '@inertialref/shared'
 import {
   atmosphericDensity,
   type BodyState,
+  conicOf,
   dampingTorque,
   dragAcceleration,
   integrateBody,
   pointMassAcceleration,
+  propagateTwoBody,
   resolveThrust,
 } from '@inertialref/physics'
 import {
@@ -27,7 +29,7 @@ import {
   surfaceRadius,
 } from '@inertialref/universe'
 import type { FrameBinding } from './binding.ts'
-import type { Entity } from './entity.ts'
+import type { Entity, RailsEpoch } from './entity.ts'
 
 /*
  * Flight.
@@ -45,6 +47,12 @@ import type { Entity } from './entity.ts'
  * 2. Gravity is patched-conic: inside a sphere of influence only that body
  *    attracts. The frame is already falling along its own Kepler orbit, so
  *    adding the primary's pull as well would double-count it.
+ *
+ * A third follows from the second. Inside one sphere of influence, a ship that
+ * is not thrusting and not in air is on a conic, exactly — so it does not need
+ * integrating at all, any more than the planet it orbits does. `coastState`
+ * evaluates that conic from a recorded epoch (ADR-0025), and `railsEpoch`
+ * decides when a ship is on one.
  */
 
 export interface FlightWorld {
@@ -61,10 +69,61 @@ const SOI_LEAVE = 1.05
 export const LANDING_CLEARANCE: Meters = 4
 export const LANDING_SPEED_LIMIT = 12
 
+/**
+ * How far above a body's highest ground the terrain is still sampled.
+ *
+ * Above the band a sphere is an exact answer for everything flight needs: the
+ * drag model has stopped (the band is at least the atmosphere's ceiling) and
+ * nothing can be in contact. The field's peak is `maxElevation` by
+ * construction; the margin covers the clearance test's own reach and leaves a
+ * round number over it, so a ship skimming a summit at the limit still meets
+ * the ground rather than the datum.
+ */
+const GROUND_BAND_MARGIN: Meters = 100 + LANDING_CLEARANCE * 2
+
+/**
+ * Altitude above the datum below which a body's ground has to be asked.
+ *
+ * The gate this replaces was a quarter of the body's radius — 1,600 km on an
+ * Earth-sized world — so every tick of a 400 km orbit sampled fourteen octaves
+ * of noise twice for an answer the datum sphere already gave to nine
+ * kilometers. Measured: 12.5 µs a tick against 1 µs above the gate.
+ */
+export function groundBand(binding: FrameBinding): Meters {
+  const relief = binding.body === null ? 0 : binding.body.surface.maxElevation
+  const air = binding.atmosphere === null ? 0 : binding.atmosphere.ceiling
+  return Math.max(relief, air) + GROUND_BAND_MARGIN
+}
+
 export interface FrameChange {
   readonly from: FrameId
   readonly to: FrameId
   readonly reason: string
+}
+
+/**
+ * What a frame's sphere-of-influence tests already know, so most ticks can
+ * skip them.
+ *
+ * For each child of the frame, and for the frame's own boundary in the last
+ * slot, the gap between the entity and the sphere as of `at`, measured from
+ * `origin`. A gap is consumed by how far the entity has since moved from the
+ * origin plus how far the child could have moved toward it — its periapsis
+ * speed times the elapsed time — and while what is left is positive the
+ * triangle inequality says the entity cannot be inside. That is a subtraction
+ * and a multiply per child in place of a Kepler solve and a pose composition,
+ * and it is what makes sixty-six children cost nothing on a tick that is not
+ * near any of them.
+ *
+ * Derived, never saved: a world that has none makes every test on its first
+ * tick and gets the answers the bounds were standing in for.
+ */
+export interface SoiWatch {
+  readonly frame: FrameId
+  at: Seconds
+  origin: Vec3
+  /** One per child, then the parent boundary. Mutated in place. */
+  readonly gaps: Float64Array
 }
 
 export interface FlightResult {
@@ -80,6 +139,11 @@ export interface FlightResult {
   readonly liftOff: boolean
   readonly altitude: Meters | null
   readonly gravity: Vec3
+  /**
+   * The bounds the sphere-of-influence tests are carrying forward, or null when
+   * this tick changed frame or made no test.
+   */
+  readonly soi: SoiWatch | null
 }
 
 /**
@@ -123,8 +187,20 @@ function airVelocity(
 export interface StepFlightOptions {
   readonly dt: Seconds
   readonly time: Seconds
-  /** Terrain sampling is the expensive part; skip it above this altitude. */
-  readonly terrainSampleAltitude?: Meters
+  /**
+   * The ground altitude the previous tick measured at this tick's starting
+   * position and instant, if it measured one.
+   *
+   * The previous tick's contact test samples the terrain under where the
+   * entity *ended up*, at the instant it got there — which is exactly this
+   * tick's starting position and instant, so the number is reused rather than
+   * sampled again. It is bit-identical to a fresh sample by construction,
+   * which is what lets a world restored from a save, with no previous tick to
+   * remember, sample fresh and continue on the same hash.
+   */
+  readonly previousAltitude?: Meters | undefined
+  /** The bounds the previous tick's sphere-of-influence tests left behind. */
+  readonly soi?: SoiWatch | null | undefined
 }
 
 /**
@@ -153,6 +229,7 @@ export function stepFlight(
       impactSpeed: 0,
       altitude: null,
       gravity: Vec.ZERO,
+      soi: null,
     }
   }
 
@@ -161,28 +238,23 @@ export function stepFlight(
   const radius = radiusVector(world, entity.state, binding, time)
   const distance = Vec.length(radius)
   const gravity = pointMassAcceleration(binding.mu, radius)
+  // The integrated state is the state at the *end* of the tick, and the
+  // contact test and the frame test both look at it. Asking them at the tick's
+  // start put the planet where it was 1/64 s ago under a ship that had moved
+  // on: 470 m of Earth's orbital motion at every sphere-of-influence crossing,
+  // and seven meters of ground rotation under every landing.
+  const after = time + dt
 
   let acceleration = gravity
   let altitude: Meters | null = null
 
   if (binding.body !== null && binding.radius > 0) {
-    // Sampled through the same helper as the contact test below. This used to
-    // be `Vec.normalize(radius)` — an *inertial* direction — and it is the
-    // altitude the atmosphere is evaluated against. The terrain gate here is
-    // `radius * 0.25` (~1,600 km on an Earth-sized world) while an atmosphere
-    // ceiling is 60–180 km, so every atmospheric pass in the game took the
-    // wrong sample, and the error moved with the planet's rotation phase.
-    const sampleBelow = options.terrainSampleAltitude ?? binding.radius * 0.25
-    if (distance - binding.radius < sampleBelow) {
-      altitude =
-        distance -
-        surfaceRadius(
-          binding.body,
-          groundDirection(world, entity, binding, time),
-        )
-    } else {
-      altitude = distance - binding.radius
-    }
+    // Sampled through the same helper as the contact test below, in body-fixed
+    // axes — the altitude the atmosphere is evaluated against, so a wrong
+    // sample here moves with the planet's rotation phase.
+    altitude =
+      options.previousAltitude ??
+      groundAltitude(world, entity, binding, radius, distance, time)
   }
 
   if (
@@ -202,6 +274,7 @@ export function stepFlight(
   }
 
   const state = integrateFree(entity, acceleration, dt)
+  const moved = { ...entity, state }
 
   // Ground contact is tested *after* integrating, against the new position.
   // Testing the old one lets a fast descent step straight through the crust —
@@ -212,10 +285,19 @@ export function stepFlight(
     binding.spinFrame !== null &&
     altitude !== null
   ) {
-    const after = groundAltitude(world, { ...entity, state }, binding, time)
+    const radiusAfter = radiusVector(world, state, binding, after)
+    const afterAltitude = groundAltitude(
+      world,
+      moved,
+      binding,
+      radiusAfter,
+      Vec.length(radiusAfter),
+      after,
+    )
     const speed = Vec.length(state.velocity)
     const contact =
-      after <= 0 || (after <= LANDING_CLEARANCE && speed < LANDING_SPEED_LIMIT)
+      afterAltitude <= 0 ||
+      (afterAltitude <= LANDING_CLEARANCE && speed < LANDING_SPEED_LIMIT)
     if (contact) {
       return {
         state,
@@ -224,29 +306,32 @@ export function stepFlight(
         liftOff: false,
         impactSpeed: speed,
         frameChange: null,
-        altitude: after,
+        altitude: afterAltitude,
         gravity,
+        soi: null,
       }
     }
-    altitude = after
+    altitude = afterAltitude
   }
 
   const transition = considerFrameChange(
     world,
-    { ...entity, state },
+    moved,
     binding,
-    distance,
-    time,
+    after,
+    options.soi ?? null,
+    null,
   )
   return {
-    state: transition?.state ?? state,
+    state: transition.change?.state ?? state,
     landed: false,
     touchdown: false,
     liftOff: false,
     impactSpeed: 0,
-    frameChange: transition?.change ?? null,
+    frameChange: transition.change?.change ?? null,
     altitude,
     gravity,
+    soi: transition.change === null ? transition.watch : null,
   }
 }
 
@@ -258,23 +343,27 @@ export function stepFlight(
  * sampling it with an inertial direction leaves the mountains standing still in
  * inertial space while the planet turns underneath them — which showed up as a
  * ship landing 83 m above the ground it had just touched.
+ *
+ * Above `groundBand` the datum sphere is the answer, exactly: nothing up there
+ * can touch the ground or feel the air, and the noise is the expensive half of
+ * a tick.
  */
 function groundAltitude(
   world: FlightWorld,
   entity: Entity,
   binding: FrameBinding,
+  radius: Vec3,
+  distance: Meters,
   time: Seconds,
 ): Meters {
-  const radius = radiusVector(world, entity.state, binding, time)
-  const distance = Vec.length(radius)
-  if (binding.body === null) return distance - binding.radius
-  // Sampling terrain is fourteen octaves of 3D noise; only worth it near the
-  // ground, and a sphere is an exact answer everywhere else.
-  if (distance - binding.radius > binding.radius * 0.25)
-    return distance - binding.radius
+  const datum = distance - binding.radius
+  if (binding.body === null || datum > groundBand(binding)) return datum
   return (
     distance -
-    surfaceRadius(binding.body, groundDirection(world, entity, binding, time))
+    surfaceRadius(
+      binding.body,
+      groundDirectionOf(world, entity, binding, radius, time),
+    )
   )
 }
 
@@ -292,10 +381,24 @@ export function groundDirection(
   binding: FrameBinding,
   time: Seconds,
 ): BodyFixedDirection {
+  return groundDirectionOf(
+    world,
+    entity,
+    binding,
+    radiusVector(world, entity.state, binding, time),
+    time,
+  )
+}
+
+function groundDirectionOf(
+  world: FlightWorld,
+  entity: Entity,
+  binding: FrameBinding,
+  radius: Vec3,
+  time: Seconds,
+): BodyFixedDirection {
   if (binding.spinFrame === null) {
-    return Vec.normalize(
-      radiusVector(world, entity.state, binding, time),
-    ) as BodyFixedDirection
+    return Vec.normalize(radius) as BodyFixedDirection
   }
   const spin = world.frames.pose(binding.spinFrame, time)
   return bodyFixedDirection(
@@ -325,6 +428,7 @@ function stepLanded(entity: Entity, options: StepFlightOptions): FlightResult {
       frameChange: null,
       altitude: 0,
       gravity: Vec.ZERO,
+      soi: null,
     }
   }
 
@@ -346,6 +450,7 @@ function stepLanded(entity: Entity, options: StepFlightOptions): FlightResult {
     frameChange: null,
     altitude: LANDING_CLEARANCE * 2,
     gravity: Vec.ZERO,
+    soi: null,
   }
 }
 
@@ -417,6 +522,28 @@ function integrateFree(
   }
 }
 
+/* ------------------------------------------------------------------------- */
+/* Spheres of influence                                                       */
+/* ------------------------------------------------------------------------- */
+
+export interface FrameTransition {
+  readonly state: FrameState
+  readonly change: FrameChange
+}
+
+export interface SoiVerdict {
+  /** The move to make, or null to stay. */
+  readonly change: FrameTransition | null
+  /** The bounds to carry to the next test. Meaningless after a change. */
+  readonly watch: SoiWatch
+  /**
+   * How long, in seconds, no sphere can be reached — from the entity's own
+   * speed bound and every child's. `Infinity` when the caller passed no bound
+   * or there is nothing to reach.
+   */
+  readonly safeFor: Seconds
+}
+
 /**
  * Move an entity up or down the frame hierarchy as it enters and leaves spheres
  * of influence.
@@ -425,107 +552,285 @@ function integrateFree(
  * vertical slice has to demonstrate, and it is deliberately invisible: the
  * entity's canonical position and velocity are unchanged by the move. Only the
  * numbers it carries change.
+ *
+ * Descend first: being inside a moon's SOI is more specific than being inside
+ * its planet's, and checking children before the parent gets that ordering
+ * right without a special case.
+ *
+ * The loop is over every child of the current frame, which for a star is every
+ * body orbiting it — sixty-six in Sol — and each one's honest test is a Kepler
+ * solve and a pose composition. Two things keep it from being paid per child
+ * per tick. A child can only be within reach if the entity's distance from the
+ * parent overlaps the child's own orbital band, which `periapsis` and
+ * `apoapsis` give exactly, by the triangle inequality. And a child that was
+ * found to be `g` meters out of reach cannot be in reach until the entity and
+ * the child have between them closed `g`, which `SoiWatch` carries forward as
+ * a gap that each tick's movement consumes. Only a child whose gap has run out
+ * is looked at again — and when one is, every gap is re-based on the entity's
+ * new position, so the bound never loosens through accumulated travel.
+ *
+ * `speedBound` is how fast the entity can move, when the caller knows: a coast
+ * has one (its periapsis speed) and turns `safeFor` into the next instant any
+ * test could fire, so a warping frame can jump straight to it. A thrusting ship
+ * has no such bound and passes null.
  */
-function considerFrameChange(
+export function considerFrameChange(
   world: FlightWorld,
   entity: Entity,
   binding: FrameBinding,
-  distance: Meters,
   time: Seconds,
-): { state: FrameState; change: FrameChange } | null {
-  /*
-   * Descend first: being inside a moon's SOI is more specific than being inside
-   * its planet's, and checking children before the parent gets that ordering
-   * right without a special case.
-   *
-   * The loop is over every child of the current frame, which for a star is
-   * every body orbiting it. That was eight and is now sixty-six, and the loop
-   * body was a Kepler solve *and* a full canonical-position resolution — per
-   * child, per tick. Measured on the approach test: 2,180 ticks per second
-   * against 9,600 before the small bodies landed. Two changes, and the second
-   * is the one that matters:
-   *
-   *   - The entity's canonical position does not depend on the child. It was
-   *     recomputed inside the loop, which was already wrong and merely cost
-   *     eight times less.
-   *   - A child can only be within reach if the entity's distance from the
-   *     *parent* overlaps the child's own orbital band. `periapsis` and
-   *     `apoapsis` come out of elements the body already carries, and the test
-   *     is exact rather than conservative — a body outside that band cannot be
-   *     within `soi` of the entity, by the triangle inequality.
-   *
-   * The prune is what makes the cost proportional to the bodies that are
-   * plausibly nearby rather than to the size of the system.
-   */
-  /*
-   * Resolved once, on the first child that needs it, and not before.
-   *
-   * Hoisting it out of the loop is right — it does not depend on the child —
-   * but computing it *unconditionally* moved it from "n times" to "always",
-   * including on the ticks where the loop body never runs. That is the common
-   * case, not a corner: 108 of Sol's 128 body frames have no children at all,
-   * and the count of ticks scales with time warp.
-   *
-   * `parentDistance` is re-derived here rather than using the `distance`
-   * argument, and that is the point of doing it at all. `distance` is measured
-   * from `entity.state` *before* this tick's integration, while the SOI test
-   * below uses the position *after* it. The prune's triangle inequality is only
-   * exact when both are the same instant; mixed, an entity that crossed a
-   * child's band edge during the step could be pruned past a body the exact
-   * test would have accepted — silently, and the smaller the body the worse it
-   * is, because Bennu's whole `reach` is about 2.8 km.
-   */
-  let resolved: { universe: UniverseVector; parentDistance: Meters } | null =
-    null
-  const resolve = (): { universe: UniverseVector; parentDistance: Meters } => {
-    if (resolved !== null) return resolved
-    const universe = canonicalPosition(world.frames, entity.state, time)
-    resolved = {
-      universe,
-      parentDistance: UV.distance(
-        universe,
-        world.frames.pose(binding.frame, time).position,
-      ),
-    }
-    return resolved
-  }
-  for (const child of world.bindingsUnder(binding.frame)) {
+  previous: SoiWatch | null,
+  speedBound: number | null,
+): SoiVerdict {
+  const children = world.bindingsUnder(binding.frame)
+  const state = entity.state
+  // The bounds are distances in the binding's own frame. An entity that is
+  // somewhere below it — a surface frame, for the tick after lift-off — makes
+  // every test honestly and carries nothing forward.
+  const inFrame = state.frame === binding.frame
+  const watch =
+    inFrame &&
+    previous !== null &&
+    previous.frame === binding.frame &&
+    previous.gaps.length === children.length + 1
+      ? previous
+      : {
+          frame: binding.frame,
+          at: time,
+          origin: state.position,
+          gaps: new Float64Array(children.length + 1).fill(-Infinity),
+        }
+  const travel = inFrame ? Vec.distance(state.position, watch.origin) : 0
+  const elapsed = time - watch.at
+  const gaps = watch.gaps
+
+  // The entity's distance from the parent, for the band prune and the parent
+  // boundary. In the frame it is a length; below it, the canonical route.
+  const parentDistance = inFrame
+    ? Vec.length(state.position)
+    : Vec.length(radiusVector(world, state, binding, time))
+
+  let universe: UniverseVector | null = null
+  let rebased = false
+  let safeFor = Infinity
+  const n = children.length
+
+  for (let i = 0; i < n; i += 1) {
+    const child = children[i] as FrameBinding
     const reach = child.sphereOfInfluence * SOI_ENTER
+    const remaining = (gaps[i] as number) - travel - child.maxSpeed * elapsed
+    if (remaining > 0) {
+      if (speedBound !== null)
+        safeFor = Math.min(safeFor, remaining / (speedBound + child.maxSpeed))
+      continue
+    }
+
+    // This child has to be looked at. The whole watch is re-based on where
+    // the entity is now, so the gaps below are measured from here.
+    if (!rebased) {
+      rebase(watch, children, state.position, time, travel, elapsed)
+      rebased = true
+    }
+
+    let gap: number
     const elements = child.body?.elements
-    const { universe, parentDistance } = resolve()
-    if (elements !== undefined) {
-      const near = elements.semiMajorAxis * (1 - elements.eccentricity)
-      const far = elements.semiMajorAxis * (1 + elements.eccentricity)
-      if (parentDistance + reach < near || parentDistance - reach > far)
-        continue
-    }
-    const childPose = world.frames.pose(child.frame, time)
-    const childDistance = UV.distance(universe, childPose.position)
-    if (childDistance < reach) {
-      return {
-        state: reframe(world.frames, entity.state, child.frame, time),
-        change: {
-          from: entity.state.frame,
-          to: child.frame,
-          reason: 'entered sphere of influence',
-        },
+    const near =
+      elements === undefined
+        ? -Infinity
+        : elements.semiMajorAxis * (1 - elements.eccentricity)
+    const far =
+      elements === undefined
+        ? Infinity
+        : elements.semiMajorAxis * (1 + elements.eccentricity)
+    if (parentDistance + reach < near) {
+      gap = near - parentDistance - reach
+    } else if (parentDistance - reach > far) {
+      gap = parentDistance - far - reach
+    } else {
+      universe ??= canonicalPosition(world.frames, state, time)
+      const childPose = world.frames.pose(child.frame, time)
+      const childDistance = UV.distance(universe, childPose.position)
+      if (childDistance < reach) {
+        return {
+          change: {
+            state: reframe(world.frames, state, child.frame, time),
+            change: {
+              from: state.frame,
+              to: child.frame,
+              reason: 'entered sphere of influence',
+            },
+          },
+          watch,
+          safeFor: 0,
+        }
       }
+      gap = childDistance - reach
     }
+    gaps[i] = gap
+    if (speedBound !== null)
+      safeFor = Math.min(safeFor, gap / (speedBound + child.maxSpeed))
   }
 
+  // The parent boundary, in the last slot. The parent does not move in its own
+  // frame, so only the entity's travel consumes this one.
+  const leaveAt = binding.sphereOfInfluence * SOI_LEAVE
+  if (binding.parent !== null) {
+    const remaining = (gaps[n] as number) - travel
+    if (remaining <= 0) {
+      if (parentDistance > leaveAt) {
+        return {
+          change: {
+            state: reframe(world.frames, state, binding.parent, time),
+            change: {
+              from: state.frame,
+              to: binding.parent,
+              reason: 'left sphere of influence',
+            },
+          },
+          watch,
+          safeFor: 0,
+        }
+      }
+      if (!rebased) {
+        rebase(watch, children, state.position, time, travel, elapsed)
+        rebased = true
+      }
+      gaps[n] = leaveAt - parentDistance
+    }
+    if (speedBound !== null) {
+      const left = rebased ? (gaps[n] as number) : (gaps[n] as number) - travel
+      safeFor = Math.min(safeFor, left / speedBound)
+    }
+  } else {
+    gaps[n] = Infinity
+  }
+
+  return { change: null, watch, safeFor }
+}
+
+/**
+ * Measure every gap from a new origin and instant.
+ *
+ * A gap is a lower bound on the distance to a sphere as of the watch's origin,
+ * and what has been consumed since is the entity's travel from that origin and
+ * the child's possible approach in the time elapsed. Subtracting both leaves a
+ * bound that is still sound from *here*, which is what makes moving the origin
+ * legal without re-solving every child.
+ */
+function rebase(
+  watch: SoiWatch,
+  children: readonly FrameBinding[],
+  origin: Vec3,
+  at: Seconds,
+  travel: number,
+  elapsed: Seconds,
+): void {
+  const gaps = watch.gaps
+  for (let i = 0; i < children.length; i += 1) {
+    gaps[i] =
+      (gaps[i] as number) -
+      travel -
+      (children[i] as FrameBinding).maxSpeed * elapsed
+  }
+  gaps[children.length] = (gaps[children.length] as number) - travel
+  watch.origin = origin
+  watch.at = at
+}
+
+/* ------------------------------------------------------------------------- */
+/* Rails                                                                      */
+/* ------------------------------------------------------------------------- */
+
+/**
+ * Whether a state can be coasted analytically from here, and if so from what.
+ *
+ * Four conditions, and each names a term the integrator would otherwise have to
+ * supply. No control input, because thrust is the one acceleration a conic
+ * does not include. No spin under flight assist, because the assist is a
+ * torque; a spin with the assist off is a constant, and the coast carries it.
+ * A periapsis above the ground band, because below it the air and the ground
+ * are terms too — and a state that is currently inside the band has a
+ * periapsis inside it, so the one test covers "not in air now" as well. And
+ * the entity in the binding's own frame, so the conic is about the attractor
+ * that is actually pulling.
+ *
+ * Deep space qualifies unconditionally: with no attractor the conic is a line.
+ */
+export function railsEpoch(
+  world: FlightWorld,
+  entity: Entity,
+  landed: boolean,
+  time: Seconds,
+): RailsEpoch | null {
+  if (landed) return null
+  const { control, state } = entity
   if (
-    binding.parent !== null &&
-    distance > binding.sphereOfInfluence * SOI_LEAVE
-  ) {
-    return {
-      state: reframe(world.frames, entity.state, binding.parent, time),
-      change: {
-        from: entity.state.frame,
-        to: binding.parent,
-        reason: 'left sphere of influence',
-      },
-    }
+    Vec.lengthSquared(control.translation) !== 0 ||
+    Vec.lengthSquared(control.rotation) !== 0
+  )
+    return null
+  if (entity.flightAssist && Vec.lengthSquared(state.angularVelocity) !== 0)
+    return null
+  const binding = world.binding(state.frame)
+  if (binding !== undefined) {
+    if (state.frame !== binding.frame) return null
+    const conic = conicOf(state, binding.mu)
+    if (!(conic.periapsis > binding.radius + groundBand(binding))) return null
   }
+  return {
+    time,
+    position: state.position,
+    velocity: state.velocity,
+    orientation: state.orientation,
+    angularVelocity: state.angularVelocity,
+  }
+}
 
-  return null
+/**
+ * The fastest a coasting entity ever moves in its frame — the bound its
+ * sphere-of-influence tests are skipped against.
+ */
+export function railsSpeedBound(
+  world: FlightWorld,
+  frame: FrameId,
+  epoch: RailsEpoch,
+): number {
+  const binding = world.binding(frame)
+  if (binding === undefined) return Vec.length(epoch.velocity)
+  return conicOf(epoch, binding.mu).periapsisSpeed
+}
+
+/**
+ * Where a coasting entity is at `time`, from its epoch.
+ *
+ * A pure function of the epoch and the instant — never of the previous tick —
+ * which is the whole property: a frame that jumps ten thousand ticks and one
+ * that steps them land on the same bits.
+ */
+export function coastState(
+  world: FlightWorld,
+  frame: FrameId,
+  epoch: RailsEpoch,
+  time: Seconds,
+): FrameState {
+  const mu = world.binding(frame)?.mu ?? 0
+  const elapsed = time - epoch.time
+  const { position, velocity } = propagateTwoBody(epoch, mu, elapsed)
+  const omega = Vec.length(epoch.angularVelocity)
+  const orientation =
+    omega === 0
+      ? epoch.orientation
+      : Q.normalize(
+          Q.multiply(
+            epoch.orientation,
+            Q.fromAxisAngle(epoch.angularVelocity, omega * elapsed),
+          ),
+        )
+  return {
+    frame,
+    position,
+    velocity,
+    orientation,
+    angularVelocity: epoch.angularVelocity,
+  }
 }

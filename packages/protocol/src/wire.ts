@@ -11,6 +11,7 @@ import {
   vec3,
 } from '@inertialref/spatial'
 import {
+  decodeNumber,
   decodeNumberTuple,
   decodeObject,
   decodeString,
@@ -27,6 +28,19 @@ import {
  * The classes-are-not-serialized rule from the spec is easy to keep here
  * because nothing in `spatial` is a class in the first place.
  */
+
+/**
+ * The shape `simulation`'s `RailsEpoch` has, declared here because protocol and
+ * simulation are the same layer and neither may import the other. Structural,
+ * so the simulation's own type satisfies it without a cast.
+ */
+export interface RailsEpoch {
+  readonly time: number
+  readonly position: Vec3
+  readonly velocity: Vec3
+  readonly orientation: Quat
+  readonly angularVelocity: Vec3
+}
 
 export type WireVec3 = readonly [number, number, number]
 export type WireQuat = readonly [number, number, number, number]
@@ -151,5 +165,45 @@ export const decodeWireFrameState: Decoder<WireFrameState> = decodeObject({
   position: decodeWireVec3,
   orientation: decodeWireQuat,
   velocity: decodeWireVec3,
+  angularVelocity: decodeWireVec3,
+})
+
+/**
+ * The epoch a coasting entity is propagated from (ADR-0025), in its frame.
+ *
+ * Saved because it is canonical: a world that dropped it and re-anchored on
+ * load would continue on a different rounding of the same conic, and the
+ * round-trip hash would say so. The frame is the entity's own and is not
+ * repeated here.
+ */
+export interface WireRailsEpoch {
+  readonly time: number
+  readonly position: WireVec3
+  readonly velocity: WireVec3
+  readonly orientation: WireQuat
+  readonly angularVelocity: WireVec3
+}
+
+export const encodeRailsEpoch = (epoch: RailsEpoch): WireRailsEpoch => ({
+  time: epoch.time,
+  position: encodeVec3(epoch.position),
+  velocity: encodeVec3(epoch.velocity),
+  orientation: encodeQuat(epoch.orientation),
+  angularVelocity: encodeVec3(epoch.angularVelocity),
+})
+
+export const decodeRailsEpoch: Decoder<RailsEpoch> = decodeObject({
+  time: decodeNumber,
+  position: decodeVec3,
+  velocity: decodeVec3,
+  orientation: decodeQuat,
+  angularVelocity: decodeVec3,
+})
+
+export const decodeWireRailsEpoch: Decoder<WireRailsEpoch> = decodeObject({
+  time: decodeNumber,
+  position: decodeWireVec3,
+  velocity: decodeWireVec3,
+  orientation: decodeWireQuat,
   angularVelocity: decodeWireVec3,
 })

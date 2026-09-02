@@ -31,6 +31,16 @@ export interface FrameBinding {
   /** Beyond this the entity is no longer bound here. Infinity for a system. */
   readonly sphereOfInfluence: Meters
   readonly atmosphere: Atmosphere | null
+  /**
+   * The fastest this frame's origin ever moves relative to its parent, m/s —
+   * the periapsis speed of its orbit, or 0 for a frame that is pinned.
+   *
+   * What a sphere-of-influence check is skipped against. An entity a gap of
+   * `g` meters outside a body's reach cannot be inside it for at least
+   * `g / (its own speed bound + this)` seconds, by the triangle inequality, and
+   * that bound is what turns sixty-six Kepler solves a tick into none.
+   */
+  readonly maxSpeed: number
   /** Rotating frame of the same body, where one exists. */
   readonly spinFrame: FrameId | null
   readonly parent: FrameId | null

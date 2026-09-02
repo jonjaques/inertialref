@@ -54,6 +54,8 @@ export interface EntityInspection {
   readonly altitude: Meters | null
   readonly altitudeText: string | null
   readonly landed: boolean
+  /** On rails: propagated from an epoch rather than integrated (ADR-0025). */
+  readonly coasting: boolean
   readonly partition: string
 }
 
@@ -137,6 +139,7 @@ export function inspectEntity(
     altitude,
     altitudeText: altitude === null ? null : formatReading(altitude),
     landed: view.landed,
+    coasting: entity.rails !== null,
     // Derived by `universe`, not open-coded here — see partitionForFrames.
     partition: partitionForFrames(world.galaxy, view.frameChain, view.position),
   }

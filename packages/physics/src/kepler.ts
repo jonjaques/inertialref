@@ -181,19 +181,32 @@ export function meanAnomalyAt(
   )
 }
 
-/** Rotation taking perifocal axes into simulation axes. */
+/**
+ * Rotation taking perifocal axes into simulation axes.
+ *
+ * Memoized on the elements object: three axis-angle constructions and two
+ * products per call, for an answer that depends on nothing that moves. A body's
+ * elements are one immutable record for the life of the system, and this ran
+ * once per body per frame resolution — a fifth of a star-frame tick, measured.
+ */
+const orientations = new WeakMap<OrbitalElements, Q.Quat>()
+
 function orbitOrientation(elements: OrbitalElements): Q.Quat {
+  const held = orientations.get(elements)
+  if (held !== undefined) return held
   // Classical Z-up chain: Rz(Ω) · Rx(i) · Rz(ω). Converted to sim axes by the
   // caller via astroToSim, so this stays comparable to any textbook.
   const zAxis = vec3(0, 0, 1)
   const xAxis = vec3(1, 0, 0)
-  return Q.multiply(
+  const rotation = Q.multiply(
     Q.multiply(
       Q.fromAxisAngle(zAxis, elements.longitudeOfAscendingNode),
       Q.fromAxisAngle(xAxis, elements.inclination),
     ),
     Q.fromAxisAngle(zAxis, elements.argumentOfPeriapsis),
   )
+  orientations.set(elements, rotation)
+  return rotation
 }
 
 /** Position and velocity relative to the primary, in simulation axes. */
