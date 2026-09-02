@@ -90,15 +90,20 @@ where it was. The families are more saturated than the class means were on
 purpose: a generated world is drawn from this at every distance, and its
 deposits contrast against it.
 
-**Every per-pixel octave is a fetch of one baked texture.** `noiseTexture.ts`
-evaluates a periodic gradient lattice once into a 128³ single-channel 3D
-texture — four texels a cell over thirty-two cells — and `fbmFetch` samples
-it at each octave's scale. The macro, micro and grain bands of the ground and
-the swell and chop of the sea are eight fetches where they were eight lattice
+**Every per-pixel octave is a fetch of one baked texture, and the normal is
+the fetch's gradient.** `noiseTexture.ts` evaluates a periodic gradient
+lattice once into a 128³ four-channel 3D texture — the value and its analytic
+gradient, four texels a cell over thirty-two cells — and `fbmFetch` samples it
+at each octave's scale. The macro, micro and grain bands of the ground and the
+swell and chop of the sea are five fetches where they were eight lattice
 evaluations of eight hashes and eight dot products each, and the field is
 periodic by construction, which is the property the sub-meter bands needed
-anyway. The octaves also sit inside branches on their own fades and on the
-quality lever: a noise multiplied by a zero fade was a noise evaluated.
+anyway. The gradient is what makes the shading: a normal differenced from a
+trilinear fetch in screen space is constant across each texel and the grid
+showed as a moiré on the sea, where the fetched gradient is smooth. The
+ground's bump left Mikkelsen's screen-space construction with it. The octaves
+also sit inside branches on their own fades and on the quality lever: a noise
+multiplied by a zero fade was a noise evaluated.
 
 **The aerial veil's view leg is the lesser of two paths.** The flat-atmosphere
 `1/μ` is a statement about looking down from space; from a standing camera it
@@ -106,6 +111,19 @@ put the ground forty meters away behind eleven atmospheres. The distance over
 a scale height takes over exactly where the orbital term stops being true,
 and above the eight-pixel gate the distance is hundreds of scale heights, so
 the seam with the disk is untouched.
+
+**The sphere wears the ground's own picture.** `render/orbitalBake.ts` asks
+the streamer's `HeightfieldSource` for a body's ninety-six level-2 regions,
+builds them with `buildPatch`, and draws them through the ground material in
+its bake mode from a `CubeCamera` at the body's centre — the reflectance
+into one cube target and the sea mask into another, because an opaque node
+material writes an alpha of one whatever its opacity node says. The sphere
+samples both by its unit position and keys its ocean colour and sun-glint on
+the mask as it does on a photographed body's. One graph draws the ground and
+takes its picture, which is how the seam rule holds for a bake at all: there
+is no second deposit stack to keep in step. Asked the first time a mapless
+solid body's disk exceeds a hundredth of a radian, ready a few frames later,
+kept four deep.
 
 **The surface has four levers, and they are named costs.** `render/quality.ts`
 carries the refinement threshold, the ground's octaves, the sea's refraction
@@ -161,28 +179,45 @@ a bound of 2.5 × 10⁻⁵.
 of 2, standing two meters over the sea on Gliese 908 IV with 1,227 patches
 at level 17:**
 
-| Change                                  | fps  |
-| --------------------------------------- | ---- |
-| Before this phase                       | 9.5  |
-| The octaves branched on their fades     | 12.2 |
-| The noise baked                         | 19.4 |
-| … and the ground's octaves off (`flat`) | 21.9 |
-| … and the sea's waves off (`flat`)      | 20.2 |
+| Change                                                     | fps  |
+| ---------------------------------------------------------- | ---- |
+| Before this phase                                          | 9.5  |
+| The octaves branched on their fades                        | 12.2 |
+| The noise baked, one channel, screen-space normals         | 19.4 |
+| … four channels, the normal from the gradient              | 11.9 |
+| … and five fetches a pixel rather than ten                 | 16.3 |
+| … with every octave off, the base cost of the two surfaces | 18.0 |
 
 At two kilometers over the same shore with 1,232 patches: 17.9 before, 19.1
-branched, and the baked figure is in the build log. The ground's octaves cost
-25 ms of the 82 ms frame as lattice evaluations and about 3 ms as fetches.
+branched, 15.3 at the end. A fetch of a four-channel texel costs about four
+times a fetch of a one-channel one at the texture unit whatever the texture's
+size — 96³ and 64³ measured within a frame of 128³ — so the gradient is paid
+for by fetching fewer octaves: the macro band's third, the micro's second and
+the grain's third, which was a fetch a pixel over the whole near ground for
+nine centimeters the chop under it already carried. The base cost with every
+octave off is what is left, and it is not in this record: the deposit stack,
+the aerial veil, the sky shell and MSAA at nine million pixels, which a
+timestamp query per pass is the instrument for. Run-to-run variance across
+this table is about two frames a second.
 
 **The fixture's plate world lost its plates.** Proxima Centauri II drew a sea
 on ground at 491 K; read against its temperature the sea goes, and with it
 the ocean that weakens a lithosphere into plates. `geology.test.ts` finds the
 most-plated solid body in the fixture rather than naming one.
 
-**A generated world is a ball of one colour from orbit until relief covers
-eight display pixels, and then it is blue and green.** The sphere has no sea
-and no pigment, because it has no cover; the orbital albedo bake the plan
-names is the most visible open item on the page now, and the kernel already
-produces everything it needs.
+**A generated world is itself from orbit.** Measured against the streamed
+ground either side of the relief gate, at 650 and 1,100 km over Gliese
+908 IV: the same lakes in the same places. What the bake does not carry is
+relief — the sphere's normal-map path is fed by the archive alone, and a
+generated body's disk shades as a smooth sphere — and a bake camera inside
+the shell sees the ground's winding backwards, so the bake's index is the
+patch's turned over rather than a second cull mode on the material.
+
+**The bake's twelve draws are one frame's stall.** Ninety-six tiles of the
+producer, ninety-six patches built on the main thread, and twelve renders of
+them, in the frame the tiles arrive: a bake is a hitch of a few tens of
+milliseconds once per body. Spreading the build across frames is the plain
+next step if the hitch is felt.
 
 **The harness cannot draw the sea.** `viewportSharedTexture` copies the
 framebuffer once a frame, ending the render pass and beginning it again, and

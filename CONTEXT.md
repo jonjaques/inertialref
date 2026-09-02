@@ -6654,6 +6654,17 @@ remembering from doing it:
   temperature, seven haze compositions gated by it, six pigments, and a
   liquid's colour, absorption and glow, all off a fork of the surface seed so
   the body's other draws stay put.
+- **An opaque node material writes an alpha of one whatever its opacity
+  node says, and a cube camera inside a shell sees the winding backwards.**
+  The orbital bake found both. The first bake carried its sea mask in the
+  alpha lane and every face read 1.0 — a sphere that was all sea, glinting
+  everywhere — so the mask is a second pass into a second target. And the
+  first bake of all was black: the camera at the body's centre looks at the
+  ground from inside, where its counter-clockwise-from-outside winding is
+  clockwise and the single-sided material culls it all. The bake's index is
+  the patch's turned over, which keeps the pipeline the boot warmed. Checked
+  by reading a face back through `window.orbitalBaker`, and by plates either
+  side of the relief gate showing the same lakes in the same places.
 - **The dev server reloads on every source edit, and a reload wipes the page
   globals a driving script keeps.** Three DPR 2 measurements were lost to
   `window.__sub` vanishing mid-run. Nothing under `src` is edited while a

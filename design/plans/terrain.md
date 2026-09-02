@@ -55,16 +55,15 @@ record ([ADR-0005](../../docs/adr/0005-procedural-seeds.md) § versioning).
 
 ## 2. Open work
 
-**The orbital albedo bake.** A generated body's `sphere` tier is a flat tint
-while its ground carries maria, rays, caps — and now a sea, rivers and a
-biosphere, which is the gap at its widest: from orbit a temperate ocean world
-is a ball of one colour until relief covers eight display pixels
-(`TERRAIN_RELIEF_PIXELS`), and then it is blue and green. A mapped body has no
-such gap. What closes it is a per-face albedo and ocean-mask tile generated
-through the same `HeightfieldSource` a patch is — the kernel already produces
-the cover — cached and regenerable, after which the shell _is_ the silhouette
-at every distance and the gate retires. The sheet and the pigment make this the
-most visible open item on the page.
+**The orbital bake carries no relief.** The sphere of a generated body wears
+the ground's own reflectance and sea mask now ([ADR-0026](../../docs/adr/0026-the-liquid.md)),
+and the gate no longer switches between a tint and a geology. What it does
+not wear is a normal: the disk's slope path reads the archive's tangent-space
+map, and a baked one — the heightfield's gradient in the sphere's own
+east-north frame, at the same six faces — is the half of the plan's bake
+still open. The other consequence stands: the bake is a hitch of a few tens
+of milliseconds in the frame its tiles arrive, once per body, and spreading
+the ninety-six builds across frames is the plain fix if it is felt.
 
 **The plate review.** "Reads as a Moon, not as noise" is a taste judgment and
 the acceptance test for it is a set of before/after plates of the zoo's survey
@@ -114,8 +113,10 @@ sheet, because a sheet per valley is a mesh per valley.
 **The frame is fragment-bound at retina sizes, and the levers are named.**
 Measured at 1920×1200 over a device pixel ratio of 2, standing two meters over
 the sea with 1,227 patches: 9.5 fps before this phase, 12.2 with the octaves
-branched on their fades, and [ADR-0026](../../docs/adr/0026-the-liquid.md)
-carries the figure with the noise baked. `render/quality.ts` names four levers
+branched on their fades, 16.3 with every octave a fetch of a baked texture
+that carries its own gradient, and 18.0 with every octave off — which is the
+base cost of the two surfaces, and the next thing to instrument.
+[ADR-0026](../../docs/adr/0026-the-liquid.md) has the table. `render/quality.ts` names four levers
 — the refinement threshold, the ground's octaves, the sea's refraction and
 waves, the rocks — and each is one measured cost; what is not done is choosing
 them for the machine, which needs `render/measure.ts` on a handheld first.
