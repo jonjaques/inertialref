@@ -601,6 +601,80 @@ same question twice; what saves it is that the two period expressions round diff
 when a test asserts "the internal reduction is exact", make sure the expected side does not
 reproduce the reduction.
 
+## The bound is loosened to the exact value of the defect it guards
+
+Sharpest finding on `feat/a-coasting-ship-is-on-rails`'s tail two commits, and the
+cheapest to spot: `universal.test.ts`'s angular-momentum bound went 1e-9 → **5e-9**, and
+the comment above it says the step-exit Newton regression "reads **4.6 × 10⁻⁹** here".
+4.6 < 5. `CONTEXT.md` restates both numbers in one sentence. Measured over 4 × 180,000
+fast-check draws of the arbitrary's own domain: the step-exit variant exceeds 1e-9 on
+10–14 states per 180k (~1.8% detection at `numRuns: 300`) and 5e-9 on 0–2 (~0.2%), so the
+change is a 10× disarm. **When a bound is loosened, put the regression's own measured
+value beside the new number and subtract.**
+
+Same finding's second half: "5 × 10⁻⁹ is four times the worst this domain produces …
+worst is 1.2 × 10⁻⁹" is one seed. Four seeds: 1.8e-10, 9.4e-10, **6.26e-8**, 8.6e-10 —
+one in four exceeds the bound, so the shipped solver is flaky against it at about the
+rate it catches the regression. fast-check is **unseeded** here (no `fc.configureGlobal`,
+no setupFile), so "swept over N states" is a claim about one draw. Re-run it with three
+seeds before quoting it.
+
+The armed alternative exists and is one line: a *deterministic* example. Hyperbola from
+400 km at 1.156 × escape, propagated 100 days to 5.4 × 10¹⁰ m, separates HEAD
+(4.8 × 10⁻¹²) from the step-exit variant (4.2 × 10⁻⁹) by 870×. The branch already found
+this shape for the bisection defect ("converges on a near-parabolic hyperbola") and did
+not for the step-exit one.
+
+**The rig, reusable in ten minutes:** `sed` the package's imports to absolute paths into
+scratch, `cp` it, patch the one line under test, and drive both copies from one loop
+importing `fast-check` from
+`node_modules/.pnpm/fast-check@4.9.0/node_modules/fast-check/lib/fast-check.js` (the root
+`node_modules/fast-check/lib/esm/` path does not exist). 180,000 runs is 18 s.
+
+## A "the row now reads 0×" honesty fix that arms a warning banner
+
+`clock.settle`'s `#asked` became nullable so a paused frame keeps its 0× instead of
+being read as the sub-tick "asked for nothing and delivered it" case. Correct — and
+`PerfPanel.tsx:164`'s amber line is `achievedTimeScale < timeScale * 0.99` with no
+`paused` term, so pausing at 100,000× now prints "capped — this frame could not deliver
+100000×". `world.paused` is on the same `WorldInspection` object, unused. The concurrent
+docs pass documented the 0× row in `docs/concepts/time.md` and did not notice the banner.
+**When a status value gains a new legitimate low reading, grep every predicate that
+compares it.**
+
+## `#railsCheck`'s lazy coast record and the tick stamp: both equivalent, do not re-derive
+
+`#enterRails` stopped constructing the `CoastRecord` and now only deletes it;
+`#coastRecord` rebuilds it at first use with `nextBoundary(this.clock.tick)`. Equivalent:
+every reader (`#coastable`, `step`, `#jump`) runs after `commitTick`, where `clock.tick`
+equals the `tick` the old call site passed, and `railsSpeedBound` reads only frame +
+epoch. Likewise `#record(..., tick - 1)` in `#railsCheck` matches the integrated path,
+which stamps `this.clock.tick` *before* `commitTick`. And `nextCheckAfter(tick, …)` is
+the same value the old `this.clock.tick` gave. All three untested, all three correct.
+
+`considerFrameChange`'s `rebased` boolean → `travel/elapsed` reset is not just a rename:
+the old code kept `const travel` after calling `rebase`, so every child *after* the
+rebase subtracted travel and elapsed a second time from already-rebased gaps. The new
+code zeroes them, which removes a double subtraction. Sound either way (the old one was
+over-conservative), and the crossing tick is unchanged because the honest test is exact.
+
+`coastState`'s `Q.integrate` swap is **bit-identical**: `Vec.length` is `Math.hypot` and
+so is `Q.integrate`'s internal omega, and `integrateBody` calls the same function.
+`visViva(mu, periapsis(e), a)` equals `sqrt(mu(1+e)/(a(1−e)))` in exact arithmetic;
+`orbitalPeriod(mu, 1/alpha)` equals `2π/(√μ·α√α)`. Both differ only in the last bits.
+
+The new bisection safeguard never exhausts: 250,000 propagations (Earth hyperbolas and
+ellipses, heliocentric ellipses to 50 revolutions) peak at **66** of the loop's 100
+iterations, 0 exhausted.
+
+## Two counts of the same population, one branch apart
+
+`docs/adr/0025-the-rails.md` says "sixty-seven children" of the Sun and
+`flight.ts:551` — written by the same branch's first commit — says "sixty-six in Sol".
+Measured `world.loadSystem(SOL).planets.length` = **67**. The ADR's "twelve" is right at
+a 30 km reach threshold (12 bodies; the next is Annefrank at 42 km) and wrong at the
+"twice that" 60 km one it argues in the same sentence (15).
+
 ## Resolved on earlier branches — do not re-report
 
 - `Observatory.stand` guards `focus` on `wanted.address !== this.#target?.address`.
@@ -609,6 +683,10 @@ reproduce the reduction.
   order-independence test was re-armed with `(33, 32.5)`.
 - `craterProfile`'s `if (t > 1)` ejecta step is fixed by `smoothstep(1, RIM_OUTER, t)`.
 - `rayCraters`'s sort is total; `morphCover`'s `evenRow/evenCol` cannot index the border.
+- The `clock.advance` → `clock.plan` rename is now swept everywhere: ADR-0006,
+  `docs/hosting.md`, `DataSection.tsx` and `.claude/rules/determinism.md` all name `plan`.
+- `World.#leaveRails` calls `#forgetDerived`; the stale `#groundAhead` finding is closed,
+  and `#step` now deletes the sample on a frame change and above the ground band.
 
 ## A memoized selection: check the memo key against what the _callee_ reads, not the caller
 

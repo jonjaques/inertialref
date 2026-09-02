@@ -120,7 +120,11 @@ is what turns a 100,000× frame over a coasting ship into one jump.
 1,920× is still there and is the ceiling on _integration_: a thrusting ship, or
 one skimming an atmosphere, is stepped through every tick and capped at the
 rate one can be stepped at, and the perf panel's _requested against delivered_
-row says which is happening.
+row says which is happening. A landed ship is stepped too — it is never on
+rails, and one entity off the rails holds the whole frame to the integration
+budget — so a ship parked on a planet warps at the ceiling, not the request,
+until it lifts off. The row reads 0× delivered on a paused frame, since a frame
+that bought nothing delivered nothing.
 
 That capping is also why `droppedTicks` is worth trusting now. The view used to
 clamp the frame delta to 0.25 s before handing it over, which changed nothing

@@ -6506,6 +6506,28 @@ decision and the alternatives; the things worth remembering from doing it:
   put the ship on the Sun's ray to the planet, heading outward, and it never
   went on rails: its conic about the Sun has a periapsis inside the Sun.
   Across the ray it is a hyperbola and coasts.
+- **A paused clock reported full warp.** `plan` sets the achieved scale to
+  0× on a paused or zero-delta frame, and `settle` ran on that frame too,
+  where "asked for nothing" is the sub-tick case that reads as delivered in
+  full — so the perf row said 100,000× delivered over a world that was not
+  moving. The asked count is now null between frames and for a frame that
+  bought nothing, and `settle` leaves the 0× standing. Not pinned by a test.
+- **Newton on the universal anomaly walks, on the hyperbolic side.** Staying
+  inside the bracket is not enough: there `F` grows like e^{χ√−α}, so from a
+  χ that is far too large every Newton step back is the same 1/√−α, and a
+  first step that overshot by 5 × 10⁶ needs a hundred and twenty of them; the
+  loop's cap returned the hundredth. A step is taken only while it at least
+  halves the one before, otherwise the bracket is bisected. Exit is on the
+  residual, never the step: a far propagation divides a large residual by a
+  large radius into a small step. Each defect is pinned by a deterministic
+  example, because the property's bound cannot be: a step-size exit reads
+  4.2 × 10⁻⁹ on the hundred-day case against 4.8 × 10⁻¹² fixed, and one that
+  never bisects reads 5 × 10¹³ on a near-parabolic escape the property draws
+  once in thirty thousand runs. The property's worst is seed-dependent —
+  2 × 10⁻¹⁰ to 1.2 × 10⁻⁹ over 180,000 states, and 6 × 10⁻⁸ on a near-radial
+  state from conditioning alone, which the arbitrary now excludes — so its
+  5e-9 is a smoke bound, and a bound written from one seed's sweep sat below
+  the defect it was named for.
 
 After, per tick: 0.01–0.03 µs at every coasting point, the integrated cases
 within noise of before (0.55 µs against 0.44 at the spawn point, quiet
