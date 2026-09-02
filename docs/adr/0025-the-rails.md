@@ -149,8 +149,8 @@ three conics without a branch.
   the entity crosses in one chunk is flown through — and the crossing speed is
   the entity's plus the body's, so in the Sun's frame that is anything under
   about 30 km of reach at a 30 km/s closing speed and twice that against an
-  Icarus-class orbit: twelve of Sol's sixty-seven children, all small asteroids
-  approached at speed nobody lands from. Below 1× the stall guard still bounds
+  Icarus-class orbit: twelve of Sol's sixty-seven children at 30 km, fifteen
+  at 60, all small asteroids approached at speed nobody lands from. Below 1× the stall guard still bounds
   the frame, so a backgrounded minute at 1× comes back as eight ticks whether
   the ship coasts or not.
 - A landed entity is never eligible, and one entity off the rails holds every
@@ -159,7 +159,7 @@ three conics without a branch.
 - The integrated path pays for the eligibility test and the gap arithmetic on
   every tick: within noise of what it cost, on a quiet machine.
 - The ceiling constant survives as the integration ceiling, and the perf
-  panel's "capped" line now says so — a coast has no ceiling to be capped by.
+  panel's "capped" line says so — a coast has no ceiling to be capped by.
 - Nothing here perturbs the planets, the frame graph or the clock's tick
   arithmetic; the properties ADR-0006's tests assert still hold, and three of
   them now assert against a thrusting ship because a coasting one no longer

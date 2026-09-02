@@ -55,7 +55,16 @@ const arbitraryState = (
     .filter(
       ({ direction, heading }) =>
         Vec.length(vec3(...direction)) > 0.1 &&
-        Vec.length(Vec.cross(vec3(...direction), vec3(...heading))) > 0.05,
+        Vec.length(vec3(...heading)) > 0.1 &&
+        // Not near-radial. The conservation property measures |Δh|/|h|, and a
+        // state within three degrees of radial has an |h| small enough that
+        // the metric reads 6 × 10⁻⁸ off a solver that is doing nothing wrong.
+        Vec.length(
+          Vec.cross(
+            Vec.withLength(vec3(...direction), 1),
+            Vec.withLength(vec3(...heading), 1),
+          ),
+        ) > 0.1,
     )
     .map(({ radius, direction, heading, factor }) => {
       const r = radius * EARTH_RADIUS
@@ -155,23 +164,19 @@ describe('universal-variable propagation', () => {
               (Vec.lengthSquared(state.velocity) / 2),
           ).toBeLessThan(1e-9)
           /*
-           * 5 × 10⁻⁹ is four times the worst this domain produces, and the
-           * distance between those two numbers is the whole reason to say so.
+           * A smoke bound, not the regression guard. Angular momentum is the
+           * sensitive one: a cross product of a position that grows by four
+           * orders of magnitude along a hyperbola and a velocity that does
+           * not, so it loses digits where the energy — a difference of two
+           * quantities that stay the same size — keeps all of them at 10⁻¹³.
+           * The worst draw is seed-dependent: over 180,000 states a seed
+           * reads anywhere from 2 × 10⁻¹⁰ to 1.2 × 10⁻⁹, and the arbitrary
+           * excludes the near-radial states that read 6 × 10⁻⁸ from
+           * conditioning alone.
            *
-           * Angular momentum is the sensitive one: it is a cross product of a
-           * position that grows by four orders of magnitude along a hyperbola
-           * and a velocity that does not, so it loses digits where the energy
-           * — a difference of two quantities that stay the same size — keeps
-           * all of them at 10⁻¹³. Swept over 180,000 states across this
-           * arbitrary's own range, the worst relative error is
-           * **1.2 × 10⁻⁹**, and one state in 180,000 is over 10⁻⁹.
-           *
-           * The bound is worth having because of what sits above it: a
-           * Newton iteration that exits on the size of its *step* rather than
-           * on its residual reads 4.6 × 10⁻⁹ here, since a far propagation
-           * divides a large residual by a large radius into a small step; and
-           * one that never bisects reads 5 × 10¹³ on the near-parabolic
-           * hyperbola the example below pins. See `solveUniversal`.
+           * The two solver defects this domain can express are each pinned by
+           * a deterministic example below, because 300 draws at this bound
+           * catch a step-size exit about once in five hundred runs.
            */
           const h0 = Vec.cross(state.position, state.velocity)
           const h1 = Vec.cross(after.position, after.velocity)
@@ -180,6 +185,27 @@ describe('universal-variable propagation', () => {
       ),
       { numRuns: 300 },
     )
+  })
+
+  it('converges on the residual, not the step, a hundred days out', () => {
+    /*
+     * The Newton step is `residual / r`, and a hundred days along this
+     * hyperbola `r` is 5.4 × 10¹⁰ m, so a residual still worth 176 divides
+     * down to a step under any tolerance scaled to `chi`. A solver that exits
+     * on the step reads 4.2 × 10⁻⁹ here; one that exits on the residual reads
+     * 4.8 × 10⁻¹². The bound sits between them with a decade to spare on
+     * each side. See `solveUniversal`.
+     */
+    const r = EARTH_RADIUS + 400_000
+    const v = escapeSpeed(EARTH_MU, r) * 1.156
+    const state: StateVector = {
+      position: vec3(r, 0, 0),
+      velocity: vec3(0, 0, v),
+    }
+    const after = propagateTwoBody(state, EARTH_MU, 100 * 86_400)
+    const h0 = Vec.cross(state.position, state.velocity)
+    const h1 = Vec.cross(after.position, after.velocity)
+    expect(Vec.distance(h0, h1) / Vec.length(h0)).toBeLessThan(1e-10)
   })
 
   it('converges on a near-parabolic hyperbola propagated a month', () => {

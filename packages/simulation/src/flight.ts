@@ -548,7 +548,7 @@ export interface SoiVerdict {
  * right without a special case.
  *
  * The loop is over every child of the current frame, which for a star is every
- * body orbiting it — sixty-six in Sol — and each one's honest test is a Kepler
+ * body orbiting it — sixty-seven in Sol — and each one's honest test is a Kepler
  * solve and a pose composition. Two things keep it from being paid per child
  * per tick. A child can only be within reach if the entity's distance from the
  * parent overlaps the child's own orbital band, which `periapsis` and

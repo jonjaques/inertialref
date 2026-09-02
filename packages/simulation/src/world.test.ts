@@ -18,6 +18,7 @@ import {
 } from '@inertialref/spatial'
 import {
   type Body,
+  type EntityId,
   bodyFixedDirection,
   bodyFixedFrameId,
   bodyFrameId,
@@ -356,6 +357,18 @@ describe('simulation clock', () => {
     world.clock.setPaused(false)
     expect(world.advance(1 / 64)).toBe(1)
   })
+
+  it('reports 0× delivered on a paused frame', () => {
+    // A paused frame asks for nothing, and "asked for nothing" is also the
+    // sub-tick frame that reads as delivered in full. The two must not share
+    // a reading: the panel's warp row is the only thing that tells a player
+    // the clock stopped.
+    const world = solarWorld()
+    world.clock.setTimeScale(100_000)
+    world.clock.setPaused(true)
+    world.advance(1 / 60)
+    expect(world.clock.status().achievedTimeScale).toBe(0)
+  })
 })
 
 describe('flight', () => {
@@ -587,6 +600,8 @@ describe('rails', () => {
     world.step()
     expect(world.isCoasting(coaster.id)).toBe(true)
     expect(world.isCoasting(burner.id)).toBe(false)
+    // An entity that does not exist is not on rails either.
+    expect(world.isCoasting('#999' as EntityId)).toBe(false)
     // Releasing the drive is what puts it on: no input, no torque, a conic
     // that clears the ground band.
     world.setControl(burner.id, Vec.ZERO, Vec.ZERO)
@@ -725,7 +740,13 @@ describe('rails', () => {
     // On a boundary: the tests only run there.
     expect(crossedAt % RAILS_CHUNK).toBe(0)
     jumped.runTicks(crossedAt)
-    expect(jumped.events().some((e) => e.kind === 'frame-change')).toBe(true)
+    const crossing = (w: World) =>
+      w.events().find((e) => e.kind === 'frame-change')?.tick
+    // Stamped with the tick the crossing was found on, which is the integrated
+    // path's convention: that path records before the tick commits, the
+    // coasting path after, and the event must not say which.
+    expect(crossing(stepped)).toBe(crossedAt - 1)
+    expect(crossing(jumped)).toBe(crossedAt - 1)
     expect(jumped.stateHash()).toBe(stepped.stateHash())
     // Still on rails on the far side: the flyby clears the ground band.
     const id = [...jumped.entities.all()][0]?.id

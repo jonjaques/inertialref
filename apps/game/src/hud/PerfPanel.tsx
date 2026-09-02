@@ -161,13 +161,16 @@ export function PerfPanel({ engine }: { engine: GameEngine }) {
               : `${world.timeScale}× requested · ${format(world.achievedTimeScale)}× delivered`
           }
         />
-        {world !== null && world.achievedTimeScale < world.timeScale * 0.99 && (
-          <div className="text-amber-400/90">
-            capped — this frame could not deliver {world.timeScale}×: a stall is
-            caught up only so far, and an integrating entity has a rate ceiling
-            a coasting ship does not
-          </div>
-        )}
+        {/* A paused frame delivers 0× honestly; that is not a cap. */}
+        {world !== null &&
+          !world.paused &&
+          world.achievedTimeScale < world.timeScale * 0.99 && (
+            <div className="text-amber-400/90">
+              capped — this frame could not deliver {world.timeScale}×: a stall
+              is caught up only so far, and an integrating entity has a rate
+              ceiling a coasting ship does not
+            </div>
+          )}
         <Row
           label="Ticks/frame"
           value={format(metrics.ticks.summarise().mean)}
