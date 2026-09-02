@@ -58,15 +58,42 @@ const PLANE = 20
 
 /**
  * Nacelle centers in hull axes, as fractions of overall length: port and
- * starboard, aft of amidships, just above the engineering hull. Approximate
- * on purpose — the glow quads are soft enough that a few meters of error
- * disappears inside the bloom, and the alternative is asking the glTF for
- * named nodes it does not have.
+ * starboard, on the nacelle axis at the grille's mid-length.
+ *
+ * Measured off the shipped glTF rather than estimated. Selecting the vertices
+ * outboard of the pylons and aft of the engineering hull's widest section
+ * isolates the two nacelle bodies exactly: each runs z +55 m to +330 m with its
+ * surface between |x| 105 m and 156 m and its axis on |x| 129.9 m, y −2.4 m. As
+ * fractions of the 642.5 m hull that is (±0.2021, −0.0037, 0.3077), and the
+ * separation it implies — 259.7 m — lands within 2.2% of the 265.5 m the
+ * reference edit measures between its own Bussard collectors, which is the
+ * independent check that the selection found nacelles and not pylons.
+ *
+ * The anchors this replaces were (±0.115, 0.03, 0.24) — 74 m from the engine,
+ * and 56 m of that is lateral: both blades left the hull from beside the
+ * engineering section rather than from the nacelles, close enough together to
+ * read as one source on the centerline. The error is a fraction of the *frame*,
+ * not of the hull, so it grows as the ship closes: 0.07 of the frame's width
+ * through the warp-outs at ~570 m, and 0.28 of it over the three frames of each
+ * fly-through wipe, where the whole point of the shot is engines going past.
+ *
+ * A few meters still disappears inside the bloom; seventy-four does not.
  */
 const NACELLES: readonly [number, number, number][] = [
-  [-0.115, 0.03, 0.24],
-  [0.115, 0.03, 0.24],
+  [-0.2021, -0.0037, 0.3077],
+  [0.2021, -0.0037, 0.3077],
 ]
+
+/**
+ * Where a streak blade starts: the nacelle's aft end, on the same axis.
+ *
+ * The grille is what glows and the blade is what the grille leaves behind, so
+ * the two do not share an anchor — a blade pinned at the grille's mid-length
+ * starts inside the engine and puts half its brightest stretch on top of the
+ * nacelle it is supposed to be trailing from. The measured aft end is z +330 m,
+ * 0.514 of the hull.
+ */
+const STREAK_ORIGIN_Z = 0.514
 
 type WarpKind = 'wash' | 'glow' | 'streak' | 'spark' | 'stretch'
 
@@ -456,7 +483,15 @@ export function createWarpEffects(hullLength: () => number): WarpEffects {
         glow.intensity.value = visible ? effects.nacelleGlow * 1.5 : 0
         glow.tint.value.setRGB(0.5, 0.75, 1.7)
 
-        place(streak.mesh, anchor.x, anchor.y)
+        // The blade leaves the back of the engine, not the middle of it.
+        const tail = rotate([offset[0] * L, offset[1] * L, STREAK_ORIGIN_Z * L])
+        const tailAnchor = toScreen(
+          camera,
+          ship.position.x + tail.x,
+          ship.position.y + tail.y,
+          ship.position.z + tail.z,
+        )
+        place(streak.mesh, tailAnchor.x, tailAnchor.y)
         streak.mesh.rotation.z = streakAngle
         /*
          * Shorter and dimmer than it was, because the stretch below now
@@ -471,7 +506,9 @@ export function createWarpEffects(hullLength: () => number): WarpEffects {
         const streakLength = frameHeight * (0.18 + effects.streaks * 0.85)
         streak.mesh.scale.set(streakLength, frameHeight * 0.055, 1)
         streak.intensity.value =
-          visible || effects.streaks > 0.5 ? effects.streaks * 1.3 : 0
+          (tailAnchor.ok && ship.visible) || effects.streaks > 0.5
+            ? effects.streaks * 1.3
+            : 0
         streak.tint.value.setRGB(1, 1, 1)
       })
 

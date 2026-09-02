@@ -487,8 +487,15 @@ function splineSegment(
 /**
  * Non-uniform Catmull-Rom over one scalar channel, held outside the ends.
  * The vector version's arithmetic, applied per channel.
+ *
+ * Exported because a route is not always a route through *space*. A camera
+ * standing off a planet is measured as a standoff in radii, a phase angle and an
+ * elevation, and splining those three and building the position from them is a
+ * different curve from splining the position — smooth in the coordinate the
+ * measurement is in rather than in meters. Same argument as
+ * `screenRoutePosition`'s log range, one level out.
  */
-function splineScalar(
+export function splineScalar(
   frames: readonly number[],
   values: readonly number[],
   frame: number,
@@ -947,6 +954,127 @@ export function lineVelocity(path: LinePath, frame: number): Vec3 {
   // d/dframe of side·exp(u) is side·exp(u)·u′, and side·exp(u) is the advance.
   const t = side * Math.exp(splineScalar(frames, logs, frame))
   return Vec.scale(path.direction, t * splineScalarSlope(frames, logs, frame))
+}
+
+/* ------------------------------------------------------------------------- */
+/* Motion control                                                             */
+/* ------------------------------------------------------------------------- */
+
+/**
+ * A pass staged the way a model shop stages one: the ship on a rail, the camera
+ * standing off it, and the framing solved rather than authored.
+ *
+ * The alternative — and what a screen-beat pass is — puts the whole of a shot's
+ * dynamism in the hull's offset from a camera that never moves. That
+ * reproduces a tracked bounding box exactly and describes a ship that cannot
+ * exist: sampled, `tng-intro`'s cruise flew its hull along a track whose
+ * perpendicular residual was 14% of its own length, at speeds between 0.5 and
+ * 629 m per frame, with the nose a mean 54° off the direction of travel and
+ * 157° off it at worst. Nothing is wrong with any single beat. What is wrong is
+ * that a screen track is three numbers a hull's position has to satisfy, and
+ * six degrees of freedom were being spent satisfying them.
+ *
+ * Spending the *camera's* six instead costs nothing measurable and buys the
+ * physics outright, because the three measured channels are preserved exactly:
+ *
+ * - the hull is on a `LinePath`, so its track is straight and its speed is
+ *   whatever its own throttle says, and `orientationAlong` gives an attitude
+ *   that cannot slide off the velocity because it does not vary;
+ * - the camera stands at `ship − range · standoff`, so the range channel is
+ *   satisfied by construction at every frame rather than fitted;
+ * - the camera aims through `frameTarget`, so the screen mark is satisfied by
+ *   construction too.
+ *
+ * What is left free is `standoff` — where the camera stands relative to the
+ * hull — and that is a real staging decision rather than a fitted number: it
+ * chooses which face of the ship the shot shows and therefore what the key
+ * lights. A constant standoff is a camera flying formation; a turning one is a
+ * camera the ship overtakes.
+ *
+ * The cost is that the camera moves, so this cannot stage a shot the reference
+ * measures as locked. The reference's credits play over a starfield with 375 to
+ * 433 matched inliers at scale 1.0000 — a locked-off camera, and the one
+ * constraint in the piece that a moving camera would break. Those passes stay
+ * screen-beat passes and get their physics from a straight rail alone.
+ */
+export interface TrackedPass {
+  /** The hull's rail, in the shot's stage axes. */
+  readonly rail: LinePath
+  /**
+   * Where the hull sits in the frame and how large it reads: the measurement,
+   * unchanged, and still the thing a diff against the reference scores.
+   */
+  readonly marks: readonly ScreenBeat[]
+  /**
+   * The direction from the camera to the hull, in stage axes — as orientations
+   * whose −Z is that direction, so the interpolation between knots is a slerp
+   * and cannot leave the unit sphere.
+   */
+  readonly standoff: readonly AimBeat[]
+  /** Roll reference for the derived pan, stage axes. */
+  readonly up: Vec3
+}
+
+/** Where a tracked pass puts its two bodies at `frame`, in stage axes. */
+export interface TrackedPose {
+  readonly camera: Vec3
+  readonly ship: Vec3
+  /** Camera orientation in stage axes: the derived pan. */
+  readonly aim: Quat
+  /** The hull's flight attitude, before any authored overlay. */
+  readonly attitude: Quat
+}
+
+/**
+ * Solve a tracked pass at one frame.
+ *
+ * Pure, and everything it needs is already here: the rail says where the ship
+ * is, the marks say how far away and where in the frame, and the standoff says
+ * from which side. `frameTarget` wants world positions, so the two stage-axes
+ * points are handed to it as displacements from a common origin — which is
+ * what a `UniverseVector` difference reduces to anyway.
+ */
+export function trackedPose(
+  pass: TrackedPass,
+  frame: number,
+  fovDeg: number,
+  aspect: number,
+): TrackedPose {
+  const ship = linePosition(pass.rail, frame)
+  const offset = screenRoutePosition(pass.marks, frame, fovDeg, aspect)
+  const range = Vec.length(offset)
+  const direction = Q.rotate(
+    routeOrientation(pass.standoff, frame),
+    vec3(0, 0, -1),
+  )
+  const camera = Vec.sub(ship, Vec.scale(direction, range))
+  /*
+   * The pan. `frameTarget` aims at the hull and then rotates the screen mark's
+   * own view direction onto the axis, which lands the hull on the mark exactly
+   * — so the framing this produces is the measurement, not an approximation of
+   * it. The mark comes back out of `offset` rather than being splined a second
+   * time, because two splines over the same knots are two things that can
+   * disagree.
+   */
+  const depth = -offset.z
+  const tanHalf = Math.tan((fovDeg * Math.PI) / 360)
+  const aim = frameTarget(
+    UV.fromVec3(camera),
+    {
+      at: UV.fromVec3(ship),
+      x: 0.5 + offset.x / depth / (2 * tanHalf * aspect),
+      y: 0.5 - offset.y / depth / (2 * tanHalf),
+    },
+    fovDeg,
+    aspect,
+    pass.up,
+  )
+  return {
+    camera,
+    ship,
+    aim,
+    attitude: orientationAlong(pass.rail, pass.up),
+  }
 }
 
 /* ------------------------------------------------------------------------- */

@@ -28,7 +28,10 @@ import {
   frameTwoTargets,
   lensForFov,
   lerp,
+  type LinePath,
+  linePosition,
   lookAlong,
+  orientationAlong,
   rangeForWidth,
   type RouteBeat,
   routeOrientation,
@@ -37,7 +40,11 @@ import {
   screenDirection,
   screenRoutePosition,
   smooth,
+  splineScalar,
   sparkEnvelope,
+  type TrackedPass,
+  type TrackedPose,
+  trackedPose,
   warpFlashEnvelope,
   withAttitude,
 } from '@inertialref/rendering'
@@ -595,6 +602,23 @@ const SHIP_CRUISE: readonly ScreenBeat[] = [
  * empty between the ship leaving and the lens spike arriving — which is why
  * the visibility window closes at f1107 rather than carrying a dot through it.
  */
+/**
+ * Where the hull is flying as it leaves, in camera axes — the direction the
+ * lens spike marks.
+ *
+ * A receding ship's screen position converges to the projection of its own
+ * velocity, so the spike's measured centre and the departure heading are one
+ * number stated twice. Derived from `SPARKS[0]` rather than typed beside it, so
+ * the two cannot drift: move the spike and the ship follows it out.
+ */
+const WARP_OUT_SPIKE = { x: 0.655, y: 0.695 } as const
+const WARP_OUT_HEADING = screenDirection(
+  WARP_OUT_SPIKE.x,
+  WARP_OUT_SPIKE.y,
+  FOV,
+  ASPECT,
+)
+
 const WARP_OUT_1: readonly ScreenBeat[] = [
   { frame: 1092, x: 0.365, y: 0.497, range: atWidth(0.768) },
   { frame: 1097, x: 0.391, y: 0.5, range: atWidth(0.738) },
@@ -632,6 +656,242 @@ const WIPE: readonly ScreenBeat[] = [
   { frame: 1319, x: 1.15, y: 0.05, range: atWidth(3.2) },
   { frame: 1322, x: 2.1, y: -0.5, range: atWidth(1.2) },
 ]
+/**
+ * The credit descent as a rail — the pass `design/plans/tng-intro.md` §2 says
+ * jags, and the jag is what a straight line refuses.
+ *
+ * Fitted on the screen residual over its own measured beats, with f2050 and
+ * f2065 left out of the fit. Those two are where the refit splices the box
+ * channel to the Bussard-cap channel and the authored x steps 0.126 of the
+ * frame between them — 0.368 to 0.483 and back to 0.357 over twenty-five
+ * frames. No straight line contains that step, which is the finding: the
+ * heading swung 82.0° off the nose at f2068 because of it, and that is why the
+ * old property test's descent window stopped at f2036.
+ *
+ * The unfitted check is the entry. A straight pass appears at the projection of
+ * its own reversed direction, and this one's is (0.454, −0.000) against a
+ * measured f1775 mark of (0.462, 0.005) — eight thousandths of the frame, from
+ * a number nothing fitted to it. Projected back across the rest of the pass the
+ * rail holds the measured track to 0.05 of the frame or better everywhere
+ * except f1920–1960, where it runs 0.09 wide; the reference's own descent fits
+ * a line at 5.0%, so that is the material and not the model.
+ *
+ * `SHIP_RETURN` keeps every one of those beats. They are the specification the
+ * rail is checked against, not the path it flies —
+ * `design/plans/tng-intro.md` §3.3 — and they still drive the skim, which
+ * begins where this leg ends.
+ */
+export const DESCENT_RAIL: LinePath = (() => {
+  const direction = Vec.normalize(vec3(0.062, -0.3821, 0.922))
+  const pivot = Vec.scale(
+    screenDirection(0.339, 0.591, FOV, ASPECT),
+    atWidth(0.735),
+  )
+  return {
+    anchor: Vec.sub(pivot, Vec.scale(direction, 60000)),
+    direction,
+    advance: [
+      /*
+       * The entry, filled in. Between the authored f1755 mark and the first
+       * measured one at f1775 the hull closes six-fold, and over the next
+       * twenty-five frames only one and a half — a real step in the closing
+       * rate, and one the reference states rather than one this invents. Two
+       * knots that far apart in log distance make a Catmull-Rom overshoot the
+       * near one, and it did: the throttle *reversed* across f1784–1799, at
+       * −378 m per frame, so the hull backed up for fifteen frames of its own
+       * approach. Three knots at a constant fractional closing carry the same
+       * two endpoints without the overshoot.
+       */
+      { frame: 1755, t: 16898.3 },
+      { frame: 1760, t: 32650.1 },
+      { frame: 1765, t: 42715.1 },
+      { frame: 1770, t: 49146.8 },
+      { frame: 1775, t: 53257.7 },
+      { frame: 1800, t: 55545.4 },
+      { frame: 1830, t: 56567.4 },
+      { frame: 1860, t: 57628.8 },
+      { frame: 1890, t: 58465.5 },
+      { frame: 1920, t: 58728.0 },
+      { frame: 1960, t: 59190.2 },
+      { frame: 1990, t: 59557.1 },
+      { frame: 2010, t: 59646.4 },
+      { frame: 2030, t: 59777.2 },
+      { frame: 2050, t: 59865.3 },
+      { frame: 2075, t: 59941.7 },
+      { frame: 2085, t: 59978.6 },
+      { frame: 2100, t: 60003.4 },
+      { frame: 2115, t: 60026.6 },
+      { frame: 2130, t: 60097.4 },
+    ],
+  }
+})()
+
+/**
+ * Where the hull flies as it leaves the second time — the second lens spike's
+ * own direction, on the same reasoning as the first.
+ *
+ * Authored, the departure converged on (0.48, 0.51) while its warp point lit up
+ * at (0.688, 0.43): 0.22 of the frame between where the ship went and where it
+ * was supposed to have gone. Those exit beats were never measurements — the
+ * reference's hull is a streak inside the second flash by f2392 — so the rail
+ * replaces them rather than compromising with them.
+ */
+const WARP_OUT_2_SPIKE = { x: 0.688, y: 0.43 } as const
+const WARP_OUT_2_HEADING = screenDirection(
+  WARP_OUT_2_SPIKE.x,
+  WARP_OUT_2_SPIKE.y,
+  FOV,
+  ASPECT,
+)
+
+/** The departure, pinned on the last frame of the skim it leaves from. */
+const WARP_OUT_2_RAIL: LinePath = (() => {
+  const pivot = Vec.scale(screenDirection(0.6, 0.58, FOV, ASPECT), atWidth(0.9))
+  return {
+    anchor: Vec.sub(pivot, Vec.scale(WARP_OUT_2_HEADING, 400)),
+    direction: WARP_OUT_2_HEADING,
+    advance: [
+      { frame: 2380, t: 400 },
+      { frame: 2386, t: 1374.3 },
+      { frame: 2392, t: 21735.2 },
+      { frame: 2404, t: 218050.5 },
+      { frame: 2416, t: 1090562.4 },
+    ],
+  }
+})()
+
+/**
+ * The wipe as a rail, and the check that it is the right one.
+ *
+ * A straight ship in front of a locked camera is a straight image line, and a
+ * line's two ends project to its two vanishing points — so an approach's
+ * direction is fixed by where the hull first appears. The fit through the
+ * wipe's own beats gives (0.3638, 0.0730, 0.9286), and the point that direction
+ * says the hull must come *from* is (0.234, 0.595) against a measured entry
+ * mark of (0.239, 0.591). Six thousandths of the frame apart, from two numbers
+ * that were not fitted to each other.
+ *
+ * Pinned on f1313 rather than on the entry, because the line has an impact
+ * parameter and only the near beats can see it: at 36 km every line through the
+ * entry mark looks the same, and at 850 m the difference between missing the
+ * lens by 294 m and hitting it is the whole shot. Projected back, the rail
+ * reproduces the measured track to 0.010 of the frame or better across
+ * f1288–1315 — the whole approach — which is the assertion
+ * `design/plans/tng-intro.md` §3.3 asks a fit to carry.
+ *
+ * Past f1316 the beats stop being measurements: the reference's hull is across
+ * the lens and its box is the frame. The authored pair at (1.15, 0.05) and
+ * (2.10, −0.50) were a hand-thrown exit, and the rail replaces them with the
+ * one it has — closest approach 294 m on f1317, which is the measured occlusion
+ * frame, and then a recede whose screen position races off the top right
+ * because that is what passing a lens does.
+ */
+export const WIPE_RAIL: LinePath = (() => {
+  const direction = Vec.normalize(vec3(0.3638, 0.073, 0.9286))
+  const pivot = Vec.scale(
+    screenDirection(0.389, 0.533, FOV, ASPECT),
+    atWidth(0.318),
+  )
+  return {
+    // 40 km back down the line, so every advance is positive and the log
+    // spline runs over one decade rather than through a zero it has no
+    // coordinate for.
+    anchor: Vec.sub(pivot, Vec.scale(direction, 40000)),
+    direction,
+    advance: [
+      { frame: 1288, t: 4986.5 },
+      { frame: 1292, t: 17105.3 },
+      { frame: 1300, t: 33692.0 },
+      { frame: 1305, t: 37114.7 },
+      { frame: 1310, t: 39156.4 },
+      { frame: 1313, t: 40000.0 },
+      { frame: 1315, t: 40572.9 },
+      { frame: 1316, t: 40879.2 },
+      // Closest approach, and the measured occlusion frame. The two agreeing
+      // is the shot: the hull covers the lens on the frame it passes it.
+      { frame: 1317, t: 41340.0 },
+      { frame: 1319, t: 42600.0 },
+      { frame: 1322, t: 46000.0 },
+    ],
+  }
+})()
+
+/**
+ * The wipe's line, mirrored in x — which is the middle pass, and which is a
+ * mirror of the *line* rather than of a beat list.
+ *
+ * Reflecting a straight pass is negating the x of its anchor and of its
+ * direction, and nothing else. That the attitude follows for free is the whole
+ * argument for staging a pass as a line: the old mirror reflected the beats and
+ * left the facing alone, so the middle hull flew the mirrored track on the
+ * unmirrored heading and crabbed 43.3° sideways across the frame for
+ * thirty-five frames. There is nothing left here for a mirror to forget.
+ */
+const mirroredLine = (line: LinePath, offset: number): LinePath => ({
+  anchor: vec3(-line.anchor.x, line.anchor.y, line.anchor.z),
+  direction: vec3(-line.direction.x, line.direction.y, line.direction.z),
+  advance: line.advance.map((beat) => ({
+    frame: beat.frame + offset,
+    t: beat.t,
+  })),
+})
+
+const shiftedLine = (line: LinePath, offset: number): LinePath => ({
+  ...line,
+  advance: line.advance.map((beat) => ({
+    frame: beat.frame + offset,
+    t: beat.t,
+  })),
+})
+
+/**
+ * The first warp-out as a rail: the cruise's own line, opened up.
+ *
+ * A ship does not turn to go to warp. The cruise's standoff was solved so that
+ * its last frame's heading vanishes at (0.655, 0.695) — the spike — so the
+ * departure is that same heading through the hull's handover position, and the
+ * only thing left to author is the throttle. Solved from the measured widths:
+ * the advance at which a point on the line sits a given distance from the lens
+ * is a quadratic, and these are its roots.
+ *
+ * **f1099–1104 deliberately do not match, and the measurement is why.** The
+ * rail puts the hull at (0.400, 0.521) and (0.505, 0.593) where the reference's
+ * track says (0.543, 0.519) and (0.607, 0.575) — 0.10 to 0.14 of the frame. To
+ * fly the reference's numbers the hull has to translate 0.15 of the frame in
+ * two frames at a range that barely changes, 568 m to 641 m: pure lateral
+ * motion, at 82 m per frame, on a hull pointing somewhere else entirely. That
+ * is not a ship, and it is not a ship in the reference either. The frames are
+ * inside the first warp flash, and `compare_render.py` scores the largest lit
+ * mass in the frame — which through f1096–1104 is the wash, whose centroid
+ * moves as the flash forms. The rail flies what the shot is; the track measures
+ * what the flash did.
+ *
+ * Either end is a measurement and both are reproduced: f1092 exactly, because
+ * it is the frame the cruise hands over on, and f1112 and f1120 to within 0.010
+ * and 0.007, because a receding ship converges on its own spike.
+ */
+const WARP_OUT_1_RAIL: LinePath = (() => {
+  const pivot = Vec.scale(
+    screenDirection(0.365, 0.497, FOV, ASPECT),
+    atWidth(0.768),
+  )
+  return {
+    anchor: Vec.sub(pivot, Vec.scale(WARP_OUT_HEADING, 400)),
+    direction: WARP_OUT_HEADING,
+    advance: [
+      { frame: 1092, t: 400 },
+      { frame: 1097, t: 425.5 },
+      { frame: 1099, t: 479.5 },
+      { frame: 1102, t: 766.9 },
+      { frame: 1104, t: 942.2 },
+      { frame: 1106, t: 3576.9 },
+      { frame: 1107, t: 6205.8 },
+      { frame: 1112, t: 54419.5 },
+      { frame: 1120, t: 545207.9 },
+    ],
+  }
+})()
+
 /*
  * Frame offsets of the three wipes, and their measured occlusion frames.
  *
@@ -724,7 +984,14 @@ const SHIP_RETURN: readonly ScreenBeat[] = [
   { frame: 2085, x: 0.353, y: 0.553, range: atWidth(0.709) },
   { frame: 2100, x: 0.339, y: 0.591, range: atWidth(0.735) },
   { frame: 2115, x: 0.337, y: 0.634, range: atWidth(0.761) },
-  { frame: 2130, x: 0.335, y: 0.683, range: atWidth(0.85) },
+  /*
+   * The handover to `DESCENT_RAIL`, and it is the rail's own value rather than
+   * the measured one. The leg ends here, so this is the first beat the skim's
+   * spline reads and the two have to agree about where the hull is on the frame
+   * they share; the measured (0.335, 0.683) is 0.038 of the frame from where the
+   * line puts it, which is a step on a hull filling half the picture.
+   */
+  { frame: 2130, x: 0.332, y: 0.721, range: atWidth(0.85) },
   /*
    * The skim: close enough that the saucer is a landscape, drifting aft — and
    * no closer, because the previous ranges flew the camera *through* it.
@@ -761,9 +1028,229 @@ const SHIP_RETURN: readonly ScreenBeat[] = [
    */
   { frame: 2355, x: 0.61, y: 0.62, range: atWidth(1.1) },
   { frame: 2380, x: 0.6, y: 0.58, range: atWidth(0.9) },
-  { frame: 2392, x: 0.55, y: 0.55, range: atWidth(0.02) },
-  { frame: 2404, x: 0.5, y: 0.52, range: atWidth(0.002) },
-  { frame: 2416, x: 0.48, y: 0.51, range: atWidth(0.0004) },
+  /*
+   * The handover to `WARP_OUT_2_RAIL`, and these three are its beats rather
+   * than the authored ones — for the reason `SHIP_CRUISE`'s own exit knot
+   * documents. A Catmull-Rom segment is shaped by the knot past its far end, so
+   * the departure that the rail flies from f2380 was *also* setting the tangent
+   * of f2356–2379, which the skim still renders. Authored, the pair either side
+   * of the cut disagreed by 0.2 of the frame and the spline between them
+   * reversed: sampled, the hull's direction of travel flipped 166° at f2360 and
+   * 102° at f2370, on a saucer filling the frame.
+   *
+   * Now they are the same line on both sides. Change one and change the other.
+   */
+  { frame: 2392, x: 0.686, y: 0.433, range: atWidth(0.02) },
+  { frame: 2404, x: 0.688, y: 0.43, range: atWidth(0.002) },
+  { frame: 2416, x: 0.688, y: 0.43, range: atWidth(0.0004) },
+]
+
+/* ------------------------------------------------------------------------- */
+/* The cruise rail                                                            */
+/* ------------------------------------------------------------------------- */
+
+/**
+ * The direction the hull flies through the cruise, in the stage's axes.
+ *
+ * A fit, and fitted in the units the measurement is in. Taking the beats above
+ * as camera-space points and least-squaring a line through them in *meters*
+ * answers the wrong question: the beats span a decade of range, so the far ones
+ * carry nearly all the leverage while contributing nearly none of the picture.
+ * A 3D line projects to a straight image line, so the residual that means
+ * something is a fraction of the frame, and minimizing that over the approach
+ * beats f676–952 gives (0.520, 0.371, 0.769) at an rms of 0.099 of the frame's
+ * width.
+ *
+ * That residual is large, and it is supposed to be: it is the whole reason the
+ * camera moves. The reference's screen track is *not* a straight image line —
+ * no locked camera and no straight ship can produce it — so a shot that insists
+ * on both has to bend the ship, which is what the authored beats were doing.
+ * Here the line is the ship and the residual is the camera's job.
+ *
+ * The old authored facing was (0.464, 0.408, 0.787), 6.6° away and inside the
+ * 6.8° spread between the two channels the direction can be fitted from. The
+ * fit is preferred because it is the line the hull actually flies rather than a
+ * heading written beside one.
+ */
+const RAIL_CRUISE_DIRECTION = Vec.normalize(vec3(0.52, 0.371, 0.769))
+
+/**
+ * The cruise rail: one straight line, flown at a constant 13.3 m per frame.
+ *
+ * The anchor sits three kilometers past the far end of the pass and every
+ * advance is negative, closing on it. That placement is the throttle: `LinePath`
+ * splines its advance in log distance, which compresses hard near the anchor —
+ * exactly what an approach whose *range* collapses wants, and exactly what this
+ * rail does not, because here the range is the camera's business and the hull's
+ * own speed should be one number. Kept an order of magnitude away from the
+ * anchor, the log spline is nearly linear and the speed comes out flat: 13.3 m
+ * per frame at f900, and 5.5 km of track across the shot.
+ *
+ * 13.3 m per frame is 319 m/s on the reference's timebase. That is slow for a
+ * starship and right for the shot: the reference spends seventeen seconds
+ * bringing the hull from four kilometers to three hundred meters, and a
+ * beauty pass is flown at whatever speed makes the frame work.
+ */
+const RAIL_CRUISE_SPEED = 13.3
+const RAIL_CRUISE_REACH = 3000
+const RAIL_CRUISE: LinePath = (() => {
+  const span = (1092 - 676) * RAIL_CRUISE_SPEED
+  return {
+    anchor: vec3(0, 0, 0),
+    direction: RAIL_CRUISE_DIRECTION,
+    advance: [
+      { frame: 676, t: -(RAIL_CRUISE_REACH + span) },
+      { frame: 884, t: -(RAIL_CRUISE_REACH + span / 2) },
+      { frame: 1092, t: -RAIL_CRUISE_REACH },
+    ],
+  }
+})()
+
+/**
+ * Where the camera stands, as a direction from the hull, authored in the
+ * hull's own frame: ahead of it, above it, and off to one side.
+ *
+ * This is the whole of what a tracked pass leaves free, and it is a staging
+ * decision rather than a fitted one — the screen mark and the apparent size are
+ * satisfied whatever it says. What it decides is which face of the hull the
+ * shot shows, and therefore what the key has to light.
+ *
+ * The sweep is the reference's own account of the pass. Ahead and above at
+ * f676: the camera sees the bow, nose-on, which is what every tracked box in
+ * the approach says it is looking at. Through the hull's plane at f948 — the
+ * frame the shot list cuts on. Astern and below by f1092: the ship has gone
+ * past and is leaving, showing the lit underside the reference's f960 and f990
+ * are made of.
+ *
+ * A held standoff was tried first and is what a camera flying formation looks
+ * like: the hull presents one face for four hundred frames while the frame's
+ * only dynamism is it getting bigger. The sweep costs 130° of pan against 34°,
+ * at 0.53°/frame mean and 1.9°/frame at closest approach, which is where a
+ * camera operator whips too.
+ */
+const STANDOFF_CRUISE_KNOTS: readonly {
+  frame: number
+  ahead: number
+  above: number
+  beside: number
+}[] = [
+  { frame: 676, ahead: 0.9, above: 0.52, beside: -0.3 },
+  { frame: 860, ahead: 0.42, above: 0.62, beside: -0.42 },
+  /*
+   * The two middle knots are solved, and what they are solved against is the
+   * relight: the camera has to be on the star's side of the hull for every
+   * frame of the shot, and the two shots put the star on opposite sides, so the
+   * sweep must cross the hull's plane once and cross it at f948.
+   *
+   * Solving them is not optional and the reason is instructive. They were
+   * authored, and they were right — until the f1092 knot was solved against the
+   * lens spike, which moved the whole slerped sweep with it: the crossing
+   * drifted forward to f909, and thirty-nine frames rendered a camera under a
+   * hull whose key was still overhead, on a hull already wider than the lens.
+   * A sweep is one object; solving one end is solving all of it.
+   *
+   * Two more things this is solved against, because a crossing on its own has
+   * a degenerate answer — a camera dead astern crosses on any frame you like
+   * and shows nothing. The reference names two frames: f820's brightest object
+   * is the saucer's top, and f960 and f990 are a lit underside with the
+   * deflector ring. So the objective is the *depth* of each. This lands +0.56
+   * at f850 and −1.00 at f990, with the crossing itself grazing — |dot| ≤ 0.11
+   * across f930–948, which the camera-mounted stage fill covers and a flip into
+   * the dark would not be.
+   */
+  { frame: 948, ahead: 0.5, above: -0.2, beside: 0.3 },
+  { frame: 1010, ahead: -0.4, above: -0.8, beside: -0.1 },
+  /*
+   * The last knot is solved, not chosen, and what it is solved against is the
+   * first lens spike.
+   *
+   * A ship does not turn to go to warp; it opens up along the line it was
+   * already flying. So the hull's heading on the last frame of the cruise has to
+   * be the direction its own warp point marks — a receding ship's screen
+   * position converges on the projection of its velocity, and the reference puts
+   * that projection at (0.655, 0.695). The standoff is the only thing free
+   * enough to make that true, because the marks and the range are satisfied
+   * whatever it says, so it is what was solved: at (−0.782, −0.204, 0.301) the
+   * exit heading's vanishing point is (0.6550, 0.6949), 0.006° off the spike.
+   *
+   * Authored, the exit heading vanished at (−0.302, 1.043) — off the
+   * bottom-left corner, 61.3° from the spike. The hull crossed the frame to the
+   * lower *right* while pointing to the lower left, and then a warp point lit up
+   * somewhere it had never been flying.
+   */
+  { frame: 1092, ahead: -0.782, above: -0.204, beside: 0.301 },
+]
+
+/**
+ * The knots above, as orientations whose −Z is the direction from the camera to
+ * the hull — the form `TrackedPass` wants, so the interpolation between them is
+ * a slerp and cannot leave the unit sphere. A Catmull-Rom over three loose
+ * components can, and a standoff that is not unit is a camera at the wrong
+ * range on a channel the marks were supposed to own.
+ */
+const STANDOFF_CRUISE: readonly AimBeat[] = (() => {
+  const flight = orientationAlong(RAIL_CRUISE, POLE)
+  const forward = Q.rotate(flight, vec3(0, 0, -1))
+  const up = Q.rotate(flight, vec3(0, 1, 0))
+  const right = Q.rotate(flight, vec3(1, 0, 0))
+  return STANDOFF_CRUISE_KNOTS.map(({ frame, ahead, above, beside }) => {
+    const toCamera = Vec.normalize(
+      Vec.add(
+        Vec.add(Vec.scale(forward, ahead), Vec.scale(up, above)),
+        Vec.scale(right, beside),
+      ),
+    )
+    return { frame, orientation: lookAlong(Vec.negate(toCamera), POLE) }
+  })
+})()
+
+/** One knot of an attitude overlay: a maneuver, against a derived frame. */
+interface AttitudeBeat {
+  readonly frame: number
+  readonly bankDeg?: number
+  readonly pitchDeg?: number
+}
+
+/**
+ * An overlay list, composed against one derived flight attitude and slerped.
+ *
+ * Composing at the knots rather than interpolating the angles is what keeps a
+ * bank a bank: `withAttitude` is a rotation about the *nose*, so two banks
+ * either side of a frame slerp through banks, while two independently
+ * interpolated angle channels fed through it do not compose to anything in
+ * particular near a large pitch.
+ */
+const attitudeBeats = (
+  flight: Quat,
+  list: readonly AttitudeBeat[],
+): AimBeat[] =>
+  list.map((beat) => ({
+    frame: beat.frame,
+    orientation: withAttitude(flight, beat.bankDeg ?? 0, beat.pitchDeg ?? 0),
+  }))
+
+/**
+ * The cruise's roll, which the reference really does.
+ *
+ * Measured from the cap-pair's screen angle and the cap area ratio: 0° at f704
+ * running to −25.5° by f958, at up to 0.656°/frame, with the break away from
+ * the approach's values at f880–900 rather than at the closest pass. Held from
+ * there, because the hull is off the top of the frame before it could recover.
+ *
+ * There is no pitch here any more, and its absence is the point. The authored
+ * −34° existed to turn the lit dorsal toward a camera that a wandering screen
+ * track had put in the wrong place; sweeping it against `dot(toCamera, dorsal)`
+ * was solving for the camera by rotating the ship. A solved camera stands where
+ * the shot wants it, so the hull can simply fly straight — and a 34° pitch on a
+ * rail is 34° of nose off the velocity, which is the defect this pass removes.
+ */
+const BANK_CRUISE: readonly AttitudeBeat[] = [
+  { frame: 676, bankDeg: 0 },
+  { frame: 800, bankDeg: -10 },
+  { frame: 880, bankDeg: -18 },
+  { frame: 930, bankDeg: -23 },
+  { frame: 985, bankDeg: -25.5 },
+  { frame: 1092, bankDeg: -25.5 },
 ]
 
 /**
@@ -838,63 +1325,47 @@ interface FacingBeat {
  * descent by contrast rolls 0.26° in total across 280 frames — dead straight
  * and unrolled, which is why one beat covers all of it.
  */
-/**
- * How far the reference's hull noses down against its own climbing track.
- *
- * Solved rather than chosen: swept against `dot(toCamera, dorsal)` over
- * f700–930 until the camera is on the lit side of the saucer everywhere in the
- * approach, which is the one thing the reference's frames state without
- * ambiguity.
- */
-const PITCH_CRUISE = -34
 
-const FACING_CRUISE: readonly FacingBeat[] = [
-  { frame: 676, forward: vec3(0.464, 0.408, 0.787), pitchDeg: PITCH_CRUISE },
-  {
-    frame: 800,
-    forward: vec3(0.464, 0.408, 0.787),
-    bankDeg: -10,
-    pitchDeg: PITCH_CRUISE,
-  },
-  // The bank-away starts here, 80-100 frames earlier than it was authored.
-  {
-    frame: 880,
-    forward: vec3(0.42, 0.4, 0.81),
-    bankDeg: -18,
-    pitchDeg: PITCH_CRUISE,
-  },
-  {
-    frame: 930,
-    forward: vec3(0.2, 0.34, 0.92),
-    bankDeg: -23,
-    pitchDeg: PITCH_CRUISE,
-  },
-  { frame: 985, forward: vec3(-0.25, 0.2, 0.95), bankDeg: -25 },
-  { frame: 1035, forward: vec3(-0.62, -0.15, -0.77), bankDeg: -20 },
-  { frame: 1120, forward: vec3(-0.6, -0.14, -0.79) },
-]
+/**
+ * The sentinel that says "this beat's attitude is the cruise's exit, handed
+ * over exactly". Not a bank angle a hull could fly — it is out of range on
+ * purpose, so a beat carrying it cannot be mistaken for one that was authored.
+ */
+const CRUISE_EXIT = Number.NEGATIVE_INFINITY
 
 const FACING_TITLES: readonly FacingBeat[] = [
   /*
-   * The cruise's exit attitude, carried across the f1092 cut.
+   * The warp-out's heading, and it is not a judgment: it is where the lens
+   * spike is.
    *
-   * `routeOrientation` holds its first beat before that beat's frame, so a
-   * list starting at f1280 pinned the warp-out hull to the *wipes'* heading —
-   * which points back down the lens. Measured: the attitude snapped 164.40° in
-   * the single frame f1091→f1092 and the nose then sat 87°–169° off its own
-   * velocity for every frame of `WARP_OUT_1`, on a hull three-quarters of the
-   * frame wide. A ship flying tail-first out of its own warp point is the
-   * defect this pass exists to remove, one shot along.
+   * A ship receding on a straight heading converges, on screen, to the point
+   * its velocity direction projects to — that is what a vanishing point is. The
+   * reference's first spike registers at (0.659, 0.704) on f1119 and
+   * (0.655, 0.688) on f1120, which is also the last place its hull was seen. So
+   * the heading is fixed by the measurement to `screenDirection(0.655, 0.695)`,
+   * and any other heading is a ship that leaves in one direction and lights its
+   * warp point in another.
    *
-   * These two beats are `FACING_CRUISE`'s last two, repeated verbatim.
-   * `routeOrientation` slerps inside a segment and takes nothing from the
-   * neighbours, so the same pair of endpoints gives the same attitude at every
-   * frame of f1035–1120 in either list, and the cut is exact rather than
-   * close. The swing from here to the wipes' heading happens across
-   * f1120–1280, with the hull off stage from f1108.
+   * It was (−0.6, −0.14, −0.79), 51° away and pointing off to port. Sampled,
+   * the nose sat 50° off its own velocity for every frame of `WARP_OUT_1` on a
+   * hull three-quarters of the frame wide, and the ship crossed the frame
+   * sideways to a warp point it was not flying at.
+   *
+   * `routeOrientation` holds its first beat before that beat's frame, so this
+   * one has to sit on the cut itself: a list starting at f1280 pins the
+   * warp-out hull to the *wipes'* heading, which points back down the lens.
+   * The swing from here to the wipes happens across f1120–1280, with the hull
+   * off stage from f1108.
    */
-  { frame: 1035, forward: vec3(-0.62, -0.15, -0.77), bankDeg: -20 },
-  { frame: 1120, forward: vec3(-0.6, -0.14, -0.79) },
+  /*
+   * The two handover beats are filled in by `buildStage`, not written here: the
+   * attitude the cruise leaves on is a *product* of the solved standoff and the
+   * rail, so restating it as a forward vector and a bank angle is two numbers
+   * that can drift apart from the thing they describe. `CRUISE_EXIT` marks the
+   * frames; `facingBeats` splices the measured attitude in.
+   */
+  { frame: 1092, forward: WARP_OUT_HEADING, bankDeg: CRUISE_EXIT },
+  { frame: 1120, forward: WARP_OUT_HEADING, bankDeg: CRUISE_EXIT },
   /*
    * The wipes' fitted heading — and the middle one's is mirrored, because its
    * *track* is.
@@ -925,8 +1396,17 @@ const FACING_TITLES: readonly FacingBeat[] = [
   // Into the skim, where the reference rolls +11.3° over f2315-2380.
   { frame: 2180, forward: vec3(-0.2, -0.4, 0.89), bankDeg: 4 },
   { frame: 2280, forward: vec3(-0.3, -0.2, 0.93), bankDeg: 8 },
-  { frame: 2380, forward: vec3(-0.42, -0.1, 0.9), bankDeg: 11 },
-  { frame: 2420, forward: vec3(-0.42, -0.1, 0.9), bankDeg: 11 },
+  /*
+   * The skim's exit is the departure's heading, so the turn happens *in* the
+   * skim rather than at the cut into it: 170° across f2280–2380, 1.7° a frame,
+   * which is the maneuver the reference is showing — the ship pulling up off
+   * the pass and lining up for warp while its saucer fills the frame. Held to
+   * f2420 because `WARP_OUT_2_RAIL` derives the same heading from
+   * `orientationAlong`, and a leg and the beats it takes over from must agree
+   * on the frame they share.
+   */
+  { frame: 2380, forward: WARP_OUT_2_HEADING, bankDeg: 11 },
+  { frame: 2420, forward: WARP_OUT_2_HEADING, bankDeg: 11 },
 ]
 
 /*
@@ -935,14 +1415,17 @@ const FACING_TITLES: readonly FacingBeat[] = [
  * — and `withAttitude` is the sparse overlay on top of it. Composed in that
  * order the previously authored bank angles are numerically unchanged.
  */
-const facingBeats = (list: readonly FacingBeat[]): AimBeat[] =>
+const facingBeats = (list: readonly FacingBeat[], exit?: Quat): AimBeat[] =>
   list.map((beat) => ({
     frame: beat.frame,
-    orientation: withAttitude(
-      lookAlong(beat.forward, POLE),
-      beat.bankDeg ?? 0,
-      beat.pitchDeg ?? 0,
-    ),
+    orientation:
+      beat.bankDeg === CRUISE_EXIT && exit !== undefined
+        ? exit
+        : withAttitude(
+            lookAlong(beat.forward, POLE),
+            beat.bankDeg === CRUISE_EXIT ? 0 : (beat.bankDeg ?? 0),
+            beat.pitchDeg ?? 0,
+          ),
   }))
 
 /** Ship visibility windows, frames inclusive. */
@@ -950,9 +1433,24 @@ const SHIP_WINDOWS: readonly (readonly [number, number])[] = [
   // Measured: the reference means 0.4 from f1108 to f1118 — nothing on screen
   // between the ship leaving and the lens spike arriving at f1119.
   [676, 1107],
-  [1286, 1323],
-  [1414, 1451],
-  [1534, 1570],
+  /*
+   * Each wipe ends on its own occlusion frame, and that is the rail's doing.
+   *
+   * A fly-through goes *through*: the hull passes the lens plane between f1317
+   * and f1318 and is behind the camera from there, which is not a thing a
+   * window can carry. The old beats kept it nominally in front by throwing it
+   * to (2.10, −0.50) — off frame in the same direction the streak leaves in,
+   * and a hull nowhere near where a hull was. What the reference shows across
+   * f1318–1322 is the streak burst, which `wipeStreak` peaks at the occlusion
+   * and decays over five frames without needing a ship to hang it on.
+   *
+   * Derived from `WIPE_OCCLUSIONS` rather than retyped, because the occlusion
+   * frame, the closest approach and the last frame the hull exists on are one
+   * fact stated three times.
+   */
+  [1286, WIPE_OCCLUSIONS[0]],
+  [1414, WIPE_OCCLUSIONS[1]],
+  [1534, WIPE_OCCLUSIONS[2]],
   [1758, 2422],
 ]
 
@@ -972,12 +1470,60 @@ interface Shot {
   readonly id: string
   readonly from: number
   readonly to: number
+  /**
+   * The camera's route, and its aim.
+   *
+   * When the shot carries a `pass` these are not a route at all: they are the
+   * **stage** — one position and one orientation, the frame both of that pass's
+   * rails are expressed in — and the camera's actual pose is solved rather than
+   * splined. A stage is exactly a camera setup, so it is the same two numbers
+   * either way and there is nothing to keep in agreement.
+   */
   readonly camera: readonly RouteBeat[]
   readonly aim: readonly AimBeat[]
   /** Camera-relative choreography, in frame terms. */
   readonly ship?: readonly ScreenBeat[]
   /** Hull facing, in camera axes. */
   readonly facing?: readonly AimBeat[]
+  /**
+   * A motion-control pass: the hull on a rail, the camera standing off it, and
+   * the framing solved. Supersedes `ship` and `facing`, and turns `camera` and
+   * `aim` into the stage.
+   */
+  readonly pass?: TrackedPass
+  /**
+   * Straight legs the hull flies in front of a camera that is *not* solved.
+   *
+   * The reference measures a locked-off camera wherever text is on screen —
+   * 375 to 433 matched starfield inliers at scale 1.0000 — so the titles shot
+   * cannot have a `TrackedPass`, and the physics has to come from the rail
+   * alone. That is enough: with the camera holding still, a straight ship is a
+   * straight *image* line, and `orientationAlong` gives it an attitude that
+   * cannot slide.
+   *
+   * Legs are expressed in the **stage's** axes rather than the camera's, which
+   * matters exactly once — the pitch this shot pans through after f2100. Under
+   * camera-relative beats a pan drags the hull with it and shows nothing; a leg
+   * stays where it is and the camera pans past it.
+   *
+   * Frames no leg covers fall through to `ship`/`facing`, which is how the skim
+   * — the one stretch the reference cannot measure at all — stays authored.
+   */
+  readonly rails?: readonly RailLeg[]
+  /**
+   * The sparse attitude overlay on the rail's derived flight attitude, already
+   * composed through `withAttitude` and slerped like any other aim.
+   */
+  readonly attitude?: readonly AimBeat[]
+}
+
+/** One straight leg of a hull's flight, in a shot's stage axes. */
+interface RailLeg {
+  readonly from: number
+  readonly to: number
+  readonly line: LinePath
+  /** The maneuver on top of the derived flight attitude, if there is one. */
+  readonly attitude?: readonly AimBeat[]
 }
 
 interface Stage {
@@ -1064,6 +1610,128 @@ function buildStage(world: World): Stage {
     return UV.translate(position, placement.position)
   }
 
+  /* ------------------------------------------------------------------------ */
+  /* Standing off a planet                                                     */
+  /* ------------------------------------------------------------------------ */
+
+  /**
+   * A camera standing off a body, in the terms the reference is measured in.
+   *
+   * A planet pass is read off the frames as three numbers per beat — how many
+   * radii out, what phase angle, how far out of the plane — and `placeShot`
+   * turns a triple into a position. What the shot list then did was spline the
+   * *positions*, in meters, and that is the wrong coordinate for the same
+   * reason `screenRoutePosition` splines range in log space: a pull-back that
+   * runs 4.3 radii to 92 in a hundred frames has knots spanning a decade and a
+   * half, and a Catmull-Rom over those takes its tangent at the near end from
+   * the far one.
+   *
+   * Measured on the sample, that is what the planet passes read as. The
+   * eclipse's camera changed speed by 2,475 km per frame between two adjacent
+   * frames at f274 — 95% of its own mean — where the standoff schedule steps
+   * 6.0, 12, 17 radii on four-frame knots. Saturn's aim turned 6.46°/frame at
+   * f417 after holding still, a jerk of 3.52°/frame², and Jupiter's 2.96°/frame.
+   * None of that is in the measurement; all of it is the interpolant, and it is
+   * what a shot looks like when it has been fitted to its knots rather than
+   * flown through them.
+   *
+   * So the three channels are splined separately — the standoff in log radii,
+   * the two angles linearly — and the position is built from the result at
+   * every frame the shot renders. The beats below are unchanged, which is the
+   * point: nothing about the measurement moves, only the curve between the
+   * numbers.
+   *
+   * `STEP` is two frames rather than one because the output is still handed to
+   * `routePosition`, and a Catmull-Rom over knots two frames apart on a curve
+   * this smooth is exact to well under a meter — while one beat per frame across
+   * four planet passes is 470 knots to build on every `prepare`.
+   */
+  const STANDOFF_STEP = 2
+
+  interface StandoffBeat {
+    readonly frame: number
+    /** Distance from the body's centre, in its own radii. */
+    readonly radii: number
+    readonly phaseDeg: number
+    readonly elevationDeg: number
+  }
+
+  const standoffRoute = (
+    beats: readonly StandoffBeat[],
+    place: (
+      radii: number,
+      phaseDeg: number,
+      elevationDeg: number,
+    ) => UniverseVector,
+  ): RouteBeat[] => {
+    const frames = beats.map((beat) => beat.frame)
+    const logRadii = beats.map((beat) => Math.log(beat.radii))
+    const phases = beats.map((beat) => beat.phaseDeg)
+    const elevations = beats.map((beat) => beat.elevationDeg)
+    const first = beats[0] as StandoffBeat
+    const last = beats[beats.length - 1] as StandoffBeat
+    const route: RouteBeat[] = []
+    for (let frame = first.frame; frame <= last.frame; frame += STANDOFF_STEP)
+      route.push({
+        frame,
+        position: place(
+          Math.exp(splineScalar(frames, logRadii, frame)),
+          splineScalar(frames, phases, frame),
+          splineScalar(frames, elevations, frame),
+        ),
+      })
+    if ((route[route.length - 1] as RouteBeat).frame !== last.frame)
+      route.push({
+        frame: last.frame,
+        position: place(last.radii, last.phaseDeg, last.elevationDeg),
+      })
+    return route
+  }
+
+  /** One knot of a composition: where a target sits in the frame. */
+  interface MarkBeat {
+    readonly frame: number
+    readonly x: number
+    readonly y: number
+  }
+
+  /**
+   * The aim, densified the same way and for the same reason.
+   *
+   * `routeOrientation` slerps between quaternions with a smoothstepped
+   * parameter, which starts and stops turning at every knot — fine when the
+   * knots are twenty frames apart and a whip when they are four. Splining the
+   * screen marks instead and solving the orientation at every sampled frame
+   * puts the smoothness in the channel the composition is authored in, and the
+   * marks are what the reference states.
+   */
+  const markRoute = (
+    beats: readonly MarkBeat[],
+    aimAt: (frame: number, x: number, y: number) => Quat,
+  ): AimBeat[] => {
+    const frames = beats.map((beat) => beat.frame)
+    const xs = beats.map((beat) => beat.x)
+    const ys = beats.map((beat) => beat.y)
+    const first = beats[0] as MarkBeat
+    const last = beats[beats.length - 1] as MarkBeat
+    const route: AimBeat[] = []
+    for (let frame = first.frame; frame <= last.frame; frame += STANDOFF_STEP)
+      route.push({
+        frame,
+        orientation: aimAt(
+          frame,
+          splineScalar(frames, xs, frame),
+          splineScalar(frames, ys, frame),
+        ),
+      })
+    if ((route[route.length - 1] as AimBeat).frame !== last.frame)
+      route.push({
+        frame: last.frame,
+        orientation: aimAt(last.frame, last.x, last.y),
+      })
+    return route
+  }
+
   /* ------------------------- Shot: Earth, f125–239 ---------------------- */
 
   /*
@@ -1113,12 +1781,22 @@ function buildStage(world: World): Stage {
      * terrain sees, and `frameTwoTargets` is happy to aim at a target the
      * frame does not contain.
      */
-    const e125 = at(earth, earthPos, 1.19, 105.4, 4)
-    const e150 = at(earth, earthPos, 1.22, 108.4, 4.5)
-    const e175 = at(earth, earthPos, 1.35, 116.4, 5)
-    const e200 = at(earth, earthPos, 1.8, 132.4, 5.5)
-    const e222 = at(earth, earthPos, 2.55, 148.5, 6)
-    const e239 = at(earth, earthPos, 4.3, 164.3, 6)
+    const place = (
+      radii: number,
+      phaseDeg: number,
+      elevationDeg: number,
+    ): UniverseVector => at(earth, earthPos, radii, phaseDeg, elevationDeg)
+    const STANDOFF: readonly StandoffBeat[] = [
+      { frame: 125, radii: 1.19, phaseDeg: 105.4, elevationDeg: 4 },
+      { frame: 150, radii: 1.22, phaseDeg: 108.4, elevationDeg: 4.5 },
+      { frame: 175, radii: 1.35, phaseDeg: 116.4, elevationDeg: 5 },
+      { frame: 200, radii: 1.8, phaseDeg: 132.4, elevationDeg: 5.5 },
+      { frame: 222, radii: 2.55, phaseDeg: 148.5, elevationDeg: 6 },
+      { frame: 239, radii: 4.3, phaseDeg: 164.3, elevationDeg: 6 },
+    ]
+    const camera = standoffRoute(STANDOFF, place)
+    const positionAt = (frame: number): UniverseVector =>
+      routePosition(camera, frame)
     /*
      * The star is the *primary* target on every knot but the last. Both land
      * when the standoff gives the pair the separation the marks ask for, which
@@ -1145,23 +1823,49 @@ function buildStage(world: World): Stage {
       id: 'earth',
       from: CUTS.earth[0],
       to: CUTS.earth[1],
-      camera: [
-        { frame: 125, position: e125 },
-        { frame: 150, position: e150 },
-        { frame: 175, position: e175 },
-        { frame: 200, position: e200 },
-        { frame: 222, position: e222 },
-        { frame: 239, position: e239 },
-      ],
+      camera,
       aim: [
-        // f125's marks are the f140–f150 track run back four frames; the
-        // reference is still fading up out of black there and its sprite does
-        // not clear the detector's floor until f140.
-        { frame: 125, orientation: pair(e125, [0.081, 0.374], [0.995, 1.49]) },
-        { frame: 150, orientation: pair(e150, [0.118, 0.381], [0.989, 1.394]) },
-        { frame: 175, orientation: pair(e175, [0.182, 0.396], [0.938, 1.186]) },
-        { frame: 200, orientation: pair(e200, [0.278, 0.416], [0.826, 0.884]) },
-        { frame: 222, orientation: pair(e222, [0.378, 0.435], [0.732, 0.716]) },
+        /*
+         * Four channels splined, not five orientations slerped: the star's mark
+         * and the disk's, densified onto the same two-frame grid the camera is,
+         * and `frameTwoTargets` solved at each. The composition is authored as
+         * screen marks, so that is where the smoothness belongs.
+         *
+         * f125's marks are the f140–f150 track run back four frames; the
+         * reference is still fading up out of black there and its sprite does
+         * not clear the detector's floor until f140.
+         */
+        ...(() => {
+          const marks = [
+            { frame: 125, sx: 0.081, sy: 0.374, dx: 0.995, dy: 1.49 },
+            { frame: 150, sx: 0.118, sy: 0.381, dx: 0.989, dy: 1.394 },
+            { frame: 175, sx: 0.182, sy: 0.396, dx: 0.938, dy: 1.186 },
+            { frame: 200, sx: 0.278, sy: 0.416, dx: 0.826, dy: 0.884 },
+            { frame: 222, sx: 0.378, sy: 0.435, dx: 0.732, dy: 0.716 },
+            // f239's own pair, so the mark curve does not stop 17 frames short
+            // of the cut and hand a stale tangent to a lone slerp. The beat
+            // itself is replaced below; what this adds is the approach to it.
+            { frame: 239, sx: 0.455, sy: 0.435, dx: 0.634, dy: 0.555 },
+          ]
+          const frames = marks.map((mark) => mark.frame)
+          const channel = (key: 'sx' | 'sy' | 'dx' | 'dy', frame: number) =>
+            splineScalar(
+              frames,
+              marks.map((mark) => mark[key]),
+              frame,
+            )
+          const out: AimBeat[] = []
+          for (let frame = 125; frame < 239; frame += STANDOFF_STEP)
+            out.push({
+              frame,
+              orientation: pair(
+                positionAt(frame),
+                [channel('sx', frame), channel('sy', frame)],
+                [channel('dx', frame), channel('dy', frame)],
+              ),
+            })
+          return out
+        })(),
         /*
          * Both marks, because the f240 cut lands invisibly only if the two
          * sides agree on the star *and* the disk; eyeballing a roll gets one.
@@ -1178,7 +1882,7 @@ function buildStage(world: World): Stage {
         {
           frame: 239,
           orientation: frameTwoTargets(
-            e239,
+            positionAt(239),
             { at: earthPos, x: 0.634, y: 0.555 },
             { at: sun, x: 0.455, y: 0.435 },
             FOV,
@@ -1241,16 +1945,34 @@ function buildStage(world: World): Stage {
      * acceleration *is* the shot — it is what makes the eclipse feel like
      * something the camera fell through rather than parked at.
      */
-    const p240 = cam(15.7, 2.2, 4.3)
-    const p256 = cam(9.0, 1.8, 4.9)
-    const p272 = cam(0, 0.9, 6.0)
-    const p276 = cam(-2.2, 0.8, 12)
-    const p280 = cam(-3.6, 0.7, 17)
-    const p288 = cam(-5.2, 0.6, 32)
-    const p300 = cam(-6.4, 0.4, 45)
-    const p320 = cam(-8.0, 0.2, 62)
-    const p340 = cam(-9.4, 0, 78)
-    const p356 = cam(-10.4, 0, 92)
+    /*
+     * Splined in the coordinates it is measured in, which for a schedule this
+     * violent is the difference between reproducing an acceleration and
+     * inventing one. Over f272–288 the standoff goes 6.0, 12, 17, 32 radii on
+     * four- and eight-frame knots; splined as positions in meters the camera's
+     * own speed changed by 2,475 km between two adjacent frames at f274, 95% of
+     * its mean for the shot. In log radii the same knots are nearly evenly
+     * spaced and the pull-back is what it says it is.
+     */
+    const camera = standoffRoute(
+      [
+        { frame: 240, radii: 4.3, phaseDeg: 15.7, elevationDeg: 2.2 },
+        { frame: 256, radii: 4.9, phaseDeg: 9.0, elevationDeg: 1.8 },
+        { frame: 272, radii: 6.0, phaseDeg: 0, elevationDeg: 0.9 },
+        { frame: 276, radii: 12, phaseDeg: -2.2, elevationDeg: 0.8 },
+        { frame: 280, radii: 17, phaseDeg: -3.6, elevationDeg: 0.7 },
+        { frame: 288, radii: 32, phaseDeg: -5.2, elevationDeg: 0.6 },
+        { frame: 300, radii: 45, phaseDeg: -6.4, elevationDeg: 0.4 },
+        { frame: 320, radii: 62, phaseDeg: -8.0, elevationDeg: 0.2 },
+        { frame: 340, radii: 78, phaseDeg: -9.4, elevationDeg: 0 },
+        { frame: 356, radii: 92, phaseDeg: -10.4, elevationDeg: 0 },
+      ],
+      // `cam` takes (swing, lift, radii); the swing is the signed phase, which
+      // is what `placeShot`'s unsigned one cannot express across totality.
+      (radii, swingDeg, liftDeg) => cam(swingDeg, liftDeg, radii),
+    )
+    const positionAt = (frame: number): UniverseVector =>
+      routePosition(camera, frame)
     const pair = (
       from: UniverseVector,
       planet: readonly [number, number],
@@ -1267,37 +1989,66 @@ function buildStage(world: World): Stage {
       id: 'eclipse',
       from: CUTS.eclipse[0],
       to: CUTS.eclipse[1],
-      camera: [
-        { frame: 240, position: p240 },
-        { frame: 256, position: p256 },
-        { frame: 272, position: p272 },
-        { frame: 276, position: p276 },
-        { frame: 280, position: p280 },
-        { frame: 288, position: p288 },
-        { frame: 300, position: p300 },
-        { frame: 320, position: p320 },
-        { frame: 340, position: p340 },
-        { frame: 356, position: p356 },
-      ],
+      camera,
+      /*
+       * Densified on the same two-frame grid as the camera, by splining both
+       * targets' marks and solving the pair at each.
+       *
+       * Totality needs no special case and no longer has one. The two marks
+       * meet there because the two *bodies* do, and `frameTwoTargets` already
+       * knows what to do with a degenerate pair — it lets the primary alone set
+       * the frame. Suspending the solver across f270–274 and dropping a lone
+       * knot into the hole put a four-frame island in a two-frame grid, and a
+       * Catmull-Rom reads a change of knot density as a change of speed: the
+       * aim's jerk peaked at 0.47°/frame² on exactly those frames.
+       */
       aim: [
-        { frame: 240, orientation: pair(p240, [0.634, 0.555], [0.455, 0.435]) },
-        { frame: 256, orientation: pair(p256, [0.56, 0.53], [0.475, 0.46]) },
-        // Totality: the two targets are one direction and TRIAD degenerates,
-        // so the disk alone sets the frame.
-        {
-          frame: 272,
-          orientation: frameTarget(
-            p272,
-            { at: marsPos, x: 0.499, y: 0.51 },
-            FOV,
-            ASPECT,
-            POLE,
-          ),
-        },
-        { frame: 288, orientation: pair(p288, [0.44, 0.46], [0.49, 0.46]) },
-        { frame: 300, orientation: pair(p300, [0.38, 0.43], [0.43, 0.43]) },
-        { frame: 320, orientation: pair(p320, [0.27, 0.42], [0.32, 0.42]) },
-        { frame: 356, orientation: pair(p356, [0.05, 0.44], [0.1, 0.44]) },
+        ...(() => {
+          const marks = [
+            { frame: 240, px: 0.634, py: 0.555, sx: 0.455, sy: 0.435 },
+            { frame: 256, px: 0.56, py: 0.53, sx: 0.475, sy: 0.46 },
+            /*
+             * The approach to totality and the recovery from it, so the marks
+             * curve through the frames the pair is suspended over rather than
+             * spanning them in one 32-frame segment. Read off the reference at
+             * f268 and f276, either side of the disk's own centring.
+             */
+            { frame: 268, px: 0.51, py: 0.515, sx: 0.487, sy: 0.472 },
+            // Totality itself: the star's mark *is* the disk's, because the
+            // star is behind the disk. `frameTwoTargets` recognizes the
+            // degenerate pair and lets the primary alone set the frame, which
+            // is what the shot wants and what a separate knot on its own
+            // spacing was doing more roughly.
+            { frame: 272, px: 0.499, py: 0.51, sx: 0.499, sy: 0.51 },
+            { frame: 276, px: 0.487, py: 0.5, sx: 0.494, sy: 0.478 },
+            { frame: 288, px: 0.44, py: 0.46, sx: 0.49, sy: 0.46 },
+            { frame: 300, px: 0.38, py: 0.43, sx: 0.43, sy: 0.43 },
+            { frame: 320, px: 0.27, py: 0.42, sx: 0.32, sy: 0.42 },
+            { frame: 356, px: 0.05, py: 0.44, sx: 0.1, sy: 0.44 },
+          ]
+          const frames = marks.map((mark) => mark.frame)
+          const channel = (
+            key: 'px' | 'py' | 'sx' | 'sy',
+            frame: number,
+          ): number =>
+            splineScalar(
+              frames,
+              marks.map((mark) => mark[key]),
+              frame,
+            )
+          const out: AimBeat[] = []
+          for (let frame = 240; frame <= 356; frame += STANDOFF_STEP) {
+            out.push({
+              frame,
+              orientation: pair(
+                positionAt(frame),
+                [channel('px', frame), channel('py', frame)],
+                [channel('sx', frame), channel('sy', frame)],
+              ),
+            })
+          }
+          return out
+        })(),
       ],
     }
   })()
@@ -1343,31 +2094,39 @@ function buildStage(world: World): Stage {
      * the first pass at this rendered a planet lit from frame right with its
      * dark side at the limb, which is the same picture backwards.
      */
-    const j357 = at(jupiter, jupiterPos, 6.5, 88, 12)
-    const j374 = at(jupiter, jupiterPos, 2.9, 96, 10)
-    const j382 = at(jupiter, jupiterPos, 1.75, 102, 8)
-    const j400 = at(jupiter, jupiterPos, 2.4, 116, 5)
-    const j412 = at(jupiter, jupiterPos, 4.6, 128, 2)
-    const aimAt = (from: UniverseVector, x: number, y: number): Quat =>
-      frameTarget(from, { at: jupiterPos, x, y }, FOV, ASPECT, POLE)
+    const camera = standoffRoute(
+      [
+        { frame: 357, radii: 6.5, phaseDeg: 88, elevationDeg: 12 },
+        { frame: 374, radii: 2.9, phaseDeg: 96, elevationDeg: 10 },
+        { frame: 382, radii: 1.75, phaseDeg: 102, elevationDeg: 8 },
+        { frame: 400, radii: 2.4, phaseDeg: 116, elevationDeg: 5 },
+        { frame: 412, radii: 4.6, phaseDeg: 128, elevationDeg: 2 },
+      ],
+      (radii, phaseDeg, elevationDeg) =>
+        at(jupiter, jupiterPos, radii, phaseDeg, elevationDeg),
+    )
     return {
       id: 'jupiter',
       from: CUTS.jupiter[0],
       to: CUTS.jupiter[1],
-      camera: [
-        { frame: 357, position: j357 },
-        { frame: 374, position: j374 },
-        { frame: 382, position: j382 },
-        { frame: 400, position: j400 },
-        { frame: 412, position: j412 },
-      ],
-      aim: [
-        { frame: 357, orientation: aimAt(j357, 1.55, 0.3) },
-        { frame: 374, orientation: aimAt(j374, 1.1, 0.4) },
-        { frame: 382, orientation: aimAt(j382, 1.02, 0.46) },
-        { frame: 400, orientation: aimAt(j400, 0.45, 0.62) },
-        { frame: 412, orientation: aimAt(j412, -0.05, 0.78) },
-      ],
+      camera,
+      aim: markRoute(
+        [
+          { frame: 357, x: 1.55, y: 0.3 },
+          { frame: 374, x: 1.1, y: 0.4 },
+          { frame: 382, x: 1.02, y: 0.46 },
+          { frame: 400, x: 0.45, y: 0.62 },
+          { frame: 412, x: -0.05, y: 0.78 },
+        ],
+        (frame, x, y) =>
+          frameTarget(
+            routePosition(camera, frame),
+            { at: jupiterPos, x, y },
+            FOV,
+            ASPECT,
+            POLE,
+          ),
+      ),
     }
   })()
 
@@ -1427,17 +2186,21 @@ function buildStage(world: World): Stage {
      * Standing far enough back to match the width costs another 9 of exposure,
      * which is the trade this schedule declines.
      */
-    const s413 = at(saturn, saturnPos, 3.13, 66, -4)
-    const s417 = at(saturn, saturnPos, 2.56, 70, -7)
-    const s421 = at(saturn, saturnPos, 2.2, 74, -10)
-    const s425 = at(saturn, saturnPos, 2.1, 78, -13)
-    const s430 = at(saturn, saturnPos, 2.35, 81, -16)
-    const s440 = at(saturn, saturnPos, 3.1, 86, -20)
-    const s460 = at(saturn, saturnPos, 5.0, 95, -25)
-    const s500 = at(saturn, saturnPos, 8.9, 110, -30)
-    const s531 = at(saturn, saturnPos, 12.2, 120, -32)
-    const aimAt = (from: UniverseVector, x: number, y: number): Quat =>
-      frameTarget(from, { at: saturnPos, x, y }, FOV, ASPECT, POLE)
+    const camera = standoffRoute(
+      [
+        { frame: 413, radii: 3.13, phaseDeg: 66, elevationDeg: -4 },
+        { frame: 417, radii: 2.56, phaseDeg: 70, elevationDeg: -7 },
+        { frame: 421, radii: 2.2, phaseDeg: 74, elevationDeg: -10 },
+        { frame: 425, radii: 2.1, phaseDeg: 78, elevationDeg: -13 },
+        { frame: 430, radii: 2.35, phaseDeg: 81, elevationDeg: -16 },
+        { frame: 440, radii: 3.1, phaseDeg: 86, elevationDeg: -20 },
+        { frame: 460, radii: 5.0, phaseDeg: 95, elevationDeg: -25 },
+        { frame: 500, radii: 8.9, phaseDeg: 110, elevationDeg: -30 },
+        { frame: 531, radii: 12.2, phaseDeg: 120, elevationDeg: -32 },
+      ],
+      (radii, phaseDeg, elevationDeg) =>
+        at(saturn, saturnPos, radii, phaseDeg, elevationDeg),
+    )
     /*
      * Aim marks are the reference's own area-weighted subject centroids —
      * (0.967, 0.889) at f413, (0.807, 0.567) at f417, (0.719, 0.534) at f421,
@@ -1451,51 +2214,73 @@ function buildStage(world: World): Stage {
       id: 'saturn',
       from: CUTS.saturn[0],
       to: CUTS.saturn[1],
-      camera: [
-        { frame: 413, position: s413 },
-        { frame: 417, position: s417 },
-        { frame: 421, position: s421 },
-        { frame: 425, position: s425 },
-        { frame: 430, position: s430 },
-        { frame: 440, position: s440 },
-        { frame: 460, position: s460 },
-        { frame: 500, position: s500 },
-        { frame: 531, position: s531 },
-      ],
-      aim: [
-        { frame: 413, orientation: aimAt(s413, 1.5, 0.98) },
-        { frame: 417, orientation: aimAt(s417, 0.95, 0.62) },
-        { frame: 421, orientation: aimAt(s421, 0.8, 0.56) },
-        { frame: 425, orientation: aimAt(s425, 0.7, 0.53) },
-        { frame: 430, orientation: aimAt(s430, 0.55, 0.51) },
-        { frame: 440, orientation: aimAt(s440, 0.35, 0.45) },
-        { frame: 460, orientation: aimAt(s460, 0.15, 0.37) },
-        { frame: 500, orientation: aimAt(s500, 0.02, 0.32) },
-        { frame: 531, orientation: aimAt(s531, -0.04, 0.3) },
-      ],
+      camera,
+      /*
+       * The entry mark is (1.12, 0.74), not (1.5, 0.98).
+       *
+       * At f413 the reference is a 0.095-wide ring sliver in the bottom-right
+       * corner, so its area-weighted centroid — (0.967, 0.889) — is a
+       * measurement of the corner rather than of where the planet is, and the
+       * old mark pushed it further out again to compensate. The cost was a whip:
+       * from a standing start the aim turned 6.46° in the frame at f417, a jerk
+       * of 3.52°/frame², which is the largest camera acceleration anywhere in
+       * the piece and lands four frames after a cut. Pulled back to a
+       * continuation of the f417–421 trend the planet still enters from off the
+       * right edge and the entry turns at 1.9°/frame.
+       */
+      aim: markRoute(
+        [
+          { frame: 413, x: 1.12, y: 0.74 },
+          { frame: 417, x: 0.95, y: 0.62 },
+          { frame: 421, x: 0.8, y: 0.56 },
+          { frame: 425, x: 0.7, y: 0.53 },
+          { frame: 430, x: 0.55, y: 0.51 },
+          { frame: 440, x: 0.35, y: 0.45 },
+          { frame: 460, x: 0.15, y: 0.37 },
+          { frame: 500, x: 0.02, y: 0.32 },
+          { frame: 531, x: -0.04, y: 0.3 },
+        ],
+        (frame, x, y) =>
+          frameTarget(
+            routePosition(camera, frame),
+            { at: saturnPos, x, y },
+            FOV,
+            ASPECT,
+            POLE,
+          ),
+      ),
     }
   })()
 
   /* --------------------- Shot: the cruise, f532–1091 --------------------- */
 
   /*
-   * The camera does not move. The starfield sits on the star shell, so
-   * translation moves nothing in frame and only rotation would; the hull is
-   * authored camera-relative anyway. A static camera is therefore not a
-   * simplification but the *accurate* description of what the reference shows
-   * — and it is what makes "never track a hull crossing meters from the lens"
-   * free rather than a discipline.
+   * The one shot in the piece the camera is free to move in, and it moves.
    *
-   * Light is staging, and this is the shot that proves it: the hull has to be
-   * lit full-face through a 400-frame approach, so the camera looks *down-sun*
-   * with the star up and behind. −0.62 along the sun line keeps it well
-   * outside a 45° field — the frame's half-diagonal is 41° — while still
-   * throwing the key over the camera's shoulder; the poleward and lateral
-   * terms put it up and to the left, which is where the reference's key
-   * plainly is. The saucer's port rim is the brightest thing in f820.
+   * Everywhere else the reference measures a locked-off camera — 375 to 433
+   * matched starfield inliers at scale 1.0000 wherever text is on screen — so
+   * everywhere else the hull does all the work against a fixed frame. Here
+   * there is no text and no such constraint, and the shot is a starship flying
+   * past, which is a thing a camera does something about.
+   *
+   * So this is a `TrackedPass`: the hull on one straight rail at 13.3 m per
+   * frame, the camera standing off it, the framing solved. The measured
+   * channels are untouched — screen mark and apparent size are satisfied by
+   * construction at every frame, so a diff against the reference sees exactly
+   * what it saw — and what changes is everything the diff is blind to. The
+   * hull's nose is on its own velocity by construction instead of a mean 54°
+   * off it. Its speed is one number instead of a range from 0.5 to 629 m per
+   * frame. And the camera swings 130° around the pass, which the starfield
+   * shows: a locked frame with a ship crossing it reads as a ship on a wire,
+   * and the pan is most of what makes it read as a fly-by instead.
+   *
+   * Light is staging, and this is the shot that proves it. What the stage's
+   * basis decides is no longer where the camera looks — that is solved — but
+   * where the *star* sits in the axes the rails are flown in, which is the one
+   * thing a solved camera cannot decide for itself.
    */
   /**
-   * The cruise camera, twice: once keyed over the top and once from below.
+   * The cruise stage, twice: once keyed over the top and once from below.
    *
    * The reference lights the hull's *dorsal* through the approach — f820's
    * brightest object is the saucer's top surface — and its *ventral* through
@@ -1506,11 +2291,14 @@ function buildStage(world: World): Stage {
    * reframing moved it, because the problem was never the framing.
    *
    * So it relights, which is what the reference must itself have done. The cut
-   * sits at f948 — the first frame where the hull is wider than the lens, and
-   * the frame by which the reference has already swung its key under the
-   * ship — the same place this piece hides every other cut. Camera position and hull choreography are
-   * identical across it; only the key swings from 0.9 poleward to 0.9 the
-   * other way, and the starfield that rotates with it is behind a wall of
+   * sits at f948, and under a solved camera that frame stopped being a
+   * convention and became a measurement: it is where the standoff sweep carries
+   * the camera through the hull's own plane, so it is the frame on which the
+   * shot genuinely stops showing a top and starts showing a bottom. Measured on
+   * the sample, `dot(toCamera, dorsal)` runs +0.56 at f850, −0.10 at f948 and
+   * −1.00 by f990, and the star's own dot flips sign on the same frame — so no
+   * frame of either shot has the camera squarely on the face its key misses. The hull is wider than the lens throughout, so the swap of
+   * stage — and the starfield that rotates with it — happens behind a wall of
    * spaceship.
    */
   const cruiseShot = (
@@ -1530,19 +2318,20 @@ function buildStage(world: World): Stage {
         : Vec.normalize(Vec.cross(vec3(1, 0, 0), toStar))
     })()
     /*
-     * Where the star lands in the frame is `dot(toStar, up)`, and with
-     * `lookAlong` levelling against the pole that works out to
-     * `−dot(toStar, forward) · dot(pole, forward)` for anything near the
-     * ecliptic — a product, so *both* terms have to carry the right sign. An
-     * early version had the second one negative by accident: the camera looked
-     * down-sun and slightly downward, which put the key 32° below the axis and
-     * lit the hull's belly through a four-hundred-frame approach in which the
-     * reference shows nothing but its brightly lit dorsal.
+     * The stage's basis, which is where the star ends up in the axes both rails
+     * are flown in — not, any longer, where the camera looks. The camera's
+     * pose is solved from the rail and the marks, so what this construction
+     * still decides is the one thing a solved camera cannot: which way the hull
+     * is lit.
      *
-     * The bound is `dot(pole, forward)` itself, so the key goes as high as the
-     * camera is willing to look up — or as low. 0.9 puts the star 60° off the
-     * view axis, well outside a 45° field, and 0.87 of full illumination on a
-     * level hull's facing surface.
+     * `dot(toStar, up)` is a *product* of two dot products for anything near
+     * the ecliptic, so both terms have to carry the right sign. An early
+     * version had the second one negative by accident, which lit the hull's
+     * belly through a four-hundred-frame approach in which the reference shows
+     * nothing but its brightly lit dorsal.
+     *
+     * 0.9 puts the star 60° off the stage axis, well outside a 45° field, and
+     * 0.87 of full illumination on the rail's own dorsal.
      */
     const poleward = Vec.normalize(Vec.cross(toStar, side))
     const forward = Vec.normalize(
@@ -1551,14 +2340,24 @@ function buildStage(world: World): Stage {
         Vec.scale(side, -0.12 * poleSign),
       ),
     )
+    const basis = lookAlong(forward, POLE)
+    const attitude = attitudeBeats(
+      orientationAlong(RAIL_CRUISE, POLE),
+      BANK_CRUISE,
+    )
     return {
       id,
       from,
       to,
       camera: [{ frame: from, position: anchor }],
-      aim: [{ frame: from, orientation: lookAlong(forward, POLE) }],
-      ship: SHIP_CRUISE,
-      facing: facingBeats(FACING_CRUISE),
+      aim: [{ frame: from, orientation: basis }],
+      pass: {
+        rail: RAIL_CRUISE,
+        marks: SHIP_CRUISE,
+        standoff: STANDOFF_CRUISE,
+        up: POLE,
+      },
+      attitude,
     }
   }
 
@@ -1589,6 +2388,7 @@ function buildStage(world: World): Stage {
     pitches: readonly PitchBeat[],
     ship?: readonly ScreenBeat[],
     facing?: readonly AimBeat[],
+    rails?: readonly RailLeg[],
   ): Shot => {
     // Each locked shot stands somewhere different, so the starfield behind the
     // credits is not the starfield behind the end cards. The reference's
@@ -1656,8 +2456,85 @@ function buildStage(world: World): Stage {
       ],
       ...(ship === undefined ? {} : { ship }),
       ...(facing === undefined ? {} : { facing }),
+      ...(rails === undefined ? {} : { rails }),
     }
   }
+
+  /*
+   * The attitude the cruise hands over on, in the titles camera's own axes.
+   *
+   * `routeOrientation` holds its first beat, so whatever sits at f1092 is the
+   * hull's attitude for the whole warp-out; and the f1092 cut is a stage swap,
+   * so "the same attitude" has to be stated in the new stage's terms rather
+   * than copied between two literals. Read off the cruise pass at its last
+   * frame it is exact by construction: the hull does not turn across the cut,
+   * it accelerates.
+   *
+   * The heading it carries is the spike's, because the standoff was solved for
+   * that. What this adds is the roll — a product of the rail and the standoff
+   * that no forward vector states.
+   */
+  const cruiseExit = (() => {
+    const pose = trackedPose(
+      {
+        rail: RAIL_CRUISE,
+        marks: SHIP_CRUISE,
+        standoff: STANDOFF_CRUISE,
+        up: POLE,
+      },
+      CUTS['cruise-close'][1],
+      FOV,
+      ASPECT,
+    )
+    const attitude = routeOrientation(
+      attitudeBeats(orientationAlong(RAIL_CRUISE, POLE), BANK_CRUISE),
+      CUTS['cruise-close'][1],
+    )
+    // Stage axes cancel: both sides of the cut carry the hull relative to its
+    // own camera, which is the only thing the frame shows.
+    return Q.normalize(Q.multiply(Q.conjugate(pose.aim), attitude))
+  })()
+  /*
+   * The passes this shot flies on rails, and the frames each one owns.
+   *
+   * A leg's window runs from the cut it starts on to the last frame the hull is
+   * on stage for it, so `SHIP_WINDOWS`'s gaps are what separate them and there
+   * is nothing between two legs for a spline to interpolate. What is left over
+   * — the credit descent and the skim — falls through to the screen beats
+   * below, which is deliberate: the descent's beats are a measured track and the
+   * skim's are not measurable at all.
+   */
+  const railsTitles: readonly RailLeg[] = [
+    /*
+     * The warp-out's attitude is the cruise's exit, held. The heading already
+     * agrees — the standoff was solved for it — so what this carries across the
+     * cut is the *roll*, which is a product of the rail and the standoff and
+     * which no forward vector states. Held rather than interpolated because a
+     * ship going to warp does not roll on the way out.
+     */
+    {
+      from: CUTS.titles[0],
+      to: 1120,
+      line: WARP_OUT_1_RAIL,
+      attitude: [{ frame: CUTS.titles[0], orientation: cruiseExit }],
+    },
+    ...WIPE_OFFSETS.map((offset, index) => ({
+      from: 1286 + offset,
+      to: 1330 + offset,
+      line:
+        index === 1
+          ? mirroredLine(WIPE_RAIL, offset)
+          : shiftedLine(WIPE_RAIL, offset),
+    })),
+    { from: 1755, to: 2130, line: DESCENT_RAIL },
+    /*
+     * The departure carries no attitude override: `FACING_TITLES` turns the
+     * hull onto this heading across the skim, and `orientationAlong` derives
+     * the identical one from the line, so the two agree on f2380 by
+     * construction rather than by two numbers matching.
+     */
+    { from: 2380, to: 2422, line: WARP_OUT_2_RAIL },
+  ]
 
   const shipTitles: readonly ScreenBeat[] = [
     ...WARP_OUT_1,
@@ -1666,7 +2543,7 @@ function buildStage(world: World): Stage {
     ...WIPE.map((beat) => shifted(beat, WIPE_OFFSETS[2] as number)),
     ...SHIP_RETURN,
   ]
-  const facingTitles = facingBeats(FACING_TITLES)
+  const facingTitles = facingBeats(FACING_TITLES, cruiseExit)
 
   const titlesShot = lockShot(
     'titles',
@@ -1685,6 +2562,7 @@ function buildStage(world: World): Stage {
     ],
     shipTitles,
     facingTitles,
+    railsTitles,
   )
 
   /*
@@ -1703,6 +2581,7 @@ function buildStage(world: World): Stage {
     [],
     shipTitles,
     facingTitles,
+    railsTitles,
   )
 
   return {
@@ -1775,7 +2654,11 @@ function shotAt(stage: Stage, frame: number): Shot {
 function wipeStreak(occlusion: number, frame: number): number {
   return Math.min(
     smooth((frame - (occlusion - 3)) / 3),
-    1 - smooth((frame - occlusion - 2) / 5),
+    // Six frames of decay rather than five, and it is the reference's: the
+    // hull is gone from the frame on the occlusion itself, so everything the
+    // reference shows across the four frames after it — a smear going up and
+    // right, then two blue blades, then nothing — has to be carried by this.
+    1 - smooth((frame - occlusion - 2) / 6),
   )
 }
 
@@ -1786,9 +2669,12 @@ function wipeStreak(occlusion: number, frame: number): number {
  * the axis — and each is the bridge into the card that follows it.
  */
 const SPARKS: readonly { start: number; x: number; y: number }[] = [
-  // (0.655, 0.695): the reference's spike registers at (0.659, 0.704) on f1119
-  // and (0.655, 0.688) on f1120, which is also where the hull was last seen.
-  { start: 1118, x: 0.655, y: 0.695 },
+  // The reference's spike registers at (0.659, 0.704) on f1119 and
+  // (0.655, 0.688) on f1120, which is also where the hull was last seen — and
+  // is therefore the direction the hull leaves along. `WARP_OUT_HEADING` reads
+  // the same mark, so the ship and its warp point cannot disagree about where
+  // it went.
+  { start: 1118, x: WARP_OUT_SPIKE.x, y: WARP_OUT_SPIKE.y },
   { start: 2412, x: 0.688, y: 0.43 },
 ]
 
@@ -1835,8 +2721,11 @@ function effectsAt(frame: number): CinematicEffects {
     streaks,
     0.8 * (1 - smooth((frame - 2396) / 15)) * (frame >= 2392 ? 1 : 0),
   )
+  // Full drive at a wipe, not 0.85: with the wash pulled back to 0.30 the
+  // blades are what carries the pass across the lens, and they are what the
+  // reference's own exit frames are made of.
   for (const occlusion of WIPE_OCCLUSIONS)
-    streaks = Math.max(streaks, 0.85 * wipeStreak(occlusion, frame))
+    streaks = Math.max(streaks, 1.0 * wipeStreak(occlusion, frame))
 
   let nacelleGlow = 0
   if (frame >= 867 && frame < 1110) nacelleGlow = smooth((frame - 867) / 120)
@@ -1850,19 +2739,34 @@ function effectsAt(frame: number): CinematicEffects {
   }
 
   /*
-   * The wipes flood too. The reference's f1320 is a frame of blue light with a
-   * hull silhouette in it — the same wash the warp flashes use, three frames
-   * long instead of fifteen, which is what makes a fly-through a *wipe* rather
-   * than a ship going past.
+   * The wipes flood too — but far less than they did, and for two frames rather
+   * than six.
+   *
+   * The reference's own occlusion frame is a *hull*: a saucer smeared across the
+   * whole frame by its own motion, with the nacelles blazing, and the blue is
+   * the light coming off it rather than a field it sits in. At 0.55 over a
+   * six-frame window this drew the other thing — a blue radial disc filling the
+   * picture, with the ship somewhere inside it — and the disc survived the ship
+   * by four frames, because the wash outlasts the pass. It read as a lens
+   * flare going off, not as three hundred thousand tonnes going past.
+   *
+   * That was always true and was hidden: the beats used to leave a hull on
+   * screen through the exit, so there was something in the blue. Staging the
+   * pass as a rail ends the hull on the frame it passes the lens, which is
+   * correct and which left the wash on its own.
+   *
+   * 0.30, rising over two frames and gone three after the occlusion. The mass
+   * the reference measures across those frames is the streak blades below,
+   * which is what it is in the reference too.
    */
   let flash = Math.max(flash1.flash, flash2.flash)
   for (const occlusion of WIPE_OCCLUSIONS) {
     flash = Math.max(
       flash,
-      0.55 *
+      0.3 *
         Math.min(
-          smooth((frame - (occlusion - 2)) / 2),
-          1 - smooth((frame - occlusion - 1) / 4),
+          smooth((frame - (occlusion - 1)) / 2),
+          1 - smooth((frame - occlusion) / 3),
         ),
     )
   }
@@ -1920,10 +2824,39 @@ function textsAt(frame: number): CinematicTextState[] {
   })
 }
 
+/**
+ * The stage a tracked pass is flown in: one camera setup, as an origin and a
+ * basis. Both of a pass's rails are expressed in these axes, and the world pose
+ * of either body is this transform applied to the solved stage-axes one.
+ */
+interface StagedPass {
+  readonly origin: UniverseVector
+  readonly basis: Quat
+  readonly pass: TrackedPass
+}
+
+const stageOf = (shot: Shot): StagedPass | null => {
+  if (shot.pass === undefined) return null
+  const origin = (shot.camera[0] as RouteBeat).position
+  const basis = (shot.aim[0] as AimBeat).orientation
+  return { origin, basis, pass: shot.pass }
+}
+
 function cameraAt(
   shot: Shot,
+  staged: StagedPass | null,
+  pose: TrackedPose | null,
   frame: number,
 ): { position: UniverseVector; orientation: Quat } {
+  if (staged !== null && pose !== null) {
+    return {
+      position: UV.translate(
+        staged.origin,
+        Q.rotate(staged.basis, pose.camera),
+      ),
+      orientation: Q.normalize(Q.multiply(staged.basis, pose.aim)),
+    }
+  }
   return {
     position: routePosition(shot.camera, frame),
     orientation: routeOrientation(shot.aim, frame),
@@ -1933,21 +2866,66 @@ function cameraAt(
 /**
  * Where the hull is, and which way it points.
  *
- * Both are camera-relative: offsets are interpolated in offset space and
- * rotated onto the camera's axes at sample time, and the facing is a direction
- * in those same axes. Absolute world beats were tried first and broke quietly
- * — the camera used to cover thousands of kilometers a frame, so the ship's
- * spline and the camera's ran through beats far enough apart to diverge
- * mid-segment by tens of kilometers, and the hero hull rendered as a dot on
- * the wrong side of the sky. Relative choreography has to stay relative, and
- * the shot list is what finally makes the camera hold still enough for anyone
- * to notice when it does not.
+ * Three staging forms, in the order they are asked for. A `pass` puts both
+ * bodies on rails in the shot's stage axes and solves the camera; a `rails` leg
+ * puts the hull alone on one, in the same axes, in front of a camera the
+ * reference measures as locked; and the fall-through is camera-relative screen
+ * beats.
+ *
+ * The last of those is not a legacy path — it is what stages the skim, which
+ * the reference cannot measure and whose beats are a camera-clearance solution
+ * rather than a trajectory. What it must stay is *relative*. Absolute world
+ * beats were tried first and broke quietly: the camera used to cover thousands
+ * of kilometers a frame, so the ship's spline and the camera's ran through
+ * beats far enough apart to diverge mid-segment by tens of kilometers, and the
+ * hero hull rendered as a dot on the wrong side of the sky.
+ *
+ * A rail is expressed against the *stage* rather than against the camera, which
+ * is not the same thing once a shot pans: the titles shot pitches through the
+ * skim, and a camera-relative hull rides that pitch so the pan shows nothing.
  */
 function shipAt(
   shot: Shot,
   camera: { position: UniverseVector; orientation: Quat },
+  staged: StagedPass | null,
+  pose: TrackedPose | null,
   frame: number,
 ): { position: UniverseVector; orientation: Quat; visible: boolean } {
+  if (staged !== null && pose !== null) {
+    /*
+     * The attitude overlay is composed against the rail's own derived frame and
+     * slerped, so a bank is a bank about the nose rather than a second opinion
+     * about where the nose is. With no overlay the hull flies the rail exactly.
+     */
+    const attitude =
+      shot.attitude === undefined
+        ? pose.attitude
+        : routeOrientation(shot.attitude, frame)
+    return {
+      position: UV.translate(staged.origin, Q.rotate(staged.basis, pose.ship)),
+      orientation: Q.normalize(Q.multiply(staged.basis, attitude)),
+      visible: shipVisible(frame),
+    }
+  }
+  const leg = shot.rails?.find(
+    (candidate) => frame >= candidate.from && frame <= candidate.to,
+  )
+  if (leg !== undefined) {
+    const basis = (shot.aim[0] as AimBeat).orientation
+    const origin = (shot.camera[0] as RouteBeat).position
+    const attitude =
+      leg.attitude === undefined
+        ? orientationAlong(leg.line, POLE)
+        : routeOrientation(leg.attitude, frame)
+    return {
+      position: UV.translate(
+        origin,
+        Q.rotate(basis, linePosition(leg.line, frame)),
+      ),
+      orientation: Q.normalize(Q.multiply(basis, attitude)),
+      visible: shipVisible(frame),
+    }
+  }
   const visible = shipVisible(frame) && shot.ship !== undefined
   if (shot.ship === undefined || shot.facing === undefined) {
     return {
@@ -1973,12 +2951,18 @@ function shipAt(
 
 function sample(stage: Stage, frame: number): CinematicSample {
   const shot = shotAt(stage, frame)
-  const camera = cameraAt(shot, frame)
+  // Solved once. The camera and the hull are two readings of one pose, and
+  // solving it twice a frame is also two chances for them to be solved against
+  // different arithmetic.
+  const staged = stageOf(shot)
+  const pose =
+    staged === null ? null : trackedPose(staged.pass, frame, FOV, ASPECT)
+  const camera = cameraAt(shot, staged, pose, frame)
   return {
     frame,
     camera,
     lens: LENS,
-    ship: shipAt(shot, camera, frame),
+    ship: shipAt(shot, camera, staged, pose, frame),
     texts: textsAt(frame),
     effects: effectsAt(frame),
     done: frame >= DURATION - 1,
@@ -1997,11 +2981,6 @@ export const TNG_TITLE_WINDOWS: ReadonlyMap<string, FadeWindow> = new Map(
 /** Hull length the ranges assume, and the lens they are solved for. */
 export const TNG_HULL_LENGTH = HULL
 
-/**
- * The cruise's authored nose-down pitch, so a test asserting the hull's nose
- * against its own track can account for it rather than restating the number.
- */
-export const TNG_CRUISE_PITCH_DEG = PITCH_CRUISE
 export const TNG_LENS = { fov: FOV, aspect: ASPECT } as const
 
 /** The measured wipe occlusions, and the offsets that place them. */
@@ -2043,3 +3022,11 @@ export const TNG_SHIP_BEATS = {
 /** `screenDirection` at this script's lens, for tests. */
 export const tngScreenDirection = (x: number, y: number): Vec3 =>
   screenDirection(x, y, FOV, ASPECT)
+
+/** The rails and the frames they own, for tests and for a throttle audit. */
+export const TNG_RAILS: readonly [string, LinePath, number, number][] = [
+  ['warp-out 1', WARP_OUT_1_RAIL, 1092, 1120],
+  ['wipe', WIPE_RAIL, 1286, 1322],
+  ['descent', DESCENT_RAIL, 1758, 2130],
+  ['warp-out 2', WARP_OUT_2_RAIL, 2380, 2422],
+]
