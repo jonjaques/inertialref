@@ -281,6 +281,11 @@ export function regionScatter(
     // this is the one place that can tell the two apart.
     if (sea !== null && elevation <= sea + 0.01) continue
     const here = unpackCover(cover, 0)
+    // Nor in a riverbed. The ground paints its channels from `wet`, and a rock
+    // wears `wet: 0` on the promise that it never stands in one — a dry block
+    // in the middle of a painted stream, or of a glowing one on a magma
+    // world, is the promise broken.
+    if (here.wet >= 0.5) continue
     /*
      * The local abundance, and the gate is against a *second* draw rather than
      * against `exists` again. Reusing the first would make the modulation a

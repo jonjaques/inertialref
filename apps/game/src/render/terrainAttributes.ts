@@ -3,6 +3,7 @@ import {
   InstancedInterleavedBuffer,
   InterleavedBuffer,
   InterleavedBufferAttribute,
+  type Mesh,
 } from 'three/webgpu'
 import { COVER_CHANNELS } from '@inertialref/universe'
 
@@ -67,4 +68,21 @@ export function attachCover(
     )
   })
   return { cover: coverBuffer, morphCover: morphBuffer }
+}
+
+/**
+ * Dispose a patch's geometry without taking the shared index down with it.
+ *
+ * Every patch geometry holds the one session-wide index attribute, and the
+ * renderer's dispose path destroys the GPU buffer of every attribute the
+ * geometry references — the index included, with no reference count. Disposing
+ * one evicted mesh would destroy the index buffer under every patch still
+ * drawn, which re-uploads it next frame: the exact per-patch churn the shared
+ * attribute exists to avoid. Detaching the index first limits the dispose to
+ * the buffers this mesh actually owns. The ground and the sheet both evict
+ * through this, since both hold the same index.
+ */
+export function disposeKeepingSharedIndex(mesh: Mesh): void {
+  mesh.geometry.setIndex(null)
+  mesh.geometry.dispose()
 }

@@ -46,13 +46,13 @@ export const NOISE_GRADIENT_SCALE = 2.5
 /**
  * Lattice cells per axis, and the period every octave closes on.
  *
- * Twenty-four, and the number is the cache's. At thirty-two cells the
- * four-channel texture is eight megabytes and the fine octaves stride
- * through it: measured at 1920×1200 over a device pixel ratio of 2, the
- * frame went from 19.4 fps with a one-channel two-megabyte texture to 11.9
- * with four channels at the same size. Three and a half megabytes fits.
- * The grain repeats every 17 m of ground and the swell every 290 m, both
- * under the distance the band survives to.
+ * Thirty-two: 128³ texels, eight megabytes over four channels. The size is
+ * not the lever — 96³ and 64³ measure within a frame of it, because a
+ * four-channel fetch costs about four times a one-channel one at the texture
+ * unit whatever the texture's size (measured at 1920×1200 over a device
+ * pixel ratio of 2: 19.4 fps with one channel, 11.9 with four). What pays
+ * for the channels is fetching fewer octaves, which is ADR-0026's table. The
+ * grain repeats every 22.4 m of ground and the swell every 384 m.
  */
 export const NOISE_CELLS = 32
 
@@ -68,7 +68,7 @@ let held: Data3DTexture | null = null
  * The texture, built on first use and kept for the session.
  *
  * One object shared by every material that samples it, because the backend
- * uploads per texture and two megabytes uploaded twice is the same two
+ * uploads per texture and eight megabytes uploaded twice is the same eight
  * megabytes on the GPU twice.
  */
 export function noiseTexture(): Data3DTexture {

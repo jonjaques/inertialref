@@ -270,10 +270,9 @@ describe('the author’s instruments', () => {
     expect(graphics.match(/role="switch"/g)).toHaveLength(2)
     expect(graphics).toMatch(/role="switch" aria-checked="false"/)
     expect(graphics).toMatch(/role="switch" aria-checked="true"/)
-    // Five radio groups: the anti-aliasing level and the extended-range
-    // override, which both used to be a button that cycled — the states you
-    // were not on had no representation in the tree at all — and the three
-    // surface levers.
+    // Five radio groups: the anti-aliasing level, the extended-range override
+    // and the three surface levers. A radio group rather than a button that
+    // cycles, so the states you are not on have a representation in the tree.
     expect(graphics.match(/role="radiogroup"/g)).toHaveLength(5)
     expect(graphics.match(/role="radio"/g)).toHaveLength(
       AA_LEVELS.length +

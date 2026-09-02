@@ -41,6 +41,7 @@ import {
   vec2,
   vec3,
 } from 'three/tsl'
+import { OPEN_OCEAN } from '@inertialref/rendering'
 import type { BodyTextures } from './planetTextures.ts'
 
 /*
@@ -285,10 +286,11 @@ export function createPlanetMaterial(): PlanetMaterial {
   const hazeColour = uniform(new Color(0.28, 0.48, 0.95))
   const hazeLimb = uniform(new Color(0.92, 0.42, 0.2))
   const hazeStrength = uniform(0)
-  // Open-ocean reflectance in linear sRGB — a few percent, blue. Measured off
-  // the mid-Pacific in orbital photographs, not off the albedo map, whose
-  // "ocean" is bathymetry data wearing water's color.
-  const oceanColour = uniform(new Color(0.012, 0.04, 0.13))
+  // Open-ocean reflectance to start; `Bodies` writes the body's own liquid
+  // over it every frame, so a bake's sea is the colour the ground gives it.
+  const oceanColour = uniform(
+    new Color(OPEN_OCEAN.r, OPEN_OCEAN.g, OPEN_OCEAN.b),
+  )
   const cloudHeight = uniform(0)
   const cloudShadow = uniform(0)
   const ringInner = uniform(0)

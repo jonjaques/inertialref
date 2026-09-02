@@ -24,14 +24,12 @@ import { NOISE_CELLS, NOISE_GRADIENT_SCALE } from './noiseTexture.ts'
  * step and a helper typed against one of them cannot be called with the result
  * of another. Every one of them is the same thing at runtime and generates the
  * same WGSL; the cast is a re-narrowing rather than a lie, and it is the same
- * one `sampled` above makes for the same reason.
+ * one `sampled` in `render/terrain.ts` makes for the same reason.
  */
 export type Vector = ReturnType<typeof vec3>
-export type Scalar = ReturnType<typeof float>
 /** A value and its gradient, as one `vec4`: `x` the value, `yzw` the slope. */
 export type Field = ReturnType<typeof vec4>
 export const asVector = (node: unknown): Vector => node as Vector
-export const asScalar = (node: unknown): Scalar => node as Scalar
 export const asField = (node: unknown): Field => node as Field
 
 /**

@@ -334,6 +334,15 @@ export function seaSheetDatum(body: Body): Meters | null {
   return seaDatumElevation(body.surface)
 }
 
+/**
+ * Open-ocean reflectance in linear sRGB — a few percent, blue. Measured off
+ * the mid-Pacific in orbital photographs, not off the albedo map, whose
+ * "ocean" is bathymetry data wearing water's color. The one number the
+ * sphere, the ground and the sheet start from where a record names no
+ * liquid, so a photographed sea is the same blue from every distance.
+ */
+export const OPEN_OCEAN: LinearRgb = { r: 0.012, g: 0.04, b: 0.13 }
+
 export function terrainPalette(body: Body): TerrainPalette {
   const grammar = body.surface.grammar
   const base = referenceReflectance(body)
@@ -489,13 +498,9 @@ export function terrainPalette(body: Body): TerrainPalette {
     // typed the remap.
     seaLevel: seaDatumElevation(body.surface),
     // The liquid's own deep colour where a body has one; open-ocean blue
-    // otherwise, which is the number `render/planet.ts` draws a photographed
-    // sea in — what orbit shows is water, not the bathymetry underneath it.
-    oceanColour: body.appearance.liquid?.colour ?? {
-      r: 0.012,
-      g: 0.04,
-      b: 0.13,
-    },
+    // otherwise, the same number the sphere draws a photographed sea in —
+    // what orbit shows is water, not the bathymetry underneath it.
+    oceanColour: body.appearance.liquid?.colour ?? OPEN_OCEAN,
     liquid: body.appearance.liquid,
     sheet: seaSheetDatum(body) === null ? 0 : 1,
 

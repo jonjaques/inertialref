@@ -18,6 +18,7 @@ import { GEOMETRY_CACHE } from '../engine/terrainStreamer.ts'
 import { seaQualityFor } from '../render/quality.ts'
 import { type WaterMaterial, waveWrap } from '../render/water.ts'
 import { warmAtMount, warmCompile, warmRenderer } from '../render/warmup.ts'
+import { disposeKeepingSharedIndex } from '../render/terrainAttributes.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
 
 /**
@@ -205,10 +206,4 @@ export function WaterPatches({
   })
 
   return <group ref={group} />
-}
-
-/** See `TerrainPatches`: the index is one attribute for the session. */
-function disposeKeepingSharedIndex(mesh: Mesh): void {
-  mesh.geometry.setIndex(null)
-  mesh.geometry.dispose()
 }

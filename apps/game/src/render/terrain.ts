@@ -42,6 +42,7 @@ import {
 import type { LinearRgb } from '@inertialref/universe'
 import {
   NO_MORPH_DISTANCE,
+  OPEN_OCEAN,
   REFLECTANCE_CEILING,
   type SurfaceMaterial,
   type TerrainPalette,
@@ -51,7 +52,7 @@ import { NOISE_CELLS, noiseTexture } from './noiseTexture.ts'
 import {
   DEFAULT_SURFACE_QUALITY,
   groundBandsFor,
-  type SurfaceQuality,
+  type GroundDetail,
 } from './quality.ts'
 
 /*
@@ -105,8 +106,11 @@ export interface TerrainMaterial {
    * whatever the manifest says exists.
    */
   setAlbedoMap(map: Texture | null, hasMap: boolean): void
-  /** The surface-quality lever. Compares before it writes. */
-  setQuality(quality: SurfaceQuality): void
+  /**
+   * The ground's slice of the surface-quality lever — the sea's goes to
+   * `WaterMaterial`, the rocks' to the scatter. Compares before it writes.
+   */
+  setQuality(ground: GroundDetail): void
   /**
    * Bake mode: 0 draws the ground, 1 writes its reflectance, 2 writes the
    * sea mask as a grey. On for the orbital bake's twelve draws and back to 0
@@ -182,10 +186,11 @@ const GRAIN_RELIEF = 0.035
  * evaluate the same periodic function of the same reduced coordinate — and the
  * coordinate stays under 45 m, where float32 resolves microns.
  *
- * Sixty-four, because every octave has to close on the same period: octave `i`
- * has `64 · 2ⁱ` wavelengths in it, which is a whole number for all three. The
- * repeat is 45 m of ground, which at the distance this band survives to is
- * always less than one period across the frame.
+ * `NOISE_CELLS`, because every octave has to close on the texture's period:
+ * octave `i` has `32 · 2ⁱ` wavelengths in it, a whole number for both. The
+ * repeat is 22.4 m of ground — a few periods across the frame at the distance
+ * the band survives to from a standing stance, more from a hover, and the
+ * grain is under the swell and the macro band there.
  */
 export const GRAIN_PERIOD = NOISE_CELLS
 
@@ -223,13 +228,15 @@ export function createTerrainMaterial(): TerrainMaterial {
   const maxElevation = uniform(1)
   const seaEnabled = uniform(0)
   const seaDatum = uniform(0)
-  const oceanColour = uniform(new Color(0.012, 0.04, 0.13))
+  const oceanColour = uniform(
+    new Color(OPEN_OCEAN.r, OPEN_OCEAN.g, OPEN_OCEAN.b),
+  )
   /*
    * Whether the sea is a sheet over this ground or a colour painted on it.
    *
    * One where `WaterPatches` draws the datum as a surface of its own, and the
    * ground under it is a seabed; zero where there is no sheet — a mapped body
-   * — and the flat clamped ground wears the water's colour as it always did.
+   * — and the flat clamped ground wears the water's colour.
    */
   const seaSheet = uniform(0)
   const liquidGlow = uniform(new Color(0, 0, 0))
@@ -875,9 +882,8 @@ export function createTerrainMaterial(): TerrainMaterial {
      *
      * The fields carry their slopes, so the shading normal is the mesh normal
      * tilted by the tangential part of the summed slope — no screen-space
-     * derivative anywhere in it. Differencing the height across pixels was
-     * the form before the texture, and it is the form the texture cannot
-     * take: a trilinear fetch is piecewise linear, so its screen difference
+     * derivative anywhere in it. Differencing the height across pixels is
+     * the form the texture cannot take: a trilinear fetch is piecewise linear, so its screen difference
      * is constant across a texel and the texel grid shows through the shading
      * as a crease at arm's length. The analytic gradient is smooth where the
      * value is only continuous.
@@ -1095,8 +1101,8 @@ export function createTerrainMaterial(): TerrainMaterial {
        */
       macroFrequency.value = (2 * Math.PI * datumRadius) / MACRO_METRES
     },
-    setQuality(quality) {
-      const bands = groundBandsFor(quality.ground)
+    setQuality(ground) {
+      const bands = groundBandsFor(ground)
       if (detailBands.value !== bands) detailBands.value = bands
     },
     setBakeMode(mode) {
@@ -1177,7 +1183,7 @@ function write(into: Deposit, from: SurfaceMaterial): void {
  * `skyColour.b` pasted into the `hazeColour` block type-checks through and then
  * reads as an art choice rather than as a bug.
  */
-function paint(into: { value: Color }, from: LinearRgb): void {
+export function paint(into: { value: Color }, from: LinearRgb): void {
   into.value.setRGB(from.r, from.g, from.b)
 }
 
@@ -1198,9 +1204,10 @@ function paint(into: { value: Color }, from: LinearRgb): void {
  * which is what `SceneView` warns about.
  *
  * It is scaled by how much sky the point can see, so a crater floor is darker
- * at night than the plain around it rather than a flat wash.
+ * at night than the plain around it rather than a flat wash. The sea keeps
+ * the same floor, or the sheet and the shore differ at night.
  */
-const AMBIENT = 0.03
+export const AMBIENT = 0.03
 
 /**
  * The scale height the ground-level veil measures a path against, meters.
@@ -1220,7 +1227,7 @@ export const AIR_SCALE_HEIGHT = 8_500
  * one under overcast, which is a state this model does not carry. Scaled by
  * `airThickness` so Mars's 0.15 gives 5% and Luna's absent air gives none.
  */
-const SKY_FRACTION = 0.33
+export const SKY_FRACTION = 0.33
 
 /*
  * A one-pixel white stand-in, so a body with no map runs the identical graph.
@@ -1255,7 +1262,7 @@ const BLANK = /*@__PURE__*/ (() => {
 })()
 
 const ZERO = new Vector3()
-const BLACK_RGB: LinearRgb = { r: 0, g: 0, b: 0 }
+export const BLACK_RGB: LinearRgb = { r: 0, g: 0, b: 0 }
 /**
  * Both ends past any distance: a patch with no parent never morphs. The
  * selection's own finite sentinel, because `Number.MAX_VALUE` rounds to

@@ -154,7 +154,7 @@ function isolate(body: Body, band: Band): void {
   }
   if (band !== 'tail') zero(SCALAR.MICRO_CEILING)
   if (band !== 'grit') zero(SCALAR.GRIT_RELIEF)
-  zero(SCALAR.SEA_ENABLED)
+  zero(SCALAR.SEA_CLAMP)
   ;(kernel.records.array as Float32Array).set(records)
   ;(kernel.words.array as Uint32Array).set(words)
   kernel.records.needsUpdate = true

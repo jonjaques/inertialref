@@ -79,16 +79,23 @@ export function groundBandsFor(detail: GroundDetail): number {
   }
 }
 
-/** The sea's reading: whether it refracts, and how many wave octaves it runs. */
+/**
+ * Wave fields the sea's graph is built with, and the most a setting can ask
+ * for: one is the swell, two adds the chop. `render/water.ts` builds against
+ * this number, so a setting cannot promise a field the graph does not hold.
+ */
+export const WAVE_OCTAVES = 2
+
+/** The sea's reading: whether it refracts, and how many wave fields it runs. */
 export function seaQualityFor(detail: SeaDetail): {
   readonly refraction: boolean
   readonly waveOctaves: number
 } {
   switch (detail) {
     case 'full':
-      return { refraction: true, waveOctaves: 3 }
+      return { refraction: true, waveOctaves: WAVE_OCTAVES }
     case 'plain':
-      return { refraction: false, waveOctaves: 3 }
+      return { refraction: false, waveOctaves: WAVE_OCTAVES }
     case 'flat':
       return { refraction: false, waveOctaves: 0 }
   }

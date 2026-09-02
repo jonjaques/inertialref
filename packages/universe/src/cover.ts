@@ -140,6 +140,12 @@ export const COVER_SHAPE = {
   dampReach: 0.5,
   patchCycles: 46,
   patchFloor: 0.35,
+  /** How steeply ground temperature falls toward the poles: `cosZenith` to this. */
+  zenithPower: 0.25,
+  /** Fraction of the relief budget over which biota climbs out of the surf. */
+  shoreRise: 0.004,
+  /** Decorrelates the patchiness from the rain it is drawn from the same seed as. */
+  patchOffset: 53.7,
 } as const
 
 /**
@@ -250,7 +256,7 @@ function biotaCover(
     COVER_SHAPE.zenithFloor,
     Math.sqrt(Math.max(0, 1 - direction.y ** 2)),
   )
-  const local = grammar.groundTemperature * cosZenith ** 0.25
+  const local = grammar.groundTemperature * cosZenith ** COVER_SHAPE.zenithPower
   const warmth = biotaWindow(local)
   if (warmth <= 0) return 0
   const budget = Math.max(grammar.reliefLimit, 1)
@@ -261,7 +267,11 @@ function biotaCover(
       COVER_SHAPE.treelineEnd * budget,
       drainage.aboveDatum,
     )
-  const ashore = smoothstep(0, 0.004 * budget, drainage.aboveDatum)
+  const ashore = smoothstep(
+    0,
+    COVER_SHAPE.shoreRise * budget,
+    drainage.aboveDatum,
+  )
   const rain =
     noise3(
       sketch.seeds.rain,
@@ -289,7 +299,7 @@ function biotaCover(
   const patch =
     noise3(
       sketch.seeds.rain,
-      direction.x * COVER_SHAPE.patchCycles + 53.7,
+      direction.x * COVER_SHAPE.patchCycles + COVER_SHAPE.patchOffset,
       direction.y * COVER_SHAPE.patchCycles,
       direction.z * COVER_SHAPE.patchCycles,
     ) *
@@ -456,7 +466,7 @@ function iceCover(
     COVER_SHAPE.zenithFloor,
     Math.sqrt(Math.max(0, 1 - direction.y ** 2)),
   )
-  const local = grammar.groundTemperature * cosZenith ** 0.25
+  const local = grammar.groundTemperature * cosZenith ** COVER_SHAPE.zenithPower
   // Ragged, because a cap edge is weather rather than a parallel. One octave:
   // the shape of a cap margin at any finer scale is seasonal and this is not.
   const ragged =

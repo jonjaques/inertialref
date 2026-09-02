@@ -17,7 +17,10 @@ import type { GameEngine } from '../engine/GameEngine.ts'
 import { GEOMETRY_CACHE } from '../engine/terrainStreamer.ts'
 import { texturesFor } from '../render/planetTextures.ts'
 import { grainWrap, type TerrainMaterial } from '../render/terrain.ts'
-import { attachCover } from '../render/terrainAttributes.ts'
+import {
+  attachCover,
+  disposeKeepingSharedIndex,
+} from '../render/terrainAttributes.ts'
 import { warmAtMount, warmCompile, warmRenderer } from '../render/warmup.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
 
@@ -136,7 +139,7 @@ export function TerrainPatches({
      * cheaper and has one fewer frame in it than transforming the normal to
      * world space per fragment to meet a world-space sun.
      */
-    terrain.setQuality(engine.surfaceQuality)
+    terrain.setQuality(engine.surfaceQuality.ground)
     if (state.palette !== null && state.orientation !== null) {
       terrain.setPalette(state.palette, state.datumRadius)
       /*
@@ -325,22 +328,6 @@ export function TerrainPatches({
   })
 
   return <group ref={group} />
-}
-
-/**
- * Dispose a patch's geometry without taking the shared index down with it.
- *
- * Every patch geometry holds the one session-wide index attribute, and the
- * renderer's dispose path destroys the GPU buffer of every attribute the
- * geometry references — the index included, with no reference count. Disposing
- * one evicted mesh would destroy the index buffer under every patch still
- * drawn, which re-uploads it next frame: the exact per-patch churn the shared
- * attribute exists to avoid. Detaching the index first limits the dispose to
- * the buffers this mesh actually owns.
- */
-function disposeKeepingSharedIndex(mesh: Mesh): void {
-  mesh.geometry.setIndex(null)
-  mesh.geometry.dispose()
 }
 
 /**

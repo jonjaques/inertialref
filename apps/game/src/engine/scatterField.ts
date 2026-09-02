@@ -550,7 +550,8 @@ function writeCover(out: Uint8Array, at: number, rock: ScatterRock): void {
       // and a rock is steep everywhere.
       ice: 0,
       // Nor running over it, nor growing on it: a block is bare by the same
-      // slope argument, and the field never places one in a riverbed.
+      // slope argument, and `scatter.ts` skips a riverbed the way it skips
+      // the sea, so no rock stands in a painted channel wearing this.
       wet: 0,
       biota: 0,
     },

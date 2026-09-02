@@ -28,7 +28,11 @@ import {
   viewportSharedTexture,
 } from 'three/tsl'
 import type { LinearRgb } from '@inertialref/universe'
-import { NO_MORPH_DISTANCE, type TerrainPalette } from '@inertialref/rendering'
+import {
+  NO_MORPH_DISTANCE,
+  OPEN_OCEAN,
+  type TerrainPalette,
+} from '@inertialref/rendering'
 import {
   asVector,
   bumped,
@@ -37,7 +41,14 @@ import {
   type Vector,
 } from './noiseNodes.ts'
 import { NOISE_CELLS, noiseTexture } from './noiseTexture.ts'
-import { AIR_SCALE_HEIGHT } from './terrain.ts'
+import { WAVE_OCTAVES } from './quality.ts'
+import {
+  AIR_SCALE_HEIGHT,
+  AMBIENT,
+  BLACK_RGB,
+  paint,
+  SKY_FRACTION,
+} from './terrain.ts'
 
 /*
  * The sea's own material.
@@ -86,13 +97,16 @@ export interface WaterMaterial {
 export interface WaterQuality {
   /** Screen-space refraction of the seabed. Off reads the liquid's colour alone. */
   readonly refraction: boolean
-  /** Octaves of wave relief. Zero is a flat sheet with the sun in it. */
+  /**
+   * Wave fields: one is the swell, two adds the chop. Zero is a flat sheet
+   * with the sun in it. Capped at `WAVE_OCTAVES`, which the graph is built to.
+   */
   readonly waveOctaves: number
 }
 
 export const DEFAULT_WATER_QUALITY: WaterQuality = {
   refraction: true,
-  waveOctaves: 2,
+  waveOctaves: WAVE_OCTAVES,
 }
 
 /**
@@ -117,9 +131,9 @@ const CHOP_RELIEF = 0.14
 
 /**
  * How many wave wavelengths the field repeats over. See `GRAIN_PERIOD` in
- * `render/terrain.ts` for why the domain is reduced on the CPU: 64 wavelengths
- * is 768 m of sea, which at the distance the waves survive to is more than a
- * period across the frame.
+ * `render/terrain.ts` for why the domain is reduced on the CPU: 32 wavelengths
+ * is 384 m of sea, about a period across the frame from a standing stance at
+ * the distance the swell survives to, and several from a low hover.
  */
 export const WAVE_PERIOD = NOISE_CELLS
 
@@ -150,7 +164,9 @@ export function createWaterMaterial(
   const sunIntensity = uniform(1)
   const time = uniform(0)
   const pixelAngle = uniform(1e-3)
-  const liquidColour = uniform(new Color(0.012, 0.04, 0.13))
+  const liquidColour = uniform(
+    new Color(OPEN_OCEAN.r, OPEN_OCEAN.g, OPEN_OCEAN.b),
+  )
   const absorption = uniform(new Vector3(0.35, 0.065, 0.025))
   const glow = uniform(new Color(0, 0, 0))
   const skyColour = uniform(new Color(0, 0, 0))
@@ -439,7 +455,7 @@ export function createWaterMaterial(
       paint(liquidColour, palette.oceanColour)
       const absorb = liquid?.absorption ?? WATER_ABSORPTION
       absorption.value.set(absorb.r, absorb.g, absorb.b)
-      paint(glow, liquid?.glow ?? BLACK)
+      paint(glow, liquid?.glow ?? BLACK_RGB)
       paint(skyColour, palette.skyColour)
       paint(hazeColour, palette.hazeColour)
       skyStrength.value = palette.airThickness
@@ -458,13 +474,8 @@ export function createWaterMaterial(
   }
 }
 
-function paint(into: { value: Color }, from: LinearRgb): void {
-  into.value.setRGB(from.r, from.g, from.b)
-}
-
 /** Water's, for a palette that names no liquid. */
 const WATER_ABSORPTION: LinearRgb = { r: 0.35, g: 0.065, b: 0.025 }
-const BLACK: LinearRgb = { r: 0, g: 0, b: 0 }
 
 /**
  * How far the wave slope displaces the refracted frame, in screen fractions
@@ -473,10 +484,6 @@ const BLACK: LinearRgb = { r: 0, g: 0, b: 0 }
  * smear.
  */
 const REFRACTION_SHIFT = 0.6
-
-/** The same floor and fraction the ground keeps. See `render/terrain.ts`. */
-const AMBIENT = 0.03
-const SKY_FRACTION = 0.33
 
 const ZERO = new Vector3()
 const NO_MORPH = new Vector2(NO_MORPH_DISTANCE, NO_MORPH_DISTANCE)

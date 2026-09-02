@@ -52,7 +52,7 @@ export interface PatchInput {
   readonly border: number
   readonly elevations: Float32Array
   /**
-   * Four bytes of surface cover per vertex, row-major, **unbordered**.
+   * `COVER_CHANNELS` bytes of surface cover per vertex, row-major, **unbordered**.
    *
    * The asymmetry with `elevations` is deliberate and it is the border's own
    * reason restated: those rings exist to be differenced against, and nothing
@@ -244,14 +244,16 @@ export function buildPatch(input: PatchInput): RenderPatch {
   /*
    * The datum sheet's vertices, kept beside the ground's over the interior
    * only — the sheet has no normals to difference and so no border — and
-   * only while some interior sample is under the sea. `wet` is decided in
-   * the same pass so the sheet costs nothing on a patch the sea never
-   * reaches, which on an ocean world is still most of the land.
+   * only where some interior sample is under the sea. Whether one is, is
+   * decided first, from the elevations alone, so a patch the sea never
+   * reaches — on an ocean world still most of the land — pays a scan of
+   * 4,225 floats and allocates nothing.
    */
-  const sheet =
-    seaLevel === null ? null : new Float64Array(resolution * resolution * 3)
+  const wet =
+    seaLevel !== null &&
+    anyBelow(elevations, stride, border, resolution, seaLevel)
+  const sheet = wet ? new Float64Array(resolution * resolution * 3) : null
   const seaRadius = bodyRadius + (seaLevel ?? 0)
-  let wet = false
   const step = resolution - 1
   for (let row = -border; row < resolution + border; row += 1) {
     const t = row / step
@@ -277,7 +279,6 @@ export function buildPatch(input: PatchInput): RenderPatch {
         sheet[at] = direction.x * seaRadius - anchorX
         sheet[at + 1] = direction.y * seaRadius - anchorY
         sheet[at + 2] = direction.z * seaRadius - anchorZ
-        if (elevation < (seaLevel as number)) wet = true
       }
     }
   }
@@ -371,7 +372,7 @@ export function buildPatch(input: PatchInput): RenderPatch {
     boundsRadius: Math.hypot(highX - lowX, highY - lowY, highZ - lowZ) / 2 || 1,
     spacing: regionSpacing(bodyRadius, region, resolution),
     water:
-      sheet !== null && wet
+      sheet !== null
         ? buildWater(
             sheet,
             elevations,
@@ -382,6 +383,23 @@ export function buildPatch(input: PatchInput): RenderPatch {
           )
         : null,
   }
+}
+
+/** Whether any interior sample of a bordered grid is under `datum`. */
+function anyBelow(
+  elevations: Float32Array,
+  stride: number,
+  border: number,
+  resolution: number,
+  datum: Meters,
+): boolean {
+  for (let row = 0; row < resolution; row += 1) {
+    const from = (row + border) * stride + border
+    for (let i = from; i < from + resolution; i += 1) {
+      if ((elevations[i] as number) < datum) return true
+    }
+  }
+  return false
 }
 
 /**

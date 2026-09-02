@@ -254,6 +254,10 @@ export const DRAINAGE_SHAPE = {
   headGain: 0.85,
   channelStart: 0.991,
   channelFull: 0.998,
+  /** A tributary's channel opens a little later than a trunk's, and narrower. */
+  tributaryOffset: 0.004,
+  /** How wet a tributary floor is against a trunk's. */
+  tributaryWeight: 0.7,
 } as const
 
 /**
@@ -975,11 +979,11 @@ export function channelWetness(valley: number, tributary: number): number {
     valley,
   )
   const branch = smoothstep(
-    DRAINAGE_SHAPE.channelStart + 0.004,
+    DRAINAGE_SHAPE.channelStart + DRAINAGE_SHAPE.tributaryOffset,
     DRAINAGE_SHAPE.channelFull,
     tributary,
   )
-  return Math.max(trunk, 0.7 * branch)
+  return Math.max(trunk, DRAINAGE_SHAPE.tributaryWeight * branch)
 }
 
 /**

@@ -11,7 +11,7 @@ import {
   type WebGPURenderer,
 } from 'three/webgpu'
 import { getLogger } from '@inertialref/shared'
-import type { RenderBody } from '@inertialref/rendering'
+import { OPEN_OCEAN, type RenderBody } from '@inertialref/rendering'
 import { formatAddress, walkBodies } from '@inertialref/universe'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { createOrbitalBaker, type OrbitalBaker } from '../render/orbitalBake.ts'
@@ -248,7 +248,7 @@ function adaptationFor(body: RenderBody): number {
 
 function tuningFor(body: RenderBody): PlanetTuning {
   const air = body.hasAtmosphere
-  const giant = body.kind === 'gas-giant' || body.kind === 'ice-giant'
+  const giant = giantKind(body.kind)
   if (giant)
     return {
       // A cloud deck kilometers thick is as close to Lambert as anything gets,
@@ -637,6 +637,15 @@ export function Bodies({
             ? baker.textureFor(body.address)
             : null
         planet.setBake(bake)
+        /*
+         * The sea the bake's mask keys is the liquid's colour, the same
+         * number the ground's palette and the sheet read, so a magma world
+         * does not wear a blue sea from orbit and a red one at the gate.
+         * Open-ocean blue where the record names no liquid: a photographed
+         * body's mask is in its normal map, and its sea is water.
+         */
+        const liquid = appearance.liquid?.colour ?? OPEN_OCEAN
+        planet.oceanColour.value.setRGB(liquid.r, liquid.g, liquid.b)
         planet.albedoScale.value = adaptationFor(body)
         planet.lunarLambert.value = tuning.lunarLambert
         planet.terminator.value = tuning.terminator
@@ -654,7 +663,7 @@ export function Bodies({
          * lunar-Lambert would otherwise leave it too flat to read as a sphere.
          */
         const airHaze = appearance.haze
-        const giant = body.kind === 'gas-giant' || body.kind === 'ice-giant'
+        const giant = giantKind(body.kind)
         planet.hazeStrength.value =
           airHaze === null ? 0 : giant ? 0.18 : airHaze.thickness
         if (airHaze !== null) {
