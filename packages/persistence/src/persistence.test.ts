@@ -79,6 +79,58 @@ describe('save round trip', () => {
     expect(restored.world.stateHash()).toBe(world.stateHash())
   })
 
+  it('continues a descent from a save the way it continues from a cache', () => {
+    /*
+     * The reuse invariant, from the only side that can see it.
+     *
+     * An integrated tick samples the ground under where it *ends up*, at the
+     * instant it gets there, and the next tick takes that number instead of
+     * sampling again — the two are the same question, so the answer is reused
+     * rather than recomputed. A restored world has no such cache and samples
+     * fresh on its first tick, so these two worlds agree only if the reuse is
+     * exact. Deep inside an atmosphere, where altitude drives the drag term
+     * and therefore the trajectory, a disagreement of one tick's worth of the
+     * planet's motion compounds into the hash within a few hundred ticks.
+     *
+     * This is what catches the post-step tests being asked at the tick's
+     * *start* while holding the state from its end: seven meters of ground
+     * rotation under a landing, 470 m of orbital motion at a sphere crossing,
+     * and nothing else in the suite goes red for either.
+     */
+    const world = new World({ seed: 'inertialref' })
+    const system = world.loadSystem(SOL)
+    const planet = [...walkBodies(system)].find(
+      (body) =>
+        body.kind === 'rocky' && body.radius > 1e6 && body.atmosphere !== null,
+    )
+    if (planet === undefined) throw new Error('no planet with air')
+
+    // Well inside the air, descending: the drag term reads the altitude every
+    // tick, so the sampled ground is in the trajectory rather than beside it.
+    const entry = planet.radius + (planet.atmosphere?.scaleHeight ?? 0)
+    const ship = world.spawnShip(
+      'entry',
+      bodyFrameId(planet.address),
+      vec3(entry, 0, 0),
+    )
+    world.teleport(ship.id, {
+      ...world.entities.require(ship.id).state,
+      velocity: vec3(-120, 0, 900),
+    })
+    world.runTicks(120)
+    // Cached: this tick's post-step sample is next tick's pre-step altitude.
+    const save = captureSave(world, ship.id)
+
+    const restored = unwrap(restoreSave(save), 'restore')
+    expect(restored.world.stateHash()).toBe(world.stateHash())
+
+    // The restored world samples fresh where the original reuses. Same answer,
+    // or the reuse was never the same question.
+    world.runTicks(400)
+    restored.world.runTicks(400)
+    expect(restored.world.stateHash()).toBe(world.stateHash())
+  })
+
   it('stores a reference to the universe, not the universe', () => {
     const { world, ship } = flownWorld(60)
     const text = serializeSave(captureSave(world, ship.id))
