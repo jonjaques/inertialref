@@ -937,4 +937,6 @@ const STAR_APPEARANCE: RenderBody['appearance'] = {
   rings: null,
   haze: null,
   colour: { r: 1, g: 1, b: 1 },
+  pigment: { r: 1, g: 1, b: 1 },
+  liquid: null,
 }

@@ -31,9 +31,19 @@ import type { UniverseVector } from '@inertialref/spatial'
 import { tidalProxyOf } from './archetype.ts'
 import {
   equilibriumTemperature,
+  liquidKind,
   type SurfaceGrammar,
   surfaceGrammar,
+  surfaceTemperature,
 } from './grammar.ts'
+import {
+  hazeFor,
+  type LiquidAppearance,
+  liquidAppearance,
+  PIGMENTS,
+  pigmentFor,
+  surfaceColourFor,
+} from './appearance.ts'
 import { parseSpectralType, type SpectralClass } from './catalog/spectral.ts'
 import {
   bodyAddress,
@@ -110,7 +120,18 @@ export const SYSTEM_ALGORITHM = algorithm('system', 3)
  * changed meaning, not position — so every other property of every body in the
  * galaxy is exactly where it was.
  */
-export const TERRAIN_ALGORITHM = algorithm('terrain', 2)
+/*
+ * Bumped to 3 when the liquid arrived: the valleys, the coast, and a sea read
+ * against its ground temperature.
+ *
+ * Every wet world's ground moved — the drainage carves up to a sixth of the
+ * budget out of the landform and the coast remaps a band either side of the
+ * datum — and every hot world with a sea lost it, which took its plates with
+ * it. The dry airless bodies are untouched to the last bit, and
+ * `SYSTEM_ALGORITHM` stays where it is for the reason above: the sea's draw
+ * is still taken, only read differently.
+ */
+export const TERRAIN_ALGORITHM = algorithm('terrain', 3)
 export const GALAXY_ALGORITHM = algorithm('galaxy', 2)
 /**
  * The measured-to-physical conversion in `catalog/photometry.ts`.
@@ -379,6 +400,24 @@ export interface BodyAppearance {
   readonly haze: HazeLayer | null
   /** Used where there is no albedo map, and to tint one that is grayscale. */
   readonly colour: LinearRgb
+  /**
+   * The colour a biosphere paints the ground, where the cover says one grows.
+   *
+   * A pigment rather than a modifier on `colour`: chlorophyll is green on
+   * basalt and green on sandstone. Which pigment is the seed's, weighted the
+   * way the photochemistry argues — green is the common answer, and a purple
+   * or a near-black one is a world that found a different molecule.
+   */
+  readonly pigment: LinearRgb
+  /**
+   * The liquid that stands or runs here, or null where nothing does.
+   *
+   * Present wherever the grammar admits a liquid, sea or no sea: a dry world
+   * with rivers still has to draw them in something. Where a photograph
+   * exists the sea is in it and the renderer draws no sheet, so this is read
+   * only through the palette of a mapless body.
+   */
+  readonly liquid: LiquidAppearance | null
 }
 
 export interface BodyMeasurement {
@@ -538,9 +577,28 @@ function makeSurface(
   const solid = facts.kind !== 'gas-giant' && facts.kind !== 'ice-giant'
   const spent = solid ? rng.range(0.45, 1) : 0
   const roughness = rng.range(1.5, 6)
-  const seaLevel =
+  const drawnSea =
     facts.atmosphere !== null && solid && rng.bool(0.4)
       ? rng.range(0.15, 0.55)
+      : null
+  /*
+   * A sea has to be a liquid, and the draw does not know what temperature the
+   * ground is at — so the draw is taken as it always was, in its place in the
+   * stream, and then *read* against the ground temperature. A world at 900 K
+   * with a sea datum drew an ocean of nothing in particular; now it is dry,
+   * and a world at 1,400 K keeps its datum as a magma sea. Gating the draw
+   * rather than its reading would skip an `rng.bool` on every hot world and
+   * move every draw after it, which is a system version rather than a terrain
+   * one.
+   */
+  const airMass =
+    facts.atmosphere === null
+      ? 0
+      : facts.atmosphere.surfaceDensity * facts.atmosphere.scaleHeight
+  const seaLevel =
+    drawnSea !== null &&
+    liquidKind(surfaceTemperature(facts.temperature, airMass)) !== null
+      ? drawnSea
       : null
   const grammar = surfaceGrammar(seed, {
     mass: facts.mass,
@@ -658,13 +716,7 @@ function makeMoon(
       shape?.polarRadius ??
       radius * (1 - rotationalFlattening(mass, radius, rotationPeriod)),
     figure: shape?.figure ?? null,
-    appearance: proceduralAppearance(
-      rng,
-      'moon',
-      radius,
-      surface.maxElevation,
-      atmosphere,
-    ),
+    appearance: proceduralAppearance(rng, 'moon', radius, surface, atmosphere),
     mu: bodyMu,
     elements,
     // `G(M + m)`, matching what `frames.ts` propagates with. See its comment.
@@ -813,13 +865,7 @@ function makePlanet(
     figure: null,
     polarRadius:
       radius * (1 - rotationalFlattening(mass, radius, rotationPeriod)),
-    appearance: proceduralAppearance(
-      rng,
-      kind,
-      radius,
-      surface.maxElevation,
-      atmosphere,
-    ),
+    appearance: proceduralAppearance(rng, kind, radius, surface, atmosphere),
     mu: bodyMu,
     elements,
     orbitalPeriod: orbitalPeriod(star.mu + bodyMu, semiMajorAxis),
@@ -1061,7 +1107,7 @@ function proceduralAppearance(
   rng: Rng,
   kind: BodyKind,
   radius: Meters,
-  relief: Meters,
+  surface: SurfaceParameters,
   atmosphere: Atmosphere | null,
 ): BodyAppearance {
   const giant = kind === 'gas-giant' || kind === 'ice-giant'
@@ -1076,11 +1122,25 @@ function proceduralAppearance(
           texture: null,
         }
       : null
-  const hue = KIND_HAZE[kind] ?? KIND_HAZE.rocky
+  /*
+   * The colours come from their own stream, off the surface seed.
+   *
+   * `rng` is the body's, and every draw after this call — the rotation, the
+   * tilt, the moons — sits downstream of it in one stream. A colour family
+   * drawn from it would move all of them, which is a system version for a
+   * change to a tint. Forked from the surface seed instead, the palette is a
+   * function of the same seed the terrain is, and the rest of the body is
+   * exactly where it was.
+   */
+  const palette = new Rng(deriveSeed(surface.seed, 'appearance'))
+  const grammar = surface.grammar
+  const hue = giant
+    ? (KIND_HAZE[kind] ?? KIND_HAZE.rocky)
+    : hazeFor(palette.fork('haze'), grammar)
   return {
     texture: null,
     maps: [],
-    relief,
+    relief: surface.maxElevation,
     geometricAlbedo: KIND_ALBEDO[kind] ?? 0.15,
     roughness: KIND_ROUGHNESS[kind] ?? 0.9,
     clouds: null,
@@ -1102,7 +1162,11 @@ function proceduralAppearance(
             // Earth's, which is what "1" means everywhere this is read.
             thickness: giant ? 1 : Math.min(1, atmosphere.surfaceDensity / 1.2),
           },
-    colour: KIND_COLOUR[kind] ?? KIND_COLOUR.rocky,
+    colour: giant
+      ? (KIND_COLOUR[kind] ?? KIND_COLOUR.rocky)
+      : surfaceColourFor(palette.fork('surface'), kind, grammar),
+    pigment: pigmentFor(palette.fork('pigment')),
+    liquid: liquidAppearance(grammar.liquidKind, palette.fork('liquid')),
   }
 }
 
@@ -1337,13 +1401,7 @@ function makeObservedPlanet(
     // Confirmed or not, nobody has photographed an exoplanet's surface. The
     // orbit is observed and the appearance is a projection, and the two are
     // marked differently everywhere they are shown.
-    appearance: proceduralAppearance(
-      rng,
-      kind,
-      radius,
-      surface.maxElevation,
-      atmosphere,
-    ),
+    appearance: proceduralAppearance(rng, kind, radius, surface, atmosphere),
     mu: bodyMu,
     elements,
     orbitalPeriod: period,
@@ -1746,6 +1804,9 @@ function makeSmallBody(
        * interpolation.
        */
       colour: darkening(KIND_COLOUR[kind], insolationHere, rng),
+      // Nothing grows on a rubble pile and nothing pools on one.
+      pigment: PIGMENTS[0]?.colour ?? { r: 0.08, g: 0.21, b: 0.05 },
+      liquid: null,
     },
     mu: bodyMu,
     elements,

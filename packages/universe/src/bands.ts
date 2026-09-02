@@ -5,6 +5,7 @@ import {
   fbm3,
   fbmField,
   mix,
+  noise3,
   pcg4d,
   ridged3,
   ridgedField,
@@ -215,6 +216,62 @@ export const DUNE_SHAPE = {
   stretch: 0.15,
   octaves: 3,
   gain: 0.18,
+} as const
+
+/**
+ * The valleys: where they run, how sharp they are, and how deep they cut.
+ *
+ * `cycles` sets the spacing of the trunk valleys — a body's radius over
+ * twenty-four, which is 180 km on Gliese 908 IV and 265 on Earth, about the
+ * spacing of the major river basins on a continent. The tributaries run at
+ * `tributaryCycles` times that, unwarped, and carve `tributaryGain` as deep.
+ * `sharpness` is what turns the noise's zero-level set into a valley: the
+ * field is `1 − |n| · sharpness`, so a valley is the strip where the noise
+ * crosses zero, and the strip is `1/sharpness` of the noise's own range wide.
+ * `valleyPower` narrows the cut into a V; `floodGain` at `floodPower` is the
+ * broad shallow floodplain the V sits in. Above `channelStart` the floor is
+ * flat: that is the riverbed, and the cover marks it wet.
+ *
+ * `depth` is the deepest cut at full drainage as a fraction of the relief
+ * budget — a kilometer on an 8 km world, which is the Grand Canyon's order — and
+ * `headGain` is how much of the ground's height above the drainage datum a
+ * channel may take, so a valley shallows toward the coast and its floor meets
+ * the sea rather than cutting under it.
+ */
+export const DRAINAGE_SHAPE = {
+  cycles: 24,
+  octaves: 3,
+  tributaryCycles: 3.1,
+  tributaryOctaves: 2,
+  tributaryGain: 0.45,
+  warpCycles: 0.45,
+  warpAmount: 0.3,
+  sharpness: 2.6,
+  valleyPower: 6,
+  floodPower: 1.6,
+  floodGain: 0.22,
+  depth: 0.13,
+  headGain: 0.85,
+  channelStart: 0.991,
+  channelFull: 0.998,
+} as const
+
+/**
+ * The coast: how wide the shelf and the plain are, and how flat each is.
+ *
+ * Widths are fractions of the hypsometry band's share of the budget, which is
+ * the scale the sea datum itself is set on. `shelfFlat` and `plainFlat` are
+ * the slope at the waterline as a fraction of the landform's own — a shelf a
+ * fifth as steep as the ground that made it is a shallow sea a long way out,
+ * which is what a continental shelf is, and the plain behind the beach is
+ * flatter than the hills behind that.
+ */
+export const COAST_SHAPE = {
+  width: 0.1,
+  shelfWidth: 1.4,
+  shelfFlat: 0.22,
+  plainWidth: 0.7,
+  plainFlat: 0.42,
 } as const
 
 /**
@@ -773,4 +830,184 @@ export function reliefBand(
     },
   )
   return clamp(relief + grammar.dunes * DUNE_SHAPE.gain * dunes, -1, 1)
+}
+
+/**
+ * A valley field: 1 in the bed of a valley, 0 on the divides between them.
+ *
+ * The strip where a noise crosses zero. A noise's zero-level set on the
+ * sphere is a network of closed curves at every octave — so where the field
+ * is `1 − |n|` sharpened, the valleys branch, meander where a finer octave
+ * bends the crossing, and never end in the middle of a plain, which is what a
+ * river does and what a ridged field's crests do not. The warp bends the
+ * trunk valleys the way a floodplain wanders; the tributaries are the same
+ * construction at three times the frequency on their own seed and are left
+ * unwarped, which is one noise apiece rather than four.
+ *
+ * Nothing here knows which way is downhill. A network that drains — every
+ * valley joining a larger one and every one reaching the sea — needs a
+ * per-region drainage graph, which is the seam
+ * [the terrain plan](../../../design/plans/terrain.md) names and defers. What
+ * this buys instead is the *look* at every scale the mesh reaches, for the
+ * cost of a stateless field: `drainageCarve` shallows the cut toward the
+ * datum, so a valley meets the shore at sea level whichever way its floor
+ * ran to get there.
+ */
+export function valleyField(
+  seed: Seed,
+  direction: Vec3,
+  cycles: number,
+  octaves: number,
+  warp: number,
+): number {
+  let px = direction.x * cycles
+  let py = direction.y * cycles
+  let pz = direction.z * cycles
+  if (warp > 0) {
+    /*
+     * Three channels from one seed, by offsetting the domain a long way
+     * along x — far enough that the three fields share no lattice cell.
+     * Cheaper than three seeds, and exactly as uncorrelated at the scale
+     * this reads them.
+     */
+    const wc = cycles * DRAINAGE_SHAPE.warpCycles
+    const wx = noise3(
+      seed,
+      direction.x * wc + 37.1,
+      direction.y * wc,
+      direction.z * wc,
+    )
+    const wy = noise3(
+      seed,
+      direction.x * wc + 71.3,
+      direction.y * wc,
+      direction.z * wc,
+    )
+    const wz = noise3(
+      seed,
+      direction.x * wc + 113.7,
+      direction.y * wc,
+      direction.z * wc,
+    )
+    px += wx * warp
+    py += wy * warp
+    pz += wz * warp
+  }
+  const n = fbm3(seed, px, py, pz, { octaves })
+  return 1 - Math.min(1, Math.abs(n) * DRAINAGE_SHAPE.sharpness)
+}
+
+/** The trunk valleys of a body, at their own scale and warp. */
+export const trunkValley = (sketch: TerrainSketch, direction: Vec3): number =>
+  valleyField(
+    sketch.seeds.drainage,
+    direction,
+    DRAINAGE_SHAPE.cycles,
+    DRAINAGE_SHAPE.octaves,
+    DRAINAGE_SHAPE.warpAmount,
+  )
+
+/** And the tributaries that feed them. */
+export const tributaryValley = (
+  sketch: TerrainSketch,
+  direction: Vec3,
+): number =>
+  valleyField(
+    sketch.seeds.tributary,
+    direction,
+    DRAINAGE_SHAPE.cycles * DRAINAGE_SHAPE.tributaryCycles,
+    DRAINAGE_SHAPE.tributaryOctaves,
+    0,
+  )
+
+/**
+ * The profile a valley field carves: a V inside a broad shallow floodplain,
+ * with a flat floor where the channel runs. 0 on a divide, 1 in the bed.
+ */
+export function valleyProfile(valley: number): number {
+  const v = valley ** DRAINAGE_SHAPE.valleyPower
+  const flood = DRAINAGE_SHAPE.floodGain * valley ** DRAINAGE_SHAPE.floodPower
+  const bed = smoothstep(
+    DRAINAGE_SHAPE.channelStart,
+    DRAINAGE_SHAPE.channelFull,
+    valley,
+  )
+  return Math.min(1, Math.max(v + flood, bed))
+}
+
+/**
+ * How deep the drainage cuts at a sample, meters, never positive.
+ *
+ * The cut is capped two ways and the cap is smooth. `depth` of the budget is
+ * the most a valley may take at full drainage; `headGain` of the ground's
+ * height above the drainage datum is the most it may take here, so the floor
+ * shallows to nothing at the shore. `1 − e^(−x)` joins the two without a
+ * crease: near the datum it is the second limit and far above it the first.
+ */
+export function drainageCarve(
+  grammar: SurfaceGrammar,
+  valley: number,
+  tributary: number,
+  aboveDatum: Meters,
+  budget: Meters,
+): Meters {
+  if (aboveDatum <= 0 || grammar.drainage <= 0) return 0
+  const deepest = DRAINAGE_SHAPE.depth * budget * grammar.drainage
+  if (deepest <= 0) return 0
+  const cap =
+    deepest * (1 - Math.exp((-DRAINAGE_SHAPE.headGain * aboveDatum) / deepest))
+  const shape = Math.min(
+    1,
+    valleyProfile(valley) +
+      DRAINAGE_SHAPE.tributaryGain * valleyProfile(tributary),
+  )
+  return -cap * shape
+}
+
+/**
+ * How much of the sample is riverbed, 0..1 — the flat floor of a channel,
+ * trunk or tributary, that `drainageCarve` has just cut.
+ */
+export function channelWetness(valley: number, tributary: number): number {
+  const trunk = smoothstep(
+    DRAINAGE_SHAPE.channelStart,
+    DRAINAGE_SHAPE.channelFull,
+    valley,
+  )
+  const branch = smoothstep(
+    DRAINAGE_SHAPE.channelStart + 0.004,
+    DRAINAGE_SHAPE.channelFull,
+    tributary,
+  )
+  return Math.max(trunk, 0.7 * branch)
+}
+
+/**
+ * The coast: the landform pulled toward the sea datum on both sides of it.
+ *
+ * A noise field crossing a datum makes a coastline, and it makes one with the
+ * slope of the noise — the shore is a cliff, the sea is deep a hundred meters
+ * out, and there is nowhere for the water to be shallow. Compressing the
+ * elevation toward the datum inside a band on each side widens the shelf
+ * under the water and lays a plain behind the beach, and the compression is
+ * C¹ at the band's edge — the smoothstep's slope is zero there — so nothing
+ * creases where the remap lets go. The two sides differ on purpose: a shelf
+ * is wider and flatter than a coastal plain, and the waterline itself keeps a
+ * kink between them, which is what a beach is.
+ *
+ * `width` is in meters and is the caller's — `COAST_SHAPE.width` of the
+ * hypsometry share, which is the scale the datum itself is set on.
+ */
+export function coastRemap(
+  elevation: Meters,
+  sea: Meters,
+  width: Meters,
+): Meters {
+  const x = elevation - sea
+  const below = x < 0
+  const w = width * (below ? COAST_SHAPE.shelfWidth : COAST_SHAPE.plainWidth)
+  const t = Math.abs(x) / w
+  if (t >= 1 || w <= 0) return elevation
+  const flat = below ? COAST_SHAPE.shelfFlat : COAST_SHAPE.plainFlat
+  return sea + x * (flat + (1 - flat) * smoothstep(0, 1, t))
 }

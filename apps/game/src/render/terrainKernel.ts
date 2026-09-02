@@ -43,9 +43,13 @@ import {
   BARE_COVER,
   BELT_MARGIN,
   BELT_SHAPE,
+  BIOTA_WINDOW,
   CHAOS_SHAPE,
+  COAST_SHAPE,
   COVER_SHAPE,
+  COVER_WORDS,
   CRATER_SHAPE,
+  DRAINAGE_SHAPE,
   DUNE_SHAPE,
   EJECTA_REACH,
   FROST_POINT,
@@ -635,6 +639,101 @@ const plateWeightCode = wgslFn(
   uses(smoothstepCode),
 )
 
+const valleyFieldCode = wgslFn(
+  `
+  fn valleyField(seed: u32, d: vec3<f32>, cycles: f32, octaves: u32, warp: f32) -> f32 {
+    // bands.ts \`valleyField\`: the strip where a warped fBm crosses zero,
+    // sharpened. The three warp channels are one seed offset along x.
+    var p = d * cycles;
+    if (warp > 0.0) {
+      let wc = cycles * ${DRAINAGE_SHAPE.warpCycles};
+      let wx = noise3(seed, vec3<f32>(d.x * wc + 37.1, d.y * wc, d.z * wc));
+      let wy = noise3(seed, vec3<f32>(d.x * wc + 71.3, d.y * wc, d.z * wc));
+      let wz = noise3(seed, vec3<f32>(d.x * wc + 113.7, d.y * wc, d.z * wc));
+      p += vec3<f32>(wx, wy, wz) * warp;
+    }
+    let n = fbm3(seed, p, octaves);
+    return 1.0 - min(1.0, abs(n) * ${DRAINAGE_SHAPE.sharpness});
+  }
+`,
+  uses(noise3Code, fbm3Code),
+)
+
+const valleyProfileCode = wgslFn(
+  `
+  fn valleyProfile(valley: f32) -> f32 {
+    // bands.ts \`valleyProfile\`: a V in a floodplain, floored at the channel.
+    let v = pow(valley, ${DRAINAGE_SHAPE.valleyPower}.0);
+    let flood = ${DRAINAGE_SHAPE.floodGain} * pow(valley, ${DRAINAGE_SHAPE.floodPower});
+    let bed = smoothstepf(${DRAINAGE_SHAPE.channelStart}, ${DRAINAGE_SHAPE.channelFull}, valley);
+    return min(1.0, max(v + flood, bed));
+  }
+`,
+  uses(smoothstepCode),
+)
+
+const drainageCarveCode = wgslFn(
+  `
+  fn drainageCarve(drainage: f32, valley: f32, tributary: f32, aboveDatum: f32, budget: f32) -> f32 {
+    // bands.ts \`drainageCarve\`: the cut, capped smoothly by the budget's
+    // share and by the ground's height above the datum.
+    if (aboveDatum <= 0.0 || drainage <= 0.0) {
+      return 0.0;
+    }
+    let deepest = ${DRAINAGE_SHAPE.depth} * budget * drainage;
+    if (deepest <= 0.0) {
+      return 0.0;
+    }
+    let cap = deepest * (1.0 - exp(-${DRAINAGE_SHAPE.headGain} * aboveDatum / deepest));
+    let shape = min(1.0, valleyProfile(valley) + ${DRAINAGE_SHAPE.tributaryGain} * valleyProfile(tributary));
+    return -cap * shape;
+  }
+`,
+  uses(valleyProfileCode),
+)
+
+const channelWetnessCode = wgslFn(
+  `
+  fn channelWetness(valley: f32, tributary: f32) -> f32 {
+    // bands.ts \`channelWetness\`.
+    let trunk = smoothstepf(${DRAINAGE_SHAPE.channelStart}, ${DRAINAGE_SHAPE.channelFull}, valley);
+    let branch = smoothstepf(${DRAINAGE_SHAPE.channelStart + 0.004}, ${DRAINAGE_SHAPE.channelFull}, tributary);
+    return max(trunk, 0.7 * branch);
+  }
+`,
+  uses(smoothstepCode),
+)
+
+const coastRemapCode = wgslFn(
+  `
+  fn coastRemap(elevation: f32, sea: f32, width: f32) -> f32 {
+    // bands.ts \`coastRemap\`: the landform pulled toward the datum inside a
+    // band on each side, C¹ at the band's edge.
+    let x = elevation - sea;
+    let below = x < 0.0;
+    let w = width * select(${COAST_SHAPE.plainWidth}, ${COAST_SHAPE.shelfWidth}, below);
+    let t = abs(x) / w;
+    if (t >= 1.0 || w <= 0.0) {
+      return elevation;
+    }
+    let flat = select(${COAST_SHAPE.plainFlat}, ${COAST_SHAPE.shelfFlat}, below);
+    return sea + x * (flat + (1.0 - flat) * smoothstepf(0.0, 1.0, t));
+  }
+`,
+  uses(smoothstepCode),
+)
+
+const biotaWindowCode = wgslFn(
+  `
+  fn biotaWindow(t: f32) -> f32 {
+    // grammar.ts \`biotaWindow\`.
+    return smoothstepf(${BIOTA_WINDOW.coldOff}.0, ${BIOTA_WINDOW.coldOn}.0, t)
+      * (1.0 - smoothstepf(${BIOTA_WINDOW.hotOn}.0, ${BIOTA_WINDOW.hotOff}.0, t));
+  }
+`,
+  uses(smoothstepCode),
+)
+
 /* ------------------------------------------------------------------------- */
 /* The kernel                                                                 */
 /* ------------------------------------------------------------------------- */
@@ -737,7 +836,7 @@ export interface TerrainKernel {
   readonly layout: TerrainKernelLayout
   /** Bordered samples per tile — invocations a tile costs. */
   readonly samples: number
-  /** Interior samples per tile — cover words a tile writes. */
+  /** Interior samples per tile. A tile writes `COVER_WORDS` cover words each. */
   readonly interior: number
   readonly compute: ComputeNode
   /** `surfaceKernel(...).records`, uploaded with `needsUpdate`. */
@@ -748,7 +847,7 @@ export interface TerrainKernel {
   readonly tiles: StorageBufferAttribute
   /** `samples` floats per tile, row-major and bordered, as the CPU lays them. */
   readonly elevations: StorageBufferAttribute
-  /** `interior` words per tile, four cover bytes each, little-endian. */
+  /** `interior · COVER_WORDS` words per tile, four cover bytes each, little-endian. */
   readonly cover: StorageBufferAttribute
   /** Invocations to run this dispatch: tiles times `samples`. */
   readonly total: { value: number }
@@ -781,7 +880,7 @@ export function createTerrainKernel(
     1,
   )
   const coverAttribute = new StorageBufferAttribute(
-    new Uint32Array(maxTiles * interior),
+    new Uint32Array(maxTiles * interior * COVER_WORDS),
     1,
   )
 
@@ -793,7 +892,11 @@ export function createTerrainKernel(
     maxTiles * TILE_STRIDE,
   ).toReadOnly()
   const elevations = storage(elevationsAttribute, 'float', maxTiles * samples)
-  const cover = storage(coverAttribute, 'uint', maxTiles * interior)
+  const cover = storage(
+    coverAttribute,
+    'uint',
+    maxTiles * interior * COVER_WORDS,
+  )
   // A float, compared against `float(instanceIndex)`: exact below 2²⁴, which
   // is 3,500 tiles of 4,761 samples.
   const total = uniform(0)
@@ -856,6 +959,21 @@ export function createTerrainKernel(
     asF(plateWeightCode({ excess, width }))
   const softLimit = (value: F, limit: F): F =>
     asF(softLimitCode({ value, limit }))
+  const valleyField = (seed: U, p: V3, cycles: F, octaves: U, warp: F): F =>
+    asF(valleyFieldCode({ seed, d: p, cycles, octaves, warp }))
+  const drainageCarve = (
+    drainage: F,
+    valley: F,
+    tributary: F,
+    aboveDatum: F,
+    budget: F,
+  ): F =>
+    asF(drainageCarveCode({ drainage, valley, tributary, aboveDatum, budget }))
+  const channelWetness = (valley: F, tributary: F): F =>
+    asF(channelWetnessCode({ valley, tributary }))
+  const coastRemap = (elevation: F, sea: F, width: F): F =>
+    asF(coastRemapCode({ elevation, sea, width }))
+  const biotaWindow = (t: F): F => asF(biotaWindowCode({ t }))
   const clamp11 = (value: F): F => clamp(value, -1, 1)
   const pcg4d = (x: U, y: U, z: U, w: U): { x: U; y: U; z: U; w: U } =>
     pcg4dCode({ x, y, z, w }) as unknown as { x: U; y: U; z: U; w: U }
@@ -1324,6 +1442,9 @@ export function createTerrainKernel(
 
       const elevation = float(0).toVar()
       const coverWord = uint(0).toVar()
+      // The second word starts at zero, which is `BARE_COVER`'s second four
+      // bytes: nothing wet and nothing growing.
+      const coverWord2 = uint(0).toVar()
       const budget = scalar(SCALAR.BUDGET)
 
       If(budget.lessThanEqual(0), () => {
@@ -1608,6 +1729,46 @@ export function createTerrainKernel(
           .add(shareIce.mul(ice))
         elevation.assign(height.mul(budget))
 
+        /* --- the valleys ----------------------------------------------------- */
+
+        // `evaluate`'s drainage block: the two valley fields kept for the
+        // cover, and the ground's height above the datum once cut.
+        const drainageAmount = scalar(SCALAR.DRAINAGE)
+        const valley = float(0).toVar()
+        const tributary = float(0).toVar()
+        const aboveDatum = float(0).toVar()
+        If(drainageAmount.greaterThan(0), () => {
+          const datum = scalar(SCALAR.DRAINAGE_DATUM)
+          valley.assign(
+            valleyField(
+              word(WORD.SEED_DRAINAGE),
+              d,
+              float(DRAINAGE_SHAPE.cycles),
+              uint(DRAINAGE_SHAPE.octaves),
+              float(DRAINAGE_SHAPE.warpAmount),
+            ),
+          )
+          tributary.assign(
+            valleyField(
+              word(WORD.SEED_TRIBUTARY),
+              d,
+              float(DRAINAGE_SHAPE.cycles * DRAINAGE_SHAPE.tributaryCycles),
+              uint(DRAINAGE_SHAPE.tributaryOctaves),
+              float(0),
+            ),
+          )
+          elevation.addAssign(
+            drainageCarve(
+              drainageAmount,
+              valley,
+              tributary,
+              elevation.sub(datum),
+              budget,
+            ),
+          )
+          aboveDatum.assign(elevation.sub(datum))
+        })
+
         const craterLevels = word(WORD.CRATER_LEVELS)
         const craterLimit = scalar(SCALAR.CRATER_LIMIT)
         const craters = float(0).toVar()
@@ -1616,6 +1777,17 @@ export function createTerrainKernel(
             ladder(d, d0, delta, tile, uint(0), craterLevels, radius),
           )
           elevation.addAssign(softLimit(craters, craterLimit))
+        })
+
+        /* --- the coast ------------------------------------------------------- */
+
+        // `evaluate`'s last term: after the craters, before the tail, and
+        // gated by the width the packer zeroes where `evaluate` skips it.
+        const coast = scalar(SCALAR.COAST_WIDTH)
+        If(coast.greaterThan(0), () => {
+          elevation.assign(
+            coastRemap(elevation, scalar(SCALAR.SEA_DATUM), coast),
+          )
         })
 
         /* --- the tail: sub-floor craters and the grit ----------------------- */
@@ -1667,11 +1839,10 @@ export function createTerrainKernel(
           elevation.addAssign(gritAmplitude.mul(sum.div(norm)))
         })
 
-        /* --- the sea -------------------------------------------------------- */
-
-        If(scalar(SCALAR.SEA_ENABLED).greaterThan(0.5), () => {
-          elevation.assign(max(elevation, scalar(SCALAR.SEA_DATUM)))
-        })
+        /*
+         * No sea clamp. The tile is the seabed — `drawnGroundElevation` —
+         * and the sea is a sheet the renderer lays over it at the datum.
+         */
 
         /* --- the cover, for an interior sample ----------------------------- */
 
@@ -1852,6 +2023,78 @@ export function createTerrainKernel(
               .bitOr(packByteNode(mineral).shiftLeft(uint(16)))
               .bitOr(packByteNode(frost).shiftLeft(uint(24))),
           )
+
+          // `wetCover`.
+          const liquid = scalar(SCALAR.LIQUID)
+          const wet = float(0).toVar()
+          If(liquid.greaterThan(0).and(aboveDatum.greaterThan(0)), () => {
+            wet.assign(saturate(channelWetness(valley, tributary).mul(liquid)))
+          })
+
+          // `biotaCover`.
+          const biotaAmount = scalar(SCALAR.BIOTA)
+          const biota = float(0).toVar()
+          If(biotaAmount.greaterThan(0), () => {
+            const cosZenith = max(
+              float(COVER_SHAPE.zenithFloor),
+              sqrt(max(float(0), float(1).sub(square(d.y)))),
+            )
+            const local = scalar(SCALAR.GROUND_TEMPERATURE).mul(
+              pow(cosZenith, float(0.25)),
+            )
+            const warmth = biotaWindow(local)
+            If(warmth.greaterThan(0), () => {
+              const treeline = float(1).sub(
+                smoothstepf(
+                  budget.mul(COVER_SHAPE.treelineStart),
+                  budget.mul(COVER_SHAPE.treelineEnd),
+                  aboveDatum,
+                ),
+              )
+              const ashore = smoothstepf(0, budget.mul(0.004), aboveDatum)
+              const rain = noise3(
+                word(WORD.SEED_RAIN),
+                d.mul(COVER_SHAPE.rainCycles),
+              )
+                .mul(0.5)
+                .add(0.5)
+              const damp = min(
+                float(1),
+                rain.add(
+                  max(square(valley), square(tributary)).mul(
+                    COVER_SHAPE.dampReach,
+                  ),
+                ),
+              )
+              const moisture = float(COVER_SHAPE.rainFloor).add(
+                damp.mul(1 - COVER_SHAPE.rainFloor),
+              )
+              const patch = noise3(
+                word(WORD.SEED_RAIN),
+                d.mul(COVER_SHAPE.patchCycles).add(vec3(53.7, 0, 0)),
+              )
+                .mul(0.5)
+                .add(0.5)
+              const patchy = float(COVER_SHAPE.patchFloor).add(
+                square(patch).mul(1 - COVER_SHAPE.patchFloor),
+              )
+              biota.assign(
+                saturate(
+                  biotaAmount
+                    .mul(warmth)
+                    .mul(treeline)
+                    .mul(ashore)
+                    .mul(moisture)
+                    .mul(patchy)
+                    .mul(float(1).sub(wet)),
+                ),
+              )
+            })
+          })
+
+          coverWord2.assign(
+            packByteNode(wet).bitOr(packByteNode(biota).shiftLeft(uint(8))),
+          )
         })
       })
 
@@ -1860,7 +2103,9 @@ export function createTerrainKernel(
         const at = tile
           .mul(uint(interior))
           .add(uint(row.mul(int(resolution)).add(col)))
+          .mul(uint(COVER_WORDS))
         cover.element(at).assign(coverWord)
+        cover.element(at.add(uint(1))).assign(coverWord2)
       })
     })
   })

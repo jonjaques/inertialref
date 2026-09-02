@@ -58,6 +58,7 @@ import {
   generateHeightfield,
   drawnDivergence,
   drawnElevation,
+  drawnGroundElevation,
   drawnSurfaceRadius,
   groundElevation,
   HEIGHTFIELD_BORDER,
@@ -74,7 +75,6 @@ import {
   regionSize,
   seaDatumElevation,
   surfaceDetailFloor,
-  surfaceRadius,
 } from './terrain.ts'
 
 const ROOT = rootSeed('inertialref')
@@ -975,13 +975,28 @@ describe('the ground has one owner', () => {
       const col = Math.round(s * (HEIGHTFIELD_RESOLUTION - 1))
       const meshed = heightfieldSample(field, row, col)
       const direction = regionDirection(region, s, t)
+      /*
+       * The mesh is the seabed — `drawnGroundElevation`, with no sea clamp —
+       * and the bound is held against the *unclamped* canonical field for the
+       * same reason: under the sea `surfaceRadius` is the datum by
+       * construction, and the seabed is meters below it. What the two fields
+       * may not do is disagree by more than the published divergence about
+       * the ground itself, wet or dry.
+       */
       expect(meshed).toBeCloseTo(
-        drawnSurfaceRadius(body, direction) - body.radius,
+        drawnGroundElevation(body.surface, direction),
         1,
       )
       expect(
-        Math.abs(meshed - (surfaceRadius(body, direction) - body.radius)),
+        Math.abs(meshed - elevationAt(body.surface, direction)),
       ).toBeLessThanOrEqual(bound)
+      // And standing on the water is standing on the water: the drawn
+      // radius the stance uses is the clamped one, never below the datum.
+      expect(
+        drawnSurfaceRadius(body, direction) - body.radius,
+      ).toBeGreaterThanOrEqual(
+        Math.min(meshed, seaDatumElevation(body.surface) as number) - 1e-6,
+      )
     }
 
     /*

@@ -61,6 +61,41 @@ export interface PatchInput {
    */
   readonly cover: Uint8Array
   readonly bodyRadius: Meters
+  /**
+   * The elevation of the sea datum, or null where no sheet is drawn.
+   *
+   * Null on a dry world and on a mapped one — a photograph's sea is in the
+   * photograph — so the caller decides whether a sheet exists and this only
+   * decides whether *this patch* needs one, which is whether the ground under
+   * it goes below the datum anywhere.
+   */
+  readonly seaLevel?: Meters | null
+}
+
+/**
+ * The sea over a patch: the datum sphere, meshed on the patch's own grid.
+ *
+ * A second surface rather than a colour on the first, because a shore seen
+ * from a landed ship is a flat sheet meeting a slope, and the ground under it
+ * is a seabed the sheet is looked *through*. The vertices are anchor-relative
+ * for the reason the patch's are, and they morph onto the parent's grid for
+ * the reason the patch's do: the parent's sheet is the parent's chord of the
+ * same sphere, and a child whose sheet did not slide onto it would show a
+ * sliver of seabed along every level boundary. `depths` is the one thing the
+ * material cannot derive — the ground under the sheet — and it morphs with
+ * the rest so the shallows do not shimmer at the handover.
+ */
+export interface WaterPatch {
+  /** xyz triples in body-fixed axes, relative to the patch's `anchor`, on the datum. */
+  readonly positions: Float32Array
+  /** Where each vertex sits once fully morphed onto the parent's grid. */
+  readonly morphPositions: Float32Array
+  /** Sea datum minus the ground, meters, never negative. Zero where the ground is dry. */
+  readonly depths: Float32Array
+  readonly morphDepths: Float32Array
+  /** Bounding sphere in the same anchor-relative axes the vertices are in. */
+  readonly boundsCentre: Vec3
+  readonly boundsRadius: Meters
 }
 
 export interface RenderPatch {
@@ -108,6 +143,8 @@ export interface RenderPatch {
   readonly boundsRadius: Meters
   /** Ground one grid cell covers: the patch's own LOD error, in meters. */
   readonly spacing: Meters
+  /** The sea over this patch, or null where the sea reaches none of it. */
+  readonly water: WaterPatch | null
 }
 
 /**
@@ -156,6 +193,7 @@ export function patchIndices(resolution: number): Uint32Array {
 
 export function buildPatch(input: PatchInput): RenderPatch {
   const { region, resolution, border, elevations, cover, bodyRadius } = input
+  const seaLevel = input.seaLevel ?? null
   invariant(
     border >= 2,
     `A patch needs two rings of border to morph; got ${border}`,
@@ -203,6 +241,17 @@ export function buildPatch(input: PatchInput): RenderPatch {
    * four hundred of them.
    */
   const extended = new Float64Array(stride * stride * 3)
+  /*
+   * The datum sheet's vertices, kept beside the ground's over the interior
+   * only — the sheet has no normals to difference and so no border — and
+   * only while some interior sample is under the sea. `wet` is decided in
+   * the same pass so the sheet costs nothing on a patch the sea never
+   * reaches, which on an ocean world is still most of the land.
+   */
+  const sheet =
+    seaLevel === null ? null : new Float64Array(resolution * resolution * 3)
+  const seaRadius = bodyRadius + (seaLevel ?? 0)
+  let wet = false
   const step = resolution - 1
   for (let row = -border; row < resolution + border; row += 1) {
     const t = row / step
@@ -212,10 +261,24 @@ export function buildPatch(input: PatchInput): RenderPatch {
       // named producer of a body-fixed direction and the one place the cube
       // convention lives. It is also the only allocation left in this loop.
       const direction = regionDirection(region, col / step, t)
-      const radius = bodyRadius + (elevations[sample] ?? 0)
+      const elevation = elevations[sample] ?? 0
+      const radius = bodyRadius + elevation
       extended[sample * 3] = direction.x * radius - anchorX
       extended[sample * 3 + 1] = direction.y * radius - anchorY
       extended[sample * 3 + 2] = direction.z * radius - anchorZ
+      if (
+        sheet !== null &&
+        row >= 0 &&
+        col >= 0 &&
+        row < resolution &&
+        col < resolution
+      ) {
+        const at = (row * resolution + col) * 3
+        sheet[at] = direction.x * seaRadius - anchorX
+        sheet[at + 1] = direction.y * seaRadius - anchorY
+        sheet[at + 2] = direction.z * seaRadius - anchorZ
+        if (elevation < (seaLevel as number)) wet = true
+      }
     }
   }
 
@@ -270,10 +333,9 @@ export function buildPatch(input: PatchInput): RenderPatch {
       // than the extended one — the same even vertex, a different stride.
       const evenCover = (evenRow * resolution + evenCol) * COVER_CHANNELS
       const target = index * COVER_CHANNELS
-      morphCover[target] = cover[evenCover] as number
-      morphCover[target + 1] = cover[evenCover + 1] as number
-      morphCover[target + 2] = cover[evenCover + 2] as number
-      morphCover[target + 3] = cover[evenCover + 3] as number
+      for (let channel = 0; channel < COVER_CHANNELS; channel += 1) {
+        morphCover[target + channel] = cover[evenCover + channel] as number
+      }
       // Two cells, because that is one of the parent's. Shading has to hand
       // over with the geometry or the switch trades a pop for a shimmer.
       writeNormal(
@@ -308,6 +370,86 @@ export function buildPatch(input: PatchInput): RenderPatch {
     },
     boundsRadius: Math.hypot(highX - lowX, highY - lowY, highZ - lowZ) / 2 || 1,
     spacing: regionSpacing(bodyRadius, region, resolution),
+    water:
+      sheet !== null && wet
+        ? buildWater(
+            sheet,
+            elevations,
+            stride,
+            border,
+            resolution,
+            seaLevel as number,
+          )
+        : null,
+  }
+}
+
+/**
+ * The sheet's attributes from the datum grid the main loop filled: the
+ * positions, their morph targets at the parent's vertices, and the depth of
+ * water over every vertex with its own morph target.
+ */
+function buildWater(
+  sheet: Float64Array,
+  elevations: Float32Array,
+  stride: number,
+  border: number,
+  resolution: number,
+  seaLevel: Meters,
+): WaterPatch {
+  const count = resolution * resolution
+  const positions = new Float32Array(count * 3)
+  const morphPositions = new Float32Array(count * 3)
+  const depths = new Float32Array(count)
+  const morphDepths = new Float32Array(count)
+  let lowX = Infinity
+  let lowY = Infinity
+  let lowZ = Infinity
+  let highX = -Infinity
+  let highY = -Infinity
+  let highZ = -Infinity
+  const depthAt = (row: number, col: number): number =>
+    Math.max(
+      0,
+      seaLevel - (elevations[(row + border) * stride + (col + border)] ?? 0),
+    )
+  for (let row = 0; row < resolution; row += 1) {
+    for (let col = 0; col < resolution; col += 1) {
+      const index = row * resolution + col
+      const x = sheet[index * 3] as number
+      const y = sheet[index * 3 + 1] as number
+      const z = sheet[index * 3 + 2] as number
+      positions[index * 3] = x
+      positions[index * 3 + 1] = y
+      positions[index * 3 + 2] = z
+      if (x < lowX) lowX = x
+      if (y < lowY) lowY = y
+      if (z < lowZ) lowZ = z
+      if (x > highX) highX = x
+      if (y > highY) highY = y
+      if (z > highZ) highZ = z
+      // The same even-index snap the ground makes; see `buildPatch`.
+      const evenRow = row & ~1
+      const evenCol = col & ~1
+      const even = (evenRow * resolution + evenCol) * 3
+      morphPositions[index * 3] = sheet[even] as number
+      morphPositions[index * 3 + 1] = sheet[even + 1] as number
+      morphPositions[index * 3 + 2] = sheet[even + 2] as number
+      depths[index] = depthAt(row, col)
+      morphDepths[index] = depthAt(evenRow, evenCol)
+    }
+  }
+  return {
+    positions,
+    morphPositions,
+    depths,
+    morphDepths,
+    boundsCentre: {
+      x: (lowX + highX) / 2,
+      y: (lowY + highY) / 2,
+      z: (lowZ + highZ) / 2,
+    },
+    boundsRadius: Math.hypot(highX - lowX, highY - lowY, highZ - lowZ) / 2 || 1,
   }
 }
 

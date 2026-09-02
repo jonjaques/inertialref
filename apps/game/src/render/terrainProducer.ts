@@ -3,6 +3,7 @@ import { getLogger, getTimer, type TimingDetail } from '@inertialref/shared'
 import { parseSeed } from '@inertialref/procedural'
 import type { JobId } from '@inertialref/protocol'
 import {
+  COVER_CHANNELS,
   HEIGHTFIELD_BORDER,
   HEIGHTFIELD_RESOLUTION,
   heightfieldStride,
@@ -287,7 +288,10 @@ export function createTileProducer(
           unpack(
             job.payload,
             elevations.slice(i * kernel.samples, (i + 1) * kernel.samples),
-            cover.slice(i * kernel.interior * 4, (i + 1) * kernel.interior * 4),
+            cover.slice(
+              i * kernel.interior * COVER_CHANNELS,
+              (i + 1) * kernel.interior * COVER_CHANNELS,
+            ),
           ),
         )
       })

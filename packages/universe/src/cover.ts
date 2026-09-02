@@ -1,13 +1,13 @@
 import type { Meters } from '@inertialref/shared'
 import { clamp01, noise3, smoothstep } from '@inertialref/procedural'
 import type { Vec3 } from '@inertialref/spatial'
-import type { PlateContext } from './bands.ts'
+import { channelWetness, type PlateContext } from './bands.ts'
 import { rayBrightness } from './craters.ts'
-import type { SurfaceGrammar } from './grammar.ts'
+import { biotaWindow, type SurfaceGrammar } from './grammar.ts'
 import { PLATE_MARGIN, plateProperty, type TerrainSketch } from './sketch.ts'
 
 /*
- * What the ground is made of, as four numbers.
+ * What the ground is made of, as six numbers.
  *
  * The height field says what shape the ground is. This says what it *is* — and
  * the split is not arbitrary, it is a split by who can answer. Three of the
@@ -20,16 +20,16 @@ import { PLATE_MARGIN, plateProperty, type TerrainSketch } from './sketch.ts'
  * What a shader cannot derive is history. Whether this plain is flood basalt or
  * the same rock as the highland beside it; whether this ground was excavated
  * last week or three billion years ago; which way the crust's composition
- * varies; where the volatiles have condensed. Those are facts about the body's
- * past, they come out of the same sketch the landforms do, and they are the
- * four channels below.
+ * varies; where the volatiles have condensed; where the liquid runs and where
+ * something grows beside it. Those are facts about the body's past, they come
+ * out of the same sketch the landforms do, and they are the six channels below.
  *
- * **The whole record is four bytes.** A patch is 4,225 vertices and a
- * whole-disk selection is several hundred patches, so a float per channel would
- * be 67 KB a patch against the 203 KB the geometry already costs. Every one of
- * these is a fraction that saturates, read through a mip chain and a splat
- * weight — `Uint8` resolves it to a four-hundredth, and nothing downstream can
- * tell that from a float.
+ * **The whole record is eight bytes**, two vertex attributes of four. A patch
+ * is 4,225 vertices and a whole-disk selection is several hundred patches, so a
+ * float per channel would be 100 KB a patch against the 203 KB the geometry
+ * already costs. Every one of these is a fraction that saturates, read through
+ * a mip chain and a splat weight — `Uint8` resolves it to a four-hundredth, and
+ * nothing downstream can tell that from a float.
  */
 
 /** What the ground at a direction is made of. Every field is 0 to 1. */
@@ -62,6 +62,24 @@ export interface SurfaceCover {
   readonly mineral: number
   /** Condensed volatiles lying on the surface: caps, frost, an icy shell. */
   readonly ice: number
+  /**
+   * Standing liquid in a channel: the riverbed `drainageCarve` floored.
+   *
+   * A river is not in the height field — the field says where the valley
+   * floor is, and this says whether liquid is running along it. The material
+   * draws it as the sea is drawn, and it is the one channel that can put
+   * water above the sea datum.
+   */
+  readonly wet: number
+  /**
+   * How much of the ground something is growing on, 0..1.
+   *
+   * The pigment of a biosphere, laid where the temperature, the air and the
+   * rainfall allow it. The design bible's flora is post-MVP; this is the
+   * colour it leaves on the ground when it arrives, and the reason a temperate
+   * world reads as one from orbit rather than as a wet desert.
+   */
+  readonly biota: number
 }
 
 /** The ground with nothing on it: bare mature bedrock. */
@@ -70,6 +88,8 @@ export const BARE_COVER: SurfaceCover = {
   dark: 0,
   mineral: 0.5,
   ice: 0,
+  wet: 0,
+  biota: 0,
 }
 
 /**
@@ -113,6 +133,13 @@ export const COVER_SHAPE = {
   airSupply: 100,
   shellStart: 0.35,
   shellSpan: 0.4,
+  rainCycles: 5,
+  rainFloor: 0.3,
+  treelineStart: 0.22,
+  treelineEnd: 0.6,
+  dampReach: 0.5,
+  patchCycles: 46,
+  patchFloor: 0.35,
 } as const
 
 /**
@@ -153,13 +180,127 @@ export function surfaceCover(
   plates: PlateContext,
   craters: Meters,
   craterLimit: Meters,
+  drainage: DrainageSample,
 ): SurfaceCover {
+  const wet = wetCover(grammar, drainage)
   return {
     bright: rayBrightness(sketch.rayCraters, grammar, direction),
     dark: mareCover(sketch, grammar, direction, craters, craterLimit),
     mineral: mineralCover(sketch, direction, plates),
     ice: iceCover(sketch, grammar, direction),
+    wet,
+    biota: biotaCover(sketch, grammar, direction, drainage, wet),
   }
+}
+
+/**
+ * What the drainage band worked out about a sample, handed on to the cover
+ * rather than evaluated twice: the two valley fields, and how far the landform
+ * stands above the drainage datum once they have cut it.
+ */
+export interface DrainageSample {
+  readonly valley: number
+  readonly tributary: number
+  /** Meters above `drainageDatum`, after the carve. Negative under the sea. */
+  readonly aboveDatum: Meters
+}
+
+/** A sample on a body with no drainage: dry, and nowhere in particular. */
+export const NO_DRAINAGE: DrainageSample = {
+  valley: 0,
+  tributary: 0,
+  aboveDatum: 0,
+}
+
+/**
+ * Liquid running in a channel, where the band has floored one and the
+ * grammar says the liquid exists.
+ *
+ * Gated on the ground standing above the datum: below it the sea is drawn
+ * instead, and a riverbed under the sea is seabed.
+ */
+function wetCover(grammar: SurfaceGrammar, drainage: DrainageSample): number {
+  if (grammar.liquid <= 0 || drainage.aboveDatum <= 0) return 0
+  return clamp01(
+    channelWetness(drainage.valley, drainage.tributary) * grammar.liquid,
+  )
+}
+
+/**
+ * What grows here.
+ *
+ * Four gates and a rainfall. The latitude term is the one `iceCover` uses,
+ * read against the biosphere's window rather than the frost point, so the
+ * cold ends of a temperate world are bare the way its poles are frozen; the
+ * treeline thins growth with altitude as a fraction of the relief budget; the
+ * shore takes it off the seabed; and the rainfall is a province-scale noise
+ * with a floor, because a world with a sea has no dry side, only drier ones.
+ * The valleys are damper than the divides, which is why the growth follows
+ * the rivers from orbit.
+ */
+function biotaCover(
+  sketch: TerrainSketch,
+  grammar: SurfaceGrammar,
+  direction: Vec3,
+  drainage: DrainageSample,
+  wet: number,
+): number {
+  if (grammar.biota <= 0) return 0
+  const cosZenith = Math.max(
+    COVER_SHAPE.zenithFloor,
+    Math.sqrt(Math.max(0, 1 - direction.y ** 2)),
+  )
+  const local = grammar.groundTemperature * cosZenith ** 0.25
+  const warmth = biotaWindow(local)
+  if (warmth <= 0) return 0
+  const budget = Math.max(grammar.reliefLimit, 1)
+  const treeline =
+    1 -
+    smoothstep(
+      COVER_SHAPE.treelineStart * budget,
+      COVER_SHAPE.treelineEnd * budget,
+      drainage.aboveDatum,
+    )
+  const ashore = smoothstep(0, 0.004 * budget, drainage.aboveDatum)
+  const rain =
+    noise3(
+      sketch.seeds.rain,
+      direction.x * COVER_SHAPE.rainCycles,
+      direction.y * COVER_SHAPE.rainCycles,
+      direction.z * COVER_SHAPE.rainCycles,
+    ) *
+      0.5 +
+    0.5
+  const damp = Math.min(
+    1,
+    rain +
+      COVER_SHAPE.dampReach *
+        Math.max(drainage.valley ** 2, drainage.tributary ** 2),
+  )
+  const moisture = COVER_SHAPE.rainFloor + (1 - COVER_SHAPE.rainFloor) * damp
+  /*
+   * And a patchiness at the scale of a province's weather, because a
+   * biosphere is not a coat of paint: a forest gives way to grassland and
+   * grassland to scrub over tens of kilometers, for reasons of soil and
+   * drainage this field does not carry. One octave, off the rain's seed at
+   * nine times its frequency, with a floor so the patches thin the growth
+   * rather than cut it.
+   */
+  const patch =
+    noise3(
+      sketch.seeds.rain,
+      direction.x * COVER_SHAPE.patchCycles + 53.7,
+      direction.y * COVER_SHAPE.patchCycles,
+      direction.z * COVER_SHAPE.patchCycles,
+    ) *
+      0.5 +
+    0.5
+  const patchy =
+    COVER_SHAPE.patchFloor + (1 - COVER_SHAPE.patchFloor) * patch * patch
+  // Nothing grows on the river itself.
+  return clamp01(
+    grammar.biota * warmth * treeline * ashore * moisture * patchy * (1 - wet),
+  )
 }
 
 /**
@@ -344,13 +485,19 @@ function iceCover(
 }
 
 /**
- * The four channels as bytes, in the order the vertex attribute carries them.
+ * The channels as bytes, in the order the vertex attributes carry them: the
+ * first four in `terrainCover`, the second four in `terrainCover2`.
  *
  * `Math.round` rather than a truncating multiply, because the ends have to
  * survive: a cover of exactly 1 truncated by `value * 255 | 0` is 255 only if
  * the multiply lands on it, and a 254 where the field says "wholly ice" is a
  * one-part-in-255 seam wherever a fully covered patch meets one that rounded
  * the other way.
+ *
+ * The last two bytes are written as zero and read by nothing. A vertex buffer
+ * stride has to be a multiple of four, so six channels cost eight bytes
+ * whatever is put in them, and the two spare are where the canonical slope
+ * the deposits still want will go.
  */
 export function packCover(
   cover: SurfaceCover,
@@ -361,10 +508,14 @@ export function packCover(
   out[at + 1] = Math.round(clamp01(cover.dark) * 255)
   out[at + 2] = Math.round(clamp01(cover.mineral) * 255)
   out[at + 3] = Math.round(clamp01(cover.ice) * 255)
+  out[at + 4] = Math.round(clamp01(cover.wet) * 255)
+  out[at + 5] = Math.round(clamp01(cover.biota) * 255)
+  out[at + 6] = 0
+  out[at + 7] = 0
 }
 
 /**
- * The four bytes back, as a record. The inverse of `packCover`.
+ * The bytes back, as a record. The inverse of `packCover`.
  *
  * Beside it rather than at the reader, because the channel order and the 255
  * are one fact and a reader that spells them out again is a second place they
@@ -377,8 +528,10 @@ export function unpackCover(bytes: Uint8Array, at: number): SurfaceCover {
     dark: (bytes[at + 1] as number) / 255,
     mineral: (bytes[at + 2] as number) / 255,
     ice: (bytes[at + 3] as number) / 255,
+    wet: (bytes[at + 4] as number) / 255,
+    biota: (bytes[at + 5] as number) / 255,
   }
 }
 
 /** How many bytes `packCover` writes per sample. */
-export const COVER_CHANNELS = 4
+export const COVER_CHANNELS = 8

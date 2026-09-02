@@ -9,6 +9,7 @@ import {
 import { UV } from '@inertialref/spatial'
 import {
   catalogStub,
+  COVER_CHANNELS,
   generateCell,
   galaxySeedOf,
   HEIGHTFIELD_BORDER,
@@ -243,7 +244,7 @@ describe('terrain task', () => {
     // The cover is the patch's own vertices and carries no border, so it is
     // 33² rather than the elevations' 37². See `cover.ts`.
     expect(result.cover).toBeInstanceOf(Uint8Array)
-    expect(result.cover.length).toBe(33 * 33 * 4)
+    expect(result.cover.length).toBe(33 * 33 * COVER_CHANNELS)
     // Both declared transferable, which is what keeps a planet's worth of
     // patches from being copied twice per frame.
     expect(generateHeightfieldTask.transfers?.(result)).toHaveLength(2)

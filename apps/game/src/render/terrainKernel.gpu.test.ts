@@ -3,6 +3,7 @@ import { openSession, type Session, terrainZoo } from '@inertialref/devtools'
 import { vec3 } from '@inertialref/spatial'
 import {
   type Body,
+  COVER_CHANNELS,
   findBody,
   generateHeightfield,
   HEIGHTFIELD_BORDER,
@@ -97,7 +98,10 @@ async function gpuTiles(
   const cover = new Uint8Array(await gpu.readBuffer(kernel.cover))
   return regions.map((_, i) => ({
     elevations: elevations.slice(i * kernel.samples, (i + 1) * kernel.samples),
-    cover: cover.slice(i * kernel.interior * 4, (i + 1) * kernel.interior * 4),
+    cover: cover.slice(
+      i * kernel.interior * COVER_CHANNELS,
+      (i + 1) * kernel.interior * COVER_CHANNELS,
+    ),
   }))
 }
 

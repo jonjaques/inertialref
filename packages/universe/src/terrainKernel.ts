@@ -12,6 +12,7 @@ import {
   RELIEF_SHAPE,
   SULCI_SHAPE,
 } from './bands.ts'
+import { COVER_CHANNELS } from './cover.ts'
 import { MAX_RAY_CRATERS, RAY_HARMONICS } from './craters.ts'
 import {
   GRIT_OCTAVES,
@@ -22,6 +23,8 @@ import {
 import { type CraterLevel, MAX_CRATER_LEVELS, terrainSketch } from './sketch.ts'
 import type { SurfaceParameters } from './system.ts'
 import {
+  coastWidth,
+  drainageDatum,
   heightfieldStride,
   regionDirection,
   seaDatumElevation,
@@ -136,9 +139,14 @@ export const SCALAR = {
   WARP_AMOUNT: 31,
   DUNE_CYCLES: 32,
   CHAOS_CELLS: 33,
+  DRAINAGE: 34,
+  LIQUID: 35,
+  BIOTA: 36,
+  DRAINAGE_DATUM: 37,
+  COAST_WIDTH: 38,
 } as const
 
-/** `vec4` slots the scalar block occupies. */
+/** `vec4` slots the scalar block occupies. Forty-eight floats; thirty-nine are spent. */
 const SCALAR_SLOTS = 12
 
 export const SCALARS_AT = 0
@@ -190,6 +198,9 @@ export const WORD = {
   OCTAVES_GRIT: 28,
   /** 1 where the relief and belt bands read the analytic-derivative form. */
   ERODED: 29,
+  SEED_DRAINAGE: 30,
+  SEED_TRIBUTARY: 31,
+  SEED_RAIN: 32,
 } as const
 
 /**
@@ -205,7 +216,7 @@ export const WORD = {
  * CPU put it, and that is a crater that exists on one processor and not the
  * other.
  */
-export const LEVEL_DRAW_AT = 32
+export const LEVEL_DRAW_AT = 36
 
 /**
  * Where each rung's sphere-intersection limits sit, four words per rung in
@@ -235,6 +246,12 @@ export const SLAB_AT = Math.ceil((LEVEL_DRAW_AT + MAX_KERNEL_LEVELS) / 4) * 4
 
 /** Words in a body's record, padded to whole `uvec4`s. */
 export const KERNEL_WORDS = SLAB_AT + 4 * MAX_KERNEL_LEVELS + 4
+
+/**
+ * Words of cover the kernel writes per interior sample: `COVER_CHANNELS`
+ * bytes, four to a word. Two, and the producer slices its readback by it.
+ */
+export const COVER_WORDS = COVER_CHANNELS / 4
 
 /** Where the tail's grit octaves start in a tile's rung frames. */
 export const GRIT_FRAMES_AT = MAX_KERNEL_LEVELS
@@ -353,6 +370,17 @@ function pack(surface: SurfaceParameters): KernelSurface {
   scalar(SCALAR.WARP_AMOUNT, RELIEF_SHAPE.warpAmount / reliefCycles)
   scalar(SCALAR.DUNE_CYCLES, reliefCycles * DUNE_SHAPE.cycles)
   scalar(SCALAR.CHAOS_CELLS, grammar.meanRadius / CHAOS_SHAPE.blockMeters)
+  scalar(SCALAR.DRAINAGE, grammar.drainage)
+  scalar(SCALAR.LIQUID, grammar.liquid)
+  scalar(SCALAR.BIOTA, grammar.biota)
+  scalar(SCALAR.DRAINAGE_DATUM, drainageDatum(surface))
+  // Zero where there is no sea or no liquid, which is the gate `evaluate`
+  // takes before `coastRemap` — a width of zero is a remap that returns its
+  // argument, so the kernel needs no second flag for it.
+  scalar(
+    SCALAR.COAST_WIDTH,
+    sea !== null && grammar.liquid > 0 ? coastWidth(surface) : 0,
+  )
 
   const slot = (index: number): number => index * 4
   const put = (at: number, x: number, y = 0, z = 0, w = 0): void => {
@@ -468,6 +496,9 @@ function pack(surface: SurfaceParameters): KernelSurface {
   words[WORD.SEED_MINERAL] = seeds.mineral.a >>> 0
   words[WORD.SEED_FROST] = seeds.frost.a >>> 0
   words[WORD.SEED_GRIT] = seeds.grit.a >>> 0
+  words[WORD.SEED_DRAINAGE] = seeds.drainage.a >>> 0
+  words[WORD.SEED_TRIBUTARY] = seeds.tributary.a >>> 0
+  words[WORD.SEED_RAIN] = seeds.rain.a >>> 0
 
   /*
    * The octave counts, from the same calls the bands make with the same

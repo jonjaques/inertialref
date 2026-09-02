@@ -15,16 +15,23 @@ import {
 } from './address.ts'
 import {
   beltBand,
+  COAST_SHAPE,
+  coastRemap,
+  drainageCarve,
   hypsometryBand,
   iceBand,
   plateContext,
   reliefBand,
+  tributaryValley,
+  trunkValley,
   volcanicBand,
 } from './bands.ts'
 import { craterField, softLimit } from './craters.ts'
 import {
   BARE_COVER,
   COVER_CHANNELS,
+  type DrainageSample,
+  NO_DRAINAGE,
   packCover,
   type SurfaceCover,
   surfaceCover,
@@ -338,6 +345,30 @@ function evaluate(
     height += bands.ice * iceBand(sketch, grammar, d, bands.ice * budget)
   }
   let elevation = height * budget
+  /*
+   * The valleys, cut into the landform before the craters land on it.
+   *
+   * Running liquid works the ground the plates and the swell have made, so the
+   * carve reads the height *those* bands produced and takes a fraction of it;
+   * a crater dug afterwards sits in the valley the way a young crater sits on
+   * any surface. The cover reads the same two fields, which is why they are
+   * kept rather than recomputed — each is three octaves of noise, and the
+   * riverbed is decided from the same number the floor was cut to.
+   */
+  let drainage: DrainageSample = NO_DRAINAGE
+  if (grammar.drainage > 0) {
+    const datum = drainageDatum(surface)
+    const valley = trunkValley(sketch, d)
+    const tributary = tributaryValley(sketch, d)
+    elevation += drainageCarve(
+      grammar,
+      valley,
+      tributary,
+      elevation - datum,
+      budget,
+    )
+    drainage = { valley, tributary, aboveDatum: elevation - datum }
+  }
   const craterLimit = bands.craters * budget
   /*
    * The **raw** sum is what the cover reads, and the difference is not a
@@ -353,9 +384,20 @@ function evaluate(
     craters = craterField(sketch, grammar, d)
     elevation += softLimit(craters, craterLimit)
   }
+  /*
+   * The coast, last: a shelf under the water and a plain behind the beach,
+   * remapped from whatever the stack put at the waterline. After the craters
+   * so that a crater on the shore is a bay rather than a pit with a rim the
+   * sea cannot reach, and before the tail, which is added by `groundCoverAt`
+   * and is a meter of grit the remap has no business flattening.
+   */
+  const sea = seaDatumElevation(surface)
+  if (sea !== null && grammar.liquid > 0) {
+    elevation = coastRemap(elevation, sea, coastWidth(surface))
+  }
   if (out !== null) {
     packCover(
-      surfaceCover(sketch, grammar, d, plates, craters, craterLimit),
+      surfaceCover(sketch, grammar, d, plates, craters, craterLimit, drainage),
       out,
       at,
     )
@@ -364,13 +406,44 @@ function evaluate(
 }
 
 /**
+ * The level the drainage runs down to, meters: the sea where there is one,
+ * and the lowlands where there is not.
+ *
+ * A valley has to shallow toward *something*, or every channel on a body is
+ * a canyon of the same depth at the coast as on the plateau. On a dry world
+ * with liquid — rivers that end in basins and lakes — the datum is set below
+ * the swell's own range, so the whole surface drains toward its lowest
+ * ground and the channels there are dry beds at the floor's own level.
+ */
+export function drainageDatum(surface: SurfaceParameters): Meters {
+  const sea = seaDatumElevation(surface)
+  if (sea !== null) return sea
+  return (
+    DRY_DRAINAGE_DATUM * surface.maxElevation * surface.grammar.bands.hypsometry
+  )
+}
+
+/**
+ * Where a dry world's drainage runs to, as a fraction of the hypsometry
+ * share: under the swell's −0.35 and above an ocean plate's −0.55, so a
+ * one-plate world drains everywhere and a plate world drains its continents.
+ */
+const DRY_DRAINAGE_DATUM = -0.45
+
+/** How wide the coast's remap reaches on this body, meters. See `coastRemap`. */
+export const coastWidth = (surface: SurfaceParameters): Meters =>
+  COAST_SHAPE.width * surface.maxElevation * surface.grammar.bands.hypsometry
+
+/**
  * The ground below a direction as it is **drawn**, with what it is made of
  * written into `out`.
  *
  * The sea clamp applies to the height and not to the cover: an ocean is a
- * material the renderer decides on from the elevation it is handed, and the
- * seabed's own composition is what would show through a shallow one. See
- * `groundElevation` for why the clamp has exactly one owner.
+ * surface the renderer draws over the elevation it is handed, and the
+ * seabed's own composition is what shows through a shallow one. See
+ * `groundElevation` for why the clamp has exactly one owner, and
+ * `drawnGroundElevation` for the one reader that asks for the seabed with
+ * `seabed` set.
  *
  * The micro tail goes in **before** the clamp rather than after it, and that is
  * what keeps a shoreline continuous. Added afterwards it would rough up the
@@ -386,11 +459,30 @@ export function groundCoverAt(
   direction: Vec3,
   out: Uint8Array | null,
   at: number,
+  seabed = false,
 ): Meters {
   const d = Vec.normalize(direction)
   const sea = seaDatumElevation(surface)
   const elevation = evaluate(surface, d, out, at) + tail(surface, d)
-  return sea === null ? elevation : Math.max(elevation, sea)
+  return sea === null || seabed ? elevation : Math.max(elevation, sea)
+}
+
+/**
+ * The ground as it is drawn *under* any sea: the same field as
+ * `drawnElevation` with the clamp left off, so the seabed is a surface.
+ *
+ * What the heightfield is made of, and nothing else reads it. The sea is a
+ * sheet of its own at the datum, drawn over this — it has to be, because a
+ * shore seen from a landed ship is a flat surface meeting a slope, and a mesh
+ * clamped to the datum is the seabed's shape painted blue. `drawnElevation`
+ * keeps the clamp for the two readers that stand on the water rather than
+ * look through it: the observatory's stance and the detail-floor search.
+ */
+export function drawnGroundElevation(
+  surface: SurfaceParameters,
+  direction: Vec3,
+): Meters {
+  return groundCoverAt(surface, direction, null, 0, true)
 }
 
 /**
@@ -899,7 +991,7 @@ export function generateHeightfield(
       // next patch draws. The cover is the patch's too, for the same reason and
       // one more — it is a vertex attribute, and the border has no vertices.
       if (row < 0 || col < 0 || row >= resolution || col >= resolution) {
-        elevations[index] = drawnElevation(surface, direction)
+        elevations[index] = drawnGroundElevation(surface, direction)
         continue
       }
       elevations[index] = groundCoverAt(
@@ -907,6 +999,7 @@ export function generateHeightfield(
         direction,
         cover,
         (row * resolution + col) * COVER_CHANNELS,
+        true,
       )
       // Read back rather than kept: the array is Float32 and the extremes have
       // to bound *it*, not the float64 the generator computed. A bounding
