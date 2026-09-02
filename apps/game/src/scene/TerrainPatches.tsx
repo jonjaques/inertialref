@@ -136,6 +136,7 @@ export function TerrainPatches({
      * cheaper and has one fewer frame in it than transforming the normal to
      * world space per fragment to meet a world-space sun.
      */
+    terrain.setQuality(engine.surfaceQuality)
     if (state.palette !== null && state.orientation !== null) {
       terrain.setPalette(state.palette, state.datumRadius)
       /*

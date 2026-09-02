@@ -272,11 +272,14 @@ export function ScatterRocks({
     // that way for as long as the field kept handing back the same list.
     const fresh = held?.batches !== scatter.batches || held.meshes !== meshes
     uploaded.current = { meshes, batches: scatter.batches }
+    const drawn = engine.surfaceQuality.rocks
     for (const batch of scatter.batches) {
       const mesh = meshes[batch.variant]
       if (mesh === undefined) continue
       const count = Math.min(batch.count, INSTANCE_CAPACITY)
-      mesh.count = count
+      // Off is a count of zero rather than an unmount: the field still
+      // resolves, and turning the rocks back on is the next frame's upload.
+      mesh.count = drawn ? count : 0
       if (!fresh) continue
       mesh.instanceMatrix.array.set(batch.matrices.subarray(0, count * 16))
       /*

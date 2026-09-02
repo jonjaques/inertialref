@@ -12,6 +12,12 @@ import { devPanels } from './registry.tsx'
 import { TargetRow } from './TargetRow.tsx'
 import { type Connection, DISCONNECTED } from '../net/health.ts'
 import { AA_LEVELS, OUTPUT_PREFERENCES } from '../render/output.ts'
+import {
+  DEFAULT_SURFACE_QUALITY,
+  GROUND_DETAILS,
+  SEA_DETAILS,
+  TERRAIN_DETAILS,
+} from '../render/quality.ts'
 import { LENS_PRESETS, lensForFov } from '@inertialref/rendering'
 import { FOCAL_MAX, FOCAL_MIN } from './controls.ts'
 
@@ -54,6 +60,8 @@ function devContext(
       onLensFlare: () => {},
       aa: '2x',
       onAa: () => {},
+      surface: DEFAULT_SURFACE_QUALITY,
+      onSurface: () => {},
     },
     camera: { lens: LENS_PRESETS.flight, onLens: () => {} },
     connection: DISCONNECTED,
@@ -246,6 +254,8 @@ describe('the author’s instruments', () => {
           onLensFlare: () => {},
           aa: '2x' as const,
           onAa: () => {},
+          surface: DEFAULT_SURFACE_QUALITY,
+          onSurface: () => {},
         },
         render: {
           preference: 'auto' as const,
@@ -255,18 +265,25 @@ describe('the author’s instruments', () => {
       }),
     )
     expect(graphics).toContain('Lens Flare')
-    // The lens-flare switch, off, and no other switch on this panel.
-    expect(graphics.match(/role="switch"/g)).toHaveLength(1)
+    // The lens-flare switch, off, and the rocks switch, on: no other switch
+    // on this panel.
+    expect(graphics.match(/role="switch"/g)).toHaveLength(2)
     expect(graphics).toMatch(/role="switch" aria-checked="false"/)
-    // Two radio groups now, and both used to be a button that cycled: the
-    // anti-aliasing level and the extended-range override. The states you were
-    // not on had no representation in the tree at all.
-    expect(graphics.match(/role="radiogroup"/g)).toHaveLength(2)
+    expect(graphics).toMatch(/role="switch" aria-checked="true"/)
+    // Five radio groups: the anti-aliasing level and the extended-range
+    // override, which both used to be a button that cycled — the states you
+    // were not on had no representation in the tree at all — and the three
+    // surface levers.
+    expect(graphics.match(/role="radiogroup"/g)).toHaveLength(5)
     expect(graphics.match(/role="radio"/g)).toHaveLength(
-      AA_LEVELS.length + OUTPUT_PREFERENCES.length,
+      AA_LEVELS.length +
+        OUTPUT_PREFERENCES.length +
+        TERRAIN_DETAILS.length +
+        GROUND_DETAILS.length +
+        SEA_DETAILS.length,
     )
     // One checked per group.
-    expect(graphics.match(/role="radio" aria-checked="true"/g)).toHaveLength(2)
+    expect(graphics.match(/role="radio" aria-checked="true"/g)).toHaveLength(5)
     expect(graphics).toMatch(/aria-checked="true"[^>]*>2x</)
     for (const level of AA_LEVELS) expect(graphics).toContain(`>${level}<`)
     // The extended-range override moved here from the transport strip. It is a

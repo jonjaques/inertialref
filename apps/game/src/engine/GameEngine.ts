@@ -89,6 +89,11 @@ import {
   type OrbitScope,
   type PresentationStack,
 } from './presentation.ts'
+import {
+  cellPixelsFor,
+  DEFAULT_SURFACE_QUALITY,
+  type SurfaceQuality,
+} from '../render/quality.ts'
 import { TerrainStreamer, type TerrainState } from './terrainStreamer.ts'
 import type { TerrainReport } from '@inertialref/devtools'
 
@@ -307,6 +312,15 @@ export class GameEngine implements PresentationHost {
    * would be lost with it.
    */
   lensFlare = true
+
+  /**
+   * What the surface may be turned down to, written by the shell from the
+   * persisted preference exactly as `lensFlare` is, and reachable from a
+   * driving script as `engine.surfaceQuality = {...}`. The streamer reads
+   * the refinement threshold off it every step; the scene components read
+   * the rest every frame and write uniforms only when a value moved.
+   */
+  surfaceQuality: SurfaceQuality = DEFAULT_SURFACE_QUALITY
 
   /**
    * The player's own lens — what the flight camera is looking through.
@@ -1173,6 +1187,7 @@ export class GameEngine implements PresentationHost {
     // and the *pair* rather than its halves — a lens measured over a viewport
     // it never landed on is a selection nobody can reproduce.
     this.#terrain.lensView = view
+    this.#terrain.cellPixels = cellPixelsFor(this.surfaceQuality.terrain)
     this.#terrain.update(
       this.world,
       shot.renderTime,

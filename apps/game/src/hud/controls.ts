@@ -7,6 +7,7 @@ import {
   verticalFovDegrees,
 } from '@inertialref/rendering'
 import type { AaLevel, OutputPreference } from '../render/output.ts'
+import type { SurfaceQuality } from '../render/quality.ts'
 import type { RendererDescription } from '../render/output.ts'
 
 /*
@@ -260,6 +261,8 @@ export interface GraphicsState {
   readonly onLensFlare: (on: boolean) => void
   readonly aa: AaLevel
   readonly onAa: (level: AaLevel) => void
+  readonly surface: SurfaceQuality
+  readonly onSurface: (next: SurfaceQuality) => void
 }
 
 /**

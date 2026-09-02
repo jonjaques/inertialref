@@ -15,6 +15,7 @@ import { HEIGHTFIELD_RESOLUTION } from '@inertialref/universe'
 import { patchIndices, pixelAngle } from '@inertialref/rendering'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { GEOMETRY_CACHE } from '../engine/terrainStreamer.ts'
+import { seaQualityFor } from '../render/quality.ts'
 import { type WaterMaterial, waveWrap } from '../render/water.ts'
 import { warmAtMount, warmCompile, warmRenderer } from '../render/warmup.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
@@ -87,6 +88,7 @@ export function WaterPatches({
     const container = group.current
     if (container === null) return
     const state = engine.terrainState()
+    water.setQuality(seaQualityFor(engine.surfaceQuality.sea))
     if (state.palette !== null && state.orientation !== null) {
       water.setPalette(state.palette)
       if (state.lens !== null) {

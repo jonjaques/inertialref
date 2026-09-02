@@ -21,6 +21,7 @@ import {
   CAMERA_LENS,
   DEBUG_ON,
   RENDER_AA,
+  RENDER_SURFACE,
   RENDER_HDR,
   RENDER_LENS_FLARE,
   usePersistentState,
@@ -219,6 +220,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    */
   const [lensFlare, setLensFlare] = usePersistentState(RENDER_LENS_FLARE)
   const [aa, setAa] = usePersistentState(RENDER_AA)
+  const [surface, setSurface] = usePersistentState(RENDER_SURFACE)
   /*
    * The lens, and the one preference in here that has changed shape.
    *
@@ -306,11 +308,12 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
   useEffect(() => {
     engine.lensFlare = lensFlare
     engine.flightLens = lens
+    engine.surfaceQuality = surface
     // What the drawing buffer is multiplied by, so the terrain predicate can
     // divide it back out: supersampling raises the sample count, not the detail
     // a viewer can resolve. See `GameEngine.supersample`.
     engine.supersample = aaDprFactor(aa)
-  }, [engine, lensFlare, lens, aa])
+  }, [engine, lensFlare, lens, aa, surface])
 
   useEffect(() => {
     const unsubscribe = monitor.subscribe(setConnection)
@@ -564,6 +567,8 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
       setAa(level)
       flash(`anti-aliasing ${level}`)
     },
+    surface,
+    onSurface: setSurface,
   }
   const cameraState: CameraState = { lens, onLens: setLens }
   const renderState: HudRenderState = {

@@ -19,6 +19,7 @@ import {
   SIGN_UP,
 } from './paths.ts'
 import { KeymapProvider } from '../input/KeymapProvider.tsx'
+import { DEFAULT_SURFACE_QUALITY } from '../render/quality.ts'
 import { OverlayRoutes } from './OverlayRoutes.tsx'
 
 /*
@@ -47,6 +48,8 @@ const state = {
     onLensFlare: () => {},
     aa: '2x' as const,
     onAa: () => {},
+    surface: DEFAULT_SURFACE_QUALITY,
+    onSurface: () => {},
   },
   camera: { lens: LENS_PRESETS.flight, onLens: () => {} },
   render: {

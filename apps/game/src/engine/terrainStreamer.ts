@@ -29,6 +29,7 @@ import {
 } from '@inertialref/universe'
 import {
   buildPatch,
+  DEFAULT_CELL_PIXELS,
   DEFAULT_LENS,
   DEFAULT_MAX_PATCHES,
   DEFAULT_VIEWPORT,
@@ -663,6 +664,13 @@ export class TerrainStreamer {
    * including the ones before a drawing buffer has been reported.
    */
   lensView: LensView | null = null
+  /**
+   * How many display pixels a cell may cover before refining — the
+   * surface-quality lever, written by the engine beside `lensView`. It is
+   * folded into the selection's `optics` scalar, because the predicate reads
+   * the two as one quotient and the memo compares that quotient.
+   */
+  cellPixels: number = DEFAULT_CELL_PIXELS
 
   constructor(pool: WorkerPool | null) {
     this.#pool = pool
@@ -902,7 +910,7 @@ export class TerrainStreamer {
       this.#forget()
       return
     }
-    const options = { maxLevel, lens, viewport }
+    const options = { maxLevel, lens, viewport, cellPixels: this.cellPixels }
 
     /*
      * Reuse the held selection while nothing it is a function of has moved.
@@ -917,7 +925,7 @@ export class TerrainStreamer {
      * address is a different `Body`), and the cache epoch recorded at walk
      * time.
      */
-    const optics = pixelsPerRadian(lens, viewport)
+    const optics = pixelsPerRadian(lens, viewport) / this.cellPixels
     const held = this.#selection
     if (
       held !== null &&
@@ -1049,8 +1057,9 @@ export class TerrainStreamer {
       readonly maxLevel: number
       readonly lens: LensView['lens']
       readonly viewport: LensView['viewport']
+      readonly cellPixels: number
     },
-    /** `pixelsPerRadian(lens, viewport)`, computed by the caller. */
+    /** `pixelsPerRadian(lens, viewport) / cellPixels`, computed by the caller. */
     optics: number,
   ): void {
     // What to draw: refine only into ground already in the cache, so a patch

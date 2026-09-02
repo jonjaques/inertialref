@@ -20,6 +20,7 @@ import {
   exp,
   float,
   Fn,
+  If,
   length,
   max,
   mix,
@@ -49,6 +50,11 @@ import {
   type TerrainPalette,
 } from '@inertialref/rendering'
 import { asVector, periodicFbm } from './noiseNodes.ts'
+import {
+  DEFAULT_SURFACE_QUALITY,
+  groundBandsFor,
+  type SurfaceQuality,
+} from './quality.ts'
 
 /*
  * The ground's own material.
@@ -101,6 +107,8 @@ export interface TerrainMaterial {
    * whatever the manifest says exists.
    */
   setAlbedoMap(map: Texture | null, hasMap: boolean): void
+  /** The surface-quality lever. Compares before it writes. */
+  setQuality(quality: SurfaceQuality): void
 }
 
 /**
@@ -221,6 +229,15 @@ export function createTerrainMaterial(): TerrainMaterial {
    */
   const seaSheet = uniform(0)
   const liquidGlow = uniform(new Color(0, 0, 0))
+  /*
+   * The surface-quality lever, as the count of detail bands that run:
+   * two is the macro and micro octaves with the grain, one the macro alone,
+   * zero none. A uniform rather than a build option so the setting takes
+   * effect on the next frame, and a *branch* on it rather than a multiply
+   * by zero, because a noise multiplied by zero is a noise evaluated — and
+   * the evaluation is the cost this exists to remove.
+   */
+  const detailBands = uniform(groundBandsFor(DEFAULT_SURFACE_QUALITY.ground))
   const skyColour = uniform(new Color(0, 0, 0))
   const hazeColour = uniform(new Color(0, 0, 0))
   const skyStrength = uniform(0)
@@ -457,18 +474,36 @@ export function createTerrainMaterial(): TerrainMaterial {
       smoothstep(float(MICRO_METRES * 0.4), float(MICRO_METRES * 2), footprint),
     )
 
+    /*
+     * Each octave runs only where it is worth anything: inside a branch on
+     * its own fade as well as on the quality lever. Past its fade an octave
+     * multiplies out to zero, and a zero that cost a Perlin evaluation per
+     * pixel is most of what a whole-screen ground costs at a retina size —
+     * the far ground, which is most of the frame from any height, pays for
+     * none of the micro or the grain this way.
+     */
     // Direction-domain, so it is one continuous field over the whole body with
     // no patch, no cube face and no level in it.
-    const macro = mx_fractal_noise_float(up.mul(macroFrequency), 3, 2, 0.5).mul(
-      macroFade,
-    )
+    const macro = float(0).toVar()
+    If(detailBands.greaterThan(0.5).and(macroFade.greaterThan(0)), () => {
+      macro.assign(
+        mx_fractal_noise_float(up.mul(macroFrequency), 3, 2, 0.5).mul(
+          macroFade,
+        ),
+      )
+    })
     // Meters-domain, so it stays sharp at arm's length. See `MICRO_METRES`.
-    const micro = mx_fractal_noise_float(
-      local.mul(float(1 / MICRO_METRES)),
-      2,
-      2.1,
-      0.55,
-    ).mul(microFade)
+    const micro = float(0).toVar()
+    If(detailBands.greaterThan(1.5).and(microFade.greaterThan(0)), () => {
+      micro.assign(
+        mx_fractal_noise_float(
+          local.mul(float(1 / MICRO_METRES)),
+          2,
+          2.1,
+          0.55,
+        ).mul(microFade),
+      )
+    })
     const detail = macro.mul(0.6).add(micro.mul(0.4))
 
     /*
@@ -486,11 +521,16 @@ export function createTerrainMaterial(): TerrainMaterial {
         footprint,
       ),
     )
-    const grit = periodicFbm(
-      asVector(grainOrigin.add(local.mul(float(1 / GRAIN_METRES)))),
-      GRAIN_OCTAVES,
-      GRAIN_PERIOD,
-    ).mul(grainFade)
+    const grit = float(0).toVar()
+    If(detailBands.greaterThan(1.5).and(grainFade.greaterThan(0)), () => {
+      grit.assign(
+        periodicFbm(
+          asVector(grainOrigin.add(local.mul(float(1 / GRAIN_METRES)))),
+          GRAIN_OCTAVES,
+          GRAIN_PERIOD,
+        ).mul(grainFade),
+      )
+    })
 
     /* --- which deposit is here --------------------------------------------- */
 
@@ -741,16 +781,20 @@ export function createTerrainMaterial(): TerrainMaterial {
         along.y.div(sqrt(horizontal)).mul(1 / Math.PI),
       )
     }
-    const published = mix(
-      vec3(1),
-      sampled(
-        albedoMap,
-        mapUv,
-        uvGradient(dFdx(local)),
-        uvGradient(dFdy(local)),
-      ),
-      mapped,
-    )
+    // Sampled only on a mapped body. The stand-in is one white texel, and a
+    // fetch with explicit gradients is legal inside a branch — but it is
+    // still a fetch, on every pixel of every mapless world.
+    const published = vec3(1).toVar()
+    If(mapped.greaterThan(0.5), () => {
+      published.assign(
+        sampled(
+          albedoMap,
+          mapUv,
+          uvGradient(dFdx(local)),
+          uvGradient(dFdy(local)),
+        ),
+      )
+    })
 
     /*
      * The ceiling, spent once and here.
@@ -1049,6 +1093,10 @@ export function createTerrainMaterial(): TerrainMaterial {
        * four kilometers of ground on both.
        */
       macroFrequency.value = (2 * Math.PI * datumRadius) / MACRO_METRES
+    },
+    setQuality(quality) {
+      const bands = groundBandsFor(quality.ground)
+      if (detailBands.value !== bands) detailBands.value = bands
     },
     setAlbedoMap(map, hasMap) {
       /*

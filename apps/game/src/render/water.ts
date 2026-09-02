@@ -439,11 +439,13 @@ export function createWaterMaterial(
       terminator.value = palette.terminator
     },
     setQuality(quality) {
-      refraction.value = quality.refraction ? 1 : 0
-      waveOctaves.value = Math.max(
+      const refract = quality.refraction ? 1 : 0
+      if (refraction.value !== refract) refraction.value = refract
+      const octaves = Math.max(
         0,
         Math.min(DEFAULT_WATER_QUALITY.waveOctaves, quality.waveOctaves),
       )
+      if (waveOctaves.value !== octaves) waveOctaves.value = octaves
     },
   }
 }
