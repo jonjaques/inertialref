@@ -13,7 +13,6 @@ import {
   atan,
   attribute,
   clamp,
-  cross,
   dFdx,
   dFdy,
   dot,
@@ -24,7 +23,6 @@ import {
   length,
   max,
   mix,
-  mx_fractal_noise_float,
   normalize,
   normalLocal,
   oneMinus,
@@ -32,7 +30,6 @@ import {
   positionLocal,
   pow,
   saturate,
-  sign,
   smoothstep,
   sqrt,
   texture,
@@ -49,7 +46,8 @@ import {
   type SurfaceMaterial,
   type TerrainPalette,
 } from '@inertialref/rendering'
-import { asVector, periodicFbm } from './noiseNodes.ts'
+import { asVector, bumped, fbmFetch, noiseSampler } from './noiseNodes.ts'
+import { NOISE_CELLS, noiseTexture } from './noiseTexture.ts'
 import {
   DEFAULT_SURFACE_QUALITY,
   groundBandsFor,
@@ -155,8 +153,8 @@ const MICRO_RELIEF = 0.25
  */
 export const GRAIN_METRES = 0.7
 
-/** Octaves of it. Three reaches 9 cm, which is a pixel at arm's length. */
-const GRAIN_OCTAVES = 3
+/** Octaves of it. Two reaches 17 cm; the third, at 9 cm, was a fetch a pixel over the whole near ground for a band the chop under it already carries. */
+const GRAIN_OCTAVES = 2
 
 /** Peak-to-peak relief of the coarsest grain octave, meters. */
 const GRAIN_RELIEF = 0.035
@@ -183,7 +181,7 @@ const GRAIN_RELIEF = 0.035
  * repeat is 45 m of ground, which at the distance this band survives to is
  * always less than one period across the frame.
  */
-export const GRAIN_PERIOD = 64
+export const GRAIN_PERIOD = NOISE_CELLS
 
 export function createTerrainMaterial(): TerrainMaterial {
   const sunDirection = uniform(new Vector3(1, 0, 0))
@@ -267,6 +265,8 @@ export function createTerrainMaterial(): TerrainMaterial {
    */
   const albedoMap = texture(BLANK)
   const mapped = uniform(0)
+  // The baked noise every detail octave is a fetch of. See `noiseTexture.ts`.
+  const noise = noiseSampler(noiseTexture())
 
   const eyeLocal = uniform(new Vector3()).onObjectUpdate(
     ({ object }) => (object?.userData.eyeLocal as Vector3 | undefined) ?? ZERO,
@@ -484,27 +484,36 @@ export function createTerrainMaterial(): TerrainMaterial {
      */
     // Direction-domain, so it is one continuous field over the whole body with
     // no patch, no cube face and no level in it.
-    const macro = float(0).toVar()
+    /*
+     * Each field is a value and a gradient — `x` and `yzw` of the fetch —
+     * and the gradient is carried in meters per meter along the body-fixed
+     * axes: the direction-domain band's slope over `|anchor|`, because a
+     * step of one meter on the ground is `1/|anchor|` of a unit direction;
+     * the meter-domain bands' over their own wavelengths.
+     */
+    const macro = vec4(0).toVar()
     If(detailBands.greaterThan(0.5).and(macroFade.greaterThan(0)), () => {
+      const field = fbmFetch(noise, asVector(up.mul(macroFrequency)), 2)
       macro.assign(
-        mx_fractal_noise_float(up.mul(macroFrequency), 3, 2, 0.5).mul(
+        vec4(field.x, field.yzw.mul(macroFrequency).div(anchorLength)).mul(
           macroFade,
         ),
       )
     })
     // Meters-domain, so it stays sharp at arm's length. See `MICRO_METRES`.
-    const micro = float(0).toVar()
+    const micro = vec4(0).toVar()
     If(detailBands.greaterThan(1.5).and(microFade.greaterThan(0)), () => {
+      const field = fbmFetch(
+        noise,
+        asVector(local.mul(float(1 / MICRO_METRES))),
+        1,
+      )
       micro.assign(
-        mx_fractal_noise_float(
-          local.mul(float(1 / MICRO_METRES)),
-          2,
-          2.1,
-          0.55,
-        ).mul(microFade),
+        vec4(field.x, field.yzw.mul(float(1 / MICRO_METRES))).mul(microFade),
       )
     })
-    const detail = macro.mul(0.6).add(micro.mul(0.4))
+    const detail = macro.x.mul(0.6).add(micro.x.mul(0.4))
+    const detailSlope = macro.yzw.mul(0.6).add(micro.yzw.mul(0.4))
 
     /*
      * And the grain: the band between a mesh cell and a pixel.
@@ -521,14 +530,15 @@ export function createTerrainMaterial(): TerrainMaterial {
         footprint,
       ),
     )
-    const grit = float(0).toVar()
+    const grit = vec4(0).toVar()
     If(detailBands.greaterThan(1.5).and(grainFade.greaterThan(0)), () => {
+      const field = fbmFetch(
+        noise,
+        asVector(grainOrigin.add(local.mul(float(1 / GRAIN_METRES)))),
+        GRAIN_OCTAVES,
+      )
       grit.assign(
-        periodicFbm(
-          asVector(grainOrigin.add(local.mul(float(1 / GRAIN_METRES)))),
-          GRAIN_OCTAVES,
-          GRAIN_PERIOD,
-        ).mul(grainFade),
+        vec4(field.x, field.yzw.mul(float(1 / GRAIN_METRES))).mul(grainFade),
       )
     })
 
@@ -846,65 +856,27 @@ export function createTerrainMaterial(): TerrainMaterial {
     /* --- the shading normal ------------------------------------------------- */
 
     /*
-     * Detail relief, as a screen-space gradient of the height field.
+     * Detail relief, as the height field's own gradient.
      *
-     * Mikkelsen's unparametrized bump mapping, which is what `bumpMap()` in TSL
-     * does for a texture — written out here because the base normal it has to
-     * perturb is the *morphed* one, in body-fixed axes, and the built-in reads
-     * `normalView`. Working in body-fixed axes throughout is what keeps this
-     * consistent with the rest of the graph; the algorithm needs only that the
-     * position and the normal are in the same frame.
+     * The fields carry their slopes, so the shading normal is the mesh normal
+     * tilted by the tangential part of the summed slope — no screen-space
+     * derivative anywhere in it. Differencing the height across pixels was
+     * the form before the texture, and it is the form the texture cannot
+     * take: a trilinear fetch is piecewise linear, so its screen difference
+     * is constant across a texel and the texel grid shows through the shading
+     * as a crease at arm's length. The analytic gradient is smooth where the
+     * value is only continuous.
      *
-     * Water gets none of it. A wave field is not in this noise, and mottling a
-     * flat sea with rock grain is the one thing that would make an ocean read
-     * as wet concrete.
+     * Water gets none of it. A wave field is not in this noise, and mottling
+     * a flat sea with rock grain is the one thing that would make an ocean
+     * read as wet concrete.
      */
-    const height = detail
+    const slopeOfDetail = detailSlope
       .mul(float(MICRO_RELIEF))
-      .add(grit.mul(float(GRAIN_RELIEF)))
+      .add(grit.yzw.mul(float(GRAIN_RELIEF)))
       .mul(bump)
       .mul(dry)
-    /*
-     * The position derivatives are **not** normalized, and that is the one
-     * place this departs from `bumpMap()` in TSL.
-     *
-     * The built-in differences a *texture*, so its `dH` is dimensionless and
-     * normalizing the position derivatives is what makes the result independent
-     * of the texture's scale. Here `height` is in meters, so the two halves have
-     * to be measured against the same ruler: left normalized, `det` is a
-     * per-triangle constant while `dH` grows with the pixel footprint, which
-     * makes the bump strengthen with distance *and* step at every triangle
-     * edge. At two kilometers up, with the far ground coarse enough that one
-     * cell covers a hundred pixels, that draws flat-toned quadrilaterals across
-     * the plain.
-     *
-     * Unnormalized, `det` goes as the footprint squared and so does the
-     * gradient term, so the quotient is scale-free — which is what Mikkelsen's
-     * derivation actually says.
-     */
-    const sigmaX = dFdx(local)
-    const sigmaY = dFdy(local)
-    const r1 = cross(sigmaY, normal)
-    const r2 = cross(normal, sigmaX)
-    const determinant = dot(sigmaX, r1)
-    const gradient = sign(determinant).mul(
-      dFdx(height).mul(r1).add(dFdy(height).mul(r2)),
-    )
-    /*
-     * The floor on `|det|` is a NaN guard, not a term.
-     *
-     * A quad that is degenerate in screen space — a sliver at the limb, or one
-     * whose two triangles carry the same `local` — has `sigmaX ≈ sigmaY ≈ 0`, so
-     * `det` is zero and `sign(det)` takes `gradient` to zero with it. The
-     * argument is then the zero vector, and `normalize` of that is NaN across
-     * the whole quad, through `mu0`, `mu` and `skyView` into the final colour.
-     * 1e-9 is far below any real determinant — it goes as the pixel footprint
-     * squared, which is 1e-4 m² on the finest patch under a landing ship — and
-     * its square survives float32, which 1e-20 would not.
-     */
-    const shaded = normalize(
-      max(determinant.abs(), float(1e-9)).mul(normal).sub(gradient),
-    )
+    const shaded = bumped(asVector(normal), asVector(slopeOfDetail))
 
     /* --- the light ---------------------------------------------------------- */
 

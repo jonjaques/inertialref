@@ -1,13 +1,13 @@
 import { Color, MeshBasicNodeMaterial, Vector2, Vector3 } from 'three/webgpu'
 import {
   attribute,
-  cross,
   dFdx,
   dFdy,
   dot,
   exp,
   float,
   Fn,
+  If,
   length,
   max,
   min,
@@ -18,18 +18,25 @@ import {
   pow,
   saturate,
   screenUV,
-  sign,
   smoothstep,
   sqrt,
   uniform,
   varying,
   vec2,
   vec3,
+  vec4,
   viewportSharedTexture,
 } from 'three/tsl'
 import type { LinearRgb } from '@inertialref/universe'
 import { NO_MORPH_DISTANCE, type TerrainPalette } from '@inertialref/rendering'
-import { asVector, periodicFbm, type Vector } from './noiseNodes.ts'
+import {
+  asVector,
+  bumped,
+  fbmFetch,
+  noiseSampler,
+  type Vector,
+} from './noiseNodes.ts'
+import { NOISE_CELLS, noiseTexture } from './noiseTexture.ts'
 import { AIR_SCALE_HEIGHT } from './terrain.ts'
 
 /*
@@ -85,7 +92,7 @@ export interface WaterQuality {
 
 export const DEFAULT_WATER_QUALITY: WaterQuality = {
   refraction: true,
-  waveOctaves: 3,
+  waveOctaves: 2,
 }
 
 /**
@@ -114,7 +121,7 @@ const CHOP_RELIEF = 0.14
  * is 768 m of sea, which at the distance the waves survive to is more than a
  * period across the frame.
  */
-export const WAVE_PERIOD = 64
+export const WAVE_PERIOD = NOISE_CELLS
 
 /** One body-fixed coordinate reduced into the wave field's period, in wavelengths. */
 export function waveWrap(meters: number): number {
@@ -177,6 +184,7 @@ export function createWaterMaterial(
 
   const localPosition = varying(vec3(), 'waterLocal')
   const waterDepth = varying(float(), 'waterDeep')
+  const noise = noiseSampler(noiseTexture())
 
   const material = new MeshBasicNodeMaterial()
   material.transparent = true
@@ -230,7 +238,6 @@ export function createWaterMaterial(
       waveOrigin.add(local.mul(float(1 / WAVE_METRES))).add(drift),
     )
     const octaves = DEFAULT_WATER_QUALITY.waveOctaves
-    const relief = periodicFbm(point, octaves, WAVE_PERIOD)
     const chopFade = oneMinus(
       smoothstep(
         float(WAVE_METRES * 0.08),
@@ -241,33 +248,34 @@ export function createWaterMaterial(
     const chopPoint = asVector(
       point.mul(4).add(vec3(time.mul(0.11), time.mul(-0.07), time.mul(0.05))),
     )
-    const chop = periodicFbm(chopPoint, 2, WAVE_PERIOD * 4).mul(chopFade)
-    // `waveOctaves` is a uniform so the setting needs no rebuild: the chop
-    // goes first, then the swell, as the count falls toward zero.
-    const swellGate = saturate(waveOctaves.div(octaves))
-    const chopGate = saturate(waveOctaves.sub(1))
-    const height = relief
-      .mul(float(WAVE_RELIEF))
-      .mul(waveFade)
-      .mul(swellGate)
-      .add(chop.mul(float(CHOP_RELIEF)).mul(chopGate))
-
     /*
-     * The wave normal by Mikkelsen's construction, as the ground does it —
-     * unnormalized position derivatives so the quotient is scale-free, and
-     * a floor on the determinant as a NaN guard rather than a term.
+     * Both fields are fetches of the baked noise, inside branches on their
+     * fades and on the lever: past its fade a field multiplies out to zero,
+     * and a zero that cost three fetches on every pixel of open sea is what
+     * the branch is for. `waveOctaves` is a uniform so the setting needs no
+     * rebuild: the chop goes first, then the swell, as the count falls.
      */
-    const sigmaX = dFdx(local)
-    const sigmaY = dFdy(local)
-    const r1 = cross(sigmaY, up)
-    const r2 = cross(up, sigmaX)
-    const determinant = dot(sigmaX, r1)
-    const gradient = sign(determinant).mul(
-      dFdx(height).mul(r1).add(dFdy(height).mul(r2)),
-    )
-    const normal = normalize(
-      max(determinant.abs(), float(1e-9)).mul(up).sub(gradient),
-    )
+    const relief = vec4(0).toVar()
+    If(waveOctaves.greaterThan(0.5).and(waveFade.greaterThan(0)), () => {
+      relief.assign(fbmFetch(noise, point, octaves).mul(waveFade))
+    })
+    const chop = vec4(0).toVar()
+    If(waveOctaves.greaterThan(1.5).and(chopFade.greaterThan(0)), () => {
+      chop.assign(fbmFetch(noise, chopPoint, 1).mul(chopFade))
+    })
+    // The value, for the foam; the slope in meters per meter, for the normal.
+    // `point` is in wavelengths, so a gradient per wavelength is one over
+    // `WAVE_METRES` per meter, and the chop's domain is four times finer.
+    const height = relief.x
+      .mul(float(WAVE_RELIEF))
+      .add(chop.x.mul(float(CHOP_RELIEF)))
+    const slope = relief.yzw
+      .mul(float(WAVE_RELIEF / WAVE_METRES))
+      .add(chop.yzw.mul(float((CHOP_RELIEF * 4) / WAVE_METRES)))
+
+    // The wave normal: the datum's, tilted by the tangential slope. See
+    // `bumped` for why it is a gradient and not a screen-space difference.
+    const normal = bumped(asVector(up), asVector(slope))
 
     /* --- the light ---------------------------------------------------------- */
 
@@ -375,7 +383,7 @@ export function createWaterMaterial(
      * fine octave so it is a line of surf rather than a white band.
      */
     const foamNoise = saturate(
-      relief.mul(0.5).add(0.5).mul(1.6).sub(0.3).mul(waveFade),
+      relief.x.mul(0.5).add(0.5).mul(1.6).sub(0.3).mul(waveFade),
     )
     const foam = oneMinus(smoothstep(float(0.05), float(1.4), depth))
       .mul(foamNoise)
