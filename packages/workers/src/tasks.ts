@@ -201,6 +201,11 @@ export interface HeightfieldRequestPayload {
   readonly resolution: number
   /** Rings of samples outside the patch. Omitted means `HEIGHTFIELD_BORDER`. */
   readonly border?: number
+  /**
+   * The seabed rather than the clamped surface. See
+   * `HeightfieldRequest.seabed`; omitted means clamped.
+   */
+  readonly seabed?: boolean
 }
 
 export interface HeightfieldResponse {
@@ -208,7 +213,7 @@ export interface HeightfieldResponse {
   readonly resolution: number
   readonly border: number
   readonly elevations: Float32Array
-  /** Four bytes of surface cover per vertex, unbordered. See `cover.ts`. */
+  /** `COVER_CHANNELS` bytes of surface cover per vertex, unbordered. See `cover.ts`. */
   readonly cover: Uint8Array
   readonly minElevation: number
   readonly maxElevation: number
@@ -236,8 +241,13 @@ export const generateHeightfieldTask = defineTask<
    * 3 worker's answer has no `cover`, and `buildPatch` reads its length —
    * which is an invariant failure on the first patch rather than a patch that
    * quietly wears the wrong material.
+   *
+   * 5: the cover record is eight bytes — wet and biota beside the four — and
+   * the request says whether the tile is the seabed. A version 4 worker's
+   * cover is half the length `buildPatch` checks, which is an invariant
+   * failure that names the mesh rather than the worker.
    */
-  version: 4,
+  version: 5,
   run(payload) {
     const seed: Seed = parseSeed(payload.surfaceSeed)
     const field: Heightfield = generateHeightfield(
@@ -257,6 +267,7 @@ export const generateHeightfieldTask = defineTask<
         ),
         resolution: payload.resolution,
         border: payload.border,
+        seabed: payload.seabed,
       },
     )
     return {

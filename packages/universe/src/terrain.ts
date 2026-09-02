@@ -471,12 +471,14 @@ export function groundCoverAt(
  * The ground as it is drawn *under* any sea: the same field as
  * `drawnElevation` with the clamp left off, so the seabed is a surface.
  *
- * What the heightfield is made of, and nothing else reads it. The sea is a
- * sheet of its own at the datum, drawn over this — it has to be, because a
- * shore seen from a landed ship is a flat surface meeting a slope, and a mesh
- * clamped to the datum is the seabed's shape painted blue. `drawnElevation`
- * keeps the clamp for the two readers that stand on the water rather than
- * look through it: the observatory's stance and the detail-floor search.
+ * What the heightfield is made of where a sheet is drawn, and nothing else
+ * reads it. The sea is a sheet of its own at the datum, drawn over this — it
+ * has to be, because a shore seen from a landed ship is a flat surface meeting
+ * a slope, and a mesh clamped to the datum is the seabed's shape painted blue.
+ * `drawnElevation` keeps the clamp for the readers that stand on the water
+ * rather than look through it — the observatory's stance, the detail-floor
+ * search — and for the heightfield of a body that gets no sheet, whose
+ * photograph is its sea.
  */
 export function drawnGroundElevation(
   surface: SurfaceParameters,
@@ -889,6 +891,15 @@ export interface HeightfieldRequest {
   readonly resolution: number
   /** Rings of samples outside the patch. Default `HEIGHTFIELD_BORDER`. */
   readonly border?: number
+  /**
+   * Whether the field is the seabed — `drawnGroundElevation`, the ground
+   * under any sea with the clamp left off — or the drawn surface, clamped up
+   * to the datum. The seabed is right only where the renderer lays a sheet
+   * over it at the datum; a mapped body has no sheet, its photograph is its
+   * sea, and an unclamped seabed under the photograph is a trench kilometers
+   * below the datum the ship lands on. Default false: clamped.
+   */
+  readonly seabed?: boolean
 }
 
 export interface Heightfield {
@@ -966,6 +977,7 @@ export function generateHeightfield(
 ): Heightfield {
   const { region, resolution } = request
   const border = request.border ?? HEIGHTFIELD_BORDER
+  const seabed = request.seabed ?? false
   invariant(
     resolution >= 2 && resolution <= 513,
     `Bad heightfield resolution ${resolution}`,
@@ -991,7 +1003,9 @@ export function generateHeightfield(
       // next patch draws. The cover is the patch's too, for the same reason and
       // one more — it is a vertex attribute, and the border has no vertices.
       if (row < 0 || col < 0 || row >= resolution || col >= resolution) {
-        elevations[index] = drawnGroundElevation(surface, direction)
+        elevations[index] = seabed
+          ? drawnGroundElevation(surface, direction)
+          : drawnElevation(surface, direction)
         continue
       }
       elevations[index] = groundCoverAt(
@@ -999,7 +1013,7 @@ export function generateHeightfield(
         direction,
         cover,
         (row * resolution + col) * COVER_CHANNELS,
-        true,
+        seabed,
       )
       // Read back rather than kept: the array is Float32 and the extremes have
       // to bound *it*, not the float64 the generator computed. A bounding

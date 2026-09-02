@@ -235,8 +235,12 @@ to main-thread output sample by sample, and would otherwise be capable of
 comparing two differently sized grids and calling them equal.
 
 The heightfield is `drawnGroundElevation`, not the bare `elevationAt`: the
-presentational tail below the canonical floor, and **no sea clamp** — the mesh
-is the seabed, and the sea is a sheet drawn over it at the datum. The clamp
+presentational tail below the canonical floor, and **no sea clamp** where a
+sheet is drawn — the mesh is the seabed, and the sea is a sheet drawn over it
+at the datum. The request carries the flag (`seabed`), and a body that gets no
+sheet — a mapped one, whose photograph is its sea — is built from the clamped
+`drawnElevation` instead, or its ocean floor is a trench under the photograph
+kilometers below the datum the ship lands on. The clamp
 still has exactly one owner, `groundElevation`, and `drawnElevation` keeps it
 for the two readers that stand on the water rather than look through it — the
 observatory's stance and the detail-floor search. The tail is the one term the
@@ -397,9 +401,9 @@ terrain is where it really is; only how sharply it catches the light is turned u
 
 A body with none of them is most of the galaxy, and it wears the ground. The
 orbital bake ([ADR-0026](../adr/0026-the-liquid.md)) draws the streamed ground
-material from the body's centre into six faces of reflectance and a sea mask,
+material from the body's center into six faces of reflectance and a sea mask,
 and the sphere samples them by direction, so what the sphere shows from orbit
-is the geology the descent arrives at rather than a base colour standing in for
+is the geology the descent arrives at rather than a base color standing in for
 it. The bake carries no relief: the sphere is flat-shaded under the same
 photometry, and the eight-pixel gate is where the ground's own normals take over.
 

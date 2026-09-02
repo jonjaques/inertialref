@@ -958,9 +958,11 @@ describe('the ground has one owner', () => {
   it('draws the mesh at the drawn radius, inside the bound it publishes', () => {
     const body = oceanWorld()
     const region = regionAddress(0, 4, 5, 6)
+    // The seabed, as the streamer asks for it where a sheet is drawn.
     const field = generateHeightfield(body.surface, {
       region,
       resolution: HEIGHTFIELD_RESOLUTION,
+      seabed: true,
     })
     const bound = drawnDivergence(body.surface)
 
@@ -998,6 +1000,29 @@ describe('the ground has one owner', () => {
         Math.min(meshed, seaDatumElevation(body.surface) as number) - 1e-6,
       )
     }
+
+    /*
+     * And without the flag the field is the clamped surface, which is what a
+     * body with no sheet — a mapped one, whose photograph is its sea — is
+     * built from. An unclamped seabed under a photograph is a trench
+     * kilometers below the datum the ship lands on.
+     */
+    const clamped = generateHeightfield(body.surface, {
+      region,
+      resolution: HEIGHTFIELD_RESOLUTION,
+    })
+    const datum = seaDatumElevation(body.surface) as number
+    let submarine = 0
+    for (let row = 0; row < HEIGHTFIELD_RESOLUTION; row += 1) {
+      for (let col = 0; col < HEIGHTFIELD_RESOLUTION; col += 1) {
+        const seabed = heightfieldSample(field, row, col)
+        const surface = heightfieldSample(clamped, row, col)
+        expect(surface).toBeGreaterThanOrEqual(datum - 1e-3)
+        if (seabed < datum) submarine += 1
+        else expect(surface).toBeCloseTo(seabed, 1)
+      }
+    }
+    expect(submarine).toBeGreaterThan(0)
 
     /*
      * And the two fields are not the same function, which is what makes the

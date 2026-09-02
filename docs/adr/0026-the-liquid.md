@@ -6,8 +6,8 @@ Status: accepted · 2 Sep 2026
 
 [ADR-0019](0019-the-geology.md) made the ground a geology and
 [ADR-0021](0021-the-ground.md) took it below the canonical floor, and every
-generated world came out of both the same two colours: a rocky one in the
-class's brown and an icy one in the class's grey, with a sea — where the
+generated world came out of both the same two colors: a rocky one in the
+class's brown and an icy one in the class's gray, with a sea — where the
 generator drew one — painted onto ground clamped flat at the datum. A shore
 seen from a landed ship was the seabed's own shape wearing blue. A world at
 900 K had an ocean. Nothing ran downhill anywhere, and nothing grew.
@@ -16,7 +16,7 @@ seen from a landed ship was the seabed's own shape wearing blue. A world at
 a drainage graph and flora to authored biomes, both correctly; what it did
 not say was how much of a world's _look_ is the liquid rather than the rock.
 The brief for this phase named four things — a shoreline, river valleys,
-water that reflects and refracts, and colour that is not brown and grey — and
+water that reflects and refracts, and color that is not brown and gray — and
 one constraint: the frame at the tail of the planet scale was 20–30 fps, and
 on a retina window 9.5.
 
@@ -63,28 +63,30 @@ the deposits still want will go.
 
 **The heightfield is the seabed, and the sea is a sheet over it.**
 `drawnGroundElevation` leaves the sea clamp off; `drawnElevation` keeps it
-for the two readers that stand on the water rather than look through it, the
-stance and the detail-floor search. `buildPatch` emits a second grid for any
+for the readers that stand on the water rather than look through it, the
+stance and the detail-floor search, and for the heightfield of a body that
+gets no sheet — a mapped one, whose photograph is its sea — which the request
+says with a `seabed` flag. `buildPatch` emits a second grid for any
 patch the sea reaches — the datum sphere on the patch's own vertices, with
 the water depth over each and a morph target for both — and
 `render/water.ts` draws it: Fresnel between what comes up through the water
 and what reflects off it; the seabed read from the frame the opaque pass
 just drew, displaced by the wave slope and attenuated by
 `e^(−absorption · path)` along the refracted ray, so a shelf is turquoise
-and the deep is the liquid's own colour; the sky and a two-lobe sun in the
+and the deep is the liquid's own color; the sky and a two-lobe sun in the
 reflection; a swell and a chop; foam where the sea is shallower than a wave
 is high. Magma is the same graph with a glow. A river is painted on its bed
 rather than drawn as a sheet, because a sheet per valley is a mesh per
 valley.
 
 **A world is drawn in families off its own seed.** `appearance.ts` replaces
-the class colour with eleven rock families and five ice ones weighted by the
+the class color with eleven rock families and five ice ones weighted by the
 ground temperature — the iron oxides, the basalts, the feldspars, olivine,
 sulfur, the tholins — with a little value and chroma of the world's own;
 seven haze compositions gated by temperature, from Rayleigh blue through
 dust, sulfuric glare, tholin orange and methane teal; six photosynthetic
 pigments, chlorophyll weighted as the common answer; and a
-`LiquidAppearance` with the deep colour, the per-meter absorption and the
+`LiquidAppearance` with the deep color, the per-meter absorption and the
 glow. Forked from the surface seed so every other draw on the body stays
 where it was. The families are more saturated than the class means were on
 purpose: a generated world is drawn from this at every distance, and its
@@ -115,10 +117,10 @@ the seam with the disk is untouched.
 **The sphere wears the ground's own picture.** `render/orbitalBake.ts` asks
 the streamer's `HeightfieldSource` for a body's ninety-six level-2 regions,
 builds them with `buildPatch`, and draws them through the ground material in
-its bake mode from a `CubeCamera` at the body's centre — the reflectance
+its bake mode from a `CubeCamera` at the body's center — the reflectance
 into one cube target and the sea mask into another, because an opaque node
 material writes an alpha of one whatever its opacity node says. The sphere
-samples both by its unit position and keys its ocean colour and sun-glint on
+samples both by its unit position and keys its ocean color and sun-glint on
 the mask as it does on a photographed body's. One graph draws the ground and
 takes its picture, which is how the seam rule holds for a bake at all: there
 is no second deposit stack to keep in step. Asked the first time a mapless
@@ -159,7 +161,7 @@ transparent, so the seabed under it is shaded in full and then attenuated to
 nothing. A branch on the depth would skip it; measured, the sea's own terms
 were the larger cost and the levers cover the rest.
 
-**A colour wheel.** A hue drawn uniformly makes every world the same unlikely
+**A color wheel.** A hue drawn uniformly makes every world the same unlikely
 pastel; the families are the surfaces that exist.
 
 **Keeping the octaves as lattice evaluations and cutting their count.** Fewer

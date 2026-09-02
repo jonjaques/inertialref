@@ -15,7 +15,11 @@ import {
 } from 'three/webgpu'
 import { getLogger } from '@inertialref/shared'
 import { formatSeed } from '@inertialref/procedural'
-import type { HeightfieldSource } from '@inertialref/workers'
+import type {
+  HeightfieldResponse,
+  HeightfieldSource,
+  JobHandle,
+} from '@inertialref/workers'
 import {
   type Body,
   HEIGHTFIELD_BORDER,
@@ -31,7 +35,6 @@ import {
   seaSheetDatum,
   terrainPalette,
 } from '@inertialref/rendering'
-import { DEFAULT_SURFACE_QUALITY } from './quality.ts'
 import { grainWrap, type TerrainMaterial } from './terrain.ts'
 import { attachCover } from './terrainAttributes.ts'
 
@@ -76,6 +79,17 @@ const BAKE_LEVEL = 2
 /** Bakes kept after their bodies leave the frame. */
 const KEPT = 4
 
+/**
+ * How long after its last ask a bake is safe from eviction, ms.
+ *
+ * A body in the frame asks every frame. With more such bodies than `KEPT`,
+ * evicting the least-recently-asked to make room would evict one asked a
+ * frame ago, which asks again next frame and evicts the next — ninety-six
+ * tiles a body a frame into the producer, and none of them ever drawn. Past
+ * the kept set a body keeps its tint until one leaves the frame instead.
+ */
+const RESIDENCY_MS = 500
+
 /** The sea mask's face size. A mask needs fewer texels than a picture. */
 const MASK_SIZE = 256
 
@@ -91,6 +105,10 @@ export interface OrbitalBakeMaps {
 interface Bake {
   readonly target: WebGLCubeRenderTarget
   readonly maskTarget: WebGLCubeRenderTarget
+  /** The tile jobs in flight, cancelled if the bake is evicted under them. */
+  readonly jobs: JobHandle<HeightfieldResponse>[]
+  /** When the body last asked, in `performance.now()` ms. */
+  asked: number
   ready: boolean
   failed: boolean
 }
@@ -139,21 +157,34 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
     1,
   )
 
+  /**
+   * Bodies with no relief: nothing to bake, and a body's relief does not
+   * change, so the verdict is kept rather than re-derived — `bodyFor` is an
+   * address parse and a system walk, and the ask comes every frame.
+   */
+  const flat = new Set<string>()
+
   function textureFor(address: string): OrbitalBakeMaps | null {
+    const now = performance.now()
     const held = bakes.get(address)
     if (held !== undefined) {
       // Touch, so the least-recently-asked is the one evicted.
+      held.asked = now
       bakes.delete(address)
       bakes.set(address, held)
       return held.ready
         ? { albedo: held.target.texture, mask: held.maskTarget.texture }
         : null
     }
+    if (flat.has(address)) return null
     const body = host.bodyFor(address)
     const source = host.heightfieldSource()
-    if (body === null || source === null || body.surface.maxElevation <= 0) {
+    if (body === null || source === null) return null
+    if (body.surface.maxElevation <= 0) {
+      flat.add(address)
       return null
     }
+    if (bakes.size >= KEPT && !evictOne(now)) return null
     const target = new WebGLCubeRenderTarget(FACE_SIZE, {
       type: HalfFloatType,
       magFilter: LinearFilter,
@@ -167,31 +198,63 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
       generateMipmaps: false,
       depthBuffer: true,
     })
-    const bake: Bake = { target, maskTarget, ready: false, failed: false }
-    bakes.set(address, bake)
-    while (bakes.size > KEPT) {
-      const oldest = bakes.keys().next().value
-      if (oldest === undefined) break
-      const evicted = bakes.get(oldest)
-      evicted?.target.dispose()
-      evicted?.maskTarget.dispose()
-      bakes.delete(oldest)
+    const bake: Bake = {
+      target,
+      maskTarget,
+      jobs: [],
+      asked: now,
+      ready: false,
+      failed: false,
     }
-    const started = performance.now()
+    bakes.set(address, bake)
     void run(body, source, bake)
       .then(() => {
         if (bake.ready) {
           log.info('orbital bake ready', {
             address,
-            ms: Math.round(performance.now() - started),
+            ms: Math.round(performance.now() - now),
           })
         }
       })
       .catch((error: unknown) => {
+        // Evicted under its tiles: the cancellation is the rejection.
+        if (!stillHeld(bake)) return
+        /*
+         * The source's own stand-down — the GPU producer retiring rejects
+         * everything it holds with this — is not the bake's failure: the
+         * next `heightfieldSource()` is the pool, and the next ask should
+         * reach it. A failure of anything else would repeat, and is kept.
+         */
+        if (String(error).includes('producer unavailable')) {
+          drop(address, bake)
+          return
+        }
         bake.failed = true
         log.warn('orbital bake failed', { address, error: String(error) })
       })
     return null
+  }
+
+  /**
+   * Evicts the least-recently-asked bake outside its residency; false when
+   * every held one is still being asked for.
+   */
+  function evictOne(now: number): boolean {
+    for (const [address, bake] of bakes) {
+      if (now - bake.asked < RESIDENCY_MS) continue
+      drop(address, bake)
+      return true
+    }
+    return false
+  }
+
+  function drop(address: string, bake: Bake): void {
+    if (bakes.get(address) !== bake) return
+    bakes.delete(address)
+    for (const job of bake.jobs) job.cancel()
+    bake.jobs.length = 0
+    bake.target.dispose()
+    bake.maskTarget.dispose()
   }
 
   async function run(
@@ -200,21 +263,27 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
     bake: Bake,
   ): Promise<void> {
     const regions = bakeRegions()
+    // The sheet's datum, where one is drawn — the same answer the streamer
+    // gives `buildPatch`, and the same flag it sends the producer.
+    const sheet = seaSheetDatum(body)
     const fields = await Promise.all(
-      regions.map(
-        (region) =>
-          source.submit({
-            surfaceSeed: formatSeed(body.surface.seed),
-            maxElevation: body.surface.maxElevation,
-            roughness: body.surface.roughness,
-            seaLevel: body.surface.seaLevel,
-            grammar: body.surface.grammar,
-            region,
-            resolution: HEIGHTFIELD_RESOLUTION,
-            border: HEIGHTFIELD_BORDER,
-          }).result,
-      ),
+      regions.map((region) => {
+        const job = source.submit({
+          surfaceSeed: formatSeed(body.surface.seed),
+          maxElevation: body.surface.maxElevation,
+          roughness: body.surface.roughness,
+          seaLevel: body.surface.seaLevel,
+          grammar: body.surface.grammar,
+          region,
+          resolution: HEIGHTFIELD_RESOLUTION,
+          border: HEIGHTFIELD_BORDER,
+          seabed: sheet !== null,
+        })
+        bake.jobs.push(job)
+        return job.result
+      }),
     )
+    bake.jobs.length = 0
     // Evicted while the tiles were in flight: nothing to draw into.
     if (!stillHeld(bake)) return
     const patches = fields.map((field, i) =>
@@ -225,7 +294,7 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
         elevations: field.elevations,
         cover: field.cover,
         bodyRadius: body.radius,
-        seaLevel: seaSheetDatum(body),
+        seaLevel: sheet,
       }),
     )
     render(body, patches, bake)
@@ -295,7 +364,7 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
     const palette = terrainPalette(body)
     terrain.setPalette(palette, body.radius)
     terrain.setAlbedoMap(null, false)
-    terrain.setQuality({ ...DEFAULT_SURFACE_QUALITY, ground: 'lean' })
+    terrain.setQuality('lean')
     // A texel is kilometers of ground: every detail octave is faded out by
     // its footprint, which is the anti-aliasing the bake gets.
     terrain.setPixelAngle(Math.PI / 2 / FACE_SIZE)

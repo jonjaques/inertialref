@@ -1470,6 +1470,8 @@ export class TerrainStreamer {
         region,
         resolution: HEIGHTFIELD_RESOLUTION,
         border: HEIGHTFIELD_BORDER,
+        // The seabed only where `buildPatch` is handed a sheet to lay over it.
+        seabed: seaSheetDatum(body) !== null,
       })
       this.#inFlight.set(key, handle)
       void handle.result

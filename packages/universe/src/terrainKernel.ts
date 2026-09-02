@@ -108,7 +108,8 @@ export const SCALAR = {
   BUDGET: 0,
   ROUGHNESS: 1,
   SEA_DATUM: 2,
-  SEA_ENABLED: 3,
+  /** One where the field is clamped up to the datum; zero for the seabed. */
+  SEA_CLAMP: 3,
   SHARE_HYPSOMETRY: 4,
   SHARE_BELTS: 5,
   SHARE_VOLCANISM: 6,
@@ -280,18 +281,36 @@ export interface KernelSurface {
   readonly gritFrequencies: readonly number[]
 }
 
-const packed = new WeakMap<SurfaceParameters, KernelSurface>()
+/** One record per surface and per side of the sea clamp. */
+const packed = new WeakMap<
+  SurfaceParameters,
+  { clamped?: KernelSurface; seabed?: KernelSurface }
+>()
 
-/** The kernel's view of a surface. Packed once per `SurfaceParameters`. */
-export function surfaceKernel(surface: SurfaceParameters): KernelSurface {
-  const held = packed.get(surface)
-  if (held !== undefined) return held
-  const built = pack(surface)
-  packed.set(surface, built)
+/**
+ * The kernel's view of a surface. Packed once per `SurfaceParameters` and
+ * per `seabed`, which is `HeightfieldRequest.seabed`: the same flag
+ * `generateHeightfield` takes, so a tile from either producer is the seabed
+ * exactly where the renderer lays a sheet over it.
+ */
+export function surfaceKernel(
+  surface: SurfaceParameters,
+  seabed = false,
+): KernelSurface {
+  const slot = seabed ? 'seabed' : 'clamped'
+  let held = packed.get(surface)
+  if (held === undefined) {
+    held = {}
+    packed.set(surface, held)
+  }
+  const known = held[slot]
+  if (known !== undefined) return known
+  const built = pack(surface, seabed)
+  held[slot] = built
   return built
 }
 
-function pack(surface: SurfaceParameters): KernelSurface {
+function pack(surface: SurfaceParameters, seabed: boolean): KernelSurface {
   const grammar = surface.grammar
   const sketch = terrainSketch(surface)
   const records = new Float32Array(KERNEL_RECORDS * 4)
@@ -336,7 +355,7 @@ function pack(surface: SurfaceParameters): KernelSurface {
   scalar(SCALAR.BUDGET, budget)
   scalar(SCALAR.ROUGHNESS, surface.roughness)
   scalar(SCALAR.SEA_DATUM, sea ?? 0)
-  scalar(SCALAR.SEA_ENABLED, sea === null ? 0 : 1)
+  scalar(SCALAR.SEA_CLAMP, sea === null || seabed ? 0 : 1)
   scalar(SCALAR.SHARE_HYPSOMETRY, bands.hypsometry)
   scalar(SCALAR.SHARE_BELTS, bands.belts)
   scalar(SCALAR.SHARE_VOLCANISM, bands.volcanism)

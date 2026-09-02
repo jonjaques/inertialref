@@ -697,8 +697,8 @@ const channelWetnessCode = wgslFn(
   fn channelWetness(valley: f32, tributary: f32) -> f32 {
     // bands.ts \`channelWetness\`.
     let trunk = smoothstepf(${DRAINAGE_SHAPE.channelStart}, ${DRAINAGE_SHAPE.channelFull}, valley);
-    let branch = smoothstepf(${DRAINAGE_SHAPE.channelStart + 0.004}, ${DRAINAGE_SHAPE.channelFull}, tributary);
-    return max(trunk, 0.7 * branch);
+    let branch = smoothstepf(${DRAINAGE_SHAPE.channelStart + DRAINAGE_SHAPE.tributaryOffset}, ${DRAINAGE_SHAPE.channelFull}, tributary);
+    return max(trunk, ${DRAINAGE_SHAPE.tributaryWeight} * branch);
   }
 `,
   uses(smoothstepCode),
@@ -1839,10 +1839,18 @@ export function createTerrainKernel(
           elevation.addAssign(gritAmplitude.mul(sum.div(norm)))
         })
 
+        /* --- the sea -------------------------------------------------------- */
+
         /*
-         * No sea clamp. The tile is the seabed — `drawnGroundElevation` —
-         * and the sea is a sheet the renderer lays over it at the datum.
+         * `groundCoverAt`'s clamp, under the same flag. The packer zeroes it
+         * for a seabed tile — `drawnGroundElevation`, with the sea a sheet the
+         * renderer lays over it at the datum — and sets it where no sheet is
+         * drawn: a mapped body's photograph is its sea, and the ground under
+         * the photograph is the datum, not the trench.
          */
+        If(scalar(SCALAR.SEA_CLAMP).greaterThan(0.5), () => {
+          elevation.assign(max(elevation, scalar(SCALAR.SEA_DATUM)))
+        })
 
         /* --- the cover, for an interior sample ----------------------------- */
 
@@ -2003,7 +2011,7 @@ export function createTerrainKernel(
               sqrt(max(float(0), float(1).sub(square(d.y)))),
             )
             const local = scalar(SCALAR.GROUND_TEMPERATURE).mul(
-              pow(cosZenith, float(0.25)),
+              pow(cosZenith, float(COVER_SHAPE.zenithPower)),
             )
             const ragged = noise3(
               word(WORD.SEED_FROST),
@@ -2040,7 +2048,7 @@ export function createTerrainKernel(
               sqrt(max(float(0), float(1).sub(square(d.y)))),
             )
             const local = scalar(SCALAR.GROUND_TEMPERATURE).mul(
-              pow(cosZenith, float(0.25)),
+              pow(cosZenith, float(COVER_SHAPE.zenithPower)),
             )
             const warmth = biotaWindow(local)
             If(warmth.greaterThan(0), () => {
@@ -2051,7 +2059,11 @@ export function createTerrainKernel(
                   aboveDatum,
                 ),
               )
-              const ashore = smoothstepf(0, budget.mul(0.004), aboveDatum)
+              const ashore = smoothstepf(
+                0,
+                budget.mul(COVER_SHAPE.shoreRise),
+                aboveDatum,
+              )
               const rain = noise3(
                 word(WORD.SEED_RAIN),
                 d.mul(COVER_SHAPE.rainCycles),
@@ -2071,7 +2083,9 @@ export function createTerrainKernel(
               )
               const patch = noise3(
                 word(WORD.SEED_RAIN),
-                d.mul(COVER_SHAPE.patchCycles).add(vec3(53.7, 0, 0)),
+                d
+                  .mul(COVER_SHAPE.patchCycles)
+                  .add(vec3(COVER_SHAPE.patchOffset, 0, 0)),
               )
                 .mul(0.5)
                 .add(0.5)

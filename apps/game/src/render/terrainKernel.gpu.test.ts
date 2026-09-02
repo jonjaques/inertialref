@@ -18,6 +18,7 @@ import {
   TILE_STRIDE,
   walkBodies,
   writeTileFrame,
+  seaDatumElevation,
 } from '@inertialref/universe'
 import { type GpuSession, openGpu } from './gpuHarness.ts'
 import { createTerrainKernel, type TerrainKernel } from './terrainKernel.ts'
@@ -79,10 +80,11 @@ interface GpuTile {
 async function gpuTiles(
   body: Body,
   regions: readonly RegionAddress[],
+  seabed = false,
 ): Promise<GpuTile[]> {
   if (regions.length > MAX_TILES)
     throw new Error('too many tiles for one batch')
-  const packed = surfaceKernel(body.surface)
+  const packed = surfaceKernel(body.surface, seabed)
   ;(kernel.records.array as Float32Array).set(packed.records)
   ;(kernel.words.array as Uint32Array).set(packed.words)
   kernel.records.needsUpdate = true
@@ -122,11 +124,17 @@ interface Gap {
 }
 
 /** The worst sample of a tile pair, and the worst cover byte. */
-function compare(body: Body, region: RegionAddress, got: GpuTile): Gap {
+function compare(
+  body: Body,
+  region: RegionAddress,
+  got: GpuTile,
+  seabed = false,
+): Gap {
   const field = generateHeightfield(body.surface, {
     region,
     resolution: HEIGHTFIELD_RESOLUTION,
     border: HEIGHTFIELD_BORDER,
+    seabed,
   })
   let elevation = 0
   for (let i = 0; i < field.elevations.length; i += 1) {
@@ -233,4 +241,31 @@ describe('the kernel against generateHeightfield', () => {
     console.info(`\n${rows.join('\n')}\n`)
     expect(failures).toEqual([])
   }, 120_000)
+
+  /*
+   * The flag is one scalar in the packed record, and the test above runs
+   * both sides clamped. A wet body's seabed is the same field with the clamp
+   * off — so the pair has to agree there too, and the tile has to actually
+   * go under the datum, or the flag is a scalar nothing reads.
+   */
+  it('is the seabed where the request asks for it', async () => {
+    // Earth: a body with a datum the field goes under, whatever the zoo holds.
+    const wet = solBody('Earth')
+    const datum = seaDatumElevation(wet.surface)
+    if (datum === null) throw new Error('Earth has no sea datum')
+    const regions = regionsAt(0)
+    const tiles = await gpuTiles(wet, regions, true)
+    let elevation = 0
+    let submarine = 0
+    regions.forEach((region, i) => {
+      const tile = tiles[i] as GpuTile
+      elevation = Math.max(
+        elevation,
+        compare(wet, region, tile, true).elevation,
+      )
+      for (const sample of tile.elevations) if (sample < datum) submarine += 1
+    })
+    expect(elevation).toBeLessThan(bound(wet, 0))
+    expect(submarine).toBeGreaterThan(0)
+  }, 60_000)
 })

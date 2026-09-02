@@ -133,6 +133,9 @@ advance at all. The consequence for anyone reading the counters: `visited`,
 The detail floor and the observatory's standing camera read `drawnElevation`;
 the mesh reads `drawnGroundElevation`, which is the same field with the sea
 clamp left off — the seabed, over which the sea is drawn as a sheet of its own.
+The request says which (`seabed`), and the streamer sets it exactly where it
+hands `buildPatch` a sheet datum: a mapped body gets no sheet, its photograph
+is its sea, and its mesh keeps the clamp.
 The contact test, the saves and the survey sites read `groundElevation`. The
 drawn fields are the canonical one plus a presentational tail, and
 `drawnDivergence` publishes how far apart they may get: **1.25 m**.
