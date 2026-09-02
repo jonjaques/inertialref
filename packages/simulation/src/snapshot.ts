@@ -19,7 +19,7 @@ import {
   formatAddress,
   type UniverseAddress,
 } from '@inertialref/universe'
-import type { EntityKind } from './entity.ts'
+import type { Entity, EntityKind } from './entity.ts'
 import type { World, WorldEvent } from './world.ts'
 
 /*
@@ -130,6 +130,42 @@ const lerpState = (
   }
 }
 
+/**
+ * One entity's view at an interpolation alpha.
+ *
+ * Exported on its own because an inspector asking about one ship does not
+ * need the poses of a hundred and twenty-nine bodies to answer — and it was
+ * building the whole snapshot, twice a sample, to read one entry out of it.
+ */
+export function entitySnapshot(
+  world: World,
+  entity: Entity,
+  alpha = world.clock.alpha,
+): EntitySnapshot {
+  const renderTime = world.clock.renderTimeAt(alpha)
+  const previous = world.previousState(entity.id) ?? entity.state
+  const state = lerpState(previous, entity.state, alpha)
+  const address: UniverseAddress | null = entity.address
+  return {
+    id: entity.id,
+    name: entity.name,
+    kind: entity.kind,
+    frame: state.frame,
+    frameChain: world.frames.has(state.frame)
+      ? world.frames.chain(state.frame)
+      : [state.frame],
+    address: address === null ? null : formatAddress(address),
+    position: canonicalPosition(world.frames, state, renderTime),
+    orientation: canonicalOrientation(world.frames, state, renderTime),
+    velocity: canonicalVelocity(world.frames, state, renderTime),
+    localPosition: state.position,
+    localVelocity: state.velocity,
+    speed: Vec.length(state.velocity),
+    landed: world.isLanded(entity.id),
+    altitude: world.altitudeOf(entity.id),
+  }
+}
+
 export function snapshot(
   world: World,
   alpha = world.clock.alpha,
@@ -142,29 +178,8 @@ export function snapshot(
   const renderTime = world.clock.renderTimeAt(alpha)
 
   const entities: EntitySnapshot[] = []
-  for (const entity of world.entities.ordered()) {
-    const previous = world.previousState(entity.id) ?? entity.state
-    const state = lerpState(previous, entity.state, alpha)
-    const address: UniverseAddress | null = entity.address
-    entities.push({
-      id: entity.id,
-      name: entity.name,
-      kind: entity.kind,
-      frame: state.frame,
-      frameChain: world.frames.has(state.frame)
-        ? world.frames.chain(state.frame)
-        : [state.frame],
-      address: address === null ? null : formatAddress(address),
-      position: canonicalPosition(world.frames, state, renderTime),
-      orientation: canonicalOrientation(world.frames, state, renderTime),
-      velocity: canonicalVelocity(world.frames, state, renderTime),
-      localPosition: state.position,
-      localVelocity: state.velocity,
-      speed: Vec.length(state.velocity),
-      landed: world.isLanded(entity.id),
-      altitude: world.altitudeOf(entity.id),
-    })
-  }
+  for (const entity of world.entities.ordered())
+    entities.push(entitySnapshot(world, entity, alpha))
 
   const bodies: BodySnapshot[] = []
   const stars: StarSnapshot[] = []

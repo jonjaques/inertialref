@@ -2,7 +2,7 @@ import { formatDuration, formatReading, type Meters } from '@inertialref/shared'
 import { formatSeed } from '@inertialref/procedural'
 import { UV, Vec } from '@inertialref/spatial'
 import type { World } from '@inertialref/simulation'
-import { snapshot } from '@inertialref/simulation'
+import { entitySnapshot } from '@inertialref/simulation'
 import {
   type EntityId,
   formatAddress,
@@ -109,9 +109,10 @@ export function inspectEntity(
 ): EntityInspection | null {
   const entity = world.entities.get(id)
   if (entity === undefined) return null
-  const shot = snapshot(world, 0)
-  const view = shot.entities.find((candidate) => candidate.id === id)
-  if (view === undefined) return null
+  // The one entity, at the tick. This was a whole world snapshot — every body's
+  // orbit and spin pose — searched for one id, and the 8 Hz status sample
+  // asked for it twice: once for the player and once per entity in the list.
+  const view = entitySnapshot(world, entity, 0)
   const altitude = world.altitudeOf(id)
 
   return {
