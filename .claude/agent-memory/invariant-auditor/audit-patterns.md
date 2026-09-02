@@ -619,7 +619,7 @@ rate it catches the regression. fast-check is **unseeded** here (no `fc.configur
 no setupFile), so "swept over N states" is a claim about one draw. Re-run it with three
 seeds before quoting it.
 
-The armed alternative exists and is one line: a *deterministic* example. Hyperbola from
+The armed alternative exists and is one line: a _deterministic_ example. Hyperbola from
 400 km at 1.156 × escape, propagated 100 days to 5.4 × 10¹⁰ m, separates HEAD
 (4.8 × 10⁻¹²) from the step-exit variant (4.2 × 10⁻⁹) by 870×. The branch already found
 this shape for the bisection defect ("converges on a near-parabolic hyperbola") and did
@@ -649,11 +649,11 @@ compares it.**
 every reader (`#coastable`, `step`, `#jump`) runs after `commitTick`, where `clock.tick`
 equals the `tick` the old call site passed, and `railsSpeedBound` reads only frame +
 epoch. Likewise `#record(..., tick - 1)` in `#railsCheck` matches the integrated path,
-which stamps `this.clock.tick` *before* `commitTick`. And `nextCheckAfter(tick, …)` is
+which stamps `this.clock.tick` _before_ `commitTick`. And `nextCheckAfter(tick, …)` is
 the same value the old `this.clock.tick` gave. All three untested, all three correct.
 
 `considerFrameChange`'s `rebased` boolean → `travel/elapsed` reset is not just a rename:
-the old code kept `const travel` after calling `rebase`, so every child *after* the
+the old code kept `const travel` after calling `rebase`, so every child _after_ the
 rebase subtracted travel and elapsed a second time from already-rebased gaps. The new
 code zeroes them, which removes a double subtraction. Sound either way (the old one was
 over-conservative), and the crossing tick is unchanged because the honest test is exact.
